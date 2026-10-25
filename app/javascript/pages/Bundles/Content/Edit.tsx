@@ -98,8 +98,8 @@ export default function BundlesContentEdit() {
 
   const searchProducts = React.useCallback(
     (options: { query?: string; page?: number; all?: boolean; reset?: string[]; preserveUrl?: boolean }) => {
-      const data: { query?: string; page?: number; all?: boolean } = {};
-      if (options.query) data.query = options.query;
+      const data: { query?: string | undefined; page?: number; all?: boolean } = {};
+      if (options.query !== undefined) data.query = options.query || undefined;
       if (options.page !== undefined) data.page = options.page;
       if (options.all !== undefined) data.all = options.all;
 

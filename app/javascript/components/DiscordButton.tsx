@@ -62,14 +62,19 @@ export const DiscordButton = ({
     if (!discordConnected) return;
     setLoading(true);
 
-    const response = await leaveServer(purchaseId, token);
-    if (response.ok) {
-      showAlert(`You've left the Discord server #${response.serverName}.`, "success");
-      setDiscordConnected(false);
-    } else {
+    try {
+      const response = await leaveServer(purchaseId, token);
+      if (response.ok) {
+        showAlert(`You've left the Discord server #${response.serverName}.`, "success");
+        setDiscordConnected(false);
+      } else {
+        showAlert("Could not leave the Discord server.", "error");
+      }
+    } catch {
       showAlert("Could not leave the Discord server.", "error");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return loading ? (

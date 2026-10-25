@@ -3,6 +3,7 @@ import { isEqual } from "lodash-es";
 import * as React from "react";
 
 import { cast } from "$app/utils/cast";
+import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 
 import { Button } from "$app/components/Button";
 import { PoweredByFooter } from "$app/components/PoweredByFooter";
@@ -64,6 +65,10 @@ const PurchaseNewInvoicePage = () => {
   const form = useForm(form_data);
   const initialCountryCode = form_data.address_fields.country_code;
   const showStateField = !form.data.address_fields.country_code || form.data.address_fields.country_code === "US";
+  const showPostalCodeField = countryRequiresPostalCode(form.data.address_fields.country_code);
+  let addressColumns = "1fr";
+  if (showStateField) addressColumns = "2fr 1fr 1fr";
+  else if (showPostalCodeField) addressColumns = "1fr 1fr";
   const showBusinessIdField =
     form_metadata.display_vat_id ||
     form_metadata.business_id_country_codes.includes(form.data.address_fields.country_code);
@@ -78,6 +83,7 @@ const PurchaseNewInvoicePage = () => {
   const validateFields = () =>
     Object.entries(form.data.address_fields).reduce((isValid, [key, value]) => {
       if (key === "state" && !showStateField) return isValid;
+      if (key === "zip_code" && !showPostalCodeField) return isValid;
       if (!value.trim()) {
         form.setError(`address_fields.${key}`, "Setting error message for highlighting the field in UI");
         return false;
@@ -93,6 +99,7 @@ const PurchaseNewInvoicePage = () => {
       address_fields: {
         ...data.address_fields,
         state: showStateField ? data.address_fields.state : "",
+        zip_code: showPostalCodeField ? data.address_fields.zip_code : "",
       },
       vat_id: showBusinessIdField ? data.vat_id : null,
     }));
@@ -188,7 +195,7 @@ const PurchaseNewInvoicePage = () => {
                 style={{
                   display: "grid",
                   gap: "var(--spacer-2)",
-                  gridTemplateColumns: showStateField ? "2fr 1fr 1fr" : "1fr 1fr",
+                  gridTemplateColumns: addressColumns,
                 }}
               >
                 <Fieldset state={form.errors["address_fields.city"] ? "danger" : undefined}>
@@ -211,15 +218,17 @@ const PurchaseNewInvoicePage = () => {
                     />
                   </Fieldset>
                 ) : null}
-                <Fieldset state={form.errors["address_fields.zip_code"] ? "danger" : undefined}>
-                  <Label htmlFor="zip_code">ZIP code</Label>
-                  <Input
-                    id="zip_code"
-                    type="text"
-                    value={form.data.address_fields.zip_code}
-                    onChange={(e) => form.setData("address_fields.zip_code", e.target.value)}
-                  />
-                </Fieldset>
+                {showPostalCodeField ? (
+                  <Fieldset state={form.errors["address_fields.zip_code"] ? "danger" : undefined}>
+                    <Label htmlFor="zip_code">ZIP code</Label>
+                    <Input
+                      id="zip_code"
+                      type="text"
+                      value={form.data.address_fields.zip_code}
+                      onChange={(e) => form.setData("address_fields.zip_code", e.target.value)}
+                    />
+                  </Fieldset>
+                ) : null}
               </div>
               <Fieldset state={form.errors["address_fields.country_code"] ? "danger" : undefined}>
                 <Label htmlFor="country">Country</Label>
@@ -291,7 +300,7 @@ const PurchaseNewInvoicePage = () => {
                   >
                     {form.data.address_fields.city || "San Francisco"}
                   </span>
-                  {", "}
+                  {showStateField || showPostalCodeField ? ", " : null}
                   {showStateField ? (
                     <>
                       <span
@@ -304,13 +313,15 @@ const PurchaseNewInvoicePage = () => {
                       {", "}
                     </>
                   ) : null}
-                  <span
-                    style={{
-                      opacity: form.data.address_fields.zip_code.length ? undefined : "var(--disabled-opacity)",
-                    }}
-                  >
-                    {form.data.address_fields.zip_code || "94107"}
-                  </span>
+                  {showPostalCodeField ? (
+                    <span
+                      style={{
+                        opacity: form.data.address_fields.zip_code.length ? undefined : "var(--disabled-opacity)",
+                      }}
+                    >
+                      {form.data.address_fields.zip_code || "94107"}
+                    </span>
+                  ) : null}
                 </div>
                 <div
                   style={{

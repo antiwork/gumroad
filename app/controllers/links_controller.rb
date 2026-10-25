@@ -671,6 +671,10 @@ class LinksController < ApplicationController
 
         Product::SaveIntegrationsService.perform(@product, product_permitted_params[:integrations], contract: product_save_contract)
         update_variants
+        # Versions are written after the first save in this action, so a $0-base product gaining its
+        # first paid version here had the flag forced on with no paid version yet. Re-apply what the
+        # seller submitted; the save below still forces it on when no paid version remains.
+        @product.customizable_price = product_permitted_params[:customizable_price] if product_permitted_params.key?(:customizable_price)
         update_removed_file_attributes
         update_custom_domain
         update_availabilities

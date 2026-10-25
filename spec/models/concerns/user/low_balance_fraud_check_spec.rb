@@ -166,8 +166,9 @@ describe User::LowBalanceFraudCheck do
   end
 
   describe "#check_for_high_balance_and_remove_low_balance_probation!", versioning: true do
+    # The recovery reads the balance rows under a lock, so a stubbed total would not reach it.
     before do
-      allow(@creator).to receive(:unpaid_balance_cents).and_return(100_00)
+      create(:balance, user: @creator, amount_cents: 100_00)
     end
 
     context "when the user is not on probation" do
@@ -205,7 +206,7 @@ describe User::LowBalanceFraudCheck do
 
       it "reverts to compliant when the previous state was compliant" do
         creator = create(:user)
-        allow(creator).to receive(:unpaid_balance_cents).and_return(100_00)
+        create(:balance, user: creator, amount_cents: 100_00)
 
         creator.mark_compliant!(author_name: "test")
         creator.send(:disable_refunds_and_put_on_probation!)
@@ -216,7 +217,7 @@ describe User::LowBalanceFraudCheck do
 
       it "keeps an admin payout pause placed while the recovery held an older copy of the account" do
         creator = create(:user)
-        allow(creator).to receive(:unpaid_balance_cents).and_return(100_00)
+        create(:balance, user: creator, amount_cents: 100_00)
         creator.mark_compliant!(author_name: "test")
         creator.send(:disable_refunds_and_put_on_probation!)
         User.find(creator.id).update!(payouts_paused_internally: true, payouts_paused_by: GUMROAD_ADMIN_ID)
@@ -236,6 +237,76 @@ describe User::LowBalanceFraudCheck do
         expect { @creator.check_for_high_balance_and_remove_low_balance_probation! }
           .not_to change { @creator.reload.user_risk_state }
       end
+    end
+
+    context "when LowBalanceFraudCheck commented on a probation it did not apply" do
+      it "leaves the earlier probation in place" do
+        creator = create(:user)
+        create(:balance, user: creator, amount_cents: 100_00)
+        creator.mark_compliant!(author_name: "admin")
+        travel 1.minute
+        creator.put_on_probation!(author_name: "admin", content: "manual probation")
+        travel 1.minute
+        creator.send(:disable_refunds_and_put_on_probation!)
+
+        expect { creator.reload.check_for_high_balance_and_remove_low_balance_probation! }
+          .not_to change { creator.reload.user_risk_state }.from("on_probation")
+      end
+    end
+
+    context "when the probation's state change has no recorded history" do
+      it "leaves the probation in place instead of guessing not_reviewed" do
+        creator = PaperTrail.request(enabled: false) do
+          create(:user).tap { _1.send(:disable_refunds_and_put_on_probation!) }
+        end
+        create(:balance, user: creator, amount_cents: 100_00)
+
+        expect { creator.reload.check_for_high_balance_and_remove_low_balance_probation! }
+          .not_to change { creator.reload.user_risk_state }.from("on_probation")
+      end
+    end
+  end
+
+  describe "recovery after LowBalanceFraudCheck re-probates an account its own probation still holds", versioning: true do
+    def low_balance_comments
+      @creator.comments.where(comment_type: Comment::COMMENT_TYPE_ON_PROBATION, author_name: "LowBalanceFraudCheck")
+    end
+
+    def probate_twice!(between: nil)
+      balance = create(:balance, user: @creator, amount_cents: -150_00)
+      travel 1.minute
+      @creator.reload.check_for_low_balance_and_probate(@purchase.id)
+      travel 1.month
+      between&.call
+      travel 2.months
+      @creator.reload.check_for_low_balance_and_probate(@purchase.id)
+      expect(low_balance_comments.count).to eq(2)
+      balance
+    end
+
+    def recover_through_balance_job!(balance)
+      balance.update!(amount_cents: 100_00)
+      UpdateSellerRefundEligibilityJob.new.perform(@creator.id)
+      @creator.reload
+    end
+
+    it "restores compliant once the balance recovers" do
+      @creator.mark_compliant!(author_name: "admin")
+      balance = probate_twice!
+
+      expect(recover_through_balance_job!(balance).user_risk_state).to eq("compliant")
+    end
+
+    it "restores not_reviewed once the balance recovers" do
+      balance = probate_twice!
+
+      expect(recover_through_balance_job!(balance).user_risk_state).to eq("not_reviewed")
+    end
+
+    it "stays blocked when an admin decided in between" do
+      balance = probate_twice!(between: -> { @creator.reload.put_on_probation!(author_name: "admin", content: "manual review") })
+
+      expect(recover_through_balance_job!(balance).user_risk_state).to eq("on_probation")
     end
   end
 end

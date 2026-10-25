@@ -4,7 +4,7 @@ import * as React from "react";
 
 import FileUtils from "$app/utils/file";
 import { asyncVoid } from "$app/utils/promise";
-import { request } from "$app/utils/request";
+import { request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { usePurchaseCustomFields, usePurchaseInfo } from "$app/components/DownloadPage/WithContent";
@@ -54,7 +54,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
         ),
       );
 
-      await request({
+      const response = await request({
         method: "POST",
         accept: "json",
         url: Routes.purchase_custom_fields_path(),
@@ -65,6 +65,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
           token: purchaseInfo.token,
         },
       });
+      if (!response.ok) throw new ResponseError();
 
       setFiles((prevFiles) => [
         ...prevFiles,
@@ -79,6 +80,7 @@ export const FileInput = ({ customFieldId }: { customFieldId: string }) => {
     } catch {
       showAlert("Error uploading files. Please try again.", "error");
     } finally {
+      event.target.value = "";
       setIsUploading(false);
     }
   });
