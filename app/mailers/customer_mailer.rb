@@ -23,13 +23,6 @@ class CustomerMailer < ApplicationMailer
   # to one receipt; read on until the template's fill is reachable, but stop after ten windows.
   GROUPED_RECEIPT_READ_WINDOWS = 10
 
-  # How far back a repeat reminder is suppressed for the same recipient, product and
-  # installment. A cart id is not a shopper identity: a checkout link opened without the
-  # original cookies lands the visitor in a new guest cart with a fresh browser_guid, and
-  # the unique index is keyed on the cart, so a new cart would re-arm the seller's sequence.
-  # Bounded so a genuine later visit is still reminded.
-  ABANDONED_CART_REMINDER_LOOKBACK = 90.days
-
   # One send per recipient + receipt set within this window. The claim is taken at render,
   # so a retry of a send that failed before SMTP handoff is also suppressed — acceptable,
   # because every caller of this mailer is a self-serve flow the buyer can re-trigger.
@@ -338,15 +331,13 @@ class CustomerMailer < ApplicationMailer
     # delivered — that is exactly the shape the reported case had (gumroad-private#1626).
     # Skipped for previews, whose fixture cart is usually one the recipient has bought from.
     purchased_product_ids = is_preview ? [] : cart.purchased_product_ids
-    reminded_installment_ids_by_product_id = is_preview ? {} : recalled_installment_ids_by_product_id(cart, workflow_ids_with_product_ids.values.flatten.uniq)
 
     @installments = workflows.filter_map do |workflow|
       installment = workflow.alive_installments.sole
       products = workflow.abandoned_cart_products.select do |product|
         product_id = ObfuscateIds.decrypt(product[:external_id])
         workflow_ids_with_product_ids[workflow.id.to_s].include?(product_id) &&
-          purchased_product_ids.exclude?(product_id) &&
-          reminded_installment_ids_by_product_id.fetch(product_id, []).exclude?(installment.id)
+          purchased_product_ids.exclude?(product_id)
       end
       next if products.empty?
 
@@ -442,37 +433,6 @@ class CustomerMailer < ApplicationMailer
   end
 
   private
-    # Which installments this recipient was already sent about each of the given products,
-    # looking only at other carts. Keyed on the recipient rather than the cart so a
-    # re-created guest cart cannot restart the sequence.
-    def recalled_installment_ids_by_product_id(cart, product_ids)
-      return {} if product_ids.empty?
-
-      recipient_email = cart.user&.email.presence || cart.email
-      recipient_carts = Cart.where.not(id: cart.id)
-      recipient_carts =
-        if cart.user_id.present?
-          recipient_carts.where("carts.user_id = ? OR carts.email = ?", cart.user_id, recipient_email)
-        else
-          recipient_carts.where(email: recipient_email)
-        end
-
-      # The send rows, not cart activity, decide what was already reminded: a cart edited long
-      # after its send must not resurrect the reminder, and a cart whose send is recent must not
-      # be forgotten because the cart itself is old. A product added to the cart after the send
-      # was not part of that mail.
-      SentAbandonedCartEmail.joins(cart: :cart_products)
-                            .where(cart_id: recipient_carts.select(:id),
-                                   sent_abandoned_cart_emails: { created_at: ABANDONED_CART_REMINDER_LOOKBACK.ago.. },
-                                   cart_products: { product_id: product_ids })
-                            .where("cart_products.created_at <= sent_abandoned_cart_emails.created_at")
-                            .distinct
-                            .pluck(:installment_id, "cart_products.product_id")
-                            .each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |(installment_id, product_id), recalled|
-                              recalled[product_id] << installment_id
-                            end
-    end
-
     # Newest receipts are the ones a "resend my receipts" caller is after, so page newest-first;
     # the state filter stays in the window query so failed ids cannot eat the read budget.
     def read_renderable_chargeables(purchase_ids)

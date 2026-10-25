@@ -1304,65 +1304,9 @@ describe CustomerMailer do
           end.not_to change { SentAbandonedCartEmail.count }
         end
 
-        context "when the earlier reminder was about a different product" do
-          before do
-            CartProduct.where(cart_id: earlier_cart.id).delete_all
-            create(:cart_product, cart: earlier_cart, product: seller1.products.second, created_at: 1.day.ago)
-          end
-
-          it "still sends the reminder" do
-            expect do
-              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
-              expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
-            end.to change { SentAbandonedCartEmail.count }.by(1)
-          end
-        end
-
-        context "when the product was added to that cart after the reminder went out" do
-          before do
-            CartProduct.where(cart_id: earlier_cart.id).delete_all
-            create(:cart_product, cart: earlier_cart, product: seller1.products.first, created_at: 1.minute.from_now)
-          end
-
-          it "still sends the reminder" do
-            expect do
-              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
-              expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
-            end.to change { SentAbandonedCartEmail.count }.by(1)
-          end
-        end
-
-        context "when the earlier reminder was a different installment of the sequence" do
-          before do
-            earlier_send.update!(installment: seller2_workflow_installment)
-          end
-
-          it "still sends the reminder" do
-            expect do
-              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
-              expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
-            end.to change { SentAbandonedCartEmail.count }.by(1)
-          end
-        end
-
-        context "when the earlier reminder is older than the lookback window" do
-          before do
-            earlier_send.update!(created_at: (CustomerMailer::ABANDONED_CART_REMINDER_LOOKBACK + 1.day).ago)
-            earlier_cart.cart_products.each { |cart_product| cart_product.update!(created_at: (CustomerMailer::ABANDONED_CART_REMINDER_LOOKBACK + 2.days).ago) }
-            earlier_cart.update!(updated_at: 1.hour.ago)
-          end
-
-          it "still sends the reminder" do
-            expect do
-              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
-              expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
-            end.to change { SentAbandonedCartEmail.count }.by(1)
-          end
-        end
-
         context "when the earlier reminder is recent but the cart it came from is old" do
           before do
-            earlier_cart.update!(updated_at: (CustomerMailer::ABANDONED_CART_REMINDER_LOOKBACK + 1.day).ago)
+            earlier_cart.update!(updated_at: 2.years.ago)
           end
 
           it "does not send the reminder again" do
