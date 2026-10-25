@@ -134,6 +134,108 @@ describe CustomerSurchargeController, :vcr do
     )
   end
 
+  context "when the deposit rounds" do
+    before do
+      @user.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
+      create(:zip_tax_rate, combined_rate: 0.2, country: "DE", state: nil, zip_code: nil, is_seller_responsible: false)
+    end
+
+    it "returns the balance the completion charge bills, which repeats the rounded deposit" do
+      commission = create(:commission_product, user: @user, price_cents: 16_01)
+
+      post "calculate_all", params: {
+        products: [{ permalink: commission.unique_permalink, price: 16_01, quantity: 1 }],
+        postal_code: 10115,
+        country: "DE",
+      }, as: :json
+
+      expect(response.parsed_body).to include(
+        "charge_canonical_total_cents" => 9_61,
+        "commission_completion_canonical_total_cents" => 9_61
+      )
+    end
+
+    it "repeats the rounded deposit tip and its tax in the balance" do
+      commission = create(:commission_product, user: @user, price_cents: 16_00)
+
+      post "calculate_all", params: {
+        products: [{ permalink: commission.unique_permalink, price: 17_01, tip_cents: 1_01, quantity: 1 }],
+        postal_code: 10115,
+        country: "DE",
+      }, as: :json
+
+      expect(response.parsed_body).to include(
+        "charge_canonical_total_cents" => 10_21,
+        "commission_completion_canonical_total_cents" => 10_21
+      )
+    end
+
+    it "bills the rest of a once-per-cart fixed discount's total at completion" do
+      commission = create(:commission_product, user: @user, price_cents: 20_01)
+      create(:offer_code, user: @user, products: [commission], code: "oncepercart", amount_cents: 5_00, once_per_cart: true)
+
+      post "calculate_all", params: {
+        products: [{ permalink: commission.unique_permalink, price: 15_01, quantity: 1, discount_code: "oncepercart" }],
+        postal_code: 10115,
+        country: "DE",
+      }, as: :json
+
+      expect(response.parsed_body).to include(
+        "charge_canonical_total_cents" => 7_51 + 1_50,
+        "commission_completion_canonical_total_cents" => 7_50 + 1_50
+      )
+    end
+
+    it "charges the tip the order puts on the deposit line" do
+      @user.update!(tipping_enabled: true)
+      commission = create(:commission_product, user: @user, price_cents: 16_04)
+
+      # A 15% tip is $2.41 on the full price, but the order tips the $8.02 deposit: $1.20.
+      post "calculate_all", params: {
+        products: [{ permalink: commission.unique_permalink, price: 18_45, tip_cents: 2_41, deposit_tip_cents: 1_20, quantity: 1 }],
+        postal_code: 10115,
+        country: "DE",
+      }, as: :json
+
+      expect(response.parsed_body).to include(
+        "charge_canonical_total_cents" => 9_22 + 1_84,
+        "commission_completion_canonical_total_cents" => 9_22 + 1_84
+      )
+    end
+
+    it "keeps the deposit a pay-what-you-want order stores, which drops the half cent" do
+      commission = create(:commission_product, user: @user, price_cents: 10_00, customizable_price: true)
+
+      post "calculate_all", params: {
+        products: [{ permalink: commission.unique_permalink, price: 16_01, quantity: 1 }],
+        postal_code: 10115,
+        country: "DE",
+      }, as: :json
+
+      expect(response.parsed_body).to include(
+        "charge_canonical_total_cents" => 8_00 + 1_60,
+        "commission_completion_canonical_total_cents" => 8_00 + 1_60
+      )
+    end
+
+    it "converts the deposit from the listed currency the way the order does" do
+      commission = create(:commission_product, user: @user, price_cents: 16_01, price_currency_type: Currency::EUR)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(Currency::EUR).and_return("0.87")
+
+      post "calculate_all", params: {
+        products: [{ permalink: commission.unique_permalink, price: 18_40, listed_price_cents: 16_01, quantity: 1 }],
+        postal_code: 10115,
+        country: "DE",
+      }, as: :json
+
+      # The order charges the rounded €8.01 deposit, $9.21 at 0.87, and the completion repeats it.
+      expect(response.parsed_body).to include(
+        "charge_canonical_total_cents" => 9_21 + 1_84,
+        "commission_completion_canonical_total_cents" => 9_21 + 1_84
+      )
+    end
+  end
+
   it "leaves a preorder balance out of the commission completion total" do
     @user.update!(created_at: User::MIN_AGE_FOR_SERVICE_PRODUCTS.ago - 1.day)
     commission = create(:commission_product, user: @user, price_cents: 16_00)

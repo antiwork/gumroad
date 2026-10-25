@@ -18,6 +18,7 @@ class CustomerSurchargeController < ApplicationController
     tax_rate = 0
     tax_included_rate = 0
     subtotal = 0
+    commission_completion_cents = 0
     quote_line_items = []
     rates_by_listed_currency = {}
     # A buyer-currency quote needs a canonical money breakdown for every line the browser
@@ -64,6 +65,7 @@ class CustomerSurchargeController < ApplicationController
         all_lines_quotable = false
         next
       end
+      commission_completion_cents += charge_details[:completion_total_cents].to_i
       quote_line_items << Checkout::BuyerCurrencyQuote::LineItem.from_surcharge(
         permalink: item[:permalink].to_s,
         product:,
@@ -164,7 +166,7 @@ class CustomerSurchargeController < ApplicationController
       charge_canonical_total_cents: all_lines_quotable ? quote_line_items.sum(&:charge_canonical_total_cents) : nil,
       # The commission balance, carrying the tax its own charge will collect. Other deferred
       # amounts (a preorder balance, future installments) are not part of this row.
-      commission_completion_canonical_total_cents: all_lines_quotable ? commission_completion_cents(quote_line_items) : nil,
+      commission_completion_canonical_total_cents: all_lines_quotable ? commission_completion_cents : nil,
       direct_listed_line_allocations:,
       direct_listed_amount_token:,
       direct_listed_amount_token_expires_at:,
@@ -270,16 +272,6 @@ class CustomerSurchargeController < ApplicationController
       end
     end
 
-    # Each line already carries the split the charge path makes (deposit now, balance later), so
-    # the balance's total is the line's full canonical money minus what today's charge takes.
-    def commission_completion_cents(line_items)
-      line_items.sum do |line_item|
-        next 0 unless line_item.later_charge_kind == "commission"
-
-        line_item.canonical_total_cents - line_item.charge_canonical_total_cents
-      end
-    end
-
     def numeric_cents(value)
       return unless value.is_a?(String) || value.is_a?(Numeric)
 
@@ -347,9 +339,9 @@ class CustomerSurchargeController < ApplicationController
         if product.is_in_preorder_state?
           ["preorder", 0, 0, full_base_price_cents]
         elsif product.native_type == Link::NATIVE_TYPE_COMMISSION
-          deposit = Commission::COMMISSION_DEPOSIT_PROPORTION
-          ["commission", (full_base_price_cents * deposit).round, (tip_cents * deposit).round,
-           (full_base_price_cents * (1 - deposit)).round]
+          split = commission_split(product:, item:, full_base_price_cents:, tip_cents:, rate: surcharges[:rate])
+          ["commission", split[:deposit_price_cents], split[:deposit_tip_cents],
+           (full_base_price_cents * (1 - Commission::COMMISSION_DEPOSIT_PROPORTION)).round]
         elsif ActiveModel::Type::Boolean.new.cast(item[:pay_in_installments]) && product.installment_plan.present?
           payments = product.installment_plan.calculate_installment_payment_price_cents(full_base_price_cents)
           ["installment", payments.first, tip_cents, payments.last]
@@ -371,13 +363,74 @@ class CustomerSurchargeController < ApplicationController
       )
       return if charge_surcharges.blank?
 
+      if kind == "commission"
+        completion_total_cents = commission_completion_total_cents(product:, item:, split:, charge_surcharges:, rate: surcharges[:rate])
+        return if completion_total_cents.nil?
+      end
+
       {
         charge_now: true,
         surcharges: charge_surcharges,
         tip_cents: charge_tip_cents,
         kind:,
         later_price_cents:,
+        completion_total_cents:,
       }
+    end
+
+    # Mirrors the deposit Purchase and Commission#completion_display_price_cents in the listed currency
+    # from the inputs the order submits, then converts each charge the way set_price_and_rate does.
+    def commission_split(product:, item:, full_base_price_cents:, tip_cents:, rate:)
+      proportion = Commission::COMMISSION_DEPOSIT_PROPORTION
+      currency = product.price_currency_type.to_s.downcase
+      listed_price_cents = currency == Currency::USD ? full_base_price_cents : numeric_cents(item[:listed_price_cents])
+      deposit_tip_cents = numeric_cents(item[:deposit_tip_cents])
+      deposit_tip_cents ||= (tip_cents * proportion).round if currency == Currency::USD || tip_cents.zero?
+      if listed_price_cents.nil? || deposit_tip_cents.nil?
+        deposit_price_cents = (full_base_price_cents * proportion).round
+        deposit_tip_cents = (tip_cents * proportion).round
+        return { deposit_price_cents:, deposit_tip_cents:, completion_price_cents: deposit_price_cents + deposit_tip_cents }
+      end
+
+      deposit_tip_cents = [deposit_tip_cents, 0].max
+      half_cents = listed_price_cents * proportion
+      # A customizable price is the submitted perceived price stored as an integer, so a half cent drops;
+      # otherwise the deposit is the rounded minimum price.
+      customizable = product.customizable_price? || (deposit_tip_cents.positive? && product.user.tipping_enabled?)
+      principal_cents = customizable ? (half_cents + deposit_tip_cents).to_i - deposit_tip_cents : half_cents.round
+      completion_principal_cents = once_per_cart_fixed_code?(product, item[:discount_code]) ? [listed_price_cents - principal_cents, 0].max : principal_cents
+      deposit_total_cents = get_usd_cents(currency, principal_cents + deposit_tip_cents, rate:)
+      deposit_tip_usd_cents = get_usd_cents(currency, deposit_tip_cents, rate:)
+      {
+        deposit_price_cents: deposit_total_cents - deposit_tip_usd_cents,
+        deposit_tip_cents: deposit_tip_usd_cents,
+        completion_price_cents: get_usd_cents(currency, completion_principal_cents + deposit_tip_cents, rate:),
+      }
+    end
+
+    # The completion purchase computes its own tax on its own price. Commissions don't ship.
+    def commission_completion_total_cents(product:, item:, split:, charge_surcharges:, rate:)
+      completion_price_cents = split[:completion_price_cents]
+      completion_surcharges =
+        if completion_price_cents == split[:deposit_price_cents] + split[:deposit_tip_cents]
+          charge_surcharges
+        else
+          calculate_surcharges(product, item[:quantity], completion_price_cents,
+                               subscription_id: item[:subscription_id], recommended_by: item[:recommended_by], rate:)
+        end
+      return if completion_surcharges.blank?
+
+      tax_result = completion_surcharges.fetch(:sales_tax_result)
+      tax_result.price_cents.to_i + [tax_result.tax_cents.round.to_i, 0].max
+    end
+
+    # Commission#completion_price_cents bills the rest of a once-per-cart fixed discount's total
+    # instead of repeating the deposit.
+    def once_per_cart_fixed_code?(product, code)
+      return false unless code.is_a?(String) && code.present?
+
+      offer_code = product.find_offer_code(code: code.downcase.strip)
+      offer_code.present? && offer_code.is_cents? && offer_code.once_per_cart?
     end
 
     def calculate_surcharges(product, quantity, price, subscription_id: nil, recommended_by: nil, rate: :unset)

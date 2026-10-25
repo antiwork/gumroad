@@ -19,6 +19,10 @@ export type GetSurchargesRequest = {
     // per-line rounded total the charge path will later persist.
     listed_price_cents?: number | undefined;
     listed_tip_cents?: number | undefined;
+    // Commission lines: the tip the order puts on the deposit, and the line's discount code, so
+    // the server can quote the deposit and completion the way Purchase and Commission charge them.
+    deposit_tip_cents?: number | undefined;
+    discount_code?: string | undefined;
     pay_in_installments?: boolean | undefined;
     subscription_id?: string | undefined;
   }[];

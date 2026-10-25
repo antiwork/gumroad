@@ -485,6 +485,7 @@ const CheckoutIndexPage = () => {
         // discounts. Keep that basis stable when a limited discount changes only today's charge.
         listedPriceCents: item.price * item.quantity,
         listedChargePriceCents: price,
+        discountCode: discount?.type === "code" ? discount.code : null,
         renewalPriceCents: item.recurrence ? Math.round(convertToUSD(item, renewalPrice)) : null,
         payInInstallments: item.pay_in_installments,
         installmentPlan: item.product.installment_plan

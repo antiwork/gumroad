@@ -2,7 +2,8 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SurchargesResponse } from "$app/data/customer_surcharge";
+import type { GetSurchargesRequest, SurchargesResponse } from "$app/data/customer_surcharge";
+import { cast } from "$app/utils/cast";
 
 import { createReducer, type CheckoutPaymentConfig } from "$app/components/Checkout/payment";
 
@@ -469,6 +470,39 @@ describe("createReducer surcharge refetches", () => {
       payment_element_mount_currency: "cad",
       payment_element_direct_listed_currency: "cad",
     });
+  });
+
+  it("sends a commission line's deposit tip, discount code and listed price", async () => {
+    const requests = stubSurchargeRequests();
+    const { result } = renderCheckout({
+      products: initialArgs.products.flatMap((ordinary) => [
+        {
+          ...ordinary,
+          permalink: "commission",
+          uid: "commission ",
+          price: 1_603,
+          listedChargePriceCents: 1_603,
+          discountCode: "oncepercart",
+          nativeType: "commission" as const,
+        },
+        { ...ordinary, listedChargePriceCents: 1_000 },
+      ]),
+    });
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    act(() => result.current[1]({ type: "set-value", tip: { type: "fixed", amount: 33 } }));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    // The order allocates the $0.33 tip over the $8.015 deposit and the $10 line: 11 cents to the
+    // deposit, against 20 cents of the full-price split the quote's tip_cents carries.
+    const [commission, product] = cast<GetSurchargesRequest>(requests.at(-1)?.payload).products;
+    expect(commission).toMatchObject({
+      tip_cents: 20,
+      deposit_tip_cents: 11,
+      discount_code: "oncepercart",
+      listed_price_cents: 1_603,
+    });
+    expect(product).not.toHaveProperty("deposit_tip_cents");
+    expect(product).not.toHaveProperty("discount_code");
   });
 
   it("requests per-line allocations for a method-forced listed mount", async () => {
