@@ -1285,6 +1285,88 @@ describe CustomerMailer do
         end
       end
 
+      # gumroad-private#3941: a link opened without the original cookies lands in a new guest
+      # cart, so the same address kept receiving the same installment from a new cart every
+      # couple of days. The sequence is keyed on the recipient, not only on the cart.
+      context "when another cart of the same address already got this installment about this product" do
+        let(:cart) { create(:cart, user: nil, email: "guest@example.com") }
+        let(:earlier_cart) { create(:cart, user: nil, email: "guest@example.com") }
+
+        before do
+          create(:cart_product, cart: earlier_cart, product: seller1.products.first)
+          SentAbandonedCartEmail.create!(cart_id: earlier_cart.id, installment_id: seller1_workflow_installment.id)
+        end
+
+        it "does not send the reminder again" do
+          expect do
+            mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end.not_to change { SentAbandonedCartEmail.count }
+        end
+
+        context "when the earlier reminder was about a different product" do
+          before do
+            CartProduct.where(cart_id: earlier_cart.id).delete_all
+            create(:cart_product, cart: earlier_cart, product: seller1.products.second)
+          end
+
+          it "still sends the reminder" do
+            expect do
+              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+              expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
+            end.to change { SentAbandonedCartEmail.count }.by(1)
+          end
+        end
+
+        context "when the earlier reminder was a different installment of the sequence" do
+          before do
+            SentAbandonedCartEmail.find_by!(cart_id: earlier_cart.id).update!(installment_id: seller2_workflow_installment.id)
+          end
+
+          it "still sends the reminder" do
+            expect do
+              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+              expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
+            end.to change { SentAbandonedCartEmail.count }.by(1)
+          end
+        end
+
+        context "when the earlier reminder is older than the lookback window" do
+          before do
+            earlier_cart.update!(updated_at: (CustomerMailer::ABANDONED_CART_REMINDER_LOOKBACK + 1.day).ago)
+          end
+
+          it "still sends the reminder" do
+            expect do
+              mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+              expect(mail.message).not_to be_a(ActionMailer::Base::NullMail)
+            end.to change { SentAbandonedCartEmail.count }.by(1)
+          end
+        end
+      end
+
+      context "when another cart of a signed-in buyer already got this installment about this product" do
+        let(:buyer) { create(:user) }
+        let(:cart) { create(:cart, user: buyer) }
+        let(:earlier_cart) { create(:cart, user: nil, email: buyer.email) }
+
+        before do
+          create(:cart_product, cart: cart, product: seller1.products.first)
+          cart.update!(updated_at: 25.hours.ago)
+          create(:cart_product, cart: earlier_cart, product: seller1.products.first)
+          SentAbandonedCartEmail.create!(cart_id: earlier_cart.id, installment_id: seller1_workflow_installment.id)
+          allow(cart).to receive(:secure_external_id).with(scope: "cart_login").and_return("stubbed_secure_cart_id")
+          allow(Cart).to receive(:find).with(cart.id).and_return(cart)
+        end
+
+        it "does not send the reminder again" do
+          expect do
+            mail = CustomerMailer.abandoned_cart(cart.id, { seller1_workflow.id => [seller1.products.first.id] }.stringify_keys)
+            expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+          end.not_to change { SentAbandonedCartEmail.count }
+        end
+      end
+
       context "when the provided workflow is not of 'abaonded_cart' type" do
         before do
           seller1_workflow.update!(workflow_type: Workflow::SELLER_TYPE)
