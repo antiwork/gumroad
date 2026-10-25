@@ -238,7 +238,10 @@ describe ForeignWebhooksController do
         allow(ErrorNotifier).to receive(:notify)
         request.headers["X-Twilio-Email-Event-Webhook-Signature"] = nil
 
-        expect { post :sendgrid, body: raw_body, as: :json }.to raise_error(Redis::TimeoutError)
+        post :sendgrid, body: raw_body, as: :json
+
+        expect(response).to have_http_status(:service_unavailable)
+        expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Redis::TimeoutError), action: "sendgrid")
         expect(HandleSendgridEventJob.jobs.size).to eq(0)
       end
 
