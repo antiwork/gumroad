@@ -175,9 +175,23 @@ const formatOptionLabel: NonNullable<ReactSelectProps<Option>["formatOptionLabel
 const LoadingIndicator = () => null;
 const IndicatorSeparator = () => null;
 
+// Let action buttons activate natively instead of selecting an option or opening the menu.
+const stopButtonActivationPropagation = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+  if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+};
+
 const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => (
-  <components.ClearIndicator {...props}>
-    <button className="cursor-pointer all-unset" aria-label="Clear value">
+  <components.ClearIndicator {...props} innerProps={{ ...props.innerProps, "aria-hidden": undefined }}>
+    <button
+      type="button"
+      className="cursor-pointer all-unset"
+      aria-label="Clear value"
+      onClick={(event) => {
+        // react-select already handles mouse/touch clearing on the wrapper.
+        if (event.detail === 0) props.clearValue();
+      }}
+      onKeyDown={stopButtonActivationPropagation}
+    >
       <X className="size-5" />
     </button>
   </components.ClearIndicator>
@@ -277,7 +291,7 @@ const MenuList = <IsMulti extends boolean>(props: MenuListProps<Option, IsMulti>
 const MultiValue = <IsMulti extends boolean>(props: MultiValueProps<Option, IsMulti>) => (
   <div {...props.removeProps} className="max-w-full min-w-0">
     <Pill asChild color="primary" className="max-w-full cursor-pointer text-left font-[inherit] text-[length:inherit]">
-      <button>
+      <button type="button" disabled={props.isDisabled} onKeyDown={stopButtonActivationPropagation}>
         <span className="min-w-0 break-words whitespace-normal">{props.data.label}</span>
         <X className="ml-2 size-5 shrink-0" />
       </button>
