@@ -228,6 +228,39 @@ describe TranscodeVideoForStreamingWorker do
 
               expect(described_class).to have_enqueued_sidekiq_job(product_file.id, ProductFile.name, described_class::MEDIACONVERT, true).in(24.hours)
             end
+
+            it "sends only the S3 URI of the source video" do
+              described_class.new.perform(product_file.id)
+
+              expect(WebMock).to(have_requested(:post, described_class::GRMC_ENDPOINT).with do |request|
+                body = JSON.parse(request.body)
+                body["s3_video_uri"] == "s3://#{S3_BUCKET}/specs/ScreenRecording.mov" && !body.key?("video_url")
+              end)
+            end
+
+            context "when grmc_cloudfront_source is active" do
+              before { Feature.activate(:grmc_cloudfront_source) }
+
+              it "also sends a CloudFront URL for the source video, signed for 24 hours" do
+                described_class.new.perform(product_file.id)
+
+                expect(WebMock).to(have_requested(:post, described_class::GRMC_ENDPOINT).with do |request|
+                  JSON.parse(request.body)["video_url"].start_with?(
+                    "#{CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL}specs/ScreenRecording.mov?Expires=#{24.hours.from_now.to_i}&Signature="
+                  )
+                end)
+              end
+
+              it "escapes the source video key in the URL" do
+                product_file.update!(url: "#{S3_BASE_URL}specs/Screen Recording (1).mov")
+
+                described_class.new.perform(product_file.id)
+
+                expect(WebMock).to(have_requested(:post, described_class::GRMC_ENDPOINT).with do |request|
+                  JSON.parse(request.body)["video_url"].start_with?("#{CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL}specs/Screen%20Recording%20%281%29.mov?")
+                end)
+              end
+            end
           end
 
           context "when request to GRMC is not successful" do

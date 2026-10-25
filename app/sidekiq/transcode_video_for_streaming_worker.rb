@@ -3,6 +3,7 @@
 class TranscodeVideoForStreamingWorker
   include Sidekiq::Job
   include Rails.application.routes.url_helpers
+  include SignedUrlHelper
   sidekiq_options retry: 13, queue: :default
 
   # Enforced by AWS Elastic Transcoder
@@ -10,6 +11,7 @@ class TranscodeVideoForStreamingWorker
   MEDIACONVERT = "mediaconvert"
   GRMC = "grmc"
   GRMC_ENDPOINT = "https://production-mediaconverter.gumroad.net/convert"
+  GRMC_VIDEO_URL_VALID_FOR = 24.hours
   ETS = "ets"
   ETS_PLAYLIST_FILENAME = "index.m3u8"
   MEDIACONVERT_OUTPUT_FILENAME = "index"
@@ -164,10 +166,11 @@ class TranscodeVideoForStreamingWorker
           # TODO(kyle): Verify that it's safe to use global ID here.
           id: streamable.id.to_s,
           s3_video_uri: "s3://#{S3_BUCKET}/#{original_video_key}",
+          video_url: (grmc_video_url(original_video_key) if Feature.active?(:grmc_cloudfront_source)),
           s3_hls_dir_uri: "s3://#{S3_BUCKET}/#{output_key_prefix}",
           presets:,
           callback_url: api_internal_grmc_webhook_url(host: API_DOMAIN)
-        }.to_json
+        }.compact.to_json
 
         response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
           http.request(request)
@@ -202,6 +205,15 @@ class TranscodeVideoForStreamingWorker
   private
     def mediaconvert_transcodable?(transcoder)
       transcoder.in?([MEDIACONVERT, GRMC])
+    end
+
+    # GRMC runs outside AWS, so reading S3 directly is billed as internet egress; S3 to CloudFront is free.
+    # This distribution skips Cloudflare, so source videos stay out of its cache.
+    def grmc_video_url(original_video_key)
+      signed_cloudfront_url(
+        "#{CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL}#{Seahorse::Util.uri_path_escape(original_video_key)}",
+        expires_in: GRMC_VIDEO_URL_VALID_FOR
+      )
     end
 
     def build_output_key_prefix(original_video_key)
