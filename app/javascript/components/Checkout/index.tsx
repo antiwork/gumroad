@@ -94,6 +94,7 @@ import {
   getSelectableDirectListedCurrency,
   getShippingCountryCodes,
   getTotalPriceFromProducts,
+  getPaymentSplit,
   getTotalPriceFromSurcharges,
   getUnshippableProducts,
   isProcessing,
@@ -397,6 +398,13 @@ export const Checkout = ({
   // sheets (getChargeTodayPrice) so the sheet total always matches the "Payment today" row.
   const futureInstallmentsWithoutTipsTotal = getFutureInstallmentsTotal(state);
 
+  const paymentSplit = getPaymentSplit({
+    total: total ?? 0,
+    serverChargeTotal: summarySurcharges?.charge_canonical_total_cents,
+    commissionCompletionTotal,
+    futureInstallmentsTotal: futureInstallmentsWithoutTipsTotal,
+  });
+
   const displayTipSelector = isTippingEnabled(state);
   const configuredDirectListedCurrency = getConfiguredDirectListedCurrency(state);
   // The surface the summary renders as of, for the same reason `summarySurcharges` above renders
@@ -533,13 +541,10 @@ export const Checkout = ({
     localAmounts?.totalCents ?? toDisplayedCents(total ?? 0),
     ...(commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0
       ? [
-          buyerCurrencyDisplay?.chargePresentmentTotalCents ??
-            toDisplayedCents(
-              total == null ? 0 : total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
-            ),
+          buyerCurrencyDisplay?.chargePresentmentTotalCents ?? toDisplayedCents(total == null ? 0 : paymentSplit.today),
           buyerCurrencyDisplay?.futureInstallmentsPresentmentTotalCents ??
             toDisplayedCents(futureInstallmentsWithoutTipsTotal),
-          toDisplayedCents(commissionCompletionTotal),
+          toDisplayedCents(paymentSplit.completion),
         ]
       : []),
   ];
@@ -804,18 +809,14 @@ export const Checkout = ({
                                   buyerCurrencyDisplay,
                                   { noCentsIfWhole },
                                 )
-                              : formatCheckoutPrice(
-                                  total - commissionCompletionTotal - futureInstallmentsWithoutTipsTotal,
-                                  localCurrency,
-                                  { noCentsIfWhole },
-                                )
+                              : formatCheckoutPrice(paymentSplit.today, localCurrency, { noCentsIfWhole })
                           }
                           isRequoting={isRequoting}
                         />
                         {commissionCompletionTotal > 0 ? (
                           <CartPriceItem
                             title="Payment after completion"
-                            price={formatCheckoutPrice(commissionCompletionTotal, localCurrency, { noCentsIfWhole })}
+                            price={formatCheckoutPrice(paymentSplit.completion, localCurrency, { noCentsIfWhole })}
                             isRequoting={isRequoting}
                           />
                         ) : null}

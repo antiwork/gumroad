@@ -13,6 +13,7 @@ import {
   getChargeTodayPrice,
   getConfiguredDirectListedCurrency,
   getFutureInstallmentsTotal,
+  getPaymentSplit,
   getLoadedDirectListedAmountToken,
   getPayLabel,
   getSelectableDirectListedCurrency,
@@ -4013,5 +4014,29 @@ describe("paymentMethodTypesForMountCurrency", () => {
     it("keeps UPI while the amount is not yet known", () => {
       expect(paymentMethodTypesForMountCurrency(inrListed, "inr", null)).toEqual(["card", "link", "upi"]);
     });
+  });
+});
+
+describe("getPaymentSplit", () => {
+  it("gives the commission balance the tax the server did not charge today", () => {
+    expect(
+      getPaymentSplit({
+        total: 19_200,
+        serverChargeTotal: 9_600,
+        commissionCompletionTotal: 8_000,
+        futureInstallmentsTotal: 0,
+      }),
+    ).toEqual({ today: 9_600, completion: 9_600 });
+  });
+
+  it("falls back to the untaxed split without a server charge total", () => {
+    expect(
+      getPaymentSplit({
+        total: 19_200,
+        serverChargeTotal: null,
+        commissionCompletionTotal: 8_000,
+        futureInstallmentsTotal: 0,
+      }),
+    ).toEqual({ today: 11_200, completion: 8_000 });
   });
 });

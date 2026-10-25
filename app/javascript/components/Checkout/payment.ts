@@ -1140,6 +1140,24 @@ export function getChargeTodayPrice(state: State) {
   return total - getFutureInstallmentsTotal(state);
 }
 
+// The server's charge-now total already carries only the tax on today's charge, so the later
+// commission balance gets the remaining tax instead of today's row absorbing all of it.
+export function getPaymentSplit({
+  total,
+  serverChargeTotal,
+  commissionCompletionTotal,
+  futureInstallmentsTotal,
+}: {
+  total: number;
+  serverChargeTotal: number | null | undefined;
+  commissionCompletionTotal: number;
+  futureInstallmentsTotal: number;
+}) {
+  if (serverChargeTotal != null && commissionCompletionTotal > 0 && futureInstallmentsTotal === 0)
+    return { today: serverChargeTotal, completion: total - serverChargeTotal };
+  return { today: total - commissionCompletionTotal - futureInstallmentsTotal, completion: commissionCompletionTotal };
+}
+
 export function getCustomFieldKey(
   field: CustomFieldDescriptor,
   product: { permalink: string; bundleProductId?: string | null },
