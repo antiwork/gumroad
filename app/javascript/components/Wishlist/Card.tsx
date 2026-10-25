@@ -7,6 +7,7 @@ import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 
 import { AuthorByline } from "$app/components/Product/AuthorByline";
 import { Skeleton } from "$app/components/Skeleton";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { ProductCard, ProductCardFigure, ProductCardHeader } from "$app/components/ui/ProductCard";
 import { StretchedLink } from "$app/components/ui/StretchedLink";
 import { useFollowWishlist } from "$app/components/Wishlist/FollowButton";
@@ -101,15 +102,14 @@ export const Card = ({ wishlist, hideSeller, eager }: CardProps) => {
             </span>
           </div>
           {wishlist.can_follow ? (
-            <a
+            <LinkButton
               onClick={() => void toggleFollowing()}
-              className="relative border-l border-border p-4 text-xl lg:border-l-0 lg:p-0"
-              role="button"
-              aria-disabled={isLoading}
+              className="relative border-l border-border p-4 text-xl focus-visible:outline-2 focus-visible:-outline-offset-2 disabled:cursor-not-allowed disabled:opacity-30 lg:border-l-0 lg:p-0"
+              disabled={isLoading}
               aria-label={isFollowing ? "Unfollow" : "Follow"}
             >
               {isFollowing ? <Bookmark pack="filled" className="size-5" /> : <BookmarkPlus className="size-5" />}
-            </a>
+            </LinkButton>
           ) : null}
         </footer>
       </section>
