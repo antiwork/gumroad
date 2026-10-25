@@ -119,6 +119,8 @@ export default function BundlesContentEdit() {
     searchProducts({ query: searchQuery, reset: ["search_data"] });
   }, 300);
 
+  React.useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+
   useOnChange(() => debouncedSearch(query), [query]);
 
   const loadMore = () => {

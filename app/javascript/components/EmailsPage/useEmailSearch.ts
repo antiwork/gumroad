@@ -21,6 +21,8 @@ export const useEmailSearch = () => {
     });
   }, 500);
 
+  React.useEffect(() => () => debouncedSearch.cancel(), [debouncedSearch]);
+
   useOnChange(() => debouncedSearch(query), [query]);
 
   return { query, setQuery };
