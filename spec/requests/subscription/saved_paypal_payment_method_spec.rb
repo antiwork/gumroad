@@ -71,12 +71,12 @@ describe "Managing a membership saved on PayPal", type: :system, js: true do
     end
 
     it "wraps a long payer email on a phone without squeezing the PayPal icon", :mobile_view do
-      @paypal_account.update!(visual: "subscriptions.billing.department-team@long-company-name-example.com")
+      @paypal_account.update!(visual: "subscriptions.billing.department-team.long-company-name@example.com")
       # The headless mobile driver has no device emulation, only an 800px window.
       page.current_window.resize_to(375, 812)
       visit_manage_page
 
-      label = find("label", text: "PayPal · subscriptions.billing.department-team@long-company-name-example.com")
+      label = find("label", text: "PayPal · subscriptions.billing.department-team.long-company-name@example.com")
       icon_width, label_right = page.evaluate_script(<<~JS, label)
         [arguments[0].querySelector("svg").getBoundingClientRect().width, arguments[0].getBoundingClientRect().right]
       JS
