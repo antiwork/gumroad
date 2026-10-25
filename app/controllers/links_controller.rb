@@ -1019,18 +1019,21 @@ class LinksController < ApplicationController
       permitted.delete(:installment_plan) if permitted[:installment_plan].blank? && !installment_plan_clear_requested?
     end
 
-    # The editor renders save errors as HTML, so every interpolated value is escaped.
+    # The editor renders save errors as HTML, so every interpolated value is escaped. The amount moves across
+    # unconverted, so show it in the saved currency and in the one the seller picked.
     def rental_price_currency_error(rental_price_cents, violation)
-      currency_type = @product.price_currency_type
-      rental_price = MoneyFormatter.format(rental_price_cents, currency_type.to_sym, no_cents_if_whole: true, symbol: true)
-      limit = case violation
-              when :below_minimum then "below the #{@product.min_price_formatted} minimum"
-              when :above_unverified_maximum then "above the $5,000 maximum"
-              else "too large"
+      format_price = ->(currency_type) { MoneyFormatter.format(rental_price_cents, currency_type.to_sym, no_cents_if_whole: true, symbol: true) }
+      problem = case violation
+                when :below_minimum
+                  "below the #{@product.min_price_formatted} minimum"
+                when :above_unverified_maximum
+                  "worth more than the #{MoneyFormatter.format(@product.user.max_product_price, :usd, no_cents_if_whole: true, symbol: true)} USD limit for your account"
+                else
+                  "which is too high"
       end
-      "This product's rental price (#{ERB::Util.html_escape(rental_price)}) is #{ERB::Util.html_escape(limit)} " \
-        "in #{ERB::Util.html_escape(@product.currency["display_format"])}, so the currency can't be changed. " \
-        "Keep the current currency, or contact support for help changing the rental price."
+      "Your changes weren't saved. Your #{ERB::Util.html_escape(format_price.(@product.price_currency_type_was))} rental price would become " \
+        "#{ERB::Util.html_escape(format_price.(@product.price_currency_type))}, #{ERB::Util.html_escape(problem)}. " \
+        "Switch back to the original currency, or contact support for help."
     end
 
     def custom_permalink_clear_requested?

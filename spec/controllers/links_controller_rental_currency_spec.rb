@@ -67,9 +67,22 @@ describe LinksController, type: :controller do
         post :update, params: editor_save_params(price_currency_type: "inr", price_cents: 10_000_00), as: :json
       end.not_to change { Price.count }
 
-      expect_rejected_with("This product's rental price (₹49) is below the ₹73 minimum in ₹ (Rupees), " \
-                           "so the currency can't be changed. " \
-                           "Keep the current currency, or contact support for help changing the rental price.")
+      expect_rejected_with("Your changes weren't saved. Your $49 rental price would become ₹49, below the ₹73 minimum. " \
+                           "Switch back to the original currency, or contact support for help.")
+    end
+
+    it "shows the saved rental price in its own currency and the new one in a currency without cents" do
+      eur_product = create(:product, user: seller, price_currency_type: "eur", price_cents: 9_900,
+                                     purchase_type: :buy_and_rent, rental_price_cents: 4_900)
+
+      post :update, params: editor_save_params(id: eur_product.unique_permalink, name: eur_product.name,
+                                               price_currency_type: "vnd", price_cents: 1_000_000), as: :json
+
+      expect(response.parsed_body["error_message"]).to eq("Your changes weren't saved. Your €49 rental price would become 4,900 ₫, " \
+                                                         "below the 25,618 ₫ minimum. " \
+                                                         "Switch back to the original currency, or contact support for help.")
+      expect(eur_product.reload.price_currency_type).to eq("eur")
+      expect(eur_product.rental).to eq(price_cents: 4_900, rent_only: false)
     end
 
     it "names the unverified seller maximum" do
@@ -79,9 +92,9 @@ describe LinksController, type: :controller do
 
       post :update, params: editor_save_params(price_currency_type: "eur", price_cents: 8_900), as: :json
 
-      expect(response.parsed_body["error_message"]).to eq("This product's rental price (€4,900) is above the $5,000 maximum in € (Euro), " \
-                                                         "so the currency can't be changed. " \
-                                                         "Keep the current currency, or contact support for help changing the rental price.")
+      expect(response.parsed_body["error_message"]).to eq("Your changes weren't saved. Your $4,900 rental price would become €4,900, " \
+                                                         "worth more than the $5,000 USD limit for your account. " \
+                                                         "Switch back to the original currency, or contact support for help.")
       expect(product.reload.price_currency_type).to eq("usd")
       expect(product.rental).to eq(price_cents: 4_900_00, rent_only: false)
     ensure
