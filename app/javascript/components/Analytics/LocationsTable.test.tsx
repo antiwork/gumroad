@@ -3,8 +3,9 @@ import { cleanup, render } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { AnalyticsCountriesTable } from "$app/components/Analytics/LocationsTable";
 import { type AnalyticsDataByState } from "$app/data/analytics";
+
+import { AnalyticsCountriesTable, AnalyticsStatesTable } from "$app/components/Analytics/LocationsTable";
 
 afterEach(cleanup);
 
@@ -56,5 +57,29 @@ describe("AnalyticsCountriesTable", () => {
     renderTable([]);
 
     expect(rows()).toEqual([["CountryNothing yet"]]);
+  });
+});
+
+describe("AnalyticsStatesTable", () => {
+  // The states table already covers a views-only row: the country value is an array in all
+  // three maps (United States is pre-seeded), so every state is visited.
+  it("lists a state that has page views but no sales", () => {
+    render(
+      <AnalyticsStatesTable
+        locationData={{
+          by_state: {
+            views: { productPermalink: { "United States": [5, 0] } },
+            sales: { productPermalink: { "United States": [0, 0] } },
+            totals: { productPermalink: { "United States": [0, 0] } },
+          },
+        }}
+        selectedProducts={["productPermalink"]}
+        locations={{ 0: "California", 1: "Oregon" }}
+        caption="Locations"
+      />,
+    );
+
+    expect(rowFor("California")).toEqual([expect.stringContaining("California"), "Views5", "Sales0", "Total$0"]);
+    expect(rowFor("Oregon")).toBeUndefined();
   });
 });
