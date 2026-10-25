@@ -35,6 +35,9 @@ describe "Tracking link keyboard sorting", type: :system, js: true do
     expect(page.evaluate_script("document.querySelector('tbody').innerText")).to include("Beta campaign", "Alpha campaign")
     expect(page).to have_text("Source", minimum: 2)
     expect(page).not_to have_button("Source", visible: true)
+  ensure
+    # The emulation override outlives the session reset, so later examples would keep this phone viewport.
+    page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
   end
 
   it "also supports keyboard sorting in the Products table" do
