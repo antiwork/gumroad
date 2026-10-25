@@ -489,16 +489,27 @@ class CustomerMailer < ApplicationMailer
     # Installment ids this recipient has already been sent, over every cart they have ever had.
     # Counted by the address the mail would go to — the account's when the cart has one — so a cart
     # holding someone else's stale guest address does not suppress that person's reminder.
+    #
+    # Two lookups rather than one `COALESCE(users.email, carts.email) IN (?)`: an expression in the
+    # filter denies the optimizer both index_carts_on_email and index_users_on_email, which turns a
+    # per-cart lookup in the daily bulk job into a scan of every cart ever created (same reasoning as
+    # Cart.owned_variant_ids_by_recipient).
     def previously_sent_installment_ids(cart, installment_ids)
       recipient_emails = Cart.recipient_emails_for(cart)
       return Set.new if recipient_emails.empty?
 
-      Cart.left_joins(:user)
-        .where("COALESCE(users.email, carts.email) IN (?)", recipient_emails)
-        .joins(:sent_abandoned_cart_emails)
-        .where(sent_abandoned_cart_emails: { installment_id: installment_ids })
+      sent = SentAbandonedCartEmail.where(installment_id: installment_ids)
+
+      sent.joins(cart: :user)
+        .where(users: { email: recipient_emails })
         .distinct
-        .pluck("sent_abandoned_cart_emails.installment_id")
+        .pluck(:installment_id)
+        .concat(
+          sent.joins(:cart)
+            .where(carts: { user_id: nil, email: recipient_emails })
+            .distinct
+            .pluck(:installment_id)
+        )
         .to_set
     end
 
