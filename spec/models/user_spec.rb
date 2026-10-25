@@ -2437,6 +2437,29 @@ describe User, :vcr do
       expect(InvalidateProductCacheWorker).to receive(:perform_bulk).with([[@product_1.id], [@product_2.id]])
       @user.clear_products_cache
     end
+
+    it "reports instead of raising when Redis is unreachable" do
+      error = RedisClient::CannotConnectError.new("unreachable")
+      allow(InvalidateProductCacheWorker).to receive(:perform_bulk).and_raise(error)
+      expect(ErrorNotifier).to receive(:notify).with(error, user_id: @user.id)
+
+      expect { @user.clear_products_cache }.not_to raise_error
+    end
+
+    it "keeps the seller's save when the enqueue cannot reach Redis" do
+      allow(InvalidateProductCacheWorker).to receive(:perform_bulk).and_raise(Redis::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+
+      @user.update!(name: "Renamed")
+
+      expect(@user.reload.name).to eq("Renamed")
+    end
+
+    it "still raises an unrelated error" do
+      allow(InvalidateProductCacheWorker).to receive(:perform_bulk).and_raise(NoMethodError)
+
+      expect { @user.clear_products_cache }.to raise_error(NoMethodError)
+    end
   end
 
   describe "#credit_card_info" do

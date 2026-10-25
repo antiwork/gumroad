@@ -484,6 +484,20 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
       expect(flash[:alert]).to eq("The logo is already removed. Please refresh the page and try again.")
     end
 
+    it "saves the new logo and reports when the product cache enqueue cannot reach Redis" do
+      create(:product, user: seller)
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+      allow(InvalidateProductCacheWorker).to receive(:perform_bulk).and_raise(RedisClient::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+      expect(ErrorNotifier).to receive(:notify).with(an_instance_of(RedisClient::CannotConnectError), user_id: seller.id).at_least(:once)
+
+      put :update, params: { profile_picture_blob_id: blob.signed_id }
+
+      expect(response).to redirect_to(profile_path)
+      expect(flash[:notice]).to eq("Changes saved!")
+      expect(seller.reload.avatar.blob.id).to eq(blob.id)
+    end
+
     it "handles duplicate attachment gracefully when avatar is already attached with the same blob" do
       blob = ActiveStorage::Blob.create_and_upload!(
         io: fixture_file_upload("smilie.png"),

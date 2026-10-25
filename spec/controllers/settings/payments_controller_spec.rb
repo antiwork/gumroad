@@ -558,6 +558,18 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(flash[:notice]).to eq("Thanks! You're all set.")
       end
 
+      it "saves the compliance info and reports when the follow-up enqueue cannot reach Redis" do
+        allow(DetectLegalEntityCountryDriftJob).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+        allow(ErrorNotifier).to receive(:notify)
+        expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Redis::CannotConnectError), user_compliance_info_id: kind_of(Integer)).at_least(:once)
+
+        put :update, params: { user: { first_name: "newfirst", last_name: "newlast" } }
+
+        expect(user.reload.alive_user_compliance_info.first_name).to eq "newfirst"
+        expect(response).to redirect_to(settings_payments_path)
+        expect_save_success_flash_message
+      end
+
       it "does not overwrite information for steps that the ui did not provide" do
         put :update, params: all_params
         put :update, params: { user: { first_name: "newfirst", last_name: "newlast" } }
@@ -2589,6 +2601,17 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       user.reload
       compliance_info = user.fetch_or_build_user_compliance_info
       expect(compliance_info.country).to eq "United States"
+    end
+
+    it "saves the country and reports when the follow-up enqueue cannot reach Redis" do
+      allow(DetectLegalEntityCountryDriftJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+      expect(ErrorNotifier).to receive(:notify).with(an_instance_of(RedisClient::CannotConnectError), user_compliance_info_id: kind_of(Integer)).at_least(:once)
+
+      post :set_country, params:, as: :json
+
+      expect(response).to be_successful
+      expect(user.reload.alive_user_compliance_info.country).to eq "United States"
     end
 
     describe "user compliance info" do

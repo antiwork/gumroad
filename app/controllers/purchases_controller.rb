@@ -293,6 +293,10 @@ class PurchasesController < ApplicationController
 
     @purchase.resend_receipt
     head :no_content
+  rescue *REDIS_TRANSPORT_ERRORS => e
+    # The enqueue is the whole request: answer "try again" rather than claim the receipt was sent.
+    ErrorNotifier.notify(e, purchase_id: @purchase.id)
+    head :service_unavailable
   end
 
   def change_can_contact

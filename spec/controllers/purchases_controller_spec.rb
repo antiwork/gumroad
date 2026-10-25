@@ -1094,6 +1094,24 @@ describe PurchasesController, :vcr do
         expect(response).to be_successful
       end
 
+      it "reports and answers 503 when the enqueue cannot reach Redis" do
+        error = RedisClient::CannotConnectError.new("unreachable")
+        allow(SendPurchaseReceiptJob).to receive(:perform_async).and_raise(error)
+        expect(ErrorNotifier).to receive(:notify).with(error, purchase_id: @purchase.id)
+
+        post :resend_receipt, params: { id: ObfuscateIds.encrypt(@purchase.id) }
+
+        expect(response).to have_http_status(:service_unavailable)
+      end
+
+      it "still raises an unrelated error" do
+        allow(SendPurchaseReceiptJob).to receive(:perform_async).and_raise(NoMethodError)
+
+        expect do
+          post :resend_receipt, params: { id: ObfuscateIds.encrypt(@purchase.id) }
+        end.to raise_error(NoMethodError)
+      end
+
       context "when the order has no successful purchases" do
         let(:purchase) { create(:failed_purchase, email: "test@example.com") }
 

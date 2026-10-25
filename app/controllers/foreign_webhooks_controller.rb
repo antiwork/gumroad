@@ -10,6 +10,13 @@ class ForeignWebhooksController < ApplicationController
   ].freeze
 
   skip_before_action :verify_authenticity_token
+
+  # Every sender here redelivers on a non-2xx, so a failed enqueue answers 503 to get the
+  # event again instead of acknowledging one we dropped.
+  rescue_from(*REDIS_TRANSPORT_ERRORS) do |e|
+    ErrorNotifier.notify(e, action: action_name)
+    head :service_unavailable
+  end
   before_action :validate_sns_webhook, only: [:sns, :mediaconvert, :sns_aws_config]
 
   before_action only: [:stripe] do

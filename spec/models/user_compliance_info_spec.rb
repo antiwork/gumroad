@@ -680,4 +680,36 @@ describe UserComplianceInfo do
       end
     end
   end
+
+  describe "enqueues after create" do
+    let(:user) { create(:user) }
+
+    it "enqueues the Stripe sync and the country drift check" do
+      uci = create(:user_compliance_info, user:)
+
+      expect(HandleNewUserComplianceInfoWorker).to have_enqueued_sidekiq_job(uci.id)
+      expect(DetectLegalEntityCountryDriftJob).to have_enqueued_sidekiq_job(uci.id)
+    end
+
+    [
+      [HandleNewUserComplianceInfoWorker, :perform_in, RedisClient::CannotConnectError],
+      [DetectLegalEntityCountryDriftJob, :perform_async, Redis::CannotConnectError],
+    ].each do |job, method, redis_error|
+      context "when #{job}.#{method} cannot reach Redis" do
+        it "reports and still saves the record" do
+          allow(job).to receive(method).and_raise(redis_error)
+          allow(ErrorNotifier).to receive(:notify)
+          expect(ErrorNotifier).to receive(:notify).with(an_instance_of(redis_error), user_compliance_info_id: kind_of(Integer))
+
+          expect { create(:user_compliance_info, user:) }.to change { user.user_compliance_infos.count }.by(1)
+        end
+
+        it "still raises an unrelated error" do
+          allow(job).to receive(method).and_raise(NoMethodError)
+
+          expect { create(:user_compliance_info, user:) }.to raise_error(NoMethodError)
+        end
+      end
+    end
+  end
 end

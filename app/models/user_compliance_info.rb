@@ -264,8 +264,11 @@ class UserComplianceInfo < ApplicationRecord
   alias_method :has_business_tax_id, :has_business_tax_id?
 
   private
+    # Raising from an after_commit cannot undo the committed record, it only fails the request.
     def handle_stripe_compliance_info
       HandleNewUserComplianceInfoWorker.perform_in(5.seconds, id) unless skip_stripe_job_on_create
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      ErrorNotifier.notify(e, user_compliance_info_id: id)
     end
 
     def handle_compliance_info_request
@@ -280,6 +283,8 @@ class UserComplianceInfo < ApplicationRecord
     # save transaction. See DetectLegalEntityCountryDriftJob.
     def detect_legal_entity_country_drift
       DetectLegalEntityCountryDriftJob.perform_async(id)
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      ErrorNotifier.notify(e, user_compliance_info_id: id)
     end
 
     def kana_fields_format

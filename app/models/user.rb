@@ -1085,9 +1085,13 @@ class User < ApplicationRecord
     (old_json || {})["tiktok_pixel_id"] != (new_json || {})["tiktok_pixel_id"]
   end
 
+  # Called from save callbacks and inside transactions, where a raise would roll back the
+  # seller's own save for the sake of a cache refresh.
   def clear_products_cache
     array_of_product_ids = links.ids.map { |product_id| [product_id] }
     InvalidateProductCacheWorker.perform_bulk(array_of_product_ids)
+  rescue *REDIS_TRANSPORT_ERRORS => e
+    ErrorNotifier.notify(e, user_id: id)
   end
 
   def generate_subscribe_preview
