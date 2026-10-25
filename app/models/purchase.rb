@@ -6259,8 +6259,20 @@ class Purchase < ApplicationRecord
       end
     end
 
+    # A Redis failover during the enqueue must not fail the purchase. This runs inside the
+    # state-machine after_transition, which is inside the DB transaction that follows a
+    # successful charge, so an escaping raise here rolls back a purchase Stripe already
+    # charged (gp#3948, gp#3947). Same class as ProductFile::EXPECTED_ENQUEUE_ERRORS:
+    # degrade to a stale product cache and report, never swallow.
     def queue_product_cache_invalidation
       InvalidateProductCacheWorker.perform_in(1.minute, link_id)
+    rescue Redis::BaseError, RedisClient::Error => e
+      Rails.logger.warn("queue_product_cache_invalidation enqueue failed (#{e.class}) purchase=#{id} link=#{link_id}")
+      begin
+        ErrorNotifier.notify(e, purchase_id: id, link_id:, cache_invalidation_enqueue_failed: true)
+      rescue StandardError => notifier_error
+        Rails.logger.warn("queue_product_cache_invalidation failure could not be reported (#{id}): #{notifier_error.class}")
+      end
     end
 
     def set_succeeded_at
