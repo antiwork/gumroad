@@ -23,13 +23,11 @@ class CustomerMailer < ApplicationMailer
   # to one receipt; read on until the template's fill is reachable, but stop after ten windows.
   GROUPED_RECEIPT_READ_WINDOWS = 10
 
-  # How far back a repeat reminder is suppressed per recipient + product + installment.
-  # A cart id is not a shopper identity: a checkout link opened without the original cookies
-  # lands the visitor in a brand-new guest cart with a fresh browser_guid, so one address can
-  # collect a new cart per send and each of them looks like a fresh abandonment
-  # (gumroad-private#3941: 12 emails in 21 days, every one sent within a second of the next
-  # cart being created). The unique index is keyed on the cart, so a fresh cart re-armed
-  # installment 1 of the seller's sequence every time.
+  # How far back a repeat reminder is suppressed for the same recipient, product and
+  # installment. A cart id is not a shopper identity: a checkout link opened without the
+  # original cookies lands the visitor in a new guest cart with a fresh browser_guid, and
+  # the unique index is keyed on the cart, so a new cart would re-arm the seller's sequence.
+  # Bounded so a genuine later visit is still reminded.
   ABANDONED_CART_REMINDER_LOOKBACK = 90.days
 
   # One send per recipient + receipt set within this window. The claim is taken at render,
@@ -428,13 +426,12 @@ class CustomerMailer < ApplicationMailer
   private
     # Which installments this recipient was already sent about each of the given products,
     # looking only at other carts. Keyed on the recipient rather than the cart so a
-    # re-created guest cart cannot restart the sequence; bounded to
-    # ABANDONED_CART_REMINDER_LOOKBACK so a genuine later visit is still reminded.
+    # re-created guest cart cannot restart the sequence.
     def recalled_installment_ids_by_product_id(cart, product_ids)
       return {} if product_ids.empty?
 
       recipient_email = cart.user&.email.presence || cart.email
-      recipient_carts = Cart.where("carts.updated_at > ?", ABANDONED_CART_REMINDER_LOOKBACK.ago).where.not(id: cart.id)
+      recipient_carts = Cart.where.not(id: cart.id)
       recipient_carts =
         if cart.user_id.present?
           recipient_carts.where("carts.user_id = ? OR carts.email = ?", cart.user_id, recipient_email)
@@ -442,8 +439,15 @@ class CustomerMailer < ApplicationMailer
           recipient_carts.where(email: recipient_email)
         end
 
+      # The send rows, not cart activity, decide what was already reminded: a cart edited long
+      # after its send must not resurrect the reminder, and a cart whose send is recent must not
+      # be forgotten because the cart itself is old. A product added to the cart after the send
+      # was not part of that mail.
       SentAbandonedCartEmail.joins(cart: :cart_products)
-                            .where(cart_id: recipient_carts.select(:id), cart_products: { product_id: product_ids })
+                            .where(cart_id: recipient_carts.select(:id),
+                                   sent_abandoned_cart_emails: { created_at: ABANDONED_CART_REMINDER_LOOKBACK.ago.. },
+                                   cart_products: { product_id: product_ids })
+                            .where("cart_products.created_at <= sent_abandoned_cart_emails.created_at")
                             .distinct
                             .pluck(:installment_id, "cart_products.product_id")
                             .each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |(installment_id, product_id), recalled|
