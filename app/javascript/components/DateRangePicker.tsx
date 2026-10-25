@@ -20,6 +20,7 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 
@@ -54,6 +55,7 @@ export const DateRangePicker = ({
   const uid = React.useId();
   const [isCustom, setIsCustom] = React.useState(false);
   const [open, setOpen] = React.useState(false);
+  const [activeItem, setActiveItem] = React.useState(0);
   const { locale } = useUserAgentInfo();
   const quickSet = (from: Date, to: Date) => {
     setFrom(from);
@@ -105,6 +107,7 @@ export const DateRangePicker = ({
           document.activeElement.blur();
         }
         setIsCustom(false);
+        setActiveItem(0);
         setOpen(open);
       }}
     >
@@ -124,6 +127,7 @@ export const DateRangePicker = ({
                 <Label htmlFor={`${uid}-from`}>From (including)</Label>
               </FieldsetTitle>
               <DateInput
+                autoFocus
                 id={`${uid}-from`}
                 value={from}
                 onChange={(date) => {
@@ -147,13 +151,55 @@ export const DateRangePicker = ({
             </Fieldset>
           </div>
         ) : (
-          <Menu>
-            {presets.map((preset) => (
-              <MenuItem key={preset.label} onClick={() => quickSet(preset.from, preset.to)}>
-                {preset.label}
+          <Menu
+            onKeyDown={(event) => {
+              const items = Array.from(
+                event.currentTarget.querySelectorAll<HTMLButtonElement>("button[role=menuitem]"),
+              );
+              const index = items.findIndex((item) => item === document.activeElement);
+              let next: number;
+              switch (event.key) {
+                case "ArrowDown":
+                  next = (index + 1) % items.length;
+                  break;
+                case "ArrowUp":
+                  next = index <= 0 ? items.length - 1 : index - 1;
+                  break;
+                case "Home":
+                  next = 0;
+                  break;
+                case "End":
+                  next = items.length - 1;
+                  break;
+                default:
+                  return;
+              }
+              event.preventDefault();
+              items[next]?.focus();
+            }}
+          >
+            {presets.map((preset, index) => (
+              <MenuItem key={preset.label} asChild>
+                <LinkButton
+                  className="w-full text-left no-underline focus:bg-active-bg focus-visible:outline-2 focus-visible:-outline-offset-2"
+                  tabIndex={activeItem === index ? 0 : -1}
+                  onFocus={() => setActiveItem(index)}
+                  onClick={() => quickSet(preset.from, preset.to)}
+                >
+                  {preset.label}
+                </LinkButton>
               </MenuItem>
             ))}
-            <MenuItem onClick={() => setIsCustom(true)}>Custom range...</MenuItem>
+            <MenuItem asChild>
+              <LinkButton
+                className="w-full text-left no-underline focus:bg-active-bg focus-visible:outline-2 focus-visible:-outline-offset-2"
+                tabIndex={activeItem === presets.length ? 0 : -1}
+                onFocus={() => setActiveItem(presets.length)}
+                onClick={() => setIsCustom(true)}
+              >
+                Custom range...
+              </LinkButton>
+            </MenuItem>
           </Menu>
         )}
       </PopoverContent>

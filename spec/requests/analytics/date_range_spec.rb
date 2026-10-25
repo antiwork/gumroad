@@ -18,6 +18,24 @@ describe "Analytics date range", :js, :sidekiq_inline, type: :system do
       recreate_model_index(ProductPageView)
     end
 
+    it "selects presets and opens custom dates using the keyboard" do
+      visit sales_dashboard_path
+
+      trigger = find('[aria-label="Date range selector"]').ancestor("button")
+      trigger.send_keys(:enter)
+      expect(page.evaluate_script("document.activeElement.textContent")).to eq("Today")
+      page.driver.browser.switch_to.active_element.send_keys(:arrow_down, :enter)
+      expect(page).to have_current_path(sales_dashboard_path(from: 6.days.ago.to_date.iso8601, to: Date.current.iso8601))
+
+      find('[aria-label="Date range selector"]').ancestor("button").send_keys(:enter)
+      page.driver.browser.switch_to.active_element.send_keys(:arrow_up, :space)
+      expect(page).to have_field("From (including)")
+      expect(page.evaluate_script("document.activeElement.id")).to eq(find_field("From (including)")[:id])
+      page.driver.browser.switch_to.active_element.send_keys(:escape)
+      expect(page).not_to have_field("From (including)")
+      expect(page.evaluate_script("document.activeElement.getAttribute('aria-expanded')")).to eq("false")
+    end
+
     it "allows selecting 'This month' date range" do
       travel_to test_date do
         visit sales_dashboard_path
