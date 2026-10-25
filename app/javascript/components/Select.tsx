@@ -28,12 +28,16 @@ type CustomProps = {
   focusedOptionId: null | string;
   setFocusedOptionId?: (id: null | string) => void;
   maxLength: number | null;
+  inputElRef: React.MutableRefObject<HTMLInputElement | null>;
+  suppressMenuOpenRef: React.MutableRefObject<boolean>;
 };
 const CustomPropsContext = React.createContext<CustomProps>({
   customOption: null,
   menuListId: null,
   focusedOptionId: null,
   maxLength: null,
+  inputElRef: { current: null },
+  suppressMenuOpenRef: { current: false },
 });
 
 export type Props<IsMulti extends boolean = boolean> = Omit<
@@ -71,6 +75,8 @@ const SelectInner = <IsMulti extends boolean>(
   };
 
   const menuListId = React.useId();
+  const inputElRef = React.useRef<HTMLInputElement | null>(null);
+  const suppressMenuOpenRef = React.useRef(false);
   const customProps = React.useMemo(
     () => ({
       customOption: props.customOption ?? null,
@@ -78,6 +84,8 @@ const SelectInner = <IsMulti extends boolean>(
       focusedOptionId,
       setFocusedOptionId,
       maxLength: props.maxLength ?? null,
+      inputElRef,
+      suppressMenuOpenRef,
     }),
     [props.customOption, focusedOptionId],
   );
@@ -106,7 +114,15 @@ const SelectInner = <IsMulti extends boolean>(
         openMenuOnFocus
         menuIsOpen={isMenuOpen}
         onMenuClose={handleMenuClose}
-        onMenuOpen={() => ((props.allowMenuOpen?.() ?? true) ? handleMenuOpen() : null)}
+        onMenuOpen={() => {
+          // A keyboard clear puts focus back on the input, and openMenuOnFocus would open the menu on
+          // the way there. The clear consumes that one open so it does not.
+          if (suppressMenuOpenRef.current) {
+            suppressMenuOpenRef.current = false;
+            return;
+          }
+          if (props.allowMenuOpen?.() ?? true) handleMenuOpen();
+        }}
         filterOption={filterOptionFn}
         formatOptionLabel={formatOptionLabel}
         styles={{
@@ -180,22 +196,34 @@ const stopButtonActivationPropagation = (event: React.KeyboardEvent<HTMLButtonEl
   if (event.key === "Enter" || event.key === " ") event.stopPropagation();
 };
 
-const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => (
-  <components.ClearIndicator {...props} innerProps={{ ...props.innerProps, "aria-hidden": undefined }}>
-    <button
-      type="button"
-      className="cursor-pointer all-unset"
-      aria-label="Clear value"
-      onClick={(event) => {
-        // react-select already handles mouse/touch clearing on the wrapper.
-        if (event.detail === 0) props.clearValue();
-      }}
-      onKeyDown={stopButtonActivationPropagation}
-    >
-      <X className="size-5" />
-    </button>
-  </components.ClearIndicator>
-);
+const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => {
+  const { inputElRef, suppressMenuOpenRef } = React.useContext(CustomPropsContext);
+
+  return (
+    <components.ClearIndicator {...props} innerProps={{ ...props.innerProps, "aria-hidden": undefined }}>
+      <button
+        type="button"
+        className="cursor-pointer all-unset"
+        aria-label="Clear value"
+        onClick={(event) => {
+          // react-select already handles mouse/touch clearing on the wrapper.
+          if (event.detail !== 0) return;
+          props.clearValue();
+          // The button unmounts with the value it cleared, so a keyboard clear would otherwise leave
+          // focus on the body. Put it back on the control's input, where react-select's own mouse
+          // path leaves it, without opening the menu on the way.
+          if (inputElRef.current && document.activeElement !== inputElRef.current) {
+            suppressMenuOpenRef.current = true;
+            inputElRef.current.focus();
+          }
+        }}
+        onKeyDown={stopButtonActivationPropagation}
+      >
+        <X className="size-5" />
+      </button>
+    </components.ClearIndicator>
+  );
+};
 
 const DropdownIndicator = <IsMulti extends boolean>(props: DropdownIndicatorProps<Option, IsMulti>) =>
   props.isMulti ? null : (
@@ -306,6 +334,10 @@ const Input = <IsMulti extends boolean>(props: InputProps<Option, IsMulti>) => {
   return (
     <components.Input
       {...props}
+      innerRef={(el) => {
+        customProps.inputElRef.current = el;
+        props.innerRef?.(el);
+      }}
       className="-mx-4 max-w-none flex-1 border-none bg-transparent shadow-none outline-none"
       aria-owns={customProps.menuListId ?? undefined}
       aria-controls={customProps.menuListId ?? undefined}

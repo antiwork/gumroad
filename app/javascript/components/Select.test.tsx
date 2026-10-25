@@ -33,6 +33,8 @@ describe("Select action buttons", () => {
     expect(onChange).toHaveBeenCalledOnce();
     expect(onChange).toHaveBeenCalledWith(null, expect.objectContaining({ action: "clear" }));
     expect(screen.queryByRole("option")).toBeNull();
+    // The clear button unmounts with the value it cleared, so focus goes back to the control's input.
+    expect(document.activeElement).toBe(screen.getByRole("combobox"));
   });
 
   it.each(["Enter", " "])("removes a selected tag with %s without opening the menu", (key) => {

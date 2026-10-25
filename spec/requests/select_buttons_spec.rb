@@ -19,6 +19,10 @@ describe "Select action buttons", type: :system, js: true do
         find_button("Clear value").send_keys(key)
         expect(page).not_to have_button("Clear value")
         expect(page).to have_text("Begin typing to select a category")
+        # The clear button unmounts with the value it cleared, so focus has to come back to the
+        # control's input, and the clear does not open the menu on the way there.
+        expect(page.evaluate_script("document.activeElement.getAttribute('role')")).to eq("combobox")
+        expect(page).not_to have_selector('[role="option"]')
       end
       expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/share")
       save_change
