@@ -157,6 +157,8 @@ describe Api::V2::UsersController do
 
         put @action, params: { access_token: @token.token, seo_description: nil }, as: :json
 
+        expect(response).to have_http_status(:ok)
+        expect(response.media_type).to eq("application/json")
         expect(response.parsed_body["success"]).to eq(true)
         expect(@user.seller_profile.reload.seo_description).to be_nil
         expect(@user.seller_profile.seo_title).to eq("Old title")
@@ -169,6 +171,9 @@ describe Api::V2::UsersController do
 
             put @action, params: @params.merge(key => value), as: :json
 
+            # The v2 API reports failures in the body with a 200, like every render_response.
+            expect(response).to have_http_status(:ok)
+            expect(response.media_type).to eq("application/json")
             expect(response.parsed_body).to eq("success" => false, "message" => "#{key} must be a string.")
             expect(@user.reload.name).not_to eq("Jane Seller")
             expect(@user.bio).not_to eq("I make great things.")
