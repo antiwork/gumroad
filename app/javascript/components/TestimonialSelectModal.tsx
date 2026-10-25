@@ -32,22 +32,25 @@ export const TestimonialSelectModal = ({
     pagination: null,
   });
   const [isLoading, setIsLoading] = React.useState(false);
-  const hasLoadedOnOpen = React.useRef(false);
+  const requestGeneration = React.useRef(0);
 
   const loadReviews = async (page = 1) => {
+    const generation = requestGeneration.current;
     setIsLoading(true);
     try {
       const data = await getReviews(productId, page);
+      if (generation !== requestGeneration.current) return;
 
       setState((prevState) => ({
         reviews: [...prevState.reviews, ...data.reviews],
         pagination: data.pagination,
       }));
     } catch (error) {
+      if (generation !== requestGeneration.current) return;
       assertResponseError(error);
       showAlert(error.message, "error");
     } finally {
-      setIsLoading(false);
+      if (generation === requestGeneration.current) setIsLoading(false);
     }
   };
 
@@ -57,16 +60,13 @@ export const TestimonialSelectModal = ({
   };
 
   React.useEffect(() => {
-    if (isOpen && !hasLoadedOnOpen.current) {
-      hasLoadedOnOpen.current = true;
-      void loadReviews(1);
-    }
-
-    if (!isOpen) {
-      hasLoadedOnOpen.current = false;
-      resetState();
-    }
-  }, [isOpen]);
+    resetState();
+    setIsLoading(false);
+    if (isOpen) void loadReviews(1);
+    return () => {
+      requestGeneration.current += 1;
+    };
+  }, [isOpen, productId]);
 
   const handleLoadMore = () => {
     if (state.pagination) {
