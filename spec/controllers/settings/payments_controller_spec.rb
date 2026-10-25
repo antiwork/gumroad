@@ -1009,6 +1009,39 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             expect(response).to have_http_status :found
             expect(session[:inertia_errors][:base]).to eq(["We're already setting up payouts for your account. Refresh this page in a moment to see its status."])
           end
+
+          it "reports payout setup as underway when a concurrent request creates the merchant account first", vcr: { record: :none } do
+            all_params.merge!(
+              bank_account: {
+                type: AchAccount.name,
+                account_number: "000123456789",
+                account_number_confirmation: "000123456789",
+                routing_number: "110000000",
+                account_holder_full_name: "gumbot"
+              }
+            )
+
+            # The other request passes the same controller guard, then persists inside create_account's
+            # user lock the row create_account writes before calling Stripe. Inject that write right after
+            # this request's guard so its own re-check under the lock is what finds it.
+            guard_checks = 0
+            allow(StripeMerchantAccountManager).to receive(:blocks_new_managed_account?).and_wrap_original do |original, checked_user|
+              blocked = original.call(checked_user)
+              guard_checks += 1
+              create(:merchant_account, user: checked_user, country: "US", currency: "usd", charge_processor_merchant_id: nil, charge_processor_alive_at: nil) if guard_checks == 1
+              blocked
+            end
+            expect(StripeMerchantAccountManager).to receive(:create_account).with(user, passphrase: GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD")).and_call_original
+            expect(Stripe::Account).not_to receive(:create)
+
+            put :update, params: all_params
+
+            expect(guard_checks).to eq(2)
+            expect(user.merchant_accounts.alive.stripe.count).to eq(1)
+            expect(response).to redirect_to(settings_payments_path)
+            expect(response).to have_http_status :found
+            expect(session[:inertia_errors][:base]).to eq(["We're already setting up payouts for your account. Refresh this page in a moment to see its status."])
+          end
         end
       end
 
