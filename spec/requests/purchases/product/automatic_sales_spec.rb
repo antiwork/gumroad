@@ -164,7 +164,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
 
     expect(page).to have_selector("[itemprop='price']", text: "$10 $7", exact_text: true, normalize_ws: true)
     expect(page).to have_selector("[data-testid='sale-banner']", text: "Sale")
-    click_on "Add to cart"
+    product_page_cta.click
     expect(page).to have_cart_item("Card product")
     expect(page).to have_text("Total US$7", normalize_ws: true)
   end
@@ -194,7 +194,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
       click_on "Target membership"
     end
     choose "Second Tier"
-    click_on "Add to cart"
+    product_page_cta.click
 
     expect(page).to have_cart_item("Target membership")
     expect(page).to have_text("Total US$80", normalize_ws: true)
@@ -275,7 +275,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
         click_on "Target membership"
       end
       choose "Second Tier"
-      click_on "Add to cart"
+      product_page_cta.click
       expect(page).to have_cart_item("Target membership")
       expect(page).to have_text("Total US$80", normalize_ws: true)
       wait_until_true(sleep_interval: 0.2) { persisted_cart_holds?(products: [membership], codes: %w[RENEW20 SHOP5]) }
@@ -310,12 +310,10 @@ describe "Automatic sales on product pages", type: :system, js: true do
       expect(page).to have_selector("[data-testid='sale-banner']", text: "$5 off First Tier")
       choose "Second Tier"
       expect(page).to have_selector("[role='status']", text: "20% off Second Tier will be applied at checkout (Code RENEW20)")
-      within(find(:article)) do
-        expect(Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)["code"]).to eq("RENEW20")
-      end
+      expect(Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)["code"]).to eq("RENEW20")
       expect(page).to have_no_selector("[data-testid='sale-banner']")
 
-      click_on "Add to cart"
+      product_page_cta.click
       expect(page).to have_cart_item("Target membership")
       expect(page).to have_text("Total US$80", normalize_ws: true)
     end
@@ -481,7 +479,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
         saves_written.increment
         later_save_written.set unless held
       end
-      click_on "Add to cart"
+      product_page_cta.click
 
       expect(page).to have_cart_item("Target membership")
       expect(page).to have_text("Total US$80", normalize_ws: true)
@@ -514,11 +512,11 @@ describe "Automatic sales on product pages", type: :system, js: true do
       end
       choose "Premium"
       within find(:article) do
-        query = Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)
+        query = Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)
         expect(query["option"]).to eq(premium.external_id)
         expect(query["code"]).to eq("RENEW20")
       end
-      click_on "Add to cart"
+      product_page_cta.click
 
       expect(page).to have_cart_item("Target product")
       expect(page).to have_text("Total US$80", normalize_ws: true)
@@ -549,7 +547,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
     end
 
     def cta_code
-      within(find(:article)) { Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)["code"] }
+      Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)["code"]
     end
 
     # Holds cart saves for this quantity on the server until the example releases them. The save's
@@ -577,7 +575,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
       login_as buyer
       open_from_profile(profile_product)
       expect(cta_code).to eq("RENEW20")
-      click_on "Add to cart"
+      product_page_cta.click
       expect(page).to have_cart_item("Target product")
       expect(page).to have_text("Total US$8", normalize_ws: true)
 
@@ -599,7 +597,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
 
       login_as buyer
       open_from_profile(profile_product)
-      click_on "Add to cart"
+      product_page_cta.click
       expect(held.wait(10)).to be(true)
       edit_cart_item("Target product") { fill_in "Quantity", with: 2 }
       @release_cart_saves.set
@@ -613,7 +611,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
 
       login_as buyer
       open_from_profile(profile_product)
-      click_on "Add to cart"
+      product_page_cta.click
       expect(page).to have_text("Total US$8", normalize_ws: true)
       expect(page).to have_button("Pay", disabled: false)
 
@@ -634,7 +632,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
       open_from_profile(profile_product)
       fill_in "Quantity", with: 2
       expect(cta_code).to eq("BULK50")
-      click_on "Add to cart"
+      product_page_cta.click
       expect(page).to have_text("Total US$10", normalize_ws: true)
       edit_cart_item("Target product") { fill_in "Quantity", with: 1 }
       wait_until_true(sleep_interval: 0.2) do
@@ -672,9 +670,9 @@ describe "Automatic sales on product pages", type: :system, js: true do
       end
       choose "Second Tier"
       within find(:article) do
-        expect(Rack::Utils.parse_query(URI.parse(find(:link, "Add to cart")[:href]).query)).not_to have_key("code")
+        expect(Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)).not_to have_key("code")
       end
-      click_on "Add to cart"
+      product_page_cta.click
       expect(page).to have_cart_item("Target membership")
       expect(page).to have_text("Total US$70", normalize_ws: true)
 

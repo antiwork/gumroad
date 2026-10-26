@@ -23,7 +23,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
 
     visit(create_embed_page(product, url: product.long_url, gumroad_params: "&email=sam@test.com", outbound: false))
 
-    within_embed_frame { click_on "Add to cart" }
+    within_embed_frame { click_on "I want this!" }
 
     check_out(product)
   end
@@ -35,7 +35,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
 
     visit(create_embed_page(pwyw_product, url: "#{direct_affiliate.referral_url_for_product(pwyw_product)}?email=john@test.com", gumroad_params: "&price=75", outbound: false))
 
-    within_embed_frame { click_on "Add to cart" }
+    within_embed_frame { click_on "I want this!" }
 
     expect_affiliate_credit_to_be_created do
       check_out(pwyw_product, email: nil)
@@ -58,7 +58,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
     within_embed_frame do
       expect(page).to have_field("Name a fair price", wait: 15)
       fill_in "Name a fair price", with: 75
-      click_on "Add to cart"
+      click_on "I want this!"
     end
 
     expect_affiliate_credit_to_be_created do
@@ -77,7 +77,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
 
     visit(create_embed_page(product, url: short_link_url(product, host: "#{PROTOCOL}://#{DOMAIN}"), outbound: false))
 
-    within_embed_frame { click_on "Add to cart" }
+    within_embed_frame { click_on "I want this!" }
 
     check_out(product)
   end
@@ -87,7 +87,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
 
     visit(create_embed_page(product, insert_anchor_tag: false, outbound: false))
 
-    within_embed_frame { click_on "Add to cart" }
+    within_embed_frame { click_on "I want this!" }
 
     check_out(product)
   end
@@ -100,7 +100,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
 
       within_embed_frame do
         expect(page).to have_status(text: "$1 off will be applied at checkout (Code SXSW)", wait: 15)
-        click_on "Add to cart"
+        click_on "I want this!"
       end
 
       check_out(product, is_free: true)
@@ -125,8 +125,8 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
 
       within_embed_frame do
         expect(page).to have_text("$75", wait: 15)
-        expect(page).to have_link("Add to cart", href: /affiliate_id=#{direct_affiliate.external_id_numeric}/, wait: 15)
-        click_on "Add to cart"
+        expect(page).to have_link("I want this!", href: /affiliate_id=#{direct_affiliate.external_id_numeric}/, wait: 15)
+        click_on "I want this!"
       end
 
       expect_affiliate_credit_to_be_created do
@@ -142,7 +142,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
       it "successfully credits the affiliate commission for the product bought from a page that contains '#{query_param}' query parameter" do
         visit(create_embed_page(product, url: short_link_url(product, host: UrlService.domain_with_protocol), outbound: false, query_params: { query_param => direct_affiliate.external_id_numeric }))
 
-        within_embed_frame { click_on "Add to cart" }
+        within_embed_frame { click_on "I want this!" }
 
         check_out(product)
 
@@ -176,7 +176,7 @@ describe "Embed scenario", type: :system, js: true, retry: 10 do
       expect(page).to have_radio_button("Blue - Extra Large - Polo", checked: true)
       expect(page).to have_field("Quantity", with: 2)
       expect(page).to have_field("Name a fair price", with: 3)
-      click_on "Add to cart"
+      click_on "I want this!"
     end
 
     expect(page).to have_field("Age", with: "21")

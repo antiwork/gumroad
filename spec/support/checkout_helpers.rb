@@ -1,6 +1,21 @@
 # frozen_string_literal: true
 
 module CheckoutHelpers
+  # Mirrors ctaNames in app/javascript/components/Product/CtaButton.tsx.
+  CTA_LABELS = {
+    "i_want_this_prompt" => "I want this!",
+    "buy_this_prompt" => "Buy this",
+    "pay_prompt" => "Pay",
+    "donate_prompt" => "Donate",
+    "support_prompt" => "Support",
+    "tip_prompt" => "Tip",
+  }.freeze
+
+  # The buy CTA's text follows the seller's call to action, so find the checkout link itself.
+  def product_page_cta
+    within find(:article) { first(:link, href: %r{/checkout\?}) }
+  end
+
   def add_to_cart(product, cart: false, pwyw_price: nil, option: nil, rent: false, recurrence: nil, logged_in_user: nil, quantity: 1, offer_code: nil, ppp_factor: nil, **params)
     choose "Rent" if rent && product.purchase_type != "rent_only"
     choose option == "Untitled" ? product.name : option if option.present?
@@ -14,14 +29,19 @@ module CheckoutHelpers
     purchase_info = product.purchase_info_for_product_page(logged_in_user, Capybara.current_session.driver.browser.manage.all_cookies.find { |cookie| cookie[:name] == "_gumroad_guid" }&.[](:value))
     if purchase_info && (purchase_info[:was_paid] || product.is_recurring_billing)
       buy_text = "Purchase again"
-    elsif cart
-      buy_text = "Add to cart"
     elsif product.is_recurring_billing
       buy_text = "Subscribe"
     elsif product.purchase_type == "rent_only" || rent
       buy_text = "Rent"
+    elsif product.custom_button_text_option.present?
+      buy_text = CTA_LABELS.fetch(product.custom_button_text_option)
     else
       buy_text = "I want this!"
+    end
+
+    if cart
+      # Cart-layout pages carry the seller's CTA now, so assert the surface rather than its label.
+      expect(page).to have_css("#app[data-page*='Products/Profile/Show'], #app[data-page*='Products/Discover/Show']", visible: :all)
     end
 
     within find(:article) do
