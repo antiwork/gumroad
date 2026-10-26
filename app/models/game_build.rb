@@ -7,6 +7,8 @@ class GameBuild < ApplicationRecord
   STATUSES = %w[uploaded live superseded].freeze
   MAX_BUILDS_PER_PRODUCT = 50
   MAX_BYTE_SIZE = 2.gigabytes
+  PUBLIC_ID_LENGTH = 21
+  DISPLAY_NAME_MAX_LENGTH = 200
   STORAGE_PREFIX = "games"
   PUBLIC_ID_ALPHABET = [*"0".."9", *"A".."Z", *"a".."z", "_", "-"].freeze
 
@@ -42,7 +44,7 @@ class GameBuild < ApplicationRecord
 
       file = product.product_files.create!(
         url: "#{S3_BASE_URL}#{storage_key}",
-        display_name: "#{product.name.to_s.truncate(200)} build #{number}.zip",
+        display_name: "#{product.name.to_s.truncate(DISPLAY_NAME_MAX_LENGTH)} build #{number}.zip",
       )
       update!(status: "live", promoted_at: Time.current, product_file: file)
       swap_file_embed(previous&.product_file, file)
@@ -53,7 +55,7 @@ class GameBuild < ApplicationRecord
 
   private
     def set_public_id
-      self.public_id ||= Array.new(21) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.size)] }.join
+      self.public_id ||= Array.new(PUBLIC_ID_LENGTH) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.size)] }.join
     end
 
     # Buyers only see files embedded in content pages, so the live zip goes on the first page of

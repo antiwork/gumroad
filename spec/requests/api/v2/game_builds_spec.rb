@@ -178,6 +178,22 @@ describe "Game builds API" do
       pages.each { |page| expect(page.reload.description.map { _1.dig("attrs", "id") }).to include(file_id) }
     end
 
+    it "keeps a superseded build's object through the deleted-files cleanup so it can be rolled back to" do
+      deploy(upload_zip("one"))
+      deploy(upload_zip("two"))
+      first, second = product.game_builds.to_a
+      [first, second].each do |b|
+        post "/api/v2/products/#{product.external_id}/games/builds/#{b.public_id}/promote", params: { access_token: token.token }
+      end
+      ProductFile.where(id: first.product_file_id).update_all(deleted_at: 3.days.ago)
+
+      RemoveDeletedFilesFromS3Job.new.perform
+
+      expect { s3.head_object(bucket: S3_BUCKET, key: first.storage_key) }.not_to raise_error
+      post "/api/v2/products/#{product.external_id}/games/builds/#{first.public_id}/promote", params: { access_token: token.token }
+      expect(product.product_files.alive.sole.url).to end_with("/1/build.zip")
+    end
+
     it "is a no-op for an already-live build" do
       deploy(upload_zip)
       build = product.game_builds.sole

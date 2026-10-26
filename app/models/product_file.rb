@@ -78,8 +78,14 @@ class ProductFile < ApplicationRecord
   scope :not_external_link, -> { where.not(filetype: "link") }
   scope :archivable, -> { not_external_link.not_stream_only }
 
+  # Also true while an immutable game build still owns the object, so the cleanup job never
+  # deletes a build that can be promoted again (rollback).
   def has_alive_duplicate_files?
-    ProductFile.alive.where(url:).exists?
+    ProductFile.alive.where(url:).exists? || owned_by_game_build?
+  end
+
+  def owned_by_game_build?
+    s3_key.present? && GameBuild.exists?(storage_key: s3_key)
   end
 
   def has_cdn_url?
