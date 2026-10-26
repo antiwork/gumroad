@@ -3180,6 +3180,55 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
     end
 
+    it "mints an onboarding link when an identity document is due, since the update flow collects no documents" do
+      # gp#3937: `account_update` shows the summary page and returns the seller with nothing
+      # submitted, so a document Stripe reports as due needs the requirement-collection flow.
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          charges_enabled: true,
+          payouts_enabled: false,
+          requirements: {
+            "currently_due" => ["individual.verification.document"],
+            "past_due" => ["individual.verification.document"],
+            "eventually_due" => ["individual.verification.document"],
+          },
+          future_requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      )
+      allow(Stripe::AccountLink).to receive(:create).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
+
+      get :remediation
+
+      expect(Stripe::AccountLink).to have_received(:create).with(hash_including(type: "account_onboarding"))
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
+    it "mints an onboarding link when the due document requirement sits on the representative" do
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      stripe_connect_account_id = merchant_account.charge_processor_merchant_id
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          requirements: {
+            "currently_due" => ["person_123.verification.document"],
+            "past_due" => ["person_123.verification.document"],
+            "eventually_due" => [],
+          },
+          future_requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      )
+      allow(Stripe::AccountLink).to receive(:create).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
+
+      get :remediation
+
+      expect(Stripe::AccountLink).to have_received(:create).with(hash_including(type: "account_onboarding"))
+    end
+
     it "opens a Stripe AccountLink when Stripe still has future_requirements.eventually_due (volume-threshold case)" do
       merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
       stripe_connect_account_id = merchant_account.charge_processor_merchant_id
@@ -3339,6 +3388,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       create(:user_compliance_info_request,
              user:,
              field_needed: "interv_cmVxbXRfMVEyOTViUzhuV09PRjdyT0ZPamtGelgxv1000c65GRfs.supportability.intellectual_property_usage.form")
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      )
 
       expect(Stripe::AccountLink).to receive(:create).with({
                                                              account: stripe_connect_account_id,
@@ -3416,7 +3473,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
       it "does not overwrite an existing stripe_disabled_reason" do
         merchant_account.update!(stripe_disabled_reason: "rejected.listed")
-        expect(Stripe::Account).not_to receive(:retrieve)
+        stub_stripe_account_retrieve(disabled_reason: "rejected.listed")
 
         get :remediation
 
