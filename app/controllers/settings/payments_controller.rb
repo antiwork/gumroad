@@ -701,19 +701,16 @@ class Settings::PaymentsController < Settings::BaseController
       @stripe_account_for_remediation ||= Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
     end
 
-    # Documents are the one thing an account-update link will not collect: that form edits what
-    # is already on the account, so a seller who owes an identity document lands on the summary
-    # page and comes back with nothing submitted (gp#3937, `errors: []`, no file ever received).
-    # An onboarding link renders the requirement-collection flow, upload slots included. Every
-    # other case keeps `account_update`, the type gumroad#4948 chose so sellers who never
-    # knowingly had a Stripe account stop seeing "Link your Stripe account".
-    IDENTITY_DOCUMENT_REQUIREMENT = /\.verification\.document\z/
+    # account_update only edits information already on the account, so a due verification document
+    # needs account_onboarding. Everything else stays on account_update, which avoids onboarding's
+    # "Link your Stripe account" prompt for sellers who never knowingly opened a Stripe account.
+    VERIFICATION_DOCUMENT_REQUIREMENT = /\.verification\.(?:additional_)?document\z/
 
     def remediation_link_type(merchant_account)
       requirements = stripe_account_for_remediation(merchant_account)["requirements"] || {}
       due = Array(requirements["currently_due"]) + Array(requirements["past_due"])
 
-      due.any? { |requirement| requirement.to_s.match?(IDENTITY_DOCUMENT_REQUIREMENT) } ? "account_onboarding" : "account_update"
+      due.any? { |requirement| requirement.to_s.match?(VERIFICATION_DOCUMENT_REQUIREMENT) } ? "account_onboarding" : "account_update"
     rescue Stripe::StripeError
       # Picking the type is a refinement; a failed read must not cost the seller their link.
       "account_update"
