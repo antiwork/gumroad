@@ -14,6 +14,8 @@ class PartnerMigration < ApplicationRecord
   MAX_NAME_LENGTH = 255
   MAX_FAILURE_REASON_LENGTH = 255
   MAX_FILES_PER_PRODUCT = 50
+  # The product editor's limit (TagSelector).
+  MAX_TAGS_PER_PRODUCT = 10
   # Without SKUs, checkout offers only the first variant category of a digital product.
   MAX_VARIANT_CATEGORIES = 1
   MAX_VARIANTS_PER_CATEGORY = 20
@@ -78,6 +80,7 @@ class PartnerMigration < ApplicationRecord
     return [nil, "name must be a string with 1 to #{MAX_NAME_LENGTH} characters."] unless string?(raw[:name]) && raw[:name].strip.length.between?(1, MAX_NAME_LENGTH)
     return [nil, "description must be a string."] unless raw[:description].nil? || string?(raw[:description])
     return [nil, "price must be a whole number of cents, 0 or more."] unless raw[:price].is_a?(Integer) && raw[:price] >= 0
+    return [nil, "price must be at most #{BasePrice::Shared::MAX_PRICE_CENTS} cents."] if raw[:price] > BasePrice::Shared::MAX_PRICE_CENTS
 
     currency = raw[:price_currency_type].nil? ? "usd" : raw[:price_currency_type].to_s.downcase
     return [nil, "price_currency_type is not a supported currency."] unless CURRENCY_CHOICES.key?(currency)
@@ -86,7 +89,7 @@ class PartnerMigration < ApplicationRecord
     return [nil, "taxonomy_id is not a known category."] unless raw[:taxonomy_id].nil? || (raw[:taxonomy_id].is_a?(Integer) && Taxonomy.exists?(id: raw[:taxonomy_id]))
 
     tags = raw[:tags].nil? ? [] : raw[:tags]
-    return [nil, "tags must be an array of strings."] unless tags.is_a?(Array) && tags.all? { string?(_1) }
+    return [nil, "tags must be an array of up to #{MAX_TAGS_PER_PRODUCT} strings."] unless tags.is_a?(Array) && tags.size <= MAX_TAGS_PER_PRODUCT && tags.all? { string?(_1) }
     # Product#tag! cannot save the same tag twice, so clean them up as Tag#clean_name does first.
     tags = unique_tag_names(tags.map { _1.downcase.strip.gsub(/[[:space:]]+/, " ") }.uniq)
     tag_error = tags.lazy.filter_map { tag_error(_1) }.first

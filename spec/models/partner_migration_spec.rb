@@ -61,6 +61,19 @@ describe PartnerMigration do
       expect(error).to eq("products[0]: each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}.")
     end
 
+    it "rejects a price above the maximum price" do
+      _products, error = described_class.normalize_products([product_attributes.merge(price: BasePrice::Shared::MAX_PRICE_CENTS + 1)])
+
+      expect(error).to eq("products[0]: price must be at most #{BasePrice::Shared::MAX_PRICE_CENTS} cents.")
+    end
+
+    it "rejects more tags than a product can have" do
+      tags = Array.new(described_class::MAX_TAGS_PER_PRODUCT + 1) { "tag#{_1}" }
+      _products, error = described_class.normalize_products([product_attributes.merge(tags:)])
+
+      expect(error).to eq("products[0]: tags must be an array of up to #{described_class::MAX_TAGS_PER_PRODUCT} strings.")
+    end
+
     it "rejects a price below the currency's minimum" do
       _products, error = described_class.normalize_products([product_attributes.merge(price: 50)])
 
