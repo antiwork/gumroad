@@ -3088,6 +3088,14 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       merchant_account = create(:merchant_account, user:)
       merchant_account.update!(stripe_disabled_reason: "rejected.listed")
       create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+      allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
+        Stripe::Account.construct_from(
+          id: merchant_account.charge_processor_merchant_id,
+          object: "account",
+          requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [] }
+        )
+      )
       allow(Stripe::AccountLink).to receive(:create).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
 
       get :remediation
@@ -3183,7 +3191,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     it "mints an onboarding link when an identity document is due, since the update flow collects no documents" do
       # gp#3937: `account_update` shows the summary page and returns the seller with nothing
       # submitted, so a document Stripe reports as due needs the requirement-collection flow.
-      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      merchant_account = create(:merchant_account, user:)
       stripe_connect_account_id = merchant_account.charge_processor_merchant_id
       allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
         Stripe::Account.construct_from(
@@ -3208,7 +3216,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     end
 
     it "mints an onboarding link when the due document requirement sits on the representative" do
-      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
+      merchant_account = create(:merchant_account, user:)
       stripe_connect_account_id = merchant_account.charge_processor_merchant_id
       allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
         Stripe::Account.construct_from(
