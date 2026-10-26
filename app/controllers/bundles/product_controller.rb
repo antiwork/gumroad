@@ -90,8 +90,8 @@ class Bundles::ProductController < Bundles::BaseController
     redirect_to edit_bundle_product_path(@bundle.external_id), alert: error_message
   end
 
-  # Removes a file the bundle itself still carries. Mirrors the seller-facing deletion in
-  # SaveFilesService: soft-delete, drop the memoized alive list, re-index the product's filetypes.
+  # Mirrors SaveFilesService's seller-facing removal, so the memoized file list and the filetypes
+  # index stay consistent.
   def remove_file
     authorize @bundle
 
@@ -104,9 +104,8 @@ class Bundles::ProductController < Bundles::BaseController
     file.mark_deleted
     @bundle.cached_alive_product_files = nil
     @bundle.enqueue_index_update_for(["filetypes"])
-    # An archive is a ZIP of the files as they stood, and both download endpoints serve the newest
-    # ready archive without checking its contents, so one built from this file would keep shipping it
-    # to buyers who purchased before the conversion. Rebuild from the files that are left.
+    # Downloads serve the newest ready archive without checking its contents, so an archive built
+    # while the file was attached is rebuilt from the files that are left.
     @bundle.generate_entity_archive!
     @bundle.invalidate_stale_folder_archives!(for_files: [file])
     GenerateProductFilesArchivesJob.perform_async(@bundle.id)

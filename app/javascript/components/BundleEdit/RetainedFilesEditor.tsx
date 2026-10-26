@@ -21,8 +21,7 @@ type RetainedFilesEditorProps = {
   onRemoved: (id: string) => void;
 };
 
-// Files attached to the bundle itself, rather than to a product in it: a converted bundle keeps the
-// files the product had, they ship to buyers, and no other bundle surface lists them.
+// Files a converted bundle kept; they ship with the bundle and no other surface lists them.
 export const RetainedFilesEditor = ({ bundleId, files, onRemoved }: RetainedFilesEditorProps) => {
   const [pendingRemoval, setPendingRemoval] = React.useState<RetainedFile | null>(null);
   const [isRemoving, setIsRemoving] = React.useState(false);
