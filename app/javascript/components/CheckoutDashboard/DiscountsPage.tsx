@@ -549,10 +549,11 @@ const DiscountsPage = ({
                                       setPopoverOfferCodeId(null);
                                       await deleteOfferCode(offerCode.id);
                                     } catch (e) {
+                                      // Only clear here: on success the reload owns the flag until it settles.
+                                      setIsLoading(false);
                                       assertResponseError(e);
                                       showAlert(e.message, "error");
                                     }
-                                    setIsLoading(false);
                                   })}
                                 >
                                   <Trash className="size-5" />
