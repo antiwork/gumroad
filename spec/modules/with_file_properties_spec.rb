@@ -112,8 +112,10 @@ describe WithFileProperties do
         ("\x00" * size) + boxes + ("a" * 20)
     end
 
-    def analyze(file_bytes, product_file: create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a"))
+    def analyze(file_bytes, product_file: create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a"), decodes: true, on_upload: nil)
       allow(product_file).to receive(:confirm_s3_key!)
+      # These bytes are not real media, so ffmpeg runs only in the examples that pass real files.
+      allow(product_file).to receive(:decodes_completely?).and_return(true) if decodes
 
       uploads = []
       s3_double = double
@@ -124,7 +126,10 @@ describe WithFileProperties do
       allow(s3_double).to receive(:get) do |options|
         File.open(options[:response_target], "wb") { |file| file.write(file_bytes) }
       end
-      allow(s3_double).to receive(:upload_file) { |path, **_options| uploads << File.binread(path) }
+      allow(s3_double).to receive(:upload_file) do |path, **_options|
+        on_upload&.call
+        uploads << File.binread(path)
+      end
       allow(product_file).to receive(:s3_object).and_return(s3_double)
 
       probed = nil
@@ -139,6 +144,14 @@ describe WithFileProperties do
 
     def repaired_m4a_bytes
       tagged_m4a_bytes.byteslice(tag_size + 10..)
+    end
+
+    def ready_archive_for(product_file)
+      archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      archive.mark_in_progress!
+      archive.mark_ready!
+      UpdateProductFilesArchiveWorker.jobs.clear
+      archive
     end
 
     it "rewrites the stored object without the tag" do
@@ -243,11 +256,183 @@ describe WithFileProperties do
       allow(s3_double).to receive(:content_disposition).and_return(nil)
       allow(s3_double).to receive(:metadata).and_return({})
       allow(product_file).to receive(:s3_object).and_return(s3_double)
+      allow(product_file).to receive(:decodes_completely?).and_return(true)
       allow(FFMPEG::Movie).to receive(:new).and_return(double(duration: 46, bitrate: 128))
 
       expect { product_file.analyze }.not_to raise_error
 
       expect(product_file.reload.duration).to eq(46)
+    end
+
+    describe "with real media" do
+      def fixture_bytes(name)
+        File.binread(Rails.root.join("spec/support/fixtures", name))
+      end
+
+      it "strips the tag once the stripped file decodes" do
+        tagged = fixture_bytes("id3v24_prefixed.m4a")
+
+        product_file, uploads, probed = analyze(tagged, decodes: false)
+
+        expect(uploads).to eq([tagged.byteslice(87..)])
+        expect(probed).to eq(tagged.byteslice(87..))
+        expect(product_file.size).to eq(tagged.bytesize - 87)
+      end
+
+      # The chunk offsets in this file were written counting the tag, so it decodes as
+      # uploaded and the stripped copy does not.
+      it "keeps the original object and measurements when the stripped file does not decode" do
+        original = fixture_bytes("id3v24_prefixed_offsets_include_tag.m4a")
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+        archive = ready_archive_for(product_file)
+
+        product_file, uploads, probed = analyze(original, product_file:, decodes: false)
+
+        expect(uploads).to be_empty
+        expect(probed).to eq(original)
+        expect(product_file.size).to eq(original.bytesize)
+        expect(product_file.duration).to eq(46)
+        expect(archive.reload).to be_ready
+        expect(UpdateProductFilesArchiveWorker.jobs.size).to eq(0)
+      end
+
+      it "keeps the tag when the decode check runs out of time, and stops the decoder" do
+        stub_const("WithFileProperties::ID3_STRIP_DECODE_TIMEOUT", 0.2)
+        decoder_pid = nil
+        allow(Process).to receive(:spawn).and_wrap_original do |original, *_command, **options|
+          decoder_pid = original.call("sleep", "30", **options)
+        end
+
+        _product_file, uploads, = analyze(fixture_bytes("id3v24_prefixed.m4a"), decodes: false)
+
+        expect(uploads).to be_empty
+        expect { Process.kill(0, decoder_pid) }.to raise_error(Errno::ESRCH)
+      end
+
+      it "keeps the tag when ffmpeg cannot be started" do
+        allow(Process).to receive(:spawn).and_raise(Errno::ENOENT)
+
+        _product_file, uploads, = analyze(fixture_bytes("id3v24_prefixed.m4a"), decodes: false)
+
+        expect(uploads).to be_empty
+      end
+
+      it "stops the decoder when the job is interrupted while it runs" do
+        decoder_pid = nil
+        allow(Process).to receive(:spawn).and_wrap_original do |original, *_command, **options|
+          decoder_pid = original.call("sleep", "30", **options)
+        end
+        allow(Process).to receive(:detach).and_wrap_original do |original, pid|
+          original.call(pid).tap do |waiter|
+            allow(waiter).to receive(:join).and_call_original
+            allow(waiter).to receive(:join).with(WithFileProperties::ID3_STRIP_DECODE_TIMEOUT).and_raise(Sidekiq::Shutdown)
+          end
+        end
+
+        begin
+          expect { analyze(fixture_bytes("id3v24_prefixed.m4a"), decodes: false) }.to raise_error(Sidekiq::Shutdown)
+          expect { Process.kill(0, decoder_pid) }.to raise_error(Errno::ESRCH)
+        ensure
+          Process.kill("KILL", decoder_pid) rescue Errno::ESRCH
+        end
+      end
+    end
+
+    describe "when the upload fails" do
+      def analyze_with_failing_upload(error, product_file:)
+        tagged = tagged_m4a_bytes
+        allow(product_file).to receive(:confirm_s3_key!)
+        allow(product_file).to receive(:decodes_completely?).and_return(true)
+        s3_double = double(content_length: tagged.bytesize, content_type: "audio/mp4", content_disposition: nil, metadata: {})
+        allow(s3_double).to receive(:get) { |options| File.binwrite(options[:response_target], tagged) }
+        allow(s3_double).to receive(:upload_file).and_raise(error)
+        allow(product_file).to receive(:s3_object).and_return(s3_double)
+        probed = nil
+        allow(FFMPEG::Movie).to receive(:new) do |path|
+          probed = File.binread(path)
+          double(duration: 46, bitrate: 128)
+        end
+
+        product_file.analyze
+        [product_file.reload, probed]
+      end
+
+      it "keeps the tagged bytes and size after a multipart upload error" do
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+
+        product_file, probed = analyze_with_failing_upload(
+          Aws::S3::MultipartUploadError.new("multipart upload failed", []), product_file:
+        )
+
+        expect(probed).to eq(tagged_m4a_bytes)
+        expect(product_file.size).to eq(tagged_m4a_bytes.bytesize)
+        expect(product_file.duration).to eq(46)
+      end
+
+      it "rebuilds archives after an error that does not prove the object was left alone" do
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+        archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+        archive.mark_in_progress!
+        archive.mark_ready!
+        UpdateProductFilesArchiveWorker.jobs.clear
+
+        analyze_with_failing_upload(Seahorse::Client::NetworkingError.new(Net::ReadTimeout.new), product_file:)
+
+        expect(archive.reload).to be_queueing
+        expect(UpdateProductFilesArchiveWorker).to have_enqueued_sidekiq_job(archive.id)
+      end
+    end
+
+    it "hides a ready archive before the object is rewritten" do
+      product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+      archive = create(:product_files_archive, link: product_file.link, product_files: [product_file])
+      archive.mark_in_progress!
+      archive.mark_ready!
+      state_during_upload = nil
+
+      analyze(tagged_m4a_bytes, product_file:, on_upload: -> { state_during_upload = archive.reload.product_files_archive_state })
+
+      expect(state_during_upload).to eq("queueing")
+    end
+
+    describe "when the rewrite is interrupted after archives are hidden" do
+      it "schedules the rebuild when the job is shut down during the upload" do
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+        archive = ready_archive_for(product_file)
+
+        expect do
+          analyze(tagged_m4a_bytes, product_file:, on_upload: -> { raise Sidekiq::Shutdown })
+        end.to raise_error(Sidekiq::Shutdown)
+
+        expect(archive.reload).to be_queueing
+        expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"] }).to eq([[archive.id]])
+      end
+
+      it "schedules the rebuild when hiding the archives again fails after the upload" do
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+        archive = ready_archive_for(product_file)
+        calls = 0
+        allow(product_file).to receive(:hide_stale_archives).and_wrap_original do |original, ids|
+          calls += 1
+          raise ActiveRecord::LockWaitTimeout, "lock wait" if calls == 2
+          original.call(ids)
+        end
+
+        expect { analyze(tagged_m4a_bytes, product_file:) }.to raise_error(ActiveRecord::LockWaitTimeout)
+
+        expect(archive.reload).to be_queueing
+        expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"] }).to eq([[archive.id]])
+      end
+
+      it "raises the interruption, not a failure to schedule the rebuild" do
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+        ready_archive_for(product_file)
+        allow(UpdateProductFilesArchiveWorker).to receive(:perform_async).and_raise(Redis::CannotConnectError)
+
+        expect do
+          analyze(tagged_m4a_bytes, product_file:, on_upload: -> { raise Sidekiq::Shutdown })
+        end.to raise_error(Sidekiq::Shutdown)
+      end
     end
   end
 

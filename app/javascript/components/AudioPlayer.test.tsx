@@ -58,7 +58,17 @@ it("reports an unplayable file instead of spinning forever", () => {
   fireEvent.error(audio);
 
   expect(container.querySelector('[role="progressbar"]')).toBeNull();
-  expect(container.textContent).toContain("This file can't be played in your browser");
+  expect(container.textContent).toContain("This file couldn't be played.");
+});
+
+it("states the failure without promising that any recovery will work", () => {
+  const { container } = render(<AudioPlayer src="https://example.com/expired-link.m4a" />);
+  const audio = container.querySelector("audio");
+  if (!audio) throw new Error("Audio element missing");
+
+  fireEvent.error(audio);
+
+  expect(audio.parentElement?.textContent).toBe("This file couldn't be played.");
 });
 
 it("shows the loader, not the previous file's controls, when given a new file", () => {
@@ -69,11 +79,24 @@ it("shows the loader, not the previous file's controls, when given a new file", 
   audio.play = vi.fn().mockResolvedValue(undefined);
   fireEvent.loadedMetadata(audio);
   fireEvent.error(audio);
-  expect(container.textContent).toContain("This file can't be played in your browser");
+  expect(container.textContent).toContain("This file couldn't be played");
 
   rerender(<AudioPlayer src="https://example.com/playable.mp3" />);
 
-  expect(container.textContent).not.toContain("This file can't be played in your browser");
+  expect(container.textContent).not.toContain("This file couldn't be played");
   expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
   expect(container.querySelector('[role="toolbar"]')).toBeNull();
+});
+
+it("reports a failure of the next file after recovering from the previous one", () => {
+  const { container, rerender } = render(<AudioPlayer src="https://example.com/unplayable.m4a" />);
+  const audio = container.querySelector("audio");
+  if (!audio) throw new Error("Audio element missing");
+  fireEvent.error(audio);
+
+  rerender(<AudioPlayer src="https://example.com/also-unplayable.m4a" />);
+  fireEvent.error(audio);
+
+  expect(container.textContent).toContain("This file couldn't be played.");
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
 });

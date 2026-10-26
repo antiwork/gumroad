@@ -18,8 +18,8 @@ class Mp4Id3Tag
   end
 
   # Byte length of the leading ID3v2 tag, or nil when there is nothing to strip.
-  # The `ftyp` box immediately after the tag is what makes the strip a repair
-  # rather than a guess: the bytes left behind have to be a playable MP4.
+  # The `ftyp` box immediately after the tag shows an MP4 follows it, not that the
+  # MP4 plays without the tag: its chunk offsets may already count the tag's bytes.
   def leading_tag_size
     header = File.binread(@path, HEADER_SIZE)
     return nil unless header&.bytesize == HEADER_SIZE && header.start_with?("ID3")

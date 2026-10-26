@@ -26,8 +26,8 @@ export const AudioPlayer = (props: Props) => {
   const userAgentInfo = useUserAgentInfo();
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [isLoaded, setIsLoaded] = React.useState(false);
-  // An undecodable file (a corrupt upload, or a container the browser can't read)
-  // never fires loadedmetadata, so without this the row spins forever.
+  // A file that fails to load or decode never fires loadedmetadata, so without
+  // this the row spins forever. The error doesn't say which, so the copy can't either.
   const [hasError, setHasError] = React.useState(false);
   const [progress, setProgress] = React.useState(0);
   const [duration, setDuration] = React.useState(0);
@@ -130,9 +130,7 @@ export const AudioPlayer = (props: Props) => {
         onError={() => setHasError(true)}
       />
       {hasError ? (
-        <p className="text-[0.875rem] leading-[1.3]">
-          This file can't be played in your browser. Download it and open it in an audio player instead.
-        </p>
+        <p className="text-[0.875rem] leading-[1.3]">This file couldn't be played.</p>
       ) : isLoaded ? (
         <>
           <div role="toolbar" className="flex items-center gap-2 text-[1.25rem]">
