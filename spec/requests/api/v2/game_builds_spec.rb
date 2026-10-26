@@ -263,7 +263,7 @@ describe "Game builds API" do
       end
 
       it "keeps a variant's existing downloads when its first page is created for the zip" do
-        existing = create(:product_file, link: product)
+        existing = product.product_files.create!(url: upload_zip("soundtrack", filename: "soundtrack.zip"))
         variants.first.product_files << existing
         deploy(upload_zip)
         build = product.game_builds.sole
