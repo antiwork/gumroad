@@ -15,13 +15,16 @@ export const createThumbnail = async (permalink: string, thumbnailPayload: Thumb
     },
   });
 
-  if (response.ok) {
-    const responseData = cast<{ success: true; thumbnail: Thumbnail } | { success: false; error: string }>(
-      await response.json(),
-    );
-    if (responseData.success) return responseData.thumbnail;
-    throw new ResponseError(responseData.error);
-  }
+  const responseData = cast<{ success: true; thumbnail: Thumbnail } | { success: false; error: string } | null>(
+    await response.json().catch(() => null),
+  );
+
+  if (response.ok && responseData?.success) return responseData.thumbnail;
+
+  // The server explains what went wrong in the body ("Invalid signed_blob_id.", "Thumbnail processing
+  // took too long…"). Throwing a bare ResponseError here is what leaves the seller with an alert that
+  // says nothing, so prefer the server's own wording and fall back only when there is no body.
+  if (responseData && !responseData.success && responseData.error !== "") throw new ResponseError(responseData.error);
 
   throw new ResponseError();
 };

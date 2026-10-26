@@ -1,8 +1,8 @@
-import { DirectUpload } from "@rails/activestorage";
 import * as React from "react";
 
 import { Thumbnail, ThumbnailPayload, createThumbnail, deleteThumbnail } from "$app/data/thumbnails";
 import { AssetPreview, ProductNativeType } from "$app/parsers/product";
+import { uploadErrorMessage, uploadFileWithRetry } from "$app/utils/directUpload";
 import FileUtils, { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import { getImageDimensionsFromFile } from "$app/utils/image";
 import { assertResponseError } from "$app/utils/request";
@@ -97,13 +97,15 @@ export const ThumbnailEditor = ({
           new Promise((resolve, reject) => {
             validateFile(file).then(
               () => {
-                new DirectUpload(file, "/rails/active_storage/direct_uploads").create((error, blob) => {
-                  if (error) return resolve(showAlert(error.message, "error"));
-                  saveThumbnail({ type: "file", signedBlobId: blob.signed_id }).then(resolve, (e: unknown) => {
-                    assertResponseError(e);
-                    reject(e);
-                  });
-                });
+                uploadFileWithRetry(file, "/rails/active_storage/direct_uploads").then(
+                  (blob) => {
+                    saveThumbnail({ type: "file", signedBlobId: blob.signed_id }).then(resolve, (e: unknown) => {
+                      assertResponseError(e);
+                      reject(e);
+                    });
+                  },
+                  (error: unknown) => resolve(showAlert(uploadErrorMessage(error), "error")),
+                );
               },
               (e: unknown) => {
                 if (e instanceof ValidationError) return resolve(showAlert(e.message, "error"));
