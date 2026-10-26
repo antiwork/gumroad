@@ -6,36 +6,53 @@ import { createJWPlayer } from "$app/utils/jwPlayer";
 
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { PlayVideoIcon } from "$app/components/PlayVideoIcon";
+import { showAlert } from "$app/components/server-components/Alert";
 import { LinkButton } from "$app/components/ui/LinkButton";
 
 function usePlayer(videoId: string, uid: string) {
   const [loading, setLoading] = useState(false);
   const [showPlayer, setShowPlayer] = useState(false);
   const playerRef = useRef<jwplayer.JWPlayer | null>(null);
+  const mounted = useRef(true);
 
   const onPlay = useCallback(async () => {
     setLoading(true);
 
-    const { streaming_urls } = await getStreamingUrls(videoId);
-
-    playerRef.current = await createJWPlayer(`${uid}-video`, {
-      playlist: [{ sources: streaming_urls.map((file) => ({ file })) }],
-    });
-    playerRef.current.on("ready", () => {
-      setShowPlayer(true);
-      playerRef.current?.play();
-    });
+    try {
+      const { streaming_urls } = await getStreamingUrls(videoId);
+      if (!mounted.current) return;
+      const player = await createJWPlayer(`${uid}-video`, {
+        playlist: [{ sources: streaming_urls.map((file) => ({ file })) }],
+      });
+      if (!mounted.current) {
+        player.remove();
+        return;
+      }
+      playerRef.current = player;
+      playerRef.current.on("ready", () => {
+        if (!mounted.current) return;
+        setShowPlayer(true);
+        playerRef.current?.play();
+      });
+    } catch {
+      if (!mounted.current) return;
+      playerRef.current?.remove();
+      playerRef.current = null;
+      setLoading(false);
+      showAlert("Could not load the video. Please try again.", "error");
+    }
   }, [videoId, uid]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       if (playerRef.current) {
         playerRef.current.remove();
         playerRef.current = null;
       }
-    },
-    [],
-  );
+    };
+  }, []);
 
   return { loading, showPlayer, onPlay, playerId: `${uid}-video` };
 }
