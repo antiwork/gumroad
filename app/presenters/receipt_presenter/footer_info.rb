@@ -11,6 +11,9 @@ class ReceiptPresenter::FooterInfo
 
   def can_manage_subscription?
     return false unless chargeable.is_a?(Purchase) && chargeable.link.is_recurring_billing?
+    # A recurring-billing product's purchases are not all subscription purchases, and the
+    # subscription is gone if the buyer's account is deleted, so there may be nothing to manage.
+    return false if chargeable.subscription.blank?
     return false if chargeable.orderable.receipt_for_gift_receiver?
     return false if chargeable.is_a?(Purchase) && chargeable.is_gift_sender_purchase
 

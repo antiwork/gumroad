@@ -32,6 +32,14 @@ describe ReceiptPresenter::FooterInfo, :vcr do
           end
         end
 
+        context "when the purchase has no subscription" do
+          before { purchase.update!(subscription: nil) }
+
+          it "returns false" do
+            expect(presenter.can_manage_subscription?).to be(false)
+          end
+        end
+
         context "when is a receipt for gift sender" do
           let(:gift) { create(:gift, link: product) }
 
