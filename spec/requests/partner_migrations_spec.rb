@@ -107,6 +107,28 @@ describe "Partner migration onboarding", type: :request do
     expect(migration.reload).to be_pending
   end
 
+  it "lets two partner users whose IDs differ only in case each claim their own link" do
+    products, _error = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
+    other_migration, other_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "EXT-1", products:)
+    other_seller = create(:named_user)
+
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    claim
+    expect(response.body).to include("Import started")
+    sign_out seller
+
+    sign_in other_seller
+    get partner_migration_path(migration_code: other_code)
+    claim
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include("Import started")
+    expect(migration.reload.user).to eq(seller)
+    expect(other_migration.reload.user).to eq(other_seller)
+    expect(partner_application.partner_sellers.pluck(:external_user_id, :user_id)).to contain_exactly(["ext-1", seller.id], ["EXT-1", other_seller.id])
+  end
+
   def claim
     get partner_migration_path
     doc = Nokogiri::HTML(response.body)

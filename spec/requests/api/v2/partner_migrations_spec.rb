@@ -46,6 +46,13 @@ describe "Partner API migrations", type: :request do
     expect(response).to have_http_status(:bad_request)
   end
 
+  it "keeps the partner user ID exactly as sent" do
+    ["ext-1", "EXT-1", "ext-1 "].each { post_migration(external_user_id: _1, products:) }
+
+    expect(PartnerMigration.where(oauth_application: partner_application).pluck(:external_user_id)).to contain_exactly("ext-1", "EXT-1", "ext-1 ")
+    expect(PartnerMigration.where(external_user_id: "ext-1").count).to eq(1)
+  end
+
   it "rejects products that are not valid" do
     expect do
       post_migration(external_user_id: "ext-1", products: [{ name: "No price" }])

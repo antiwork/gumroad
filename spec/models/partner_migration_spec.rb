@@ -185,6 +185,20 @@ describe PartnerMigration do
       expect(partner_seller.reload).to be_alive
     end
 
+    it "links partner user IDs that differ only in case, accents, Unicode form or trailing spaces to different accounts" do
+      external_user_ids = ["aB3x", "Ab3X", "café", "cafe", "\u00e9", "e\u0301", "ext-9", "ext-9 "]
+
+      external_user_ids.each do |external_user_id|
+        migration, _code = create_migration(external_user_id:)
+        claimer = create(:user)
+
+        migration.claim!(claimer)
+
+        expect(partner_application.partner_sellers.where(external_user_id:).sole).to have_attributes(user: claimer, external_user_id:)
+      end
+      expect(partner_application.partner_sellers.pluck(:external_user_id)).to match_array(external_user_ids)
+    end
+
     it "rejects a suspended account" do
       migration, _code = create_migration
       seller.update!(user_risk_state: "suspended_for_fraud")
