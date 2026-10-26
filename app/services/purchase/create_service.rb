@@ -525,6 +525,13 @@ class Purchase::CreateService < Purchase::BaseService
           raise Purchase::PurchaseInvalid, "The bundle's contents have changed. Please refresh the page!"
         end
 
+        # Refused here, before the charge: once the bundle is paid, its member purchases are created
+        # whether or not the member is for sale.
+        if bundle_product.product.active_sales_hold.present?
+          purchase.error_code = PurchaseErrorCode::NOT_FOR_SALE
+          raise Purchase::PurchaseInvalid, "#{bundle_product.product.name} is not currently for sale."
+        end
+
         validate_bundle_component_inventory(bundle_product)
       end
     end

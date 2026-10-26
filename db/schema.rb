@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_19_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_19_000006) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2026,6 +2026,19 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.boolean "anonymous"
     t.index ["link_id", "has_message", "created_at"], name: "idx_on_link_id_has_message_created_at_2fcf6c0c64"
     t.index ["purchase_id"], name: "index_product_reviews_on_purchase_id", unique: true
+  end
+
+  create_table "product_sales_holds", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "external_id", limit: 21, null: false
+    t.bigint "product_id", null: false
+    t.bigint "held_by_id", null: false
+    t.boolean "unpublished_listing", default: false, null: false
+    t.datetime "released_at"
+    t.bigint "released_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["external_id"], name: "index_product_sales_holds_on_external_id", unique: true
+    t.index ["product_id", "released_at"], name: "index_product_sales_holds_on_product_id_and_released_at"
   end
 
   create_table "product_taggings", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

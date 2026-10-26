@@ -702,4 +702,217 @@ describe Api::Internal::Admin::ProductsController do
       )
     end
   end
+
+  describe "sales holds" do
+    let(:product) { create(:product, user: seller, price_cents: 1_00) }
+
+    describe "POST hold_sales" do
+      include_examples "admin api authorization required", :post, :hold_sales, { id: "fake", user_id: "fake" }
+
+      before { request.headers["Authorization"] = "Bearer #{AdminApiToken.mint!(actor_user_id: admin_user.id)}" }
+
+      it "rejects the legacy shared admin token" do
+        request.headers["Authorization"] = "Bearer test-admin-token"
+
+        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+
+        expect(response).to have_http_status(:unauthorized)
+        expect(product.reload).to be_alive
+      end
+
+      it "requires the seller's user_id" do
+        post :hold_sales, params: { id: product.external_id }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(product.reload).to be_alive
+      end
+
+      it "refuses a product that belongs to someone else" do
+        other_seller = create(:user, email: "other-seller@example.com")
+
+        post :hold_sales, params: { id: product.external_id, user_id: other_seller.external_id }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq({ success: false, message: "Product does not belong to user" }.as_json)
+        expect(product.reload).to be_alive
+      end
+
+      it "refuses when the seller's email changed since the operator looked" do
+        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id, expected_email: "someone-else@example.com" }
+
+        expect(response).to have_http_status(:conflict)
+        expect(product.reload).to be_alive
+      end
+
+      it "returns not found for an unknown product" do
+        post :hold_sales, params: { id: "fake", user_id: seller.external_id }
+
+        expect(response).to have_http_status(:not_found)
+        expect(response.parsed_body).to eq({ success: false, message: "Product not found" }.as_json)
+      end
+
+      it "holds the listing, reads back its state and audits the write against the product" do
+        risk_state = seller.user_risk_state
+
+        expect do
+          post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+        end.to change { AdminApiAuditLog.count }.by(1)
+
+        hold = product.sales_holds.sole
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include(
+          "success" => true,
+          "status" => "held",
+          "sales_hold" => include("id" => hold.external_id, "active" => true, "unpublished_listing" => true, "held_by_id" => admin_user.external_id),
+          "product" => include("id" => product.external_id, "alive" => false, "active_sales_hold_id" => hold.external_id, "unpublished_by_admin" => false)
+        )
+        expect(AdminApiAuditLog.last).to have_attributes(
+          action: "products.hold_sales",
+          target_type: "Link",
+          target_external_id: product.external_id,
+          actor_user_id: admin_user.id,
+          response_status: 200
+        )
+        expect(seller.reload.user_risk_state).to eq(risk_state)
+      end
+
+      it "writes nothing when the product changes owner between the lookup and the locked write" do
+        new_owner = create(:user, email: "new-owner@example.com")
+        allow_any_instance_of(Link).to receive(:hold_sales!).and_wrap_original do |original, **kwargs|
+          Link.where(id: product.id).update_all(user_id: new_owner.id)
+          original.call(**kwargs)
+        end
+
+        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+
+        expect(response).to have_http_status(:conflict)
+        expect(product.reload).to be_alive
+        expect(product.sales_holds).to be_empty
+        expect(AdminApiAuditLog.last).to have_attributes(action: "products.hold_sales", response_status: 409)
+      end
+
+      it "writes nothing when the seller's email changes between the lookup and the locked write" do
+        allow_any_instance_of(Link).to receive(:hold_sales!).and_wrap_original do |original, **kwargs|
+          User.where(id: seller.id).update_all(email: "changed-seller@example.com")
+          original.call(**kwargs)
+        end
+
+        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id, expected_email: "seller@example.com" }
+
+        expect(response).to have_http_status(:conflict)
+        expect(product.reload).to be_alive
+        expect(product.sales_holds).to be_empty
+      end
+
+      it "returns the existing hold when called again" do
+        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+        hold_id = response.parsed_body.dig("sales_hold", "id")
+
+        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include("status" => "already_held", "sales_hold" => include("id" => hold_id))
+        expect(product.sales_holds.count).to eq(1)
+      end
+
+      it "reports that a listing the seller had already unpublished was left as it was" do
+        product.unpublish!
+
+        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+
+        expect(response.parsed_body.dig("sales_hold", "unpublished_listing")).to be(false)
+      end
+    end
+
+    describe "POST release_sales_hold" do
+      include_examples "admin api authorization required", :post, :release_sales_hold, { id: "fake", user_id: "fake", hold_id: "fake" }
+
+      before { request.headers["Authorization"] = "Bearer #{AdminApiToken.mint!(actor_user_id: admin_user.id)}" }
+
+      let!(:hold) { product.hold_sales!(seller:, held_by: admin_user).first }
+
+      it "requires the hold id" do
+        post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id }
+
+        expect(response).to have_http_status(:bad_request)
+        expect(hold.reload).to be_active
+      end
+
+      it "returns not found for a hold on another product" do
+        other_hold, = create(:product, user: seller).hold_sales!(seller:, held_by: admin_user)
+
+        post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id, hold_id: other_hold.external_id }
+
+        expect(response).to have_http_status(:not_found)
+        expect(other_hold.reload).to be_active
+      end
+
+      it "refuses a product that belongs to someone else" do
+        other_seller = create(:user, email: "other-seller@example.com")
+
+        post :release_sales_hold, params: { id: product.external_id, user_id: other_seller.external_id, hold_id: hold.external_id }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(hold.reload).to be_active
+      end
+
+      it "lifts the hold, leaves the listing unpublished and audits the write" do
+        expect do
+          post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id, hold_id: hold.external_id }
+        end.to change { AdminApiAuditLog.count }.by(1)
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include(
+          "status" => "released",
+          "sales_hold" => include("id" => hold.external_id, "active" => false, "released_by_id" => admin_user.external_id),
+          "product" => include("alive" => false, "active_sales_hold_id" => nil)
+        )
+        expect(AdminApiAuditLog.last).to have_attributes(
+          action: "products.release_sales_hold",
+          target_type: "Link",
+          target_external_id: product.external_id,
+          response_status: 200
+        )
+      end
+
+      it "leaves the hold when the product changes owner between the lookup and the locked write" do
+        new_owner = create(:user, email: "new-owner@example.com")
+        allow_any_instance_of(Link).to receive(:release_sales_hold!).and_wrap_original do |original, *args, **kwargs|
+          Link.where(id: product.id).update_all(user_id: new_owner.id)
+          original.call(*args, **kwargs)
+        end
+
+        post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id, hold_id: hold.external_id }
+
+        expect(response).to have_http_status(:conflict)
+        expect(hold.reload).to be_active
+      end
+
+      it "leaves a newer hold in place when an older release is retried" do
+        post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id, hold_id: hold.external_id }
+        newer_hold, = product.reload.hold_sales!(seller:, held_by: admin_user)
+
+        post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id, hold_id: hold.external_id }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to include(
+          "status" => "already_released",
+          "product" => include("active_sales_hold_id" => newer_hold.external_id)
+        )
+        expect(newer_hold.reload).to be_active
+      end
+    end
+
+    describe "GET show" do
+      before { request.headers["Authorization"] = "Bearer #{AdminApiToken.mint!(actor_user_id: admin_user.id)}" }
+
+      it "includes the active hold" do
+        hold, = product.hold_sales!(seller:, held_by: admin_user)
+
+        get :show, params: { id: product.external_id }
+
+        expect(response.parsed_body.dig("product", "active_sales_hold")).to include("id" => hold.external_id, "active" => true)
+      end
+    end
+  end
 end

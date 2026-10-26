@@ -594,6 +594,16 @@ describe "Muse MCP" do
       expect(response.parsed_body.dig("result", "structuredContent", "product", "published")).to eq(true)
       expect(@product.reload).to be_published
     end
+
+    it "does not publish a product Gumroad has put on a sales hold" do
+      @product.hold_sales!(seller: @seller, held_by: create(:admin_user))
+
+      post_mcp({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "publish_product", arguments: { id: @product.external_id } } })
+
+      expect(response).to be_successful
+      expect(response.parsed_body["result"]).to include("isError" => true, "content" => [{ "type" => "text", "text" => Link::UNPUBLISHED_BY_ADMIN_MESSAGE }])
+      expect(@product.reload.purchase_disabled_at).to be_present
+    end
   end
 
   context "with a default-scope (view_public) token" do
