@@ -72,6 +72,7 @@ module Product::Searchable
   DEFAULT_SALES_VOLUME_RECENTNESS = 3.months
   HOT_AND_NEW_PRODUCT_RECENTNESS = 90.days
   TOP_CREATORS_SIZE = 6
+  MAX_TOP_CREATORS_SIZE = 50
 
   included do
     include Elasticsearch::Model
@@ -187,6 +188,9 @@ module Product::Searchable
       tags_aggregation_size = params[:user_id].present? && is_alive_on_profile ? MAX_NUMBER_OF_PROFILE_TAGS : MAX_NUMBER_OF_TAGS
       min_price_cents = price_filter_cents(params[:min_price], rounding: :ceil) if params[:min_price].present?
       max_price_cents = price_filter_cents(params[:max_price], rounding: :floor) if params[:max_price].present?
+      # Integer only: public search endpoints pass request params (strings, arrays) straight through,
+      # so only server-side callers can change the size.
+      top_creators_size = params[:top_creators_size].is_a?(Integer) ? params[:top_creators_size].clamp(1, MAX_TOP_CREATORS_SIZE) : TOP_CREATORS_SIZE
       search_options = Elasticsearch::DSL::Search.search do
         size params.fetch(:size, RECOMMENDED_PRODUCTS_PER_PAGE).to_i
         from (params[:from].to_i - 1).clamp(0, MAX_RESULT_WINDOW - size)
@@ -403,7 +407,7 @@ module Product::Searchable
           aggregation "top_creators" do
             terms do
               field "user_id"
-              size TOP_CREATORS_SIZE
+              size top_creators_size
               order sales_volume_sum: :desc
 
               aggregation "sales_volume_sum" do

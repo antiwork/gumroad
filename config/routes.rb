@@ -198,6 +198,11 @@ Rails.application.routes.draw do
       get "/tax_forms", to: "tax_forms#index"
       get "/tax_forms/:year/:tax_form_type/download", to: "tax_forms#download"
       get "/earnings", to: "earnings#show"
+
+      # Partner applications (client credentials, partner_api scope).
+      get "/partner/products", to: "partner/products#index"
+      get "/partner/creators/top", to: "partner/creators#top"
+      get "/partner/categories", to: "partner/categories#index"
     end
   end
 
