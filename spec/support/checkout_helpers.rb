@@ -13,7 +13,7 @@ module CheckoutHelpers
 
   # The buy CTA's text follows the seller's call to action, so find the checkout link itself.
   def product_page_cta
-    within find(:article) { first(:link, href: %r{/checkout\?}) }
+    within(find(:article)) { first(:link, href: %r{/checkout\?}) }
   end
 
   def add_to_cart(product, cart: false, pwyw_price: nil, option: nil, rent: false, recurrence: nil, logged_in_user: nil, quantity: 1, offer_code: nil, ppp_factor: nil, **params)
