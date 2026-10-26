@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-class CreateGameBuilds < ActiveRecord::Migration[8.1]
+class CreateProductBuilds < ActiveRecord::Migration[8.1]
   def change
-    create_table :game_builds do |t|
+    create_table :product_builds do |t|
       t.bigint :product_id, null: false
       t.string :public_id, limit: 21, null: false
       t.integer :number, null: false

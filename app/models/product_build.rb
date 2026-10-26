@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
-# One immutable upload of a browser game for a product. The zip is copied into
-# games/<product_id>/<number>/ on deploy, so later changes to the seller's source
-# upload cannot alter it. Only `promote!` makes a build the one buyers get.
-class GameBuild < ApplicationRecord
+# One immutable upload of a web build (a game, an interactive course) for a product.
+# The zip is copied into builds/<product_id>/<number>/ on deploy, so later changes to
+# the seller's source upload cannot alter it. Only `promote!` makes a build the one buyers get.
+class ProductBuild < ApplicationRecord
   STATUSES = %w[uploaded live superseded].freeze
   MAX_BUILDS_PER_PRODUCT = 50
   MAX_BYTE_SIZE = 2.gigabytes
   PUBLIC_ID_LENGTH = 21
   DISPLAY_NAME_MAX_LENGTH = 200
-  STORAGE_PREFIX = "games"
+  STORAGE_PREFIX = "builds"
   PUBLIC_ID_ALPHABET = [*"0".."9", *"A".."Z", *"a".."z", "_", "-"].freeze
 
   belongs_to :product, class_name: "Link"
@@ -41,7 +41,7 @@ class GameBuild < ApplicationRecord
         next self
       end
 
-      previous = product.game_builds.live.where.not(id:).first
+      previous = product.product_builds.live.where.not(id:).first
       if previous
         previous.product_file&.mark_deleted!
         previous.update!(status: "superseded")

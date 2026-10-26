@@ -138,7 +138,7 @@ class Link < ApplicationRecord
   has_many :orders, through: :sales, source: :order
   has_many :sold_calls, through: :sales, source: :call
   has_many :asset_previews
-  has_many :game_builds, -> { order(:number) }, foreign_key: :product_id, dependent: :destroy
+  has_many :product_builds, -> { order(:number) }, foreign_key: :product_id, dependent: :destroy
   has_one :thumbnail, foreign_key: "product_id"
   has_one :thumbnail_alive, -> { alive }, class_name: "Thumbnail", foreign_key: "product_id"
   has_many :display_asset_previews, -> { alive.in_order }, class_name:  "AssetPreview"

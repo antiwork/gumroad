@@ -122,7 +122,7 @@ Rails.application.routes.draw do
         end
         resources :skus, only: [:index]
         resources :subscribers, only: [:index]
-        resources :game_builds, path: "games/builds", only: [:index, :show] do
+        resources :product_builds, path: "builds", only: [:index, :show] do
           collection { post :deploy }
           member { post :promote }
         end

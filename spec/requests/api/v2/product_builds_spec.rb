@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Game builds API" do
+describe "Product builds API" do
   let(:user) { create(:user) }
   let(:product) { create(:product, user:) }
   let(:oauth_application) { create(:oauth_application, owner: create(:user)) }
@@ -18,11 +18,11 @@ describe "Game builds API" do
   end
 
   def deploy(url, product_id: product.external_id)
-    post "/api/v2/products/#{product_id}/games/builds/deploy", params: { access_token: token.token, url: }
+    post "/api/v2/products/#{product_id}/builds/deploy", params: { access_token: token.token, url: }
   end
 
   def promote(build)
-    post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+    post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/promote", params: { access_token: token.token }
   end
 
   def live_download_bytes
@@ -43,16 +43,16 @@ describe "Game builds API" do
   end
 
   describe "POST deploy" do
-    it "copies the upload to the product's games prefix as build 1 without making it live" do
+    it "copies the upload to the product's builds prefix as build 1 without making it live" do
       url = upload_zip("abc")
       deploy(url)
 
-      build = response.parsed_body["game_build"]
+      build = response.parsed_body["build"]
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be true
       expect(build).to include("number" => 1, "status" => "uploaded", "byte_size" => 3)
-      record = product.game_builds.sole
-      expect(record.storage_key).to eq("games/#{product.id}/1/build.zip")
+      record = product.product_builds.sole
+      expect(record.storage_key).to eq("builds/#{product.id}/1/build.zip")
       expect(s3.get_object(bucket: S3_BUCKET, key: record.storage_key).body.read).to eq("abc")
       expect(product.product_files.alive).to be_empty
     end
@@ -60,13 +60,13 @@ describe "Game builds API" do
     it "copies an upload whose filename needs escaping in the copy source" do
       deploy(upload_zip("abc", filename: "Game #2.zip"))
       expect(response.parsed_body["success"]).to be true
-      expect(s3.get_object(bucket: S3_BUCKET, key: product.game_builds.sole.storage_key).body.read).to eq("abc")
+      expect(s3.get_object(bucket: S3_BUCKET, key: product.product_builds.sole.storage_key).body.read).to eq("abc")
     end
 
     it "numbers builds sequentially" do
       deploy(upload_zip)
       deploy(upload_zip)
-      expect(product.game_builds.pluck(:number)).to eq([1, 2])
+      expect(product.product_builds.pluck(:number)).to eq([1, 2])
     end
 
     it "is idempotent for a retried deploy of the same upload" do
@@ -74,7 +74,7 @@ describe "Game builds API" do
       deploy(url)
       deploy(url)
       expect(response.parsed_body["success"]).to be true
-      expect(product.game_builds.count).to eq(1)
+      expect(product.product_builds.count).to eq(1)
     end
 
     it "still returns the build when a retry finds the source upload gone" do
@@ -84,20 +84,20 @@ describe "Game builds API" do
       deploy(url)
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body).to include("success" => true)
-      expect(response.parsed_body["game_build"]["number"]).to eq(1)
+      expect(response.parsed_body["build"]["number"]).to eq(1)
     end
 
     it "keeps the build immutable when the source upload is overwritten later" do
       url = upload_zip("one")
       deploy(url)
       s3.put_object(bucket: S3_BUCKET, key: url.delete_prefix(S3_BASE_URL), body: "two")
-      expect(s3.get_object(bucket: S3_BUCKET, key: product.game_builds.sole.storage_key).body.read).to eq("one")
+      expect(s3.get_object(bucket: S3_BUCKET, key: product.product_builds.sole.storage_key).body.read).to eq("one")
     end
 
     it "rejects a url outside the seller's own uploads" do
       deploy(upload_zip(owner: create(:user)))
       expect(response.parsed_body).to include("success" => false)
-      expect(product.game_builds).to be_empty
+      expect(product.product_builds).to be_empty
     end
 
     it "rejects a url that is not a zip" do
@@ -117,11 +117,11 @@ describe "Game builds API" do
     end
 
     it "caps builds per product" do
-      stub_const("GameBuild::MAX_BUILDS_PER_PRODUCT", 1)
+      stub_const("ProductBuild::MAX_BUILDS_PER_PRODUCT", 1)
       deploy(upload_zip)
       deploy(upload_zip)
       expect(response.parsed_body["success"]).to be false
-      expect(product.game_builds.count).to eq(1)
+      expect(product.product_builds.count).to eq(1)
     end
 
     it "does not deploy to another seller's product" do
@@ -131,7 +131,7 @@ describe "Game builds API" do
 
     it "requires the edit_products scope" do
       read_token = create("doorkeeper/access_token", application: oauth_application, resource_owner_id: user.id, scopes: "view_public")
-      post "/api/v2/products/#{product.external_id}/games/builds/deploy", params: { access_token: read_token.token, url: upload_zip }
+      post "/api/v2/products/#{product.external_id}/builds/deploy", params: { access_token: read_token.token, url: upload_zip }
       expect(response).to have_http_status(:forbidden)
     end
   end
@@ -139,12 +139,12 @@ describe "Game builds API" do
   describe "POST promote" do
     it "makes the build live and attaches it as the product's download" do
       deploy(upload_zip)
-      build = product.game_builds.sole
+      build = product.product_builds.sole
 
-      post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+      post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/promote", params: { access_token: token.token }
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["game_build"]).to include("status" => "live")
+      expect(response.parsed_body["build"]).to include("status" => "live")
       file = product.product_files.alive.sole
       expect(file.url).to eq("#{S3_BASE_URL}#{build.storage_key}")
       expect(build.reload.product_file).to eq(file)
@@ -153,10 +153,10 @@ describe "Game builds API" do
     it "supersedes the previous live build and swaps the download" do
       deploy(upload_zip)
       deploy(upload_zip)
-      first, second = product.game_builds.to_a
+      first, second = product.product_builds.to_a
 
       [first, second].each do |b|
-        post "/api/v2/products/#{product.external_id}/games/builds/#{b.public_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/builds/#{b.public_id}/promote", params: { access_token: token.token }
       end
 
       expect(first.reload.status).to eq("superseded")
@@ -167,11 +167,11 @@ describe "Game builds API" do
     it "can roll back to a superseded build" do
       deploy(upload_zip)
       deploy(upload_zip)
-      first, second = product.game_builds.to_a
+      first, second = product.product_builds.to_a
       [first, second, first].each do |b|
-        post "/api/v2/products/#{product.external_id}/games/builds/#{b.public_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/builds/#{b.public_id}/promote", params: { access_token: token.token }
       end
-      expect(product.game_builds.live.pluck(:number)).to eq([1])
+      expect(product.product_builds.live.pluck(:number)).to eq([1])
       expect(product.product_files.alive.sole.url).to end_with("/1/build.zip")
     end
 
@@ -179,13 +179,13 @@ describe "Game builds API" do
       rich = create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }])
       deploy(upload_zip)
       deploy(upload_zip)
-      first, second = product.game_builds.to_a
+      first, second = product.product_builds.to_a
 
-      post "/api/v2/products/#{product.external_id}/games/builds/#{first.public_id}/promote", params: { access_token: token.token }
+      post "/api/v2/products/#{product.external_id}/builds/#{first.public_id}/promote", params: { access_token: token.token }
       embeds = -> { rich.reload.description.select { _1["type"] == "fileEmbed" }.map { _1.dig("attrs", "id") } }
       expect(embeds.call).to eq([first.reload.product_file.external_id])
 
-      post "/api/v2/products/#{product.external_id}/games/builds/#{second.public_id}/promote", params: { access_token: token.token }
+      post "/api/v2/products/#{product.external_id}/builds/#{second.public_id}/promote", params: { access_token: token.token }
       expect(embeds.call).to eq([second.reload.product_file.external_id])
       expect(rich.reload.description.first["type"]).to eq("paragraph")
     end
@@ -201,15 +201,15 @@ describe "Game builds API" do
         pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
         deploy(upload_zip)
         deploy(upload_zip)
-        first, second = product.game_builds.to_a
+        first, second = product.product_builds.to_a
 
-        post "/api/v2/products/#{product.external_id}/games/builds/#{first.public_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/builds/#{first.public_id}/promote", params: { access_token: token.token }
         expect(response).to have_http_status(:ok)
         first_file_id = first.reload.product_file.external_id
         pages.each { |page| expect(page.reload.description.map { _1.dig("attrs", "id") }).to include(first_file_id) }
         buyers.each { expect(buyer_file_ids(_1)).to eq([first_file_id]) }
 
-        post "/api/v2/products/#{product.external_id}/games/builds/#{second.public_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/builds/#{second.public_id}/promote", params: { access_token: token.token }
         buyers.each { expect(buyer_file_ids(_1)).to eq([second.reload.product_file.external_id]) }
       end
 
@@ -218,7 +218,7 @@ describe "Game builds API" do
         page = create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => manual.external_id, "uid" => SecureRandom.uuid } }])
         early_buyer = create(:purchase, link: product, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
         deploy(upload_zip)
-        build = product.game_builds.sole
+        build = product.product_builds.sole
 
         promote(build)
 
@@ -229,7 +229,7 @@ describe "Game builds API" do
       it "gives a version added after the promote the live zip when the live build is promoted again" do
         pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
         deploy(upload_zip)
-        build = product.game_builds.sole
+        build = product.product_builds.sole
         promote(build)
         file_id = build.reload.product_file.external_id
         post "/api/v2/products/#{product.external_id}/variant_categories/#{category.external_id}/variants", params: { name: "Deluxe" }, headers: { "Authorization" => "Bearer #{token.token}" }, as: :json
@@ -246,9 +246,9 @@ describe "Game builds API" do
 
       it "gives buyers of a variant without content pages the live zip, also after the seller saves the versions" do
         deploy(upload_zip)
-        build = product.game_builds.sole
+        build = product.product_builds.sole
 
-        post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/promote", params: { access_token: token.token }
 
         expect(response).to have_http_status(:ok)
         buyers.each { expect(buyer_file_ids(_1)).to eq([build.reload.product_file.external_id]) }
@@ -266,9 +266,9 @@ describe "Game builds API" do
         existing = create(:product_file, link: product, url: upload_zip("soundtrack", filename: "soundtrack.zip"))
         variants.first.product_files << existing
         deploy(upload_zip)
-        build = product.game_builds.sole
+        build = product.product_builds.sole
 
-        post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/promote", params: { access_token: token.token }
 
         expect(buyer_file_ids(buyers.first)).to eq([existing.external_id, build.reload.product_file.external_id])
       end
@@ -277,16 +277,16 @@ describe "Game builds API" do
     it "keeps a superseded build's object through the deleted-files cleanup so it can be rolled back to" do
       deploy(upload_zip("one"))
       deploy(upload_zip("two"))
-      first, second = product.game_builds.to_a
+      first, second = product.product_builds.to_a
       [first, second].each do |b|
-        post "/api/v2/products/#{product.external_id}/games/builds/#{b.public_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/builds/#{b.public_id}/promote", params: { access_token: token.token }
       end
       ProductFile.where(id: first.product_file_id).update_all(deleted_at: 2.days.ago)
 
       RemoveDeletedFilesFromS3Job.new.perform
 
       expect { s3.head_object(bucket: S3_BUCKET, key: first.storage_key) }.not_to raise_error
-      post "/api/v2/products/#{product.external_id}/games/builds/#{first.public_id}/promote", params: { access_token: token.token }
+      post "/api/v2/products/#{product.external_id}/builds/#{first.public_id}/promote", params: { access_token: token.token }
       expect(product.product_files.alive.sole.url).to end_with("/1/build.zip")
     end
 
@@ -294,21 +294,21 @@ describe "Game builds API" do
       product.unpublish!
       deploy(upload_zip("one"))
       deploy(upload_zip("two"))
-      first, second = product.game_builds.to_a
+      first, second = product.product_builds.to_a
       [first, second].each { promote(_1) }
       ProductFile.where(id: first.reload.product_file_id).update_all(deleted_at: 2.days.ago)
 
       RemoveDeletedFilesFromS3Job.new.perform
       promote(first)
 
-      expect(product.game_builds.live.pluck(:number)).to eq([1])
+      expect(product.product_builds.live.pluck(:number)).to eq([1])
       expect(live_download_bytes).to eq("one")
     end
 
     it "lets a deleted unsold product's build downloads be removed from S3" do
       deploy(upload_zip)
       deploy(upload_zip)
-      first, second = product.game_builds.to_a
+      first, second = product.product_builds.to_a
       [first, second].each { promote(_1) }
       product.delete!
       DeleteProductFilesWorker.new.perform(product.id)
@@ -323,8 +323,8 @@ describe "Game builds API" do
 
     it "is a no-op for an already-live build" do
       deploy(upload_zip)
-      build = product.game_builds.sole
-      2.times { post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token } }
+      build = product.product_builds.sole
+      2.times { post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/promote", params: { access_token: token.token } }
       expect(product.product_files.alive.count).to eq(1)
     end
 
@@ -337,7 +337,7 @@ describe "Game builds API" do
       it "restores the product's download when the live build is promoted again" do
         buyer = create(:purchase, link: product, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
         deploy(upload_zip("one"))
-        build = product.game_builds.sole
+        build = product.product_builds.sole
         promote(build)
         delete_files_via_api
         expect(buyer_file_ids(buyer)).to eq([])
@@ -345,7 +345,7 @@ describe "Game builds API" do
         promote(build)
 
         expect(response).to have_http_status(:ok)
-        expect(product.game_builds.live.pluck(:number)).to eq([1])
+        expect(product.product_builds.live.pluck(:number)).to eq([1])
         expect(buyer_file_ids(buyer)).to eq([build.reload.product_file.external_id])
         product.product_files.deleted.update_all(deleted_at: 2.days.ago)
         RemoveDeletedFilesFromS3Job.new.perform
@@ -355,7 +355,7 @@ describe "Game builds API" do
       it "replaces an embed the deleted download left on the content page instead of adding a second one" do
         page = create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }])
         deploy(upload_zip)
-        build = product.game_builds.sole
+        build = product.product_builds.sole
         promote(build)
         deleted_file = build.reload.product_file
         deleted_file.mark_deleted!
@@ -373,7 +373,7 @@ describe "Game builds API" do
         pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
         buyers = variants.map { create(:purchase, link: product, variant_attributes: [_1], ip_address: "127.0.0.1").tap(&:create_url_redirect!) }
         deploy(upload_zip)
-        build = product.game_builds.sole
+        build = product.product_builds.sole
         promote(build)
         deleted_file_id = build.reload.product_file.external_id
         # The API refuses to delete an embedded file, so the seller unembeds it from each version first.
@@ -402,21 +402,21 @@ describe "Game builds API" do
   describe "GET index / show" do
     it "lists builds and shows one" do
       deploy(upload_zip)
-      get "/api/v2/products/#{product.external_id}/games/builds", params: { access_token: token.token }
+      get "/api/v2/products/#{product.external_id}/builds", params: { access_token: token.token }
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["game_builds"].map { _1["number"] }).to eq([1])
+      expect(response.parsed_body["builds"].map { _1["number"] }).to eq([1])
 
-      id = response.parsed_body["game_builds"].first["id"]
-      get "/api/v2/products/#{product.external_id}/games/builds/#{id}", params: { access_token: token.token }
+      id = response.parsed_body["builds"].first["id"]
+      get "/api/v2/products/#{product.external_id}/builds/#{id}", params: { access_token: token.token }
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["game_build"]["id"]).to eq(id)
+      expect(response.parsed_body["build"]["id"]).to eq(id)
     end
 
     it "does not expose another product's build" do
       other = create(:product, user:)
       deploy(upload_zip, product_id: other.external_id)
-      id = other.game_builds.sole.public_id
-      get "/api/v2/products/#{product.external_id}/games/builds/#{id}", params: { access_token: token.token }
+      id = other.product_builds.sole.public_id
+      get "/api/v2/products/#{product.external_id}/builds/#{id}", params: { access_token: token.token }
       expect(response.parsed_body["success"]).to be false
     end
   end
