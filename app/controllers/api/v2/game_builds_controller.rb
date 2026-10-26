@@ -41,7 +41,7 @@ class Api::V2::GameBuildsController < Api::V2::BaseController
 
       number = (@product.game_builds.maximum(:number) || 0) + 1
       key = GameBuild.storage_key_for(@product.id, number)
-      Aws::S3::Client.new.copy_object(bucket: S3_BUCKET, key:, copy_source: "#{S3_BUCKET}/#{source_key}", metadata_directive: "REPLACE", content_type: "application/zip")
+      Aws::S3::Client.new.copy_object(bucket: S3_BUCKET, key:, copy_source: "#{S3_BUCKET}/#{Seahorse::Util.uri_path_escape(source_key)}", metadata_directive: "REPLACE", content_type: "application/zip")
       @product.game_builds.create!(number:, source_url: url, storage_key: key, byte_size: head.content_length)
     end
     return render_response(false, message: "This product already has #{GameBuild::MAX_BUILDS_PER_PRODUCT} builds.") unless build

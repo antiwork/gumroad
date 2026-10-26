@@ -61,12 +61,26 @@ class GameBuild < ApplicationRecord
     # Buyers only see files embedded in content pages, so the live zip goes on the first page of
     # the product (or of each variant) and the superseded one is removed everywhere.
     def swap_file_embed(old_file, new_file)
-      contents = product.has_product_level_rich_content? ? product.alive_rich_contents.to_a : product.alive_variants.flat_map { _1.alive_rich_contents.to_a }
+      per_variant = !product.has_product_level_rich_content?
+      contents = per_variant ? product.alive_variants.flat_map { _1.alive_rich_contents.to_a } : product.alive_rich_contents.to_a
       first_page_ids = contents.group_by { [_1.entity_type, _1.entity_id] }.values.map { |pages| pages.min_by(&:position).id }
       contents.each do |content|
         nodes = old_file ? RichContent.reject_file_embeds(content.description, [old_file.id]) : content.description.to_a
-        nodes += [{ "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => new_file.external_id, "uid" => SecureRandom.uuid } }] if first_page_ids.include?(content.id)
+        nodes += [file_embed_node(new_file)] if first_page_ids.include?(content.id)
         content.update!(description: nodes)
       end
+      return unless per_variant
+
+      # A variant's buyers get only its linked files, and every save relinks them from the variant's
+      # page embeds, so a variant without pages gets one holding the zip.
+      product.alive_variants.each do |variant|
+        variant.alive_rich_contents.create!(description: [file_embed_node(new_file)]) if variant.alive_rich_contents.none?
+        variant.product_files.delete(old_file) if old_file
+        variant.product_files << new_file
+      end
+    end
+
+    def file_embed_node(file)
+      { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
     end
 end

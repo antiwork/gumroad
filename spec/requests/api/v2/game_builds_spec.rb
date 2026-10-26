@@ -11,8 +11,8 @@ describe "Game builds API" do
 
   before { host! "test.gumroad.com" }
 
-  def upload_zip(content = "PK-fake-zip", owner: user)
-    key = "attachments/#{owner.external_id}/#{SecureRandom.hex}/original/game.zip"
+  def upload_zip(content = "PK-fake-zip", owner: user, filename: "game.zip")
+    key = "attachments/#{owner.external_id}/#{SecureRandom.hex}/original/#{filename}"
     s3.put_object(bucket: S3_BUCKET, key:, body: content)
     "#{S3_BASE_URL}#{key}"
   end
@@ -34,6 +34,12 @@ describe "Game builds API" do
       expect(record.storage_key).to eq("games/#{product.id}/1/build.zip")
       expect(s3.get_object(bucket: S3_BUCKET, key: record.storage_key).body.read).to eq("abc")
       expect(product.product_files.alive).to be_empty
+    end
+
+    it "copies an upload whose filename needs escaping in the copy source" do
+      deploy(upload_zip("abc", filename: "Game #2.zip"))
+      expect(response.parsed_body["success"]).to be true
+      expect(s3.get_object(bucket: S3_BUCKET, key: product.game_builds.sole.storage_key).body.read).to eq("abc")
     end
 
     it "numbers builds sequentially" do
@@ -163,19 +169,59 @@ describe "Game builds API" do
       expect(rich.reload.description.first["type"]).to eq("paragraph")
     end
 
-    it "embeds the live zip in each variant's first page when variants have their own content" do
-      category = create(:variant_category, link: product, title: "Versions")
-      variants = [create(:variant, variant_category: category, name: "A"), create(:variant, variant_category: category, name: "B")]
-      product.update!(has_same_rich_content_for_all_variants: false)
-      pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
-      deploy(upload_zip)
-      build = product.game_builds.sole
+    context "when variants have their own content" do
+      let(:category) { create(:variant_category, link: product, title: "Versions") }
+      let!(:variants) { [create(:variant, variant_category: category, name: "A"), create(:variant, variant_category: category, name: "B")] }
+      let(:buyers) { variants.map { create(:purchase, link: product, variant_attributes: [_1], ip_address: "127.0.0.1").tap(&:create_url_redirect!) } }
 
-      post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+      before { product.update!(has_same_rich_content_for_all_variants: false) }
 
-      expect(response).to have_http_status(:ok)
-      file_id = build.reload.product_file.external_id
-      pages.each { |page| expect(page.reload.description.map { _1.dig("attrs", "id") }).to include(file_id) }
+      # File ids the buyer's download page lists, after checking the download endpoint serves each one.
+      def buyer_file_ids(purchase)
+        redirect_token = purchase.url_redirect.token
+        get "/d/#{redirect_token}", headers: { "X-Inertia" => "true" }
+        expect(response).to have_http_status(:ok)
+        ids = response.parsed_body.dig("props", "content", "content_items").map { _1["id"] }
+        ids.each do |id|
+          get url_redirect_download_product_files_path(redirect_token, product_file_ids: [id], format: :json)
+          expect(response).to have_http_status(:ok)
+        end
+        ids
+      end
+
+      it "gives each variant's buyers the live zip from their first page and swaps it on the next promote" do
+        pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
+        deploy(upload_zip)
+        deploy(upload_zip)
+        first, second = product.game_builds.to_a
+
+        post "/api/v2/products/#{product.external_id}/games/builds/#{first.public_id}/promote", params: { access_token: token.token }
+        expect(response).to have_http_status(:ok)
+        first_file_id = first.reload.product_file.external_id
+        pages.each { |page| expect(page.reload.description.map { _1.dig("attrs", "id") }).to include(first_file_id) }
+        buyers.each { expect(buyer_file_ids(_1)).to eq([first_file_id]) }
+
+        post "/api/v2/products/#{product.external_id}/games/builds/#{second.public_id}/promote", params: { access_token: token.token }
+        buyers.each { expect(buyer_file_ids(_1)).to eq([second.reload.product_file.external_id]) }
+      end
+
+      it "gives buyers of a variant without content pages the live zip, also after the seller saves the versions" do
+        deploy(upload_zip)
+        build = product.game_builds.sole
+
+        post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+
+        expect(response).to have_http_status(:ok)
+        buyers.each { expect(buyer_file_ids(_1)).to eq([build.reload.product_file.external_id]) }
+
+        # The editor resubmits each version with the pages it shows.
+        options = variants.map do |variant|
+          pages = variant.alive_rich_contents.map { { id: _1.external_id, title: _1.title, description: _1.description } }
+          { id: variant.external_id, name: variant.name, rich_content: pages }
+        end
+        Product::VariantsUpdaterService.new(product: product.reload, variants_params: [{ id: category.external_id, name: category.title, options: }]).perform
+        buyers.each { expect(buyer_file_ids(_1)).to eq([build.reload.product_file.external_id]) }
+      end
     end
 
     it "keeps a superseded build's object through the deleted-files cleanup so it can be rolled back to" do
