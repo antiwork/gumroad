@@ -226,6 +226,24 @@ describe "Game builds API" do
         expect(page.reload.description.count { _1["type"] == "fileEmbed" }).to eq(2)
       end
 
+      it "gives a version added after the promote the live zip when the live build is promoted again" do
+        pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
+        deploy(upload_zip)
+        build = product.game_builds.sole
+        promote(build)
+        file_id = build.reload.product_file.external_id
+        post "/api/v2/products/#{product.external_id}/variant_categories/#{category.external_id}/variants", params: { name: "Deluxe" }, headers: { "Authorization" => "Bearer #{token.token}" }, as: :json
+        deluxe_buyer = create(:purchase, link: product, variant_attributes: [category.variants.find_by!(name: "Deluxe")], ip_address: "127.0.0.1").tap(&:create_url_redirect!)
+        expect(buyer_file_ids(deluxe_buyer)).to eq([])
+
+        promote(build)
+
+        expect(build.reload.product_file.external_id).to eq(file_id)
+        expect(buyer_file_ids(deluxe_buyer)).to eq([file_id])
+        buyers.each { expect(buyer_file_ids(_1)).to eq([file_id]) }
+        pages.each { |page| expect(page.reload.description.count { _1["type"] == "fileEmbed" }).to eq(1) }
+      end
+
       it "gives buyers of a variant without content pages the live zip, also after the seller saves the versions" do
         deploy(upload_zip)
         build = product.game_builds.sole
@@ -259,6 +277,22 @@ describe "Game builds API" do
       expect { s3.head_object(bucket: S3_BUCKET, key: first.storage_key) }.not_to raise_error
       post "/api/v2/products/#{product.external_id}/games/builds/#{first.public_id}/promote", params: { access_token: token.token }
       expect(product.product_files.alive.sole.url).to end_with("/1/build.zip")
+    end
+
+    it "lets a deleted unsold product's build downloads be removed from S3" do
+      deploy(upload_zip)
+      deploy(upload_zip)
+      first, second = product.game_builds.to_a
+      [first, second].each { promote(_1) }
+      product.delete!
+      DeleteProductFilesWorker.new.perform(product.id)
+      product.product_files.update_all(deleted_at: 2.days.ago)
+
+      RemoveDeletedFilesFromS3Job.new.perform
+
+      [first, second].each do |build|
+        expect { s3.head_object(bucket: S3_BUCKET, key: build.storage_key) }.to raise_error(Aws::S3::Errors::NotFound)
+      end
     end
 
     it "is a no-op for an already-live build" do

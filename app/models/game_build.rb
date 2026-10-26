@@ -29,13 +29,17 @@ class GameBuild < ApplicationRecord
 
   def live? = status == "live"
 
-  # Makes this build the one buyers get, superseding the current one, or restores the live build's
-  # download if the seller deleted it. Serialised on the product row so two concurrent promotes
-  # cannot leave two live builds.
+  # Makes this build the one buyers get, superseding the current one. Promoting the live build again
+  # restores its download if the seller deleted it and delivers it to versions added since.
+  # Serialised on the product row so two concurrent promotes cannot leave two live builds.
   def promote!
     product.with_lock do
       reload
-      next self if live? && product_file&.alive?
+      if live? && product_file&.alive?
+        swap_file_embed(nil, product_file)
+        product.generate_product_files_archives!
+        next self
+      end
 
       previous = product.game_builds.live.where.not(id:).first
       if previous
@@ -67,11 +71,14 @@ class GameBuild < ApplicationRecord
       contents = per_variant ? product.alive_variants.flat_map { _1.alive_rich_contents.to_a } : []
       # Buyers without a version still read the product's own pages while any has content (UrlRedirect).
       contents += product.alive_rich_contents.to_a if !per_variant || product.alive_rich_contents.any?(&:has_editor_content?)
-      first_page_ids = contents.group_by { [_1.entity_type, _1.entity_id] }.values.map { |pages| pages.min_by(&:position).id }
-      contents.each do |content|
-        nodes = old_file ? RichContent.reject_file_embeds(content.description, [old_file.id]) : content.description.to_a
-        nodes += [file_embed_node(new_file)] if first_page_ids.include?(content.id)
-        content.update!(description: nodes)
+      contents.group_by { [_1.entity_type, _1.entity_id] }.each_value do |pages|
+        embedded = pages.any? { _1.embedded_product_file_ids_in_order.include?(new_file.id) }
+        first_page = pages.min_by(&:position)
+        pages.each do |content|
+          nodes = old_file ? RichContent.reject_file_embeds(content.description, [old_file.id]) : content.description.to_a
+          nodes += [file_embed_node(new_file)] if content == first_page && !embedded
+          content.update!(description: nodes) unless nodes == content.description
+        end
       end
       return unless per_variant
 
@@ -80,7 +87,7 @@ class GameBuild < ApplicationRecord
       product.alive_variants.each do |variant|
         variant.alive_rich_contents.create!(description: [file_embed_node(new_file)]) if variant.alive_rich_contents.none?
         variant.product_files.delete(old_file) if old_file
-        variant.product_files << new_file
+        variant.product_files << new_file unless variant.product_files.include?(new_file)
       end
     end
 
