@@ -3198,6 +3198,95 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
     end
 
+    # The hosted page is Stripe's, so these stub the account read and the link mint rather than
+    # driving connect.stripe.com: only the request we send is ours.
+    def stub_stripe_account_requirements(stripe_connect_account_id, currently_due: [], past_due: [], eventually_due: [])
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          charges_enabled: true,
+          payouts_enabled: false,
+          requirements: { "currently_due" => currently_due, "past_due" => past_due, "eventually_due" => eventually_due },
+          future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+        )
+      )
+    end
+
+    def expect_remediation_link_type(stripe_connect_account_id, type)
+      expect(Stripe::AccountLink).to receive(:create).with({
+                                                             account: stripe_connect_account_id,
+                                                             refresh_url: remediation_settings_payments_url,
+                                                             return_url: verify_stripe_remediation_settings_payments_url,
+                                                             type:,
+                                                           }).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
+    end
+
+    it "opens an onboarding link when an identity document is currently due" do
+      # An individual whose only outstanding item is a document never sees a document step in
+      # account_update, so the requirement can never be satisfied from our page.
+      stripe_connect_account_id = StripeMerchantAccountManager.create_account(user, passphrase: "1234").charge_processor_merchant_id
+      stub_stripe_account_requirements(stripe_connect_account_id, currently_due: ["individual.verification.document"])
+      expect_remediation_link_type(stripe_connect_account_id, "account_onboarding")
+
+      get :remediation
+
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
+    it "opens an onboarding link when an identity document is past due" do
+      stripe_connect_account_id = StripeMerchantAccountManager.create_account(user, passphrase: "1234").charge_processor_merchant_id
+      stub_stripe_account_requirements(stripe_connect_account_id, past_due: ["individual.verification.document"])
+      expect_remediation_link_type(stripe_connect_account_id, "account_onboarding")
+
+      get :remediation
+
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
+    it "opens an onboarding link for a person-level document requirement" do
+      stripe_connect_account_id = StripeMerchantAccountManager.create_account(user, passphrase: "1234").charge_processor_merchant_id
+      stub_stripe_account_requirements(stripe_connect_account_id, currently_due: ["person_123.verification.document"])
+      expect_remediation_link_type(stripe_connect_account_id, "account_onboarding")
+
+      get :remediation
+
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
+    it "keeps the account_update link when the due requirements need no document" do
+      stripe_connect_account_id = StripeMerchantAccountManager.create_account(user, passphrase: "1234").charge_processor_merchant_id
+      stub_stripe_account_requirements(stripe_connect_account_id,
+                                       currently_due: ["individual.address.line1"],
+                                       past_due: ["individual.id_number"])
+      expect_remediation_link_type(stripe_connect_account_id, "account_update")
+
+      get :remediation
+
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
+    it "keeps the account_update link when the document is only eventually due" do
+      stripe_connect_account_id = StripeMerchantAccountManager.create_account(user, passphrase: "1234").charge_processor_merchant_id
+      stub_stripe_account_requirements(stripe_connect_account_id, eventually_due: ["individual.verification.document"])
+      expect_remediation_link_type(stripe_connect_account_id, "account_update")
+
+      get :remediation
+
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
+    it "keeps the account_update link without reading Stripe when the seller has a local request" do
+      stripe_connect_account_id = StripeMerchantAccountManager.create_account(user, passphrase: "1234").charge_processor_merchant_id
+      create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+      expect(Stripe::Account).not_to receive(:retrieve)
+      expect_remediation_link_type(stripe_connect_account_id, "account_update")
+
+      get :remediation
+
+      expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+    end
+
     context "when the only open requirement is a pending_verification Stripe cannot finish" do
       def stub_unfinishable_review(stripe_connect_account_id, pending_verification: ["person_123.verification.document"],
                                    charges_enabled: false, payouts_enabled: nil, errors: [], current_deadline: nil)
@@ -3313,11 +3402,18 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
           )
         )
-        expect(Stripe::AccountLink).to receive(:create).and_call_original
+        expect(Stripe::AccountLink).to receive(:create).with(
+          {
+            account: merchant_account.charge_processor_merchant_id,
+            refresh_url: remediation_settings_payments_url,
+            return_url: verify_stripe_remediation_settings_payments_url,
+            type: "account_onboarding",
+          }
+        ).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
 
         get :remediation
 
-        expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{merchant_account.charge_processor_merchant_id}/"))
+        expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
       end
     end
 

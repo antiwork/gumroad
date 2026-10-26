@@ -323,7 +323,11 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     has_local_requests = current_seller.user_compliance_info_requests.requested.exists?
-    if !has_local_requests && !stripe_account_has_open_requirements?(current_seller.stripe_account)
+    # One Stripe read serves both the open-requirements check and the link-type choice. Sellers
+    # with a local request already have an actionable item in our own flow, so they keep the
+    # account_update link without a round trip.
+    stripe_api_account = retrieve_stripe_account(current_seller.stripe_account) unless has_local_requests
+    if !has_local_requests && (stripe_api_account.nil? || !stripe_account_has_open_requirements?(stripe_api_account))
       redirect_to settings_payments_path, **nothing_open_flash and return
     end
 
@@ -331,7 +335,7 @@ class Settings::PaymentsController < Settings::BaseController
                                              account: current_seller.stripe_account.charge_processor_merchant_id,
                                              refresh_url: remediation_settings_payments_url,
                                              return_url: verify_stripe_remediation_settings_payments_url,
-                                             type: "account_update",
+                                             type: remediation_link_type(stripe_api_account),
                                            }).url, allow_other_host: true
   rescue Stripe::StripeError => e
     sync_stripe_disabled_reason(current_seller.stripe_account) if e.is_a?(Stripe::InvalidRequestError) && current_seller.stripe_account.stripe_disabled_reason.blank?
@@ -676,8 +680,28 @@ class Settings::PaymentsController < Settings::BaseController
       end
     end
 
-    def stripe_account_has_open_requirements?(merchant_account)
-      stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+    # nil when Stripe can't be read: the caller then keeps the reassuring redirect, and the link
+    # type falls back to account_update.
+    def retrieve_stripe_account(merchant_account)
+      Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+    rescue Stripe::StripeError => e
+      ErrorNotifier.notify(e, context: { user_id: current_seller.id })
+      nil
+    end
+
+    # Stripe's account_update page restates what it already stores and, for some country and
+    # account-type combinations, never renders the identity document it is asking for — leaving
+    # those sellers with no way to submit it anywhere. Onboarding collects the whole requirement
+    # set, so use it while a document is due; everyone else keeps account_update.
+    def remediation_link_type(stripe_account)
+      requirements = stripe_account&.[]("requirements") || {}
+      due = Array(requirements["currently_due"]) + Array(requirements["past_due"])
+      return "account_onboarding" if due.any? { |requirement| requirement.to_s.end_with?(".verification.document") }
+
+      "account_update"
+    end
+
+    def stripe_account_has_open_requirements?(stripe_account)
       requirements = stripe_account["requirements"] || {}
       future_requirements = stripe_account["future_requirements"] || {}
       return true if [
@@ -690,9 +714,6 @@ class Settings::PaymentsController < Settings::BaseController
       ].any?(&:present?)
 
       stripe_review_has_no_exit?(stripe_account, requirements)
-    rescue Stripe::StripeError => e
-      ErrorNotifier.notify(e, context: { user_id: current_seller.id })
-      false
     end
 
     # A `pending_verification` entry on its own is Stripe reviewing what the seller submitted
