@@ -15,6 +15,7 @@ class CreateGameBuilds < ActiveRecord::Migration[8.1]
       t.timestamps
 
       t.index :public_id, unique: true
+      t.index :storage_key, length: 191
       t.index [:product_id, :number], unique: true
       t.index [:product_id, :status]
       t.index [:product_id, :source_url], unique: true, length: { source_url: 191 }

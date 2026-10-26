@@ -185,7 +185,7 @@ describe "Game builds API" do
       [first, second].each do |b|
         post "/api/v2/products/#{product.external_id}/games/builds/#{b.public_id}/promote", params: { access_token: token.token }
       end
-      ProductFile.where(id: first.product_file_id).update_all(deleted_at: 3.days.ago)
+      ProductFile.where(id: first.product_file_id).update_all(deleted_at: 2.days.ago)
 
       RemoveDeletedFilesFromS3Job.new.perform
 

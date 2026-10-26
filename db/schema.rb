@@ -1132,6 +1132,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_20_000001) do
     t.index ["product_id", "source_url"], name: "index_game_builds_on_product_id_and_source_url", unique: true, length: { source_url: 191 }
     t.index ["product_id", "status"], name: "index_game_builds_on_product_id_and_status"
     t.index ["public_id"], name: "index_game_builds_on_public_id", unique: true
+    t.index ["storage_key"], name: "index_game_builds_on_storage_key", length: 191
   end
 
   create_table "gifts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

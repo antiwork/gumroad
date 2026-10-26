@@ -85,7 +85,7 @@ class ProductFile < ApplicationRecord
   end
 
   def owned_by_game_build?
-    s3_key.present? && GameBuild.exists?(storage_key: s3_key)
+    s3_key&.start_with?("#{GameBuild::STORAGE_PREFIX}/") && GameBuild.exists?(storage_key: s3_key)
   end
 
   def has_cdn_url?
