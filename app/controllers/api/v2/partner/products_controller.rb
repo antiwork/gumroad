@@ -22,14 +22,9 @@ class Api::V2::Partner::ProductsController < Api::V2::Partner::BaseController
     # `from` is 1-based in search_options.
     response = Link.search(Link.search_options(search_params.merge(sort:, from: (page - 1) * per_page + 1, size: per_page, track_total_hits: true)))
     product_ids = response.records.ids.map(&:to_i)
-    products_by_id = Link.includes(ProfilePresenter::PublicApiProps::PRODUCT_ASSOCIATIONS_FOR_VISIBILITY).where(id: product_ids).index_by(&:id)
-    products = product_ids.filter_map { products_by_id[_1] }
-    # Visitors do not see sold-out products whose seller hides them. Like the profile grid,
-    # only the current page is checked, so `total` drops by the hidden products on this page.
-    visible_products = products.reject { |product| product.hide_sold_out_variants? && product.remaining_for_sale_count == 0 }
-    total = response.results.total - (products.size - visible_products.size)
+    products_by_id = Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).where(id: product_ids).index_by(&:id)
 
-    render_products(visible_products, creators:, total:, page:, per_page:)
+    render_products(product_ids.filter_map { products_by_id[_1] }, creators:, total: response.results.total, page:, per_page:)
   end
 
   private

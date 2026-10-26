@@ -140,6 +140,17 @@ describe "Partner API", type: :request do
       expect(response.parsed_body["products"].map { _1["id"] }).to match_array([product.external_id, other_product.external_id])
     end
 
+    it "reuses the sold-out check of each seller for a few minutes" do
+      create(:product, user: seller, hide_sold_out_variants: true, max_purchase_count: 0)
+      index_model_records(Link)
+      get_products
+
+      expect_any_instance_of(Link).not_to receive(:remaining_for_sale_count)
+      get_products
+
+      expect(response.parsed_body["total"]).to eq(2)
+    end
+
     it "narrows to one creator by external user ID" do
       get_products(external_user_id: "ext-2")
 
@@ -222,6 +233,14 @@ describe "Partner API", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["creators"].map { _1["external_user_id"] }).to eq(["ext-2", "ext-1"])
       expect(response.parsed_body["creators"].first.keys).to match_array(%w[external_user_id name avatar_url profile_url])
+    end
+
+    it "does not rank sales of a sold-out product that its seller hides" do
+      other_product.update!(hide_sold_out_variants: true, max_purchase_count: 2)
+
+      get "/api/v2/partner/creators/top", params: { access_token: token.token }
+
+      expect(response.parsed_body["creators"].map { _1["external_user_id"] }).to eq(["ext-1"])
     end
 
     it "limits the number of creators" do
