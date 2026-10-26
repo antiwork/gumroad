@@ -5,6 +5,14 @@
   <% if @purchase.present? %>
     <table>
       <tbody>
+        <% if @customer_email.present? %>
+          <tr>
+            <td>
+              <h4>Customer email</h4>
+            </td>
+            <td><%= @customer_email %></td>
+          </tr>
+        <% end %>
         <tr>
           <td>
             <h4>Product price</h4>

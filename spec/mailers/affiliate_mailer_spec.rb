@@ -105,6 +105,18 @@ describe AffiliateMailer do
         expect(mail.body.encoded).to include "1"
       end
 
+      it "shows the customer's email" do
+        rows = email_rows(AffiliateMailer.notify_affiliate_of_sale(purchase.id))
+        expect(rows["Customer email"]).to eq(purchase.email)
+      end
+
+      it "falls back to the purchaser account's email when the purchase has none" do
+        purchaser = create(:user)
+        purchase.update_columns(email: nil, purchaser_id: purchaser.id)
+        rows = email_rows(AffiliateMailer.notify_affiliate_of_sale(purchase.id))
+        expect(rows["Customer email"]).to eq(purchaser.email)
+      end
+
       it "shows the fee deduction so the emailed figures reconcile with the balance" do
         credited_cents = purchase.affiliate_credit_cents
         fee_share_cents = purchase.affiliate_credit.fee_cents
