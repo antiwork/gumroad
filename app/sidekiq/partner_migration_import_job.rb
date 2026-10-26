@@ -17,7 +17,7 @@ class PartnerMigrationImportJob
   ].freeze
 
   sidekiq_retries_exhausted do |job, exception|
-    PartnerMigration.find_by(id: job["args"].first)&.update!(status: PartnerMigration::STATUS_FAILED, failure_reason: exception.message.truncate(255))
+    PartnerMigration.find_by(id: job["args"].first)&.update!(status: PartnerMigration::STATUS_FAILED, failure_reason: exception.message.truncate(PartnerMigration::MAX_FAILURE_REASON_LENGTH))
   end
 
   def perform(partner_migration_id)

@@ -12,6 +12,7 @@ class PartnerMigration < ApplicationRecord
   MAX_PRODUCTS = 500
   MAX_EXTERNAL_USER_ID_LENGTH = 255
   MAX_NAME_LENGTH = 255
+  MAX_FAILURE_REASON_LENGTH = 255
   MAX_FILES_PER_PRODUCT = 50
   # Without SKUs, checkout offers only the first variant category of a digital product.
   MAX_VARIANT_CATEGORIES = 1
