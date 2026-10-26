@@ -121,6 +121,23 @@ const withProviders = (children: React.ReactNode, loggedIn = true, userId = rawL
   </DomainSettingsProvider>
 );
 
+describe("ReviewForm rating focus", () => {
+  it("keeps keyboard-initiated rating changes focused on the radio", () => {
+    render(withProviders(form()));
+    const radio = screen.getByRole<HTMLInputElement>("radio", { name: "3 stars" });
+    radio.focus();
+    fireEvent.click(radio, { detail: 0 });
+    expect(document.activeElement).toBe(radio);
+    expect(radio.checked).toBe(true);
+  });
+
+  it("still advances pointer selections to the written review", () => {
+    render(withProviders(form()));
+    fireEvent.click(screen.getByRole("radio", { name: "4 stars" }), { detail: 1 });
+    expect(document.activeElement).toBe(screen.getByRole("textbox"));
+  });
+});
+
 const postButton = () => screen.getByRole<HTMLButtonElement>("button", { name: "Update review" });
 const chooseVideoReview = () => fireEvent.click(screen.getByRole("radio", { name: "Video review" }));
 const chooseTextReview = () => fireEvent.click(screen.getByRole("radio", { name: "Text review" }));

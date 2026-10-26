@@ -93,6 +93,38 @@ describe("Product page reviews", js: true, type: :system) do
     expect(page).to have_text("Your rating:")
   end
 
+  it "keeps keyboard focus on the rating while navigating and autosaves the selected star" do
+    purchaser = create(:user)
+    purchase = create(:purchase, link: product, purchaser:)
+    login_as(purchaser)
+
+    visit product.long_url
+
+    first_star = find("input[type='radio'][aria-label='1 star']")
+    page.execute_script("arguments[0].focus()", first_star)
+    first_star.send_keys(:space)
+    expect(page).to have_radio_button("1 star", checked: true)
+    wait_until_true { purchase.reload.original_product_review&.rating == 1 }
+    expect(purchase.reload.original_product_review.rating).to eq(1)
+
+    page.driver.browser.switch_to.active_element.send_keys(:arrow_left)
+    expect(page).to have_radio_button("5 stars", checked: true)
+    expect(page.evaluate_script("document.activeElement.getAttribute('aria-label')")).to eq("5 stars")
+    wait_until_true { purchase.reload.original_product_review&.rating == 5 }
+    expect(purchase.reload.original_product_review.rating).to eq(5)
+
+    page.driver.browser.switch_to.active_element.send_keys(:arrow_up)
+    expect(page).to have_radio_button("4 stars", checked: true)
+    expect(page.evaluate_script("document.activeElement.getAttribute('aria-label')")).to eq("4 stars")
+    wait_until_true { purchase.reload.original_product_review&.rating == 4 }
+    expect(purchase.reload.original_product_review.rating).to eq(4)
+
+    find("input[type='radio'][aria-label='3 stars']").ancestor("label").click
+    expect(page.evaluate_script("document.activeElement.tagName")).to eq("TEXTAREA")
+    wait_until_true { purchase.reload.original_product_review&.rating == 3 }
+    expect(purchase.reload.original_product_review.rating).to eq(3)
+  end
+
   it "saves the rating as soon as a star is selected, without requiring the Post review button" do
     purchaser = create(:user)
     purchase = create(:purchase, link: product, purchaser:)

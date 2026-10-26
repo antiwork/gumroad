@@ -486,16 +486,13 @@ export const ReviewForm = React.forwardRef<
           <Label htmlFor={uid}>{viewing ? "Your rating:" : "Liked it? Give it a rating:"}</Label>
           <RatingSelector
             currentRating={rating}
-            onChangeCurrentRating={(newRating) => {
+            onChangeCurrentRating={(newRating, event) => {
               setRating(newRating);
               autosaveRating(newRating);
-              // Move the buyer straight into the written review: focus the
-              // textarea (which also scrolls it into view when it sits below
-              // the fold). The rating is already autosaved at this point, so
-              // typing is purely an optional next step — nothing is lost if
-              // they stop here. Only applies in text mode; the video recorder
-              // has no text input to focus.
-              if (reviewMode === "text") messageInputRef.current?.focus();
+              // Pointer selections advance to writing; keyboard selections keep native radio navigation.
+              if (reviewMode === "text" && event.nativeEvent instanceof MouseEvent && event.nativeEvent.detail > 0) {
+                messageInputRef.current?.focus();
+              }
             }}
             disabled={disabled || viewing}
           />
