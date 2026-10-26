@@ -14,6 +14,7 @@ import { CurrencyCode, currencyCodeList, formatPriceCentsWithCurrencySymbol } fr
 
 import { BundleEditLayout, useProductUrl } from "$app/components/BundleEdit/Layout";
 import { ProductPreview } from "$app/components/BundleEdit/ProductPreview";
+import { RetainedFile, RetainedFilesEditor } from "$app/components/BundleEdit/RetainedFilesEditor";
 import { BundleProduct } from "$app/components/BundleEdit/types";
 import {
   computeDiscountedPriceCents,
@@ -23,7 +24,6 @@ import {
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { NumberInput } from "$app/components/NumberInput";
 import { Seller } from "$app/components/Product";
-import { RetainedFile, RetainedFilesEditor } from "$app/components/BundleEdit/RetainedFilesEditor";
 import { Attribute, AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
 import { CustomButtonTextOptionInput } from "$app/components/ProductEdit/ProductTab/CustomButtonTextOptionInput";

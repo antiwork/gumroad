@@ -98,14 +98,17 @@ class Bundles::ProductController < Bundles::BaseController
   def remove_file
     authorize @bundle
 
-    file = @bundle.alive_product_files.find_by_external_id!(params[:file_id])
+    file = @bundle.alive_product_files.find { |product_file| product_file.external_id == params[:file_id] }
+    if file.nil?
+      return render json: { success: false, error_message: "That file is no longer attached to this bundle." },
+                    status: :not_found
+    end
+
     file.mark_deleted
     @bundle.cached_alive_product_files = nil
     @bundle.enqueue_index_update_for(["filetypes"])
 
     render json: { success: true }
-  rescue ActiveRecord::RecordNotFound
-    render json: { success: false, error_message: "That file is no longer attached to this bundle." }, status: :not_found
   end
 
   private

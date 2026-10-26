@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -39,7 +40,7 @@ export const RetainedFilesEditor = ({ bundleId, files, onRemoved }: RetainedFile
         url: Routes.remove_file_bundle_product_path(bundleId),
         data: { file_id: file.id },
       });
-      const json: { success?: boolean; message?: string; error_message?: string } = await response.json();
+      const json = cast<{ success?: boolean; message?: string; error_message?: string }>(await response.json());
       if (!response.ok || json.success === false) throw new ResponseError(json.message ?? json.error_message);
 
       setPendingRemoval(null);
