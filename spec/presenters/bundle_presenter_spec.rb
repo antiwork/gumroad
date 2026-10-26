@@ -113,7 +113,7 @@ describe BundlePresenter do
         size: 139.megabytes
       )
 
-      expect(described_class.new(bundle:).edit_product_props[:retained_files]).to eq(
+      expect(described_class.new(bundle:).edit_product_props[:bundle][:retained_files]).to eq(
         [
           {
             id: file.external_id,
@@ -128,7 +128,7 @@ describe BundlePresenter do
     it "omits files that are no longer attached to the bundle" do
       create(:product_file, link: bundle, deleted_at: Time.current)
 
-      expect(described_class.new(bundle:).edit_product_props[:retained_files]).to eq([])
+      expect(described_class.new(bundle:).edit_product_props[:bundle][:retained_files]).to eq([])
     end
   end
 
