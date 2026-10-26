@@ -127,6 +127,9 @@ describe("DiscountsPage loading state", () => {
 
     clickSort();
     clickSort();
+    expect(mocks.getPagedDiscounts).toHaveBeenCalledTimes(2);
+    // Let the cancelled request's rejection settle before reading the flag.
+    await new Promise((resolve) => setTimeout(resolve, 0));
     fireEvent.click(button("New discount"));
     expect(button("Adding discount...").disabled).toBe(true);
 
