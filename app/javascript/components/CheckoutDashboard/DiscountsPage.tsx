@@ -319,28 +319,34 @@ const DiscountsPage = ({
   isSearchVisible.current ||= hasSearchableContent;
 
   const loadDiscounts = asyncVoid(async ({ page, query, sort, keepUrl }: QueryParams & { keepUrl?: boolean }) => {
+    activeRequest.current?.cancel();
+    setIsLoading(true);
+
+    if (!keepUrl)
+      setUrlQueryParams({
+        query,
+        sort,
+        page: pagination.pages > 1 ? page : null,
+      });
+
+    const request = getPagedDiscounts(page || 1, query, sort);
+    activeRequest.current = request;
+
     try {
-      activeRequest.current?.cancel();
-      setIsLoading(true);
-
-      if (!keepUrl)
-        setUrlQueryParams({
-          query,
-          sort,
-          page: pagination.pages > 1 ? page : null,
-        });
-
-      const request = getPagedDiscounts(page || 1, query, sort);
-      activeRequest.current = request;
-
       const { offer_codes: offerCodes, pagination: newPagination } = await request.response;
       setState({ offerCodes, pagination: newPagination });
-      setIsLoading(false);
-      activeRequest.current = null;
     } catch (e) {
-      if (e instanceof AbortError) return;
-      assertResponseError(e);
-      showAlert(e.message, "error");
+      if (!(e instanceof AbortError)) {
+        assertResponseError(e);
+        showAlert(e.message, "error");
+      }
+    } finally {
+      // Only the newest request owns the flag: a failed or superseded one must not leave the page
+      // loading forever, and a cancelled one must not clear the flag of the request that replaced it.
+      if (activeRequest.current === request) {
+        activeRequest.current = null;
+        setIsLoading(false);
+      }
     }
   });
 
@@ -735,10 +741,11 @@ const DiscountsPage = ({
                     await deleteOfferCode(selectedOfferCodeId);
                     setSelectedOfferCodeId(null);
                   } catch (e) {
+                    // Only clear here: on success the reload owns the flag until it settles.
+                    setIsLoading(false);
                     assertResponseError(e);
                     showAlert(e.message, "error");
                   }
-                  setIsLoading(false);
                 })}
                 disabled={!selectedOfferCode.can_update || isLoading}
               >
