@@ -1116,25 +1116,6 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_20_000001) do
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
   end
 
-  create_table "product_builds", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "product_id", null: false
-    t.string "public_id", limit: 21, null: false
-    t.integer "number", null: false
-    t.string "status", limit: 16, default: "uploaded", null: false
-    t.string "source_url", limit: 1024, null: false
-    t.string "storage_key", limit: 1024, null: false
-    t.bigint "byte_size", null: false
-    t.bigint "product_file_id"
-    t.datetime "promoted_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.index ["product_id", "number"], name: "index_product_builds_on_product_id_and_number", unique: true
-    t.index ["product_id", "source_url"], name: "index_product_builds_on_product_id_and_source_url", unique: true, length: { source_url: 191 }
-    t.index ["product_id", "status"], name: "index_product_builds_on_product_id_and_status"
-    t.index ["public_id"], name: "index_product_builds_on_public_id", unique: true
-    t.index ["storage_key"], name: "index_product_builds_on_storage_key", length: 191
-  end
-
   create_table "gifts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "giftee_purchase_id"
     t.bigint "gifter_purchase_id"
@@ -1875,6 +1856,25 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.datetime "updated_at", null: false
     t.index ["intent_id"], name: "index_processor_payment_intents_on_intent_id"
     t.index ["purchase_id"], name: "index_processor_payment_intents_on_purchase_id", unique: true
+  end
+
+  create_table "product_builds", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "product_id", null: false
+    t.string "public_id", limit: 21, null: false
+    t.integer "number", null: false
+    t.string "status", limit: 16, default: "uploaded", null: false
+    t.string "source_url", limit: 1024, null: false
+    t.string "storage_key", limit: 1024, null: false
+    t.bigint "byte_size", null: false
+    t.bigint "product_file_id"
+    t.datetime "promoted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["product_id", "number"], name: "index_product_builds_on_product_id_and_number", unique: true
+    t.index ["product_id", "source_url"], name: "index_product_builds_on_product_id_and_source_url", unique: true, length: { source_url: 191 }
+    t.index ["product_id", "status"], name: "index_product_builds_on_product_id_and_status"
+    t.index ["public_id"], name: "index_product_builds_on_public_id", unique: true
+    t.index ["storage_key"], name: "index_product_builds_on_storage_key", length: 191
   end
 
   create_table "product_cached_values", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
