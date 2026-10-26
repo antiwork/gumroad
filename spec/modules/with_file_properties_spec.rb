@@ -336,6 +336,27 @@ describe WithFileProperties do
           Process.kill("KILL", decoder_pid) rescue Errno::ESRCH
         end
       end
+
+      it "stops the decoder when the job is shut down just after starting it" do
+        decoder_pid = nil
+        job = Thread.current
+        allow(Process).to receive(:spawn).and_wrap_original do |original, *_command, **options|
+          decoder_pid = original.call("sleep", "30", **options)
+          # Sidekiq delivers a shutdown to the job thread asynchronously, at any point.
+          Thread.new { job.raise(Sidekiq::Shutdown) }.join
+          decoder_pid
+        end
+
+        begin
+          expect { analyze(fixture_bytes("id3v24_prefixed.m4a"), decodes: false) }.to raise_error(Sidekiq::Shutdown)
+          expect { Process.kill(0, decoder_pid) }.to raise_error(Errno::ESRCH)
+        ensure
+          if decoder_pid
+            Process.kill("KILL", decoder_pid) rescue Errno::ESRCH
+            Process.wait(decoder_pid) rescue Errno::ECHILD
+          end
+        end
+      end
     end
 
     describe "when the upload fails" do
@@ -421,6 +442,38 @@ describe WithFileProperties do
         expect { analyze(tagged_m4a_bytes, product_file:) }.to raise_error(ActiveRecord::LockWaitTimeout)
 
         expect(archive.reload).to be_queueing
+        expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"] }).to eq([[archive.id]])
+      end
+
+      it "hides the archives again when the job is shut down during the upload" do
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+        archive = ready_archive_for(product_file)
+        # A build that starts during the upload reads the tagged bytes; it must not be left able to mark them ready.
+        build_started_during_upload = -> { archive.reload.mark_in_progress! }
+
+        expect do
+          analyze(tagged_m4a_bytes, product_file:, on_upload: -> { build_started_during_upload.call; raise Sidekiq::Shutdown })
+        end.to raise_error(Sidekiq::Shutdown)
+
+        expect(archive.reload).to be_queueing
+        expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"] }).to eq([[archive.id]])
+      end
+
+      it "raises the interruption and still schedules the rebuild when hiding the archives again fails" do
+        product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/tagged.m4a")
+        archive = ready_archive_for(product_file)
+        calls = 0
+        allow(product_file).to receive(:hide_stale_archives).and_wrap_original do |original, ids|
+          calls += 1
+          raise ActiveRecord::LockWaitTimeout, "lock wait" if calls == 2
+          original.call(ids)
+        end
+
+        expect do
+          analyze(tagged_m4a_bytes, product_file:, on_upload: -> { raise Sidekiq::Shutdown })
+        end.to raise_error(Sidekiq::Shutdown)
+
+        expect(calls).to eq(2)
         expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"] }).to eq([[archive.id]])
       end
 

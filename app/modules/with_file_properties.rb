@@ -275,12 +275,9 @@ module WithFileProperties
           rescue Aws::S3::MultipartUploadError, Aws::Errors::ServiceError, Seahorse::Client::NetworkingError => e
             upload_error = e
           end
-          # Hidden again because a build can start during the upload, and rebuilt even after an
-          # error: a request that timed out or failed to complete may still have replaced the object.
-          hide_stale_archives(stale_archive_ids)
-          archives_hidden = true
+          upload_finished = true
         ensure
-          schedule_archive_rebuilds(stale_archive_ids, interrupted: !archives_hidden)
+          rebuild_stale_archives(stale_archive_ids, interrupted: !upload_finished)
         end
 
         if upload_error
@@ -306,33 +303,50 @@ module WithFileProperties
       end
     end
 
-    # While an interruption propagates, a failure here is logged so it doesn't replace it.
-    def schedule_archive_rebuilds(archive_ids, interrupted:)
-      archive_ids.each { UpdateProductFilesArchiveWorker.perform_async(_1) }
-    rescue StandardError => e
-      raise unless interrupted
+    # Hidden again because a build can start during the upload, and rebuilt even after an error
+    # or interruption: a request that timed out may still have replaced the object. The rebuild
+    # is scheduled even if the hide fails; while an interruption propagates, failures are only logged.
+    def rebuild_stale_archives(archive_ids, interrupted:)
+      failure = nil
+      [-> { hide_stale_archives(archive_ids) },
+       -> { archive_ids.each { UpdateProductFilesArchiveWorker.perform_async(_1) } }].each do |step|
+        step.call
+      rescue StandardError => e
+        failure ||= e
+      end
+      return if failure.nil?
+      raise failure unless interrupted
 
-      logger.warn("Analyze -- could not schedule archive rebuilds for #{self.class.name} #{id} (#{e.class} => #{e.message})")
+      logger.warn("Analyze -- could not rebuild archives for #{self.class.name} #{id} (#{failure.class} => #{failure.message})")
     end
 
     # A full decode, not a probe: a probe reads only the headers, which stay valid
     # when the chunk offsets point at the wrong bytes.
     def decodes_completely?(path)
-      pid = Process.spawn("ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", path,
-                          "-map", "0:a?", "-map", "0:v?", "-f", "null", "-",
-                          in: File::NULL, out: File::NULL, err: File::NULL)
-      waiter = Process.detach(pid)
-      waiter.join(ID3_STRIP_DECODE_TIMEOUT) ? waiter.value.success? : false
+      # Interrupts such as Sidekiq::Shutdown are only let in during the wait, so a started
+      # decoder is always stopped and reaped before the interrupt is raised.
+      Thread.handle_interrupt(Object => :never) do
+        pid = Process.spawn("ffmpeg", "-nostdin", "-v", "error", "-xerror", "-i", path,
+                            "-map", "0:a?", "-map", "0:v?", "-f", "null", "-",
+                            in: File::NULL, out: File::NULL, err: File::NULL)
+        waiter = Process.detach(pid)
+        finished = Thread.handle_interrupt(Object => :immediate) { waiter.join(ID3_STRIP_DECODE_TIMEOUT) }
+        finished ? waiter.value.success? : false
+      ensure
+        stop_decoder(pid, waiter) if pid
+      end
     rescue SystemCallError
       false
-    ensure
-      # Covers the timeout and an interrupted job (e.g. Sidekiq::Shutdown) alike.
-      if waiter&.alive?
-        begin
-          Process.kill("KILL", pid)
-        rescue Errno::ESRCH
-        end
-        waiter.join
+    end
+
+    def stop_decoder(pid, waiter)
+      return if waiter && !waiter.alive?
+
+      begin
+        Process.kill("KILL", pid)
+      rescue Errno::ESRCH
       end
+      waiter ? waiter.join : Process.wait(pid)
+    rescue Errno::ECHILD
     end
 end
