@@ -214,7 +214,7 @@ describe "Game builds API" do
       end
 
       it "gives buyers from before the versions existed the live zip when the product's own pages still embed files" do
-        manual = product.product_files.create!(url: upload_zip("manual", filename: "manual.zip"))
+        manual = create(:product_file, link: product, url: upload_zip("manual", filename: "manual.zip"))
         page = create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => manual.external_id, "uid" => SecureRandom.uuid } }])
         early_buyer = create(:purchase, link: product, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
         deploy(upload_zip)
@@ -263,7 +263,7 @@ describe "Game builds API" do
       end
 
       it "keeps a variant's existing downloads when its first page is created for the zip" do
-        existing = product.product_files.create!(url: upload_zip("soundtrack", filename: "soundtrack.zip"))
+        existing = create(:product_file, link: product, url: upload_zip("soundtrack", filename: "soundtrack.zip"))
         variants.first.product_files << existing
         deploy(upload_zip)
         build = product.game_builds.sole
