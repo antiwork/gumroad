@@ -169,7 +169,7 @@ export const AudioPlayer = (props: Props) => {
             value={progress}
             max={duration}
             onChange={withAudio(
-              (audio, ev: React.ChangeEvent<HTMLInputElement>) => (audio.currentTime = parseInt(ev.target.value, 10)),
+              (audio, ev: React.ChangeEvent<HTMLInputElement>) => (audio.currentTime = Number(ev.target.value)),
             )}
             progress={(progress * 100) / duration}
             className="grow"

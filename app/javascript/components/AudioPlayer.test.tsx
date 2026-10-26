@@ -6,7 +6,25 @@ import { afterEach, expect, it, vi } from "vitest";
 import { AudioPlayer } from "$app/components/AudioPlayer";
 
 vi.mock("$app/components/UserAgent", () => ({ useUserAgentInfo: () => ({ locale: "en-US" }) }));
+vi.mock("@boxicons/react", () => ({
+  PauseCircle: () => null,
+  PlayCircle: () => null,
+  RotateCcw10: () => null,
+  RotateCw10: () => null,
+}));
 afterEach(cleanup);
+
+it("preserves the fractional position selected by the seek control", () => {
+  const { container, getByRole } = render(<AudioPlayer src="https://example.com/audio.mp3" isPlaying={false} />);
+  const audio = container.querySelector("audio");
+  if (!audio) throw new Error("Audio element missing");
+  Object.defineProperty(audio, "duration", { value: 46 });
+  fireEvent.loadedMetadata(audio);
+
+  fireEvent.change(getByRole("slider"), { target: { value: "12.75" } });
+
+  expect(audio.currentTime).toBe(12.75);
+});
 
 it.each([
   [3690, 0],
