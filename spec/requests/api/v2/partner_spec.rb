@@ -63,6 +63,29 @@ describe "Partner API", type: :request do
       expect(response).to have_http_status(:forbidden)
     end
 
+    it "issues partner_api through the client credentials grant only to applications configured with it" do
+      post "/oauth/token", params: { grant_type: "client_credentials", scope: "partner_api", client_id: partner_application.uid, client_secret: partner_application.secret }
+      expect(response).to have_http_status(:ok)
+
+      get_products(access_token: response.parsed_body.fetch("access_token"))
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["products"].map { _1["id"] }).to eq([product.external_id])
+
+      self_serve_application = create(:oauth_application, owner: create(:user))
+      post "/oauth/token", params: { grant_type: "client_credentials", scope: "partner_api", client_id: self_serve_application.uid, client_secret: self_serve_application.secret }
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error"]).to eq("invalid_scope")
+    end
+
+    it "is not served on a seller's custom domain" do
+      create(:custom_domain, user: seller, domain: "example.com")
+      host! "example.com"
+
+      get_products
+
+      expect(response).to have_http_status(:not_found)
+    end
+
     it "returns 403 for a token issued on behalf of a seller" do
       seller_token = create("doorkeeper/access_token", application: partner_application, resource_owner_id: seller.id, scopes: "partner_api")
 
@@ -167,6 +190,28 @@ describe "Partner API", type: :request do
       expect(response.parsed_body["products"].size).to eq(1)
     end
 
+    it "rejects array and hash pagination values" do
+      get_products(page: ["2"])
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("success" => false, "message" => "page and per_page must be integers.")
+
+      get_products(per_page: { "size" => "1" })
+
+      expect(response).to have_http_status(:bad_request)
+    end
+
+    it "loads users only for the sellers it lists" do
+      create_list(:partner_seller, 20, oauth_application: partner_application)
+      users_loaded = 0
+      count_users = ->(*, payload) { users_loaded += payload[:record_count] if payload[:class_name] == "User" }
+
+      ActiveSupport::Notifications.subscribed(count_users, "instantiation.active_record") { get_products }
+
+      expect(response.parsed_body["products"].size).to eq(2)
+      expect(users_loaded).to be < 20
+    end
+
     it "rejects a page beyond the search result window" do
       get_products(per_page: 100, page: 101)
 
@@ -237,6 +282,13 @@ describe "Partner API", type: :request do
       get "/api/v2/partner/creators/top", params: { access_token: token.token, sort: "price_asc" }
 
       expect(response).to have_http_status(:bad_request)
+    end
+
+    it "rejects an array limit" do
+      get "/api/v2/partner/creators/top", params: { access_token: token.token, limit: ["1"] }
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body).to eq("success" => false, "message" => "limit must be an integer.")
     end
 
     it "limits the number of creators" do

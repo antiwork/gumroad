@@ -5,6 +5,8 @@ class Api::V2::Partner::ProductsController < Api::V2::Partner::BaseController
   MAX_PER_PAGE = 100
 
   def index
+    return render_bad_request("page and per_page must be integers.") unless integer_params?(:page, :per_page)
+
     page = [params[:page].to_i, 1].max
     per_page = (params[:per_page].presence || DEFAULT_PER_PAGE).to_i.clamp(1, MAX_PER_PAGE)
     # Elasticsearch cannot page past its result window; search_options would silently repeat the last page.
@@ -32,6 +34,7 @@ class Api::V2::Partner::ProductsController < Api::V2::Partner::BaseController
   private
     def render_products(products, partner_sellers:, total:, page:, per_page:)
       partner_sellers_by_user_id = partner_sellers.index_by(&:user_id)
+      preload_users(partner_sellers_by_user_id.values_at(*products.map(&:user_id).uniq))
 
       render json: {
         success: true,
