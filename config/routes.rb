@@ -122,6 +122,10 @@ Rails.application.routes.draw do
         end
         resources :skus, only: [:index]
         resources :subscribers, only: [:index]
+        resources :product_builds, path: "builds", only: [:index, :show] do
+          collection { post :deploy }
+          member { post :promote }
+        end
         # Documented read access to the reviews shown on the product's public page, including the
         # submission date the public page-data endpoint never returned.
         resources :product_reviews, path: "reviews", only: [:index]
