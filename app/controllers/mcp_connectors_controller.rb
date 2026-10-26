@@ -12,10 +12,11 @@ class McpConnectorsController < ApplicationController
     },
     "claude" => {
       label: "Claude",
-      listing_notice: "Available as a custom connector. Gumroad is not yet listed in Claude’s connector directory.",
-      connect_label: "Set up a custom connector",
-      setup: "Open Settings > Connectors in Claude. Choose Add custom connector and enter the URL below. If this option is unavailable, check your plan or ask your organization administrator to enable custom connectors.",
-      availability: "Custom connector access depends on your Claude plan and organization settings."
+      directory_url: "https://claude.ai/directory/gumroad",
+      listing_notice: "Listed in Claude’s connector directory. You can also add it as a custom connector.",
+      connect_label: "Add Gumroad to Claude",
+      setup: "Open Gumroad in Claude’s connector directory and connect it. Or open Settings > Connectors in Claude, choose Add custom connector, and enter the URL below. If you cannot add connectors, ask your organization administrator.",
+      availability: "Add Gumroad from Claude’s connector directory. On Team and Enterprise plans, your organization’s settings control which connectors you can add."
     }
   }.freeze
 

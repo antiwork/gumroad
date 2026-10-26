@@ -948,6 +948,29 @@ describe UrlRedirect do
         end
       end
 
+      it "serves the variant's own content when the variant's category is gone" do
+        # Legacy variants can have variant_category_id NULL; Variant#link delegates to
+        # the missing category and raises instead of yielding a product.
+        variant_rich_content = @variant.alive_rich_contents.first
+        @variant.update_column(:variant_category_id, nil)
+
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: variant_rich_content.external_id, page_id: variant_rich_content.external_id, variant_id: @variant.external_id, title: "Variant-level page", description: { type: "doc", content: variant_rich_content.description }, updated_at: variant_rich_content.updated_at }])
+      end
+
+      it "still serves the variant's own content when the variant and its category are gone" do
+        variant_rich_content = @variant.alive_rich_contents.first
+        @variant.update_columns(variant_category_id: nil, deleted_at: Time.current)
+
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: variant_rich_content.external_id, page_id: variant_rich_content.external_id, variant_id: @variant.external_id, title: "Variant-level page", description: { type: "doc", content: variant_rich_content.description }, updated_at: variant_rich_content.updated_at }])
+      end
+
+      it "serves the variant's file on the mobile delivery endpoint when the variant's category is gone" do
+        @variant.update_column(:variant_category_id, nil)
+
+        file_data = UrlRedirect.find(@url_redirect.id).product_json_data[:file_data]
+        expect(file_data.map { _1[:id] }).to eq([@variant.product_files.first.external_id])
+      end
+
       it "returns the rich content of the cheapest variant when the purchase is associated with a deleted variant" do
         @product.alive_rich_contents.find_each(&:mark_deleted!)
 

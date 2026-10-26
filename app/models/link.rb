@@ -65,6 +65,7 @@ class Link < ApplicationRecord
 
   METADATA_CACHE_NAMESPACE = :product_metadata_cache
   REQUIRE_CAPTCHA_FOR_SELLERS_YOUNGER_THAN = 6.months
+  UNPUBLISHED_BY_ADMIN_MESSAGE = "This product was unpublished by Gumroad and cannot be republished by the seller."
 
   # The section write runs on every product create, inside whatever transaction the caller
   # opened, so its wait for the seller_profiles row is bounded well below MySQL's 50s default.
@@ -166,6 +167,7 @@ class Link < ApplicationRecord
   belongs_to :affiliate_application, class_name: "OauthApplication", optional: true
   has_many :affiliate_credits
   has_many :comments, as: :commentable
+  has_many :sales_holds, class_name: "ProductSalesHold", foreign_key: :product_id
   has_many :workflows
   has_many :dropbox_files
   has_many :shipping_destinations
@@ -551,6 +553,7 @@ class Link < ApplicationRecord
 
   def publish!
     enforce_not_unpublished_by_admin!
+    enforce_no_active_sales_hold!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
     enforce_merchant_account_exits_for_new_users!
@@ -594,6 +597,9 @@ class Link < ApplicationRecord
         else
           self.flags = current_flags
         end
+        # The checks at the top read this record as loaded; a takedown or hold that committed since is only visible now.
+        enforce_not_unpublished_by_admin!
+        enforce_no_active_sales_hold!(lock: true)
         self.transcode_videos_on_purchase = true
         save!
 
@@ -660,6 +666,46 @@ class Link < ApplicationRecord
       delete!
       "deleted"
     end
+  end
+
+  SalesHoldSellerChanged = Class.new(StandardError)
+
+  # Takes the listing off sale until released, touching nothing else. Returns the active hold and
+  # whether this call created it.
+  def hold_sales!(seller:, held_by:)
+    transaction do
+      lock_for_sales_hold!(seller)
+      # Plain read: the product lock already serializes hold writers, and a locking read of a missing
+      # row takes a gap lock that two holds inserting at once can deadlock on.
+      hold = sales_holds.active.first
+      if hold.nil?
+        unpublished_listing = purchase_disabled_at.nil?
+        unpublish! if unpublished_listing
+        hold = sales_holds.create!(held_by:, unpublished_listing:)
+        [hold, true]
+      else
+        [hold, false]
+      end
+    end
+  end
+
+  # Lifts only this hold. The listing is not relisted here: publishing is the seller's, and goes
+  # through every check publish! makes. Returns false if the hold was already released.
+  def release_sales_hold!(hold, seller:, released_by:)
+    transaction do
+      lock_for_sales_hold!(seller)
+      hold.lock!
+      if hold.active?
+        hold.update!(released_at: Time.current, released_by:)
+        true
+      else
+        false
+      end
+    end
+  end
+
+  def active_sales_hold
+    sales_holds.active.first
   end
 
   def publishable?
@@ -1958,8 +2004,16 @@ class Link < ApplicationRecord
     def enforce_not_unpublished_by_admin!
       return unless is_unpublished_by_admin?
 
-      errors.add(:base, "This product was unpublished by Gumroad and cannot be republished by the seller.")
-      raise LinkInvalid, "This product was unpublished by Gumroad and cannot be republished by the seller."
+      errors.add(:base, UNPUBLISHED_BY_ADMIN_MESSAGE)
+      raise LinkInvalid, UNPUBLISHED_BY_ADMIN_MESSAGE
+    end
+
+    def enforce_no_active_sales_hold!(lock: false)
+      holds = sales_holds.active
+      return unless (lock ? holds.lock : holds).exists?
+
+      errors.add(:base, UNPUBLISHED_BY_ADMIN_MESSAGE)
+      raise LinkInvalid, UNPUBLISHED_BY_ADMIN_MESSAGE
     end
 
     def enforce_user_email_confirmation!
@@ -2018,6 +2072,17 @@ class Link < ApplicationRecord
     end
 
   private
+    # Seller before product, the order publish! and the permalink claim take them in. `seller` is the
+    # account the operator looked up; if it was deleted, changed email or stopped owning this product
+    # since, nothing is written.
+    def lock_for_sales_hold!(seller)
+      locked_seller_id, locked_email = User.alive.where(id: seller.id).lock.pick(:id, :email)
+      lock!
+      return if locked_seller_id.present? && locked_email == seller.email && user_id == locked_seller_id
+
+      raise SalesHoldSellerChanged, "The product's seller changed since it was looked up"
+    end
+
     # Publish/unpublish flips these columns; content edits to a live listing also
     # warrant a ping so search engines re-crawl the updated page.
     def indexnow_submission_needed?

@@ -14,7 +14,7 @@
         <p class="max-w-xl text-lg"><%= @client[:listing_notice] %></p>
       <% end %>
       <div class="flex flex-col items-start gap-5">
-        <%= render "home/shared/button", text: pending_review ? "View technical details" : (@client[:connect_label] || "Connect your store"), url: "#connect", variant: "dark" %>
+        <%= render "home/shared/button", text: pending_review ? "View technical details" : (@client[:connect_label] || "Connect your store"), url: @client[:directory_url] || "#connect", variant: "dark" %>
         <% unless pending_review %>
           <p class="text-base">You’ll need a Gumroad account and MCP support in <%= client_name %>.</p>
         <% end %>
@@ -81,6 +81,9 @@
           <li class="space-y-4">
             <h3 class="text-2xl font-medium">1. Add the connector</h3>
             <p class="text-lg"><%= @client[:setup] %></p>
+            <% if @client[:directory_url] %>
+              <%= link_to "Gumroad in Claude’s connector directory", @client[:directory_url], class: "block text-lg underline underline-offset-4" %>
+            <% end %>
             <div class="rounded-lg border border-white/35 p-5">
               <p class="mb-2 text-sm text-pink">MCP server URL</p>
               <code class="block select-all break-all text-base"><%= "#{PROTOCOL}://#{DOMAIN}/#{@client_key}/v1/mcp" %></code>

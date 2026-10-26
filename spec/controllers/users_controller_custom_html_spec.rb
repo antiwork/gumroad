@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
 describe UsersController, :vcr, type: :controller do
   CUSTOM_HTML_CSP = RendersCustomHtmlPages::CUSTOM_HTML_CSP
@@ -154,6 +155,60 @@ describe UsersController, :vcr, type: :controller do
       expect(response).to be_successful
       expect(response.body).not_to include(%(src="/landing/embed"))
       expect(response.media_type).to eq("application/json")
+    end
+  end
+
+  describe "GET coffee with a product custom_html" do
+    let(:seller) { create(:user, :eligible_for_service_products, name: "Jane Doe", bio: "Maker of things") }
+
+    let!(:coffee) do
+      create(:product, name: "Buy me a coffee", user: seller, native_type: Link::NATIVE_TYPE_COFFEE,
+                       custom_html: "<section><h1>Live coffee landing page</h1></section>")
+    end
+
+    it "serves the custom landing page at /coffee, the coffee product's canonical URL" do
+      get :coffee
+
+      expect(response).to be_successful
+      expect(response.body).to include(%(id="gumroad-landing-frame"))
+      expect(response.body).to include(%(src="/l/#{coffee.unique_permalink}/landing/embed"))
+      expect(response.body).to include(%(sandbox="#{RendersCustomHtmlPages::CUSTOM_HTML_SANDBOX}"))
+      expect(response.body).not_to include("Live coffee landing page")
+    end
+
+    it "canonicalizes to the coffee URL rather than the short link" do
+      get :coffee
+
+      expect(response.body).to include(%(rel="canonical" href="#{custom_domain_coffee_url(host: seller.subdomain_with_protocol)}"))
+    end
+
+    it "renders the standard coffee page for the custom page's buy button (?wanted=true)", inertia: true do
+      get :coffee, params: { wanted: "true" }
+
+      expect(inertia.component).to eq("Users/Coffee")
+      expect(response.body).not_to include("gumroad-landing-frame")
+    end
+
+    it "renders the standard coffee page for ?native=true", inertia: true do
+      get :coffee, params: { native: "true" }
+
+      expect(inertia.component).to eq("Users/Coffee")
+      expect(response.body).not_to include("gumroad-landing-frame")
+    end
+
+    it "leaves the purchase-confirmation redirect ahead of the custom page" do
+      get :coffee, params: { purchase_email: "buyer@example.com" }
+
+      expect(response).to redirect_to("/coffee")
+    end
+
+    it "renders the standard coffee page when the custom_html_pages feature is off", inertia: true do
+      Feature.deactivate_user(:custom_html_pages, seller)
+
+      get :coffee
+
+      expect(inertia.component).to eq("Users/Coffee")
+      expect(response.body).not_to include("gumroad-landing-frame")
     end
   end
 

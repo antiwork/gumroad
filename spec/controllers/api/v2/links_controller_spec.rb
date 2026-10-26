@@ -2655,6 +2655,15 @@ describe Api::V2::LinksController do
         expect(response.parsed_body["product"]).to eq(@product.reload.as_json(api_scopes: ["edit_products"]))
       end
 
+      it "does not relist a product Gumroad has put on a sales hold" do
+        @product.hold_sales!(seller: @user, held_by: create(:admin_user))
+
+        put @action, params: @params
+
+        expect(response.parsed_body).to eq({ success: false, message: Link::UNPUBLISHED_BY_ADMIN_MESSAGE }.as_json)
+        expect(@product.reload.purchase_disabled_at).to be_present
+      end
+
       context "when new account and no valid merchant account connected" do
         before do
           @user.check_merchant_account_is_linked = true

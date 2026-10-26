@@ -125,6 +125,15 @@ describe "Product::Searchable - Indexing scenarios" do
       expect(document["_source"]["price_cents"]).to eq(100)
     end
 
+    it "flips is_bundle in the document when a bundle is converted to a digital product", :elasticsearch_wait_for_refresh do
+      bundle = create(:product, is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE)
+      expect(EsClient.get(index: Link.index_name, id: bundle.id)["_source"]["is_bundle"]).to eq(true)
+
+      bundle.update!(is_bundle: false, native_type: Link::NATIVE_TYPE_DIGITAL)
+
+      expect(EsClient.get(index: Link.index_name, id: bundle.id)["_source"]["is_bundle"]).to eq(false)
+    end
+
     describe "on product update" do
       it "requests update of the name & rated_as_adult fields on name change" do
         expect_product_update %w[name rated_as_adult]
@@ -216,6 +225,18 @@ describe "Product::Searchable - Indexing scenarios" do
 
         @product.native_type = Link::NATIVE_TYPE_CALL
         @product.save(validate: false)
+      end
+
+      it "sends updated is_bundle field when a bundle is converted to a digital product" do
+        bundle = create(:product, is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE)
+        expect(ProductIndexingService).to receive(:perform).with(
+          product: bundle,
+          action: "update",
+          attributes_to_update: %w[is_call native_type is_bundle],
+          on_failure: :async
+        ).and_call_original
+
+        bundle.update!(is_bundle: false, native_type: Link::NATIVE_TYPE_DIGITAL)
       end
 
       it "does not index changes when transaction is rolled back" do

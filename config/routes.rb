@@ -532,6 +532,8 @@ Rails.application.routes.draw do
           resources :products, only: [:index, :show] do
             member do
               get "files/:file_id/download_url", action: :file_download, as: :file_download
+              post :hold_sales
+              post :release_sales_hold
             end
           end
 

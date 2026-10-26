@@ -710,7 +710,7 @@ class UrlRedirect < ApplicationRecord
     def should_refer_to_product_level_rich_content_of_purchased_variant?(entity)
       return false unless entity.is_a?(BaseVariant)
 
-      product = entity.link
+      product = product_for_rich_content(entity)
       return false if product.nil?
 
       # When the shared-content flag is on but the product level is blank while
@@ -721,7 +721,9 @@ class UrlRedirect < ApplicationRecord
     end
 
     def product_or_cheapest_variant_as_rich_content_provider(entity)
-      product = entity.is_a?(BaseVariant) ? entity.link : entity
+      product = product_for_rich_content(entity)
+      return entity if product.nil?
+
       # A product-level page that is just an empty placeholder (a blank paragraph
       # the editor can leave behind) must not count as "the product has its own
       # content" — that would show buyers a single blank page instead of falling
@@ -743,5 +745,9 @@ class UrlRedirect < ApplicationRecord
       else
         cheapest_first.first
       end
+    end
+
+    def product_for_rich_content(entity)
+      entity.is_a?(BaseVariant) ? entity.owning_product : entity
     end
 end

@@ -184,6 +184,11 @@ describe SellerProfile do
       # --primary is the body text colour, so --contrast-primary sits on top of that.
       expect(subject.text_color_on_primary).to eq("#000000")
     end
+
+    it "gives the email footer the wordmark that stays visible on the background" do
+      expect(subject.email_wordmark_image_path).to eq("email/wordmark_logo_light.png")
+      expect(build(:seller_profile, background_color: "#ffffff").email_wordmark_image_path).to eq("email/wordmark_logo.png")
+    end
   end
 
   describe "danger colour helpers" do

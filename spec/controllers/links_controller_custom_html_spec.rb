@@ -275,7 +275,7 @@ describe LinksController, :vcr, type: :controller do
     it "escapes the checkout URL for JavaScript string context" do
       allow(product).to receive(:unique_permalink).and_return(%(abc</script><script>alert(1)</script>))
 
-      html = controller.send(:custom_html_wrapper_document, product, nonce: "nonce")
+      html = controller.send(:product_custom_html_wrapper_document, product, nonce: "nonce")
 
       expect(html).to include("\\u003c/script\\u003e")
       expect(html).not_to include(%(abc</script><script>alert(1)</script>))
@@ -361,6 +361,30 @@ describe LinksController, :vcr, type: :controller do
 
         expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
       end
+    end
+  end
+
+  describe "GET show for a coffee product" do
+    let(:seller) { create(:user, :eligible_for_service_products) }
+    let(:coffee) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE, custom_html: "<section><h1>Live landing page</h1></section>") }
+
+    it "serves the custom landing page at the short link instead of redirecting to /coffee" do
+      get :show, params: { id: coffee.unique_permalink }
+
+      expect(response).to be_successful
+      expect(response.body).to include(%(src="/l/#{coffee.unique_permalink}/landing/embed"))
+    end
+
+    it "carries ?wanted=true across the /coffee redirect so the buy button still reaches checkout" do
+      get :show, params: { id: coffee.unique_permalink, wanted: "true" }
+
+      expect(response).to redirect_to(custom_domain_coffee_path(wanted: "true"))
+    end
+
+    it "carries ?native=true across the /coffee redirect" do
+      get :show, params: { id: coffee.unique_permalink, native: "true" }
+
+      expect(response).to redirect_to(custom_domain_coffee_path(native: "true"))
     end
   end
 

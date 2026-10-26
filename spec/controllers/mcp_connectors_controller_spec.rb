@@ -5,11 +5,13 @@ require "spec_helper"
 describe McpConnectorsController do
   render_views
 
-  it "documents Claude custom setup without claiming a directory listing" do
+  it "points Claude setup at the connector directory and keeps the custom connector path" do
     get :show, params: { client: "claude" }
 
     expect(response).to be_successful
-    expect(response.body).to include("Available as a custom connector", "not yet listed in Claude’s connector directory", "Set up a custom connector")
+    expect(response.body).to include("Listed in Claude’s connector directory", "Add Gumroad to Claude", "Add custom connector")
+    expect(Nokogiri::HTML(response.body).css('a[href="https://claude.ai/directory/gumroad"]').size).to be >= 2
+    expect(response.body).not_to include("not yet listed")
     expect(response.body).to include("/claude/v1/mcp", "organization administrator", "Review the requested permissions before you authorize access")
     expect(response.body).not_to include("Submitted for review")
   end
@@ -41,7 +43,8 @@ describe McpConnectorsController do
       get :index
 
       expect(response).to be_successful
-      expect(response.body).to include("Gumroad MCP for Claude", "Available now as a custom connector", "not yet listed in Claude’s connector directory")
+      expect(response.body).to include("Gumroad MCP for Claude", "Available now in Claude’s connector directory", "Listed in Claude’s connector directory")
+      expect(response.body).not_to include("not yet listed")
       expect(response.body).to include("Gumroad MCP for Muse", "not yet available in Muse")
       expect(response.body).to include("ChatGPT", "Not available yet")
       expect(response.body).not_to include("Connect your store")

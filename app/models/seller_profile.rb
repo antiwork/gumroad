@@ -98,6 +98,12 @@ class SellerProfile < ApplicationRecord
     "background-color: #{colors[:accent]}; color: #{colors[:text]}; border-color: #000000; box-shadow: 0.25rem 0.25rem 0 #000000;"
   end
 
+  # The email footer wordmark is a fixed-colour PNG, so unlike text it cannot follow the theme:
+  # the dark asset disappears on a store whose background resolves to light text.
+  def email_wordmark_image_path
+    text_color_on_background == ContrastColor::WHITE ? "email/wordmark_logo_light.png" : "email/wordmark_logo.png"
+  end
+
   # The text colour for body copy sitting directly on the seller's background colour.
   def text_color_on_background
     ContrastColor.for(background_color)

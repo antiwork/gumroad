@@ -31,6 +31,12 @@ class BaseVariant < ApplicationRecord
     link_id
   end
 
+  # The product this variant belongs to, or nil when it is orphaned (a Variant whose
+  # category row is gone). Variant#link raises for those rather than returning nil.
+  def owning_product
+    is_a?(Variant) ? variant_category&.link : link
+  end
+
   scope :in_order, -> { order(created_at: :asc) }
 
   has_flags 1 => :is_default_sku,

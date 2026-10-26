@@ -196,6 +196,20 @@ describe Bundles::ContentController, inertia: true do
       end
     end
 
+    it "does not publish a bundle Gumroad has put on a sales hold" do
+      bundle.hold_sales!(seller:, held_by: create(:admin_user))
+
+      put :update, params: {
+        bundle_id: bundle.external_id,
+        products: [{ product_id: bundle.bundle_products.first.product.external_id, quantity: 1 }],
+        publish: true
+      }
+
+      expect(response).to redirect_to(edit_bundle_content_path(bundle.external_id))
+      expect(flash[:alert]).to eq(Link::UNPUBLISHED_BY_ADMIN_MESSAGE)
+      expect(bundle.reload.purchase_disabled_at).to be_present
+    end
+
     context "when the product is not a bundle" do
       let(:product) { create(:product, user: seller) }
       let(:member_product) { bundle.bundle_products.first.product }

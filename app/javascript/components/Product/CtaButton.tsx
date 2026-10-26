@@ -26,7 +26,7 @@ type Props = {
   purchase: Purchase | null;
   discountCode: ProductDiscount | null;
   selection: PriceSelection;
-  label: string | undefined;
+  label?: string | undefined;
   showInstallmentPlanNotes?: boolean;
   // The discount for this selection is not quoted yet: there is no checkout link to follow.
   pricePending?: boolean;

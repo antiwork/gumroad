@@ -58,6 +58,21 @@ describe PostResendApi, :freeze_time do
       send_default_email
     end
 
+    # The footer wordmark is a fixed-colour PNG, so a store theme that puts light text on its
+    # background needs the light asset or the mark disappears into the footer.
+    it "uses the light footer wordmark on a dark background" do
+      expect(html_doc(sent_email_content).at_css("a.wordmark img")["src"]).to include("wordmark_logo_light.png")
+    end
+
+    it "keeps the dark footer wordmark on a light background" do
+      @post.seller.seller_profile.update!(background_color: "#ffffff")
+      send_default_email
+
+      src = html_doc(sent_email_content).at_css("a.wordmark img")["src"]
+      expect(src).to include("wordmark_logo.png")
+      expect(src).not_to include("wordmark_logo_light.png")
+    end
+
     it "includes them as CSS" do
       expect(sent_email_content).to include("body {\nbackground-color: #000000; color: #ffffff; font-family: \"Roboto Mono\", \"ABC Favorit\", monospace;\n}")
       expect(sent_email_content).to include("body {\nheight: auto; min-height: 100%;\n}")

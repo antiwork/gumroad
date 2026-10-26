@@ -61,7 +61,7 @@
               <% if client[:pending_review] %>
                 <p class="text-lg">Submitted for review. The Gumroad connector is not yet available in <%= client[:label] %>.</p>
               <% else %>
-                <p class="text-lg">Available now as a custom connector.</p>
+                <p class="text-lg"><%= client[:directory_url] ? "Available now in #{client[:label]}’s connector directory." : "Available now as a custom connector." %></p>
                 <% if client[:listing_notice] %>
                   <p class="text-base"><%= client[:listing_notice] %></p>
                 <% end %>
@@ -92,7 +92,7 @@
       <ol class="list-none space-y-8 pl-0">
         <li class="space-y-3">
           <h3 class="text-2xl font-medium">1. Add the connector</h3>
-          <p class="text-lg">Open your assistant’s connector settings and add a remote MCP server using the URL from its connector page.</p>
+          <p class="text-lg">Add Gumroad from Claude’s connector directory, or open your assistant’s connector settings and add a remote MCP server using the URL from its connector page.</p>
           <%= link_to "Gumroad MCP for Claude connector page", "/claude", class: "block text-lg underline underline-offset-4" %>
         </li>
         <li class="space-y-3">

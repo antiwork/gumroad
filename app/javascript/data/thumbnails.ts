@@ -15,13 +15,15 @@ export const createThumbnail = async (permalink: string, thumbnailPayload: Thumb
     },
   });
 
-  if (response.ok) {
-    const responseData = cast<{ success: true; thumbnail: Thumbnail } | { success: false; error: string }>(
-      await response.json(),
-    );
-    if (responseData.success) return responseData.thumbnail;
-    throw new ResponseError(responseData.error);
-  }
+  const responseData = cast<{ success: true; thumbnail: Thumbnail } | { success: false; error: string } | null>(
+    await response.json().catch(() => null),
+  );
+
+  if (response.ok && responseData?.success) return responseData.thumbnail;
+
+  // The server's body names the actual reason ("Invalid signed_blob_id."), which tells the seller more
+  // than the generic ResponseError default — fall back to that default only when there is no message.
+  if (responseData && !responseData.success && responseData.error !== "") throw new ResponseError(responseData.error);
 
   throw new ResponseError();
 };

@@ -76,7 +76,7 @@ describe "UserCustomDomainScenario", type: :system, js: true do
       it "allows displaying and purchasing a product in Embed using its custom domain URL" do
         visit(create_embed_page(@product, url: product_url, gumroad_params: "&email=sam@test.com", outbound: false, custom_domain_base_uri:))
 
-        within_frame { click_on "Add to cart" }
+        within_frame { click_on "I want this!" }
 
         check_out(@product)
       end

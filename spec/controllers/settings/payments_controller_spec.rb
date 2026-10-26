@@ -3085,7 +3085,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
     it "still creates a Stripe account link for a rejected account with an open verification request (appealable fork)" do
       # e.g. Japan `rejected.listed` collision: rejected, but Stripe still has
       # a live identity-document request — the remediation link must keep working.
-      merchant_account = create(:merchant_account, user:)
+      merchant_account = StripeMerchantAccountManager.create_account(user, passphrase: "1234")
       merchant_account.update!(stripe_disabled_reason: "rejected.listed")
       create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
       allow(Stripe::AccountLink).to receive(:create).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
@@ -3178,6 +3178,84 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       get :remediation
 
       expect(response.location).to match(Regexp.new("https://connect.stripe.com/setup/c/#{stripe_connect_account_id}/"))
+    end
+
+    context "when choosing the account link type" do
+      let!(:merchant_account) { create(:merchant_account, user:) }
+
+      before do
+        allow(Stripe::AccountLink).to receive(:create).and_return(double(url: "https://connect.stripe.com/setup/s/test"))
+      end
+
+      def stub_stripe_requirements(requirements: {}, future_requirements: {})
+        allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
+          Stripe::Account.construct_from(
+            id: merchant_account.charge_processor_merchant_id,
+            object: "account",
+            charges_enabled: true,
+            requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [], "pending_verification" => [] }.merge(requirements),
+            future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }.merge(future_requirements)
+          )
+        )
+      end
+
+      [
+        ["currently_due", "individual.verification.document"],
+        ["past_due", "individual.verification.document"],
+        ["past_due", "person_123.verification.document"],
+        ["currently_due", "company.verification.document"],
+        ["currently_due", "individual.verification.additional_document"],
+        ["past_due", "individual.verification.additional_document"],
+        ["currently_due", "person_123.verification.additional_document"],
+      ].each do |due_list, requirement|
+        it "requests account_onboarding when requirements.#{due_list} lists #{requirement}" do
+          stub_stripe_requirements(requirements: { due_list => [requirement] })
+
+          get :remediation
+
+          expect(Stripe::AccountLink).to have_received(:create).with(hash_including(type: "account_onboarding"))
+          expect(Stripe::Account).to have_received(:retrieve).once
+          expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+        end
+      end
+
+      it "requests account_onboarding when a local document request is open and requirements.past_due lists individual.verification.document" do
+        create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        stub_stripe_requirements(requirements: { "past_due" => ["individual.verification.document"] })
+
+        get :remediation
+
+        expect(Stripe::AccountLink).to have_received(:create).with(hash_including(type: "account_onboarding"))
+        expect(Stripe::Account).to have_received(:retrieve).once
+      end
+
+      {
+        "requirements.eventually_due" => { requirements: { "eventually_due" => ["individual.verification.document"] } },
+        "requirements.pending_verification" => { requirements: { "pending_verification" => ["individual.verification.document"] } },
+        "future_requirements.currently_due" => { future_requirements: { "currently_due" => ["individual.verification.document"] } },
+        "future_requirements.past_due" => { future_requirements: { "past_due" => ["individual.verification.document"] } },
+      }.each do |location, stubbed_requirements|
+        it "keeps account_update when the document is only in #{location}" do
+          create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+          stub_stripe_requirements(**stubbed_requirements)
+
+          get :remediation
+
+          expect(Stripe::AccountLink).to have_received(:create).with(hash_including(type: "account_update"))
+        end
+      end
+
+      it "keeps account_update and still opens the link when reading the account fails with a local request open" do
+        create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        allow(Stripe::Account).to receive(:retrieve).and_raise(Stripe::APIConnectionError.new("Stripe is down"))
+        expect(ErrorNotifier).not_to receive(:notify)
+
+        get :remediation
+
+        expect(Stripe::AccountLink).to have_received(:create).with(hash_including(type: "account_update"))
+        expect(response).to redirect_to "https://connect.stripe.com/setup/s/test"
+        expect(flash[:alert]).to be_nil
+      end
     end
 
     it "opens a Stripe AccountLink when Stripe still has future_requirements.eventually_due (volume-threshold case)" do
@@ -3313,7 +3391,12 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
             future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
           )
         )
-        expect(Stripe::AccountLink).to receive(:create).and_call_original
+        expect(Stripe::AccountLink).to receive(:create).with({
+                                                               account: merchant_account.charge_processor_merchant_id,
+                                                               refresh_url: remediation_settings_payments_url,
+                                                               return_url: verify_stripe_remediation_settings_payments_url,
+                                                               type: "account_onboarding",
+                                                             }).and_call_original
 
         get :remediation
 
@@ -3416,7 +3499,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
       it "does not overwrite an existing stripe_disabled_reason" do
         merchant_account.update!(stripe_disabled_reason: "rejected.listed")
-        expect(Stripe::Account).not_to receive(:retrieve)
+        stub_stripe_account_retrieve(disabled_reason: "rejected.fraud")
 
         get :remediation
 

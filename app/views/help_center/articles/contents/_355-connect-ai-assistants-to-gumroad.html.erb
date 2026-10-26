@@ -17,7 +17,7 @@
 
   <h3 id="availability">Which assistants you can connect</h3>
   <ul>
-    <li><strong>Claude:</strong> available now as a custom connector. Your Claude plan or your organization's settings have to allow custom connectors.</li>
+    <li><strong>Claude:</strong> available now in <a href="https://claude.ai/directory/gumroad">Claude's connector directory</a>. You can also add it as a custom connector.</li>
     <li><strong>Muse:</strong> submitted for review. The Gumroad connector is not yet available in Muse.</li>
     <li><strong>ChatGPT:</strong> not available yet. We will announce it when it is.</li>
   </ul>
@@ -25,12 +25,12 @@
 
   <h3 id="connect-claude">Connecting Claude</h3>
   <ol>
-    <li>In Claude, open <strong>Settings &gt; Connectors</strong>.</li>
-    <li>Choose <strong>Add custom connector</strong>, then paste this URL: <code>https://gumroad.com/claude/v1/mcp</code></li>
-    <li>If you do not see the option to add a custom connector, your plan or your organization administrator controls it.</li>
+    <li>Open <a href="https://claude.ai/directory/gumroad">Gumroad in Claude's connector directory</a> and connect it. You need to be signed in to Claude.</li>
     <li>When Claude opens a Gumroad sign-in page, sign in and review the permissions you are asked to grant.</li>
     <li>In a chat, select the Gumroad connector and try asking "Show my Gumroad products."</li>
   </ol>
+  <p>Gumroad is listed as a community connector, so Claude shows a notice that Anthropic has not verified it. The connector is run by Gumroad.</p>
+  <p>You can also add Gumroad as a custom connector: in Claude, open <strong>Settings &gt; Connectors</strong>, choose <strong>Add custom connector</strong>, and paste this URL: <code>https://gumroad.com/claude/v1/mcp</code>. Custom connectors depend on your Claude plan and your organization's settings.</p>
   <p>Your assistant can only see the Gumroad account you signed in with. If you sell from more than one account, connect the one you want to work with.</p>
 
   <h3 id="can-do">What your assistant can do</h3>
@@ -70,7 +70,7 @@
   <p>Revoke the connection any time under <a href="https://gumroad.com/settings/authorized_applications">Authorized Applications</a> in your Gumroad settings. Disconnecting or deleting the connector inside your AI app does not revoke its access token, so revoke it in Gumroad to actually end the connection.</p>
 
   <h3 id="troubleshooting">Troubleshooting</h3>
-  <p><strong>I cannot find "Add custom connector" in Claude.</strong> Custom connectors depend on your Claude plan and your organization's settings. If you are on a team plan, an administrator may need to enable them for you.</p>
+  <p><strong>I cannot add Gumroad in Claude.</strong> Start from <a href="https://claude.ai/directory/gumroad">Gumroad's directory listing</a> while signed in to Claude. On Team and Enterprise plans, your organization's settings control which connectors you can add, so an administrator may need to allow it.</p>
   <p><strong>The assistant says it cannot find my products.</strong> Check that you connected the Gumroad account that owns them, and that you granted product access during sign-in. If you connected the wrong account, revoke access and connect again.</p>
   <p><strong>A tool says it needs a permission.</strong> Reconnect the assistant and grant the permission it names. Nothing else changes when you do.</p>
   <p><strong>Publishing from chat fails.</strong> Publishing needs the same things it needs in your dashboard: a confirmed email address, payouts set up for your account, and shipping destinations if you sell physical products. A product that Gumroad has taken down also cannot be published. Fix that in Gumroad, then ask the assistant to publish again.</p>

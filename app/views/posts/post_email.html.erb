@@ -68,7 +68,7 @@ Do not include route helpers (`root_url`), because the URL options (e.g. the hos
 
         <a class="wordmark" href="<%= @gumroad_url %>">
           {{t_powered_by}}
-          <img src="<%= image_url("email/wordmark_logo.png") %>" alt="Gumroad" style="width: 138px; height: 18px;" width="138" height="18">
+          <img src="<%= image_url(@post.user.seller_profile.email_wordmark_image_path) %>" alt="Gumroad" style="width: 138px; height: 18px;" width="138" height="18">
         </a>
       </div>
     </div>

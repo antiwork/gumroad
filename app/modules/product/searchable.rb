@@ -35,6 +35,9 @@ module Product::Searchable
     "display_product_reviews" => ["display_product_reviews", "is_recommendable"],
     "is_adult" => "rated_as_adult",
     "native_type" => ["is_call", "native_type"],
+    # A bundle-to-digital conversion only flips this flags bit, so without it the index keeps
+    # is_bundle: true and the product is filtered out of every bundle selector.
+    "is_bundle" => "is_bundle",
     "price_currency_type" => "price_currency_type",
     "customizable_price" => "customizable_price",
   }.freeze

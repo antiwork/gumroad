@@ -29,7 +29,10 @@ module RichContents
       # state where those hidden pages are the product's only real content
       # (see Link#recoverable_hidden_variant_rich_content?). Serving them is
       # what lets the seller (and buyers) reach the content again.
-      return [] if link.has_same_rich_content_for_all_variants? && !link.recoverable_hidden_variant_rich_content?
+      # An orphaned variant (its category row is gone) has no product to consult, so
+      # nothing hides its pages: serve them rather than raising from #link.
+      product = owning_product
+      return [] if product&.has_same_rich_content_for_all_variants? && !product.recoverable_hidden_variant_rich_content?
       variant_id = self.external_id
     end
 

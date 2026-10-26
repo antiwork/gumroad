@@ -331,7 +331,7 @@ class Settings::PaymentsController < Settings::BaseController
                                              account: current_seller.stripe_account.charge_processor_merchant_id,
                                              refresh_url: remediation_settings_payments_url,
                                              return_url: verify_stripe_remediation_settings_payments_url,
-                                             type: "account_update",
+                                             type: remediation_link_type(current_seller.stripe_account),
                                            }).url, allow_other_host: true
   rescue Stripe::StripeError => e
     sync_stripe_disabled_reason(current_seller.stripe_account) if e.is_a?(Stripe::InvalidRequestError) && current_seller.stripe_account.stripe_disabled_reason.blank?
@@ -677,9 +677,10 @@ class Settings::PaymentsController < Settings::BaseController
     end
 
     def stripe_account_has_open_requirements?(merchant_account)
-      stripe_account = Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+      stripe_account = stripe_account_for_remediation(merchant_account)
       requirements = stripe_account["requirements"] || {}
       future_requirements = stripe_account["future_requirements"] || {}
+
       return true if [
         requirements["currently_due"],
         requirements["past_due"],
@@ -693,6 +694,26 @@ class Settings::PaymentsController < Settings::BaseController
     rescue Stripe::StripeError => e
       ErrorNotifier.notify(e, context: { user_id: current_seller.id })
       false
+    end
+
+    # Memoized so the open-requirements check and the link-type decision share one read.
+    def stripe_account_for_remediation(merchant_account)
+      @stripe_account_for_remediation ||= Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
+    end
+
+    # account_update only edits information already on the account, so a due verification document
+    # needs account_onboarding. Everything else stays on account_update, which avoids onboarding's
+    # "Link your Stripe account" prompt for sellers who never knowingly opened a Stripe account.
+    VERIFICATION_DOCUMENT_REQUIREMENT = /\.verification\.(?:additional_)?document\z/
+
+    def remediation_link_type(merchant_account)
+      requirements = stripe_account_for_remediation(merchant_account)["requirements"] || {}
+      due = Array(requirements["currently_due"]) + Array(requirements["past_due"])
+
+      due.any? { |requirement| requirement.to_s.match?(VERIFICATION_DOCUMENT_REQUIREMENT) } ? "account_onboarding" : "account_update"
+    rescue Stripe::StripeError
+      # Picking the type is a refinement; a failed read must not cost the seller their link.
+      "account_update"
     end
 
     # A `pending_verification` entry on its own is Stripe reviewing what the seller submitted

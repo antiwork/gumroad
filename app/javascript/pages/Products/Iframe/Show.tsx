@@ -42,7 +42,6 @@ function IframeProductShowPage() {
             quote={quote}
             selection={selection}
             setSelection={setSelection}
-            ctaLabel="Add to cart"
           />
         </section>
         <PoweredByFooter className="p-0" />

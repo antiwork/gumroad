@@ -195,7 +195,7 @@ export function useRecaptcha({
 }
 
 // Google's floating badge is hidden globally (.grecaptcha-badge in _global.scss) because it
-// covers the mobile CtaBar's Add to cart button. Google's terms allow hiding it only when the
+// covers the mobile CtaBar's buy button. Google's terms allow hiding it only when the
 // branding disclosure appears inline in the protected flow — render this wherever a
 // useRecaptcha surface submits.
 export const RecaptchaDisclosure = ({ className }: { className?: string }) => (
