@@ -116,8 +116,10 @@ const LinkGenerationSection = ({
               onClick={() => {
                 try {
                   const url = new URL(inputLink);
-                  const isGumroadDomain = [rootDomain, shortDomain].some((domain) => url.host.endsWith(domain));
-                  if (isGumroadDomain) {
+                  const isGumroadDomain = [rootDomain, shortDomain].some(
+                    (domain) => url.host === domain || url.host.endsWith(`.${domain}`),
+                  );
+                  if ((url.protocol === "http:" || url.protocol === "https:") && isGumroadDomain) {
                     url.searchParams.set(affiliateQueryParam, globalAffiliateId.toString());
                     setGeneratedLink(url.toString());
                     setHasError(false);
