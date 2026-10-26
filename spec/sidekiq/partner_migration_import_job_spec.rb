@@ -163,6 +163,24 @@ describe PartnerMigrationImportJob do
     expect(seller.links.sole.tags.pluck(:name)).to eq(["art"])
   end
 
+  it "saves variant and file names at the column widths without cutting them" do
+    title = "é" * PartnerMigration::MAX_VARIANT_CATEGORY_TITLE_LENGTH
+    name = "\u{1F600}" * PartnerMigration::MAX_VARIANT_NAME_LENGTH
+    display_name = "ü" * PartnerMigration::MAX_FILE_DISPLAY_NAME_LENGTH
+    migration = create_claimed_migration([product_attributes.merge(
+      covers: [], thumbnail_url: nil,
+      files: [{ url: "https://files.example.com/pack.zip", display_name: }],
+      variant_categories: [{ title:, variants: [{ name: }] }],
+    )])
+
+    described_class.new.perform(migration.id)
+
+    product = seller.links.sole
+    expect(product.variant_categories.sole.title).to eq(title)
+    expect(product.variant_categories.sole.variants.sole.name).to eq(name)
+    expect(product.alive_product_files.sole.display_name).to eq(display_name)
+  end
+
   it "imports tags that the tags table treats as the same name once" do
     migration = create_claimed_migration([{ name: "Brush Set", price: 500, tags: ["café", "cafe"] }])
 

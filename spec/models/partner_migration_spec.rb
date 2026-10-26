@@ -61,6 +61,48 @@ describe PartnerMigration do
       expect(error).to eq("products[0]: each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}.")
     end
 
+    it "accepts variant and file names up to the column widths, counted in characters" do
+      title = "é" * described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH
+      name = "\u{1F600}" * described_class::MAX_VARIANT_NAME_LENGTH
+      decomposed_name = "e\u0301" * (described_class::MAX_VARIANT_NAME_LENGTH / 2)
+      display_name = "ü" * described_class::MAX_FILE_DISPLAY_NAME_LENGTH
+      products, error = described_class.normalize_products([product_attributes.merge(
+        files: [{ url: "https://files.example.com/pack.zip", display_name: }],
+        variant_categories: [{ title:, variants: [{ name: }, { name: decomposed_name }] }],
+      )])
+
+      expect(error).to be_nil
+      expect(products.first["variant_categories"].first).to include("title" => title, "variants" => [include("name" => name), include("name" => decomposed_name)])
+      expect(products.first["files"].first["display_name"]).to eq(display_name)
+    end
+
+    it "rejects a variant category title longer than its column" do
+      category = { title: "t" * (described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH + 1), variants: [{ name: "Standard" }] }
+      _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
+
+      expect(error).to eq("products[0]: variant category title must have up to #{described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH} characters.")
+    end
+
+    it "rejects a variant name longer than its column" do
+      category = { title: "License", variants: [{ name: "Standard" }, { name: "e\u0301" * 128 }] }
+      _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
+
+      expect(error).to eq("products[0]: variant name must have up to #{described_class::MAX_VARIANT_NAME_LENGTH} characters.")
+    end
+
+    it "rejects a file display name longer than its column" do
+      files = [{ url: "https://files.example.com/pack.zip", display_name: "d" * (described_class::MAX_FILE_DISPLAY_NAME_LENGTH + 1) }]
+      _products, error = described_class.normalize_products([product_attributes.merge(files:)])
+
+      expect(error).to eq("products[0]: file display_name must have up to #{described_class::MAX_FILE_DISPLAY_NAME_LENGTH} characters.")
+    end
+
+    it "keeps the length limits equal to the column widths" do
+      expect(VariantCategory.columns_hash.fetch("title").limit).to eq(described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH)
+      expect(Variant.columns_hash.fetch("name").limit).to eq(described_class::MAX_VARIANT_NAME_LENGTH)
+      expect(ProductFile.columns_hash.fetch("display_name").limit).to eq(described_class::MAX_FILE_DISPLAY_NAME_LENGTH)
+    end
+
     it "rejects a price above the maximum price" do
       _products, error = described_class.normalize_products([product_attributes.merge(price: BasePrice::Shared::MAX_PRICE_CENTS + 1)])
 

@@ -14,6 +14,10 @@ class PartnerMigration < ApplicationRecord
   MAX_NAME_LENGTH = 255
   MAX_FAILURE_REASON_LENGTH = 255
   MAX_FILES_PER_PRODUCT = 50
+  # Column widths in characters. MySQL runs without strict mode, so a longer value would be cut short.
+  MAX_FILE_DISPLAY_NAME_LENGTH = 1024
+  MAX_VARIANT_CATEGORY_TITLE_LENGTH = 255
+  MAX_VARIANT_NAME_LENGTH = 255
   # The product editor's limit (TagSelector).
   MAX_TAGS_PER_PRODUCT = 10
   # Without SKUs, checkout offers only the first variant category of a digital product.
@@ -98,6 +102,7 @@ class PartnerMigration < ApplicationRecord
     files = raw[:files].nil? ? [] : raw[:files]
     return [nil, "files must be an array with up to #{MAX_FILES_PER_PRODUCT} items."] unless files.is_a?(Array) && files.size <= MAX_FILES_PER_PRODUCT
     return [nil, "each file needs an https url and an optional display_name string."] unless files.all? { _1.respond_to?(:key?) && https_url?(_1[:url]) && (_1[:display_name].nil? || string?(_1[:display_name])) }
+    return [nil, "file display_name must have up to #{MAX_FILE_DISPLAY_NAME_LENGTH} characters."] if files.any? { _1[:display_name].to_s.length > MAX_FILE_DISPLAY_NAME_LENGTH }
 
     covers = raw[:covers].nil? ? [] : raw[:covers]
     return [nil, "covers must be an array with up to #{Link::MAX_PREVIEW_COUNT} items."] unless covers.is_a?(Array) && covers.size <= Link::MAX_PREVIEW_COUNT
@@ -127,9 +132,11 @@ class PartnerMigration < ApplicationRecord
 
     categories = raw_categories.map do |category|
       return [nil, "each variant category needs a title string and 1 to #{MAX_VARIANTS_PER_CATEGORY} variants."] unless category.respond_to?(:key?) && string?(category[:title]) && category[:variants].is_a?(Array) && category[:variants].size.between?(1, MAX_VARIANTS_PER_CATEGORY)
+      return [nil, "variant category title must have up to #{MAX_VARIANT_CATEGORY_TITLE_LENGTH} characters."] if category[:title].length > MAX_VARIANT_CATEGORY_TITLE_LENGTH
 
       variants = category[:variants].map do |variant|
         return [nil, "each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}."] unless variant.respond_to?(:key?) && string?(variant[:name]) && (variant[:price_difference_cents].nil? || (variant[:price_difference_cents].is_a?(Integer) && variant[:price_difference_cents].between?(0, BasePrice::Shared::MAX_PRICE_CENTS)))
+        return [nil, "variant name must have up to #{MAX_VARIANT_NAME_LENGTH} characters."] if variant[:name].length > MAX_VARIANT_NAME_LENGTH
 
         { "name" => variant[:name], "price_difference_cents" => variant[:price_difference_cents] || 0 }
       end
