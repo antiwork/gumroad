@@ -50,6 +50,16 @@ describe "Game builds API" do
       expect(product.game_builds.count).to eq(1)
     end
 
+    it "still returns the build when a retry finds the source upload gone" do
+      url = upload_zip
+      deploy(url)
+      s3.delete_object(bucket: S3_BUCKET, key: url.delete_prefix(S3_BASE_URL))
+      deploy(url)
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("success" => true)
+      expect(response.parsed_body["game_build"]["number"]).to eq(1)
+    end
+
     it "keeps the build immutable when the source upload is overwritten later" do
       url = upload_zip("one")
       deploy(url)

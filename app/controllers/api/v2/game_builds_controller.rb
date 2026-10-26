@@ -25,6 +25,9 @@ class Api::V2::GameBuildsController < Api::V2::BaseController
       return render_response(false, message: "url must be a .zip you uploaded with POST /v2/files/presign and /v2/files/complete.")
     end
 
+    existing = @product.game_builds.find_by(source_url: url)
+    return render_response(true, game_build: build_json(existing)) if existing
+
     source_key = url.delete_prefix(S3_BASE_URL)
     head = Aws::S3::Client.new.head_object(bucket: S3_BUCKET, key: source_key)
     return render_response(false, message: "The uploaded zip is empty or larger than #{GameBuild::MAX_BYTE_SIZE / 1.gigabyte} GB.") unless head.content_length.between?(1, GameBuild::MAX_BYTE_SIZE)
