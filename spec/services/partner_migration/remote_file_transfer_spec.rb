@@ -84,6 +84,14 @@ describe PartnerMigration::RemoteFileTransfer do
     expect { described_class.new(seller:, url: "http://files.example.com/pack.zip").perform }.to raise_error(described_class::Error, "Only https URLs are supported.")
   end
 
+  it "does not follow a redirect to an http URL", :skip_ssrf_stub do
+    allow(Resolv).to receive(:getaddresses).with("files.example.com").and_return(["93.184.215.14"])
+    stub_request(:get, "https://files.example.com/pack.zip").to_return(status: 302, headers: { "Location" => "http://files.example.com/pack.zip" })
+    stub_request(:get, "http://files.example.com/pack.zip").to_return(status: 200, body: "zip bytes")
+
+    expect { described_class.new(seller:, url: "https://files.example.com/pack.zip").perform }.to raise_error(SsrfFilter::InvalidUriScheme)
+  end
+
   it "blocks a private address", :skip_ssrf_stub do
     expect { described_class.new(seller:, url: "https://127.0.0.1/pack.zip").perform }.to raise_error(SsrfFilter::PrivateIPAddress)
   end

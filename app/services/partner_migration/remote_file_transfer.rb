@@ -11,6 +11,8 @@ class PartnerMigration::RemoteFileTransfer
 
   MAX_BYTES = WithFileProperties::MAX_DOWNLOAD_SIZE
   MAX_FILENAME_LENGTH = 200
+  # SsrfFilter allows http by default, also when an https URL redirects.
+  ALLOWED_SCHEMES = %w[https].freeze
   TEMPORARY_HTTP_CODES = %w[408 425 429].freeze
   # Net::HTTP's read timeout stops a host that goes silent, but not one that sends a byte now and then.
   MAX_DOWNLOAD_DURATION = 3.hours
@@ -35,7 +37,7 @@ class PartnerMigration::RemoteFileTransfer
   def self.stream(url, tempfile, max_bytes)
     too_large = "The file is larger than #{ActiveSupport::NumberHelper.number_to_human_size(max_bytes)}."
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + MAX_DOWNLOAD_DURATION
-    response = SsrfFilter.get(url) do |http_response|
+    response = SsrfFilter.get(url, scheme_whitelist: ALLOWED_SCHEMES) do |http_response|
       raise Error, too_large if http_response["content-length"].to_i > max_bytes
 
       write_file = http_response.is_a?(Net::HTTPSuccess)
