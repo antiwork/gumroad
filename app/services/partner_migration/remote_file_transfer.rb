@@ -60,8 +60,9 @@ class PartnerMigration::RemoteFileTransfer
   # extension, so a name without one gets the extension of the detected content type.
   def self.filename_for(uri, content_disposition, tempfile)
     disposition_name = content_disposition.to_s[/filename\*=UTF-8''([^;]+)/i, 1] || content_disposition.to_s[/filename="?([^";]+)"?/i, 1]
-    # A legacy name such as "caf%E9.zip" decodes to bytes that are not UTF-8, which gsub rejects.
-    name = CGI.unescape(disposition_name || File.basename(uri.path.to_s)).scrub("_").gsub(/[^\w.\- ]/, "_").strip
+    # Path segments and RFC 5987 values keep "+" literal, unlike form encoding. A legacy name such as
+    # "caf%E9.zip" decodes to bytes that are not UTF-8, which gsub rejects.
+    name = CGI.unescapeURIComponent(disposition_name || File.basename(uri.path.to_s)).scrub("_").gsub(/[^\w.\- ]/, "_").strip
     name = "file" if name.blank? || name.match?(/\A\.+\z/)
     if File.extname(name).blank?
       name += Rack::Mime::MIME_TYPES.invert[Marcel::MimeType.for(tempfile)].to_s

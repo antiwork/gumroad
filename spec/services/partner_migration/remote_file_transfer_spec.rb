@@ -34,6 +34,14 @@ describe PartnerMigration::RemoteFileTransfer do
     expect(url).to end_with("/original/Texture Pack.zip")
   end
 
+  it "does not read a plus sign in the URL path as a space" do
+    stub_download("pdf bytes")
+
+    url = described_class.new(seller:, url: "https://files.example.com/C++%20Guide.pdf").perform
+
+    expect(url).to end_with("/original/C__ Guide.pdf")
+  end
+
   it "replaces bytes that are not valid UTF-8 in the filename" do
     stub_download("zip bytes", content_disposition: "attachment; filename*=UTF-8''Caf%E9.zip")
 
