@@ -394,6 +394,40 @@ describe "Product creation", type: :system, js: true do
         end
       end
 
+      %w[light dark].each do |color_scheme|
+        it "shows a keyboard focus ring on the close action with at least 3:1 contrast in #{color_scheme} mode" do
+          page.driver.browser.execute_cdp("Emulation.setEmulatedMedia", features: [{ name: "prefers-color-scheme", value: color_scheme }])
+          visit new_product_path
+
+          within(:status, text: "New. You can create your product using AI now") { find_link("Learn more").execute_script("this.focus()") }
+          page.driver.browser.action.send_keys(:tab).perform
+          close_button = find_button("close", exact: true)
+          expect(close_button.evaluate_script("this === document.activeElement && this.matches(':focus-visible')")).to be(true)
+          expect(close_button.evaluate_script("getComputedStyle(this).outlineStyle")).to eq("solid")
+          expect(close_button.evaluate_script(<<~JS)).to be >= 3
+            (() => {
+              const canvas = Object.assign(document.createElement("canvas"), { width: 1, height: 1 });
+              const context = canvas.getContext("2d", { willReadFrequently: true });
+              const paint = (color) => { context.fillStyle = color; context.fillRect(0, 0, 1, 1); };
+              const read = () => [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+              const backgrounds = [];
+              for (let node = this.parentElement; node; node = node.parentElement) backgrounds.unshift(getComputedStyle(node).backgroundColor);
+              paint("white");
+              backgrounds.forEach(paint);
+              const backdrop = read();
+              paint(getComputedStyle(this).outlineColor);
+              const ring = read();
+              const luminance = (rgb) => rgb.map((v) => v / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+                .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+              const [lighter, darker] = [luminance(ring), luminance(backdrop)].sort((a, b) => b - a);
+              return (lighter + 0.05) / (darker + 0.05);
+            })()
+          JS
+        ensure
+          page.driver.browser.execute_cdp("Emulation.setEmulatedMedia", features: [])
+        end
+      end
+
       %w[click keyboard].each do |activation|
         it "dismisses the promo by #{activation} without creating a product or losing entered values" do
           visit new_product_path

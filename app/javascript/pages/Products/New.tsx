@@ -375,7 +375,7 @@ const NewProductPage = () => {
                       </a>
                     </div>
                     <LinkButton
-                      className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
                       onClick={() => void dismissAiPromo()}
                     >
                       close
