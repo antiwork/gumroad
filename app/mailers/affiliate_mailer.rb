@@ -242,7 +242,7 @@ class AffiliateMailer < ApplicationMailer
       @quantity = @purchase.quantity
       @variants = @purchase.variants_list
       @variants_count = @purchase.variant_names&.count || 0
-      @customer_email = @purchase.email.presence || @purchase.purchaser&.email
+      @buyer_email = @purchase.email.presence || @purchase.purchaser&.email
       # The balance credits the cut MINUS the collaborator's share of the Gumroad fee, so show that
       # deduction; a bare "Your cut" overstates what actually lands in the balance.
       @fee_share_cents = @purchase.affiliate_credit.fee_cents
