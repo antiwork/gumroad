@@ -279,6 +279,21 @@ describe "Game builds API" do
       expect(product.product_files.alive.sole.url).to end_with("/1/build.zip")
     end
 
+    it "keeps an unpublished product's superseded build through the cleanup so it can be rolled back to" do
+      product.unpublish!
+      deploy(upload_zip("one"))
+      deploy(upload_zip("two"))
+      first, second = product.game_builds.to_a
+      [first, second].each { promote(_1) }
+      ProductFile.where(id: first.reload.product_file_id).update_all(deleted_at: 2.days.ago)
+
+      RemoveDeletedFilesFromS3Job.new.perform
+      promote(first)
+
+      expect(product.game_builds.live.pluck(:number)).to eq([1])
+      expect(live_download_bytes).to eq("one")
+    end
+
     it "lets a deleted unsold product's build downloads be removed from S3" do
       deploy(upload_zip)
       deploy(upload_zip)

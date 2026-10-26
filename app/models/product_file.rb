@@ -78,14 +78,14 @@ class ProductFile < ApplicationRecord
   scope :not_external_link, -> { where.not(filetype: "link") }
   scope :archivable, -> { not_external_link.not_stream_only }
 
-  # Also true while a game build of an alive product still owns the object, so the cleanup job
-  # never deletes a build that can be promoted again (rollback).
+  # Also true while a game build of a product that is not deleted still owns the object, so the
+  # cleanup job never deletes a build that can be promoted again (rollback).
   def has_alive_duplicate_files?
     ProductFile.alive.where(url:).exists? || owned_by_game_build?
   end
 
   def owned_by_game_build?
-    s3_key&.start_with?("#{GameBuild::STORAGE_PREFIX}/") && GameBuild.joins(:product).merge(Link.alive).exists?(storage_key: s3_key)
+    s3_key&.start_with?("#{GameBuild::STORAGE_PREFIX}/") && GameBuild.joins(:product).merge(Link.visible).exists?(storage_key: s3_key)
   end
 
   def has_cdn_url?
