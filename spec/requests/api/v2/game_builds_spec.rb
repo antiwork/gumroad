@@ -27,6 +27,7 @@ describe "Game builds API" do
       deploy(url)
 
       build = response.parsed_body["game_build"]
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be true
       expect(build).to include("number" => 1, "status" => "uploaded", "byte_size" => 3)
       record = product.game_builds.sole
@@ -103,8 +104,9 @@ describe "Game builds API" do
       deploy(upload_zip)
       build = product.game_builds.sole
 
-      post "/api/v2/products/#{product.external_id}/games/builds/#{build.external_id}/promote", params: { access_token: token.token }
+      post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
 
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body["game_build"]).to include("status" => "live")
       file = product.product_files.alive.sole
       expect(file.url).to eq("#{S3_BASE_URL}#{build.storage_key}")
@@ -117,7 +119,7 @@ describe "Game builds API" do
       first, second = product.game_builds.to_a
 
       [first, second].each do |b|
-        post "/api/v2/products/#{product.external_id}/games/builds/#{b.external_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/games/builds/#{b.public_id}/promote", params: { access_token: token.token }
       end
 
       expect(first.reload.status).to eq("superseded")
@@ -130,16 +132,31 @@ describe "Game builds API" do
       deploy(upload_zip)
       first, second = product.game_builds.to_a
       [first, second, first].each do |b|
-        post "/api/v2/products/#{product.external_id}/games/builds/#{b.external_id}/promote", params: { access_token: token.token }
+        post "/api/v2/products/#{product.external_id}/games/builds/#{b.public_id}/promote", params: { access_token: token.token }
       end
       expect(product.game_builds.live.pluck(:number)).to eq([1])
       expect(product.product_files.alive.sole.url).to end_with("/1/build.zip")
     end
 
+    it "embeds the live zip in the product's content page and swaps it on the next promote" do
+      rich = create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }])
+      deploy(upload_zip)
+      deploy(upload_zip)
+      first, second = product.game_builds.to_a
+
+      post "/api/v2/products/#{product.external_id}/games/builds/#{first.public_id}/promote", params: { access_token: token.token }
+      embeds = -> { rich.reload.description.select { _1["type"] == "fileEmbed" }.map { _1.dig("attrs", "id") } }
+      expect(embeds.call).to eq([first.reload.product_file.external_id])
+
+      post "/api/v2/products/#{product.external_id}/games/builds/#{second.public_id}/promote", params: { access_token: token.token }
+      expect(embeds.call).to eq([second.reload.product_file.external_id])
+      expect(rich.reload.description.first["type"]).to eq("paragraph")
+    end
+
     it "is a no-op for an already-live build" do
       deploy(upload_zip)
       build = product.game_builds.sole
-      2.times { post "/api/v2/products/#{product.external_id}/games/builds/#{build.external_id}/promote", params: { access_token: token.token } }
+      2.times { post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token } }
       expect(product.product_files.alive.count).to eq(1)
     end
   end
@@ -148,17 +165,19 @@ describe "Game builds API" do
     it "lists builds and shows one" do
       deploy(upload_zip)
       get "/api/v2/products/#{product.external_id}/games/builds", params: { access_token: token.token }
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body["game_builds"].map { _1["number"] }).to eq([1])
 
       id = response.parsed_body["game_builds"].first["id"]
       get "/api/v2/products/#{product.external_id}/games/builds/#{id}", params: { access_token: token.token }
+      expect(response).to have_http_status(:ok)
       expect(response.parsed_body["game_build"]["id"]).to eq(id)
     end
 
     it "does not expose another product's build" do
       other = create(:product, user:)
       deploy(upload_zip, product_id: other.external_id)
-      id = other.game_builds.sole.external_id
+      id = other.game_builds.sole.public_id
       get "/api/v2/products/#{product.external_id}/games/builds/#{id}", params: { access_token: token.token }
       expect(response.parsed_body["success"]).to be false
     end

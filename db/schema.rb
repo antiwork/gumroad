@@ -1117,7 +1117,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_20_000001) do
   end
 
   create_table "game_builds", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
-    t.bigint "link_id", null: false
+    t.bigint "product_id", null: false
+    t.string "public_id", limit: 21, null: false
     t.integer "number", null: false
     t.string "status", limit: 16, default: "uploaded", null: false
     t.string "source_url", limit: 1024, null: false
@@ -1127,9 +1128,10 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_20_000001) do
     t.datetime "promoted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["link_id", "number"], name: "index_game_builds_on_link_id_and_number", unique: true
-    t.index ["link_id", "source_url"], name: "index_game_builds_on_link_id_and_source_url", unique: true, length: { source_url: 191 }
-    t.index ["link_id", "status"], name: "index_game_builds_on_link_id_and_status"
+    t.index ["product_id", "number"], name: "index_game_builds_on_product_id_and_number", unique: true
+    t.index ["product_id", "source_url"], name: "index_game_builds_on_product_id_and_source_url", unique: true, length: { source_url: 191 }
+    t.index ["product_id", "status"], name: "index_game_builds_on_product_id_and_status"
+    t.index ["public_id"], name: "index_game_builds_on_public_id", unique: true
   end
 
   create_table "gifts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
