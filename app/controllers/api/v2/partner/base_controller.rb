@@ -44,9 +44,20 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
     end
 
     def partner_sellers_in_scope
-      partner_sellers = current_partner_application.partner_sellers.alive.includes(:user)
+      partner_sellers = current_partner_application.partner_sellers.alive
       partner_sellers = partner_sellers.where(external_user_id: params[:external_user_id].to_s) if params[:external_user_id].present?
       partner_sellers
+    end
+
+    # Users are loaded only for the rows a response renders, not for the whole roster.
+    def preload_users(partner_sellers)
+      ActiveRecord::Associations::Preloader.new(records: partner_sellers, associations: :user).call
+      partner_sellers
+    end
+
+    # Query strings can carry arrays and hashes (`page[]=2`), which have no `to_i`.
+    def integer_params?(*names)
+      names.all? { |name| params[name].nil? || params[name].is_a?(String) || params[name].is_a?(Numeric) }
     end
 
     # Search filters shared by the partner product and creator endpoints, or nil when `category`
