@@ -80,6 +80,32 @@ describe("Covers", () => {
     expect(document.activeElement).toBe(first);
   });
 
+  // The indicator row is hidden over a video or embed cover. Unmounting it there removed the tab
+  // the keyboard user had just focused, so focus fell to the body and the arrow keys went dead.
+  it("keeps keyboard navigation working once a video cover hides the indicators", () => {
+    const covers = [cover({ type: "image", filetype: "png" }), cover({ id: "cover-2", type: "video" })];
+    const Harness = () => {
+      const [activeCoverId, setActiveCoverId] = React.useState<string | null>("cover-1");
+      return <Covers covers={covers} activeCoverId={activeCoverId} setActiveCoverId={setActiveCoverId} />;
+    };
+    render(<Harness />);
+    const first = screen.getByRole<HTMLButtonElement>("tab", { name: "Show cover 1" });
+    first.focus();
+
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    const second = screen.getByRole<HTMLButtonElement>("tab", { name: "Show cover 2" });
+    expect(second.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(second);
+    // Hidden from the player it covers, but still mounted and still receiving pointer-free clicks.
+    const tablist = screen.getByRole("tablist");
+    expect(tablist.className).toContain("opacity-0");
+    expect(tablist.className).toContain("pointer-events-none");
+
+    fireEvent.keyDown(second, { key: "ArrowLeft" });
+    expect(first.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(first);
+  });
+
   it("shapes the frame to a landscape cover's own ratio", () => {
     const { container } = renderCovers([cover()]);
 

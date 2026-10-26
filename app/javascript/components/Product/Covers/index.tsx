@@ -93,6 +93,9 @@ export const Covers = ({
   // invisible either way, so the broader condition is a no-op there and stays correct if
   // the cap's shape test changes.
   const frameIsShaped = frameStyle !== undefined;
+  // The indicator row sits over the bottom of the frame, so it stays out of the way while a video
+  // or embed is on screen.
+  const indicatorsOverPlayer = activeCover?.type === "oembed" || activeCover?.type === "video";
 
   const { itemsRef, handleScroll } = useScrollableCarousel(activeCoverIndex, (index) =>
     setActiveCoverId(covers[index]?.id ?? null),
@@ -120,11 +123,16 @@ export const Covers = ({
           <CoverItem cover={cover} frameIsShaped={frameIsShaped} productName={productName} key={cover.id} />
         ))}
       </div>
-      {covers.length > 1 && activeCover?.type !== "oembed" && activeCover?.type !== "video" ? (
+      {covers.length > 1 ? (
         <div
           role="tablist"
           aria-label="Select a cover"
-          className="absolute bottom-0 flex w-full flex-wrap justify-center gap-2 p-3"
+          className={classNames(
+            "absolute bottom-0 flex w-full flex-wrap justify-center gap-2 p-3",
+            // Hidden rather than unmounted: removing the row takes the focused tab with it and drops
+            // focus to the body. Clicks fall through to the player, and focus reveals the row again.
+            indicatorsOverPlayer && "pointer-events-none opacity-0 focus-within:opacity-100",
+          )}
         >
           {covers.map((cover, i) => (
             <LinkButton
