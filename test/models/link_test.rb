@@ -1874,6 +1874,15 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal({}, two_files.multifile_aware_product_file_info)
   end
 
+  # A converted bundle keeps the files the product had. They are not what its page describes —
+  # buyers get its members' files — so one of them must not be reported as the bundle's size.
+  test "multifile_aware_product_file_info ignores the files a bundle still carries" do
+    bundle = create_product(is_bundle: true)
+    create_product_file(link: bundle, size: 300, pagelength: 7)
+
+    assert_equal({}, bundle.multifile_aware_product_file_info)
+  end
+
   test "removed_file_info_attributes accumulates removed attributes" do
     link = build_product
     assert_equal [], link.removed_file_info_attributes

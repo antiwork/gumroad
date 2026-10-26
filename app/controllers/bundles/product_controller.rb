@@ -90,6 +90,24 @@ class Bundles::ProductController < Bundles::BaseController
     redirect_to edit_bundle_product_path(@bundle.external_id), alert: error_message
   end
 
+  # Removes a file still attached to the bundle itself. A product converted into a bundle keeps
+  # its old ProductFile rows, and they are shipped to every buyer, so the bundle editor lists
+  # them (BundlePresenter#edit_product_props) and removes them one at a time. Mirrors the
+  # seller-facing deletion in SaveFilesService: soft-delete, drop the memoized alive list,
+  # re-index the link's filetypes.
+  def remove_file
+    authorize @bundle
+
+    file = @bundle.alive_product_files.find_by_external_id!(params[:file_id])
+    file.mark_deleted
+    @bundle.cached_alive_product_files = nil
+    @bundle.enqueue_index_update_for(["filetypes"])
+
+    render json: { success: true }
+  rescue ActiveRecord::RecordNotFound
+    render json: { success: false, error_message: "That file is no longer attached to this bundle." }, status: :not_found
+  end
+
   private
     def product_permitted_params
       params.permit(

@@ -883,7 +883,11 @@ class Link < ApplicationRecord
   end
 
   # Public: Returns the file info (size, dimensions, etc) if there's only one file associated with this product.
+  # A bundle's own files are not what its page describes — buyers get its members' files, plus any file still
+  # attached to the bundle — so one such file must not stand in for the bundle's size.
   def multifile_aware_product_file_info
+    return {} if is_bundle?
+
     multifile_aware_product_file_info = {}
     if alive_product_files.count == 1
       multifile_aware_product_file_info = alive_product_files.first.file_info(require_shipping)

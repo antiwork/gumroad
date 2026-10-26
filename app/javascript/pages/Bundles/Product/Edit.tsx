@@ -23,6 +23,7 @@ import {
 import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { NumberInput } from "$app/components/NumberInput";
 import { Seller } from "$app/components/Product";
+import { RetainedFile, RetainedFilesEditor } from "$app/components/BundleEdit/RetainedFilesEditor";
 import { Attribute, AttributesEditor } from "$app/components/ProductEdit/ProductTab/AttributesEditor";
 import { CoverEditor } from "$app/components/ProductEdit/ProductTab/CoverEditor";
 import { CustomButtonTextOptionInput } from "$app/components/ProductEdit/ProductTab/CustomButtonTextOptionInput";
@@ -66,6 +67,7 @@ type ProductPageProps = {
     display_product_reviews: boolean;
     hide_bundle_product_reviews: boolean;
     public_files: PublicFileWithStatus[];
+    retained_files: RetainedFile[];
     is_published: boolean;
     products: BundleProduct[];
     default_offer_code: OfferCode | null;
@@ -131,6 +133,7 @@ export default function BundlesProductEdit() {
   const [initialBundle] = React.useState(bundle);
   const [showRefundPolicyPreview, setShowRefundPolicyPreview] = React.useState(false);
   const [publicFiles, setPublicFiles] = React.useState(bundle.public_files);
+  const [retainedFiles, setRetainedFiles] = React.useState(bundle.retained_files);
   // Not persisted: applying a discount just computes and sets price_cents, so it does not
   // survive re-opening the editor.
   const [discountPercent, setDiscountPercent] = React.useState<number | null>(null);
@@ -455,6 +458,11 @@ export default function BundlesProductEdit() {
             setCustomAttributes={(custom_attributes) => form.setData("custom_attributes", custom_attributes)}
           />
         </section>
+        <RetainedFilesEditor
+          bundleId={id}
+          files={retainedFiles}
+          onRemoved={(fileId) => setRetainedFiles((files) => files.filter((file) => file.id !== fileId))}
+        />
         <section className="grid gap-8 border-t border-border p-4 md:p-8">
           <h2>Settings</h2>
           <Fieldset>

@@ -163,4 +163,43 @@ describe Bundles::ProductController, inertia: true do
       expect(bundle.reload.name).not_to eq("Renamed")
     end
   end
+
+  describe "POST remove_file" do
+    let!(:file) { create(:product_file, link: bundle, url: "#{S3_BASE_URL}specs/vol-1.zip") }
+
+    it_behaves_like "authorize called for action", :post, :remove_file do
+      let(:policy_klass) { LinkPolicy }
+      let(:record) { bundle }
+      let(:request_params) { { bundle_id: bundle.external_id, file_id: file.external_id } }
+    end
+
+    it "soft-deletes the file and re-indexes the link's filetypes" do
+      expect_any_instance_of(Link).to receive(:enqueue_index_update_for).with(["filetypes"]).and_call_original
+
+      post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+
+      expect(response).to be_successful
+      expect(file.reload).to be_deleted
+      expect(bundle.reload.alive_product_files).to be_empty
+    end
+
+    it "leaves the files of the products in the bundle alone" do
+      member = create(:product, user: seller)
+      create(:product_file, link: member)
+      create(:bundle_product, bundle:, product: member, quantity: 1, position: 0)
+
+      post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+
+      expect(member.reload.alive_product_files.count).to eq(1)
+    end
+
+    it "refuses a file that belongs to another product" do
+      other = create(:product_file, link: create(:product, user: seller))
+
+      post :remove_file, params: { bundle_id: bundle.external_id, file_id: other.external_id }
+
+      expect(response).to have_http_status(:not_found)
+      expect(other.reload).to be_alive
+    end
+  end
 end

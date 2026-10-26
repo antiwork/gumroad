@@ -27,6 +27,10 @@ class BundlePresenter
         title: bundle.user.refund_policy.title,
         fine_print: bundle.user.refund_policy.fine_print,
       },
+      # Files still attached to the bundle itself. A product converted into a bundle keeps its old
+      # ProductFile rows, this editor had no panel for them, and the download archive ships them to
+      # buyers alongside the members' files — so the seller needs to see and remove them.
+      retained_files: retained_files_props,
     )
   end
 
@@ -106,6 +110,17 @@ class BundlePresenter
         fine_print_enabled: refund_policy.fine_print.present?,
         title: refund_policy.title,
       }
+    end
+
+    def retained_files_props
+      bundle.alive_product_files.map do |file|
+        {
+          id: file.external_id,
+          name: file.name_displayable,
+          filetype: file.filetype,
+          size: file.size_displayable,
+        }
+      end
     end
 
     def shared_props
