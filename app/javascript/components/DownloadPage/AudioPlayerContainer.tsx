@@ -61,6 +61,8 @@ export const AudioPlayerContainer = ({
     [],
   );
 
+  React.useEffect(() => () => updateProgress.cancel(), [updateProgress]);
+
   const onEnded = () => {
     pauseAudio();
     updateProgress.cancel();
