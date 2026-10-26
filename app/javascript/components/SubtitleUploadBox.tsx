@@ -7,7 +7,7 @@ import {
   snapshotPickedFiles,
 } from "$app/utils/snapshotPickedFile";
 
-import { buttonVariants } from "$app/components/Button";
+import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 
 type UploadBoxProps = { onUploadFiles: (domFiles: File[]) => unknown };
@@ -18,6 +18,7 @@ const acceptedSubtitleExtensions = FileUtils.getAllowedSubtitleExtensions()
 
 export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
   const snapshotInFlight = React.useRef(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   const filePickerOnChange = (fileInput: HTMLInputElement) => {
     if (snapshotInFlight.current || !fileInput.files) return;
@@ -52,17 +53,21 @@ export const SubtitleUploadBox = ({ onUploadFiles }: UploadBoxProps) => {
   };
 
   return (
-    <label className={buttonVariants({ size: "default", color: "primary" })}>
+    <>
       <input
+        ref={inputRef}
         className="subtitles-file sr-only"
         type="file"
         name="file"
         accept={acceptedSubtitleExtensions}
         tabIndex={-1}
+        aria-label="Add subtitles"
         multiple
         onChange={(e) => filePickerOnChange(e.target)}
       />
-      Add subtitles
-    </label>
+      <Button color="primary" onClick={() => inputRef.current?.click()}>
+        Add subtitles
+      </Button>
+    </>
   );
 };

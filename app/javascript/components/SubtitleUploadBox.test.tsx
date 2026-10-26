@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +45,16 @@ const renderPicker = () => {
 };
 
 describe("SubtitleUploadBox", () => {
+  it("provides a native button that opens the subtitle file picker", () => {
+    const { input } = renderPicker();
+    const click = vi.spyOn(input, "click").mockImplementation(() => {});
+    const button = screen.getByRole<HTMLButtonElement>("button", { name: "Add subtitles" });
+    expect(button.tagName).toBe("BUTTON");
+    expect(button.type).toBe("button");
+    fireEvent.click(button);
+    expect(click).toHaveBeenCalledOnce();
+  });
+
   it("uploads a snapshot copy of a small subtitle and resets the input", async () => {
     const { onUploadFiles, input } = renderPicker();
     const picked = new File(["1\n00:00:00,000 --> 00:00:01,000\nhi\n"], "captions.srt", { type: "text/plain" });
