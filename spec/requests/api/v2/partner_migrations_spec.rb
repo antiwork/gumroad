@@ -35,7 +35,15 @@ describe "Partner API migrations", type: :request do
     post_migration(products:)
 
     expect(response).to have_http_status(:bad_request)
-    expect(response.parsed_body["message"]).to eq("external_user_id must be a string with 1 to 255 characters.")
+    expect(response.parsed_body["message"]).to eq("external_user_id must be a string with 1 to 255 characters, not only spaces.")
+  end
+
+  it "rejects an external user ID with only spaces" do
+    expect do
+      post_migration(external_user_id: "   ", products:)
+    end.not_to change { PartnerMigration.count }
+
+    expect(response).to have_http_status(:bad_request)
   end
 
   it "rejects products that are not valid" do

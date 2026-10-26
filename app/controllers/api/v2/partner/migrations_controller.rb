@@ -5,8 +5,9 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
   # sign up, and the products are then imported as drafts in that Gumroad account.
   def create
     external_user_id = params[:external_user_id]
-    unless external_user_id.is_a?(String) && external_user_id.length.between?(1, 255)
-      return render_bad_request("external_user_id must be a string with 1 to 255 characters.")
+    max_length = PartnerMigration::MAX_EXTERNAL_USER_ID_LENGTH
+    unless external_user_id.is_a?(String) && external_user_id.present? && external_user_id.length <= max_length
+      return render_bad_request("external_user_id must be a string with 1 to #{max_length} characters, not only spaces.")
     end
 
     products, error = PartnerMigration.normalize_products(params[:products])

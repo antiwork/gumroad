@@ -105,6 +105,26 @@ describe PartnerMigrationImportJob do
     expect(migration.reload.results["0"]["warnings"]).to include(a_string_starting_with("Cover https://files.example.com/cover.png was not imported: The file is larger than"))
   end
 
+  it "deletes the uploaded cover and thumbnail when their analysis fails" do
+    allow_any_instance_of(ActiveStorage::Attached::One).to receive(:analyze).and_raise(Aws::S3::Errors::ServiceError.new(nil, "S3 is down"))
+    allow_any_instance_of(AssetPreview).to receive(:analyze_file).and_raise(Aws::S3::Errors::ServiceError.new(nil, "S3 is down"))
+    migration = create_claimed_migration([product_attributes.merge(files: [])])
+
+    expect { described_class.new.perform(migration.id) }.not_to change { ActiveStorage::Blob.count }
+
+    expect(migration.reload.results["0"]["warnings"].size).to eq(2)
+  end
+
+  it "stops a thumbnail download that runs past the time limit" do
+    stub_const("PartnerMigration::RemoteFileTransfer::MAX_DOWNLOAD_DURATION", -1.second)
+    migration = create_claimed_migration([product_attributes.merge(files: [], covers: [])])
+
+    described_class.new.perform(migration.id)
+
+    expect(creator.links.sole.thumbnail).to be_nil
+    expect(migration.reload.results["0"]["warnings"]).to include(a_string_matching(/\AThumbnail .* was not imported: The file download took longer than/))
+  end
+
   it "lets Sidekiq retry a temporary download failure" do
     remote_files["https://files.example.com/pack.zip"] = nil
     allow(SsrfFilter).to receive(:get).and_wrap_original do |original, url, &block|

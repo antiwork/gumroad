@@ -10,6 +10,8 @@ require "digest"
 class PartnerMigration < ApplicationRecord
   EXPIRES_IN = 7.days
   MAX_PRODUCTS = 500
+  MAX_EXTERNAL_USER_ID_LENGTH = 255
+  MAX_NAME_LENGTH = 255
   MAX_FILES_PER_PRODUCT = 50
   # Without SKUs, checkout offers only the first variant category of a digital product.
   MAX_VARIANT_CATEGORIES = 1
@@ -27,7 +29,7 @@ class PartnerMigration < ApplicationRecord
   belongs_to :oauth_application
   belongs_to :user, optional: true
 
-  validates :external_user_id, presence: true, length: { maximum: 255 }
+  validates :external_user_id, presence: true, length: { maximum: MAX_EXTERNAL_USER_ID_LENGTH }
   validates :code_digest, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
   validates :expires_at, presence: true
@@ -72,7 +74,7 @@ class PartnerMigration < ApplicationRecord
 
   def self.normalize_product(raw)
     return [nil, "must be an object."] unless raw.respond_to?(:key?)
-    return [nil, "name must be a string with 1 to 255 characters."] unless string?(raw[:name]) && raw[:name].strip.length.between?(1, 255)
+    return [nil, "name must be a string with 1 to #{MAX_NAME_LENGTH} characters."] unless string?(raw[:name]) && raw[:name].strip.length.between?(1, MAX_NAME_LENGTH)
     return [nil, "description must be a string."] unless raw[:description].nil? || string?(raw[:description])
     return [nil, "price must be a whole number of cents, 0 or more."] unless raw[:price].is_a?(Integer) && raw[:price] >= 0
 

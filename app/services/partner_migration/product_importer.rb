@@ -107,7 +107,8 @@ class PartnerMigration::ProductImporter
           asset_preview.file.attach(blob.signed_id)
           asset_preview.analyze_file
           asset_preview.save!
-        rescue ActiveRecord::RecordInvalid
+        rescue StandardError
+          # Nothing keeps a blob that is not saved.
           blob&.purge
           raise
         end
@@ -118,16 +119,23 @@ class PartnerMigration::ProductImporter
       end
     end
 
+    # Thumbnail#url= limits the size but not the time, so the thumbnail also uses the bounded download.
     def attach_thumbnail(product)
       return [] if attributes["thumbnail_url"].blank?
 
-      thumbnail = product.build_thumbnail
-      thumbnail.url = attributes["thumbnail_url"]
-      thumbnail.file.analyze if thumbnail.file.attached? && !thumbnail.file.analyzed?
-      thumbnail.save!
+      PartnerMigration::RemoteFileTransfer.download(attributes["thumbnail_url"], max_bytes: Thumbnail::MAX_FILE_SIZE) do |tempfile, filename|
+        blob = ActiveStorage::Blob.create_and_upload!(io: tempfile, filename:, content_type: Marcel::MimeType.for(tempfile, name: filename))
+        thumbnail = product.build_thumbnail
+        thumbnail.file.attach(blob.signed_id)
+        thumbnail.file.analyze
+        thumbnail.save!
+      rescue StandardError
+        # Nothing keeps a blob that is not saved.
+        blob&.purge
+        raise
+      end
       []
     rescue *MEDIA_ERRORS => e
-      thumbnail&.file&.blob&.purge if thumbnail&.file&.attached?
       ["Thumbnail #{attributes["thumbnail_url"]} was not imported: #{e.message}"]
     end
 end
