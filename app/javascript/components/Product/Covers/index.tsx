@@ -5,6 +5,7 @@ import { AssetPreview } from "$app/parsers/product";
 import { classNames } from "$app/utils/classNames";
 import { MAX_PORTRAIT_FRAME_HEIGHT } from "$app/utils/videoFrame";
 
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { useElementDimensions } from "$app/components/useElementDimensions";
 import { useOnChange } from "$app/components/useOnChange";
 import { useScrollableCarousel } from "$app/components/useScrollableCarousel";
@@ -126,18 +127,41 @@ export const Covers = ({
           className="absolute bottom-0 flex w-full flex-wrap justify-center gap-2 p-3"
         >
           {covers.map((cover, i) => (
-            <div
+            <LinkButton
               key={i}
               role="tab"
               aria-label={`Show cover ${i + 1}`}
               aria-selected={i === activeCoverIndex}
               aria-controls={cover.id}
+              tabIndex={i === activeCoverIndex ? 0 : -1}
+              onKeyDown={(event) => {
+                let index: number;
+                switch (event.key) {
+                  case "ArrowLeft":
+                    index = (i + covers.length - 1) % covers.length;
+                    break;
+                  case "ArrowRight":
+                    index = (i + 1) % covers.length;
+                    break;
+                  case "Home":
+                    index = 0;
+                    break;
+                  case "End":
+                    index = covers.length - 1;
+                    break;
+                  default:
+                    return;
+                }
+                event.preventDefault();
+                setActiveCoverId(covers[index]?.id ?? null);
+                event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[index]?.focus();
+              }}
               onClick={(e) => {
                 e.preventDefault();
                 setActiveCoverId(cover.id);
               }}
               className={classNames(
-                "block rounded-full border border-current bg-background p-2",
+                "block rounded-full border border-current bg-background p-2 focus-visible:outline-2 focus-visible:outline-offset-2",
                 i === activeCoverIndex && "bg-current",
               )}
             />

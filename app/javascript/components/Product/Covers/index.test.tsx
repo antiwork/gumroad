@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -56,6 +56,30 @@ const renderCovers = (covers: AssetPreview[], activeCoverId = covers[0]?.id ?? n
 const frame = (container: HTMLElement) => container.querySelector<HTMLElement>("figure > div");
 
 describe("Covers", () => {
+  it("makes cover tabs keyboard reachable and supports arrow navigation with wrapping", () => {
+    const covers = [cover({ type: "image" }), cover({ id: "cover-2", type: "image" })];
+    const Harness = () => {
+      const [activeCoverId, setActiveCoverId] = React.useState<string | null>("cover-1");
+      return <Covers covers={covers} activeCoverId={activeCoverId} setActiveCoverId={setActiveCoverId} />;
+    };
+    render(<Harness />);
+    const first = screen.getByRole<HTMLButtonElement>("tab", { name: "Show cover 1" });
+    const second = screen.getByRole<HTMLButtonElement>("tab", { name: "Show cover 2" });
+    expect(first.tagName).toBe("BUTTON");
+    expect(first.tabIndex).toBe(0);
+    expect(second.tabIndex).toBe(-1);
+    fireEvent.keyDown(first, { key: "ArrowRight" });
+    expect(second.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(second);
+    fireEvent.keyDown(second, { key: "ArrowRight" });
+    expect(first.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "End" });
+    expect(document.activeElement).toBe(second);
+    fireEvent.keyDown(second, { key: "Home" });
+    expect(document.activeElement).toBe(first);
+  });
+
   it("shapes the frame to a landscape cover's own ratio", () => {
     const { container } = renderCovers([cover()]);
 
