@@ -38,7 +38,7 @@ vi.mock("$app/components/useOriginalLocation", () => ({
   useOriginalLocation: () => "http://localhost/checkout/discounts",
 }));
 
-import { ResponseError } from "$app/utils/request";
+import { AbortError, ResponseError } from "$app/utils/request";
 
 import DiscountsPage, { DiscountsPageProps, OfferCode } from "./DiscountsPage";
 
@@ -82,6 +82,7 @@ const props: DiscountsPageProps = {
 const renderPage = () => render(<DiscountsPage {...props} />);
 
 const clickSort = () => fireEvent.click(screen.getByRole("columnheader", { name: "Discount" }));
+const button = (name: string) => screen.getByRole<HTMLButtonElement>("button", { name });
 
 describe("DiscountsPage loading state", () => {
   beforeEach(() => {
@@ -101,20 +102,22 @@ describe("DiscountsPage loading state", () => {
     clickSort();
     await waitFor(() => expect(mocks.showAlert).toHaveBeenCalledWith("Something went wrong.", "error"));
 
-    fireEvent.click(screen.getByRole("button", { name: "New discount" }));
+    fireEvent.click(button("New discount"));
 
-    const submit = screen.getByRole("button", { name: "Add discount" }) as HTMLButtonElement;
-    expect(submit.disabled).toBe(false);
-    expect((screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(false);
+    expect(button("Add discount").disabled).toBe(false);
+    expect(button("Cancel").disabled).toBe(false);
   });
 
   it("keeps the flag while the newest request is still in flight after an earlier one is cancelled", async () => {
-    let resolveNewest: (value: { offer_codes: OfferCode[]; pagination: { page: number; pages: number } }) => void =
-      () => {};
+    let rejectFirst: (reason: unknown) => void = () => {};
+    let resolveNewest: (value: {
+      offer_codes: OfferCode[];
+      pagination: { page: number; pages: number };
+    }) => void = () => {};
     mocks.getPagedDiscounts
       .mockReturnValueOnce({
-        response: Promise.reject(new ResponseError("Request aborted")),
-        cancel: () => {},
+        response: new Promise((_, reject) => (rejectFirst = reject)),
+        cancel: () => rejectFirst(new AbortError()),
       })
       .mockReturnValueOnce({
         response: new Promise((resolve) => (resolveNewest = resolve)),
@@ -124,13 +127,10 @@ describe("DiscountsPage loading state", () => {
 
     clickSort();
     clickSort();
-    fireEvent.click(screen.getByRole("button", { name: "New discount" }));
-    const whileLoading = screen.getByRole("button", { name: "Adding discount..." }) as HTMLButtonElement;
-    expect(whileLoading.disabled).toBe(true);
+    fireEvent.click(button("New discount"));
+    expect(button("Adding discount...").disabled).toBe(true);
 
     resolveNewest({ offer_codes: [offerCode], pagination: { page: 1, pages: 1 } });
-    await waitFor(() =>
-      expect((screen.getByRole("button", { name: "Add discount" }) as HTMLButtonElement).disabled).toBe(false),
-    );
+    await waitFor(() => expect(button("Add discount").disabled).toBe(false));
   });
 });
