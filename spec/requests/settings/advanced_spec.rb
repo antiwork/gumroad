@@ -6,6 +6,22 @@ require "shared_examples/authorize_called"
 describe("Advanced Settings Scenario", type: :system, js: true) do
   let(:seller) { create(:user, name: "Gum") }
 
+  it "describes the focused test-ping button with its tooltip" do
+    login_as seller
+    visit settings_advanced_path
+
+    button = find_button("Send test ping to URL")
+    page.execute_script("arguments[0].focus()", button)
+    tip = find("[role='tooltip']", text: "Send your most recent sale's JSON, with 'test' set to 'true'")
+    expect(button["aria-describedby"].to_s.split).to include(tip[:id])
+
+    tree = page.driver.browser.execute_cdp("Accessibility.getFullAXTree")
+    control = tree.fetch("nodes").find do |node|
+      node.dig("role", "value") == "button" && node.dig("name", "value") == "Send test ping to URL"
+    end
+    expect(control&.dig("description", "value")).to eq(tip.text)
+  end
+
   describe "deleting the gumroad account" do
     context "when logged user has role admin" do
       include_context "with switching account to user as admin for seller"

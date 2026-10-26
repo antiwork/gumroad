@@ -52,19 +52,66 @@ type Props = {
 } & React.HTMLAttributes<HTMLSpanElement>;
 
 export const WithTooltip = ({ tip, children, position = "bottom", className, tooltipProps, ...props }: Props) => {
-  const id = React.useId();
+  const generatedId = React.useId();
+  const id = tooltipProps?.id ?? generatedId;
+  const contentRef = React.useRef<HTMLSpanElement>(null);
+  const hasTip = Boolean(tip);
+  React.useEffect(() => {
+    const content = contentRef.current;
+    if (!hasTip || !content) return;
+
+    // Descriptions do not inherit through layout wrappers; associate the actual controls,
+    // including controls rendered later by children, without cloning them or replacing refs.
+    const ownedTargets = new Set<Element>();
+    const descriptionIds = (element: Element) =>
+      element.getAttribute("aria-describedby")?.split(/\s+/u).filter(Boolean) ?? [];
+    const release = (element: Element) => {
+      const remaining = descriptionIds(element).filter((value) => value !== id);
+      if (remaining.length > 0) element.setAttribute("aria-describedby", remaining.join(" "));
+      else element.removeAttribute("aria-describedby");
+      ownedTargets.delete(element);
+    };
+    const sync = () => {
+      const targets = new Set(
+        content.querySelectorAll(
+          'a[href], area[href], button, input, select, textarea, summary, [tabindex], [contenteditable]:not([contenteditable="false"])',
+        ),
+      );
+      for (const element of ownedTargets) {
+        if (!targets.has(element)) release(element);
+      }
+      for (const element of targets) {
+        const existing = descriptionIds(element);
+        if (existing.includes(id)) continue;
+        element.setAttribute("aria-describedby", [...existing, id].join(" "));
+        ownedTargets.add(element);
+      }
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(content, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["aria-describedby", "tabindex", "href", "contenteditable"],
+    });
+    return () => {
+      observer.disconnect();
+      for (const element of ownedTargets) release(element);
+    };
+  }, [hasTip, id]);
   const positionClasses = getPositionClasses(position);
 
   return (
     <span {...props} className={classNames("group/tooltip relative inline-grid", className, getSide(position))}>
-      <span aria-describedby={tip ? id : undefined} style={{ display: "contents" }}>
+      <span ref={contentRef} aria-describedby={tip ? id : undefined} style={{ display: "contents" }}>
         {children}
       </span>
       {tip ? (
         <span
           role="tooltip"
-          id={id}
           {...tooltipProps}
+          id={id}
           className={classNames(
             "pointer-events-none absolute z-30 hidden w-40 max-w-max rounded-md bg-primary p-3 text-primary-foreground group-focus-within/tooltip:block group-hover/tooltip:block",
             positionClasses.tooltip,
