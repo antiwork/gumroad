@@ -8,8 +8,8 @@ describe "Partner API", type: :request do
 
   let(:seller) { create(:user, name: "Ada Seller") }
   let(:other_seller) { create(:user) }
-  let!(:partner_creator) { PartnerCreator.create!(oauth_application: partner_application, user: seller, external_user_id: "ext-1") }
-  let!(:other_partner_creator) { PartnerCreator.create!(oauth_application: partner_application, user: other_seller, external_user_id: "ext-2") }
+  let!(:partner_seller) { create(:partner_seller, oauth_application: partner_application, user: seller, external_user_id: "ext-1") }
+  let!(:other_partner_seller) { create(:partner_seller, oauth_application: partner_application, user: other_seller, external_user_id: "ext-2") }
 
   before do
     host! "test.gumroad.com"
@@ -82,7 +82,7 @@ describe "Partner API", type: :request do
 
     before do
       other_partner_application = create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api")
-      PartnerCreator.create!(oauth_application: other_partner_application, user: non_partner_product.user, external_user_id: "ext-1")
+      create(:partner_seller, oauth_application: other_partner_application, user: non_partner_product.user, external_user_id: "ext-1")
       index_model_records(Link)
     end
 
@@ -153,7 +153,7 @@ describe "Partner API", type: :request do
     end
 
     it "excludes a creator removed from the program" do
-      other_partner_creator.mark_deleted!
+      other_partner_seller.mark_deleted!
 
       get_products
 
@@ -222,6 +222,21 @@ describe "Partner API", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["creators"].map { _1["external_user_id"] }).to eq(["ext-2", "ext-1"])
       expect(response.parsed_body["creators"].first.keys).to match_array(%w[external_user_id name avatar_url profile_url])
+    end
+
+    it "applies the hot_and_new age filter to the ranking" do
+      other_product.update!(created_at: (Link::HOT_AND_NEW_PRODUCT_RECENTNESS + 1.day).ago)
+      index_model_records(Link)
+
+      get "/api/v2/partner/creators/top", params: { access_token: token.token, sort: "hot_and_new" }
+
+      expect(response.parsed_body["creators"].map { _1["external_user_id"] }).to eq(["ext-1"])
+    end
+
+    it "rejects an unsupported sort" do
+      get "/api/v2/partner/creators/top", params: { access_token: token.token, sort: "price_asc" }
+
+      expect(response).to have_http_status(:bad_request)
     end
 
     it "limits the number of creators" do
