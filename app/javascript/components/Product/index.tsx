@@ -301,7 +301,6 @@ export const Product = ({
   saleLabel,
   selectionDiscountCode,
   quote,
-  ctaLabel,
   selection,
   setSelection,
   ctaButtonRef,
@@ -320,7 +319,6 @@ export const Product = ({
   selectionDiscountCode?: ((optionId: string | null, rent: boolean) => ProductDiscount | null) | undefined;
   // Whether the codes above were quoted for the current selection; the buy buttons wait until they are.
   quote?: SelectionQuote | undefined;
-  ctaLabel?: string | undefined;
   selection: PriceSelection;
   setSelection?: React.Dispatch<React.SetStateAction<PriceSelection>>;
   ctaButtonRef?: React.MutableRefObject<HTMLAnchorElement | null>;
@@ -863,7 +861,6 @@ export const Product = ({
             pricePending={!!quote && quote.state !== "ready"}
             priceLoading={quote?.state === "loading"}
             selection={selection}
-            label={ctaLabel}
             showInstallmentPlanNotes
             setSelection={setSelection}
             configurationSelectorRef={configurationSelectorRef}

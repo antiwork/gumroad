@@ -41,7 +41,6 @@ const LazySectionEditor = lazyWithRetry(
 
 export const Layout = (
   props: Props & {
-    cart?: boolean;
     hasHero?: boolean;
     hideSellerByline?: boolean;
   },
@@ -51,7 +50,6 @@ export const Layout = (
     purchase,
     discount_code: initialDiscountCode,
     sale_label: initialSaleLabel,
-    cart,
     hasHero,
     wishlists,
     main_section_index,
@@ -65,7 +63,6 @@ export const Layout = (
     selection,
   });
   const ctaButtonRef = React.useRef<HTMLAnchorElement>(null);
-  const ctaLabel = cart ? "Add to cart" : undefined;
 
   const configurationSelectorRef = React.useRef<ConfigurationSelectorHandle>(null);
 
@@ -79,7 +76,6 @@ export const Layout = (
         saleLabel={saleLabel}
         selectionDiscountCode={selectionDiscountCode}
         quote={quote}
-        ctaLabel={ctaLabel}
         selection={selection}
         setSelection={setSelection}
         ctaButtonRef={ctaButtonRef}
@@ -111,7 +107,6 @@ export const Layout = (
         discountCode={discountCode}
         pricePending={quote.state !== "ready"}
         priceLoading={quote.state === "loading"}
-        ctaLabel={ctaLabel}
         selection={selection}
         setSelection={setSelection}
         ctaButtonRef={ctaButtonRef}
@@ -147,7 +142,6 @@ const CtaBar = ({
   priceLoading,
   ctaButtonRef,
   configurationSelectorRef,
-  ctaLabel,
   selection,
   setSelection,
   hasHero,
@@ -159,7 +153,6 @@ const CtaBar = ({
   priceLoading: boolean;
   ctaButtonRef: React.RefObject<HTMLAnchorElement>;
   configurationSelectorRef: React.RefObject<ConfigurationSelectorHandle>;
-  ctaLabel?: string | undefined;
   selection: PriceSelection;
   setSelection: React.Dispatch<React.SetStateAction<PriceSelection>>;
   hasHero: boolean;
@@ -283,7 +276,6 @@ const CtaBar = ({
             pricePending={pricePending}
             priceLoading={priceLoading}
             selection={selection}
-            label={ctaLabel}
             setSelection={setSelection}
             configurationSelectorRef={configurationSelectorRef}
           />

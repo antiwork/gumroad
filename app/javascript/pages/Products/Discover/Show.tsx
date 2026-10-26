@@ -21,7 +21,7 @@ function DiscoverProductShowPage() {
       taxonomiesForNav={props.taxonomies_for_nav}
       forceDomain
     >
-      <Layout cart hasHero {...props} />
+      <Layout hasHero {...props} />
       {/* Render an empty div for the add section button */}
       {"products" in props ? <div /> : null}
     </DiscoverLayout>

@@ -205,6 +205,12 @@ for (const surface of ["sticky", "inline"] as const) {
       expect(checkoutParams(cta).get("product")).toBe(product.permalink);
     });
 
+    it("uses the seller's call to action", () => {
+      const { bar } = renderLayout({ ...product, custom_button_text_option: "pay_prompt" });
+      expect(getCta(bar, surface, "Pay")).toBeTruthy();
+      expect(screen.queryByRole("link", { name: "Add to cart" })).toBeNull();
+    });
+
     it.each([
       ["", false, null],
       ["4", false, null],
