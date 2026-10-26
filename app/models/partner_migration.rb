@@ -80,10 +80,16 @@ class PartnerMigration < ApplicationRecord
 
     currency = raw[:price_currency_type].nil? ? "usd" : raw[:price_currency_type].to_s.downcase
     return [nil, "price_currency_type is not a supported currency."] unless CURRENCY_CHOICES.key?(currency)
+    min_price = CURRENCY_CHOICES[currency]["min_price"]
+    return [nil, "price must be 0 or at least #{min_price} cents in #{currency}."] unless raw[:price].zero? || raw[:price] >= min_price
     return [nil, "taxonomy_id is not a known category."] unless raw[:taxonomy_id].nil? || (raw[:taxonomy_id].is_a?(Integer) && Taxonomy.exists?(id: raw[:taxonomy_id]))
 
     tags = raw[:tags].nil? ? [] : raw[:tags]
     return [nil, "tags must be an array of strings."] unless tags.is_a?(Array) && tags.all? { string?(_1) }
+    # Product#tag! cannot save the same tag twice, so clean them up as Tag#clean_name does first.
+    tags = tags.map { _1.downcase.strip.gsub(/[[:space:]]+/, " ") }.uniq
+    tag_error = tags.lazy.filter_map { tag_error(_1) }.first
+    return [nil, "tags: #{tag_error}"] if tag_error
 
     files = raw[:files].nil? ? [] : raw[:files]
     return [nil, "files must be an array with up to #{MAX_FILES_PER_PRODUCT} items."] unless files.is_a?(Array) && files.size <= MAX_FILES_PER_PRODUCT
@@ -132,6 +138,13 @@ class PartnerMigration < ApplicationRecord
 
   def self.string?(value) = value.is_a?(String)
 
+  # Tag's own name rules, without its uniqueness check: the import reuses an existing tag.
+  def self.tag_error(name)
+    tag = Tag.new(name:)
+    Tag.validators_on(:name).grep_v(ActiveRecord::Validations::UniquenessValidator).each { _1.validate(tag) }
+    tag.errors[:name].first
+  end
+
   def self.https_url?(value)
     return false unless value.is_a?(String)
 
@@ -140,7 +153,7 @@ class PartnerMigration < ApplicationRecord
   rescue URI::InvalidURIError
     false
   end
-  private_class_method :normalize_product, :normalize_variant_categories, :string?, :https_url?
+  private_class_method :normalize_product, :normalize_variant_categories, :string?, :tag_error, :https_url?
 
   def pending? = status == STATUS_PENDING
   def expired?(at = Time.current) = expires_at <= at

@@ -61,6 +61,24 @@ describe PartnerMigration do
       expect(error).to eq("products[0]: each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}.")
     end
 
+    it "rejects a price below the currency's minimum" do
+      _products, error = described_class.normalize_products([product_attributes.merge(price: 50)])
+
+      expect(error).to eq("products[0]: price must be 0 or at least 99 cents in usd.")
+    end
+
+    it "cleans tags the way products save them and drops duplicates" do
+      products, _error = described_class.normalize_products([product_attributes.merge(tags: [" Art ", "art", "Digital  Art"])])
+
+      expect(products.first["tags"]).to eq(["art", "digital art"])
+    end
+
+    it "rejects a tag that a product cannot use" do
+      _products, error = described_class.normalize_products([product_attributes.merge(tags: ["textures", "x" * 21])])
+
+      expect(error).to eq("products[0]: tags: A tag is too long. Please try again with a shorter one, under 20 characters.")
+    end
+
     it "rejects an unknown taxonomy" do
       _products, error = described_class.normalize_products([product_attributes.merge(taxonomy_id: 0)])
 
