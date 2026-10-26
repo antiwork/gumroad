@@ -19,6 +19,8 @@ class RetryStripeRejectedPayoutSetupsJob
            .uniq
            .each { |user_id| RetryStripeRejectedPayoutSetupForSellerJob.perform_async(user_id) }
     end
+
+    RetryStripeJpAddressResyncsJob.new.perform
   end
 
   def self.retry_count(note)
