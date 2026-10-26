@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_19_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_20_000001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1114,6 +1114,22 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_19_000005) do
     t.index ["slug", "sluggable_type", "scope"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type_and_scope", unique: true, length: { slug: 70, scope: 70 }
     t.index ["slug", "sluggable_type"], name: "index_friendly_id_slugs_on_slug_and_sluggable_type", length: { slug: 140 }
     t.index ["sluggable_type", "sluggable_id"], name: "index_friendly_id_slugs_on_sluggable_type_and_sluggable_id"
+  end
+
+  create_table "game_builds", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "link_id", null: false
+    t.integer "number", null: false
+    t.string "status", limit: 16, default: "uploaded", null: false
+    t.string "source_url", limit: 1024, null: false
+    t.string "storage_key", limit: 1024, null: false
+    t.bigint "byte_size", null: false
+    t.bigint "product_file_id"
+    t.datetime "promoted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["link_id", "number"], name: "index_game_builds_on_link_id_and_number", unique: true
+    t.index ["link_id", "source_url"], name: "index_game_builds_on_link_id_and_source_url", unique: true, length: { source_url: 191 }
+    t.index ["link_id", "status"], name: "index_game_builds_on_link_id_and_status"
   end
 
   create_table "gifts", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
