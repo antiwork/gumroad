@@ -163,6 +163,14 @@ describe PartnerMigrationImportJob do
     expect(seller.links.sole.tags.pluck(:name)).to eq(["art"])
   end
 
+  it "imports tags that the tags table treats as the same name once" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500, tags: ["café", "cafe"] }])
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.links.sole.tags.pluck(:name)).to eq(["café"])
+  end
+
   it "lets Sidekiq retry a failed DNS lookup" do
     allow(SsrfFilter).to receive(:get).and_raise(SsrfFilter::UnresolvedHostname)
     migration = create_claimed_migration([product_attributes])

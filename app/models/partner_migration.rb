@@ -87,7 +87,7 @@ class PartnerMigration < ApplicationRecord
     tags = raw[:tags].nil? ? [] : raw[:tags]
     return [nil, "tags must be an array of strings."] unless tags.is_a?(Array) && tags.all? { string?(_1) }
     # Product#tag! cannot save the same tag twice, so clean them up as Tag#clean_name does first.
-    tags = tags.map { _1.downcase.strip.gsub(/[[:space:]]+/, " ") }.uniq
+    tags = unique_tag_names(tags.map { _1.downcase.strip.gsub(/[[:space:]]+/, " ") }.uniq)
     tag_error = tags.lazy.filter_map { tag_error(_1) }.first
     return [nil, "tags: #{tag_error}"] if tag_error
 
@@ -138,6 +138,19 @@ class PartnerMigration < ApplicationRecord
 
   def self.string?(value) = value.is_a?(String)
 
+  # Keeps the first of the names that tags.name treats as equal. Its collation matches "café" with
+  # "cafe" and "straße" with "strasse", which Ruby cannot reproduce, so MySQL groups them.
+  def self.unique_tag_names(names)
+    return names if names.size < 2
+
+    collation = Tag.columns_hash.fetch("name").collation
+    raise ArgumentError, "Unexpected collation #{collation.inspect}" unless collation.match?(/\A\w+\z/)
+
+    rows = Array.new(names.size, "SELECT ? AS position, ? AS name").join(" UNION ALL ")
+    sql = sanitize_sql_array(["SELECT MIN(position) FROM (#{rows}) names GROUP BY name COLLATE #{collation}", *names.each_with_index.flat_map { [_2, _1] }])
+    connection.select_values(sql).map(&:to_i).sort.map { names[_1] }
+  end
+
   # Tag's own name rules, without its uniqueness check: the import reuses an existing tag.
   def self.tag_error(name)
     tag = Tag.new(name:)
@@ -153,7 +166,7 @@ class PartnerMigration < ApplicationRecord
   rescue URI::InvalidURIError
     false
   end
-  private_class_method :normalize_product, :normalize_variant_categories, :string?, :tag_error, :https_url?
+  private_class_method :normalize_product, :normalize_variant_categories, :string?, :unique_tag_names, :tag_error, :https_url?
 
   def pending? = status == STATUS_PENDING
   def expired?(at = Time.current) = expires_at <= at

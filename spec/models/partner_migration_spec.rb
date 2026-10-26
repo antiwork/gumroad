@@ -73,6 +73,12 @@ describe PartnerMigration do
       expect(products.first["tags"]).to eq(["art", "digital art"])
     end
 
+    it "drops tags that the tags table treats as the same name" do
+      products, _error = described_class.normalize_products([product_attributes.merge(tags: ["café", "cafe", "straße", "strasse"])])
+
+      expect(products.first["tags"]).to eq(["café", "straße"])
+    end
+
     it "rejects a tag that a product cannot use" do
       _products, error = described_class.normalize_products([product_attributes.merge(tags: ["textures", "x" * 21])])
 
