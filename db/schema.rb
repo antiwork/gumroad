@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_20_000002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_20_000003) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1675,6 +1675,25 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_20_000002) do
     t.index ["oauth_application_id", "external_user_id"], name: "index_partner_creators_on_application_and_external_user", unique: true
     t.index ["oauth_application_id", "user_id"], name: "index_partner_creators_on_application_and_user", unique: true
     t.index ["user_id"], name: "index_partner_creators_on_user_id"
+  end
+
+  create_table "partner_migrations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.integer "oauth_application_id", null: false
+    t.string "external_user_id", null: false
+    t.string "code_digest", null: false
+    t.json "products", null: false
+    t.json "results"
+    t.string "status", default: "pending", null: false
+    t.bigint "user_id"
+    t.datetime "expires_at", null: false
+    t.datetime "claimed_at"
+    t.datetime "completed_at"
+    t.string "failure_reason"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["code_digest"], name: "index_partner_migrations_on_code_digest", unique: true
+    t.index ["oauth_application_id", "external_user_id"], name: "index_partner_migrations_on_application_and_external_user"
+    t.index ["user_id"], name: "index_partner_migrations_on_user_id"
   end
 
   create_table "payment_options", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

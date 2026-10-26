@@ -1,0 +1,77 @@
+# frozen_string_literal: true
+
+# Imports a claimed partner migration's products as drafts for the claiming creator.
+#
+# `results` records each product by its index in the payload, in the same transaction that creates
+# the product. A retry skips the products already recorded, so it does not create duplicates.
+class PartnerMigrationImportJob
+  include Sidekiq::Job
+  sidekiq_options queue: :long, retry: 5, lock: :until_executed
+
+  # Errors that a retry cannot fix. The product is recorded as failed and the import continues.
+  # Other errors, such as a network error or PartnerMigration::RemoteFileTransfer::TemporaryError,
+  # reach Sidekiq, which retries the job.
+  PRODUCT_ERRORS = [
+    PartnerMigration::RemoteFileTransfer::Error, SsrfFilter::Error, URI::InvalidURIError,
+    ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved, Link::LinkInvalid
+  ].freeze
+
+  sidekiq_retries_exhausted do |job, exception|
+    PartnerMigration.find_by(id: job["args"].first)&.update!(status: PartnerMigration::STATUS_FAILED, failure_reason: exception.message.truncate(255))
+  end
+
+  def perform(partner_migration_id)
+    # The claim may not have replicated yet.
+    ApplicationRecord.connected_to(role: :writing) do
+      migration = PartnerMigration.find(partner_migration_id)
+      return unless migration.status == PartnerMigration::STATUS_CLAIMED
+
+      migration.products.each_with_index do |attributes, index|
+        result = migration.results&.dig(index.to_s)
+        if result.nil?
+          import_product(migration, index, attributes)
+        elsif result["media_pending"]
+          # A previous attempt stopped after it created the product. Retrying the media could add
+          # the same covers twice, so report it instead.
+          record_result(migration, index, "product_id" => result["product_id"], "warnings" => ["The import stopped before the covers and thumbnail were added."])
+        end
+      end
+
+      migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current)
+    end
+  end
+
+  private
+    def import_product(migration, index, attributes)
+      importer = PartnerMigration::ProductImporter.new(seller: migration.user, attributes:)
+      file_urls = importer.download_files
+      product = begin
+        ActiveRecord::Base.transaction do
+          importer.create_product!(file_urls).tap { record_result(migration, index, "product_id" => _1.external_id, "media_pending" => true) }
+        end
+      rescue StandardError
+        # An after_commit callback can raise after the product is saved. Its files must stay.
+        importer.discard_uploaded_files unless product_recorded?(migration, index)
+        raise
+      end
+
+      warnings = importer.attach_media(product)
+      record_result(migration, index, { "product_id" => product.external_id, "warnings" => warnings.presence }.compact)
+    rescue SsrfFilter::UnresolvedHostname
+      # A DNS lookup can fail for a moment, so Sidekiq retries it.
+      raise
+    rescue *PRODUCT_ERRORS => e
+      # A saved product keeps its result. The retry reports its unfinished media.
+      raise if product_recorded?(migration, index)
+
+      record_result(migration, index, "error" => e.message)
+    end
+
+    def product_recorded?(migration, index)
+      PartnerMigration.where(id: migration.id).pick(:results)&.key?(index.to_s)
+    end
+
+    def record_result(migration, index, result)
+      migration.update!(results: (migration.results || {}).merge(index.to_s => result))
+    end
+end

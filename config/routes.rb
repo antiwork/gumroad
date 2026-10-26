@@ -203,6 +203,7 @@ Rails.application.routes.draw do
       get "/partner/products", to: "partner/products#index"
       get "/partner/creators/top", to: "partner/creators#top"
       get "/partner/categories", to: "partner/categories#index"
+      post "/partner/migrations", to: "partner/migrations#create"
     end
   end
 
@@ -1093,6 +1094,10 @@ Rails.application.routes.draw do
 
     post "/products/:id/release_preorder", to: "links#release_preorder", as: :release_preorder
 
+
+    # One-time links from a partner application to import a creator's products.
+    get "/partner_migration" => "partner_migrations#show", as: :partner_migration
+    post "/partner_migration" => "partner_migrations#create"
 
     get "/dashboard" => "dashboard#index", as: :dashboard
     get "/dashboard/customers_count" => "dashboard#customers_count", as: :dashboard_customers_count

@@ -1,0 +1,34 @@
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+  <% if @claimed %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <h2>Import started</h2>
+      <p>Your products will appear as drafts in your Gumroad account. Review each one before you publish it.</p>
+    </header>
+    <footer class="flex flex-col gap-4 p-4 text-center">
+      <%= link_to "Go to products", products_path, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
+    </footer>
+  <% elsif @error_message.present? %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <h2>Import not available</h2>
+      <p><%= @error_message %></p>
+    </header>
+  <% else %>
+    <header class="flex flex-col gap-4 p-4 text-center">
+      <div>
+        <%= image_tag @migration.oauth_application.icon_url || image_path("gumroad_app.png"), size: "72" %>
+      </div>
+      <h2>
+        Import <%= pluralize(@migration.products.size, "product") %> from
+        <strong><%= @migration.oauth_application.name %></strong>?
+      </h2>
+      <p>The products are imported as drafts in <strong><%= current_user.email %></strong>. Nothing is published until you publish it.</p>
+      <p>This also links this Gumroad account to your <%= @migration.oauth_application.name %> account.</p>
+    </header>
+    <footer class="flex flex-col gap-4 p-4 text-center">
+      <%= form_tag partner_migration_path, method: :post, style: "display: contents" do %>
+        <%= hidden_field_tag :partner_migration_id, @migration.id %>
+        <%= button_tag "Import products", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
+      <% end %>
+    </footer>
+  <% end %>
+</main>
