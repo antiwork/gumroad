@@ -240,6 +240,21 @@ describe "Widget Page scenario", js: true, type: :system do
           end
         end
 
+        %w[light dark].each do |color_scheme|
+          it "renders the subscribe copy action without a background in #{color_scheme} mode" do
+            page.driver.browser.execute_cdp("Emulation.setEmulatedMedia", features: [{ name: "prefers-color-scheme", value: color_scheme }])
+            visit widgets_path
+
+            within_section "Subscribe form", section_element: :section do
+              copy_button = find_button("Copy embed code")
+              expect(copy_button.evaluate_script("getComputedStyle(this).backgroundColor")).to eq("rgba(0, 0, 0, 0)")
+              expect(copy_button[:type]).to eq("button")
+            end
+          ensure
+            page.driver.browser.execute_cdp("Emulation.setEmulatedMedia", features: [])
+          end
+        end
+
         it "allows previewing follow form embed" do
           visit widgets_path
           within_section "Subscribe form", section_element: :section  do

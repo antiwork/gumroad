@@ -22,6 +22,7 @@ import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Switch } from "$app/components/ui/Switch";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -123,9 +124,7 @@ export default function PublicWidgets() {
               <FieldsetTitle>
                 <Label htmlFor={followFormEmbedUID}>Subscribe form embed code</Label>
                 <CopyToClipboard text={followFormEmbedHTML} copyTooltip="Copy to Clipboard" tooltipPosition="top">
-                  <button type="button" className="font-normal underline">
-                    Copy embed code
-                  </button>
+                  <LinkButton className="font-normal">Copy embed code</LinkButton>
                 </CopyToClipboard>
               </FieldsetTitle>
               <Textarea id={followFormEmbedUID} value={followFormEmbedHTML} readOnly />
