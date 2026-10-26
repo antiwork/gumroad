@@ -140,6 +140,29 @@ describe PartnerMigrationImportJob do
     expect(migration.reload.results).to be_nil
   end
 
+  it "imports the other products before letting Sidekiq retry a temporary failure" do
+    allow(SsrfFilter).to receive(:get).and_wrap_original do |original, url, &block|
+      next original.call(url, &block) unless url.to_s == "https://files.example.com/pack.zip"
+
+      Net::HTTPServiceUnavailable.new("1.1", "503", "")
+    end
+    migration = create_claimed_migration([product_attributes, { name: "Brush Set", price: 500 }])
+
+    expect { described_class.new.perform(migration.id) }.to raise_error(PartnerMigration::RemoteFileTransfer::TemporaryError)
+
+    brush_set = seller.links.sole
+    expect(brush_set.name).to eq("Brush Set")
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_CLAIMED, results: { "1" => { "product_id" => brush_set.external_id } })
+  end
+
+  it "imports tags that differ only in case once" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500, tags: ["Art", "art"] }])
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.links.sole.tags.pluck(:name)).to eq(["art"])
+  end
+
   it "lets Sidekiq retry a failed DNS lookup" do
     allow(SsrfFilter).to receive(:get).and_raise(SsrfFilter::UnresolvedHostname)
     migration = create_claimed_migration([product_attributes])

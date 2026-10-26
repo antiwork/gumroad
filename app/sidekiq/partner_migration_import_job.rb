@@ -26,6 +26,9 @@ class PartnerMigrationImportJob
       migration = PartnerMigration.find(partner_migration_id)
       return unless migration.status == PartnerMigration::STATUS_CLAIMED
 
+      # An error that a retry may fix does not hold back the products after it. The job imports them,
+      # then raises the first such error, so the Sidekiq retry imports only the products left.
+      retry_error = nil
       migration.products.each_with_index do |attributes, index|
         result = migration.results&.dig(index.to_s)
         if result.nil?
@@ -35,7 +38,12 @@ class PartnerMigrationImportJob
           # the same covers twice, so report it instead.
           record_result(migration, index, "product_id" => result["product_id"], "warnings" => ["The import stopped before the covers and thumbnail were added."])
         end
+      rescue StandardError => e
+        retry_error ||= e
+        # A rolled-back transaction can leave a result in memory that was never saved.
+        migration.reload
       end
+      raise retry_error if retry_error
 
       migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current)
     end
