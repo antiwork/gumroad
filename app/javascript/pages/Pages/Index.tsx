@@ -204,8 +204,8 @@ export default function PagesIndex() {
                     onSuccess: () => setDeleting(null),
                     onError: () => {
                       showAlert("Failed to delete the page. Please try again.", "error");
-                      setDeleting({ ...deleting, busy: false });
                     },
+                    onFinish: () => setDeleting((current) => current && { ...current, busy: false }),
                   });
                 }}
               >
