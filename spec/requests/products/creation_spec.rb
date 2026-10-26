@@ -380,6 +380,48 @@ describe "Product creation", type: :system, js: true do
       allow_any_instance_of(User).to receive(:eligible_for_ai_product_generation?).and_return(true)
     end
 
+    describe "promo dismissal" do
+      %w[light dark].each do |color_scheme|
+        it "renders the close action without a background in #{color_scheme} mode" do
+          page.driver.browser.execute_cdp("Emulation.setEmulatedMedia", features: [{ name: "prefers-color-scheme", value: color_scheme }])
+          visit new_product_path
+
+          close_button = find_button("close", exact: true)
+          expect(close_button.evaluate_script("getComputedStyle(this).backgroundColor")).to eq("rgba(0, 0, 0, 0)")
+          expect(close_button[:type]).to eq("button")
+        ensure
+          page.driver.browser.execute_cdp("Emulation.setEmulatedMedia", features: [])
+        end
+      end
+
+      %w[click keyboard].each do |activation|
+        it "dismisses the promo by #{activation} without creating a product or losing entered values" do
+          visit new_product_path
+          fill_in "Name", with: "Draft product"
+          fill_in "Price", with: "12"
+          original_product_count = seller.products.count
+
+          close_button = find_button("close", exact: true)
+          activation == "click" ? close_button.click : close_button.send_keys(:enter)
+
+          expect(page).not_to have_status(text: "New. You can create your product using AI now")
+          expect(page).to have_button("Next: Customize", disabled: false)
+          expect(page).to have_current_path(new_product_path)
+          expect(page).to have_field("Name", with: "Draft product")
+          expect(page).to have_field("Price", with: "12")
+          expect(seller.reload.dismissed_create_products_with_ai_promo_alert?).to be(true)
+          expect(seller.products.count).to eq(original_product_count)
+
+          click_on "Next: Customize"
+          expect(page).to have_title("Draft product")
+          expect(seller.products.count).to eq(original_product_count + 1)
+
+          visit new_product_path
+          expect(page).not_to have_status(text: "New. You can create your product using AI now")
+        end
+      end
+    end
+
     it "explains when the hourly generation limit clears" do
       throttle_key = RedisKey.ai_request_throttle(seller.id)
       $redis.setex(throttle_key, 15.minutes.to_i, 10)
