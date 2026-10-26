@@ -862,7 +862,7 @@ describe "UTM links", :js, type: :system do
       wait_for_ajax
       seller1_utm_link_visit = seller1_utm_link.utm_link_visits.last
       click_on "Product 1 by Seller 1"
-      click_on "Add to cart"
+      product_page_cta.click
       visit product2.long_url
       add_to_cart(product2)
 
