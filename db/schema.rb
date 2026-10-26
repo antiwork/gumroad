@@ -1664,7 +1664,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_21_000002) do
     t.index ["pageable_type", "pageable_id", "slug"], name: "index_pages_on_pageable_and_slug", unique: true
   end
 
-  create_table "partner_creators", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+  create_table "partner_sellers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.integer "oauth_application_id", null: false
     t.bigint "user_id", null: false
     t.string "external_user_id", null: false
@@ -1672,9 +1672,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_21_000002) do
     t.datetime "deleted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.index ["oauth_application_id", "external_user_id"], name: "index_partner_creators_on_application_and_external_user", unique: true
-    t.index ["oauth_application_id", "user_id"], name: "index_partner_creators_on_application_and_user", unique: true
-    t.index ["user_id"], name: "index_partner_creators_on_user_id"
+    t.index ["oauth_application_id", "external_user_id"], name: "index_partner_sellers_on_application_and_external_user", unique: true
+    t.index ["oauth_application_id", "user_id"], name: "index_partner_sellers_on_application_and_user", unique: true
+    t.index ["user_id"], name: "index_partner_sellers_on_user_id"
   end
 
   create_table "payment_options", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

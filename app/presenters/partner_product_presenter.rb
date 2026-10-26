@@ -8,9 +8,9 @@ class PartnerProductPresenter
   include ActionView::Helpers::OutputSafetyHelper
   include CurrencyHelper
 
-  def initialize(product:, partner_creator:)
+  def initialize(product:, partner_seller:)
     @product = product
-    @partner_creator = partner_creator
+    @partner_seller = partner_seller
   end
 
   def props
@@ -36,10 +36,10 @@ class PartnerProductPresenter
       is_recurring_billing: product.is_recurring_billing,
       ratings: card_props[:ratings],
       rated_as_adult: product.rated_as_adult?,
-      creator: PartnerCreatorPresenter.new(partner_creator:).props,
+      creator: PartnerSellerPresenter.new(partner_seller:).props,
     }
   end
 
   private
-    attr_reader :product, :partner_creator
+    attr_reader :product, :partner_seller
 end
