@@ -64,7 +64,9 @@ class GameBuild < ApplicationRecord
     # the product (or of each variant) and the superseded one is removed everywhere.
     def swap_file_embed(old_file, new_file)
       per_variant = !product.has_product_level_rich_content?
-      contents = per_variant ? product.alive_variants.flat_map { _1.alive_rich_contents.to_a } : product.alive_rich_contents.to_a
+      contents = per_variant ? product.alive_variants.flat_map { _1.alive_rich_contents.to_a } : []
+      # Buyers without a version still read the product's own pages while any has content (UrlRedirect).
+      contents += product.alive_rich_contents.to_a if !per_variant || product.alive_rich_contents.any?(&:has_editor_content?)
       first_page_ids = contents.group_by { [_1.entity_type, _1.entity_id] }.values.map { |pages| pages.min_by(&:position).id }
       contents.each do |content|
         nodes = old_file ? RichContent.reject_file_embeds(content.description, [old_file.id]) : content.description.to_a

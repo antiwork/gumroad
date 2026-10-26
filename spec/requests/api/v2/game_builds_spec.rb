@@ -213,6 +213,19 @@ describe "Game builds API" do
         buyers.each { expect(buyer_file_ids(_1)).to eq([second.reload.product_file.external_id]) }
       end
 
+      it "gives buyers from before the versions existed the live zip when the product's own pages still embed files" do
+        manual = product.product_files.create!(url: upload_zip("manual", filename: "manual.zip"))
+        page = create(:rich_content, entity: product, description: [{ "type" => "fileEmbed", "attrs" => { "id" => manual.external_id, "uid" => SecureRandom.uuid } }])
+        early_buyer = create(:purchase, link: product, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
+        deploy(upload_zip)
+        build = product.game_builds.sole
+
+        promote(build)
+
+        expect(buyer_file_ids(early_buyer)).to eq([manual.external_id, build.reload.product_file.external_id])
+        expect(page.reload.description.count { _1["type"] == "fileEmbed" }).to eq(2)
+      end
+
       it "gives buyers of a variant without content pages the live zip, also after the seller saves the versions" do
         deploy(upload_zip)
         build = product.game_builds.sole
