@@ -57,7 +57,29 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
         search_params.merge!(taxonomy_id: category[:id], include_taxonomy_descendants: true)
       end
 
-      search_params.merge(user_id: creators.map(&:user_id), is_alive_on_profile: true)
+      user_ids = creators.map(&:user_id)
+      search_params.merge(user_id: user_ids, is_alive_on_profile: true, exclude_ids: product_ids_hidden_from_profile(user_ids))
+    end
+
+    # A seller with saved profile sections shows only the products in their product grids and
+    # featured product sections. A seller without saved sections shows every live product
+    # (ProfileSectionsPresenter.default_products_section_available?).
+    def product_ids_hidden_from_profile(user_ids)
+      sections_by_seller_id = SellerProfileSection.on_profile.where(seller_id: user_ids).group_by(&:seller_id)
+      return [] if sections_by_seller_id.empty?
+
+      Link.where(user_id: sections_by_seller_id.keys).alive.not_archived.pluck(:id, :user_id).filter_map do |product_id, seller_id|
+        product_id unless shown_on_profile?(product_id, sections_by_seller_id[seller_id])
+      end
+    end
+
+    def shown_on_profile?(product_id, sections)
+      sections.any? do |section|
+        case section
+        when SellerProfileProductsSection then section.shown_products.include?(product_id)
+        when SellerProfileFeaturedProductSection then section.featured_product_id == product_id
+        end
+      end
     end
 
     def render_bad_request(message)

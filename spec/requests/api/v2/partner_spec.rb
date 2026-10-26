@@ -108,6 +108,38 @@ describe "Partner API", type: :request do
       expect(listing.keys).not_to include("sales_count", "sales_usd_cents", "files", "rich_content")
     end
 
+    it "excludes products that a seller with profile sections does not show" do
+      hidden_product = create(:product, user: seller)
+      create(:seller_profile_products_section, seller:, shown_products: [product.id])
+      index_model_records(Link)
+
+      get_products
+
+      expect(response.parsed_body["products"].map { _1["id"] }).to match_array([product.external_id, other_product.external_id])
+      expect(response.parsed_body["products"].map { _1["id"] }).not_to include(hidden_product.external_id)
+    end
+
+    it "includes a product that a seller features on the profile" do
+      featured_product = create(:product, user: seller)
+      create(:seller_profile_featured_product_section, seller:, featured_product_id: featured_product.id)
+      index_model_records(Link)
+
+      get_products(external_user_id: "ext-1")
+
+      expect(response.parsed_body["products"].map { _1["id"] }).to eq([featured_product.external_id])
+    end
+
+    it "does not let another seller's section show a hidden product" do
+      hidden_product = create(:product, user: seller)
+      create(:seller_profile_products_section, seller:, shown_products: [product.id])
+      create(:seller_profile_products_section, seller: other_seller, shown_products: [other_product.id, hidden_product.id])
+      index_model_records(Link)
+
+      get_products
+
+      expect(response.parsed_body["products"].map { _1["id"] }).to match_array([product.external_id, other_product.external_id])
+    end
+
     it "narrows to one creator by external user ID" do
       get_products(external_user_id: "ext-2")
 
