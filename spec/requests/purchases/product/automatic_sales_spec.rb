@@ -511,11 +511,9 @@ describe "Automatic sales on product pages", type: :system, js: true do
         click_on "Target product"
       end
       choose "Premium"
-      within find(:article) do
-        query = Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)
-        expect(query["option"]).to eq(premium.external_id)
-        expect(query["code"]).to eq("RENEW20")
-      end
+      query = Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)
+      expect(query["option"]).to eq(premium.external_id)
+      expect(query["code"]).to eq("RENEW20")
       product_page_cta.click
 
       expect(page).to have_cart_item("Target product")
@@ -669,9 +667,7 @@ describe "Automatic sales on product pages", type: :system, js: true do
         click_on "Target membership"
       end
       choose "Second Tier"
-      within find(:article) do
-        expect(Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)).not_to have_key("code")
-      end
+      expect(Rack::Utils.parse_query(URI.parse(product_page_cta[:href]).query)).not_to have_key("code")
       product_page_cta.click
       expect(page).to have_cart_item("Target membership")
       expect(page).to have_text("Total US$70", normalize_ws: true)
