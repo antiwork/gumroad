@@ -152,9 +152,8 @@ class BundlePresenter
           products: bundle.bundle_products.alive.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).map { self.class.bundle_product(product: _1.product, quantity: _1.quantity, selected_variant_id: _1.variant&.external_id) },
           collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
           public_files: bundle.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
-          # Files still attached to the bundle itself, not to a product in it. A product converted
-          # into a bundle keeps its old ProductFile rows and the download archive ships them to
-          # buyers, so the editor lists them for removal.
+          # Files still attached to the bundle itself, not to a product in it: a converted bundle
+          # keeps the files the product had, and buyers receive them.
           retained_files: retained_files_props,
           default_offer_code: default_offer_code ? {
             id: default_offer_code.external_id,

@@ -21,9 +21,8 @@ type RetainedFilesEditorProps = {
   onRemoved: (id: string) => void;
 };
 
-// Files attached to the bundle link itself, rather than to a product in the bundle. They are
-// invisible in every other bundle surface and are delivered to buyers, so the seller needs to see
-// them and be able to remove them. Hidden entirely when there are none, which is the normal case.
+// Files attached to the bundle itself, rather than to a product in it: a converted bundle keeps the
+// files the product had, they ship to buyers, and no other bundle surface lists them.
 export const RetainedFilesEditor = ({ bundleId, files, onRemoved }: RetainedFilesEditorProps) => {
   const [pendingRemoval, setPendingRemoval] = React.useState<RetainedFile | null>(null);
   const [isRemoving, setIsRemoving] = React.useState(false);

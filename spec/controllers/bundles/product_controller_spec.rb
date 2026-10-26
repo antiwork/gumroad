@@ -173,7 +173,7 @@ describe Bundles::ProductController, inertia: true do
       let(:request_params) { { bundle_id: bundle.external_id, file_id: file.external_id } }
     end
 
-    it "soft-deletes the file and re-indexes the link's filetypes" do
+    it "soft-deletes the file and re-indexes the product's filetypes" do
       expect_any_instance_of(Link).to receive(:enqueue_index_update_for).with(["filetypes"]).and_call_original
 
       post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
@@ -200,6 +200,34 @@ describe Bundles::ProductController, inertia: true do
 
       expect(response).to have_http_status(:not_found)
       expect(other.reload).to be_alive
+    end
+
+    # The download endpoints serve the newest ready archive without checking its contents, so an
+    # archive built from the file would keep shipping it to buyers who purchased before the conversion.
+    it "kills the archives built while the file was attached" do
+      stale = ready_archive([file])
+
+      post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+
+      expect(response).to be_successful
+      expect(stale.reload).to be_deleted
+    end
+
+    it "rebuilds the product-level archive from the files that are left" do
+      kept = create(:product_file, link: bundle, url: "#{S3_BASE_URL}specs/vol-2.zip")
+      stale = ready_archive([file, kept])
+
+      post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+
+      expect(stale.reload).to be_deleted
+      expect(bundle.product_files_archives.alive.entity_archives.last.product_files).to eq([kept])
+    end
+
+    def ready_archive(files)
+      archive = bundle.product_files_archives.create!(product_files: files)
+      archive.mark_in_progress!
+      archive.mark_ready!
+      archive
     end
   end
 end

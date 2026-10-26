@@ -90,11 +90,8 @@ class Bundles::ProductController < Bundles::BaseController
     redirect_to edit_bundle_product_path(@bundle.external_id), alert: error_message
   end
 
-  # Removes a file still attached to the bundle itself. A product converted into a bundle keeps
-  # its old ProductFile rows, and they are shipped to every buyer, so the bundle editor lists
-  # them (BundlePresenter#edit_product_props) and removes them one at a time. Mirrors the
-  # seller-facing deletion in SaveFilesService: soft-delete, drop the memoized alive list,
-  # re-index the link's filetypes.
+  # Removes a file the bundle itself still carries. Mirrors the seller-facing deletion in
+  # SaveFilesService: soft-delete, drop the memoized alive list, re-index the product's filetypes.
   def remove_file
     authorize @bundle
 
@@ -107,6 +104,12 @@ class Bundles::ProductController < Bundles::BaseController
     file.mark_deleted
     @bundle.cached_alive_product_files = nil
     @bundle.enqueue_index_update_for(["filetypes"])
+    # An archive is a ZIP of the files as they stood, and both download endpoints serve the newest
+    # ready archive without checking its contents, so one built from this file would keep shipping it
+    # to buyers who purchased before the conversion. Rebuild from the files that are left.
+    @bundle.generate_entity_archive!
+    @bundle.invalidate_stale_folder_archives!(for_files: [file])
+    GenerateProductFilesArchivesJob.perform_async(@bundle.id)
 
     render json: { success: true }
   end
