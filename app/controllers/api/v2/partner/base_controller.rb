@@ -16,14 +16,6 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
   before_action { require_oauth_scope! :partner_api }
   before_action :require_partner_application!
 
-  # What remaining_for_sale_count reads, without the card associations.
-  INVENTORY_ASSOCIATIONS = [
-    :tiers,
-    { variant_categories_alive: :alive_variants },
-    { bundle_products: { product: [:tiers, { variant_categories_alive: :alive_variants }], variant: [] } },
-  ].freeze
-  SOLD_OUT_CACHE_TTL = 5.minutes
-
   SORT_KEYS = [
     ProductSortKey::BEST_SELLERS,
     ProductSortKey::NEWEST,
@@ -65,8 +57,7 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
       end
 
       user_ids = creators.map(&:user_id)
-      exclude_ids = product_ids_hidden_from_profile(user_ids) + sold_out_product_ids_hidden_from_visitors(user_ids)
-      search_params.merge(user_id: user_ids, is_alive_on_profile: true, exclude_ids:)
+      search_params.merge(user_id: user_ids, is_alive_on_profile: true, exclude_ids: product_ids_hidden_from_profile(user_ids))
     end
 
     # A seller with saved profile sections shows only the products in their product grids and
@@ -85,25 +76,6 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
       Link.where(user_id: shown_ids_by_seller_id.keys).alive.not_archived.pluck(:id, :user_id).filter_map do |product_id, seller_id|
         product_id unless shown_ids_by_seller_id[seller_id].include?(product_id)
       end
-    end
-
-    # Visitors do not see a sold-out product whose seller hides sold-out items (ProfileSectionsPresenter).
-    # The stock check reads each limited product's sales count, so the result is cached per seller
-    # and a request scans only the sellers missing from the cache.
-    def sold_out_product_ids_hidden_from_visitors(user_ids)
-      keys = user_ids.index_by { "partner_api/hidden_sold_out_product_ids/#{_1}" }
-      cached = Rails.cache.read_multi(*keys.keys)
-      missing_user_ids = keys.except(*cached.keys).values
-      if missing_user_ids.any?
-        hidden_ids_by_user_id = missing_user_ids.index_with { [] }
-        Link.where(user_id: missing_user_ids).alive.not_archived.hide_sold_out_variants.includes(INVENTORY_ASSOCIATIONS).find_each do |product|
-          hidden_ids_by_user_id[product.user_id] << product.id if product.remaining_for_sale_count == 0
-        end
-        fresh = hidden_ids_by_user_id.transform_keys { "partner_api/hidden_sold_out_product_ids/#{_1}" }
-        Rails.cache.write_multi(fresh, expires_in: SOLD_OUT_CACHE_TTL)
-        cached.merge!(fresh)
-      end
-      cached.values.flatten
     end
 
     def render_bad_request(message)
