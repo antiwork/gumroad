@@ -34,6 +34,14 @@ describe PartnerMigration::RemoteFileTransfer do
     expect(url).to end_with("/original/Texture Pack.zip")
   end
 
+  it "replaces bytes that are not valid UTF-8 in the filename" do
+    stub_download("zip bytes", content_disposition: "attachment; filename*=UTF-8''Caf%E9.zip")
+
+    url = described_class.new(seller:, url: "https://files.example.com/caf%E9.zip").perform
+
+    expect(url).to end_with("/original/Caf_.zip")
+  end
+
   it "adds the extension of the detected type to a filename without one" do
     stub_download(File.binread(Rails.root.join("spec/support/fixtures/smilie.png")))
 
