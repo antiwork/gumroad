@@ -21,6 +21,27 @@ describe "Game builds API" do
     post "/api/v2/products/#{product_id}/games/builds/deploy", params: { access_token: token.token, url: }
   end
 
+  def promote(build)
+    post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+  end
+
+  def live_download_bytes
+    s3.get_object(bucket: S3_BUCKET, key: product.product_files.alive.sole.s3_key).body.read
+  end
+
+  # File ids the buyer's download page lists, after checking the download endpoint serves each one.
+  def buyer_file_ids(purchase)
+    redirect_token = purchase.url_redirect.token
+    get "/d/#{redirect_token}", headers: { "X-Inertia" => "true" }
+    expect(response).to have_http_status(:ok)
+    ids = response.parsed_body.dig("props", "content", "content_items").map { _1["id"] }
+    ids.each do |id|
+      get url_redirect_download_product_files_path(redirect_token, product_file_ids: [id], format: :json)
+      expect(response).to have_http_status(:ok)
+    end
+    ids
+  end
+
   describe "POST deploy" do
     it "copies the upload to the product's games prefix as build 1 without making it live" do
       url = upload_zip("abc")
@@ -176,19 +197,6 @@ describe "Game builds API" do
 
       before { product.update!(has_same_rich_content_for_all_variants: false) }
 
-      # File ids the buyer's download page lists, after checking the download endpoint serves each one.
-      def buyer_file_ids(purchase)
-        redirect_token = purchase.url_redirect.token
-        get "/d/#{redirect_token}", headers: { "X-Inertia" => "true" }
-        expect(response).to have_http_status(:ok)
-        ids = response.parsed_body.dig("props", "content", "content_items").map { _1["id"] }
-        ids.each do |id|
-          get url_redirect_download_product_files_path(redirect_token, product_file_ids: [id], format: :json)
-          expect(response).to have_http_status(:ok)
-        end
-        ids
-      end
-
       it "gives each variant's buyers the live zip from their first page and swaps it on the next promote" do
         pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
         deploy(upload_zip)
@@ -245,6 +253,76 @@ describe "Game builds API" do
       build = product.game_builds.sole
       2.times { post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token } }
       expect(product.product_files.alive.count).to eq(1)
+    end
+
+    context "when the seller deleted the live build's download" do
+      def delete_files_via_api
+        put "/api/v2/products/#{product.external_id}", params: { files: [] }, headers: { "Authorization" => "Bearer #{token.token}" }, as: :json
+        expect(response.parsed_body["success"]).to be true
+      end
+
+      it "restores the product's download when the live build is promoted again" do
+        buyer = create(:purchase, link: product, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
+        deploy(upload_zip("one"))
+        build = product.game_builds.sole
+        promote(build)
+        delete_files_via_api
+        expect(buyer_file_ids(buyer)).to eq([])
+
+        promote(build)
+
+        expect(response).to have_http_status(:ok)
+        expect(product.game_builds.live.pluck(:number)).to eq([1])
+        expect(buyer_file_ids(buyer)).to eq([build.reload.product_file.external_id])
+        product.product_files.deleted.update_all(deleted_at: 2.days.ago)
+        RemoveDeletedFilesFromS3Job.new.perform
+        expect(live_download_bytes).to eq("one")
+      end
+
+      it "replaces an embed the deleted download left on the content page instead of adding a second one" do
+        page = create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }])
+        deploy(upload_zip)
+        build = product.game_builds.sole
+        promote(build)
+        deleted_file = build.reload.product_file
+        deleted_file.mark_deleted!
+
+        promote(build)
+
+        expect(build.reload.product_file).not_to eq(deleted_file)
+        expect(page.reload.description.filter_map { _1.dig("attrs", "id") if _1["type"] == "fileEmbed" }).to eq([build.product_file.external_id])
+      end
+
+      it "restores each variant's download without leaving the deleted file's embed or duplicating the new one" do
+        category = create(:variant_category, link: product, title: "Versions")
+        variants = [create(:variant, variant_category: category, name: "A"), create(:variant, variant_category: category, name: "B")]
+        product.update!(has_same_rich_content_for_all_variants: false)
+        pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
+        buyers = variants.map { create(:purchase, link: product, variant_attributes: [_1], ip_address: "127.0.0.1").tap(&:create_url_redirect!) }
+        deploy(upload_zip)
+        build = product.game_builds.sole
+        promote(build)
+        deleted_file_id = build.reload.product_file.external_id
+        # The API refuses to delete an embedded file, so the seller unembeds it from each version first.
+        variants.zip(pages).each do |variant, page|
+          content = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hi" }] }] }
+          put "/api/v2/products/#{product.external_id}/variant_categories/#{category.external_id}/variants/#{variant.external_id}",
+              params: { rich_content: [{ id: page.external_id, title: nil, description: content }] }, headers: { "Authorization" => "Bearer #{token.token}" }, as: :json
+          expect(response.parsed_body["success"]).to be true
+        end
+        delete_files_via_api
+        buyers.each { expect(buyer_file_ids(_1)).to eq([]) }
+
+        promote(build)
+
+        new_file_id = build.reload.product_file.external_id
+        expect(new_file_id).not_to eq(deleted_file_id)
+        buyers.each { expect(buyer_file_ids(_1)).to eq([new_file_id]) }
+        pages.each do |page|
+          expect(page.reload.description.filter_map { _1.dig("attrs", "id") if _1["type"] == "fileEmbed" }).to eq([new_file_id])
+          expect(page.description.first["type"]).to eq("paragraph")
+        end
+      end
     end
   end
 

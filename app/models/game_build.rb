@@ -29,25 +29,27 @@ class GameBuild < ApplicationRecord
 
   def live? = status == "live"
 
-  # Makes this build the one buyers get, superseding the current one. Serialised on the
-  # product row so two concurrent promotes cannot leave two live builds.
+  # Makes this build the one buyers get, superseding the current one, or restores the live build's
+  # download if the seller deleted it. Serialised on the product row so two concurrent promotes
+  # cannot leave two live builds.
   def promote!
     product.with_lock do
       reload
-      next self if live?
+      next self if live? && product_file&.alive?
 
-      previous = product.game_builds.live.first
+      previous = product.game_builds.live.where.not(id:).first
       if previous
         previous.product_file&.mark_deleted!
         previous.update!(status: "superseded")
       end
+      replaced_file = live? ? product_file : previous&.product_file
 
       file = product.product_files.create!(
         url: "#{S3_BASE_URL}#{storage_key}",
         display_name: "#{product.name.to_s.truncate(DISPLAY_NAME_MAX_LENGTH)} build #{number}.zip",
       )
       update!(status: "live", promoted_at: Time.current, product_file: file)
-      swap_file_embed(previous&.product_file, file)
+      swap_file_embed(replaced_file, file)
       product.generate_product_files_archives!
       self
     end
