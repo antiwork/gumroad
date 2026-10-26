@@ -23,6 +23,11 @@ describe AddIsPartnerToOauthApplications do
     connection.columns(:oauth_applications).find { _1.name == "is_partner" }
   end
 
+  # Rails 8.1 deserializes Column#default; older adapters return MySQL's raw "0".
+  def is_partner_default
+    ActiveRecord::Type::Boolean.new.deserialize(is_partner_column.default)
+  end
+
   def superseded_version_recorded?
     connection.select_value("SELECT 1 FROM schema_migrations WHERE version = #{connection.quote(superseded_version)}").present?
   end
@@ -38,7 +43,8 @@ describe AddIsPartnerToOauthApplications do
   it "skips the column that a run under the superseded number already added" do
     expect { migration.migrate(:up) }.not_to raise_error
 
-    expect(is_partner_column).to have_attributes(sql_type: "tinyint(1)", default: false, null: false)
+    expect(is_partner_column).to have_attributes(sql_type: "tinyint(1)", null: false)
+    expect(is_partner_default).to be(false)
   end
 
   it "adds the column when it is missing" do
@@ -46,7 +52,8 @@ describe AddIsPartnerToOauthApplications do
 
     migration.migrate(:up)
 
-    expect(is_partner_column).to have_attributes(sql_type: "tinyint(1)", default: false, null: false)
+    expect(is_partner_column).to have_attributes(sql_type: "tinyint(1)", null: false)
+    expect(is_partner_default).to be(false)
   end
 
   it "keeps the column on the way down while the superseded version is recorded" do
