@@ -12,13 +12,16 @@ class RetryStripeJpAddressResyncForSellerJob
     return if user.current_payout_processor == PayoutProcessorType::PAYPAL
     return if user.stripe_account.blank? || user.alive_user_compliance_info.nil?
 
+    info = user.alive_user_compliance_info
+    return if info.street_address_kanji.blank? && info.street_address_kana.blank?
+
     requests = RetryStripeJpAddressResyncsJob.requests_for(user)
     return if requests.empty?
 
     begin
-      StripeMerchantAccountManager.handle_new_user_compliance_info(
-        user.alive_user_compliance_info, notify: false, force_address_resync: true
-      )
+      # No force_address_resync: that sends whole address hashes, blanks included. The manager already
+      # re-adds only the due leaves our record holds.
+      StripeMerchantAccountManager.handle_new_user_compliance_info(info, notify: false)
     rescue => e
       Rails.logger.error("RetryStripeJpAddressResyncForSellerJob failed for user #{user.id}: #{e.class}: #{e.message}")
     end
