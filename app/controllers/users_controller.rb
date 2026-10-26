@@ -4,7 +4,7 @@ class UsersController < ApplicationController
   include ProductsHelper, SearchProducts, CustomDomainConfig, SocialShareUrlHelper, ActionView::Helpers::SanitizeHelper,
           AffiliateCookie
 
-  include PageMeta::Favicon, PageMeta::User
+  include PageMeta::Favicon, PageMeta::User, PageMeta::Product
   include RendersCustomHtmlPages
   include CurrencyHelper
 
@@ -107,6 +107,18 @@ class UsersController < ApplicationController
     set_user_page_meta(@user)
     product = @user.products.visible_and_not_archived.find_by(native_type: Link::NATIVE_TYPE_COFFEE)
     e404 if product.nil?
+
+    # /coffee is a coffee product's canonical URL, so a published landing page has to
+    # render here too — otherwise the seller's own product link shows the standard page.
+    # The custom page's buy button arrives as /l/:permalink?wanted=true, which redirects
+    # here (LinksController#show) carrying the flag; re-rendering the custom page would
+    # send the buyer back to the button they just clicked. ?native=true is the same
+    # standard-page escape /l/:permalink offers.
+    if product_custom_html_visible?(product) && params[:wanted] != "true" && params[:native] != "true"
+      coffee_url = custom_domain_coffee_url(host: custom_domain_host_for_meta(product) || @user.subdomain_with_protocol)
+      nonce = SecureHeaders.content_security_policy_script_nonce(request)
+      return render html: product_custom_html_wrapper_document(product, nonce:, canonical_url: coffee_url).html_safe, layout: false
+    end
 
     set_meta_tag(title: product.name)
 
