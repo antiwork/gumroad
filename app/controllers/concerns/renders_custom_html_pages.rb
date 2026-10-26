@@ -966,6 +966,243 @@ module RendersCustomHtmlPages
       HTML
     end
 
+    # Everything below serves the product landing page. LinksController renders it at
+    # /l/:permalink and UsersController at /coffee (a coffee product's canonical URL), so the
+    # two agree; both controllers include PageMeta::Product for custom_domain_host_for_meta.
+    def product_custom_html_visible?(product)
+      product.present? && Feature.active?(:custom_html_pages, product.user) && product.custom_html.present? && (product.alive? || can_preview_product_custom_html?(product))
+    end
+
+    def can_preview_product_custom_html?(product)
+      logged_in_user.present? && (logged_in_user == product.user || logged_in_user.collaborator_for?(product) || logged_in_user.is_team_member?)
+    end
+
+    # Hostnames the product landing page's navigation bridge accepts as "this
+    # seller's own store". Same shape as the profile's allowlist (see
+    # UsersController#profile_store_hostnames): only hosts this seller
+    # controls, never a shared Gumroad host, so the sandboxed seller HTML can
+    # never navigate the visitor's tab to arbitrary gumroad.com paths. Product
+    # links the seller writes point at their subdomain (Link#long_url), so a
+    # visitor browsing the custom domain still needs the subdomain
+    # allowlisted for those links to bridge.
+    def product_custom_html_store_hostnames(product)
+      user = product&.user
+      return [] if user.nil?
+
+      hostnames = []
+      hostnames << request.host unless VALID_REQUEST_HOSTS.include?(request.host)
+      hostnames.concat(user.custom_html_store_hostnames)
+      hostnames.compact.uniq
+    end
+
+    # Omitting `allow-same-origin` keeps the seller's HTML on an opaque origin
+    # — no access to gumroad.com cookies or parent DOM. We also omit
+    # `allow-top-navigation`: the seller's HTML must never navigate the buyer's
+    # tab (that would let a malicious onclick redirect to a phishing site with
+    # gumroad.com still in the URL bar). Instead the buy button posts a message
+    # to this wrapper, which navigates to the one checkout URL we control here,
+    # and links to the seller's own Gumroad pages post `gumroad:navigate`,
+    # which this wrapper re-validates against the seller's own hostnames
+    # before navigating the top-level window. Without that second bridge a
+    # plain in-page link to the seller's storefront or another of their
+    # products could only work as `target="_blank"` — anything same-tab was
+    # blocked by the sandbox and the visitor landed on an error page.
+    def product_custom_html_wrapper_document(product, nonce:, offer_code: nil, canonical_url: nil)
+      iframe_src = ERB::Util.h("/l/#{product.unique_permalink}/landing/embed")
+      checkout_params = { wanted: true }
+      checkout_params[:code] = offer_code if offer_code.present?
+      checkout_url_js = ERB::Util.json_escape("/l/#{product.unique_permalink}?#{Rack::Utils.build_query(checkout_params)}".to_json)
+      store_hostnames_js = ERB::Util.json_escape(product_custom_html_store_hostnames(product).to_json)
+      title = ERB::Util.h(product.name.to_s)
+      canonical = ERB::Util.h((canonical_url || product.long_url(host: custom_domain_host_for_meta(product))).to_s)
+      # The wrapper is what search engines see at the canonical /l/<permalink>
+      # URL — the seller's HTML lives in a sandboxed, opaque-origin iframe whose
+      # content crawlers generally do NOT attribute to this page. Without the
+      # tags below, going custom made a product invisible to search (no meta
+      # description, no structured data, empty body). Mirror the standard
+      # product page's SEO signals here: same description source
+      # (PageMeta::Product) and the same JSON-LD (Product::StructuredData).
+      # All of this is trusted, Gumroad-authored data rendered in the trusted
+      # wrapper — none of it comes from the seller's custom HTML.
+      # `.presence` on the plaintext (not the raw description) so markup-only
+      # descriptions like "<p><br></p>" — present as raw HTML but empty once
+      # stripped to text — still fall back instead of emitting empty tags.
+      description = product.plaintext_description.presence || "Available on Gumroad"
+      # plaintext_description returns decoded text with no HTML escaping, and this wrapper
+      # interpolates it into an attribute and into the document body below, so escape it here
+      # (ERB::Util.h covers quotes as well as &/</>).
+      escaped_description = ERB::Util.h(description)
+      # Same snippet cap as PageMeta::Product's meta/og. The .seo-summary body below keeps the
+      # full text, so a long description loses head weight rather than crawlable content.
+      escaped_meta_description = ERB::Util.h(SnippetText.truncate(description))
+      structured_data = product.structured_data(host: custom_domain_host_for_meta(product))
+      # json_escape keeps the JSON valid while escaping <, >, & so a
+      # description containing "</script>" can't break out of the script tag.
+      structured_data_tag = if structured_data.any?
+        %(<script type="application/ld+json">#{ERB::Util.json_escape(structured_data.to_json)}</script>)
+      else
+        ""
+      end
+      # Thumbnail first (the wrapper's original image source, kept as the
+      # winner), then the standard product page's fallback chain — cover image,
+      # then the thumbnail of a video/oembed cover — via
+      # Link#social_share_image. Without the fallbacks, products with a
+      # cover but no thumbnail (the common case) lost their link-preview image
+      # the moment they went custom (gumroad-private#1122).
+      share_image = product.thumbnail&.alive&.url || product.social_share_image
+      share_image_tags = if share_image
+        escaped_share_image = ERB::Util.h(share_image)
+        %(<meta property="og:image" content="#{escaped_share_image}">\n    <meta property="twitter:card" content="summary_large_image">\n    <meta property="twitter:image" content="#{escaped_share_image}">)
+      else
+        ""
+      end
+      <<~HTML
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>#{title}</title>
+            <link rel="canonical" href="#{canonical}">
+            <meta name="description" content="#{escaped_meta_description}">
+            <meta property="og:title" content="#{title}">
+            <meta property="og:description" content="#{escaped_meta_description}">
+            <meta property="og:type" content="product">
+            <meta property="og:url" content="#{canonical}">
+            #{share_image_tags}
+            #{structured_data_tag}
+            <meta name="csrf-token" content="#{ERB::Util.h(form_authenticity_token)}">
+            #{custom_html_analytics_head(product)}
+            <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}.seo-summary{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}#{custom_html_wrapper_theme_background_css(product.user)}</style>
+          </head>
+          <body>
+            <div class="seo-summary">
+              <h1>#{title}</h1>
+              <p>#{escaped_description}</p>
+            </div>
+            <iframe
+              id="gumroad-landing-frame"
+              src="#{iframe_src}"
+              title="#{title}"
+              sandbox="#{CUSTOM_HTML_SANDBOX}"
+            ></iframe>
+            <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false">
+              var frame = document.getElementById("gumroad-landing-frame");
+              var BASE_CHECKOUT = #{checkout_url_js};
+              // Hosts this seller controls. A "gumroad:navigate" message is only
+              // honored for these, so the untrusted iframe can never send the
+              // visitor's tab off to a phishing site with gumroad.com still in
+              // the URL bar.
+              var STORE_HOSTNAMES = #{store_hostnames_js};
+              #{custom_html_navigation_allowlist_js.indent(14).strip}
+              // Whitelist the selection-state keys the checkout already accepts on the
+              // URL (see LinksController#show). The iframe is opaque-origin and untrusted,
+              // so anything not in this list is ignored even if the buy button claims it.
+              var ALLOWED_CHECKOUT_KEYS = ["variant","option","quantity","price","recurrence"];
+              function buildCheckoutUrl(base, params) {
+                if (!params || typeof params !== "object") return base;
+                try {
+                  var u = new URL(base, window.location.origin);
+                  for (var i = 0; i < ALLOWED_CHECKOUT_KEYS.length; i++) {
+                    var k = ALLOWED_CHECKOUT_KEYS[i], v = params[k];
+                    if (v == null || v === "") continue;
+                    u.searchParams.set(k, String(v));
+                  }
+                  return u.pathname + u.search;
+                } catch (_e) { return base; }
+              }
+              window.addEventListener("message", function (e) {
+                // Opaque-origin e.origin isn't a usable check — gate on e.source.
+                if (!frame || e.source !== frame.contentWindow) return;
+                // String form: back-compat for any caller still sending the old signal.
+                if (e.data === "gumroad:checkout") { window.location.href = BASE_CHECKOUT; return; }
+                // Structured form: {type:"gumroad:checkout", params:{variant,quantity,price,recurrence}}.
+                if (e.data && typeof e.data === "object" && e.data.type === "gumroad:checkout") {
+                  window.location.href = buildCheckoutUrl(BASE_CHECKOUT, e.data.params);
+                  return;
+                }
+                // Same-tab navigation to the seller's own Gumroad pages (their
+                // storefront, their other products) and to Gumroad's blessed
+                // account/cart paths. The sandbox deliberately withholds
+                // top-level navigation from the iframe, so a plain link inside
+                // the page can't do this itself — it asks here and we
+                // re-validate the destination.
+                if (e.data && typeof e.data === "object" && e.data.type === "gumroad:navigate" && typeof e.data.url === "string") {
+                  var url;
+                  try { url = new URL(e.data.url, window.location.href); } catch (_err) { return; }
+                  if (url.protocol !== "https:" && url.protocol !== "http:") return;
+                  var destination = gumroadNavigationTarget(url, STORE_HOSTNAMES);
+                  if (destination === null) return;
+                  window.location.href = destination;
+                }
+              });
+            </script>
+            #{custom_html_background_wrapper_script(nonce:)}
+            #{can_preview_product_custom_html?(product) ? custom_html_live_reload_script(version_src: "/l/#{product.unique_permalink}/landing/version", nonce:) : ""}
+          </body>
+        </html>
+      HTML
+    end
+
+    # Custom HTML pages bypass the React product page, so the seller's analytics
+    # (Google Analytics, Facebook/TikTok pixels, and raw third-party snippets)
+    # never load. We inject them into the trusted wrapper — never the sandboxed
+    # landing iframe, whose strict CSP (connect-src 'none', no Google host in
+    # script-src) blocks them by design. The wrapper runs under the global site
+    # CSP, which allowlists those hosts, and the `custom_html_analytics` entry
+    # point reuses the same tracking modules the standard product page uses.
+    #
+    # The entry point fires the same events the standard product page would
+    # (product view + "I want this" on buy click) so switching to a custom page
+    # keeps the same analytics event names. begin_checkout and purchase stay on
+    # the standard checkout and receipt pages the buy button navigates to, which
+    # already fire them — firing them here too would double-count.
+    def custom_html_analytics_head(product)
+      tracking_enabled = analytics_enabled?(seller: product.user)
+      analytics = product.analytics_data
+      # When third-party tracking is off, blank the pixel ids before they reach
+      # the props JSON. The frontend never uses them in that case (every pixel
+      # call is gated on tracking_enabled), but without this a seller who
+      # disabled third-party analytics would still see their Google/Facebook/
+      # TikTok ids embedded in the page source for anyone to inspect.
+      analytics = analytics.merge(google_analytics_id: nil, facebook_pixel_id: nil, tiktok_pixel_id: nil) unless tracking_enabled
+      has_product_third_party_analytics = tracking_enabled && product.has_third_party_analytics?("product")
+      has_configured_pixel = tracking_enabled && analytics.values_at(:google_analytics_id, :facebook_pixel_id, :tiktok_pixel_id).any?(&:present?)
+
+      props = {
+        seller_id: product.user.external_id,
+        analytics:,
+        tracking_enabled:,
+        has_product_third_party_analytics:,
+        third_party_analytics_domain: THIRD_PARTY_ANALYTICS_DOMAIN,
+        permalink: product.unique_permalink,
+        name: product.name,
+      }
+
+      # The pixel meta tags render only when tracking is enabled and the seller has
+      # at least one pixel id configured. All three enabled flags are "true" rather
+      # than per-pixel because the frontend gates each pixel on its own configured
+      # id — mirroring PageMeta::Analytics#set_analytics_meta_tags, which the
+      # wrapper's layout-less document can't accumulate. The props JSON goes in a
+      # double-quoted attribute, so ERB::Util.h (which escapes ") is the right escape
+      # here — json_escape would leave quotes intact and break out of the attribute.
+      pixel_meta_tags = if has_configured_pixel
+        <<~HTML
+          <meta property="gr:google_analytics:enabled" content="true">
+          <meta property="gr:fb_pixel:enabled" content="true">
+          <meta property="gr:tiktok_pixel:enabled" content="true">
+        HTML
+      else
+        ""
+      end
+
+      <<~HTML.strip
+        #{pixel_meta_tags}
+        <meta name="gr:custom-html-analytics" content="#{ERB::Util.h(props.to_json)}">
+        #{helpers.vite_typescript_tag("custom_html_analytics")}
+      HTML
+    end
+
     # The landing iframe HTML must reflect a just-published edit, so read from the
     # primary rather than a possibly-lagging replica. Wired as an around_action in
     # each controller (the product and profile embed actions both need it) so the

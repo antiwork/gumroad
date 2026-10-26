@@ -714,10 +714,61 @@ describe Api::Internal::Admin::ProductsController do
       it "rejects the legacy shared admin token" do
         request.headers["Authorization"] = "Bearer test-admin-token"
 
-        post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+        expect do
+          post :hold_sales, params: { id: product.external_id, user_id: seller.external_id }
+        end.not_to change { AdminApiAuditLog.count }
 
         expect(response).to have_http_status(:unauthorized)
         expect(product.reload).to be_alive
+      end
+
+      describe "refused requests" do
+        def expect_refusal_audited(status:, target: product)
+          expect(response).to have_http_status(status)
+          expect(AdminApiAuditLog.last).to have_attributes(
+            action: "products.hold_sales",
+            actor_user_id: admin_user.id,
+            target_type: target && "Link",
+            target_external_id: target&.external_id,
+            http_method: "POST",
+            route: request.path,
+            request_id: request.request_id,
+            response_status: Rack::Utils.status_code(status)
+          )
+          expect(ProductSalesHold.count).to eq(0)
+        end
+
+        it "audits a request without the seller's user_id against the product" do
+          expect { post :hold_sales, params: { id: product.external_id } }.to change { AdminApiAuditLog.count }.by(1)
+
+          expect_refusal_audited(status: :bad_request)
+          expect(product.reload).to be_alive
+        end
+
+        it "audits a request for an unknown product without a target" do
+          expect { post :hold_sales, params: { id: "fake", user_id: seller.external_id } }.to change { AdminApiAuditLog.count }.by(1)
+
+          expect_refusal_audited(status: :not_found, target: nil)
+          expect(AdminApiAuditLog.last.params_snapshot).to include("id" => "fake", "user_id" => seller.external_id)
+        end
+
+        it "audits a request naming a seller who does not own the product" do
+          other_seller = create(:user, email: "other-seller@example.com")
+
+          expect { post :hold_sales, params: { id: product.external_id, user_id: other_seller.external_id } }.to change { AdminApiAuditLog.count }.by(1)
+
+          expect_refusal_audited(status: :unprocessable_entity)
+          expect(product.reload).to be_alive
+        end
+
+        it "audits an email mismatch without recording the email" do
+          expect do
+            post :hold_sales, params: { id: product.external_id, user_id: seller.external_id, expected_email: "someone-else@example.com" }
+          end.to change { AdminApiAuditLog.count }.by(1)
+
+          expect_refusal_audited(status: :conflict)
+          expect(AdminApiAuditLog.last.params_snapshot["expected_email"]).to eq("[REDACTED]")
+        end
       end
 
       it "requires the seller's user_id" do
@@ -830,6 +881,64 @@ describe Api::Internal::Admin::ProductsController do
       before { request.headers["Authorization"] = "Bearer #{AdminApiToken.mint!(actor_user_id: admin_user.id)}" }
 
       let!(:hold) { product.hold_sales!(seller:, held_by: admin_user).first }
+
+      describe "refused requests" do
+        def expect_refusal_audited(status:)
+          expect(response).to have_http_status(status)
+          expect(AdminApiAuditLog.last).to have_attributes(
+            action: "products.release_sales_hold",
+            actor_user_id: admin_user.id,
+            target_type: "Link",
+            target_external_id: product.external_id,
+            http_method: "POST",
+            route: request.path,
+            request_id: request.request_id,
+            response_status: Rack::Utils.status_code(status)
+          )
+        end
+
+        it "audits a request without a hold id" do
+          expect { post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id } }.to change { AdminApiAuditLog.count }.by(1)
+
+          expect_refusal_audited(status: :bad_request)
+          expect(hold.reload).to be_active
+        end
+
+        it "audits a release naming another listing's hold and leaves both holds active" do
+          other_hold, = create(:product, user: seller).hold_sales!(seller:, held_by: admin_user)
+
+          expect do
+            post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id, hold_id: other_hold.external_id }
+          end.to change { AdminApiAuditLog.count }.by(1)
+
+          expect_refusal_audited(status: :not_found)
+          expect(AdminApiAuditLog.last.params_snapshot).to include("hold_id" => other_hold.external_id)
+          expect(hold.reload).to be_active
+          expect(other_hold.reload).to be_active
+        end
+
+        it "audits a release naming a seller who does not own the product" do
+          other_seller = create(:user, email: "other-seller@example.com")
+
+          expect do
+            post :release_sales_hold, params: { id: product.external_id, user_id: other_seller.external_id, hold_id: hold.external_id }
+          end.to change { AdminApiAuditLog.count }.by(1)
+
+          expect_refusal_audited(status: :unprocessable_entity)
+          expect(hold.reload).to be_active
+        end
+
+        it "does not audit a request with the legacy shared token" do
+          request.headers["Authorization"] = "Bearer test-admin-token"
+
+          expect do
+            post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id, hold_id: hold.external_id }
+          end.not_to change { AdminApiAuditLog.count }
+
+          expect(response).to have_http_status(:unauthorized)
+          expect(hold.reload).to be_active
+        end
+      end
 
       it "requires the hold id" do
         post :release_sales_hold, params: { id: product.external_id, user_id: seller.external_id }

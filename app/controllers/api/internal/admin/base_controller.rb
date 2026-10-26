@@ -30,6 +30,8 @@ class Api::Internal::Admin::BaseController < Api::Internal::BaseController
     low_balance_probation_recoveries.execute
     low_balance_probation_recoveries.preview
     products.file_download_url
+    products.hold_sales
+    products.release_sales_hold
     purchases.reassign
     purchases.resend_all_receipts
     sendgrid_emails.remove_suppression

@@ -101,7 +101,7 @@ end
 
 ### Hold sales of one listing
 
-This goes through the internal admin API, not the console, and needs a per-actor admin token. Both calls are audited against the product, and both answer 409 without writing if the seller or the product's owner changed after the lookup.
+This goes through the internal admin API, not the console, and needs a per-actor admin token. Per-actor authenticated requests that reach either action are submitted to the existing admin audit writer, refusals included: against the product when its id resolves, without a target when it doesn't. That writer is best effort, as for every admin write: a failure to save the audit row is reported, not raised. A refusal (missing input, unknown product or hold, wrong seller, or a 409 because the seller or the product's owner changed after the lookup) changes no product or hold.
 
 ```sh
 # Hold. The response's sales_hold.id is what a release needs.

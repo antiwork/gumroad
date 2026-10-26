@@ -63,12 +63,15 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   end
 
   # Blocks new sales of one listing and keeps the seller from relisting it. The account, its other
-  # listings, existing buyers' access and charges already under way are left alone.
+  # listings, existing buyers' access and charges already under way are left alone. Refusals are
+  # audited too, and write nothing to the product or its holds.
   def hold_sales
-    seller, product = find_seller_product_for_write_or_render
-    return unless product
+    product = Link.find_by_external_id(params[:id])
 
     record_admin_write(action: "products.hold_sales", target: product) do
+      seller = find_seller_of_product_for_write_or_render(product)
+      return unless seller
+
       hold, created = product.hold_sales!(seller:, held_by: Current.admin_actor)
       render json: sales_hold_payload(product, hold, status: created ? "held" : "already_held")
     rescue Link::SalesHoldSellerChanged => e
@@ -80,15 +83,17 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
 
   # Takes the hold's id, so a retried release cannot lift a hold placed after it.
   def release_sales_hold
-    return render json: { success: false, message: "hold_id is required" }, status: :bad_request if params[:hold_id].blank?
-
-    seller, product = find_seller_product_for_write_or_render
-    return unless product
-
-    hold = product.sales_holds.find_by(external_id: params[:hold_id])
-    return render json: { success: false, message: "Sales hold not found" }, status: :not_found if hold.blank?
+    product = Link.find_by_external_id(params[:id])
 
     record_admin_write(action: "products.release_sales_hold", target: product) do
+      return render json: { success: false, message: "hold_id is required" }, status: :bad_request if params[:hold_id].blank?
+
+      seller = find_seller_of_product_for_write_or_render(product)
+      return unless seller
+
+      hold = product.sales_holds.find_by(external_id: params[:hold_id])
+      return render json: { success: false, message: "Sales hold not found" }, status: :not_found if hold.blank?
+
       released = product.release_sales_hold!(hold, seller:, released_by: Current.admin_actor)
       render json: sales_hold_payload(product, hold, status: released ? "released" : "already_released")
     rescue Link::SalesHoldSellerChanged => e
@@ -126,12 +131,11 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   end
 
   private
-    # Returns [seller, product]. The model re-checks both under its locks before writing.
-    def find_seller_product_for_write_or_render
+    # The model re-checks the seller and owner under its locks before writing.
+    def find_seller_of_product_for_write_or_render(product)
       seller = find_internal_admin_user_for_write_or_render
       return unless seller
 
-      product = Link.find_by_external_id(params[:id])
       if product.blank?
         render json: { success: false, message: "Product not found" }, status: :not_found
         nil
@@ -139,7 +143,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
         render json: { success: false, message: "Product does not belong to user" }, status: :unprocessable_entity
         nil
       else
-        [seller, product]
+        seller
       end
     end
 

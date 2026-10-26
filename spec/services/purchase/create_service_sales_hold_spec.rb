@@ -8,8 +8,8 @@ describe Purchase::CreateService, "for a listing on a sales hold" do
   let(:paid_product) { create(:product, user: seller, price_cents: 6_00) }
   let(:free_product) { create(:product, user: seller, price_cents: 0) }
 
-  def checkout(product, email: "buyer@example.com")
-    product.reload
+  def checkout(product, email: "buyer@example.com", reload: true)
+    product.reload if reload
     params = {
       purchase: {
         email:,
@@ -149,6 +149,81 @@ describe Purchase::CreateService, "for a listing on a sales hold" do
       expect(error).to be_nil
       expect(purchase).to be_successful
       expect(successful_sales_of(held_member).count).to eq(1)
+    end
+
+    describe "hold lookups" do
+      def bundle_of(size)
+        bundle = create(:product, user: seller, price_cents: 0, is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE)
+        members = Array.new(size) { |i| create(:product, user: seller, name: "Member #{i + 1}") }
+        Bundle::UpdateProductsService.new(bundle:, products: members.map { { product_id: _1.external_id, variant_id: nil, quantity: 1 } }).perform
+        [bundle, members]
+      end
+
+      # Every statement that touches the holds table, including query-cache hits.
+      def hold_reads(&block)
+        reads = []
+        callback = ->(*, payload) { reads << payload if payload[:sql].include?("product_sales_holds") }
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record", &block)
+        reads
+      end
+
+      it "reads holds once per checkout however many members the bundle has" do
+        small, = bundle_of(2)
+        large, = bundle_of(6)
+
+        results = {}
+        reads = { 2 => hold_reads { results[2] = checkout(small) }, 6 => hold_reads { results[6] = checkout(large) } }
+
+        expect(reads.transform_values(&:size)).to eq(2 => 1, 6 => 1)
+        expect(results.values.map(&:last)).to eq([nil, nil])
+        expect(results.values.map(&:first)).to all(be_successful)
+      end
+
+      it "names the first held member and grants nothing when several members are held" do
+        bundle, members = bundle_of(6)
+        [members[2], members[4]].each { _1.hold_sales!(seller:, held_by: admin) }
+
+        purchase = error = nil
+        reads = hold_reads { purchase, error = checkout(bundle) }
+
+        expect(reads.size).to eq(1)
+        expect(error).to eq("Member 3 is not currently for sale.")
+        expect(purchase.error_code).to eq(PurchaseErrorCode::NOT_FOR_SALE)
+        expect(Purchase.where(link_id: [bundle.id, *members.map(&:id)]).successful).to be_empty
+        expect(BundleProductPurchase.count).to eq(0)
+      end
+
+      it "reads the current hold state on every checkout" do
+        bundle, members = bundle_of(3)
+        hold, = members[1].hold_sales!(seller:, held_by: admin)
+
+        outcomes = []
+        reads = hold_reads { 2.times { outcomes << checkout(bundle).last } }
+        expect(outcomes).to eq(["Member 2 is not currently for sale."] * 2)
+        expect(reads.size).to eq(2)
+
+        members[1].reload.release_sales_hold!(hold, seller:, released_by: admin)
+        purchase, error = checkout(bundle)
+        expect(error).to be_nil
+        expect(purchase).to be_successful
+      end
+
+      it "reads holds from the database even when the request's query cache holds the same statement" do
+        bundle, members = bundle_of(3)
+        members[1].hold_sales!(seller:, held_by: admin)
+
+        outcome = nil
+        # `reload` clears the query cache, so the bundle is reloaded before priming and not again.
+        reads = ActiveRecord::Base.cache do
+          bundle.reload
+          ProductSalesHold.active.where(product_id: bundle.bundle_products.alive.map(&:product_id)).distinct.pluck(:product_id)
+          hold_reads { outcome = checkout(bundle, reload: false) }
+        end
+
+        expect(outcome.last).to eq("Member 2 is not currently for sale.")
+        expect(reads.size).to eq(1)
+        expect(reads.first[:cached]).to be_falsey
+      end
     end
 
     describe "when paid" do

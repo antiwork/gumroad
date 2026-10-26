@@ -519,15 +519,20 @@ class Purchase::CreateService < Purchase::BaseService
       # Not every client echoes the bundle contents back (the checkout page always does), so an
       # absent key is a contents mismatch, not a reason to raise.
       submitted_bundle_products = params[:bundle_products] || []
+      bundle_products = product.bundle_products.alive.to_a
+      # One read per validation, never answered from the request's query cache.
+      held_product_ids = ProductSalesHold.uncached do
+        ProductSalesHold.active.where(product_id: bundle_products.map(&:product_id)).distinct.pluck(:product_id).to_set
+      end
 
-      product.bundle_products.alive.each do |bundle_product|
+      bundle_products.each do |bundle_product|
         if submitted_bundle_products.none? { _1[:product_id] == bundle_product.product.external_id && _1[:variant_id] == bundle_product.variant&.external_id && _1[:quantity].to_i == bundle_product.quantity }
           raise Purchase::PurchaseInvalid, "The bundle's contents have changed. Please refresh the page!"
         end
 
         # Refused here, before the charge: once the bundle is paid, its member purchases are created
         # whether or not the member is for sale.
-        if bundle_product.product.active_sales_hold.present?
+        if held_product_ids.include?(bundle_product.product_id)
           purchase.error_code = PurchaseErrorCode::NOT_FOR_SALE
           raise Purchase::PurchaseInvalid, "#{bundle_product.product.name} is not currently for sale."
         end
