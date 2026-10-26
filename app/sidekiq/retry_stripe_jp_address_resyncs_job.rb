@@ -14,8 +14,8 @@ class RetryStripeJpAddressResyncsJob
   def perform
     candidates.find_in_batches(batch_size: BATCH_SIZE) do |batch|
       ReplicaLagWatcher.watch
-      batch.select { |request| due?(request) }
-           .map(&:user_id).uniq
+      batch.filter_map { |request| request.user_id if due?(request) }
+           .uniq
            .each { |user_id| RetryStripeJpAddressResyncForSellerJob.perform_async(user_id) }
     end
   end
