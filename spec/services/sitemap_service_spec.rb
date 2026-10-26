@@ -111,6 +111,49 @@ describe SitemapService do
       locs = Zlib::GzipReader.open(path, &:read).scan(%r{<loc>([^<]+)</loc>}).flatten
       expect(locs).to include("#{seller.subdomain_with_protocol}/l/#{product.unique_permalink}")
     end
+
+    it "lists only alive products created in the month, even when ids interleave with other months" do
+      month = Time.current.beginning_of_month
+      seller = create(:user, username: "monthseller")
+      inside = create(:product, user: seller, created_at: month + 1.day)
+      # Created after `inside` but backdated, so its id falls inside the month's id range.
+      outside = create(:product, user: seller, created_at: month - 1.day)
+      deleted = create(:product, user: seller, created_at: month + 2.days, deleted_at: Time.current)
+      last = create(:product, user: seller, created_at: month + 3.days)
+
+      path = "#{Rails.public_path}/sitemap/products/monthly/#{month.year}/#{month.month}/sitemap.xml.gz"
+      service.generate(month.to_date)
+
+      locs = Zlib::GzipReader.open(path, &:read).scan(%r{<loc>([^<]+)</loc>}).flatten
+      expect(locs.grep(%r{/l/#{inside.unique_permalink}\z})).to be_present
+      expect(locs.grep(%r{/l/#{last.unique_permalink}\z})).to be_present
+      expect(locs.grep(%r{/l/#{outside.unique_permalink}\z})).to be_empty
+      expect(locs.grep(%r{/l/#{deleted.unique_permalink}\z})).to be_empty
+    end
+
+    # Left to the optimizer, the batch query intersects the deleted_at/banned_at indexes and
+    # filesorts — 42s a batch in production, past the statement cap (the job died nightly).
+    it "walks the month's products in primary-key order within the month's id range" do
+      product = create(:product, created_at: Time.current)
+      batch_sql = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        batch_sql << payload[:sql] if payload[:sql].include?("`links`.*")
+      end
+      begin
+        service.generate(product.created_at.to_date)
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(batch_sql).to be_present
+      expect(batch_sql).to all(include("FORCE INDEX (PRIMARY)"))
+      expect(batch_sql).to all(match(/`links`.`id` BETWEEN #{@product.id} AND #{product.id}/))
+    end
+
+    it "writes nothing and does not raise for a month with no products" do
+      expect { service.generate(Date.new(2001, 1, 1)) }.not_to raise_error
+      expect(File.exist?("#{Rails.public_path}/sitemap/products/monthly/2001/1/sitemap.xml.gz")).to be false
+    end
   end
 
   describe "#generate_categories" do

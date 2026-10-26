@@ -1224,6 +1224,23 @@ describe Api::V2::LinksController do
         expect(files.first["url"]).to eq("https://example.com/my-file.zip")
       end
 
+      it "reports whether downloads are disabled for each file" do
+        streamed = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf", stream_only: true)
+        downloadable = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
+
+        get :show, params: @params
+        files = response.parsed_body["product"]["files"].index_by { |file| file["id"] }
+        expect(files[streamed.external_id]["stream_only"]).to be(true)
+        expect(files[downloadable.external_id]["stream_only"]).to be(false)
+      end
+
+      it "reports stream_only false when the file type cannot open without a download" do
+        create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.zip", stream_only: true)
+
+        get :show, params: @params
+        expect(response.parsed_body["product"]["files"].first["stream_only"]).to be(false)
+      end
+
       it "includes covers array and main_cover_id" do
         cover = create(:asset_preview, link: @product)
 
@@ -2653,6 +2670,15 @@ describe Api::V2::LinksController do
         expect(@product.reload.purchase_disabled_at).to be_nil
         expect(response.parsed_body["success"]).to be(true)
         expect(response.parsed_body["product"]).to eq(@product.reload.as_json(api_scopes: ["edit_products"]))
+      end
+
+      it "does not relist a product Gumroad has put on a sales hold" do
+        @product.hold_sales!(seller: @user, held_by: create(:admin_user))
+
+        put @action, params: @params
+
+        expect(response.parsed_body).to eq({ success: false, message: Link::UNPUBLISHED_BY_ADMIN_MESSAGE }.as_json)
+        expect(@product.reload.purchase_disabled_at).to be_present
       end
 
       context "when new account and no valid merchant account connected" do

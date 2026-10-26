@@ -21,9 +21,8 @@ export const createThumbnail = async (permalink: string, thumbnailPayload: Thumb
 
   if (response.ok && responseData?.success) return responseData.thumbnail;
 
-  // The server explains what went wrong in the body ("Invalid signed_blob_id.", "Thumbnail processing
-  // took too long…"). Throwing a bare ResponseError here is what leaves the seller with an alert that
-  // says nothing, so prefer the server's own wording and fall back only when there is no body.
+  // The server's body names the actual reason ("Invalid signed_blob_id."), which tells the seller more
+  // than the generic ResponseError default — fall back to that default only when there is no message.
   if (responseData && !responseData.success && responseData.error !== "") throw new ResponseError(responseData.error);
 
   throw new ResponseError();

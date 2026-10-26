@@ -266,6 +266,12 @@ export const PRODUCT_FIELDS: FieldDefinition[] = [
       },
       { name: "filetype", type: "string", description: 'File extension (e.g. "pdf") or "link" for external URLs' },
       { name: "filegroup", type: "string", description: 'Group classification (e.g. "audio", "video", "document")' },
+      {
+        name: "stream_only",
+        type: "boolean",
+        description:
+          "True when downloads are disabled for this file and the buyer opens it in the player or in-browser reader instead",
+      },
     ],
   },
   {

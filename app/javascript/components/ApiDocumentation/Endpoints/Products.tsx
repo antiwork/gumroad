@@ -633,7 +633,8 @@ export const UpdateProduct = () => (
         "size": 102400,
         "url": "https://api.gumroad.com/r/...signed...",
         "filetype": "psd",
-        "filegroup": "image"
+        "filegroup": "image",
+        "stream_only": false
       }
     ]
 # ...remaining product fields

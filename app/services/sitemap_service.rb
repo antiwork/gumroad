@@ -134,8 +134,10 @@ class SitemapService
     def create_sitemap(period, filename, path, include_index: false)
       sitemap_config(filename, path, include_index)
 
+      products = products_created_in(period)
+
       SitemapGenerator::Sitemap.create do
-        Link.alive.where(created_at: period).preload(*SITEMAP_PRELOADS).find_each do |product|
+        products.preload(*SITEMAP_PRELOADS).find_each do |product|
           # short_link_path keys off to_param (unique_permalink), which 301s to the seller's
           # custom permalink whenever one is set. A redirecting sitemap entry is non-canonical,
           # so list the permalink that redirect points at instead.
@@ -150,6 +152,24 @@ class SitemapService
       if ping_search_engines?
         SitemapGenerator::Sitemap.ping_search_engines
       end
+    end
+
+    # Left to itself, MySQL plans find_each's batch query by intersecting the deleted_at and
+    # banned_at indexes (millions of NULL rows) and then filesorting by id: 42s for one batch
+    # of the current month in production, so the run died on the statement cap every night.
+    # Instead, bound the month's ids from the created_at index (a covering scan, ~0.7s for
+    # October 2026) and walk that range in primary-key order, keeping the created_at filter
+    # so the bounds only narrow the scan. Measured on October 2026 (~500k ids): the whole
+    # id walk takes ~1.4s.
+    def products_created_in(period)
+      created_in_period = Link.where(created_at: period)
+      first_id = created_in_period.minimum(:id)
+      return Link.none if first_id.nil?
+      last_id = created_in_period.maximum(:id)
+
+      Link.from("#{Link.quoted_table_name} FORCE INDEX (PRIMARY)")
+        .alive
+        .where(id: first_id..last_id, created_at: period)
     end
 
     def sitemap_config(filename, path, include_index)

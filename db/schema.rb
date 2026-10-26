@@ -2042,6 +2042,19 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.index ["purchase_id"], name: "index_product_reviews_on_purchase_id", unique: true
   end
 
+  create_table "product_sales_holds", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.string "external_id", limit: 21, null: false
+    t.bigint "product_id", null: false
+    t.bigint "held_by_id", null: false
+    t.boolean "unpublished_listing", default: false, null: false
+    t.datetime "released_at"
+    t.bigint "released_by_id"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["external_id"], name: "index_product_sales_holds_on_external_id", unique: true
+    t.index ["product_id", "released_at"], name: "index_product_sales_holds_on_product_id_and_released_at"
+  end
+
   create_table "product_taggings", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.integer "tag_id"
     t.integer "product_id"

@@ -6,7 +6,7 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   # Serving a signed URL for a seller's actual file bytes is more sensitive
   # than the metadata-only reads in this controller, so it is audited like a
   # write and refuses legacy shared tokens.
-  before_action :require_per_actor_token!, only: :file_download
+  before_action :require_per_actor_token!, only: %i[file_download hold_sales release_sales_hold]
 
   # Inlined from the deleted admin web UI concern (Admin::Users::ListPaginatedProducts):
   # live products first, newest first.
@@ -56,7 +56,49 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
 
     ancestry_paths = taxonomy_ancestry_paths_for([product])
 
-    render json: { success: true, product: serialize_product(product, with_fraud_context: true, ancestry_paths:) }
+    payload = serialize_product(product, with_fraud_context: true, ancestry_paths:)
+    payload[:active_sales_hold] = serialize_sales_hold(product.active_sales_hold)
+
+    render json: { success: true, product: payload }
+  end
+
+  # Blocks new sales of one listing and keeps the seller from relisting it. The account, its other
+  # listings, existing buyers' access and charges already under way are left alone. Refusals are
+  # audited too, and write nothing to the product or its holds.
+  def hold_sales
+    product = Link.find_by_external_id(params[:id])
+
+    record_admin_write(action: "products.hold_sales", target: product) do
+      seller = find_seller_of_product_for_write_or_render(product)
+      return unless seller
+
+      hold, created = product.hold_sales!(seller:, held_by: Current.admin_actor)
+      render json: sales_hold_payload(product, hold, status: created ? "held" : "already_held")
+    rescue Link::SalesHoldSellerChanged => e
+      render json: { success: false, message: e.message }, status: :conflict
+    rescue ActiveRecord::RecordInvalid, Link::LinkInvalid => e
+      render json: { success: false, message: product.errors.full_messages.to_sentence.presence || e.message }, status: :unprocessable_entity
+    end
+  end
+
+  # Takes the hold's id, so a retried release cannot lift a hold placed after it.
+  def release_sales_hold
+    product = Link.find_by_external_id(params[:id])
+
+    record_admin_write(action: "products.release_sales_hold", target: product) do
+      return render json: { success: false, message: "hold_id is required" }, status: :bad_request if params[:hold_id].blank?
+
+      seller = find_seller_of_product_for_write_or_render(product)
+      return unless seller
+
+      hold = product.sales_holds.find_by(external_id: params[:hold_id])
+      return render json: { success: false, message: "Sales hold not found" }, status: :not_found if hold.blank?
+
+      released = product.release_sales_hold!(hold, seller:, released_by: Current.admin_actor)
+      render json: sales_hold_payload(product, hold, status: released ? "released" : "already_released")
+    rescue Link::SalesHoldSellerChanged => e
+      render json: { success: false, message: e.message }, status: :conflict
+    end
   end
 
   def file_download
@@ -89,6 +131,56 @@ class Api::Internal::Admin::ProductsController < Api::Internal::Admin::BaseContr
   end
 
   private
+    # The model re-checks the seller and owner under its locks before writing.
+    def find_seller_of_product_for_write_or_render(product)
+      seller = find_internal_admin_user_for_write_or_render
+      return unless seller
+
+      if product.blank?
+        render json: { success: false, message: "Product not found" }, status: :not_found
+        nil
+      elsif product.user_id != seller.id
+        render json: { success: false, message: "Product does not belong to user" }, status: :unprocessable_entity
+        nil
+      else
+        seller
+      end
+    end
+
+    def sales_hold_payload(product, hold, status:)
+      product.reload
+      {
+        success: true,
+        status:,
+        sales_hold: serialize_sales_hold(hold.reload),
+        product: {
+          id: product.external_id,
+          alive: product.alive?,
+          published: product.published?,
+          draft: product.draft?,
+          purchase_disabled_at: product.purchase_disabled_at&.iso8601,
+          deleted_at: product.deleted_at&.iso8601,
+          banned_at: product.banned_at&.iso8601,
+          unpublished_by_admin: product.is_unpublished_by_admin?,
+          active_sales_hold_id: product.active_sales_hold&.external_id
+        }
+      }
+    end
+
+    def serialize_sales_hold(hold)
+      return if hold.nil?
+
+      {
+        id: hold.external_id,
+        active: hold.active?,
+        unpublished_listing: hold.unpublished_listing,
+        held_at: hold.created_at.iso8601,
+        held_by_id: hold.held_by&.external_id,
+        released_at: hold.released_at&.iso8601,
+        released_by_id: hold.released_by&.external_id
+      }
+    end
+
     def find_seller_or_render
       user = if params[:external_id].present?
         User.find_by(external_id: params[:external_id])

@@ -97,6 +97,30 @@ users.each do |user|
 end
 ```
 
+## Listings
+
+### Hold sales of one listing
+
+This goes through the internal admin API, not the console, and needs a per-actor admin token. Per-actor authenticated requests that reach either action are submitted to the existing admin audit writer, refusals included: against the product when its id resolves, without a target when it doesn't. That writer is best effort, as for every admin write: a failure to save the audit row is reported, not raised. A refusal (missing input, unknown product or hold, wrong seller, or a 409 because the seller or the product's owner changed after the lookup) changes no product or hold.
+
+```sh
+# Hold. The response's sales_hold.id is what a release needs.
+curl -X POST "$API/internal/admin/products/$PRODUCT_ID/hold_sales" \
+  -H "Authorization: Bearer $TOKEN" -d user_id=$SELLER_ID
+
+# Release that hold. A release of an older hold leaves a newer one in place.
+curl -X POST "$API/internal/admin/products/$PRODUCT_ID/release_sales_hold" \
+  -H "Authorization: Bearer $TOKEN" -d user_id=$SELLER_ID -d hold_id=$HOLD_ID
+```
+
+A hold unpublishes the listing if it is live and stops every seller publish path (web, API, Muse, bundles) from relisting it. It leaves the account, its other listings, files, content, custom domain and profile sections alone, and sends no email.
+
+It stops new checkouts only, including checkouts of any bundle that contains the listing. Recurring charges, preorder charges, upgrades of existing memberships, commission completions and the seller's own test purchases skip the sale check. A checkout that got past the check before the hold, bundle or not, still completes and is not cancelled. Existing buyers of a bundle that the seller later adds the listing to can still be given it by the bundle's content update.
+
+The hold follows one product ID. A duplicate of the listing, or a new listing with the same content, is not held.
+
+A release only lifts the hold. If the hold unpublished the listing (`unpublished_listing: true`), it stays unpublished until the seller publishes it again.
+
 ## Purchases
 
 ### Refund purchases

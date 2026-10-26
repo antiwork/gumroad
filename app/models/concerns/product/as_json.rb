@@ -158,6 +158,9 @@ module Product::AsJson
               url: f.signed_url,
               filetype: f.filetype,
               filegroup: f.filegroup,
+              # Effective value (the raw flag AND a file type that can still be opened without
+              # downloading), matching delivery and the editor. Write-only before this.
+              stream_only: f.stream_only?,
             }
           rescue Aws::S3::Errors::NotFound => e
             Rails.logger.warn("Skipping product file #{f.id} with missing S3 object: #{e.message}")
