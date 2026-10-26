@@ -163,6 +163,21 @@ describe "Game builds API" do
       expect(rich.reload.description.first["type"]).to eq("paragraph")
     end
 
+    it "embeds the live zip in each variant's first page when variants have their own content" do
+      category = create(:variant_category, link: product, title: "Versions")
+      variants = [create(:variant, variant_category: category, name: "A"), create(:variant, variant_category: category, name: "B")]
+      product.update!(has_same_rich_content_for_all_variants: false)
+      pages = variants.map { create(:rich_content, entity: _1, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }]) }
+      deploy(upload_zip)
+      build = product.game_builds.sole
+
+      post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+
+      expect(response).to have_http_status(:ok)
+      file_id = build.reload.product_file.external_id
+      pages.each { |page| expect(page.reload.description.map { _1.dig("attrs", "id") }).to include(file_id) }
+    end
+
     it "is a no-op for an already-live build" do
       deploy(upload_zip)
       build = product.game_builds.sole

@@ -56,15 +56,14 @@ class GameBuild < ApplicationRecord
       self.public_id ||= Array.new(21) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.size)] }.join
     end
 
-    # Buyers of a product with content pages only see files embedded in them, so the live
-    # build's zip is embedded on the first page and the superseded one is removed.
+    # Buyers only see files embedded in content pages, so the live zip goes on the first page of
+    # the product (or of each variant) and the superseded one is removed everywhere.
     def swap_file_embed(old_file, new_file)
-      contents = product.has_product_level_rich_content? ? product.alive_rich_contents : product.alive_variants.flat_map(&:alive_rich_contents)
+      contents = product.has_product_level_rich_content? ? product.alive_rich_contents.to_a : product.alive_variants.flat_map { _1.alive_rich_contents.to_a }
+      first_page_ids = contents.group_by { [_1.entity_type, _1.entity_id] }.values.map { |pages| pages.min_by(&:position).id }
       contents.each do |content|
         nodes = old_file ? RichContent.reject_file_embeds(content.description, [old_file.id]) : content.description.to_a
-        if content == contents.first
-          nodes += [{ "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => new_file.external_id, "uid" => SecureRandom.uuid } }]
-        end
+        nodes += [{ "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => new_file.external_id, "uid" => SecureRandom.uuid } }] if first_page_ids.include?(content.id)
         content.update!(description: nodes)
       end
     end
