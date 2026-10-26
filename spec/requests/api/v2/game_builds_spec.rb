@@ -261,6 +261,17 @@ describe "Game builds API" do
         Product::VariantsUpdaterService.new(product: product.reload, variants_params: [{ id: category.external_id, name: category.title, options: }]).perform
         buyers.each { expect(buyer_file_ids(_1)).to eq([build.reload.product_file.external_id]) }
       end
+
+      it "keeps a variant's existing downloads when its first page is created for the zip" do
+        existing = create(:product_file, link: product)
+        variants.first.product_files << existing
+        deploy(upload_zip)
+        build = product.game_builds.sole
+
+        post "/api/v2/products/#{product.external_id}/games/builds/#{build.public_id}/promote", params: { access_token: token.token }
+
+        expect(buyer_file_ids(buyers.first)).to eq([existing.external_id, build.reload.product_file.external_id])
+      end
     end
 
     it "keeps a superseded build's object through the deleted-files cleanup so it can be rolled back to" do

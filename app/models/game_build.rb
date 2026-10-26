@@ -85,7 +85,10 @@ class GameBuild < ApplicationRecord
       # A variant's buyers get only its linked files, and every save relinks them from the variant's
       # page embeds, so a variant without pages gets one holding the zip.
       product.alive_variants.each do |variant|
-        variant.alive_rich_contents.create!(description: [file_embed_node(new_file)]) if variant.alive_rich_contents.none?
+        if variant.alive_rich_contents.none?
+          existing = variant.product_files.alive.where.not(id: [old_file&.id, new_file.id].compact).in_order
+          variant.alive_rich_contents.create!(description: (existing.to_a + [new_file]).map { file_embed_node(_1) })
+        end
         variant.product_files.delete(old_file) if old_file
         variant.product_files << new_file unless variant.product_files.include?(new_file)
       end
