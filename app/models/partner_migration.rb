@@ -135,7 +135,7 @@ class PartnerMigration < ApplicationRecord
       return [nil, "variant category title must have up to #{MAX_VARIANT_CATEGORY_TITLE_LENGTH} characters."] if category[:title].length > MAX_VARIANT_CATEGORY_TITLE_LENGTH
 
       variants = category[:variants].map do |variant|
-        return [nil, "each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}."] unless variant.respond_to?(:key?) && string?(variant[:name]) && (variant[:price_difference_cents].nil? || (variant[:price_difference_cents].is_a?(Integer) && variant[:price_difference_cents].between?(0, BasePrice::Shared::MAX_PRICE_CENTS)))
+        return [nil, "each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}."] unless variant.respond_to?(:key?) && string?(variant[:name]) && variant[:name].present? && (variant[:price_difference_cents].nil? || (variant[:price_difference_cents].is_a?(Integer) && variant[:price_difference_cents].between?(0, BasePrice::Shared::MAX_PRICE_CENTS)))
         return [nil, "variant name must have up to #{MAX_VARIANT_NAME_LENGTH} characters."] if variant[:name].length > MAX_VARIANT_NAME_LENGTH
 
         { "name" => variant[:name], "price_difference_cents" => variant[:price_difference_cents] || 0 }

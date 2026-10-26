@@ -83,6 +83,13 @@ describe PartnerMigration do
       expect(error).to eq("products[0]: variant category title must have up to #{described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH} characters.")
     end
 
+    it "rejects a blank variant name, which the import cannot save" do
+      category = { title: "License", variants: [{ name: "   " }] }
+      _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
+
+      expect(error).to eq("products[0]: each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}.")
+    end
+
     it "rejects a variant name longer than its column" do
       category = { title: "License", variants: [{ name: "Standard" }, { name: "e\u0301" * 128 }] }
       _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
