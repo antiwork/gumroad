@@ -36,7 +36,6 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
       render json: { success: false, message: "This endpoint is only available to partner applications." }, status: :forbidden
     end
 
-    # The partner's creators, narrowed to one when `external_user_id` is given.
     def partner_creators_in_scope
       creators = current_partner_application.partner_creators.alive.includes(:user)
       creators = creators.where(external_user_id: params[:external_user_id].to_s) if params[:external_user_id].present?
@@ -65,20 +64,17 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
     # featured product sections. A seller without saved sections shows every live product
     # (ProfileSectionsPresenter.default_products_section_available?).
     def product_ids_hidden_from_profile(user_ids)
-      sections_by_seller_id = SellerProfileSection.on_profile.where(seller_id: user_ids).group_by(&:seller_id)
-      return [] if sections_by_seller_id.empty?
-
-      Link.where(user_id: sections_by_seller_id.keys).alive.not_archived.pluck(:id, :user_id).filter_map do |product_id, seller_id|
-        product_id unless shown_on_profile?(product_id, sections_by_seller_id[seller_id])
-      end
-    end
-
-    def shown_on_profile?(product_id, sections)
-      sections.any? do |section|
+      shown_ids_by_seller_id = SellerProfileSection.on_profile.where(seller_id: user_ids).each_with_object({}) do |section, shown|
+        ids = shown[section.seller_id] ||= Set.new
         case section
-        when SellerProfileProductsSection then section.shown_products.include?(product_id)
-        when SellerProfileFeaturedProductSection then section.featured_product_id == product_id
+        when SellerProfileProductsSection then ids.merge(section.shown_products)
+        when SellerProfileFeaturedProductSection then ids << section.featured_product_id
         end
+      end
+      return [] if shown_ids_by_seller_id.empty?
+
+      Link.where(user_id: shown_ids_by_seller_id.keys).alive.not_archived.pluck(:id, :user_id).filter_map do |product_id, seller_id|
+        product_id unless shown_ids_by_seller_id[seller_id].include?(product_id)
       end
     end
 
