@@ -6,7 +6,7 @@ describe "Partner migration onboarding", type: :request do
   include Devise::Test::IntegrationHelpers
 
   let(:partner_application) { create(:oauth_application, owner: create(:user), name: "Example App", is_partner: true, confidential: true, scopes: "partner_api") }
-  let(:creator) { create(:named_user) }
+  let(:seller) { create(:named_user) }
   let!(:migration_and_code) do
     products, _error = PartnerMigration.normalize_products([{ name: "Texture Pack", price: 1500 }, { name: "Brush Set", price: 500 }])
     PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
@@ -40,8 +40,8 @@ describe "Partner migration onboarding", type: :request do
     expect(logged_paths).to eq(["/partner_migration?migration_code=[FILTERED]"])
   end
 
-  it "asks the logged-in creator to confirm the import" do
-    sign_in creator
+  it "asks the logged-in seller to confirm the import" do
+    sign_in seller
 
     get partner_migration_path(migration_code: code)
     follow_redirect!
@@ -52,35 +52,35 @@ describe "Partner migration onboarding", type: :request do
   end
 
   it "claims the migration and starts the import" do
-    sign_in creator
+    sign_in seller
     get partner_migration_path(migration_code: code)
 
     claim
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("Import started")
-    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_CLAIMED, user: creator)
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_CLAIMED, user: seller)
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
   end
 
   it "does not accept a used link from another account" do
-    sign_in creator
+    sign_in seller
     get partner_migration_path(migration_code: code)
     claim
-    sign_out creator
+    sign_out seller
 
     sign_in create(:named_user)
     get partner_migration_path(migration_code: code)
     follow_redirect!
 
     expect(response.body).to include("This link is invalid or expired.")
-    expect(migration.reload.user).to eq(creator)
+    expect(migration.reload.user).to eq(seller)
   end
 
   it "rejects a form for a different link than the one in the session" do
     products, _error = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
     other_migration, other_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-2", products:)
-    sign_in creator
+    sign_in seller
     get partner_migration_path(migration_code: code)
     get partner_migration_path
     form = Nokogiri::HTML(response.body)
@@ -98,7 +98,7 @@ describe "Partner migration onboarding", type: :request do
   end
 
   it "shows an error for an unknown code" do
-    sign_in creator
+    sign_in seller
 
     get partner_migration_path(migration_code: "unknown")
     claim

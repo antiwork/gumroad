@@ -5,7 +5,7 @@ require "spec_helper"
 describe PartnerMigration do
   let(:partner_application) { create(:oauth_application, owner: create(:user), name: "Example App", is_partner: true, confidential: true, scopes: "partner_api") }
   let(:product_attributes) { { name: "Texture Pack", price: 1500 } }
-  let(:creator) { create(:user) }
+  let(:seller) { create(:user) }
 
   def create_migration(external_user_id: "ext-1")
     products, _error = described_class.normalize_products([product_attributes])
@@ -73,79 +73,79 @@ describe PartnerMigration do
   end
 
   describe "#claim!" do
-    it "links the creator to the partner user ID and starts the import" do
+    it "links the seller to the partner user ID and starts the import" do
       migration, _code = create_migration
 
-      migration.claim!(creator)
+      migration.claim!(seller)
 
-      expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, user: creator, claimed_at: be_present)
-      expect(partner_application.partner_creators.alive.find_by(external_user_id: "ext-1")).to have_attributes(user: creator, migrated_at: be_present)
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, user: seller, claimed_at: be_present)
+      expect(partner_application.partner_sellers.alive.find_by(external_user_id: "ext-1")).to have_attributes(user: seller, migrated_at: be_present)
       expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
     end
 
     it "cannot be claimed by a second account" do
       migration, _code = create_migration
-      migration.claim!(creator)
+      migration.claim!(seller)
 
       expect { migration.claim!(create(:user)) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
-    it "queues the import again when the same creator claims again before it finishes" do
+    it "queues the import again when the same seller claims again before it finishes" do
       migration, _code = create_migration
-      migration.claim!(creator)
+      migration.claim!(seller)
       Sidekiq::Worker.clear_all
 
-      migration.claim!(creator)
+      migration.claim!(seller)
 
       expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
       migration.update!(status: described_class::STATUS_COMPLETED)
-      expect { migration.claim!(creator) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
+      expect { migration.claim!(seller) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
     it "rejects an expired link" do
       migration, _code = create_migration
       migration.update!(expires_at: 1.minute.ago)
 
-      expect { migration.claim!(creator) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
+      expect { migration.claim!(seller) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
     it "rejects a link from an application that is no longer a partner" do
       migration, _code = create_migration
       partner_application.update!(is_partner: false)
 
-      expect { migration.claim!(creator) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
+      expect { migration.claim!(seller) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
     it "rejects a partner user ID that is linked to a different Gumroad account" do
-      PartnerCreator.create!(oauth_application: partner_application, user: create(:user), external_user_id: "ext-1")
+      create(:partner_seller, oauth_application: partner_application, user: create(:user), external_user_id: "ext-1")
       migration, _code = create_migration
 
-      expect { migration.claim!(creator) }.to raise_error(described_class::ClaimError, "This Example App account is already linked to a different Gumroad account.")
+      expect { migration.claim!(seller) }.to raise_error(described_class::ClaimError, "This Example App account is already linked to a different Gumroad account.")
       expect(migration.reload).to be_pending
     end
 
     it "rejects a Gumroad account that is linked to a different partner user ID" do
-      PartnerCreator.create!(oauth_application: partner_application, user: creator, external_user_id: "ext-2")
+      create(:partner_seller, oauth_application: partner_application, user: seller, external_user_id: "ext-2")
       migration, _code = create_migration
 
-      expect { migration.claim!(creator) }.to raise_error(described_class::ClaimError, "Your Gumroad account is already linked to a different Example App account.")
+      expect { migration.claim!(seller) }.to raise_error(described_class::ClaimError, "Your Gumroad account is already linked to a different Example App account.")
     end
 
-    it "restores a creator that was removed from the program" do
-      partner_creator = PartnerCreator.create!(oauth_application: partner_application, user: creator, external_user_id: "ext-1")
-      partner_creator.mark_deleted!
+    it "restores a seller that was removed from the program" do
+      partner_seller = create(:partner_seller, oauth_application: partner_application, user: seller, external_user_id: "ext-1")
+      partner_seller.mark_deleted!
       migration, _code = create_migration
 
-      migration.claim!(creator)
+      migration.claim!(seller)
 
-      expect(partner_creator.reload).to be_alive
+      expect(partner_seller.reload).to be_alive
     end
 
     it "rejects a suspended account" do
       migration, _code = create_migration
-      creator.update!(user_risk_state: "suspended_for_fraud")
+      seller.update!(user_risk_state: "suspended_for_fraud")
 
-      expect { migration.claim!(creator) }.to raise_error(described_class::ClaimError, "This account cannot import products.")
+      expect { migration.claim!(seller) }.to raise_error(described_class::ClaimError, "This account cannot import products.")
     end
   end
 end

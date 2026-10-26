@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe PartnerMigrationImportJob do
   let(:partner_application) { create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api") }
-  let(:creator) { create(:user) }
+  let(:seller) { create(:user) }
   let(:image) { File.binread(Rails.root.join("spec/support/fixtures/smilie.png")) }
   let(:remote_files) do
     {
@@ -32,7 +32,7 @@ describe PartnerMigrationImportJob do
     raise error if error
 
     migration, _code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products: normalized)
-    migration.update!(status: PartnerMigration::STATUS_CLAIMED, user: creator)
+    migration.update!(status: PartnerMigration::STATUS_CLAIMED, user: seller)
     migration
   end
 
@@ -53,7 +53,7 @@ describe PartnerMigrationImportJob do
 
     described_class.new.perform(migration.id)
 
-    product = creator.links.sole
+    product = seller.links.sole
     expect(product).to have_attributes(name: "Texture Pack", description: "<p>Forty textures.</p>", price_cents: 1500, draft: true, purchase_disabled_at: be_present)
     expect(product.alive?).to be(false)
     expect(product.tags.pluck(:name)).to eq(["textures"])
@@ -61,7 +61,7 @@ describe PartnerMigrationImportJob do
     expect(product.variant_categories.sole.variants.map { [_1.name, _1.price_difference_cents] }).to eq([["Standard", 0], ["Commercial", 3000]])
     product_file = product.alive_product_files.sole
     expect(product_file).to have_attributes(display_name: "Pack")
-    expect(product_file.url).to start_with("#{S3_BASE_URL}attachments/#{creator.external_id}/")
+    expect(product_file.url).to start_with("#{S3_BASE_URL}attachments/#{seller.external_id}/")
     expect(product.has_product_level_rich_content?).to be(true)
     expect(product.alive_rich_contents.sole.description).to match([include("type" => "fileEmbed", "attrs" => include("id" => product_file.external_id))])
     expect(product.asset_previews.alive.count).to eq(1)
@@ -77,10 +77,10 @@ describe PartnerMigrationImportJob do
 
     described_class.new.perform(migration.id)
 
-    expect(creator.links.pluck(:name)).to eq(["Brush Set"])
+    expect(seller.links.pluck(:name)).to eq(["Brush Set"])
     expect(migration.reload.results).to eq(
       "0" => { "error" => "The file download failed with HTTP 404." },
-      "1" => { "product_id" => creator.links.sole.external_id },
+      "1" => { "product_id" => seller.links.sole.external_id },
     )
     expect(migration.status).to eq(PartnerMigration::STATUS_COMPLETED)
   end
@@ -90,7 +90,7 @@ describe PartnerMigrationImportJob do
 
     described_class.new.perform(migration.id)
 
-    product = creator.links.sole
+    product = seller.links.sole
     expect(product.asset_previews.alive.count).to eq(0)
     expect(migration.reload.results["0"]).to include("product_id" => product.external_id, "warnings" => [a_string_starting_with("Cover https://files.example.com/missing.png was not imported")])
   end
@@ -101,7 +101,7 @@ describe PartnerMigrationImportJob do
 
     described_class.new.perform(migration.id)
 
-    expect(creator.links.sole.asset_previews.alive.count).to eq(0)
+    expect(seller.links.sole.asset_previews.alive.count).to eq(0)
     expect(migration.reload.results["0"]["warnings"]).to include(a_string_starting_with("Cover https://files.example.com/cover.png was not imported: The file is larger than"))
   end
 
@@ -121,7 +121,7 @@ describe PartnerMigrationImportJob do
 
     described_class.new.perform(migration.id)
 
-    expect(creator.links.sole.thumbnail).to be_nil
+    expect(seller.links.sole.thumbnail).to be_nil
     expect(migration.reload.results["0"]["warnings"]).to include(a_string_matching(/\AThumbnail .* was not imported: The file download took longer than/))
   end
 
@@ -136,7 +136,7 @@ describe PartnerMigrationImportJob do
 
     expect { described_class.new.perform(migration.id) }.to raise_error(PartnerMigration::RemoteFileTransfer::TemporaryError)
 
-    expect(creator.links).to be_empty
+    expect(seller.links).to be_empty
     expect(migration.reload.results).to be_nil
   end
 
@@ -153,12 +153,12 @@ describe PartnerMigrationImportJob do
     migration = create_claimed_migration([product_attributes])
 
     expect { described_class.new.perform(migration.id) }.to raise_error(Timeout::Error)
-    product_id = creator.links.sole.external_id
+    product_id = seller.links.sole.external_id
     expect(migration.reload.results).to eq("0" => { "product_id" => product_id, "media_pending" => true })
 
     described_class.new.perform(migration.id)
 
-    expect(creator.links.count).to eq(1)
+    expect(seller.links.count).to eq(1)
     expect(migration.reload.status).to eq(PartnerMigration::STATUS_COMPLETED)
     expect(migration.results).to eq("0" => { "product_id" => product_id, "warnings" => ["The import stopped before the covers and thumbnail were added."] })
   end
@@ -169,7 +169,7 @@ describe PartnerMigrationImportJob do
     described_class.new.perform(migration.id)
 
     expect(migration.reload.results["0"]).to eq("error" => "The file download failed with HTTP 404.")
-    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{creator.external_id}/").count).to eq(0)
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").count).to eq(0)
   end
 
   it "deletes the files it uploaded when the product cannot be created" do
@@ -179,7 +179,7 @@ describe PartnerMigrationImportJob do
     described_class.new.perform(migration.id)
 
     expect(migration.reload.results["0"]).to eq("error" => "Invalid product")
-    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{creator.external_id}/").count).to eq(0)
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").count).to eq(0)
   end
 
   it "deletes a thumbnail upload that fails validation" do
@@ -205,9 +205,9 @@ describe PartnerMigrationImportJob do
 
     expect { described_class.new.perform(migration.id) }.to raise_error(ActiveRecord::RecordInvalid)
 
-    product = creator.links.sole
+    product = seller.links.sole
     expect(migration.reload.results["0"]).to eq("product_id" => product.external_id, "media_pending" => true)
-    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{creator.external_id}/").count).to eq(1)
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").count).to eq(1)
   end
 
   it "skips products that a previous attempt imported" do
@@ -216,7 +216,7 @@ describe PartnerMigrationImportJob do
 
     described_class.new.perform(migration.id)
 
-    expect(creator.links.pluck(:name)).to eq(["Texture Pack"])
+    expect(seller.links.pluck(:name)).to eq(["Texture Pack"])
     expect(migration.reload.results.keys).to eq(["0", "1"])
   end
 
@@ -226,7 +226,7 @@ describe PartnerMigrationImportJob do
 
     described_class.new.perform(migration.id)
 
-    expect(creator.links).to be_empty
+    expect(seller.links).to be_empty
   end
 
   it "marks the migration as failed when retries run out" do
