@@ -54,6 +54,13 @@ describe PartnerMigration do
       expect(error).to eq("products[0]: variant_categories must be an array with up to 1 item.")
     end
 
+    it "rejects a variant price difference above the maximum price" do
+      category = { title: "License", variants: [{ name: "Commercial", price_difference_cents: BasePrice::Shared::MAX_PRICE_CENTS + 1 }] }
+      _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
+
+      expect(error).to eq("products[0]: each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}.")
+    end
+
     it "rejects an unknown taxonomy" do
       _products, error = described_class.normalize_products([product_attributes.merge(taxonomy_id: 0)])
 
