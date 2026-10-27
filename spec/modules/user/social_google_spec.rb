@@ -552,11 +552,11 @@ describe User::SocialGoogle do
       allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
 
       save_attempts = 0
-      allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args|
+      allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args, **kwargs|
         save_attempts += 1
         raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if save_attempts == 1
 
-        original.call(*args)
+        original.call(*args, **kwargs)
       end
 
       result = User.find_or_create_for_google_oauth2(deadlock_data)
@@ -591,11 +591,11 @@ describe User::SocialGoogle do
       allow_any_instance_of(User).to receive(:google_picture_url).and_return(nil)
 
       save_attempts = 0
-      allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args|
+      allow_any_instance_of(User).to receive(:save!).and_wrap_original do |original, *args, **kwargs|
         save_attempts += 1
         raise ActiveRecord::LockWaitTimeout, "Lock wait timeout exceeded" if save_attempts == 1
 
-        original.call(*args)
+        original.call(*args, **kwargs)
       end
 
       result = User.find_or_create_for_google_oauth2(lock_timeout_data)

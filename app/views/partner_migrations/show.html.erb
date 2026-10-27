@@ -1,13 +1,5 @@
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
-  <% if @claimed %>
-    <header class="flex flex-col gap-4 p-4 text-center">
-      <h2>Import started</h2>
-      <p>Your products will appear as drafts in your Gumroad account. Review each one before you publish it.</p>
-    </header>
-    <footer class="flex flex-col gap-4 p-4 text-center">
-      <%= link_to "Go to products", products_path, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
-    </footer>
-  <% elsif @error_message.present? %>
+  <% if @error_message.present? %>
     <header class="flex flex-col gap-4 p-4 text-center">
       <h2>Import not available</h2>
       <p><%= @error_message %></p>
@@ -22,11 +14,13 @@
         <strong><%= @migration.oauth_application.name %></strong>?
       </h2>
       <p>The products are imported as drafts in <strong><%= current_user.email %></strong>. Nothing is published until you publish it.</p>
+      <%= button_to "Use another account", switch_partner_migration_account_path, method: :post, class: "min-h-11 cursor-pointer border-0 bg-transparent px-2 py-2 text-base leading-snug text-current underline" %>
       <p>This also links this Gumroad account to your <%= @migration.oauth_application.name %> account.</p>
     </header>
     <footer class="flex flex-col gap-4 p-4 text-center">
       <%= form_tag partner_migration_path, method: :post, style: "display: contents" do %>
         <%= hidden_field_tag :partner_migration_id, @migration.id %>
+        <%= hidden_field_tag :partner_migration_code_digest, @migration.code_digest %>
         <%= button_tag "Import products", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
       <% end %>
     </footer>

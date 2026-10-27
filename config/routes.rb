@@ -208,6 +208,7 @@ Rails.application.routes.draw do
       get "/partner/creators/top", to: "partner/creators#top"
       get "/partner/categories", to: "partner/categories#index"
       post "/partner/migrations", to: "partner/migrations#create"
+      get "/partner/migrations/:id", to: "partner/migrations#show"
     end
   end
 
@@ -970,7 +971,11 @@ Rails.application.routes.draw do
 
     resources :bundles, only: [] do
       scope module: :bundles do
-        resource :product, only: [:edit, :update], controller: "product"
+        resource :product, only: [:edit, :update], controller: "product" do
+          # Its own request: the product form is the bundle save, and a retained file is not
+          # part of it. See Bundles::ProductController#remove_file.
+          post :remove_file
+        end
         resource :content, only: [:edit, :update], controller: "content" do
           post :update_purchases_content
         end
@@ -1102,6 +1107,9 @@ Rails.application.routes.draw do
     # One-time links from a partner application to import a creator's products.
     get "/partner_migration" => "partner_migrations#show", as: :partner_migration
     post "/partner_migration" => "partner_migrations#create"
+    post "/partner_migration/switch_account" => "partner_migrations#switch_account", as: :switch_partner_migration_account
+    get "/partner_migration/:id" => "partner_migrations#status", as: :partner_migration_status
+    post "/partner_migration/:id/retry" => "partner_migrations#retry_import", as: :retry_partner_migration
 
     get "/dashboard" => "dashboard#index", as: :dashboard
     get "/dashboard/customers_count" => "dashboard#customers_count", as: :dashboard_customers_count

@@ -1252,8 +1252,10 @@ class User < ApplicationRecord
     resource_subscriptions.alive.update_all(deleted_at: revoked_at)
   end
 
+  # Confirmation can sign in a record that fails validation; that must not keep its old sessions alive.
   def invalidate_browser_sessions!
-    update!(last_active_sessions_invalidated_at: DateTime.current)
+    self.last_active_sessions_invalidated_at = DateTime.current
+    save!(validate: false)
   end
 
   # Google and Apple adoption already retire the password and sessions. Whoever created an
@@ -1762,11 +1764,11 @@ class User < ApplicationRecord
 
   protected
     def after_confirmation
-      # The password reset link sent to the old email should be invalidated
-      # so that if an attacker takes control of that old email they shouldn't
-      # be able to reset the password of the victim's account after a new email
-      # is confirmed.
-      update!(reset_password_token: nil, reset_password_sent_at: nil)
+      # Kills a reset link sent to the old address. Initial confirmation saves without
+      # validations, so an unrelated invalid attribute must not block this or the attach.
+      self.reset_password_token = nil
+      self.reset_password_sent_at = nil
+      save!(validate: false)
 
       # Guest purchases follow the address only once its owner has proven it.
       AttachPastPurchasesToUserWorker.perform_async(id, email)
@@ -1923,7 +1925,9 @@ class User < ApplicationRecord
                       .where(email:)
                       .each(&:make_requester_an_affiliate!)
 
-      update!(pre_signup_affiliate_request_processed: true)
+      # Confirmation can commit a record that fails validation, so don't re-validate here.
+      self.pre_signup_affiliate_request_processed = true
+      save!(validate: false)
     end
 
     FLAGS_TO_ENABLE_BY_DEFAULT = %w{

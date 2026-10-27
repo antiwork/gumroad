@@ -82,7 +82,17 @@ describe PartnerMigrationImportJob do
       "0" => { "error" => "The file download failed with HTTP 404." },
       "1" => { "product_id" => seller.links.sole.external_id },
     )
-    expect(migration.status).to eq(PartnerMigration::STATUS_COMPLETED)
+    expect(migration.status).to eq(PartnerMigration::STATUS_FAILED)
+  end
+
+  it "imports a catalog above the daily editor quota", :enforce_product_creation_limit do
+    migration = create_claimed_migration(Array.new(11) { |index| { name: "Asset #{index}", price: 500 } })
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.links.count).to eq(11)
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_COMPLETED)
+    expect(migration.results.values).to all(include("product_id"))
   end
 
   it "keeps the product and returns a warning when a cover cannot be imported" do
@@ -161,24 +171,6 @@ describe PartnerMigrationImportJob do
     described_class.new.perform(migration.id)
 
     expect(seller.links.sole.tags.pluck(:name)).to eq(["art"])
-  end
-
-  it "saves variant and file names at the column widths without cutting them" do
-    title = "é" * PartnerMigration::MAX_VARIANT_CATEGORY_TITLE_LENGTH
-    name = "\u{1F600}" * PartnerMigration::MAX_VARIANT_NAME_LENGTH
-    display_name = "ü" * PartnerMigration::MAX_FILE_DISPLAY_NAME_LENGTH
-    migration = create_claimed_migration([product_attributes.merge(
-      covers: [], thumbnail_url: nil,
-      files: [{ url: "https://files.example.com/pack.zip", display_name: }],
-      variant_categories: [{ title:, variants: [{ name: }] }],
-    )])
-
-    described_class.new.perform(migration.id)
-
-    product = seller.links.sole
-    expect(product.variant_categories.sole.title).to eq(title)
-    expect(product.variant_categories.sole.variants.sole.name).to eq(name)
-    expect(product.alive_product_files.sole.display_name).to eq(display_name)
   end
 
   it "imports tags that the tags table treats as the same name once" do

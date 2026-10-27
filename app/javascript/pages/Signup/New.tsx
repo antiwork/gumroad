@@ -18,6 +18,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 type PageProps = {
   email: string | null;
   application_name: string | null;
+  migration_product_count?: number;
   referrer: {
     id: string;
     name: string;
@@ -29,7 +30,13 @@ type PageProps = {
 };
 
 function SignupPage() {
-  const { email: initialEmail, application_name, referrer, stats } = usePage<PageProps>().props;
+  const {
+    email: initialEmail,
+    application_name,
+    migration_product_count,
+    referrer,
+    stats,
+  } = usePage<PageProps>().props;
   const { number_of_creators, total_made } = stats;
 
   const url = new URL(useOriginalLocation());
@@ -66,7 +73,11 @@ function SignupPage() {
       : `Join over ${number_of_creators.toLocaleString()} creators who have earned over ${formatPrice("$", total_made, 0, { noCentsIfWhole: true })} on Gumroad selling digital products and memberships.`;
 
   return (
-    <Layout header={<h1>{headerText}</h1>} headerActions={<Link href={Routes.login_path({ next })}>Log in</Link>}>
+    <Layout
+      header={<h1>{headerText}</h1>}
+      headerActions={<Link href={Routes.login_path({ next })}>Log in</Link>}
+      migrationProductCount={migration_product_count}
+    >
       <form onSubmit={handleSubmit}>
         <SocialAuth />
         <Separator>

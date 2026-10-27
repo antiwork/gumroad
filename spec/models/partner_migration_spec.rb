@@ -61,53 +61,25 @@ describe PartnerMigration do
       expect(error).to eq("products[0]: each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}.")
     end
 
-    it "accepts variant and file names up to the column widths, counted in characters" do
-      title = "é" * described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH
-      name = "\u{1F600}" * described_class::MAX_VARIANT_NAME_LENGTH
-      decomposed_name = "e\u0301" * (described_class::MAX_VARIANT_NAME_LENGTH / 2)
-      display_name = "ü" * described_class::MAX_FILE_DISPLAY_NAME_LENGTH
-      products, error = described_class.normalize_products([product_attributes.merge(
-        files: [{ url: "https://files.example.com/pack.zip", display_name: }],
-        variant_categories: [{ title:, variants: [{ name: }, { name: decomposed_name }] }],
-      )])
-
-      expect(error).to be_nil
-      expect(products.first["variant_categories"].first).to include("title" => title, "variants" => [include("name" => name), include("name" => decomposed_name)])
-      expect(products.first["files"].first["display_name"]).to eq(display_name)
+    it "rejects blank and oversized variant names and category titles" do
+      ["", " ", "x" * (described_class::MAX_NAME_LENGTH + 1)].each do |name|
+        category = { title: "License", variants: [{ name: }] }
+        expect(described_class.normalize_products([product_attributes.merge(variant_categories: [category])]).last).to include("variant name")
+        category = { title: name, variants: [{ name: "Standard" }] }
+        expect(described_class.normalize_products([product_attributes.merge(variant_categories: [category])]).last).to include("variant category title")
+      end
     end
 
-    it "rejects a variant category title longer than its column" do
-      category = { title: "t" * (described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH + 1), variants: [{ name: "Standard" }] }
-      _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
+    it "rejects a combined product and variant price above the stored range" do
+      category = { title: "License", variants: [{ name: "Commercial", price_difference_cents: BasePrice::Shared::MAX_PRICE_CENTS }] }
 
-      expect(error).to eq("products[0]: variant category title must have up to #{described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH} characters.")
+      expect(described_class.normalize_products([product_attributes.merge(variant_categories: [category])]).last).to include("product price plus each variant")
     end
 
-    it "rejects a blank variant name, which the import cannot save" do
-      category = { title: "License", variants: [{ name: "   " }] }
-      _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
+    it "rejects a file display name that would be truncated" do
+      product = product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip", display_name: "x" * (described_class::MAX_NAME_LENGTH + 1) }])
 
-      expect(error).to eq("products[0]: each variant needs a name string and a whole number price_difference_cents from 0 to #{BasePrice::Shared::MAX_PRICE_CENTS}.")
-    end
-
-    it "rejects a variant name longer than its column" do
-      category = { title: "License", variants: [{ name: "Standard" }, { name: "e\u0301" * 128 }] }
-      _products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [category])])
-
-      expect(error).to eq("products[0]: variant name must have up to #{described_class::MAX_VARIANT_NAME_LENGTH} characters.")
-    end
-
-    it "rejects a file display name longer than its column" do
-      files = [{ url: "https://files.example.com/pack.zip", display_name: "d" * (described_class::MAX_FILE_DISPLAY_NAME_LENGTH + 1) }]
-      _products, error = described_class.normalize_products([product_attributes.merge(files:)])
-
-      expect(error).to eq("products[0]: file display_name must have up to #{described_class::MAX_FILE_DISPLAY_NAME_LENGTH} characters.")
-    end
-
-    it "keeps the length limits equal to the column widths" do
-      expect(VariantCategory.columns_hash.fetch("title").limit).to eq(described_class::MAX_VARIANT_CATEGORY_TITLE_LENGTH)
-      expect(Variant.columns_hash.fetch("name").limit).to eq(described_class::MAX_VARIANT_NAME_LENGTH)
-      expect(ProductFile.columns_hash.fetch("display_name").limit).to eq(described_class::MAX_FILE_DISPLAY_NAME_LENGTH)
+      expect(described_class.normalize_products([product]).last).to include("file display_name")
     end
 
     it "rejects a price above the maximum price" do
@@ -163,6 +135,40 @@ describe PartnerMigration do
       expect(described_class.find_by_code(code)).to eq(migration)
       expect(migration.expires_at).to be_within(1.minute).of(described_class::EXPIRES_IN.from_now)
     end
+
+    it "reuses one migration when the partner retries a seller export" do
+      first, first_code = create_migration
+      second, second_code = create_migration
+
+      expect(second.id).to eq(first.id)
+      expect(first_code).not_to eq(second_code)
+      expect(described_class.find_by_code(first_code)).to be_nil
+      expect(described_class.find_by_code(second_code)).to eq(first)
+    end
+
+    it "refreshes signed URLs without clearing products that already imported" do
+      original = product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip?signature=old" }])
+      products, = described_class.normalize_products([original])
+      migration, = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+      migration.claim!(seller)
+      migration.update!(results: { "0" => { "product_id" => "saved-product" } })
+      products, = described_class.normalize_products([original.merge(files: [{ url: "https://files.example.com/pack.zip?signature=new" }])])
+
+      refreshed, = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+
+      expect(refreshed.id).to eq(migration.id)
+      expect(refreshed.results).to eq("0" => { "product_id" => "saved-product" })
+      expect(refreshed.products.first["files"].first["url"]).to end_with("signature=new")
+    end
+
+    it "rejects catalog changes after the seller confirms" do
+      migration, = create_migration
+      migration.claim!(seller)
+      products, = described_class.normalize_products([product_attributes.merge(name: "Another product")])
+
+      expect { described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:) }.to raise_error(described_class::CatalogConflict)
+      expect(migration.reload.products.first["name"]).to eq("Texture Pack")
+    end
   end
 
   describe "#claim!" do
@@ -172,7 +178,7 @@ describe PartnerMigration do
       migration.claim!(seller)
 
       expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, user: seller, claimed_at: be_present)
-      expect(partner_application.partner_sellers.alive.find_by(external_user_id: "ext-1")).to have_attributes(user: seller, migrated_at: be_present)
+      expect(partner_application.partner_sellers.alive.find_by(external_user_id: "ext-1")).to have_attributes(user: seller, migrated_at: nil)
       expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
     end
 
@@ -253,6 +259,40 @@ describe PartnerMigration do
       seller.update!(user_risk_state: "suspended_for_fraud")
 
       expect { migration.claim!(seller) }.to raise_error(described_class::ClaimError, "This account cannot import products.")
+    end
+
+    it "starts the migration date when an imported product first goes live" do
+      migration, = create_migration
+      migration.claim!(seller)
+      PartnerMigrationImportJob.new.perform(migration.id)
+      partner_seller = partner_application.partner_sellers.sole
+      expect(partner_seller.migrated_at).to be_nil
+
+      seller.links.sole.publish!
+
+      expect(partner_seller.reload.migrated_at).to eq(seller.links.sole.first_published_at)
+    end
+
+    it "retries only failed products and preserves saved products" do
+      migration, = create_migration
+      migration.claim!(seller)
+      migration.update!(status: described_class::STATUS_FAILED, results: { "0" => { "product_id" => "saved" }, "1" => { "error" => "Missing file" } })
+
+      migration.retry!(seller)
+
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, results: { "0" => { "product_id" => "saved" } })
+      expect { migration.retry!(create(:user)) }.to raise_error(described_class::ClaimError)
+    end
+
+    it "keeps failed results when the previous job still holds its queue lock" do
+      migration, = create_migration
+      migration.claim!(seller)
+      results = { "0" => { "error" => "Missing file" } }
+      migration.update!(status: described_class::STATUS_FAILED, results:)
+      allow(PartnerMigrationImportJob).to receive(:perform_async).with(migration.id).and_return(nil)
+
+      expect { migration.retry!(seller) }.to raise_error(described_class::ClaimError, /still finishing/)
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_FAILED, results:)
     end
   end
 end

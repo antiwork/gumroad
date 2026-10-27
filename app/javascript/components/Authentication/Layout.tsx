@@ -10,10 +10,12 @@ export const Layout = ({
   children,
   header,
   headerActions,
+  migrationProductCount,
 }: {
   children: React.ReactNode;
   header: React.ReactNode;
   headerActions?: React.ReactNode;
+  migrationProductCount?: number | undefined;
 }) => {
   const { rootDomain, scheme } = useDomains();
 
@@ -30,6 +32,12 @@ export const Layout = ({
           className="p-8 sm:p-16"
         >
           {header}
+          {migrationProductCount !== undefined ? (
+            <p className="mt-4">
+              Gumroad imports your {migrationProductCount} {migrationProductCount === 1 ? "product" : "products"} as{" "}
+              {migrationProductCount === 1 ? "a draft" : "drafts"}. After you continue, confirm the destination account.
+            </p>
+          ) : null}
         </PageHeader>
         <div className="p-8 sm:p-16">{children}</div>
       </div>

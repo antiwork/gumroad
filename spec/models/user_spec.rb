@@ -3355,6 +3355,31 @@ describe User, :vcr do
 
       expect(guest_purchase.reload.purchaser).to eq(user)
     end
+
+    [false, true].each do |affiliate_requests_processed|
+      it "clears the reset token before queuing the attach job when the account's stored data no longer passes validation (affiliate requests processed: #{affiliate_requests_processed})" do
+        user = create(:unconfirmed_user, pre_signup_affiliate_request_processed: affiliate_requests_processed)
+        user.update_column(:payment_address, "not-an-email")
+        user.send_reset_password_instructions
+        expect(user.reload.reset_password_token).to be_present
+        guest_purchase = create(:purchase, email: user.email, purchaser: nil)
+        token_when_queued = :not_queued
+        allow(AttachPastPurchasesToUserWorker).to receive(:perform_async).and_wrap_original do |original, *args|
+          token_when_queued = User.find(user.id).reset_password_token
+          original.call(*args)
+        end
+
+        user.confirm
+
+        expect(user.reload).to be_confirmed
+        expect(user.pre_signup_affiliate_request_processed).to be(true)
+        expect(user.reset_password_token).to be_nil
+        expect(user.reset_password_sent_at).to be_nil
+        expect(token_when_queued).to be_nil
+        AttachPastPurchasesToUserWorker.drain
+        expect(guest_purchase.reload.purchaser).to eq(user)
+      end
+    end
   end
 
   describe "#update_alive_cart_email" do
@@ -3659,6 +3684,16 @@ describe User, :vcr do
           user.invalidate_browser_sessions!
         end.to change { user.reload.last_active_sessions_invalidated_at }.from(nil).to(DateTime.current)
          .and not_change { active_access_token.reload.revoked_at }
+      end
+    end
+
+    it "updates the timestamp when the stored data no longer passes validation" do
+      user.update_column(:payment_address, "not-an-email")
+
+      freeze_time do
+        user.invalidate_browser_sessions!
+
+        expect(user.reload.last_active_sessions_invalidated_at).to eq(DateTime.current)
       end
     end
   end

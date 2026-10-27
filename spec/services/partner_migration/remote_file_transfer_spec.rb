@@ -84,6 +84,20 @@ describe PartnerMigration::RemoteFileTransfer do
     expect { described_class.new(seller:, url: "https://files.example.com/missing.zip").perform }.to raise_error(described_class::Error, "The file download failed with HTTP 404.")
   end
 
+  it "rejects a response that ends before its declared length", :skip_ssrf_stub do
+    allow(SsrfFilter).to receive(:get) do |_url, **options, &block|
+      client = Net::HTTP.new("files.example.com")
+      options.fetch(:http_options, {}).each { |key, value| client.public_send("#{key}=", value) }
+      socket = Net::BufferedIO.new(StringIO.new("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\nshort"))
+      response = Net::HTTPResponse.read_new(socket)
+      response.ignore_eof = client.ignore_eof
+      response.reading_body(socket, true) { block.call(response) }
+      response
+    end
+
+    expect { described_class.new(seller:, url: "https://files.example.com/pack.zip").perform }.to raise_error(EOFError)
+  end
+
   it "raises a temporary error for a response that can succeed later" do
     stub_download("", code: "503")
 
