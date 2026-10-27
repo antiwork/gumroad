@@ -54,15 +54,19 @@ class ProductBuilds::UnpackSiteService
   # rubyzip holds every central-directory record in memory the moment the archive is opened, so the
   # directory is walked here first, with the budgets a build may hold. Counting entries alone would
   # not bound that: one record can carry a 64 KB name, so the bytes the records occupy are budgeted
-  # too. The directory's own declared count is not read at all — the records carry their own
-  # lengths, so only walking them says what the archive really holds.
+  # too. The walk reads exactly the directory rubyzip will read — the record it picks, the count it
+  # declares, in the window it searches for that record — so what was measured and what gets loaded
+  # cannot be two different things: an archive whose directory does not match its own description is
+  # rejected instead of opened.
   CENTRAL_DIRECTORY_ENTRY_SIGNATURE = "PK\x01\x02".b
   CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE = 46
   EOCD_SIGNATURE = "PK\x05\x06".b
   ZIP64_EOCD_SIGNATURE = "PK\x06\x06".b
   ZIP64_EOCD_LOCATOR_SIGNATURE = "PK\x06\x07".b
-  # The end-of-central-directory record plus the longest comment a zip can carry behind it.
-  EOCD_SEARCH_WINDOW = 70_000
+  # rubyzip decides which of the two end-of-directory records an archive has by looking for their
+  # signatures in this many bytes of the archive's tail, so the same window is read here: the walk
+  # has to pick the same record, or it measures a directory rubyzip would not read.
+  EOCD_SEARCH_WINDOW = 65_554
   # Room for the folder entries an archive carries on top of the files they hold.
   ARCHIVE_ENTRY_SLACK = 1_024
   # 5000 files at ~100 bytes of directory record each is about half a megabyte, so this leaves an
@@ -72,6 +76,9 @@ class ProductBuilds::UnpackSiteService
   # What rubyzip reads from the archive at a time. A chunk runs past the entry that asked for it, so
   # it is also what each entry costs the read budget below.
   ARCHIVE_READ_CHUNK = 32_768
+  # An archive whose directory does not hold the records it says it does is not one rubyzip can read
+  # back the way it describes itself, so it is rejected before it is opened.
+  MALFORMED_DIRECTORY = "The zip's directory does not hold the entries it says it does, so it cannot be unpacked."
 
   # What the unpack has read out of the archive. One object per archive, shared by every copy of the
   # archive IO: rubyzip dups that IO for each entry it opens, so a counter held by the IO would only
@@ -208,29 +215,52 @@ class ProductBuilds::UnpackSiteService
     # The entries a build may hold: its files, plus the folder entries an archive carries for them.
     def max_archive_entries = ProductBuild::MAX_SITE_FILES * 2 + ARCHIVE_ENTRY_SLACK
 
-    # Walks the archive's central directory without opening it, which is the memory rubyzip is about
-    # to spend: the records it holds there are counted and measured, and the walk stops as soon as
-    # either budget is passed. A record's name and comment lengths are read from the record itself,
-    # which is why the bytes are budgeted next to the count: a handful of entries can carry megabytes
-    # of names. Returns the entries found, which is what the read budget is worked out from.
+    # Walks the archive's directory without opening it, which is the memory rubyzip is about to spend:
+    # the records it holds there are counted and measured, and the walk stops as soon as either budget
+    # is passed. A record's name and comment lengths are read from the record itself, which is why the
+    # bytes are budgeted next to the count: a handful of entries can carry megabytes of names. Returns
+    # the entries found, which is what the read budget is worked out from.
     def check_directory(zip_path)
       File.open(zip_path, "rb") do |file|
-        central_directory_offsets(file).map { |offset| walk_directory(file, offset) }.max || 0
+        directory = zip_directory(file)
+        return 0 if directory.nil?
+
+        walk_directory(file, directory[:offset], directory[:entries])
       end
     end
 
-    # Counts and measures the records of one directory, raising when either budget is passed.
-    def walk_directory(file, offset)
-      return 0 if offset.nil? || offset >= file.size
+    # The directory rubyzip will read, as the end-of-directory record it picks describes it: where the
+    # records start and how many of them there are. Reading the archive's own description is what
+    # keeps the walk and the load from disagreeing — the records are still measured from the record
+    # itself, never trusted, but the count says how many have to be there for the archive to be one
+    # rubyzip would read at all.
+    def zip_directory(file)
+      file.seek([file.size - EOCD_SEARCH_WINDOW, 0].max)
+      tail = file.read
+
+      if tail.include?(ZIP64_EOCD_SIGNATURE) && tail.include?(ZIP64_EOCD_LOCATOR_SIGNATURE) && (zip64 = tail.rindex(ZIP64_EOCD_SIGNATURE))
+        return { offset: tail[zip64 + 48, 8]&.unpack1("Q<"), entries: tail[zip64 + 32, 8]&.unpack1("Q<") }
+      end
+
+      eocd = tail.rindex(EOCD_SIGNATURE)
+      return nil unless eocd
+
+      { offset: tail[eocd + 16, 4]&.unpack1("V"), entries: tail[eocd + 10, 2]&.unpack1("v") }
+    end
+
+    # Counts and measures the records rubyzip is about to load, raising when the archive's directory
+    # is not the one it describes, or when either budget is passed.
+    def walk_directory(file, offset, declared_entries)
+      raise UnpackError, MALFORMED_DIRECTORY if offset.nil? || declared_entries.nil? || offset >= file.size
 
       file.seek(offset)
       entries = 0
       metadata_bytes = 0
 
-      loop do
+      while entries < declared_entries
         header = file.read(CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE)
-        break if header.nil? || header.bytesize < CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE
-        break unless header.start_with?(CENTRAL_DIRECTORY_ENTRY_SIGNATURE)
+        raise UnpackError, MALFORMED_DIRECTORY if header.nil? || header.bytesize < CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE
+        raise UnpackError, MALFORMED_DIRECTORY unless header.start_with?(CENTRAL_DIRECTORY_ENTRY_SIGNATURE)
 
         name_length, extra_length, comment_length = header[28, 6].unpack("vvv")
         record_size = CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE + name_length + extra_length + comment_length
@@ -243,24 +273,6 @@ class ProductBuilds::UnpackSiteService
       end
 
       entries
-    end
-
-    # Every directory an archive can name: rubyzip picks one of them by the ZIP64 signatures in the
-    # archive's tail, and a hostile archive cannot be trusted to agree with us about which, so both
-    # are walked and both are held to the budgets. When neither record is there, rubyzip cannot open
-    # the archive either, and there is nothing to measure.
-    def central_directory_offsets(file)
-      file.seek([file.size - EOCD_SEARCH_WINDOW, 0].max)
-      tail = file.read
-
-      offsets = []
-      if tail.include?(ZIP64_EOCD_LOCATOR_SIGNATURE) && (zip64 = tail.rindex(ZIP64_EOCD_SIGNATURE))
-        offsets << tail[zip64 + 48, 8]&.unpack1("Q<")
-      end
-      eocd = tail.rindex(EOCD_SIGNATURE)
-      offsets << tail[eocd + 16, 4]&.unpack1("V") if eocd
-
-      offsets.compact.uniq
     end
 
     # Copies one entry into the build's site prefix, stopping as soon as it passes the bytes left in

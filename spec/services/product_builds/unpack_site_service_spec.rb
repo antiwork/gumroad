@@ -325,6 +325,21 @@ describe ProductBuilds::UnpackSiteService do
         expect(site_keys).to be_empty
       end
 
+      it "rejects an archive whose directory does not hold the entries it declares" do
+        # rubyzip reads the directory the archive says it has, whatever is really there, so an archive
+        # that declares more entries than it holds is one rubyzip would keep reading past what was
+        # measured — a handful of records and a declared count in the millions is how a zip makes the
+        # worker allocate millions of entries it never wrote.
+        bytes = zip_bytes({ "index.html" => "<html></html>", "assets/a.js" => "a" })
+        eocd_at = bytes.rindex(described_class::EOCD_SIGNATURE)
+        bytes[eocd_at + 10, 2] = [500].pack("v")
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /directory does not hold the entries it says/)
+        expect(build.reload.site_unpack_error).to match(/directory does not hold the entries it says/)
+        expect(site_keys).to be_empty
+      end
+
       it "rejects bytes that are not an archive at all" do
         s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: "not a zip")
 
