@@ -462,7 +462,7 @@ class PartnerMigration < ApplicationRecord
     end
 
     def send_account_setup_email(token)
-      CreatorMailer.partner_migration_account_setup(id, encrypted_token: self.class.encrypt_account_setup_token(token)).deliver_later
+      CreatorMailer.partner_migration_account_setup(id, self.class.encrypt_account_setup_token(token)).deliver_later
     end
 
     def assign_public_id

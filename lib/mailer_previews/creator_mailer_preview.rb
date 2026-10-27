@@ -3,7 +3,7 @@
 class CreatorMailerPreview < ActionMailer::Preview
   include CdnUrlHelper
   def partner_migration_account_setup
-    CreatorMailer.partner_migration_account_setup(partner_migration&.id, encrypted_token: PartnerMigration.encrypt_account_setup_token("preview-token"))
+    CreatorMailer.partner_migration_account_setup(partner_migration&.id, PartnerMigration.encrypt_account_setup_token("preview-token"))
   end
 
   def partner_migration_finished

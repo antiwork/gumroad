@@ -17,9 +17,9 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
   before do
     host! DOMAIN
     stub_vite_layout_helpers
-    allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, **options|
-      emailed_tokens << PartnerMigration.decrypt_account_setup_token(options[:encrypted_token])
-      original.call(id, **options)
+    allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, encrypted_token|
+      emailed_tokens << PartnerMigration.decrypt_account_setup_token(encrypted_token)
+      original.call(id, encrypted_token)
     end
   end
 
@@ -221,6 +221,20 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     end
     expect(response.body).to include("We sent the email again.")
     expect(emailed_tokens.size).to eq(2)
+  end
+
+  it "keeps the setup token out of the email headers that record the mailer arguments" do
+    create_account
+    encrypted_token = PartnerMigration.encrypt_account_setup_token("secret-setup-token")
+
+    [MailerInfo::EMAIL_PROVIDER_SENDGRID, MailerInfo::EMAIL_PROVIDER_RESEND].each do |email_provider|
+      allow(MailerInfo).to receive(:random_delivery_method_options).and_return(MailerInfo::DeliveryMethod.options(domain: :gumroad, email_provider:))
+      mail = CreatorMailer.partner_migration_account_setup(migration.id, encrypted_token).deliver_now
+      resend_args = mail.header[MailerInfo.header_name(:mailer_args)]&.value
+
+      headers = mail.header.fields.map { _1.value.to_s }.push(resend_args && MailerInfo.decrypt(resend_args)).join
+      expect(headers).not_to include(encrypted_token), "#{email_provider} headers hold the token"
+    end
   end
 
   it "redacts the setup token from the request log" do

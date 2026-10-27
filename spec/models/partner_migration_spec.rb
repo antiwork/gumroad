@@ -199,9 +199,9 @@ describe PartnerMigration do
     it "keeps the setup token out of the mail job in plain text" do
       migration = create_migration_for("new-seller@example.com")
       encrypted_tokens = []
-      allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, **options|
-        encrypted_tokens << options[:encrypted_token]
-        original.call(id, **options)
+      allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, encrypted_token|
+        encrypted_tokens << encrypted_token
+        original.call(id, encrypted_token)
       end
 
       migration.create_account_and_claim!(ip: "203.0.113.10")
@@ -237,9 +237,9 @@ describe PartnerMigration do
 
     it "finds the migration by the emailed token until it expires" do
       emailed_tokens = []
-      allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, **options|
-        emailed_tokens << described_class.decrypt_account_setup_token(options[:encrypted_token])
-        original.call(id, **options)
+      allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, encrypted_token|
+        emailed_tokens << described_class.decrypt_account_setup_token(encrypted_token)
+        original.call(id, encrypted_token)
       end
       migration.create_account_and_claim!(ip: "203.0.113.10")
       token = emailed_tokens.sole

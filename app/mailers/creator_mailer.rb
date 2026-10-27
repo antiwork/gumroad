@@ -13,7 +13,8 @@ class CreatorMailer < ApplicationMailer
     mail to: recipient, subject: @subject
   end
 
-  def partner_migration_account_setup(partner_migration_id, encrypted_token:)
+  # A positional string, so the mailer header that records the arguments keeps only its first characters.
+  def partner_migration_account_setup(partner_migration_id, encrypted_token)
     @migration = PartnerMigration.find(partner_migration_id)
     token = PartnerMigration.decrypt_account_setup_token(encrypted_token)
     @setup_url = partner_migration_account_setup_url(account_setup_token: token, host: DOMAIN, protocol: PROTOCOL)

@@ -101,13 +101,13 @@ class PartnerMigrationsController < ApplicationController
   end
 
   private
-    # The drafts appear on the products page as they import.
     # The session holds the last link opened, which may differ from the page that the form came from.
     def stale_form?
       params[:partner_migration_id] != @migration.public_id || params[:partner_migration_code_digest] != @migration.code_digest
     end
 
-    # After the password setup, the import has often finished, so the notice follows its status.
+    # The drafts appear on the products page as they import. After the password setup, the import has
+    # often finished, so the notice follows its status.
     def redirect_to_products(migration)
       count = migration.products.size
       products = count == 1 ? "product" : "#{count} products"
