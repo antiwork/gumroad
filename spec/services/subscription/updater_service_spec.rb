@@ -556,7 +556,8 @@ describe Subscription::UpdaterService, :vcr do
             @subscription.reload.purchases.is_original_subscription_purchase.not_is_archived_original_subscription_purchase.order(:id).to_a
           end
 
-          it "restarts at the lowered price and leaves only the restarted plan unarchived" do
+          it "restarts at the lowered price and leaves only the restarted plan unarchived",
+             vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/changing_plans/allows_upgrading_to_biyearly_recurrence_immediately" } do
             expect(unarchived_originals).to eq [@original_purchase, @stale_original]
             expect(@stale_original.displayed_price_cents).to eq stale_price_cents
             expect(@subscription.current_subscription_price_cents).to eq @original_purchase.displayed_price_cents
@@ -577,7 +578,8 @@ describe Subscription::UpdaterService, :vcr do
             expect(@subscription.current_subscription_price_cents).to eq lowered_price_cents
           end
 
-          it "keeps both earlier originals unarchived when the restart charge fails" do
+          it "keeps both earlier originals unarchived when the restart charge fails",
+             vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/using_the_existing_card/does_not_send_email_when_charge_user_fails" } do
             service = Subscription::UpdaterService.new(
               subscription: @subscription,
               gumroad_guid: @gumroad_guid,
@@ -596,7 +598,8 @@ describe Subscription::UpdaterService, :vcr do
             expect(@subscription).not_to be_alive
           end
 
-          it "restores both earlier originals when a restart within the paid period defers the price change" do
+          it "restores both earlier originals when a restart within the paid period defers the price change",
+             vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/using_the_existing_card/does_not_send_email_when_charge_user_fails" } do
             travel_to(@originally_subscribed_at + 1.month)
             @subscription.update!(cancelled_at: Time.current, deactivated_at: Time.current, cancelled_by_buyer: true)
 
@@ -614,7 +617,8 @@ describe Subscription::UpdaterService, :vcr do
             expect(@subscription.current_subscription_price_cents).to eq @original_purchase.displayed_price_cents
           end
 
-          it "reindexes the other archived originals so search no longer lists them as current" do
+          it "reindexes the other archived originals so search no longer lists them as current",
+             vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/changing_plans/allows_upgrading_to_biyearly_recurrence_immediately" } do
             index_model_records(Purchase)
             ElasticsearchIndexerWorker.jobs.clear
 
@@ -636,7 +640,8 @@ describe Subscription::UpdaterService, :vcr do
             expect(document["selected_flags"]).to include("is_archived_original_subscription_purchase")
           end
 
-          it "keeps renewing an active membership at the honored price" do
+          it "keeps renewing an active membership at the honored price",
+             vcr: { cassette_name: "Subscription_UpdaterService/_perform/tiered_membership_subscription/restarting_a_membership/changing_plans/allows_upgrading_to_biyearly_recurrence_immediately" } do
             @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false)
 
             renewal = @subscription.charge!

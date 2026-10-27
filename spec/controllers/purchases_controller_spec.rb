@@ -1380,7 +1380,8 @@ describe PurchasesController, :vcr do
         expect(response.parsed_body["success"]).to eq true
       end
 
-      it "restarts a lapsed membership at a lowered price when an earlier plan change left another original unarchived" do
+      it "restarts a lapsed membership at a lowered price when an earlier plan change left another original unarchived",
+         vcr: { cassette_name: "PurchasesController/within_consumer_area/PUT_update_subscription/reCAPTCHA_behavior/does_not_attempt_to_verify_the_Google_reCAPTCHA_verification_if_using_an_existing_card" } do
         travel_to(@originally_subscribed_at + 4.months) do
           @subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
           @subscription.update_current_plan!(new_variants: [@original_tier], new_price: @quarterly_product_price)
