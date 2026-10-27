@@ -56,7 +56,7 @@ class DevTools
       end
       ActiveRecord::Base.connection.enable_query_cache!
       without_loggers do
-        [Purchase, Link, Balance, Installment, AudienceMember].each do |model|
+        [Purchase, Link, Installment, AudienceMember].each do |model|
           print "Recreating index and importing #{model.name} => #{model.count} records..."
           es_import_with_time(model, force: true)
         end

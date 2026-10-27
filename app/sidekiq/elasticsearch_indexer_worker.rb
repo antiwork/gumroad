@@ -27,6 +27,9 @@ class ElasticsearchIndexerWorker
       end
     end
 
+    # Balance is no longer indexed; drop jobs queued before it was retired.
+    return if params["class_name"] == "Balance"
+
     klass = params.fetch("class_name").constantize
 
     client_params = {
