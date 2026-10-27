@@ -262,6 +262,26 @@ describe ProductBuilds::UnpackSiteService do
         expect(site_keys).to be_empty
       end
 
+      it "rejects a ZIP64 archive whose own 16-bit field declares only a handful of entries" do
+        # rubyzip prefers the ZIP64 count whenever the ZIP64 signatures are in the tail, whatever
+        # the classic record says, so reading only the classic field would let an archive hand the
+        # worker millions of entries to load while declaring one.
+        bytes = Zip::OutputStream.write_buffer do |zip|
+          zip.put_next_entry("index.html")
+          zip.write("<html></html>")
+        end.string
+        zip64_record = described_class::ZIP64_EOCD_SIGNATURE + ("\x00" * 28) + [10_000_000].pack("Q<") + ("\x00" * 20)
+        locator = "PK\x06\x07".b + ("\x00" * 16)
+        eocd_at = bytes.rindex(described_class::EOCD_SIGNATURE)
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes[0...eocd_at] + zip64_record + locator + bytes[eocd_at..])
+
+        expect(Zip::File).not_to receive(:open)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /declares more entries/)
+        expect(build.reload.site_unpack_error).to match(/declares more entries/)
+        expect(site_keys).to be_empty
+      end
+
       it "rejects bytes that are not an archive at all" do
         s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: "not a zip")
 

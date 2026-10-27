@@ -144,9 +144,14 @@ class ProductBuilds::UnpackSiteService
     # The entries a build may hold: its files, plus the folder entries an archive carries for them.
     def max_archive_entries = ProductBuild::MAX_SITE_FILES * 2 + ARCHIVE_ENTRY_SLACK
 
-    # The number of entries the archive declares, read from the record every zip ends with rather
-    # than from the archive itself: opening it is what costs the memory this guard exists to save.
-    # A zip whose count does not fit its 16-bit field keeps the count in its ZIP64 record instead.
+    # The number of entries rubyzip will read out of the archive, read from the record every zip
+    # ends with rather than from the archive itself: opening it is what costs the memory this guard
+    # exists to save.
+    #
+    # rubyzip takes that count from the ZIP64 record whenever the ZIP64 signatures are in the
+    # tail, whatever the classic record's 16-bit field says, so both counts are read and the larger
+    # one decides: no pairing of the two records can leave a small number here and a large one
+    # there.
     def declared_entry_count(zip_path)
       tail = File.open(zip_path, "rb") do |file|
         file.seek([file.size - EOCD_SEARCH_WINDOW, 0].max)
@@ -156,16 +161,11 @@ class ProductBuilds::UnpackSiteService
       eocd = tail.rindex(EOCD_SIGNATURE)
       return 0 unless eocd
 
-      declared = tail[eocd + 10, 2]&.unpack1("v")
-      return 0 unless declared
-      return declared unless declared == ZIP64_ENTRY_COUNT_MARKER
-
-      # A 16-bit field cannot hold the count, so it is in the ZIP64 record; when even that is
-      # missing the archive is over any cap a build has, and the marker itself says so.
+      classic_count = tail[eocd + 10, 2]
       zip64 = tail.rindex(ZIP64_EOCD_SIGNATURE)
-      return ZIP64_ENTRY_COUNT_MARKER unless zip64
+      zip64_count = tail[zip64 + 32, 8] if zip64
 
-      tail[zip64 + 32, 8]&.unpack1("Q<") || ZIP64_ENTRY_COUNT_MARKER
+      [classic_count&.unpack1("v"), zip64_count&.unpack1("Q<")].compact.max || 0
     end
 
     # Copies one entry into the build's site prefix, stopping as soon as it passes the bytes left in
