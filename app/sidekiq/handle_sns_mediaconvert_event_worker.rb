@@ -9,6 +9,9 @@ class HandleSnsMediaconvertEventWorker
     return unless notification["Type"] == "Notification"
 
     message = JSON.parse(notification["Message"])["detail"]
+    # A repeated event for a finished job must not touch a newer attempt on the same source.
+    return unless TranscodedVideo.processing.exists?(job_id: message["jobId"])
+
     handle_transcoding_job_notification(message["jobId"], transcoded_state(message), transcoded_video_key(message))
   end
 

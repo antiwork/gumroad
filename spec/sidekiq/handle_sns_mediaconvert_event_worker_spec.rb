@@ -59,6 +59,19 @@ describe HandleSnsMediaconvertEventWorker do
       end
     end
 
+    context "when an old job's error arrives again during a newer attempt" do
+      let!(:old_video) { create(:transcoded_video, job_id: "abcd", state: "error") }
+      let!(:new_video) { create(:transcoded_video, job_id: "efgh", state: "processing", original_video_key: old_video.original_video_key) }
+
+      it "leaves the newer attempt processing and sends no email" do
+        expect do
+          described_class.new.perform(error_notification)
+        end.not_to have_enqueued_mail(ContactingCreatorMailer, :video_transcode_failed)
+
+        expect(new_video.reload.state).to eq "processing"
+      end
+    end
+
     context "when MediaConvert successfully transcodes the video" do
       before do
         @transcoded_video = create(:transcoded_video, job_id: "abcd", state: "processing")
