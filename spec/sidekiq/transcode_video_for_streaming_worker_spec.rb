@@ -304,21 +304,6 @@ describe TranscodeVideoForStreamingWorker do
           end.to_not change { TranscodedVideo.count }
         end
 
-        context "when transcoder param is set to ets" do
-          before do
-            ets_client_double = double("ets_client")
-            allow(ets_client_double).to receive(:data).and_return(OpenStruct.new({ job: { id: 1 } }))
-            allow_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job).and_return(ets_client_double)
-          end
-
-          it "transcodes the video using ETS" do
-            expect_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job)
-
-            ets_transcoder = described_class::ETS
-            described_class.new.perform(product_file.id, ProductFile.name, ets_transcoder)
-          end
-        end
-
         context "when transcoder param is set to MediaConvert" do
           it "transcodes the video using MediaConvert" do
             expect_any_instance_of(Aws::MediaConvert::Client).to receive(:create_job)
@@ -330,57 +315,43 @@ describe TranscodeVideoForStreamingWorker do
       end
     end
 
-    describe "transcode using ETS" do
+    describe "output_key_prefix" do
       let(:product_file) { product.product_files.first }
 
-      describe "output_key_prefix" do
-        before do
-          ets_client_double = double("ets_client")
-          allow(ets_client_double).to receive(:data).and_return(OpenStruct.new({ job: { id: 1 } }))
-          allow_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job).and_return(ets_client_double)
-          @ets_transcoder = described_class::ETS
+      before do
+        mediaconvert_client_double = double("mediaconvert_client")
+        allow(mediaconvert_client_double).to receive(:job).and_return(OpenStruct.new({ id: "abc-123" }))
+        allow_any_instance_of(Aws::MediaConvert::Client).to receive(:create_job).and_return(mediaconvert_client_double)
+      end
+
+      def transcoded_video_key_for(original_video_key)
+        described_class.new.create_hls_transcode_job(product_file, original_video_key, 1080, described_class::MEDIACONVERT)
+        TranscodedVideo.last!.transcoded_video_key
+      end
+
+      context "when repeated occurrences of extension is present in the filename" do
+        it "generates the correct output_key_prefix" do
+          original_video_key = "prefix/original/Ep 1.mp4 1-6 slides test.mp4 1-6 slides test.mp4 1-6 slides test.mp4"
+
+          expect(transcoded_video_key_for(original_video_key)).to eq("prefix/original/Ep 1.mp4 1-6 slides test.mp4 1-6 slides test.mp4 1-6 slides test/hls/")
         end
 
-        context "when repeated occurrences of extension is present in the filename" do
-          it "generates the correct output_key_prefix" do
-            original_video_key = "prefix/original/Ep 1.mp4 1-6 slides test.mp4 1-6 slides test.mp4 1-6 slides test.mp4"
+        it "generates the correct output_key_prefix when filename contains multiple lines" do
+          original_video_key = "prefix/original/Ep 1.mp4 1-6 slides test.mp4\n 1-6 slides test.mp4\n 1-6 slides test.mp4"
 
-            output_prefix_key = "prefix/original/Ep 1.mp4 1-6 slides test.mp4 1-6 slides test.mp4 1-6 slides test/hls/"
-            expect_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job).with(hash_including({ output_key_prefix: output_prefix_key }))
-
-            described_class.new.create_hls_transcode_job(product_file, original_video_key, 1080, @ets_transcoder)
-          end
-
-          it "generates the correct output_key_prefix when filename contains multiple lines" do
-            original_video_key = "prefix/original/Ep 1.mp4 1-6 slides test.mp4\n 1-6 slides test.mp4\n 1-6 slides test.mp4"
-
-            output_prefix_key = "prefix/original/Ep 1.mp4 1-6 slides test.mp4\n 1-6 slides test.mp4\n 1-6 slides test/hls/"
-            expect_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job).with(hash_including({ output_key_prefix: output_prefix_key }))
-
-            described_class.new.create_hls_transcode_job(product_file, original_video_key, 1080, @ets_transcoder)
-          end
+          expect(transcoded_video_key_for(original_video_key)).to eq("prefix/original/Ep 1.mp4 1-6 slides test.mp4\n 1-6 slides test.mp4\n 1-6 slides test/hls/")
         end
+      end
 
-        context "when repeated occurrences of extension is not present in the filename" do
-          it "generates the correct output_key_prefix" do
-            original_video_key = "prefix/original/test.mp4"
-
-            output_prefix_key = "prefix/original/test/hls/"
-            expect_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job).with(hash_including({ output_key_prefix: output_prefix_key }))
-
-            described_class.new.create_hls_transcode_job(product_file, original_video_key, 1080, @ets_transcoder)
-          end
+      context "when repeated occurrences of extension is not present in the filename" do
+        it "generates the correct output_key_prefix" do
+          expect(transcoded_video_key_for("prefix/original/test.mp4")).to eq("prefix/original/test/hls/")
         end
+      end
 
-        context "when the extension contains regexp metacharacters" do
-          it "strips the extension literally without compiling it as a pattern" do
-            original_video_key = "prefix/original/clip.m(p4"
-
-            output_prefix_key = "prefix/original/clip/hls/"
-            expect_any_instance_of(Aws::ElasticTranscoder::Client).to receive(:create_job).with(hash_including({ output_key_prefix: output_prefix_key }))
-
-            described_class.new.create_hls_transcode_job(product_file, original_video_key, 1080, @ets_transcoder)
-          end
+      context "when the extension contains regexp metacharacters" do
+        it "strips the extension literally without compiling it as a pattern" do
+          expect(transcoded_video_key_for("prefix/original/clip.m(p4")).to eq("prefix/original/clip/hls/")
         end
       end
     end

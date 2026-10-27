@@ -220,11 +220,11 @@ class UrlRedirectsController < ApplicationController
     render plain: @url_redirect.smil_xml_for_product_file(@product_file), content_type: Mime[:text]
   end
 
-  # Public: Returns a modified version of the Elastic Transcoder-generated master playlist in order to prevent hotlinking.
+  # Public: Returns a modified version of the transcoder-generated master playlist in order to prevent hotlinking.
   #
   # The original master playlist simply has relative paths to the resolution-specific playlists and works by the assumption that all playlist
   # files and .ts segments are public. This makes it easy for anyone to hotlink the video by posting the path to either of the playlist files.
-  # The ideal way to prevent that is to use AES encryption, which Elastic Transcoder doesn't yet support. We instead make the playlist files private
+  # The ideal way to prevent that is to use AES encryption. We instead make the playlist files private
   # and provide signed urls to these playlist files.
   def hls_playlist
     (@product_file = @url_redirect.product_file(params[:product_file_id]) || @url_redirect.alive_product_files.first) || e404
