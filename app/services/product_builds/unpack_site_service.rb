@@ -6,10 +6,11 @@
 # soon as the file count or the total uncompressed size passes its limit, so a zip bomb cannot
 # fill the bucket or the disk. The size an entry declares in the archive is never trusted.
 #
-# A zip whose files all sit inside one top-level folder (`zip -r game.zip game/`, what a seller's
-# OS produces by default) is unpacked from the inside of that folder, so `game/index.html` plays
-# the same as a zip whose index.html is at its root. Every other layout is a bad build: no
-# index.html once that folder is stripped, or more than one top-level entry.
+# A zip whose files all sit inside one top-level folder is unpacked from the inside of that folder,
+# so `game/index.html` plays the same as a zip whose index.html is at its root. macOS Finder's
+# Compress also adds a top-level `__MACOSX/` of AppleDouble (`._*`) files when the files carry
+# extended attributes; it is never written and is not a second top-level entry. Every other layout
+# is a bad build: no index.html once the wrapping folder is stripped, or more than one top-level entry.
 #
 # The entry count and the metadata bytes an archive's central directory actually holds are measured
 # before the archive is opened, because rubyzip reads every record in it into memory on open.
@@ -53,6 +54,7 @@ class ProductBuilds::UnpackSiteService
   S3_DELETE_BATCH_SIZE = 1_000
   S3_KEY_MAX_BYTES = 1_024
   UNREADABLE_ARCHIVE = "The zip could not be read, so there is nothing to play."
+  FINDER_METADATA_FOLDER = "__MACOSX"
 
   # rubyzip holds every central-directory record in memory the moment the archive is opened, so the
   # directory is walked here first, with the budgets a build may hold. Counting entries alone would
@@ -195,16 +197,23 @@ class ProductBuilds::UnpackSiteService
         zip = reading_archive { Zip::File.open_buffer(bounded) }
 
         files = zip.reject(&:directory?)
-        # Every name is checked before anything is copied, so a zip rejected for its layout or its
-        # names does not leave a half-written site behind.
-        folder = folder_to_strip(files.map { normalize_entry_name(_1.name) })
-        paths = files.map { relative_entry_name(_1.name, folder) }
+        # Every entry is checked before anything is copied, so a zip rejected for its layout or its
+        # names does not leave a half-written site behind. Finder's metadata gets the same name and
+        # symlink checks as every other entry before it is dropped, so it cannot slip a hostile
+        # entry past them.
+        names = files.map { normalize_entry_name(_1.name) }
+        if (symlink = files.find(&:symlink?))
+          raise UnpackError, "A build cannot contain symlinks: #{shown(symlink.name)}."
+        end
         # Seeking to a local header past the end can raise EINVAL on some filesystems, which would read
         # as a disk error and be retried.
         raise UnpackError, UNREADABLE_ARCHIVE if files.any? { _1.local_header_offset >= archive.size }
 
-        files.zip(paths).each do |entry, path|
-          raise UnpackError, "A build cannot contain symlinks: #{shown(entry.name)}." if entry.symlink?
+        site = files.zip(names).reject { |_, name| name.start_with?("#{FINDER_METADATA_FOLDER}/") }
+        folder = folder_to_strip(site.map(&:last))
+        site = site.map { |entry, name| [entry, relative_entry_name(name, folder)] }
+
+        site.each do |entry, path|
           raise UnpackError, "A build can have at most #{ProductBuild::MAX_SITE_FILES} files." if file_count >= ProductBuild::MAX_SITE_FILES
 
           written = copy_entry(entry, path, s3, ProductBuild::MAX_SITE_BYTE_SIZE - byte_size)
@@ -351,10 +360,9 @@ class ProductBuilds::UnpackSiteService
       top_level.first if paths.all? { |path| path.start_with?("#{top_level.first}/") }
     end
 
-    # The entry's path relative to the site prefix, once the folder the zip wraps it in is gone.
+    # The entry's checked name relative to the site prefix, once the folder the zip wraps it in is gone.
     def relative_entry_name(name, folder)
-      path = normalize_entry_name(name)
-      path = path.delete_prefix("#{folder}/") if folder
+      path = folder ? name.delete_prefix("#{folder}/") : name
       if "#{build.site_prefix}/#{path}".bytesize > S3_KEY_MAX_BYTES
         raise UnpackError, "The zip has an entry with a name that is too long: #{shown(path)}."
       end

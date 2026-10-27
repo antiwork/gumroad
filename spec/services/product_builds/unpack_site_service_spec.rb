@@ -163,6 +163,34 @@ describe ProductBuilds::UnpackSiteService do
       expect(build.site_file_count).to eq(2)
     end
 
+    it "unpacks a wrapped zip next to the __MACOSX folder Finder adds, without writing that folder" do
+      upload_zip({
+                   "game/index.html" => "<html>finder</html>",
+                   "game/assets/game.js" => "console.log(1)",
+                   "__MACOSX/game/._index.html" => "appledouble",
+                   "__MACOSX/game/assets/._game.js" => "appledouble",
+                 })
+
+      described_class.perform(build)
+
+      expect(site_keys).to eq([
+                                "#{site_prefix}/assets/game.js",
+                                "#{site_prefix}/index.html",
+                              ])
+      expect(body_of("#{site_prefix}/index.html")).to eq("<html>finder</html>")
+      expect(build.reload.site_ready?).to be true
+      expect(build.site_file_count).to eq(2)
+    end
+
+    it "does not write the __MACOSX folder when the site sits at the zip's root" do
+      upload_zip({ "index.html" => "<html></html>", "__MACOSX/._index.html" => "appledouble" })
+
+      described_class.perform(build)
+
+      expect(site_keys).to eq(["#{site_prefix}/index.html"])
+      expect(build.reload.site_file_count).to eq(1)
+    end
+
     it "rejects a zip whose index.html is more than one folder deep" do
       # Only a single wrapping folder is stripped, so a second one leaves no index.html at the root.
       upload_zip({
@@ -308,6 +336,39 @@ describe ProductBuilds::UnpackSiteService do
         expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /more than one top-level entry/)
         expect(site_keys).to be_empty
         expect(s3.list_objects_v2(bucket: S3_BUCKET, prefix: "builds/#{product.id}/1/").contents.map(&:key)).to eq([build.storage_key])
+      end
+
+      it "rejects a zip with two top-level folders even when the other entry is Finder's __MACOSX folder" do
+        upload_zip({
+                     "game/index.html" => "<html></html>",
+                     "other/index.html" => "<html></html>",
+                     "__MACOSX/game/._index.html" => "appledouble",
+                   })
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /more than one top-level entry/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects a zip that holds only Finder's __MACOSX folder" do
+        upload_zip({ "__MACOSX/game/._index.html" => "appledouble", "__MACOSX/index.html" => "<html></html>" })
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /no index.html at its root/)
+        expect(build.reload.site_unpack_error).to match(/no index.html at its root/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects an entry inside the __MACOSX folder that tries to leave the build's folder" do
+        upload_zip({ "game/index.html" => "<html></html>", "__MACOSX/../../evil.html" => "x" })
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /outside its own folder/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects a symlink inside the __MACOSX folder" do
+        upload_zip({ "game/index.html" => "<html></html>" }, symlink: "__MACOSX/game/._link.html")
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /cannot contain symlinks/)
+        expect(site_keys).to be_empty
       end
 
       it "rejects an archive whose directory holds more entries than a build may hold, without opening it" do
