@@ -430,6 +430,22 @@ describe ProductFile do
     end
   end
 
+  describe "#as_json web build label" do
+    it "leaves the label nil for a file the seller uploaded by hand" do
+      expect(create(:readable_document).as_json).to include(web_build: nil)
+    end
+
+    it "labels the zip a promoted web build put in the content" do
+      product = create(:product)
+      file = create(:readable_document, link: product)
+      create(:product_build, product:, product_file: file, number: 3, status: "live",
+                             source_url: "https://example.com/game.zip", storage_key: "builds/#{product.id}/3/build.zip",
+                             byte_size: 10)
+
+      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live" })
+    end
+  end
+
   describe "file group and analyze" do
     it "enqueues analyze after file creation" do
       product_file = create(:readable_document)

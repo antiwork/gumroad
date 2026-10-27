@@ -43,6 +43,7 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
+import { Pill } from "$app/components/ui/Pill";
 import { Placeholder } from "$app/components/ui/Placeholder";
 import { Row, RowActions, RowContent, RowDetails } from "$app/components/ui/Rows";
 import { Switch } from "$app/components/ui/Switch";
@@ -645,6 +646,14 @@ const FileEmbedNodeView = ({
               thumbnailUrl={imageThumbnailUrl}
               details={
                 <>
+                  {/* A promoted web build's zip is not a hand-uploaded file: label it so the seller
+                      knows which row the deploy pipeline owns. */}
+                  {file.web_build ? (
+                    <li>
+                      <Pill size="small">Web build v{file.web_build.number}</Pill>
+                    </li>
+                  ) : null}
+
                   {file.extension ? <li>{file.extension}</li> : null}
 
                   {isFailedUpload ? (

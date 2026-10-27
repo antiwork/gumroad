@@ -39,6 +39,9 @@ class ProductFile < ApplicationRecord
   has_many :alive_subtitle_files, -> { alive }, class_name: "SubtitleFile"
   has_many :media_locations
   has_one :dropbox_file
+  # Set once a promoted web build (a game, an interactive course) owns this file, so the seller
+  # editor and the buyer's content page can label it instead of showing a bare zip.
+  has_one :product_build
   has_and_belongs_to_many :base_variants
   has_and_belongs_to_many :product_files_archives
 
@@ -147,6 +150,9 @@ class ProductFile < ApplicationRecord
       is_streamable: streamable?,
       # So the editor never offers a switch the backend ignores (see #can_disable_downloads?).
       can_disable_downloads: can_disable_downloads?,
+      # Present on the zip a promoted web build put in the content, so the editor's row can say
+      # "Web build v3" instead of looking like a file the seller uploaded by hand.
+      web_build: web_build_summary,
       stream_only: stream_only?,
       # Pixel dimensions, so the product editor's video preview can be shaped to
       # the file rather than assuming 16:9 and pillarboxing portrait video. Nil
@@ -308,6 +314,14 @@ class ProductFile < ApplicationRecord
 
   def archivable?
     !external_link? && !stream_only?
+  end
+
+  # The build that owns this file, when a promoted web build put it here. Nil for every file a
+  # seller uploaded directly, so callers can label builds without a second lookup each.
+  def web_build_summary
+    build = product_build
+    return if build.nil?
+    { number: build.number, status: build.status }
   end
 
   def consumable?

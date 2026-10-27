@@ -263,12 +263,15 @@ class UrlRedirectPresenter
     def map_file(file)
       media_location = media_locations_by_file[file.id]
       download_url = url_redirect.is_file_downloadable?(file) ? url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }) : nil
+      # A promoted web build's zip is labelled for the buyer; every hand-uploaded file leaves it nil.
+      web_build = file.is_a?(ProductFile) ? file.web_build_summary : nil
 
       {
         type: "file",
         file_name: file.name_displayable,
         description: file.description,
         extension: file.display_extension,
+        web_build:,
         file_size: file.size,
         pagelength: (file.epub? ? nil : file.pagelength),
         duration: file.duration,

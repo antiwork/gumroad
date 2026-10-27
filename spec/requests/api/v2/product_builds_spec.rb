@@ -175,6 +175,21 @@ describe "Product builds API" do
       expect(product.product_files.alive.sole.url).to end_with("/1/build.zip")
     end
 
+    it "labels the live build's zip for the buyer so it does not read as a hand-uploaded file" do
+      deploy(upload_zip)
+      build = product.product_builds.sole
+
+      post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/promote", params: { access_token: token.token }
+
+      purchase = create(:purchase, link: product)
+      purchase.create_url_redirect!
+      get "/d/#{purchase.url_redirect.token}", headers: { "X-Inertia" => "true" }
+
+      expect(response).to have_http_status(:ok)
+      items = response.parsed_body.dig("props", "content", "content_items")
+      expect(items.sole).to include("web_build" => { "number" => 1, "status" => "live" })
+    end
+
     it "embeds the live zip in the product's content page and swaps it on the next promote" do
       rich = create(:rich_content, entity: product, description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Hi" }] }])
       deploy(upload_zip)

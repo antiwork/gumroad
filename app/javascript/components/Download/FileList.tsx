@@ -70,6 +70,9 @@ export type FileItem = {
   duration: number | null;
   content_length: number | null;
   download_url: string | null;
+  // Set on the zip a promoted web build (a game, an interactive course) put in the content, so the
+  // row can say so instead of reading like a file the seller uploaded by hand. Null otherwise.
+  web_build?: { number: number; status: string } | null;
   // False when the shared folder ZIP leaves the file out, such as a file downloadable only through a grant.
   archivable?: boolean;
   // Set for images a browser can draw; it opens the original file, not the thumbnail.
@@ -289,6 +292,10 @@ export const FileRow = ({
           reserveThumbnailSlot={reserveThumbnailSlot}
           details={
             <>
+              {/* A hostable build is a zip a browser runs, not a document to read in place, so the
+                  row says what it is before the buyer downloads it. */}
+              {file.web_build ? <li>Web build v{file.web_build.number}</li> : null}
+
               {file.extension ? <li>{file.extension}</li> : null}
 
               {externalLinkUrl ? <li>{externalLinkUrl}</li> : null}
