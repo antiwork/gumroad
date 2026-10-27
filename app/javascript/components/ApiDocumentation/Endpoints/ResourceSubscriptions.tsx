@@ -253,10 +253,10 @@ export const TestResourceSubscription = () => (
     description={
       <>
         Send a test event to a resource subscription's post_url. The payload uses the subscription's resource_name and
-        is marked with <code>test: true</code>. It is built from your most recent matching event when one exists
-        (source "last_event"), otherwise from sample data with the documented fields (source "sample"). It is a copy
-        of the data only: no purchase, refund or dispute is created, and the sale is not changed. Only subscriptions
-        created by the calling application can be tested.
+        is marked with <code>test: true</code>. It is built from your most recent matching event when one exists (source
+        "last_event"), otherwise from sample data with the documented fields (source "sample"). It is a copy of the data
+        only: no purchase, refund or dispute is created, and the sale is not changed. Only subscriptions created by the
+        calling application can be tested.
       </>
     }
   >
