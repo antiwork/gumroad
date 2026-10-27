@@ -218,6 +218,16 @@ describe "Partner API", type: :request do
       expect(response).to have_http_status(:bad_request)
     end
 
+    it "serves the last partial page within the search result window" do
+      search_response = double(records: double(ids: []), results: double(total: Link::MAX_RESULT_WINDOW))
+      expect(Link).to receive(:search).with(hash_including(size: 1, from: Link::MAX_RESULT_WINDOW - 1)).and_return(search_response)
+
+      get_products(per_page: 99, page: 102)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body).to include("total" => Link::MAX_RESULT_WINDOW, "next_page" => nil)
+    end
+
     it "rejects an unsupported sort" do
       get_products(sort: "price_asc")
 
@@ -237,7 +247,24 @@ describe "Partner API", type: :request do
       get_products
 
       expect(response.parsed_body["products"].map { _1["id"] }).to match_array([product.external_id, other_product.external_id])
-      expect(response.parsed_body["total"]).to eq(2)
+      expect(response.parsed_body["total"]).to eq(3)
+    end
+
+    it "continues past an empty page without changing the search total" do
+      other_product.update!(created_at: 3.days.ago)
+      product.update!(created_at: 2.days.ago)
+      create(:product, user: seller, created_at: 1.day.ago, hide_sold_out_variants: true, max_purchase_count: 0)
+      index_model_records(Link)
+
+      get_products(sort: "newest", per_page: 1)
+
+      expect(response.parsed_body).to include("products" => [], "total" => 3, "next_page" => 2)
+      get_products(sort: "newest", per_page: 1, page: response.parsed_body["next_page"])
+      expect(response.parsed_body).to include("total" => 3, "next_page" => 3)
+      expect(response.parsed_body["products"].sole["id"]).to eq(product.external_id)
+      get_products(sort: "newest", per_page: 1, page: response.parsed_body["next_page"])
+      expect(response.parsed_body).to include("total" => 3, "next_page" => nil)
+      expect(response.parsed_body["products"].sole["id"]).to eq(other_product.external_id)
     end
   end
 

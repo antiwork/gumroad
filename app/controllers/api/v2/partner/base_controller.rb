@@ -92,9 +92,10 @@ class Api::V2::Partner::BaseController < Api::V2::BaseController
       end
       return [] if shown_ids_by_seller_id.empty?
 
-      Link.where(user_id: shown_ids_by_seller_id.keys).alive.not_archived.pluck(:id, :user_id).filter_map do |product_id, seller_id|
-        product_id unless shown_ids_by_seller_id[seller_id].include?(product_id)
-      end
+      hidden_products = shown_ids_by_seller_id.map do |seller_id, shown_ids|
+        Link.where(user_id: seller_id).where.not(id: shown_ids.to_a)
+      end.reduce(&:or)
+      hidden_products.alive.not_archived.pluck(:id)
     end
 
     def render_bad_request(message)
