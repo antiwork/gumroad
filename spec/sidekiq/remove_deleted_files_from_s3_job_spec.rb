@@ -53,21 +53,38 @@ describe RemoveDeletedFilesFromS3Job do
   end
 
   it "removes the HLS renditions of a recently deleted transcoded video" do
-    transcoded_video = create(:transcoded_video, deleted_at: 26.hours.ago)
+    product_file = create(:streamable_video, is_transcoded_for_hls: true)
+    transcoded_video = create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key)
     hls_dir = transcoded_video.transcoded_video_key.delete_suffix("index.m3u8")
+    product_file.mark_deleted
     allow_any_instance_of(described_class).to receive(:gather_transcoded_video_keys).and_return(["#{hls_dir}index.m3u8", "#{hls_dir}index_480p.m3u8"])
+    deleted_keys = []
+    allow_any_instance_of(described_class).to receive(:delete_s3_objects!) { |_, keys| deleted_keys.concat(keys) }
 
-    expect_any_instance_of(described_class).to receive(:delete_s3_objects!).with(["#{hls_dir}index.m3u8", "#{hls_dir}index_480p.m3u8"])
-    described_class.new.perform
+    travel 26.hours do
+      described_class.new.perform
+    end
+
+    expect(deleted_keys).to include("#{hls_dir}index.m3u8", "#{hls_dir}index_480p.m3u8")
     expect(transcoded_video.reload.deleted_from_cdn_at).to be_present
   end
 
   it "keeps HLS renditions that another file's alive transcoded video still uses" do
-    transcoded_video = create(:transcoded_video, deleted_at: 26.hours.ago)
+    product_file = create(:streamable_video, is_transcoded_for_hls: true)
+    transcoded_video = create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key)
     create(:transcoded_video, original_video_key: transcoded_video.original_video_key, transcoded_video_key: transcoded_video.transcoded_video_key)
+    hls_dir = transcoded_video.transcoded_video_key.delete_suffix("index.m3u8")
+    product_file.mark_deleted
+    deleted_keys = []
+    allow_any_instance_of(described_class).to receive(:delete_s3_objects!) { |_, keys| deleted_keys.concat(keys) }
 
-    expect_any_instance_of(described_class).not_to receive(:delete_s3_objects!)
-    described_class.new.perform
+    expect(transcoded_video.reload).to be_deleted
+
+    travel 26.hours do
+      described_class.new.perform
+    end
+
+    expect(deleted_keys).not_to include("#{hls_dir}index.m3u8")
     expect(transcoded_video.reload.deleted_from_cdn_at).to be_nil
   end
 
