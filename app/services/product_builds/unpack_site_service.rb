@@ -69,6 +69,50 @@ class ProductBuilds::UnpackSiteService
   # order of magnitude of headroom for the extras real zips carry while still bounding the memory a
   # hostile archive can make the worker hold.
   ARCHIVE_METADATA_BYTE_BUDGET = 8.megabytes
+  # What rubyzip reads from the archive at a time. A chunk runs past the entry that asked for it, so
+  # it is also what each entry costs the read budget below.
+  ARCHIVE_READ_CHUNK = 32_768
+
+  # What the unpack has read out of the archive. One object per archive, shared by every copy of the
+  # archive IO: rubyzip dups that IO for each entry it opens, so a counter held by the IO would only
+  # ever see one entry's reads.
+  class ReadBudget
+    def initialize(limit)
+      @limit = limit
+      @read = 0
+    end
+
+    def add(bytes)
+      @read += bytes
+      return if @read <= @limit
+
+      raise UnpackError, "The zip reads more of its own bytes than a build can hold."
+    end
+  end
+
+  # The archive as rubyzip sees it: every byte it reads is counted, so an archive that points several
+  # of its entries at the same bytes cannot decompress them once per entry.
+  class BoundedArchive
+    def initialize(io, budget)
+      @io = io
+      @budget = budget
+    end
+
+    def read(length = nil, outbuf = nil)
+      data = length ? @io.read(length) : @io.read
+      @budget.add(data.bytesize) if data
+      outbuf ? outbuf.replace(data.to_s) : data
+    end
+
+    def dup = self.class.new(@io.dup, @budget)
+    def size = @io.size
+    def tell = @io.tell
+    def seek(*args) = @io.seek(*args)
+    def eof = @io.eof
+    def eof? = @io.eof
+    def close = @io.close
+    def closed? = @io.closed?
+  end
 
   def self.perform(build) = new(build).perform
 
@@ -113,14 +157,19 @@ class ProductBuilds::UnpackSiteService
     end
 
     def unpack(zip_path)
-      check_directory(zip_path)
+      entries = check_directory(zip_path)
 
       s3 = Aws::S3::Client.new
       file_count = 0
       byte_size = 0
       has_index = false
 
-      Zip::File.open(zip_path) do |zip|
+      archive = File.open(zip_path, "rb")
+      begin
+        # The archive is handed to rubyzip through a counter, so the whole unpack is bounded by what
+        # it reads out of it: opening it by path would give rubyzip an IO of its own, unmeasured.
+        zip = Zip::File.open_buffer(BoundedArchive.new(archive, ReadBudget.new(archive_read_budget(archive.size, entries))))
+
         files = zip.reject(&:directory?)
         # Whether the zip wraps the site in a folder is a property of the whole archive, so it is
         # decided from the names before anything is copied: a layout we reject must not leave a
@@ -137,6 +186,8 @@ class ProductBuilds::UnpackSiteService
           byte_size += written
           has_index = true if path == "index.html"
         end
+      ensure
+        archive.close
       end
 
       raise UnpackError, "The zip has no index.html at its root, so there is nothing to play." unless has_index
@@ -148,6 +199,12 @@ class ProductBuilds::UnpackSiteService
       raise UnpackError, "The zip could not be read, so there is nothing to play."
     end
 
+    # What the unpack may read out of the archive: the archive itself, plus one 32 KB chunk per
+    # entry, because the chunk rubyzip reads for an entry runs past it. A build's entries read their
+    # own bytes once, so an archive that reads far past this has pointed its entries at the same
+    # data, which would otherwise be decompressed once per entry.
+    def archive_read_budget(archive_size, entries) = (archive_size + (entries * ARCHIVE_READ_CHUNK)) * 2
+
     # The entries a build may hold: its files, plus the folder entries an archive carries for them.
     def max_archive_entries = ProductBuild::MAX_SITE_FILES * 2 + ARCHIVE_ENTRY_SLACK
 
@@ -155,49 +212,55 @@ class ProductBuilds::UnpackSiteService
     # to spend: the records it holds there are counted and measured, and the walk stops as soon as
     # either budget is passed. A record's name and comment lengths are read from the record itself,
     # which is why the bytes are budgeted next to the count: a handful of entries can carry megabytes
-    # of names.
+    # of names. Returns the entries found, which is what the read budget is worked out from.
     def check_directory(zip_path)
       File.open(zip_path, "rb") do |file|
-        offset = central_directory_offset(file)
-        return if offset.nil? || offset > file.size
-
-        file.seek(offset)
-        entries = 0
-        metadata_bytes = 0
-
-        loop do
-          header = file.read(CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE)
-          break if header.nil? || header.bytesize < CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE
-          break unless header.start_with?(CENTRAL_DIRECTORY_ENTRY_SIGNATURE)
-
-          name_length, extra_length, comment_length = header[28, 6].unpack("vvv")
-          record_size = CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE + name_length + extra_length + comment_length
-          entries += 1
-          metadata_bytes += record_size
-          raise UnpackError, "The zip has more entries than a build may hold." if entries > max_archive_entries
-          raise UnpackError, "The zip's entry names and folders take up more room than a build may hold." if metadata_bytes > ARCHIVE_METADATA_BYTE_BUDGET
-
-          file.seek(record_size - CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE, IO::SEEK_CUR)
-        end
+        central_directory_offsets(file).map { |offset| walk_directory(file, offset) }.max || 0
       end
     end
 
-    # Where the archive's directory starts, read from the same record rubyzip will read it from: it
-    # takes the ZIP64 record whenever both of its signatures are in the archive's tail, whatever the
-    # record before it says. When neither is there, rubyzip cannot open the archive either, and the
-    # walk has nothing to measure.
-    def central_directory_offset(file)
+    # Counts and measures the records of one directory, raising when either budget is passed.
+    def walk_directory(file, offset)
+      return 0 if offset.nil? || offset >= file.size
+
+      file.seek(offset)
+      entries = 0
+      metadata_bytes = 0
+
+      loop do
+        header = file.read(CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE)
+        break if header.nil? || header.bytesize < CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE
+        break unless header.start_with?(CENTRAL_DIRECTORY_ENTRY_SIGNATURE)
+
+        name_length, extra_length, comment_length = header[28, 6].unpack("vvv")
+        record_size = CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE + name_length + extra_length + comment_length
+        entries += 1
+        metadata_bytes += record_size
+        raise UnpackError, "The zip has more entries than a build may hold." if entries > max_archive_entries
+        raise UnpackError, "The zip's entry names and folders take up more room than a build may hold." if metadata_bytes > ARCHIVE_METADATA_BYTE_BUDGET
+
+        file.seek(record_size - CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE, IO::SEEK_CUR)
+      end
+
+      entries
+    end
+
+    # Every directory an archive can name: rubyzip picks one of them by the ZIP64 signatures in the
+    # archive's tail, and a hostile archive cannot be trusted to agree with us about which, so both
+    # are walked and both are held to the budgets. When neither record is there, rubyzip cannot open
+    # the archive either, and there is nothing to measure.
+    def central_directory_offsets(file)
       file.seek([file.size - EOCD_SEARCH_WINDOW, 0].max)
       tail = file.read
 
+      offsets = []
       if tail.include?(ZIP64_EOCD_LOCATOR_SIGNATURE) && (zip64 = tail.rindex(ZIP64_EOCD_SIGNATURE))
-        return tail[zip64 + 48, 8]&.unpack1("Q<")
+        offsets << tail[zip64 + 48, 8]&.unpack1("Q<")
       end
-
       eocd = tail.rindex(EOCD_SIGNATURE)
-      return nil unless eocd
+      offsets << tail[eocd + 16, 4]&.unpack1("V") if eocd
 
-      tail[eocd + 16, 4]&.unpack1("V")
+      offsets.compact.uniq
     end
 
     # Copies one entry into the build's site prefix, stopping as soon as it passes the bytes left in
@@ -205,7 +268,7 @@ class ProductBuilds::UnpackSiteService
     def copy_entry(entry, path, s3, remaining_bytes)
       Tempfile.create("entry") do |file|
         file.binmode
-        copied = IO.copy_stream(entry.get_input_stream, file, remaining_bytes + 1)
+        copied = copy_entry_bytes(entry, file, remaining_bytes)
         if copied > remaining_bytes
           raise UnpackError, "A build's files can unpack to at most #{ProductBuild::MAX_SITE_BYTE_SIZE / 1.gigabyte} GB."
         end
@@ -221,6 +284,17 @@ class ProductBuilds::UnpackSiteService
         )
         written_keys << key
         copied
+      end
+    end
+
+    # Copies one entry out of the archive and closes the stream it read it through: rubyzip opens one
+    # IO per entry, so leaving them open would hold a descriptor per file in the build.
+    def copy_entry_bytes(entry, file, remaining_bytes)
+      stream = entry.get_input_stream
+      begin
+        IO.copy_stream(stream, file, remaining_bytes + 1)
+      ensure
+        stream.close
       end
     end
 

@@ -62,6 +62,27 @@ describe ProductBuilds::UnpackSiteService do
     end.string
   end
 
+  # Points the last `count` entries of an archive's central directory at the first local header, which
+  # is how a zip makes several of its entries read the same bytes without carrying them twice.
+  def point_entries_at_first_local_header(zip_bytes, count)
+    bytes = zip_bytes.b
+    eocd_at = bytes.rindex(ProductBuilds::UnpackSiteService::EOCD_SIGNATURE)
+    offset = bytes[eocd_at + 16, 4].unpack1("V")
+    records = []
+
+    loop do
+      header = bytes[offset, ProductBuilds::UnpackSiteService::CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE]
+      break if header.nil? || !header.start_with?(ProductBuilds::UnpackSiteService::CENTRAL_DIRECTORY_ENTRY_SIGNATURE)
+
+      name_length, extra_length, comment_length = header[28, 6].unpack("vvv")
+      records << offset
+      offset += ProductBuilds::UnpackSiteService::CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE + name_length + extra_length + comment_length
+    end
+
+    records.last(count).each { |record| bytes[record + 42, 4] = [0].pack("V") }
+    bytes
+  end
+
   def site_keys
     s3.list_objects_v2(bucket: S3_BUCKET, prefix: "#{site_prefix}/").contents.map(&:key).sort
   end
@@ -249,7 +270,7 @@ describe ProductBuilds::UnpackSiteService do
 
         # The whole point of walking the directory first: rubyzip would have every one of those
         # entries in memory by the time the iteration could reject them.
-        expect(Zip::File).not_to receive(:open)
+        expect(Zip::File).not_to receive(:open_buffer)
 
         expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /The zip has more entries than a build may hold/)
         expect(build.reload.site_unpack_error).to match(/The zip has more entries than a build may hold/)
@@ -258,8 +279,9 @@ describe ProductBuilds::UnpackSiteService do
 
       it "walks the directory a ZIP64 record points at, not the one the record before it names" do
         # rubyzip reads the ZIP64 record whenever both of its signatures are in the tail, whatever
-        # the classic record says, so a classic offset pointing at nothing cannot be the one the walk
-        # trusts — that would let the entries be counted as zero.
+        # the classic record says, so a classic offset pointing at nothing cannot be allowed to stand
+        # for the archive's directory: the entries would be counted as zero and nothing would be
+        # measured.
         stub_const("ProductBuild::MAX_SITE_FILES", 1)
         bytes = zip_bytes(Array.new(1_028) { |i| ["file#{i}.txt", ""] }.to_h)
         eocd_at = bytes.rindex(described_class::EOCD_SIGNATURE)
@@ -273,7 +295,7 @@ describe ProductBuilds::UnpackSiteService do
         classic_lied[eocd_at + 16, 4] = [0].pack("V")
         s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: classic_lied + zip64_record + locator)
 
-        expect(Zip::File).not_to receive(:open)
+        expect(Zip::File).not_to receive(:open_buffer)
 
         expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /The zip has more entries than a build may hold/)
         expect(site_keys).to be_empty
@@ -288,6 +310,18 @@ describe ProductBuilds::UnpackSiteService do
         expect(Zip::File).not_to receive(:open)
 
         expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /take up more room than a build may hold/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects an archive whose entries are pointed at the same bytes" do
+        # Reading an entry means reading the archive, and a zip can point every one of its entries at
+        # one stream: without a read budget the same megabytes are decompressed once per entry, so the
+        # work is bounded by the archive's size instead of by its entry count.
+        bytes = zip_bytes({ "index.html" => SecureRandom.bytes(1.megabyte), "assets/a.js" => "a", "assets/b.js" => "b" })
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: point_entries_at_first_local_header(bytes, 2))
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /reads more of its own bytes/)
+        expect(build.reload.site_unpack_error).to match(/reads more of its own bytes/)
         expect(site_keys).to be_empty
       end
 
