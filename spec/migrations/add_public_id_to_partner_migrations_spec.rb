@@ -5,7 +5,8 @@ require Rails.root.join("db/migrate/20261221000006_add_public_id_to_partner_migr
 
 describe AddPublicIdToPartnerMigrations do
   # MySQL commits each ALTER, so a transaction cannot undo these examples. They write their own rows
-  # under an application ID no factory uses, and the around block deletes them and restores the column.
+  # under an application ID no factory uses, and the around block deletes them and rebuilds the column
+  # unless it is back in its finished shape.
   self.use_transactional_tests = false
 
   subject(:migration) { described_class.new }
@@ -17,6 +18,7 @@ describe AddPublicIdToPartnerMigrations do
     example.run
   ensure
     connection.execute("DELETE FROM partner_migrations WHERE oauth_application_id = #{oauth_application_id}")
+    connection.remove_column(:partner_migrations, :public_id) if connection.column_exists?(:partner_migrations, :public_id) && !finished_column?
     described_class.new.migrate(:up) unless connection.column_exists?(:partner_migrations, :public_id)
     PartnerMigration.reset_column_information
   end
@@ -56,6 +58,17 @@ describe AddPublicIdToPartnerMigrations do
     connection.indexes(:partner_migrations).map { [_1.name, _1.columns, _1.unique] }.sort
   end
 
+  def finished_column?
+    public_id_column == { "collation" => "utf8mb4_0900_bin", "nullable" => "NO", "max_length" => 21 } &&
+      indexes.include?(["index_partner_migrations_on_public_id", ["public_id"], true])
+  end
+
+  # The state a run leaves when it stops after adding the column, before NOT NULL and the index.
+  def add_unfinished_column
+    connection.remove_column(:partner_migrations, :public_id) if connection.column_exists?(:partner_migrations, :public_id)
+    connection.add_column(:partner_migrations, :public_id, :string, limit: 21, collation: "utf8mb4_0900_bin")
+  end
+
   it "gives every existing row its own Nano ID and keeps every other value and index" do
     migration.migrate(:down)
     expect(connection.column_exists?(:partner_migrations, :public_id)).to be(false)
@@ -92,5 +105,55 @@ describe AddPublicIdToPartnerMigrations do
 
     expect(connection.column_exists?(:partner_migrations, :public_id)).to be(false)
     expect(rows).to eq(rows_before)
+  end
+
+  it "continues a run that stopped after assigning some IDs, and keeps them" do
+    add_unfinished_column
+    insert_migration("ext-1", status: "claimed", public_id: "aB3xaB3xaB3xaB3xaB3x_")
+    insert_migration("ext-2", status: "pending")
+    insert_migration("ext-3", status: "pending")
+    rows_before = rows
+
+    migration.migrate(:up)
+
+    expect(rows).to eq(rows_before)
+    expect(public_ids.first).to eq("aB3xaB3xaB3xaB3xaB3x_")
+    expect(public_ids).to all(match(/\A[A-Za-z0-9_-]{21}\z/))
+    expect(public_ids.uniq.size).to eq(3)
+    expect(finished_column?).to be(true)
+  end
+
+  it "changes nothing when it runs again after finishing" do
+    insert_migration("ext-1", status: "claimed", public_id: Nanoid.generate)
+    insert_migration("ext-2", status: "pending", public_id: Nanoid.generate)
+    state_before = [public_ids, rows, indexes, public_id_column]
+
+    migration.migrate(:up)
+
+    expect([public_ids, rows, indexes, public_id_column]).to eq(state_before)
+  end
+
+  it "refuses a column, index, or IDs that it cannot finish from, and assigns nothing" do
+    differences = {
+      "another collation" => -> { connection.change_column(:partner_migrations, :public_id, :string, limit: 21, collation: "utf8mb4_unicode_ci") },
+      "another length" => -> { connection.change_column(:partner_migrations, :public_id, :string, limit: 32, collation: "utf8mb4_0900_bin") },
+      "an index that is not unique" => -> { connection.add_index(:partner_migrations, :public_id, name: "index_partner_migrations_on_public_id") },
+      "an ID that is not a Nano ID" => -> { insert_migration("ext-2", status: "pending", public_id: "short") },
+      "an empty ID" => -> { insert_migration("ext-2", status: "pending", public_id: "") },
+      "a duplicate ID" => -> { 2.times { insert_migration("ext-2-#{_1}", status: "pending", public_id: "aB3xaB3xaB3xaB3xaB3x_") } },
+    }
+
+    differences.each do |difference, prepare|
+      add_unfinished_column
+      insert_migration("ext-1", status: "pending")
+      prepare.call
+      state_before = [public_id_column, indexes]
+
+      expect { migration.migrate(:up) }.to raise_error(RuntimeError, /public_id/), "accepted #{difference}"
+
+      expect(public_ids.first).to be_nil
+      expect([public_id_column, indexes]).to eq(state_before)
+      connection.execute("DELETE FROM partner_migrations WHERE oauth_application_id = #{oauth_application_id}")
+    end
   end
 end
