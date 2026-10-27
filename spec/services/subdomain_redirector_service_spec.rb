@@ -15,6 +15,32 @@ describe SubdomainRedirectorService do
     end
   end
 
+  describe "#redirects" do
+    let(:redis_key) { "subdomain_redirect_namespace:subdomain_redirects_config" }
+
+    it "reads Redis once while the config is empty, then serves later lookups from the cache" do
+      expect($redis).to receive(:get).with(redis_key).once.and_call_original
+
+      expect(described_class.new.redirects).to eq({})
+      expect(described_class.new.redirects).to eq({})
+    end
+
+    it "reads Redis again once the config is updated" do
+      expect(described_class.new.redirects).to eq({})
+
+      service.update("live.gumroad.com=example.com")
+
+      expect(described_class.new.redirects).to eq({ "live.gumroad.com" => "example.com" })
+    end
+
+    it "degrades to no redirects when the Redis read stalls" do
+      allow($redis).to receive(:get).with(redis_key).and_raise(RedisClient::Error.new("Waited 1.0 seconds"))
+
+      expect(service.redirects).to eq({})
+      expect(Rails.cache.exist?("subdomain_redirects_cache_key")).to be(false)
+    end
+  end
+
   describe "#redirect_urL_for" do
     before do
       config = "live.gumroad.com=example.com\ntwitter.gumroad.com/123=twitter.com/gumroad"
