@@ -22,7 +22,7 @@ class UrlRedirectPresenter
   end
 
   def download_attributes
-    files = url_redirect.alive_product_files.includes(:alive_subtitle_files).with_attached_thumbnail.in_order
+    files = url_redirect.alive_product_files.includes(:alive_subtitle_files, :product_build).with_attached_thumbnail.in_order
     folder_ids_with_files = files.map(&:folder_id).compact
     product_folders = url_redirect.referenced_link&.product_folders&.where(id: folder_ids_with_files)&.in_order || []
     commission = purchase&.commission
