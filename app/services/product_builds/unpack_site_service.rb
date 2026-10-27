@@ -50,6 +50,7 @@ class ProductBuilds::UnpackSiteService
   }.freeze
   DEFAULT_CONTENT_TYPE = "application/octet-stream"
   ENTRY_NAME_MAX_LENGTH = 100
+  S3_DELETE_BATCH_SIZE = 1_000
   S3_KEY_MAX_BYTES = 1_024
   UNREADABLE_ARCHIVE = "The zip could not be read, so there is nothing to play."
 
@@ -166,7 +167,7 @@ class ProductBuilds::UnpackSiteService
       return if written_keys.empty?
 
       s3 = Aws::S3::Client.new
-      written_keys.each_slice(1_000) do |keys|
+      written_keys.each_slice(S3_DELETE_BATCH_SIZE) do |keys|
         result = s3.delete_objects(bucket: S3_BUCKET, delete: { objects: keys.map { { key: _1 } }, quiet: true })
         # A key left behind would be served, so a partial delete fails the run and the retry cleans up.
         raise "Could not delete #{result.errors.size} unpacked files of build #{build.id}" if result.errors.any?
@@ -275,8 +276,6 @@ class ProductBuilds::UnpackSiteService
       { offset: tail[eocd + 16, 4]&.unpack1("V"), entries: tail[eocd + 10, 2]&.unpack1("v") }
     end
 
-    # Counts and measures the records rubyzip is about to load, raising when the archive's directory
-    # is not the one it describes, or when either budget is passed.
     def walk_directory(file, offset, declared_entries)
       raise UnpackError, MALFORMED_DIRECTORY if offset.nil? || declared_entries.nil? || offset >= file.size
 
