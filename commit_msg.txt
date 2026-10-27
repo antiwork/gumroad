@@ -1,0 +1,38 @@
+Upload large payout exports under a key unique to the recipient
+
+## What
+
+`ContactingCreatorMailer#payout_data` now names the uploaded object itself instead of reusing the emailed attachment name as the S3 key: `payout-data/Payouts_<recipient id>_<epoch>_<random hex>.<extension>`. The attachment filename is unchanged, so the recipient still sees `Payout of 2026-10-24.csv` (or `Payouts.zip`) attached or linked as before.
+
+## Why
+
+`ExportPayoutData` names a single-payout export `Payout of <date>.csv` and a multi-payout export `Payouts.zip`, and `payout_data` passed that name straight to `MailerAttachmentOrLinkService`, which hands it to `ExpiringS3FileService` as the object key whenever the file is over 10 MB. Payouts are exported in batches, so every seller paid on a date shares the single-payout name, and every multi-payout export shares one name whatever the date.
+
+The key sat at the bucket root with nothing unique in it, so a second seller exporting within the presigned link's 7-day lifetime replaced the object behind the first seller's link. The first seller's link then downloaded the second seller's file, which for a payout export is that period's buyer names and emails. Over 10 MB is exactly the exports from the largest sellers, who have the most buyer rows in the file.
+
+Only this mailer was affected. `user_sales_data` and `tax_form_transaction_report` already key under a directory prefix with the user id, a timestamp and random hex, and `affiliates_data` and `subscribers_data` pass filenames that carry the seller's username and a timestamp. `payout_data` was the one path that took the shared attachment name as the key.
+
+## Before / after
+
+No visible change to the email or the attachment name.
+
+- Before: two same-date payout exports over 10 MB overwrite one another in S3, and the earlier link serves the later seller's buyer list.
+- After: each export gets its own object, so a link only ever serves the file it was issued for.
+
+Objects already written are untouched by this diff; auditing the bucket for past collisions is separate work.
+
+## QA steps
+
+Export payout data for a seller whose CSV is over 10 MB, then export it again, and confirm the two emails link to different object keys, each resolving to its own file.
+
+## Test results
+
+- `bundle exec rspec spec/mailers/contacting_creator_mailer_spec.rb -e "payout_data"` -> 4 examples, 0 failures.
+- Failing first: with `app/mailers/contacting_creator_mailer.rb` alone reverted to `origin/main` and the specs kept, both new examples fail. The first receives `"Payout of 2026-10-24.csv"` instead of the unique key, and the second gets the same key twice for two over-size exports carrying the same attachment name.
+- The whole file runs 252 examples with 116 failures here, against 251 examples with the same 116 failures on `origin/main` in this environment: pre-existing and unrelated to this diff.
+- `bundle exec rubocop` on both changed files: no offenses.
+
+AI Disclosure: the report and a first draft of the spec arrived by email; the over-size example is added here, and the change was reviewed, verified and imported by Hermes Agent.
+
+Based on a patch attached to a report from Aditya Garud (https://github.com/yashranaway)
+Co-authored-by: Aditya Garud <153842990+yashranaway@users.noreply.github.com>
