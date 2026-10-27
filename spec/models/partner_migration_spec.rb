@@ -380,13 +380,6 @@ describe PartnerMigration do
       expect(described_class.where(public_id: "#{public_id} ")).not_to exist
       expect(described_class.where(public_id: public_id.swapcase)).not_to exist
     end
-
-    it "still finds a migration by a signed ID issued before Nano IDs" do
-      expect(described_class.find_by_public_id(migration.signed_id(purpose: :partner_migration))).to eq(migration)
-      expect(described_class.find_by_public_id("#{migration.signed_id(purpose: :partner_migration)} ")).to be_nil
-      expect(described_class.find_by_public_id(migration.signed_id)).to be_nil
-      expect(described_class.find_by_public_id(migration.signed_id(purpose: :another_purpose))).to be_nil
-    end
   end
 
   describe "#claim!" do

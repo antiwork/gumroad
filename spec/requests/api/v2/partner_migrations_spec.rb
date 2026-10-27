@@ -155,20 +155,4 @@ describe "Partner API migrations", type: :request do
       expect(response).to have_http_status(:not_found), "returned #{response.status} for #{value.inspect}"
     end
   end
-
-  it "still returns import progress for a migration ID issued before Nano IDs, only to the same partner" do
-    post_migration(external_user_id: "ext-1", products:)
-    legacy_id = PartnerMigration.last.signed_id(purpose: :partner_migration)
-
-    get "/api/v2/partner/migrations/#{legacy_id}", params: { access_token: token.token }
-
-    expect(response).to have_http_status(:ok)
-    expect(response.parsed_body).to include("status" => "pending", "total" => 1)
-    another_application = create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api")
-    another_token = create("doorkeeper/access_token", application: another_application, resource_owner_id: nil, scopes: "partner_api")
-
-    get "/api/v2/partner/migrations/#{legacy_id}", params: { access_token: another_token.token }
-
-    expect(response).to have_http_status(:not_found)
-  end
 end

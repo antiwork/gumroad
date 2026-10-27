@@ -41,8 +41,6 @@ class PartnerMigration < ApplicationRecord
   # A job that keeps stopping, for example on a file that exhausts the worker's memory, gets a final state.
   MAX_RESUMES = 3
   PUBLIC_ID_FORMAT = /\A[A-Za-z0-9_-]{21}\z/
-  # The purpose of the signed IDs issued before public_id. Links and partner records may still hold them.
-  LEGACY_SIGNED_ID_PURPOSE = :partner_migration
 
   STATUS_PENDING = "pending"
   STATUS_CLAIMED = "claimed"
@@ -104,12 +102,9 @@ class PartnerMigration < ApplicationRecord
     find_by(code_digest: digest(code))
   end
 
-  # Takes the Nano ID, or a signed ID issued before it. Never the row ID.
+  # Takes the Nano ID only, never the row ID.
   def self.find_by_public_id(value)
-    return unless value.is_a?(String)
-    return find_by(public_id: value) if value.match?(PUBLIC_ID_FORMAT)
-
-    find_signed(value, purpose: LEGACY_SIGNED_ID_PURPOSE)
+    find_by(public_id: value) if value.is_a?(String) && value.match?(PUBLIC_ID_FORMAT)
   end
 
   def self.digest(value)
