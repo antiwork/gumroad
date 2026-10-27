@@ -17,7 +17,7 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
 
     render json: {
       success: true,
-      migration_id: migration.status_id,
+      migration_id: migration.public_id,
       status: migration.status,
       onboarding_url: partner_migration_url(migration_code: code, host: DOMAIN, protocol: PROTOCOL),
       expires_at: migration.expires_at.iso8601,
@@ -27,7 +27,7 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
   end
 
   def show
-    migration = PartnerMigration.find_signed(params[:id], purpose: :partner_migration)
+    migration = PartnerMigration.find_by_public_id(params[:id])
     return head :not_found unless migration&.oauth_application_id == current_partner_application.id
 
     render json: { success: true, status: migration.status, **migration.progress, results: migration.results, failure_reason: migration.failure_reason }

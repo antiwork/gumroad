@@ -153,6 +153,8 @@ gem "mysql2", ">= 0.5.6"
 # We need none of it: stickiness is per-thread here and web has no reading pool at all.
 # Rakefile loads the gem's rake helper on its own.
 gem "active_record_proxy_adapters", "~> 0.11.1", require: "active_record_proxy_adapters/railties/mysql2"
+# 2.0.1 appends to unfrozen string literals, which Ruby 3.4 deprecates and --enable-frozen-string-literal rejects.
+gem "nanoid", "2.0.0"
 gem "nokogiri", "~> 1.19"
 gem "omniauth-apple", "~> 1.3"
 gem "omniauth-google-oauth2", "~> 1.1", ">= 1.1.1"

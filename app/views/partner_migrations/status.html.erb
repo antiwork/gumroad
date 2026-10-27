@@ -21,7 +21,7 @@
       <p role="alert"><%= @migration.failure_reason %></p>
     <% end %>
     <% if @migration.status != PartnerMigration::STATUS_COMPLETED %>
-      <%= button_to @migration.status == PartnerMigration::STATUS_CLAIMED ? "Resume import" : "Retry failed products", retry_partner_migration_path(@migration.status_id), method: :post, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
+      <%= button_to @migration.status == PartnerMigration::STATUS_CLAIMED ? "Resume import" : "Retry failed products", retry_partner_migration_path(@migration.public_id), method: :post, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
       <p>A retry keeps the products that already imported. If a file link has expired, ask <%= @migration.oauth_application.name %> to refresh it.</p>
     <% end %>
     <%= link_to "Go to products", products_path, class: "underline" %>

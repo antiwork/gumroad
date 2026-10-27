@@ -20,6 +20,9 @@ class PartnerMigration < ApplicationRecord
   MAX_VARIANT_CATEGORIES = 1
   MAX_VARIANTS_PER_CATEGORY = 20
   MAX_CODE_GENERATION_ATTEMPTS = 3
+  PUBLIC_ID_FORMAT = /\A[A-Za-z0-9_-]{21}\z/
+  # The purpose of the signed IDs issued before public_id. Links and partner records may still hold them.
+  LEGACY_SIGNED_ID_PURPOSE = :partner_migration
 
   STATUS_PENDING = "pending"
   STATUS_CLAIMED = "claimed"
@@ -33,10 +36,14 @@ class PartnerMigration < ApplicationRecord
   belongs_to :oauth_application
   belongs_to :user, optional: true
 
+  attr_readonly :public_id
+  before_validation :assign_public_id, on: :create
+
   validates :external_user_id, presence: true, length: { maximum: MAX_EXTERNAL_USER_ID_LENGTH }
   validates :code_digest, presence: true, uniqueness: true
   validates :status, inclusion: { in: STATUSES }
   validates :expires_at, presence: true
+  validates :public_id, format: { with: PUBLIC_ID_FORMAT }
 
   def self.create_for!(oauth_application:, external_user_id:, products:)
     attempts = 0
@@ -66,6 +73,14 @@ class PartnerMigration < ApplicationRecord
     return if code.blank?
 
     find_by(code_digest: digest(code))
+  end
+
+  # Takes the Nano ID, or a signed ID issued before it. Never the row ID.
+  def self.find_by_public_id(value)
+    return unless value.is_a?(String)
+    return find_by(public_id: value) if value.match?(PUBLIC_ID_FORMAT)
+
+    find_signed(value, purpose: LEGACY_SIGNED_ID_PURPOSE)
   end
 
   def self.digest(value)
@@ -266,11 +281,11 @@ class PartnerMigration < ApplicationRecord
     { total: products.size, imported:, failed:, remaining: products.size - imported - failed }
   end
 
-  def status_id
-    signed_id(purpose: :partner_migration)
-  end
-
   private
+    def assign_public_id
+      self.public_id ||= Nanoid.generate
+    end
+
     def link_partner_seller!(claimer)
       partner_sellers = oauth_application.partner_sellers
       by_external_user = partner_sellers.find_by(external_user_id:)

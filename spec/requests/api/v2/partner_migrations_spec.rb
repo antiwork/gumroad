@@ -31,6 +31,14 @@ describe "Partner API migrations", type: :request do
     expect(migration.products.first).to include("name" => "Texture Pack", "files" => [{ "url" => "https://files.example.com/pack.zip", "display_name" => "Pack" }])
   end
 
+  it "identifies the migration by its Nano ID, not by a value that carries the row ID" do
+    post_migration(external_user_id: "ext-1", products:)
+
+    migration_id = response.parsed_body.fetch("migration_id")
+    expect(migration_id).to eq(PartnerMigration.last.public_id)
+    expect(migration_id).to match(/\A[A-Za-z0-9_-]{21}\z/)
+  end
+
   it "rejects a missing external user ID" do
     post_migration(products:)
 
@@ -112,6 +120,36 @@ describe "Partner API migrations", type: :request do
     another_token = create("doorkeeper/access_token", application: another_application, resource_owner_id: nil, scopes: "partner_api")
 
     get "/api/v2/partner/migrations/#{migration_id}", params: { access_token: another_token.token }
+
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "does not return import progress for a row ID, another case, or extra characters" do
+    post_migration(external_user_id: "ext-1", products:)
+    migration_id = response.parsed_body.fetch("migration_id")
+    migration = PartnerMigration.last
+
+    [migration.id.to_s, migration_id.swapcase, "#{migration_id} ", "#{migration_id}x", migration_id.chop].each do |value|
+      next if value == migration_id
+
+      get "/api/v2/partner/migrations/#{ERB::Util.url_encode(value)}", params: { access_token: token.token }
+
+      expect(response).to have_http_status(:not_found), "returned #{response.status} for #{value.inspect}"
+    end
+  end
+
+  it "still returns import progress for a migration ID issued before Nano IDs, only to the same partner" do
+    post_migration(external_user_id: "ext-1", products:)
+    legacy_id = PartnerMigration.last.signed_id(purpose: :partner_migration)
+
+    get "/api/v2/partner/migrations/#{legacy_id}", params: { access_token: token.token }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("status" => "pending", "total" => 1)
+    another_application = create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api")
+    another_token = create("doorkeeper/access_token", application: another_application, resource_owner_id: nil, scopes: "partner_api")
+
+    get "/api/v2/partner/migrations/#{legacy_id}", params: { access_token: another_token.token }
 
     expect(response).to have_http_status(:not_found)
   end

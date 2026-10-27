@@ -18,19 +18,19 @@ class PartnerMigrationsController < ApplicationController
   before_action :load_owned_migration, only: [:status, :retry_import]
 
   def show
-    redirect_to partner_migration_status_path(@migration.status_id) if @migration&.user_id == current_user.id
+    redirect_to partner_migration_status_path(@migration.public_id) if @migration&.user_id == current_user.id
   end
 
   def create
     # The session holds the last link opened, which may differ from the page this form came from.
-    if params[:partner_migration_id].to_s != @migration.id.to_s || params[:partner_migration_code_digest] != @migration.code_digest
+    if params[:partner_migration_id] != @migration.public_id || params[:partner_migration_code_digest] != @migration.code_digest
       @error_message = "This page is out of date. Open the link from the application again."
       return render :show, status: :unprocessable_entity
     end
 
     @migration.claim!(current_user, expected_code_digest: params[:partner_migration_code_digest])
     session.delete(SESSION_KEY)
-    redirect_to partner_migration_status_path(@migration.status_id), status: :see_other
+    redirect_to partner_migration_status_path(@migration.public_id), status: :see_other
   rescue PartnerMigration::ClaimError => e
     @error_message = e.message
     render :show, status: :unprocessable_entity
@@ -43,9 +43,9 @@ class PartnerMigrationsController < ApplicationController
 
   def retry_import
     @migration.retry!(current_user)
-    redirect_to partner_migration_status_path(@migration.status_id), status: :see_other
+    redirect_to partner_migration_status_path(@migration.public_id), status: :see_other
   rescue PartnerMigration::ClaimError => e
-    redirect_to partner_migration_status_path(@migration.status_id), warning: e.message, status: :see_other
+    redirect_to partner_migration_status_path(@migration.public_id), warning: e.message, status: :see_other
   end
 
   def switch_account
@@ -75,7 +75,7 @@ class PartnerMigrationsController < ApplicationController
     end
 
     def load_owned_migration
-      @migration = PartnerMigration.find_signed(params[:id], purpose: :partner_migration)
+      @migration = PartnerMigration.find_by_public_id(params[:id])
       e404 unless @migration&.user_id == current_user.id && !impersonating?
     end
 

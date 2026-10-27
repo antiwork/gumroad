@@ -169,6 +169,54 @@ describe PartnerMigration do
       expect { described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:) }.to raise_error(described_class::CatalogConflict)
       expect(migration.reload.products.first["name"]).to eq("Texture Pack")
     end
+
+    it "gives each migration its own Nano ID and keeps it when the partner sends the export again" do
+      first, = create_migration
+      other, = create_migration(external_user_id: "ext-2")
+      again, = create_migration
+
+      expect(first.public_id).to match(/\A[A-Za-z0-9_-]{21}\z/)
+      expect(other.public_id).not_to eq(first.public_id)
+      expect(again.id).to eq(first.id)
+      expect(again.reload.public_id).to eq(first.public_id)
+    end
+  end
+
+  describe "#public_id" do
+    it "cannot be changed" do
+      migration, = create_migration
+      public_id = migration.public_id
+
+      expect { migration.update!(public_id: Nanoid.generate) }.to raise_error(ActiveRecord::ReadonlyAttributeError)
+      expect(migration.reload.public_id).to eq(public_id)
+    end
+  end
+
+  describe ".find_by_public_id" do
+    let(:public_id) { "aB3xaB3xaB3xaB3xaB3x_" }
+    let!(:migration) do
+      products, _error = described_class.normalize_products([product_attributes])
+      described_class.create!(oauth_application: partner_application, external_user_id: "ext-1", products:, code_digest: described_class.digest("code"), expires_at: 1.day.from_now, public_id:)
+    end
+
+    it "finds a migration by its exact Nano ID" do
+      expect(described_class.find_by_public_id(public_id)).to eq(migration)
+    end
+
+    it "does not find a migration by its row ID, another case, or extra characters" do
+      [migration.id, migration.id.to_s, public_id.swapcase, public_id.upcase, "#{public_id} ", " #{public_id}", "#{public_id}\n", public_id.chop, "#{public_id}x", "", nil, [public_id]].each do |value|
+        expect(described_class.find_by_public_id(value)).to be_nil, "found a migration for #{value.inspect}"
+      end
+      expect(described_class.where(public_id: "#{public_id} ")).not_to exist
+      expect(described_class.where(public_id: public_id.swapcase)).not_to exist
+    end
+
+    it "still finds a migration by a signed ID issued before Nano IDs" do
+      expect(described_class.find_by_public_id(migration.signed_id(purpose: :partner_migration))).to eq(migration)
+      expect(described_class.find_by_public_id("#{migration.signed_id(purpose: :partner_migration)} ")).to be_nil
+      expect(described_class.find_by_public_id(migration.signed_id)).to be_nil
+      expect(described_class.find_by_public_id(migration.signed_id(purpose: :another_purpose))).to be_nil
+    end
   end
 
   describe "#claim!" do

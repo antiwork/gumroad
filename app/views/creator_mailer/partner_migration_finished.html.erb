@@ -6,5 +6,5 @@
     <p>Your product import on Gumroad is ready to review.</p>
   <% end %>
   <p>Imported products start as drafts. Review the files, license options, and prices before you publish.</p>
-  <p><%= link_to "Review products", partner_migration_status_url(@migration.status_id), class: "button primary" %></p>
+  <p><%= link_to "Review products", partner_migration_status_url(@migration.public_id), class: "button primary" %></p>
 </div>

@@ -49,6 +49,7 @@ describe "Partner migration onboarding", type: :request do
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("Import 2 products from")
     expect(response.body).to include("Example App")
+    expect(Nokogiri::HTML(response.body).at_css("input[name='partner_migration_id']")["value"]).to eq(migration.public_id)
   end
 
   it "keeps the export while an account without an email adds an address" do
@@ -228,6 +229,7 @@ describe "Partner migration onboarding", type: :request do
     get partner_migration_path(migration_code: code)
     claim
     status_address = request.path
+    expect(status_address).to eq(partner_migration_status_path(migration.public_id))
     PartnerMigrationImportJob.new.perform(migration.id)
 
     get status_address
@@ -250,13 +252,54 @@ describe "Partner migration onboarding", type: :request do
                       })
     sign_in seller
 
-    get partner_migration_status_path(migration.status_id)
+    get partner_migration_status_path(migration.public_id)
 
     expect(response.body).to include("Import needs attention", "1 of 2 products imported", "Cover could not be imported.", "The file link expired.", "Retry failed products")
-    form = Nokogiri::HTML(response.body).at_css("form[action='#{retry_partner_migration_path(migration.status_id)}']")
-    post retry_partner_migration_path(migration.status_id), params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
+    form = Nokogiri::HTML(response.body).at_css("form[action='#{retry_partner_migration_path(migration.public_id)}']")
+    post retry_partner_migration_path(migration.public_id), params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
     expect(response).to have_http_status(:see_other)
     expect(migration.reload.results).to eq("0" => { "product_id" => product.external_id, "warnings" => ["Cover could not be imported."] })
+  end
+
+  it "opens the status page from a link issued before Nano IDs, only for its owner" do
+    migration.claim!(seller, expected_code_digest: migration.code_digest)
+    legacy_path = partner_migration_status_path(migration.signed_id(purpose: :partner_migration))
+    sign_in seller
+
+    get legacy_path
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include("Import started")
+    sign_out seller
+    sign_in create(:named_user)
+    get legacy_path
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "does not open the status page for a row ID, another case, or extra characters" do
+    migration.claim!(seller, expected_code_digest: migration.code_digest)
+    sign_in seller
+
+    [migration.id.to_s, migration.public_id.swapcase, "#{migration.public_id} ", "#{migration.public_id}x"].each do |value|
+      next if value == migration.public_id
+
+      get partner_migration_status_path(value)
+
+      expect(response).to have_http_status(:not_found), "returned #{response.status} for #{value.inspect}"
+    end
+  end
+
+  it "does not open the status page while the owner is impersonating another user" do
+    admin = create(:admin_user)
+    migration.claim!(admin, expected_code_digest: migration.code_digest)
+    sign_in admin
+    $redis.set(RedisKey.impersonated_user(admin.id), seller.id)
+
+    get partner_migration_status_path(migration.public_id)
+
+    expect(response).to have_http_status(:not_found)
+  ensure
+    $redis.del(RedisKey.impersonated_user(admin.id)) if defined?(admin) && admin&.persisted?
   end
 
   def claim

@@ -26,7 +26,7 @@ describe PartnerMigrationNotificationJob do
     expect(body).not_to have_text("Example App")
     expect(body).not_to have_text("Texture Pack")
     expect(body).to have_text("Imported products start as drafts.")
-    status_url = Rails.application.routes.url_helpers.partner_migration_status_url(migration.status_id, host: DOMAIN, protocol: PROTOCOL)
+    status_url = Rails.application.routes.url_helpers.partner_migration_status_url(migration.public_id, host: DOMAIN, protocol: PROTOCOL)
     expect(body).to have_link("Review products", href: status_url)
     expect(migration.reload.notified_at).to be_present
   end
