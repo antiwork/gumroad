@@ -11,7 +11,9 @@ class BraintreeController < ApplicationController
     render json: {
       clientToken: Braintree::ClientToken.generate
     }
-  rescue *BraintreeExceptions::UNAVAILABLE => e
+  # A gateway timeout (504) is absent from the shared UNAVAILABLE list: on the charge paths a 504 is
+  # outcome-ambiguous and must not read as a clean "not charged" retry. Token generation is idempotent.
+  rescue *BraintreeExceptions::UNAVAILABLE, Braintree::GatewayTimeoutError => e
     error_message = "BraintreeException: #{e.inspect}"
     Rails.logger.error error_message
 
