@@ -42,8 +42,8 @@ describe UseExactPartnerExternalUserIds do
 
   def insert_migration(external_user_id)
     connection.execute(<<~SQL)
-      INSERT INTO partner_migrations (oauth_application_id, external_user_id, code_digest, products, status, expires_at, created_at, updated_at)
-      VALUES (#{oauth_application_id}, #{connection.quote(external_user_id)}, #{connection.quote(SecureRandom.hex)}, '[]', 'pending', NOW(), NOW(), NOW())
+      INSERT INTO partner_migrations (oauth_application_id, external_user_id, code_digest, public_id, products, status, expires_at, created_at, updated_at)
+      VALUES (#{oauth_application_id}, #{connection.quote(external_user_id)}, #{connection.quote(SecureRandom.hex)}, #{connection.quote(Nanoid.generate)}, '[]', 'pending', NOW(), NOW(), NOW())
     SQL
   end
 

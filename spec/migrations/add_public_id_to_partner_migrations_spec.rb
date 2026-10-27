@@ -21,11 +21,17 @@ describe AddPublicIdToPartnerMigrations do
     PartnerMigration.reset_column_information
   end
 
+  # The test database is not in strict mode, so an omitted NOT NULL column would be stored as ''. Once the
+  # column exists, public_id is always written, as NULL when not given.
   def insert_migration(external_user_id, status:, public_id: nil)
     columns = "oauth_application_id, external_user_id, code_digest, products, results, status, expires_at, created_at, updated_at"
     values = [oauth_application_id, connection.quote(external_user_id), connection.quote(SecureRandom.hex), connection.quote([{ name: "Texture Pack" }].to_json),
               connection.quote({ "0" => { "product_id" => "abc" } }.to_json), connection.quote(status), "NOW()", "'2026-01-02 03:04:05'", "'2026-01-02 03:04:05'"].join(", ")
-    connection.execute("INSERT INTO partner_migrations (#{columns}#{", public_id" if public_id}) VALUES (#{values}#{", #{connection.quote(public_id)}" if public_id})")
+    if connection.column_exists?(:partner_migrations, :public_id)
+      columns += ", public_id"
+      values += ", #{connection.quote(public_id)}"
+    end
+    connection.execute("INSERT INTO partner_migrations (#{columns}) VALUES (#{values})")
   end
 
   def rows
