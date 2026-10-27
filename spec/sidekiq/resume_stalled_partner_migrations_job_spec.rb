@@ -16,12 +16,12 @@ describe ResumeStalledPartnerMigrationsJob do
     stalled = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago)
     running = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: 1.minute.ago)
     finished = migration_with(status: PartnerMigration::STATUS_COMPLETED, updated_at: 1.day.ago)
+    Sidekiq::Worker.clear_all
 
     described_class.new.perform
 
-    expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(stalled.id)
-    expect(PartnerMigrationImportJob).not_to have_enqueued_sidekiq_job(running.id)
-    expect(PartnerMigrationImportJob).not_to have_enqueued_sidekiq_job(finished.id)
+    expect(PartnerMigrationImportJob.jobs.map { _1["args"] }).to eq([[stalled.id]])
+    expect([running.reload, finished.reload].map(&:resumes_count)).to eq([0, 0])
     expect(stalled.reload.resumes_count).to eq(1)
   end
 
@@ -37,21 +37,23 @@ describe ResumeStalledPartnerMigrationsJob do
   it "fails a stopped import instead of resuming it for an account that can no longer import" do
     seller = create(:user, user_risk_state: "suspended_for_fraud")
     stalled = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago, user: seller)
+    Sidekiq::Worker.clear_all
 
     described_class.new.perform
 
     expect(stalled.reload).to have_attributes(status: PartnerMigration::STATUS_FAILED, failure_reason: "This account cannot import products.")
-    expect(PartnerMigrationImportJob).not_to have_enqueued_sidekiq_job(stalled.id)
+    expect(PartnerMigrationImportJob.jobs.size).to eq(0)
   end
 
   it "fails an import that keeps stopping, and emails the seller" do
     stalled = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago, resumes_count: PartnerMigration::MAX_RESUMES)
+    Sidekiq::Worker.clear_all
 
     described_class.new.perform
 
     expect(stalled.reload).to have_attributes(status: PartnerMigration::STATUS_FAILED, failure_reason: "The import stopped 4 times before it finished.")
     expect(stalled.completed_at).to be_present
-    expect(PartnerMigrationImportJob).not_to have_enqueued_sidekiq_job(stalled.id)
-    expect(PartnerMigrationNotificationJob).to have_enqueued_sidekiq_job(stalled.id)
+    expect(PartnerMigrationImportJob.jobs.size).to eq(0)
+    expect(PartnerMigrationNotificationJob.jobs.map { _1["args"] }).to eq([[stalled.id]])
   end
 end

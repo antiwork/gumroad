@@ -162,7 +162,7 @@ describe PartnerMigration do
       migration = create_migration_for("new-seller@example.com", profile: { "name" => "Ada", "bio" => "3D artist" })
 
       expect do
-        expect(migration.create_account_and_claim!(ip: "203.0.113.10")).to be_nil
+        expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to be_nil
       end.to have_enqueued_mail(CreatorMailer, :partner_migration_account_setup)
 
       user = User.find_by!(email: "new-seller@example.com")
@@ -175,7 +175,7 @@ describe PartnerMigration do
     it "does not send Devise's confirmation email, because the setup email confirms the address" do
       migration = create_migration_for("new-seller@example.com")
 
-      expect { migration.create_account_and_claim!(ip: "203.0.113.10") }.not_to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+      expect { migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest) }.not_to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
     end
 
     it "turns announcements off for a Canadian address, as signup does" do
@@ -183,7 +183,7 @@ describe PartnerMigration do
       allow(GeoIp).to receive(:lookup).and_call_original
       allow(GeoIp).to receive(:lookup).with("203.0.113.10").and_return(double(country_code: Compliance::Countries::CAN.alpha2))
 
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 
       expect(User.find_by!(email: "new-seller@example.com").announcement_notification_enabled).to be(false)
     end
@@ -192,7 +192,7 @@ describe PartnerMigration do
       PartnerSeller.create!(oauth_application: partner_application, user: create(:user), external_user_id: "ext-1")
       migration = create_migration_for("new-seller@example.com")
 
-      expect(migration.create_account_and_claim!(ip: "203.0.113.10")).to eq("This Example App account is already linked to a different Gumroad account.")
+      expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to eq("This Example App account is already linked to a different Gumroad account.")
       expect(User.where(email: "new-seller@example.com")).to be_empty
     end
 
@@ -204,7 +204,7 @@ describe PartnerMigration do
         original.call(id, encrypted_token)
       end
 
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 
       token = described_class.decrypt_account_setup_token(encrypted_tokens.sole)
       expect(described_class.find_by_account_setup_token(token)).to eq(migration)
@@ -216,15 +216,15 @@ describe PartnerMigration do
       migration = create_migration_for("Seller@example.com")
 
       expect(migration.account_creatable?).to be(false)
-      expect(migration.create_account_and_claim!(ip: "203.0.113.10")).to be_nil
+      expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to be_nil
       expect(migration.reload).to be_pending
     end
 
     it "creates one account when the link opens twice" do
       migration = create_migration_for("new-seller@example.com")
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 
-      expect(described_class.find(migration.id).create_account_and_claim!(ip: "203.0.113.10")).to be_nil
+      expect(described_class.find(migration.id).create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to be_nil
       expect(User.where(email: "new-seller@example.com").count).to eq(1)
     end
   end
@@ -241,7 +241,7 @@ describe PartnerMigration do
         emailed_tokens << described_class.decrypt_account_setup_token(encrypted_token)
         original.call(id, encrypted_token)
       end
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
       token = emailed_tokens.sole
 
       expect(described_class.find_by_account_setup_token(token)).to eq(migration)
@@ -250,21 +250,46 @@ describe PartnerMigration do
       end
     end
 
-    it "sets the password, confirms the email, records the terms, and ends the setup" do
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+    it "does not create an account for a catalog that the partner replaced after the page showed it" do
+      expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: "digest-of-the-page")).to eq(described_class::OUT_OF_DATE_MESSAGE)
 
-      migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11")
+      expect(User.find_by(email: migration.email)).to be_nil
+      expect(migration.reload).to be_pending
+    end
+
+    it "rejects the password from a page whose setup link a resend replaced" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      shown_digest = migration.reload.account_setup_token_digest
+      travel_to((described_class::ACCOUNT_SETUP_RESEND_INTERVAL + 1.second).from_now) { migration.resend_account_setup! }
+
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: shown_digest) }.to raise_error(described_class::AccountSetupError)
+      expect(migration.user.reload.valid_password?("a-long-new-password-123")).to be(false)
+    end
+
+    it "ends the setup once anyone gets into the account another way, such as a password reset" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      migration.user.update!(sign_in_count: 1)
+
+      expect(migration.reload).to have_attributes(account_setup_pending?: false, account_setup_open?: false)
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+      expect(migration.resend_account_setup!).to eq(:expired)
+    end
+
+    it "sets the password, confirms the email, records the terms, and ends the setup" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest)
 
       user = migration.user.reload
       expect(user.valid_password?("a-long-new-password-123")).to be(true)
       expect(user).to be_confirmed
       expect(user.tos_agreements.sole.ip).to eq("203.0.113.11")
       expect(migration.reload.account_setup_pending?).to be(false)
-      expect { migration.complete_account_setup!(password: "another-password-456", ip: "203.0.113.11") }.to raise_error(described_class::AccountSetupError)
+      expect { migration.complete_account_setup!(password: "another-password-456", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
     end
 
     it "reports an expired setup instead of asking the seller to wait" do
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 
       travel_to((described_class::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).from_now) do
         expect(migration.resend_account_setup!).to eq(:expired)
@@ -272,7 +297,7 @@ describe PartnerMigration do
     end
 
     it "stops resending after the maximum, and a resend does not extend the link" do
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
       (described_class::MAX_ACCOUNT_SETUP_EMAILS - 1).times do |i|
         travel_to(((i + 1) * (described_class::ACCOUNT_SETUP_RESEND_INTERVAL + 1.second)).from_now) { expect(migration.resend_account_setup!).to eq(:sent) }
       end
@@ -280,12 +305,12 @@ describe PartnerMigration do
       travel_to(1.hour.from_now) { expect(migration.resend_account_setup!).to eq(:limit) }
       expect(migration.reload.account_setup_emails_count).to eq(described_class::MAX_ACCOUNT_SETUP_EMAILS)
       travel_to((described_class::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).from_now) do
-        expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11") }.to raise_error(described_class::AccountSetupError)
+        expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
       end
     end
 
     it "replaces the link when the seller asks again, at most once a minute" do
-      migration.create_account_and_claim!(ip: "203.0.113.10")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
       first_digest = migration.reload.account_setup_token_digest
 
       expect(migration.resend_account_setup!).to eq(:too_soon)

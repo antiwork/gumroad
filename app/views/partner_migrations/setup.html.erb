@@ -7,6 +7,8 @@
   <% end %>
 <% else %>
   <%= form_tag partner_migration_account_setup_path, method: :post, style: "display: contents" do %>
+    <%= hidden_field_tag :partner_migration_id, @migration.public_id %>
+    <%= hidden_field_tag :account_setup_token_digest, @migration.account_setup_token_digest %>
     <% content_for :partner_migration_footer do %>
       <%= button_tag "Set password and see my products", class: partner_migration_button_class %>
     <% end %>

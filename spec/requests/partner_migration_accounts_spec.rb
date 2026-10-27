@@ -39,6 +39,10 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     post create_partner_migration_account_path, params: form.css("input[type='hidden']").to_h { [_1["name"], _1["value"]] }
   end
 
+  def setup_form_fields
+    Nokogiri::HTML(response.body).css("form[action='#{partner_migration_account_setup_path}'] input[type='hidden']").to_h { [_1["name"], _1["value"]] }
+  end
+
   def form_token(path)
     Nokogiri::HTML(response.body).at_css("form[action='#{path}'] input[name='authenticity_token']")["value"]
   end
@@ -84,11 +88,11 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     follow_redirect!
     expect(response.body).to include("Set your password", "new-seller@example.com")
 
-    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", authenticity_token: form_token(partner_migration_account_setup_path) }
+    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", **setup_form_fields }
     expect(response).to have_http_status(:unprocessable_entity)
     expect(response.body).to include("Accept the Terms of Use to continue.")
 
-    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", authenticity_token: form_token(partner_migration_account_setup_path) }
+    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", **setup_form_fields }
     expect(response).to redirect_to(products_path)
     expect(flash[:notice]).to eq("We're importing your 2 products from Example App. They appear here as drafts.")
     seller = migration.reload.user
@@ -127,7 +131,7 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
       0
     end
 
-    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", authenticity_token: form_token(partner_migration_account_setup_path) }
+    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", **setup_form_fields }
 
     expect(response).to redirect_to(products_path)
     expect(checked_under_lock).to eq([false])
@@ -139,7 +143,7 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     get partner_migration_account_setup_path(account_setup_token: emailed_tokens.sole)
     follow_redirect!
 
-    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", authenticity_token: form_token(partner_migration_account_setup_path) }
+    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", **setup_form_fields }
 
     expect(response).to redirect_to(products_path)
     expect(flash[:notice]).to eq("Your 2 products from Example App are here as drafts.")
@@ -149,7 +153,7 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     create_account
     get partner_migration_account_setup_path(account_setup_token: emailed_tokens.sole)
     follow_redirect!
-    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", authenticity_token: form_token(partner_migration_account_setup_path) }
+    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", **setup_form_fields }
     seller = migration.reload.user
     expect(seller.two_factor_authentication_enabled?).to be(true)
     sign_out seller
@@ -174,6 +178,25 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     expect(response).to have_http_status(:unprocessable_entity)
     expect(response.body).to include("This page is out of date.")
     expect(User.where(email: ["new-seller@example.com", "other@example.com"])).to be_empty
+  end
+
+  it "rejects a set-password form for a different setup link than the one in the session" do
+    create_account
+    get partner_migration_account_setup_path(account_setup_token: emailed_tokens.sole)
+    follow_redirect!
+    first_page_fields = setup_form_fields
+    products, = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
+    other_migration, = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-2", products:, email: "other@example.com")
+    other_migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: other_migration.code_digest)
+    get partner_migration_account_setup_path(account_setup_token: emailed_tokens.last)
+    follow_redirect!
+    expect(response.body).to include("other@example.com")
+
+    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", **first_page_fields }
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response.body).to include("This page is out of date.")
+    expect(User.find_by!(email: "other@example.com").valid_password?("a-long-new-password-123")).to be(false)
   end
 
   it "keeps a valid setup token when a link with an unknown token opens" do

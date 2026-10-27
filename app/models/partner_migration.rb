@@ -2,15 +2,9 @@
 
 require "digest"
 
-# A partner application's request to move one of its users' catalogs to Gumroad.
-#
-# The partner sends the products, and gets back a one-time onboarding link. The creator opens the
-# link, logs in or signs up, and claims the migration. The claim links the creator to the partner's
-# user ID and imports the products as drafts. Only a SHA-256 digest of the link's code is stored.
-#
-# When the export names an email that no Gumroad account uses, opening the link creates the account
-# and claims the import for it. The seller then sets a password from an emailed link, which also
-# proves that they own the address.
+# A partner application's request to move one of its users' catalogs to Gumroad. Only SHA-256 digests
+# of the onboarding code and the account setup token are stored. Nothing imports until the creator
+# confirms the catalog that the page showed, so every claim checks the digest that page carried.
 class PartnerMigration < ApplicationRecord
   EXPIRES_IN = 7.days
   # The job touches the migration around each transfer, and one download stops after
@@ -170,7 +164,7 @@ class PartnerMigration < ApplicationRecord
     return if token.blank?
 
     migration = find_by(account_setup_token_digest: digest(token))
-    migration unless migration&.account_setup_expired?
+    migration if migration&.account_setup_open?
   end
 
   # Returns [products, nil] with only the supported keys, or [nil, error message].
@@ -303,7 +297,9 @@ class PartnerMigration < ApplicationRecord
     claimable? && email.present? && !User.by_email(email).exists?
   end
 
-  def account_setup_pending? = account_created && account_setup_token_digest.present?
+  # Setup ends once anyone gets into the account, for example through a password reset or Google, so an
+  # older setup link cannot replace credentials that the seller set another way.
+  def account_setup_pending? = account_created && account_setup_token_digest.present? && user&.sign_in_count.to_i.zero?
   def account_setup_expired? = claimed_at.nil? || claimed_at + ACCOUNT_SETUP_EXPIRES_IN <= Time.current
   # The seller can still set a password from the setup email.
   def account_setup_open? = account_setup_pending? && !account_setup_expired?
@@ -316,7 +312,7 @@ class PartnerMigration < ApplicationRecord
 
   # Creates the seller's account, claims the import for it, and emails a link to set a password.
   # Returns nil, or a message for the seller when the account cannot be created.
-  def create_account_and_claim!(ip:)
+  def create_account_and_claim!(ip:, expected_code_digest:)
     return unless account_creatable?
 
     user = User.new(email:, password: Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH), account_created_ip: ip)
@@ -334,7 +330,7 @@ class PartnerMigration < ApplicationRecord
 
         user.save!(validate: false)
         token = issue_account_setup_token!(account_created: true)
-        claim!(user, expected_code_digest: code_digest)
+        claim!(user, expected_code_digest:)
       end
     end
     send_account_setup_email(token) if token
@@ -362,7 +358,7 @@ class PartnerMigration < ApplicationRecord
   end
 
   # Sets the password from the emailed link. The link proves the address, so it also confirms it.
-  def complete_account_setup!(password:, ip:)
+  def complete_account_setup!(password:, ip:, expected_token_digest:)
     raise AccountSetupError, INVALID_LINK_MESSAGE unless account_setup_open?
 
     # A local, because the lock reloads this record and its user.
@@ -373,7 +369,8 @@ class PartnerMigration < ApplicationRecord
     # Validation calls the breached-password API, so it runs before the lock that the import job waits on.
     account.validate!
     with_lock do
-      raise AccountSetupError, INVALID_LINK_MESSAGE unless account_setup_open?
+      # The page that the seller submitted showed this token; a resend since then replaced it.
+      raise AccountSetupError, INVALID_LINK_MESSAGE unless account_setup_open? && account_setup_token_digest == expected_token_digest
 
       account.save!(validate: false)
       update!(account_setup_token_digest: nil)

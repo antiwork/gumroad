@@ -47,7 +47,7 @@ class PartnerMigrationsController < ApplicationController
         return render :create_account, status: :unprocessable_entity
       end
 
-      @error_message = @migration.create_account_and_claim!(ip: request.remote_ip)
+      @error_message = @migration.create_account_and_claim!(ip: request.remote_ip, expected_code_digest: params[:partner_migration_code_digest])
       return render :create_account, status: :unprocessable_entity if @error_message
 
       create_user_event("signup", user_id: @migration.user_id) if @migration.account_created
@@ -76,12 +76,18 @@ class PartnerMigrationsController < ApplicationController
     @migration = PartnerMigration.find_by_account_setup_token(session[SETUP_SESSION_KEY])
     return render :setup, status: :unprocessable_entity if @migration.nil?
 
+    # The session holds the last setup link opened, which may differ from the page that the form came from.
+    if params[:partner_migration_id] != @migration.public_id || params[:account_setup_token_digest] != @migration.account_setup_token_digest
+      @error_message = PartnerMigration::OUT_OF_DATE_MESSAGE
+      return render :setup, status: :unprocessable_entity
+    end
+
     unless params[:terms_accepted] == "1"
       @error_message = "Accept the Terms of Use to continue."
       return render :setup, status: :unprocessable_entity
     end
 
-    @migration.complete_account_setup!(password: params[:password].to_s, ip: request.remote_ip)
+    @migration.complete_account_setup!(password: params[:password].to_s, ip: request.remote_ip, expected_token_digest: params[:account_setup_token_digest])
     session.delete(SETUP_SESSION_KEY)
     sign_in_new_seller(@migration.user)
     redirect_to_products(@migration)
