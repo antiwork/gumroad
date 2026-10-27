@@ -599,6 +599,21 @@ class Subscription::UpdaterService
                                               .not_is_archived_original_subscription_purchase
                                               .where.not(id: original_purchase.id).to_a
       @other_archived_originals.each { _1.update_flag!(:is_archived_original_subscription_purchase, true, true) }
+      reindex_original_flags_after_commit(@other_archived_originals.map(&:id))
+    end
+
+    # `update_flag!` skips callbacks, so mirror the purchase's own flags reindex. The worker reads the
+    # committed row, which also covers a deferred restart that unarchived these again.
+    def reindex_original_flags_after_commit(purchase_ids)
+      return if purchase_ids.empty?
+
+      AfterCommitEverywhere.after_commit do
+        purchase_ids.each do |id|
+          options = { "record_id" => id, "class_name" => "Purchase", "fields" => Purchase::ATTRIBUTE_TO_SEARCH_FIELDS["flags"] }
+          ElasticsearchIndexerWorker.perform_in(4.seconds, "update", options)
+          ElasticsearchIndexerWorker.perform_in(3.minutes, "update", options)
+        end
+      end
     end
 
     def charge_user!

@@ -537,14 +537,19 @@ describe Subscription::UpdaterService, :vcr do
 
         context "when an earlier plan change left another original purchase unarchived" do
           let(:lowered_price_cents) { 2_99 }
+          let(:stale_price_cents) { 6_49 }
           let(:lowered_price_params) do
             existing_card_params.merge(perceived_price_cents: lowered_price_cents, perceived_upgrade_price_cents: lowered_price_cents)
           end
 
+          # The stale original has its own price so the specs show which original sets the honored rate.
           before do
+            @original_tier_quarterly_price.update!(price_cents: stale_price_cents)
             @stale_original = @subscription.update_current_plan!(new_variants: [@original_tier], new_price: @quarterly_product_price)
             @original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
             @original_tier_quarterly_price.update!(price_cents: lowered_price_cents)
+            # update_current_plan! cached the original it archived; load the subscription fresh, as a request would.
+            @subscription.reload
           end
 
           def unarchived_originals
@@ -553,6 +558,8 @@ describe Subscription::UpdaterService, :vcr do
 
           it "restarts at the lowered price and leaves only the restarted plan unarchived" do
             expect(unarchived_originals).to eq [@original_purchase, @stale_original]
+            expect(@stale_original.displayed_price_cents).to eq stale_price_cents
+            expect(@subscription.current_subscription_price_cents).to eq @original_purchase.displayed_price_cents
 
             result = Subscription::UpdaterService.new(
               subscription: @subscription,
@@ -585,6 +592,7 @@ describe Subscription::UpdaterService, :vcr do
             end.not_to change { @subscription.reload.purchases.count }
 
             expect(unarchived_originals).to eq [@original_purchase, @stale_original]
+            expect(@subscription.current_subscription_price_cents).to eq @original_purchase.displayed_price_cents
             expect(@subscription).not_to be_alive
           end
 
@@ -603,6 +611,29 @@ describe Subscription::UpdaterService, :vcr do
             expect(result[:success]).to eq true
             expect(@subscription.reload).to be_alive
             expect(unarchived_originals).to eq [@original_purchase, @stale_original]
+            expect(@subscription.current_subscription_price_cents).to eq @original_purchase.displayed_price_cents
+          end
+
+          it "reindexes the other archived originals so search no longer lists them as current" do
+            index_model_records(Purchase)
+            ElasticsearchIndexerWorker.jobs.clear
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: lowered_price_params,
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+            expect(result[:success]).to eq true
+
+            stale_jobs = ElasticsearchIndexerWorker.jobs.select { _1["args"].second["record_id"] == @stale_original.id }
+            expect(stale_jobs.map { _1["args"] }).to include(["update", { "record_id" => @stale_original.id, "class_name" => "Purchase", "fields" => Purchase::ATTRIBUTE_TO_SEARCH_FIELDS["flags"] }])
+            stale_jobs.each { ElasticsearchIndexerWorker.new.perform(*_1["args"]) }
+
+            document = EsClient.get(index: Purchase.index_name, id: @stale_original.id).fetch("_source")
+            expect(document["not_subscription_or_original_subscription_purchase"]).to eq false
+            expect(document["selected_flags"]).to include("is_archived_original_subscription_purchase")
           end
 
           it "keeps renewing an active membership at the honored price" do
@@ -611,6 +642,7 @@ describe Subscription::UpdaterService, :vcr do
             renewal = @subscription.charge!
 
             expect(renewal.displayed_price_cents).to eq @original_purchase.displayed_price_cents
+            expect(renewal.displayed_price_cents).not_to eq stale_price_cents
             expect(renewal.displayed_price_cents).not_to eq lowered_price_cents
             expect(unarchived_originals).to eq [@original_purchase, @stale_original]
           end
