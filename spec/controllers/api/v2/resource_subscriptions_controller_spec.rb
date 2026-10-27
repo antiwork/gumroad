@@ -334,7 +334,7 @@ describe Api::V2::ResourceSubscriptionsController do
     end
 
     it "uses the seller's last disputed sale for a dispute subscription" do
-      purchase = create(:disputed_purchase, link: product, seller: @user)
+      purchase = create(:purchase, link: product, seller: @user, chargeback_date: 1.day.ago)
       resource_subscription = create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "dispute")
 
       post :test_event, params: @params.merge(id: resource_subscription.external_id)

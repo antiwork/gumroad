@@ -46,7 +46,7 @@ describe ResourceSubscription::TestEvent do
     end
 
     it "uses the last won dispute's sale for dispute_won" do
-      purchase = create(:disputed_purchase, link: product, seller:, chargeback_reversed: true)
+      purchase = create(:purchase, link: product, seller:, chargeback_date: 1.day.ago, chargeback_reversed: true)
       create(:dispute, purchase:, state: :won, won_at: Time.current)
 
       test_event = test_event_for("dispute_won")
