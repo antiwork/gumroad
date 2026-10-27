@@ -51,13 +51,13 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     catalog = [product_attributes] + Array.new(10) { |index| { name: "Asset #{index + 2}", price: 500 } }
     visit export_catalog(catalog)
     expect(page).to have_content("Connect Example App to Gumroad")
-    expect(page).to have_content("Your 11 products will arrive as drafts.")
+    expect(page).to have_content("Gumroad imports your 11 products as drafts.")
 
     fill_in "Email", with: seller.email
     fill_in "Password", with: "wrong-password"
     click_on "Login"
     expect(page).to have_alert("Please try another password. The one you entered was incorrect.")
-    expect(page).to have_content("Your 11 products will arrive as drafts.")
+    expect(page).to have_content("Gumroad imports your 11 products as drafts.")
     log_in
 
     expect(page).to have_content(seller.email)
@@ -90,7 +90,7 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     visit export_catalog([product_attributes])
     click_on "Sign up"
     expect(page).to have_content("Sign up for Gumroad and connect Example App")
-    expect(page).to have_content("Your 1 product will arrive as drafts.")
+    expect(page).to have_content("Gumroad imports your 1 product as a draft.")
     fill_in "Email", with: "new-seller@example.com"
     fill_in "Password", with: SecureRandom.hex(16)
     click_on "Create account"

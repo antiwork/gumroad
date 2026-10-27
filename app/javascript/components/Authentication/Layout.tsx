@@ -34,8 +34,8 @@ export const Layout = ({
           {header}
           {migrationProductCount !== undefined ? (
             <p className="mt-4">
-              Your {migrationProductCount} {migrationProductCount === 1 ? "product" : "products"} will arrive as drafts.
-              After you continue, confirm the destination account and start the import.
+              Gumroad imports your {migrationProductCount} {migrationProductCount === 1 ? "product" : "products"} as{" "}
+              {migrationProductCount === 1 ? "a draft" : "drafts"}. After you continue, confirm the destination account.
             </p>
           ) : null}
         </PageHeader>

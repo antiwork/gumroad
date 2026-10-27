@@ -37,7 +37,8 @@ class PartnerMigration::RemoteFileTransfer
   def self.stream(url, tempfile, max_bytes)
     too_large = "The file is larger than #{ActiveSupport::NumberHelper.number_to_human_size(max_bytes)}."
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + MAX_DOWNLOAD_DURATION
-    response = SsrfFilter.get(url, scheme_whitelist: ALLOWED_SCHEMES) do |http_response|
+    # Net::HTTP otherwise accepts a short response as a complete file.
+    response = SsrfFilter.get(url, scheme_whitelist: ALLOWED_SCHEMES, http_options: { ignore_eof: false }) do |http_response|
       raise Error, too_large if http_response["content-length"].to_i > max_bytes
 
       write_file = http_response.is_a?(Net::HTTPSuccess)
