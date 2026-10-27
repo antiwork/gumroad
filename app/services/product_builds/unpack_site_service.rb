@@ -11,8 +11,8 @@
 # the same as a zip whose index.html is at its root. Every other layout is a bad build: no
 # index.html once that folder is stripped, or more than one top-level entry.
 #
-# The entry count an archive declares is checked from its end-of-central-directory record before
-# the archive is opened, because rubyzip reads every entry's metadata into memory on open.
+# The entry count and the metadata bytes an archive's central directory actually holds are measured
+# before the archive is opened, because rubyzip reads every record in it into memory on open.
 class ProductBuilds::UnpackSiteService
   class UnpackError < StandardError; end
 
@@ -51,17 +51,24 @@ class ProductBuilds::UnpackSiteService
   DEFAULT_CONTENT_TYPE = "application/octet-stream"
   ENTRY_NAME_MAX_LENGTH = 100
 
-  # rubyzip materialises every central-directory entry the moment the archive is opened, so the
-  # file cap cannot be the only guard: by the time the iteration starts, the memory is already
-  # spent. The count the archive declares is read from its own end-of-central-directory record
-  # first, and an archive that declares more entries than a build may hold is rejected unopened.
+  # rubyzip holds every central-directory record in memory the moment the archive is opened, so the
+  # directory is walked here first, with the budgets a build may hold. Counting entries alone would
+  # not bound that: one record can carry a 64 KB name, so the bytes the records occupy are budgeted
+  # too. The directory's own declared count is not read at all — the records carry their own
+  # lengths, so only walking them says what the archive really holds.
+  CENTRAL_DIRECTORY_ENTRY_SIGNATURE = "PK\x01\x02".b
+  CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE = 46
   EOCD_SIGNATURE = "PK\x05\x06".b
   ZIP64_EOCD_SIGNATURE = "PK\x06\x06".b
-  ZIP64_ENTRY_COUNT_MARKER = 0xFFFF
+  ZIP64_EOCD_LOCATOR_SIGNATURE = "PK\x06\x07".b
   # The end-of-central-directory record plus the longest comment a zip can carry behind it.
   EOCD_SEARCH_WINDOW = 70_000
   # Room for the folder entries an archive carries on top of the files they hold.
   ARCHIVE_ENTRY_SLACK = 1_024
+  # 5000 files at ~100 bytes of directory record each is about half a megabyte, so this leaves an
+  # order of magnitude of headroom for the extras real zips carry while still bounding the memory a
+  # hostile archive can make the worker hold.
+  ARCHIVE_METADATA_BYTE_BUDGET = 8.megabytes
 
   def self.perform(build) = new(build).perform
 
@@ -106,7 +113,7 @@ class ProductBuilds::UnpackSiteService
     end
 
     def unpack(zip_path)
-      raise UnpackError, "The zip declares more entries than a build may hold." if declared_entry_count(zip_path) > max_archive_entries
+      check_directory(zip_path)
 
       s3 = Aws::S3::Client.new
       file_count = 0
@@ -144,28 +151,53 @@ class ProductBuilds::UnpackSiteService
     # The entries a build may hold: its files, plus the folder entries an archive carries for them.
     def max_archive_entries = ProductBuild::MAX_SITE_FILES * 2 + ARCHIVE_ENTRY_SLACK
 
-    # The number of entries rubyzip will read out of the archive, read from the record every zip
-    # ends with rather than from the archive itself: opening it is what costs the memory this guard
-    # exists to save.
-    #
-    # rubyzip takes that count from the ZIP64 record whenever the ZIP64 signatures are in the
-    # tail, whatever the classic record's 16-bit field says, so both counts are read and the larger
-    # one decides: no pairing of the two records can leave a small number here and a large one
-    # there.
-    def declared_entry_count(zip_path)
-      tail = File.open(zip_path, "rb") do |file|
-        file.seek([file.size - EOCD_SEARCH_WINDOW, 0].max)
-        file.read
+    # Walks the archive's central directory without opening it, which is the memory rubyzip is about
+    # to spend: the records it holds there are counted and measured, and the walk stops as soon as
+    # either budget is passed. A record's name and comment lengths are read from the record itself,
+    # which is why the bytes are budgeted next to the count: a handful of entries can carry megabytes
+    # of names.
+    def check_directory(zip_path)
+      File.open(zip_path, "rb") do |file|
+        offset = central_directory_offset(file)
+        return if offset.nil? || offset > file.size
+
+        file.seek(offset)
+        entries = 0
+        metadata_bytes = 0
+
+        loop do
+          header = file.read(CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE)
+          break if header.nil? || header.bytesize < CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE
+          break unless header.start_with?(CENTRAL_DIRECTORY_ENTRY_SIGNATURE)
+
+          name_length, extra_length, comment_length = header[28, 6].unpack("vvv")
+          record_size = CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE + name_length + extra_length + comment_length
+          entries += 1
+          metadata_bytes += record_size
+          raise UnpackError, "The zip has more entries than a build may hold." if entries > max_archive_entries
+          raise UnpackError, "The zip's entry names and folders take up more room than a build may hold." if metadata_bytes > ARCHIVE_METADATA_BYTE_BUDGET
+
+          file.seek(record_size - CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE, IO::SEEK_CUR)
+        end
+      end
+    end
+
+    # Where the archive's directory starts, read from the same record rubyzip will read it from: it
+    # takes the ZIP64 record whenever both of its signatures are in the archive's tail, whatever the
+    # record before it says. When neither is there, rubyzip cannot open the archive either, and the
+    # walk has nothing to measure.
+    def central_directory_offset(file)
+      file.seek([file.size - EOCD_SEARCH_WINDOW, 0].max)
+      tail = file.read
+
+      if tail.include?(ZIP64_EOCD_LOCATOR_SIGNATURE) && (zip64 = tail.rindex(ZIP64_EOCD_SIGNATURE))
+        return tail[zip64 + 48, 8]&.unpack1("Q<")
       end
 
       eocd = tail.rindex(EOCD_SIGNATURE)
-      return 0 unless eocd
+      return nil unless eocd
 
-      classic_count = tail[eocd + 10, 2]
-      zip64 = tail.rindex(ZIP64_EOCD_SIGNATURE)
-      zip64_count = tail[zip64 + 32, 8] if zip64
-
-      [classic_count&.unpack1("v"), zip64_count&.unpack1("Q<")].compact.max || 0
+      tail[eocd + 16, 4]&.unpack1("V")
     end
 
     # Copies one entry into the build's site prefix, stopping as soon as it passes the bytes left in

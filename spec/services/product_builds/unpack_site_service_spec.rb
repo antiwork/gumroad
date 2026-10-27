@@ -53,6 +53,15 @@ describe ProductBuilds::UnpackSiteService do
     bytes
   end
 
+  def zip_bytes(entries)
+    Zip::OutputStream.write_buffer do |zip|
+      entries.each do |path, content|
+        zip.put_next_entry(path)
+        zip.write(content)
+      end
+    end.string
+  end
+
   def site_keys
     s3.list_objects_v2(bucket: S3_BUCKET, prefix: "#{site_prefix}/").contents.map(&:key).sort
   end
@@ -234,51 +243,51 @@ describe ProductBuilds::UnpackSiteService do
         expect(s3.list_objects_v2(bucket: S3_BUCKET, prefix: "builds/#{product.id}/1/").contents.map(&:key)).to eq([build.storage_key])
       end
 
-      it "rejects an archive that declares more entries than a build may hold, without opening it" do
+      it "rejects an archive whose directory holds more entries than a build may hold, without opening it" do
         stub_const("ProductBuild::MAX_SITE_FILES", 1)
         upload_zip(Array.new(1_028) { |i| ["file#{i}.txt", ""] }.to_h)
 
-        # The whole point of reading the count first: rubyzip would have every entry in memory by
-        # the time the iteration could reject them.
+        # The whole point of walking the directory first: rubyzip would have every one of those
+        # entries in memory by the time the iteration could reject them.
         expect(Zip::File).not_to receive(:open)
 
-        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /declares more entries/)
-        expect(build.reload.site_unpack_error).to match(/declares more entries/)
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /The zip has more entries than a build may hold/)
+        expect(build.reload.site_unpack_error).to match(/The zip has more entries than a build may hold/)
         expect(site_keys).to be_empty
       end
 
-      it "reads the entry count of a ZIP64 archive from its ZIP64 record" do
-        # A count past 65,535 does not fit the record's own field, so a zip carries it in the ZIP64
-        # record that precedes it. Only the tail of the file is needed to answer, so this fixture
-        # never has to be a real 10-million-entry archive.
-        zip64_record = described_class::ZIP64_EOCD_SIGNATURE + ("\x00" * 28) + [10_000_000].pack("Q<") + ("\x00" * 20)
-        locator = "PK\x06\x07".b + ("\x00" * 16)
-        eocd = described_class::EOCD_SIGNATURE + ("\x00" * 6) + [described_class::ZIP64_ENTRY_COUNT_MARKER].pack("v") + ("\x00" * 10)
-        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: zip64_record + locator + eocd)
-
-        expect(Zip::File).not_to receive(:open)
-
-        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /declares more entries/)
-        expect(site_keys).to be_empty
-      end
-
-      it "rejects a ZIP64 archive whose own 16-bit field declares only a handful of entries" do
-        # rubyzip prefers the ZIP64 count whenever the ZIP64 signatures are in the tail, whatever
-        # the classic record says, so reading only the classic field would let an archive hand the
-        # worker millions of entries to load while declaring one.
-        bytes = Zip::OutputStream.write_buffer do |zip|
-          zip.put_next_entry("index.html")
-          zip.write("<html></html>")
-        end.string
-        zip64_record = described_class::ZIP64_EOCD_SIGNATURE + ("\x00" * 28) + [10_000_000].pack("Q<") + ("\x00" * 20)
-        locator = "PK\x06\x07".b + ("\x00" * 16)
+      it "walks the directory a ZIP64 record points at, not the one the record before it names" do
+        # rubyzip reads the ZIP64 record whenever both of its signatures are in the tail, whatever
+        # the classic record says, so a classic offset pointing at nothing cannot be the one the walk
+        # trusts — that would let the entries be counted as zero.
+        stub_const("ProductBuild::MAX_SITE_FILES", 1)
+        bytes = zip_bytes(Array.new(1_028) { |i| ["file#{i}.txt", ""] }.to_h)
         eocd_at = bytes.rindex(described_class::EOCD_SIGNATURE)
-        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes[0...eocd_at] + zip64_record + locator + bytes[eocd_at..])
+        cdir_offset = bytes[eocd_at + 16, 4].unpack1("V")
+        cdir_size = bytes[eocd_at + 12, 4].unpack1("V")
+        zip64_record = described_class::ZIP64_EOCD_SIGNATURE + [44].pack("Q<") + [0, 0].pack("vv") + [0, 0].pack("VV") +
+                       [1_028, 1_028].pack("Q<Q<") + [cdir_size].pack("Q<") + [cdir_offset].pack("Q<")
+        locator = described_class::ZIP64_EOCD_LOCATOR_SIGNATURE + [0].pack("V") + [bytes.bytesize].pack("Q<") + [1].pack("V")
+        classic_lied = bytes.dup
+        classic_lied[eocd_at + 10, 2] = [1].pack("v")
+        classic_lied[eocd_at + 16, 4] = [0].pack("V")
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: classic_lied + zip64_record + locator)
 
         expect(Zip::File).not_to receive(:open)
 
-        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /declares more entries/)
-        expect(build.reload.site_unpack_error).to match(/declares more entries/)
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /The zip has more entries than a build may hold/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects an archive whose entry names take up more room than a build may hold" do
+        # Two entries are well inside the count cap; a name carries its own length, so the bytes are
+        # what has to be budgeted.
+        stub_const("ProductBuilds::UnpackSiteService::ARCHIVE_METADATA_BYTE_BUDGET", 200)
+        upload_zip({ "index.html" => "<html></html>", "assets/#{"a" * 500}.js" => "x" })
+
+        expect(Zip::File).not_to receive(:open)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /take up more room than a build may hold/)
         expect(site_keys).to be_empty
       end
 
