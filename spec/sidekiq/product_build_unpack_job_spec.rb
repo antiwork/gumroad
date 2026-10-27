@@ -40,6 +40,29 @@ describe ProductBuildUnpackJob do
     expect(build.reload.site_unpack_error).to match(/more than one top-level entry/)
   end
 
+  it "records an archive rubyzip fails to parse instead of retrying it" do
+    # A known extra-field ID with a truncated length makes rubyzip raise NoMethodError on open.
+    bytes = Zip::OutputStream.write_buffer do |zip|
+      zip.put_next_entry("index.html")
+      zip.write("x")
+    end.string.b
+    eocd_at = bytes.rindex("PK\x05\x06".b)
+    record = bytes[eocd_at + 16, 4].unpack1("V")
+    name_length, extra_length = bytes[record + 28, 4].unpack("vv")
+    bytes[record + 30, 2] = [extra_length + 3].pack("v")
+    bytes.insert(record + 46 + name_length + extra_length, "UT\x00".b)
+    bytes[eocd_at + 3 + 12, 4] = [bytes[eocd_at + 3 + 12, 4].unpack1("V") + 3].pack("V")
+    s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes)
+
+    expect { described_class.new.perform(build.id) }.not_to raise_error
+
+    expect(build.reload.site_unpack_error).to match(/could not be read/)
+  end
+
+  it "runs one unpack per build at a time" do
+    expect(described_class.sidekiq_options["lock"]).to eq(:until_executed)
+  end
+
   it "does nothing when the build is gone" do
     expect { described_class.new.perform(-1) }.not_to raise_error
   end

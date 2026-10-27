@@ -50,6 +50,8 @@ class ProductBuilds::UnpackSiteService
   }.freeze
   DEFAULT_CONTENT_TYPE = "application/octet-stream"
   ENTRY_NAME_MAX_LENGTH = 100
+  S3_KEY_MAX_BYTES = 1_024
+  UNREADABLE_ARCHIVE = "The zip could not be read, so there is nothing to play."
 
   # rubyzip holds every central-directory record in memory the moment the archive is opened, so the
   # directory is walked here first, with the budgets a build may hold. Counting entries alone would
@@ -100,9 +102,10 @@ class ProductBuilds::UnpackSiteService
   # The archive as rubyzip sees it: every byte it reads is counted, so an archive that points several
   # of its entries at the same bytes cannot decompress them once per entry.
   class BoundedArchive
-    def initialize(io, budget)
+    def initialize(io, budget, copies = [])
       @io = io
       @budget = budget
+      @copies = copies
     end
 
     def read(length = nil, outbuf = nil)
@@ -111,7 +114,15 @@ class ProductBuilds::UnpackSiteService
       outbuf ? outbuf.replace(data.to_s) : data
     end
 
-    def dup = self.class.new(@io.dup, @budget)
+    # rubyzip dups the archive for each entry it opens and can raise before handing that copy back,
+    # so every copy is kept to be closed with the archive.
+    def dup
+      copy = self.class.new(@io.dup, @budget, @copies)
+      @copies << copy
+      copy
+    end
+
+    def close_copies = @copies.each { _1.close unless _1.closed? }
     def size = @io.size
     def tell = @io.tell
     def seek(*args) = @io.seek(*args)
@@ -136,11 +147,11 @@ class ProductBuilds::UnpackSiteService
       unpack(zip_file.path)
     end
     build
-  rescue UnpackError => e
-    # A rejected zip must leave nothing behind: a half-written site/ would be served once the
-    # player exists, and the seller has to upload a fixed zip as a new build anyway.
+  rescue StandardError => e
+    # A failed unpack must leave nothing behind: a half-written site/ would be served once the
+    # player exists. A rejected zip is recorded; any other error is left to the job's retry.
     delete_written_files
-    build.update!(site_unpack_error: e.message)
+    build.update!(site_unpack_error: e.message) if e.is_a?(UnpackError)
     raise
   end
 
@@ -155,7 +166,11 @@ class ProductBuilds::UnpackSiteService
       return if written_keys.empty?
 
       s3 = Aws::S3::Client.new
-      written_keys.each { |key| s3.delete_object(bucket: S3_BUCKET, key:) }
+      written_keys.each_slice(1_000) do |keys|
+        result = s3.delete_objects(bucket: S3_BUCKET, delete: { objects: keys.map { { key: _1 } }, quiet: true })
+        # A key left behind would be served, so a partial delete fails the run and the retry cleans up.
+        raise "Could not delete #{result.errors.size} unpacked files of build #{build.id}" if result.errors.any?
+      end
       written_keys.clear
     end
 
@@ -172,38 +187,50 @@ class ProductBuilds::UnpackSiteService
       has_index = false
 
       archive = File.open(zip_path, "rb")
+      bounded = BoundedArchive.new(archive, ReadBudget.new(archive_read_budget(archive.size, entries)))
       begin
         # The archive is handed to rubyzip through a counter, so the whole unpack is bounded by what
         # it reads out of it: opening it by path would give rubyzip an IO of its own, unmeasured.
-        zip = Zip::File.open_buffer(BoundedArchive.new(archive, ReadBudget.new(archive_read_budget(archive.size, entries))))
+        zip = reading_archive { Zip::File.open_buffer(bounded) }
 
         files = zip.reject(&:directory?)
-        # Whether the zip wraps the site in a folder is a property of the whole archive, so it is
-        # decided from the names before anything is copied: a layout we reject must not leave a
-        # half-written site behind.
+        # Every name is checked before anything is copied, so a zip rejected for its layout or its
+        # names does not leave a half-written site behind.
         folder = folder_to_strip(files.map { normalize_entry_name(_1.name) })
+        paths = files.map { relative_entry_name(_1.name, folder) }
+        # Seeking to a local header past the end can raise EINVAL on some filesystems, which would read
+        # as a disk error and be retried.
+        raise UnpackError, UNREADABLE_ARCHIVE if files.any? { _1.local_header_offset >= archive.size }
 
-        files.each do |entry|
+        files.zip(paths).each do |entry, path|
           raise UnpackError, "A build cannot contain symlinks: #{shown(entry.name)}." if entry.symlink?
           raise UnpackError, "A build can have at most #{ProductBuild::MAX_SITE_FILES} files." if file_count >= ProductBuild::MAX_SITE_FILES
 
-          path = relative_entry_name(entry.name, folder)
           written = copy_entry(entry, path, s3, ProductBuild::MAX_SITE_BYTE_SIZE - byte_size)
           file_count += 1
           byte_size += written
           has_index = true if path == "index.html"
         end
       ensure
+        bounded.close_copies
         archive.close
       end
 
       raise UnpackError, "The zip has no index.html at its root, so there is nothing to play." unless has_index
 
       build.update!(site_unpacked_at: Time.current, site_file_count: file_count, site_byte_size: byte_size, site_unpack_error: nil)
-    rescue Zip::Error
-      # An archive rubyzip cannot read is a seller input error like the ones above, not a transient
-      # one: reject it the same way instead of letting the job retry a zip that will never open.
-      raise UnpackError, "The zip could not be read, so there is nothing to play."
+    end
+
+    # rubyzip raises plain NoMethodError and TypeError on some malformed records, not only Zip::Error,
+    # so anything it raises while reading the archive is a rejected zip. Those are reported too: a bug of
+    # ours here would otherwise look like a run of bad zips. Local disk errors stay retryable.
+    def reading_archive
+      yield
+    rescue UnpackError, SystemCallError
+      raise
+    rescue StandardError => e
+      ErrorNotifier.notify(e) unless e.is_a?(Zip::Error) || e.is_a?(Zlib::Error)
+      raise UnpackError, UNREADABLE_ARCHIVE
     end
 
     # What the unpack may read out of the archive: the archive itself, plus one 32 KB chunk per
@@ -264,6 +291,7 @@ class ProductBuilds::UnpackSiteService
 
         name_length, extra_length, comment_length = header[28, 6].unpack("vvv")
         record_size = CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE + name_length + extra_length + comment_length
+        raise UnpackError, MALFORMED_DIRECTORY if file.pos + record_size - CENTRAL_DIRECTORY_ENTRY_FIXED_SIZE > file.size
         entries += 1
         metadata_bytes += record_size
         raise UnpackError, "The zip has more entries than a build may hold." if entries > max_archive_entries
@@ -280,13 +308,15 @@ class ProductBuilds::UnpackSiteService
     def copy_entry(entry, path, s3, remaining_bytes)
       Tempfile.create("entry") do |file|
         file.binmode
-        copied = copy_entry_bytes(entry, file, remaining_bytes)
+        copied = reading_archive { copy_entry_bytes(entry, file, remaining_bytes) }
         if copied > remaining_bytes
           raise UnpackError, "A build's files can unpack to at most #{ProductBuild::MAX_SITE_BYTE_SIZE / 1.gigabyte} GB."
         end
 
         file.rewind
         key = "#{build.site_prefix}/#{path}"
+        # Tracked before the call: a put that times out after S3 stored the object must still be cleaned up.
+        written_keys << key
         s3.put_object(
           bucket: S3_BUCKET,
           key:,
@@ -294,7 +324,6 @@ class ProductBuilds::UnpackSiteService
           content_length: copied,
           content_type: content_type_for(path),
         )
-        written_keys << key
         copied
       end
     end
@@ -326,14 +355,24 @@ class ProductBuilds::UnpackSiteService
     # The entry's path relative to the site prefix, once the folder the zip wraps it in is gone.
     def relative_entry_name(name, folder)
       path = normalize_entry_name(name)
-      folder ? path.delete_prefix("#{folder}/") : path
+      path = path.delete_prefix("#{folder}/") if folder
+      if "#{build.site_prefix}/#{path}".bytesize > S3_KEY_MAX_BYTES
+        raise UnpackError, "The zip has an entry with a name that is too long: #{shown(path)}."
+      end
+
+      path
     end
 
     # The entry's path relative to the site prefix, or an error when the entry tries to leave it.
     def normalize_entry_name(name)
-      name = name.to_s
+      # rubyzip hands names back as raw bytes whatever the archive's UTF-8 flag says, and S3 keys
+      # must be UTF-8.
+      name = name.to_s.dup.force_encoding(Encoding::UTF_8)
       raise UnpackError, "The zip has an entry with no name." if name.empty?
-      raise UnpackError, "The zip has an entry with an unsafe name: #{shown(name)}." if name.include?("\0") || name.include?("\\")
+      raise UnpackError, "The zip has an entry whose name is not valid UTF-8: #{shown(name)}." unless name.valid_encoding?
+      # Control characters cannot go into the XML body of the batched delete that cleans up a failed run;
+      # backslashes are path separators on Windows.
+      raise UnpackError, "The zip has an entry with an unsafe name: #{shown(name)}." if name.match?(/[\p{Cc}\u{FFFE}\u{FFFF}\\]/)
       raise UnpackError, "The zip has an absolute path: #{shown(name)}." if name.start_with?("/") || name.match?(/\A[A-Za-z]:/)
 
       segments = name.split("/").reject { _1.empty? || _1 == "." }
@@ -349,6 +388,6 @@ class ProductBuilds::UnpackSiteService
     end
 
     def shown(name)
-      name.to_s.truncate(ENTRY_NAME_MAX_LENGTH)
+      name.to_s.dup.force_encoding(Encoding::UTF_8).scrub.gsub(/\p{Cc}/) { format("\\x%02X", _1.ord) }.truncate(ENTRY_NAME_MAX_LENGTH)
     end
 end

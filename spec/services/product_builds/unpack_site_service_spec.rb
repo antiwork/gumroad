@@ -83,6 +83,33 @@ describe ProductBuilds::UnpackSiteService do
     bytes
   end
 
+  # Appends `extra` to the extra field of the central-directory record for the first entry,
+  # keeping every offset after it consistent.
+  def with_central_extra(zip_bytes, extra)
+    bytes = zip_bytes.b
+    eocd_at = bytes.rindex(ProductBuilds::UnpackSiteService::EOCD_SIGNATURE)
+    record = bytes[eocd_at + 16, 4].unpack1("V")
+    name_length, extra_length = bytes[record + 28, 4].unpack("vv")
+    bytes[record + 30, 2] = [extra_length + extra.bytesize].pack("v")
+    bytes.insert(record + 46 + name_length + extra_length, extra.b)
+    eocd_at += extra.bytesize
+    bytes[eocd_at + 12, 4] = [bytes[eocd_at + 12, 4].unpack1("V") + extra.bytesize].pack("V")
+    bytes
+  end
+
+  # Appends `extra` to the extra field of the last entry's local header. Only the central directory
+  # sits after it, so its offset is the only one that moves.
+  def with_last_local_extra(zip_bytes, extra)
+    bytes = zip_bytes.b
+    header = bytes.rindex("PK\x03\x04".b)
+    name_length, extra_length = bytes[header + 26, 4].unpack("vv")
+    bytes[header + 28, 2] = [extra_length + extra.bytesize].pack("v")
+    bytes.insert(header + 30 + name_length + extra_length, extra.b)
+    eocd_at = bytes.rindex(ProductBuilds::UnpackSiteService::EOCD_SIGNATURE)
+    bytes[eocd_at + 16, 4] = [bytes[eocd_at + 16, 4].unpack1("V") + extra.bytesize].pack("V")
+    bytes
+  end
+
   def site_keys
     s3.list_objects_v2(bucket: S3_BUCKET, prefix: "#{site_prefix}/").contents.map(&:key).sort
   end
@@ -177,6 +204,25 @@ describe ProductBuilds::UnpackSiteService do
 
       expect(build.reload.site_ready?).to be true
       expect(body_of("#{site_prefix}/#{long_name}")).to eq("x")
+    end
+
+    it "unpacks entries whose names are not ASCII under the names the seller gave them" do
+      upload_zip({
+                   "index.html" => "<html></html>",
+                   "assets/café.png" => "png",
+                   "关卡/数据.json" => "{}",
+                 })
+
+      described_class.perform(build)
+
+      expect(site_keys).to eq([
+                                "#{site_prefix}/assets/café.png",
+                                "#{site_prefix}/index.html",
+                                "#{site_prefix}/关卡/数据.json",
+                              ])
+      expect(body_of("#{site_prefix}/assets/café.png")).to eq("png")
+      expect(content_type_of("#{site_prefix}/关卡/数据.json")).to eq("application/json")
+      expect(build.reload.site_ready?).to be true
     end
 
     it "does nothing when the build is already unpacked" do
@@ -347,6 +393,103 @@ describe ProductBuilds::UnpackSiteService do
         expect(build.reload.site_unpack_error).to match(/could not be read/)
         expect(build.site_ready?).to be false
         expect(s3.list_objects_v2(bucket: S3_BUCKET, prefix: "builds/#{product.id}/1/").contents.map(&:key)).to eq([build.storage_key])
+      end
+
+      it "rejects an entry whose name holds a control character" do
+        upload_zip({ "index.html" => "<html></html>" }, raw_name: "assets/a\x01.js")
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /unsafe name/)
+        expect(build.reload.site_unpack_error).to include("assets/a\\x01.js")
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects an entry whose local header lies past the end of the archive, before copying anything" do
+        bytes = zip_bytes({ "index.html" => "<html></html>", "assets/a.js" => "a" }).b
+        eocd_at = bytes.rindex(described_class::EOCD_SIGNATURE)
+        last_record = bytes.rindex(described_class::CENTRAL_DIRECTORY_ENTRY_SIGNATURE, eocd_at)
+        bytes[last_record + 42, 4] = [0xFFFF_FF00].pack("V")
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes)
+
+        expect_any_instance_of(Aws::S3::Client).not_to receive(:put_object)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /could not be read/)
+        expect(build.reload.site_unpack_error).to match(/could not be read/)
+      end
+
+      it "rejects an entry whose name is not valid UTF-8" do
+        upload_zip({ "index.html" => "<html></html>" }, raw_name: "assets/caf\x82.png".b)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /not valid UTF-8/)
+        expect(build.reload.site_unpack_error).to match(/not valid UTF-8/)
+        expect(build.site_unpack_error).to be_valid_encoding
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects an entry whose site key would be longer than S3 allows, before copying anything" do
+        upload_zip({ "index.html" => "<html></html>", "assets/#{"a" * 1_000}.js" => "x" })
+
+        expect_any_instance_of(Aws::S3::Client).not_to receive(:put_object)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /name that is too long/)
+        expect(build.reload.site_unpack_error).to match(/name that is too long/)
+      end
+
+      it "rejects a directory record with a truncated extra field" do
+        bytes = with_central_extra(zip_bytes({ "index.html" => "<html></html>" }), "UT\x00")
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /could not be read/)
+        expect(build.reload.site_unpack_error).to match(/could not be read/)
+      end
+
+      it "deletes the files it already copied when a later entry's local header has a truncated extra field" do
+        bytes = with_last_local_extra(zip_bytes({ "index.html" => "<html></html>", "assets/b.js" => "b" }), "UT\x00")
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /could not be read/)
+        expect(build.reload.site_unpack_error).to match(/could not be read/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects an archive whose ZIP64 locator sits before the ZIP64 record" do
+        base = zip_bytes({ "index.html" => "<html></html>" }).b
+        eocd_at = base.rindex(described_class::EOCD_SIGNATURE)
+        cdir_offset = base[eocd_at + 16, 4].unpack1("V")
+        tail = described_class::ZIP64_EOCD_LOCATOR_SIGNATURE + ("\0" * 16) + described_class::ZIP64_EOCD_SIGNATURE +
+               [44, 45, 45, 0, 0, 1, 1, 0, cdir_offset].pack("Q<vvVVQ<Q<Q<Q<")
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: base[0, eocd_at + 20] + [tail.bytesize].pack("v") + tail)
+        expect(ErrorNotifier).to receive(:notify).with(an_instance_of(TypeError))
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /could not be read/)
+        expect(build.reload.site_unpack_error).to match(/could not be read/)
+      end
+
+      it "rejects an archive whose last directory record runs past the end of the file" do
+        # The record's fixed header ends at EOF and carries the end-of-directory record inside it,
+        # while declaring a one-byte name that is not there.
+        eocd = described_class::EOCD_SIGNATURE + [1, 0, 0, 1, 0, 0, 0].pack("vvvvVVv")
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: described_class::CENTRAL_DIRECTORY_ENTRY_SIGNATURE + ("\0" * 20) + eocd)
+
+        expect(Zip::File).not_to receive(:open_buffer)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /does not hold the entries/)
+        expect(build.reload.site_unpack_error).to match(/does not hold the entries/)
+      end
+
+      it "deletes the files it already copied when storage fails partway, and leaves the retry to Sidekiq" do
+        upload_zip({ "index.html" => "<html></html>", "assets/app.js" => "x" })
+        calls = 0
+        allow_any_instance_of(Aws::S3::Client).to receive(:put_object).and_wrap_original do |original, *args, **kwargs|
+          calls += 1
+          raise Aws::S3::Errors::ServiceError.new(nil, "boom") if calls == 2
+
+          original.call(*args, **kwargs)
+        end
+
+        expect { described_class.perform(build) }.to raise_error(Aws::S3::Errors::ServiceError)
+        expect(calls).to eq(2)
+        expect(build.reload.site_unpack_error).to be_nil
+        expect(site_keys).to be_empty
       end
 
       it "deletes the files it already copied when a later entry cannot be decompressed" do
