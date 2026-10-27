@@ -78,7 +78,7 @@ describe "Collabs", type: :system, js: true do
         p.update_balance_and_mark_successful!
       end
 
-      [Purchase, Link, Balance].each do |model|
+      [Purchase, Link].each do |model|
         index_model_records(model)
       rescue Elasticsearch::Transport::Transport::Errors::BadRequest => e
         raise unless e.message.include?("resource_already_exists_exception")

@@ -8,6 +8,10 @@ describe SendToElasticsearchWorker do
     @product_double = double("product")
   end
 
+  it "is unique while it waits to run, so a burst of changes to one product collapses into one job" do
+    expect(described_class.get_sidekiq_options["lock"]).to eq(:until_executing)
+  end
+
   it "attempts to index the product in Elasticsearch when instructed" do
     expect(Link).to receive(:find_by).with(id: @product.id)
     allow(Link).to receive(:find_by).with(id: @product.id).and_return(@product_double)

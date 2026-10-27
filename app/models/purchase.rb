@@ -6371,14 +6371,11 @@ class Purchase < ApplicationRecord
     end
 
     def update_product_search_index!
-      link.enqueue_index_update_for(%w[is_recommendable])
-
-      # sales_volume needs to be updated asynchronously, because:
-      # - it's based on Product::Stats#total_usd_cents, which itself uses the Purchase index data
-      # - purchases are indexed asynchronously, and the index is also internally refreshed asynchronously
-      # If we indexed sales_volume synchronously, it's likely to fetch outdated data from the purchases index,
-      # thus not reflecting the latest purchase that was just made here.
-      SendToElasticsearchWorker.perform_in(5.seconds, link.id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"])
+      # Nothing here talks to Elasticsearch from the request. sales_volume is based on Product::Stats#total_usd_cents,
+      # which reads the purchases index, and this purchase is indexed asynchronously (the index also refreshes
+      # asynchronously), so computing it now would miss the sale just made. The job is unique while it waits, so a
+      # burst of sales for one product collapses into a single update.
+      SendToElasticsearchWorker.perform_in(5.seconds, link.id, "update", %w[is_recommendable sales_volume total_fee_cents past_year_fee_cents])
     end
 
     def enqueue_product_search_refresh_after_refund

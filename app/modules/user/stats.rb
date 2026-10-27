@@ -97,8 +97,8 @@ module User::Stats
     nil
   end
 
-  def balance_formatted(via: :sql)
-    formatted_dollar_amount(unpaid_balance_cents(via:), with_currency: should_be_shown_currencies_always?)
+  def balance_formatted
+    formatted_dollar_amount(unpaid_balance_cents, with_currency: should_be_shown_currencies_always?)
   end
 
   def affiliate_credits_sum_for_credits_created_between(start_time, end_time)

@@ -2,7 +2,6 @@
 
 class Balance < ApplicationRecord
   include ExternalId
-  include Balance::Searchable
   include Balance::RefundEligibilityUnderwriter
 
   belongs_to :user, optional: true

@@ -2,7 +2,8 @@
 
 class SendToElasticsearchWorker
   include Sidekiq::Job
-  sidekiq_options retry: 10, queue: :default
+  # until_executing, not until_executed: a change that lands while the job runs still gets a fresh job.
+  sidekiq_options retry: 10, queue: :default, lock: :until_executing
 
   def perform(link_id, action, attributes_to_update = [])
     return if (product = Link.find_by(id: link_id)).nil?

@@ -18,7 +18,6 @@ describe "Dashboard - Mobile Table Labels", type: :system, js: true, mobile_view
 
     index_model_records(Purchase)
     index_model_records(Link)
-    index_model_records(Balance)
 
     login_as(seller)
   end
