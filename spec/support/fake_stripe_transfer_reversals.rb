@@ -1,9 +1,7 @@
 # frozen_string_literal: true
 
-# Stateful stand-in for the Stripe endpoints refund-fee retention calls, served over WebMock so the
-# real SDK builds requests and parses responses (including Stripe::InvalidRequestError). Capacity is
-# checked when a reversal is created, as Stripe does, so two refunds that read the same transfer
-# before either reverses race exactly as they do in production.
+# Stateful Stripe transfer endpoints behind WebMock, so the real SDK builds requests and parses errors.
+# The fake owns transfer capacity and checks it when a reversal is created, so overlaps are deterministic.
 class FakeStripeTransferReversals
   API = %r{\Ahttps://api\.stripe\.com/v1/}
 
