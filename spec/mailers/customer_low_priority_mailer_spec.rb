@@ -66,6 +66,20 @@ describe CustomerLowPriorityMailer do
       end
     end
 
+    context "non-USD memberships" do
+      it "shows the renewal price in the display currency without converting it again" do
+        purchase = create(:membership_purchase)
+        purchase.update!(displayed_price_currency_type: "twd", displayed_price_cents: 297_00, rate_converted_to_usd: "31.555814")
+        subscription = purchase.subscription
+        allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(297_00)
+
+        mail = CustomerLowPriorityMailer.subscription_renewal_reminder(subscription.id)
+
+        expect(mail.body.encoded).to include "NT$297"
+        expect(mail.body.encoded).not_to include "9,372"
+      end
+    end
+
     context "installment plans" do
       let(:installment_plan_purchase) { create(:installment_plan_purchase) }
       let(:subscription) { installment_plan_purchase.subscription }
@@ -227,7 +241,7 @@ describe CustomerLowPriorityMailer do
         allow(Subscription).to receive(:find).with(subscription.id).and_return(subscription)
         allow(subscription).to receive(:current_subscription_price_cents).and_return(5_00)
         allow(subscription).to receive(:original_purchase).and_return(purchase)
-        allow(purchase).to receive(:format_price_in_currency).with(5_00).and_return("$5")
+        allow(purchase).to receive(:format_displayed_price_cents).with(5_00).and_return("$5")
         allow(purchase).to receive(:formatted_total_price).and_return("$10")
 
         mail = CustomerLowPriorityMailer.subscription_renewal_reminder(subscription.id)

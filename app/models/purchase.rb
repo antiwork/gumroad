@@ -1901,9 +1901,8 @@ class Purchase < ApplicationRecord
     Money.new(affiliate_credit_cents).format(symbol: true)
   end
 
-  def format_price_in_currency(price_cents)
-    price_cents_in_currency = usd_cents_to_currency(displayed_price_currency_type, price_cents, rate_converted_to_usd)
-    format_price_in_cents(price_cents_in_currency)
+  def format_displayed_price_cents(displayed_price_cents)
+    format_price_in_cents(displayed_price_cents)
   end
 
   def format_buyer_presentment_amount(amount_cents, symbol: true)
