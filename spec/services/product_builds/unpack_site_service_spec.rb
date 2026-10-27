@@ -15,7 +15,7 @@ describe ProductBuilds::UnpackSiteService do
     end
   end
 
-  def upload_zip(entries, symlink: nil, raw_name: nil)
+  def upload_zip(entries, symlink: nil, raw_name: nil, corrupt_entry: nil)
     buffer = Zip::OutputStream.write_buffer do |zip|
       entries.each do |path, content|
         zip.put_next_entry(path)
@@ -37,7 +37,20 @@ describe ProductBuilds::UnpackSiteService do
         zip.write("x")
       end
     end
-    s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: buffer.string)
+    bytes = corrupt_entry ? corrupt_zip_entry(buffer.string, corrupt_entry) : buffer.string
+    s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: bytes)
+  end
+
+  # rubyzip only writes archives it can read back, so the compressed bytes of one entry are
+  # overwritten in a zip it just wrote: the central directory still looks valid, which is what a
+  # zip that is damaged in transit looks like.
+  def corrupt_zip_entry(zip_bytes, entry_index)
+    bytes = zip_bytes.b
+    offset = -1
+    (entry_index + 1).times { offset = bytes.index("PK\x03\x04".b, offset + 1) }
+    name_length, extra_length = bytes[offset + 26, 4].unpack("vv")
+    bytes[offset + 30 + name_length + extra_length, 12] = "\x00\xff\x11\x22\x33\x44\x55\x66\x77\x88\x99\xaa".b
+    bytes
   end
 
   def site_keys
@@ -93,6 +106,18 @@ describe ProductBuilds::UnpackSiteService do
       expect(build.site_byte_size).to eq("<html></html>".bytesize + 1)
       expect(build.site_unpack_error).to be_nil
       expect(build.site_ready?).to be true
+    end
+
+    it "unpacks an entry whose extension is long enough to overrun a temporary filename" do
+      # 245 keeps the key's own segment inside S3's 255-byte limit while the temporary filename,
+      # which adds its own prefix and random part, no longer fits in it.
+      long_name = "assets/asset.#{"a" * 245}"
+      upload_zip({ "index.html" => "<html></html>", long_name => "x" })
+
+      described_class.perform(build)
+
+      expect(build.reload.site_ready?).to be true
+      expect(body_of("#{site_prefix}/#{long_name}")).to eq("x")
     end
 
     it "does nothing when the build is already unpacked" do
@@ -161,6 +186,24 @@ describe ProductBuilds::UnpackSiteService do
 
         expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /no index.html at its root/)
         expect(build.reload.site_unpack_error).to match(/no index.html at its root/)
+      end
+
+      it "rejects bytes that are not an archive at all" do
+        s3.put_object(bucket: S3_BUCKET, key: build.storage_key, body: "not a zip")
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /could not be read/)
+        expect(build.reload.site_unpack_error).to match(/could not be read/)
+        expect(build.site_ready?).to be false
+        expect(s3.list_objects_v2(bucket: S3_BUCKET, prefix: "builds/#{product.id}/1/").contents.map(&:key)).to eq([build.storage_key])
+      end
+
+      it "deletes the files it already copied when a later entry cannot be decompressed" do
+        upload_zip({ "index.html" => "<html></html>", "assets/app.js" => "A" * 4096 }, corrupt_entry: 1)
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /could not be read/)
+        expect(build.reload.site_unpack_error).to match(/could not be read/)
+        expect(site_keys).to be_empty
+        expect(s3.list_objects_v2(bucket: S3_BUCKET, prefix: "builds/#{product.id}/1/").contents.map(&:key)).to eq([build.storage_key])
       end
     end
   end

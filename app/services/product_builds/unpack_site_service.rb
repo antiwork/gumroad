@@ -97,7 +97,7 @@ class ProductBuilds::UnpackSiteService
           raise UnpackError, "A build cannot contain symlinks: #{shown(entry.name)}." if entry.symlink?
           raise UnpackError, "A build can have at most #{ProductBuild::MAX_SITE_FILES} files." if file_count >= ProductBuild::MAX_SITE_FILES
 
-          path = site_path(entry.name)
+          path = normalize_entry_name(entry.name)
           written = copy_entry(entry, path, s3, ProductBuild::MAX_SITE_BYTE_SIZE - byte_size)
           file_count += 1
           byte_size += written
@@ -108,12 +108,16 @@ class ProductBuilds::UnpackSiteService
       raise UnpackError, "The zip has no index.html at its root, so there is nothing to play." unless has_index
 
       build.update!(site_unpacked_at: Time.current, site_file_count: file_count, site_byte_size: byte_size, site_unpack_error: nil)
+    rescue Zip::Error
+      # An archive rubyzip cannot read is a seller input error like the ones above, not a transient
+      # one: reject it the same way instead of letting the job retry a zip that will never open.
+      raise UnpackError, "The zip could not be read, so there is nothing to play."
     end
 
     # Copies one entry into the build's site prefix, stopping as soon as it passes the bytes left in
     # the budget: the length the archive declares for the entry is not trusted.
     def copy_entry(entry, path, s3, remaining_bytes)
-      Tempfile.create(["entry", File.extname(path)]) do |file|
+      Tempfile.create("entry") do |file|
         file.binmode
         copied = IO.copy_stream(entry.get_input_stream, file, remaining_bytes + 1)
         if copied > remaining_bytes
@@ -135,7 +139,7 @@ class ProductBuilds::UnpackSiteService
     end
 
     # The entry's path relative to the site prefix, or an error when the entry tries to leave it.
-    def site_path(name)
+    def normalize_entry_name(name)
       name = name.to_s
       raise UnpackError, "The zip has an entry with no name." if name.empty?
       raise UnpackError, "The zip has an entry with an unsafe name: #{shown(name)}." if name.include?("\0") || name.include?("\\")
