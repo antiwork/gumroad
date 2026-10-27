@@ -225,6 +225,20 @@ describe UpdateProductFilesArchiveWorker, :vcr do
         expect(open_uploads(archive)).to be_empty
       end
 
+      it "names a file typed from its bytes with the detected extension" do
+        key = "specs/streaming-archive-#{SecureRandom.hex}"
+        source_keys << key
+        bytes = File.binread(Rails.root.join("spec/support/fixtures/billion-dollar-company-chapter-0.pdf"))
+        s3_client.put_object(bucket: S3_BUCKET, key:, body: bytes)
+        file = create(:product_file, link: nil, installment:, url: "#{S3_BASE_URL}#{key}", display_name: "Synthetic Book")
+        file.analyze
+        archive = archive_for(installment, [file])
+
+        described_class.new.perform(archive.id)
+
+        expect(zip_entries(archive)).to eq("Synthetic Book.pdf" => [Zlib.crc32(bytes), bytes])
+      end
+
       it "resumes a dropped source read at the byte it stopped" do
         source = Random.new(2).bytes(3.megabytes)
         archive = archive_for(installment, [add_file(installment, source, display_name: "Video")])

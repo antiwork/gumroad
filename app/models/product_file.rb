@@ -9,6 +9,17 @@ class ProductFile < ApplicationRecord
   MAX_EPUB_READER_ARCHIVE_SIZE = 32.megabytes
   # TGA, EXR, TIFF, DDS and PSD textures are images too, but no browser draws them.
   BROWSER_RENDERABLE_IMAGE_FILETYPES = %w[png jpg jpeg gif webp].freeze
+  # Types a file stored without an extension is given from its leading bytes. ZIP, MP3 and MP4
+  # are left out because their signatures also start Office files, ID3-tagged M4As and audio-only MP4s.
+  CONTENT_SNIFFED_FILETYPES = {
+    "application/pdf" => "pdf",
+    "application/epub+zip" => "epub",
+    "application/x-mobipocket-ebook" => "mobi",
+    "image/png" => "png",
+    "image/jpeg" => "jpg",
+    "image/gif" => "gif",
+  }.freeze
+  CONTENT_SNIFF_BYTES = 4.kilobytes
 
   # Enqueueing the retirement job (see `stored_file_present?`) is best-effort, but
   # only these failures are expected: Redis is unreachable, or the Sidekiq client
@@ -68,6 +79,12 @@ class ProductFile < ApplicationRecord
 
   after_save :invalidate_product_cache
   after_commit :schedule_rename_in_storage, on: :update, if: :saved_change_to_display_name?
+  after_commit :update_product_filetypes_index, on: :update, if: -> { link.present? && saved_change_to_filetype? }
+  # Keeps the current type until analyze has read the bytes at the new key, so a stamped PDF stays stamped meanwhile.
+  after_commit :reanalyze_moved_file, on: :update, if: -> { saved_change_to_url? && s3? && s3_extension.empty? }
+  # A save that turns stamping on already queues this check (WithProductFiles#save_files!); one that
+  # doesn't, like analyze typing a file as a PDF, needs its own.
+  after_commit :check_pdf_stampability, on: :update, if: -> { link.present? && pdf_stamp_enabled? && !saved_change_to_pdf_stamp_enabled? && saved_change_to_filetype?(to: "pdf") }
 
   attr_json_data_accessor :epub_section_info
   has_s3_fields :url
@@ -254,7 +271,7 @@ class ProductFile < ApplicationRecord
   def signed_url
     return url if external_link?
 
-    safe_signed_download_url(s3_key, s3_filename, is_video: streamable?)
+    safe_signed_download_url(s3_key, filename_with_extension, is_video: streamable?)
   end
 
   # Files that can be read in the browser's built-in reader (the /read page).
@@ -330,13 +347,20 @@ class ProductFile < ApplicationRecord
   end
 
   def display_extension
-    external_link? ? "URL" : s3_display_extension
+    external_link? ? "URL" : s3_display_extension.presence || filetype.to_s.upcase
+  end
+
+  # A file typed from its bytes keeps its extensionless key, so name copies of it from the type.
+  def filename_with_extension
+    return s3_filename if s3_extension.present? || filetype.blank?
+
+    "#{s3_filename}.#{filetype}"
   end
 
   def rename_in_storage
     return if display_name == s3_display_name
 
-    extension = s3_extension
+    extension = File.extname(filename_with_extension)
     name_with_extension = display_name.ends_with?(extension) ? display_name : "#{display_name}#{extension}"
     new_key = MultipartTransfer.transfer_to_s3(self.s3_object.presigned_url(:get, expires_in: SignedUrlHelper::SIGNED_S3_URL_VALID_FOR_MAXIMUM.to_i).to_s, destination_filename: name_with_extension, existing_s3_object: self.s3_object)
     self.url = URI::DEFAULT_PARSER.unescape("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{new_key}")
@@ -364,7 +388,7 @@ class ProductFile < ApplicationRecord
 
   def mobile_json_data
     {
-      name: s3_filename,
+      name: filename_with_extension,
       size:,
       filetype:,
       filegroup:,
@@ -525,6 +549,29 @@ class ProductFile < ApplicationRecord
       return if external_link?
       # a slight delay to allow the new `display_name` to propagate to replica DBs
       RenameProductFileWorker.perform_in(5.seconds, id)
+    end
+
+    # A row moved to a key without an extension usually keeps the same bytes (fingerprint reuse), so a
+    # type the bytes don't positively identify is left alone: clearing it would unlock stream-only videos.
+    def set_filetype_from_content
+      return unless s3_extension.empty? && size.to_i.positive?
+
+      head = s3_object.get(range: "bytes=0-#{CONTENT_SNIFF_BYTES - 1}").body.read
+      sniffed_filetype = CONTENT_SNIFFED_FILETYPES[Marcel::MimeType.for(StringIO.new(head))]
+      determine_and_set_filegroup(sniffed_filetype) if sniffed_filetype
+    end
+
+    def reanalyze_moved_file
+      schedule_file_analyze
+    end
+
+    def update_product_filetypes_index
+      link.enqueue_index_update_for(["filetypes"])
+    end
+
+    def check_pdf_stampability
+      # Delayed like the save_files! check, so a worker reading from a replica sees the new type.
+      PdfUnstampableNotifierJob.perform_in(5.seconds, link_id)
     end
 
     def belongs_to_product_or_installment

@@ -2077,6 +2077,15 @@ describe CustomerMailer do
       expect(mail.attachments.first.filename).to eq(product_file.s3_filename)
     end
 
+    it "names the attachment with the type of a file stored without an extension" do
+      typed_file = create(:readable_document, link: product, url: "#{S3_BASE_URL}attachments/#{SecureRandom.hex}/original/Synthetic Book")
+
+      mail = CustomerMailer.send_to_kindle("kindle@kindle.com", typed_file.id)
+
+      expect(mail.attachments.first.filename).to eq("Synthetic Book.pdf")
+      expect(mail.attachments.first.mime_type).to eq("application/pdf")
+    end
+
     context "when the file is stamp-enabled" do
       let(:purchase) { create(:free_purchase, link: product) }
       let(:url_redirect) { create(:url_redirect, link: product, purchase:) }
