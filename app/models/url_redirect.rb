@@ -179,7 +179,7 @@ class UrlRedirect < ApplicationRecord
 
       {
         url:,
-        filename: product_file.s3_filename
+        filename: product_file.filename_with_extension
       }
     end.to_json
   end
@@ -288,6 +288,8 @@ class UrlRedirect < ApplicationRecord
     end
     s3_key = s3_retrievable.s3_key
     s3_filename = s3_retrievable.s3_filename
+    # A stamped copy of a file typed from its bytes is stored without an extension too.
+    s3_filename += File.extname(product_file.filename_with_extension) if s3_retrievable.s3_extension.blank?
     signed_download_url_for_s3_key_and_filename(s3_key, s3_filename, is_video: product_file.streamable?)
   end
 

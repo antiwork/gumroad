@@ -376,13 +376,23 @@ describe LiftPlatformStripePauseJob do
       expect(resume_notes).to be_empty
     end
 
-    it "keeps the hold when a failure has no recorded reason" do
+    it "keeps the hold when a failure has no recorded reason and no capability message" do
+      2.times { failed_payout }
+      failed_payout(reason: nil, error_message: "Your bank account was closed.")
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally).to be(true)
+    end
+
+    it "releases the hold when the failures lost their reason but kept the capability message" do
       2.times { failed_payout }
       failed_payout(reason: nil)
 
       described_class.new.perform(seller.id)
 
-      expect(seller.reload.payouts_paused_internally).to be(true)
+      expect(seller.reload.payouts_paused?).to be(false)
+      expect(resume_notes.last.content).to include("Payouts automatically resumed")
     end
 
     it "keeps the hold when an unaccounted payout added to it, even if older failures would qualify" do

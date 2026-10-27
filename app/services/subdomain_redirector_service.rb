@@ -15,23 +15,12 @@ class SubdomainRedirectorService
     Rails.cache.delete(CACHE_KEY)
   end
 
+  # Read on every request: an empty table is cached like any other, and a stalled Redis
+  # read degrades to "no redirects" instead of failing the page.
   def redirects
-    Rails.cache.fetch(CACHE_KEY) do
-      config = subdomain_redirect_namespace.get(REDIS_KEY)
-      return {} if config.blank?
-
-      redirect_config = {}
-
-      config.split("\n").each do |config_line|
-        host, location = config_line.split("=", 2).map(&:strip)
-
-        if host.present? && location.present?
-          redirect_config[host.downcase] = location unless PROTECTED_HOSTS.include?(host)
-        end
-      end
-
-      redirect_config
-    end
+    Rails.cache.fetch(CACHE_KEY) { parse_config(subdomain_redirect_namespace.get(REDIS_KEY)) }
+  rescue *REDIS_TRANSPORT_ERRORS
+    {}
   end
 
   def redirect_url_for(request)
@@ -45,6 +34,17 @@ class SubdomainRedirectorService
   end
 
   private
+    def parse_config(config)
+      return {} if config.blank?
+
+      config.split("\n").each_with_object({}) do |config_line, redirect_config|
+        host, location = config_line.split("=", 2).map(&:strip)
+        next if host.blank? || location.blank? || PROTECTED_HOSTS.include?(host)
+
+        redirect_config[host.downcase] = location
+      end
+    end
+
     def subdomain_redirect_namespace
       @_subdomain_redirect_namespace ||= Redis::Namespace.new(:subdomain_redirect_namespace, redis: $redis)
     end

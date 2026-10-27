@@ -4958,6 +4958,178 @@ describe StripeChargeProcessor, :vcr do
         expect(refund.reload.debited_stripe_transfer).to eq("trr_existing")
       end
     end
+
+    describe "when concurrent refunds of one seller reverse the same transfer" do
+      let(:fake) { FakeStripeTransferReversals.new }
+      let(:merchant_account) { create(:merchant_account, country: "GB", currency: "gbp", charge_processor_merchant_id: "acct_fee_race") }
+      let(:seller) { merchant_account.user }
+      let(:product) { create(:product, user: seller) }
+
+      before do
+        allow(described_class).to receive(:get_rate).with("gbp").and_return("0.80")
+        allow(ErrorNotifier).to receive(:notify)
+        stub_request(:any, FakeStripeTransferReversals::API).to_return { |request| fake.respond(request) }
+        fake.add_transfer("tr_race_shared", amount: 150)
+        fake.add_transfer("tr_race_next", amount: 5000)
+        create(:payment_completed, user: seller, stripe_connect_account_id: "acct_fee_race",
+                                   stripe_internal_transfer_id: "tr_race_shared", created_at: 2.days.ago)
+        create(:payment_completed, user: seller, stripe_connect_account_id: "acct_fee_race",
+                                   stripe_internal_transfer_id: "tr_race_next", created_at: 1.day.ago)
+      end
+
+      def pending_fee_refund
+        purchase = create(:purchase, merchant_account:, seller:, link: product)
+        refund = create(:refund, purchase:, fee_retention_pending: true)
+        credit = create(:credit, user: seller, merchant_account:, fee_retention_refund: refund, amount_cents: -100)
+        BalanceTransaction.create!(user: seller, merchant_account:, credit:,
+                                   issued_amount: BalanceTransaction::Amount.new(currency: "usd", gross_cents: -100, net_cents: -100),
+                                   holding_amount: BalanceTransaction::Amount.new(currency: "gbp", gross_cents: -80, net_cents: -80))
+        [refund, credit]
+      end
+
+      # Runs the competing refund to completion after `refund` has read and pinned the transfer,
+      # but before its own reversal request reaches Stripe.
+      def overlap_first_reversal_of(refund, &competitor)
+        overlapped = false
+        allow(Stripe::Transfer).to receive(:create_reversal).and_wrap_original do |method, *args|
+          if !overlapped && args.second.dig(:metadata, :refund_id) == refund.id.to_s
+            overlapped = true
+            competitor.call
+          end
+          method.call(*args)
+        end
+      end
+
+      def posts_for(refund)
+        fake.reversal_posts.select { _1[:refund_id] == refund.id.to_s }
+      end
+
+      it "collects the refused refund's fee from the next transfer with room instead of deferring it" do
+        refund, credit = pending_fee_refund
+        competing_refund, competing_credit = pending_fee_refund
+        overlap_first_reversal_of(refund) { competing_refund.recover_pending_fee_retention! }
+
+        refund.recover_pending_fee_retention!
+
+        expect(fake.reversal_posts.map { _1.values_at(:transfer_id, :refund_id, :amount) }).to eq([
+                                                                                                    ["tr_race_shared", competing_refund.id.to_s, 100],
+                                                                                                    ["tr_race_shared", refund.id.to_s, 100],
+                                                                                                    ["tr_race_next", refund.id.to_s, 100],
+                                                                                                  ])
+        expect(posts_for(refund).map { _1[:idempotency_key] }).to eq([
+                                                                       "refund_fee_retention_reversal_#{refund.id}_tr_race_shared",
+                                                                       "refund_fee_retention_reversal_#{refund.id}_tr_race_next",
+                                                                     ])
+        expect(fake.transfer("tr_race_shared")[:amount_reversed]).to eq(100)
+        expect(fake.transfer("tr_race_next")[:amount_reversed]).to eq(100)
+        [[refund, credit, "tr_race_next"], [competing_refund, competing_credit, "tr_race_shared"]].each do |collected_refund, collected_credit, source|
+          collected_refund.reload
+          expect(collected_refund.fee_retention_pending).to be_falsey
+          expect(collected_refund.fee_retention_error).to be_nil
+          expect(collected_refund.fee_retention_attempts.to_i).to eq(0)
+          expect(collected_refund.fee_retention_source_transfer).to eq(source)
+          expect(collected_refund.debited_stripe_transfer).to eq(fake.reversals(source).sole[:id])
+          expect(collected_refund.fee_retention_collected_cents).to eq(100)
+          expect(BalanceTransaction.where(credit: collected_credit).sum(:holding_amount_net_cents)).to eq(-100)
+        end
+        expect(ErrorNotifier).not_to have_received(:notify)
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(100)
+        expect(fake.reversal_posts.size).to eq(3)
+      end
+
+      it "converts the fee into the currency of the transfer it moves to" do
+        fake.add_transfer("tr_race_next", amount: 5000, currency: "gbp")
+        refund, credit = pending_fee_refund
+        competing_refund, = pending_fee_refund
+        overlap_first_reversal_of(refund) { competing_refund.recover_pending_fee_retention! }
+
+        refund.recover_pending_fee_retention!
+
+        expect(posts_for(refund).map { _1.values_at(:transfer_id, :amount) }).to eq([["tr_race_shared", 100], ["tr_race_next", 80]])
+        expect(refund.reload.fee_retention_pending).to be_falsey
+        expect(refund.fee_retention_collected_cents).to eq(80)
+        expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-80)
+      end
+
+      it "keeps the fee pending on the refused transfer when no other transfer has room" do
+        fake.reverse!("tr_race_next", amount: 4950, refund_id: "unrelated")
+        refund, credit = pending_fee_refund
+        competing_refund, = pending_fee_refund
+        overlap_first_reversal_of(refund) { competing_refund.recover_pending_fee_retention! }
+
+        refund.recover_pending_fee_retention!
+
+        expect(posts_for(refund).map { _1[:transfer_id] }).to eq(["tr_race_shared"])
+        refund.reload
+        expect(refund.fee_retention_pending).to be(true)
+        expect(refund.fee_retention_attempts).to eq(1)
+        expect(refund.fee_retention_source_transfer).to eq("tr_race_shared")
+        expect(refund.debited_stripe_transfer).to be_nil
+        expect(refund.fee_retention_written_off_at).to be_nil
+        expect(refund.fee_retention_error["message"]).to match(/remaining to reverse/)
+        expect(BalanceTransaction.where(credit:).sum(:holding_amount_net_cents)).to eq(-80)
+        expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Stripe::InvalidRequestError), context: { refund_id: refund.id, purchase_id: refund.purchase_id }).once
+      end
+
+      it "does not move to another transfer for an unrelated rejection" do
+        _refund, credit = pending_fee_refund
+        fake.fail_next_reversal("tr_race_shared", "Insufficient funds in Stripe account.")
+
+        expect { described_class.debit_stripe_account_for_refund_fee(credit:) }
+          .to raise_error(Stripe::InvalidRequestError, "Insufficient funds in Stripe account.")
+        expect(fake.reversal_posts.map { _1[:transfer_id] }).to eq(["tr_race_shared"])
+        expect(fake.requests.map { _1[:action] }).not_to include(:list_reversals)
+        expect(credit.fee_retention_refund.reload.fee_retention_source_transfer).to eq("tr_race_shared")
+      end
+
+      it "adopts its own reversal on the refused transfer instead of collecting again elsewhere" do
+        refund, credit = pending_fee_refund
+        fake.before_reversal = lambda do |transfer_id, _refund_id|
+          fake.before_reversal = nil
+          fake.reverse!(transfer_id, amount: 100, refund_id: refund.id)
+        end
+
+        expect(described_class.debit_stripe_account_for_refund_fee(credit:)).to eq(100)
+        expect(fake.reversal_posts.map { _1[:transfer_id] }).to eq(["tr_race_shared"])
+        expect(refund.reload.fee_retention_source_transfer).to eq("tr_race_shared")
+        expect(refund.debited_stripe_transfer).to eq(fake.reversals("tr_race_shared").sole[:id])
+        expect(fake.transfer("tr_race_next")[:amount_reversed]).to eq(0)
+      end
+
+      it "stays on the refused transfer when its reversals cannot be listed" do
+        refund, credit = pending_fee_refund
+        competing_refund, = pending_fee_refund
+        overlap_first_reversal_of(refund) { competing_refund.recover_pending_fee_retention! }
+        fake.fail_next_reversal_list("tr_race_shared")
+
+        expect { described_class.debit_stripe_account_for_refund_fee(credit:) }.to raise_error(Stripe::APIError)
+        expect(posts_for(refund).map { _1[:transfer_id] }).to eq(["tr_race_shared"])
+        expect(refund.reload.fee_retention_source_transfer).to eq("tr_race_shared")
+        expect(refund.debited_stripe_transfer).to be_nil
+        expect(fake.transfer("tr_race_next")[:amount_reversed]).to eq(0)
+      end
+
+      it "stops after a bounded number of refused transfers" do
+        %w[tr_race_third tr_race_fourth].each.with_index(1) do |transfer_id, index|
+          fake.add_transfer(transfer_id, amount: 5000)
+          create(:payment_completed, user: seller, stripe_connect_account_id: "acct_fee_race",
+                                     stripe_internal_transfer_id: transfer_id, created_at: (12 - index).hours.ago)
+        end
+        refund, credit = pending_fee_refund
+        fake.before_reversal = lambda do |transfer_id, _refund_id|
+          remaining = fake.transfer(transfer_id)[:amount] - fake.transfer(transfer_id)[:amount_reversed]
+          fake.reverse!(transfer_id, amount: remaining - 50, refund_id: "competitor")
+        end
+
+        expect { described_class.debit_stripe_account_for_refund_fee(credit:) }
+          .to raise_error(Stripe::InvalidRequestError, /remaining to reverse/)
+        expect(posts_for(refund).map { _1[:transfer_id] }).to eq(%w[tr_race_shared tr_race_next tr_race_third])
+        expect(fake.transfer("tr_race_fourth")[:amount_reversed]).to eq(0)
+        expect(refund.reload.fee_retention_source_transfer).to eq("tr_race_third")
+        expect(refund.debited_stripe_transfer).to be_nil
+      end
+    end
   end
 
   describe ".debit_stripe_account_for_australia_backtaxes" do

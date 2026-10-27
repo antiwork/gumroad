@@ -467,6 +467,16 @@ describe UrlRedirect do
       expect(@url_redirect.signed_location_for_file(pdf_product_file, allow_unstamped: true)).to match(/manual/)
     end
 
+    it "names the stamped copy of a file typed from its bytes with the detected extension" do
+      pdf_product_file = create(:readable_document, link: @product, url: "#{S3_BASE_URL}attachments/#{SecureRandom.hex}/original/Synthetic Book", pdf_stamp_enabled: true)
+      create(:stamped_pdf, url_redirect: @url_redirect, product_file: pdf_product_file, url: "#{S3_BASE_URL}attachments/#{SecureRandom.hex}/original/Synthetic Book_stamped")
+      allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1)
+      allow_any_instance_of(Aws::S3::Object).to receive(:presigned_url) { |_, _, options| options[:response_content_disposition] }
+
+      expect(@url_redirect.signed_location_for_file(pdf_product_file)).to eq('attachment; filename="Synthetic Book_stamped.pdf"')
+      expect(JSON.parse(@url_redirect.product_files_hash).map { _1["filename"] }).to include("Synthetic Book.pdf")
+    end
+
     it "omits an unstamped PDF from the Dropbox file list" do
       pdf_product_file = @product.product_files.alive.pdf.last
       pdf_product_file.update!(pdf_stamp_enabled: true)

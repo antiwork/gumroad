@@ -9,6 +9,17 @@ class ProductFile < ApplicationRecord
   MAX_EPUB_READER_ARCHIVE_SIZE = 32.megabytes
   # TGA, EXR, TIFF, DDS and PSD textures are images too, but no browser draws them.
   BROWSER_RENDERABLE_IMAGE_FILETYPES = %w[png jpg jpeg gif webp].freeze
+  # Types a file stored without an extension is given from its leading bytes. ZIP, MP3 and MP4
+  # are left out because their signatures also start Office files, ID3-tagged M4As and audio-only MP4s.
+  CONTENT_SNIFFED_FILETYPES = {
+    "application/pdf" => "pdf",
+    "application/epub+zip" => "epub",
+    "application/x-mobipocket-ebook" => "mobi",
+    "image/png" => "png",
+    "image/jpeg" => "jpg",
+    "image/gif" => "gif",
+  }.freeze
+  CONTENT_SNIFF_BYTES = 4.kilobytes
 
   # Enqueueing the retirement job (see `stored_file_present?`) is best-effort, but
   # only these failures are expected: Redis is unreachable, or the Sidekiq client
@@ -28,6 +39,9 @@ class ProductFile < ApplicationRecord
   has_many :alive_subtitle_files, -> { alive }, class_name: "SubtitleFile"
   has_many :media_locations
   has_one :dropbox_file
+  # Set once a promoted web build (a game, an interactive course) owns this file, so the seller
+  # editor and the buyer's content page can label it instead of showing a bare zip.
+  has_one :product_build
   has_and_belongs_to_many :base_variants
   has_and_belongs_to_many :product_files_archives
 
@@ -67,7 +81,20 @@ class ProductFile < ApplicationRecord
   validate :thumbnail_is_vaild
 
   after_save :invalidate_product_cache
+  # Editor removals, product deletion and build replacement each mark a file deleted differently, so
+  # its HLS renditions are retired here and RemoveDeletedFilesFromS3Job removes them with the source.
+  after_save :delete_transcoded_videos, if: -> { saved_change_to_deleted_at?(from: nil) }
   after_commit :schedule_rename_in_storage, on: :update, if: :saved_change_to_display_name?
+  after_commit :update_product_filetypes_index, on: :update, if: -> { link.present? && saved_change_to_filetype? }
+  # A type detected for a key without an extension adds the file to ZIPs and renames its entry, so stale
+  # archives go with the save and the product's are rebuilt.
+  after_update :invalidate_archives_for_detected_type, if: :detected_type_changed?
+  after_commit :rebuild_archives_for_detected_type, on: :update, if: :detected_type_changed?
+  # Keeps the current type until analyze has read the bytes at the new key, so a stamped PDF stays stamped meanwhile.
+  after_commit :reanalyze_moved_file, on: :update, if: -> { saved_change_to_url? && s3? && s3_extension.empty? }
+  # A save that turns stamping on already queues this check (WithProductFiles#save_files!); one that
+  # doesn't, like analyze typing a file as a PDF, needs its own.
+  after_commit :check_pdf_stampability, on: :update, if: -> { link.present? && pdf_stamp_enabled? && !saved_change_to_pdf_stamp_enabled? && saved_change_to_filetype?(to: "pdf") }
 
   attr_json_data_accessor :epub_section_info
   has_s3_fields :url
@@ -126,6 +153,9 @@ class ProductFile < ApplicationRecord
       is_streamable: streamable?,
       # So the editor never offers a switch the backend ignores (see #can_disable_downloads?).
       can_disable_downloads: can_disable_downloads?,
+      # Present on the zip a promoted web build put in the content, so the editor's row can say
+      # "Web build v3" instead of looking like a file the seller uploaded by hand.
+      web_build: web_build_summary,
       stream_only: stream_only?,
       # Pixel dimensions, so the product editor's video preview can be shaped to
       # the file rather than assuming 16:9 and pillarboxing portrait video. Nil
@@ -254,7 +284,7 @@ class ProductFile < ApplicationRecord
   def signed_url
     return url if external_link?
 
-    safe_signed_download_url(s3_key, s3_filename, is_video: streamable?)
+    safe_signed_download_url(s3_key, filename_with_extension, is_video: streamable?)
   end
 
   # Files that can be read in the browser's built-in reader (the /read page).
@@ -287,6 +317,14 @@ class ProductFile < ApplicationRecord
 
   def archivable?
     !external_link? && !stream_only?
+  end
+
+  # The build that owns this file, when a promoted web build put it here. Nil for every file a
+  # seller uploaded directly, so callers can label builds without a second lookup each.
+  def web_build_summary
+    build = product_build
+    return if build.nil?
+    { number: build.number, status: build.status }
   end
 
   def consumable?
@@ -330,13 +368,25 @@ class ProductFile < ApplicationRecord
   end
 
   def display_extension
-    external_link? ? "URL" : s3_display_extension
+    external_link? ? "URL" : s3_display_extension.presence || filetype.to_s.upcase
+  end
+
+  # A file typed from its bytes keeps its extensionless key, so name copies of it from the type.
+  def filename_with_extension
+    return s3_filename if s3_extension.present? || filetype.blank?
+
+    "#{s3_filename}.#{filetype}"
+  end
+
+  # Empty when the stored key has its own extension, so archive digests for those files are unchanged.
+  def detected_extension
+    s3? && s3_extension.empty? ? File.extname(filename_with_extension) : ""
   end
 
   def rename_in_storage
     return if display_name == s3_display_name
 
-    extension = s3_extension
+    extension = File.extname(filename_with_extension)
     name_with_extension = display_name.ends_with?(extension) ? display_name : "#{display_name}#{extension}"
     new_key = MultipartTransfer.transfer_to_s3(self.s3_object.presigned_url(:get, expires_in: SignedUrlHelper::SIGNED_S3_URL_VALID_FOR_MAXIMUM.to_i).to_s, destination_filename: name_with_extension, existing_s3_object: self.s3_object)
     self.url = URI::DEFAULT_PARSER.unescape("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{new_key}")
@@ -364,7 +414,7 @@ class ProductFile < ApplicationRecord
 
   def mobile_json_data
     {
-      name: s3_filename,
+      name: filename_with_extension,
       size:,
       filetype:,
       filegroup:,
@@ -527,6 +577,42 @@ class ProductFile < ApplicationRecord
       RenameProductFileWorker.perform_in(5.seconds, id)
     end
 
+    # A row moved to a key without an extension usually keeps the same bytes (fingerprint reuse), so a
+    # type the bytes don't positively identify is left alone: clearing it would unlock stream-only videos.
+    def set_filetype_from_content
+      return unless s3_extension.empty? && size.to_i.positive?
+
+      head = s3_object.get(range: "bytes=0-#{CONTENT_SNIFF_BYTES - 1}").body.read
+      sniffed_filetype = CONTENT_SNIFFED_FILETYPES[Marcel::MimeType.for(StringIO.new(head))]
+      determine_and_set_filegroup(sniffed_filetype) if sniffed_filetype
+    end
+
+    def reanalyze_moved_file
+      schedule_file_analyze
+    end
+
+    def detected_type_changed?
+      saved_change_to_filetype? && s3? && s3_extension.empty?
+    end
+
+    def invalidate_archives_for_detected_type
+      link&.invalidate_stale_product_files_archives!(for_files: [self])
+      installment.generate_entity_archive! if installment&.needs_updated_entity_archive?
+    end
+
+    def rebuild_archives_for_detected_type
+      GenerateProductFilesArchivesJob.perform_async(link_id) if link_id
+    end
+
+    def update_product_filetypes_index
+      link.enqueue_index_update_for(["filetypes"])
+    end
+
+    def check_pdf_stampability
+      # Delayed like the save_files! check, so a worker reading from a replica sees the new type.
+      PdfUnstampableNotifierJob.perform_in(5.seconds, link_id)
+    end
+
     def belongs_to_product_or_installment
       return if (link.present? && installment.nil?) || (link.nil? && installment.present?)
 
@@ -545,6 +631,10 @@ class ProductFile < ApplicationRecord
 
     def invalidate_product_cache
       link.invalidate_cache if link.present?
+    end
+
+    def delete_transcoded_videos
+      transcoded_videos.alive.each(&:mark_deleted!)
     end
 
     def thumbnail_is_vaild

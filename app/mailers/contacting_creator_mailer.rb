@@ -646,10 +646,12 @@ class ContactingCreatorMailer < ApplicationMailer
     @recipient = User.find(recipient_user_id)
     @subject = "Here's your payout data!"
 
+    # The attachment name is shared by every seller paid on that date, so it cannot double as
+    # the S3 key: a later export would overwrite the object behind an earlier seller's link.
     file_or_url = MailerAttachmentOrLinkService.new(
       file: tempfile,
-      filename: attachment_name,
-      extension:
+      extension:,
+      filename: "payout-data/Payouts_#{recipient_user_id}_#{Time.current.strftime("%s")}_#{SecureRandom.hex}.#{extension}"
     ).perform
 
     if file = file_or_url[:file]

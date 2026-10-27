@@ -43,7 +43,7 @@ module SignedUrlHelper
     s3_path = s3_path.sub(%r{^/}, "") # remove the leading slash as the distribution URL will always end in a slash
     download_url = "#{file_download_host(content_length)}#{s3_path}?"
     download_url += "cache_group=#{CGI.escape(cache_group)}&" if cache_group.present?
-    download_url += "response-content-disposition=attachment"
+    download_url += "response-content-disposition=#{content_disposition_param(s3_key, s3_filename)}"
     download_url += "&cache_key=#{cf_cache_key(s3_filename)}" if file_needs_cache_key?(s3_filename)
     expires_in ||= is_video ? SIGNED_VIDEO_URL_VALID_FOR : signed_url_validity_time_for_file_size(content_length)
 
@@ -111,6 +111,14 @@ module SignedUrlHelper
       else
         CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL
       end
+    end
+
+    # Browsers name a CDN download after the key's last segment. Only a name whose extension the key
+    # lacks is sent along, so every other URL, and its cache entry, stays as it was.
+    def content_disposition_param(s3_key, s3_filename)
+      return "attachment" if s3_filename.blank? || File.extname(s3_filename) == File.extname(s3_key)
+
+      CGI.escape(ActionDispatch::Http::ContentDisposition.format(disposition: "attachment", filename: s3_filename))
     end
 
     def file_needs_cache_key?(s3_filename)

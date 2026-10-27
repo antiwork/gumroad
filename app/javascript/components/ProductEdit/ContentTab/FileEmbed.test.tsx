@@ -531,3 +531,30 @@ it("shows the same switch off for an oversized EPUB picked but not yet saved", a
     screen.getByText("This file is too large for the in-browser reader, so downloads can't be turned off"),
   ).toBeTruthy();
 });
+
+it("labels the zip a promoted web build put in the content", async () => {
+  // The deploy pipeline owns this file, so the row must not read as something the seller uploaded.
+  const file: FileEntry = {
+    ...streamableFile,
+    extension: "ZIP",
+    is_streamable: false,
+    status: { type: "saved" },
+    web_build: { number: 3, status: "live" },
+  };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.getByText("Web build v3")).toBeTruthy();
+});
+
+it("leaves a hand-uploaded zip unlabelled", async () => {
+  const file: FileEntry = { ...streamableFile, extension: "ZIP", is_streamable: false, status: { type: "saved" } };
+  context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
+
+  render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
+  await act(() => Promise.resolve());
+
+  expect(screen.queryByText(/Web build/u)).toBeNull();
+});

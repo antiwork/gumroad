@@ -135,7 +135,7 @@ class UrlRedirectsController < ApplicationController
     end
 
     if request.format.json?
-      render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.s3_filename } } })
+      render(json: { files: product_files.map { { url: @url_redirect.signed_location_for_file(_1), filename: _1.filename_with_extension } } })
     else
       # Non-JSON requests to this controller route pass an array with a single product file ID for `product_file_ids`
       @product_file = product_files.first

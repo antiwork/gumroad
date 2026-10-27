@@ -7,7 +7,7 @@ module ProductsHelper
 
   def files_data(product)
     product.product_files.alive.in_order
-      .includes(:alive_subtitle_files, :transcoded_videos, thumbnail_attachment: :blob)
+      .includes(:alive_subtitle_files, :product_build, :transcoded_videos, thumbnail_attachment: :blob)
       .map(&:as_json)
   end
 

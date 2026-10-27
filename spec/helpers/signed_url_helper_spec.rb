@@ -78,6 +78,15 @@ describe SignedUrlHelper do
       end
     end
 
+    it "names the download only when the name has an extension its key lacks" do
+      allow(s3_object_double).to receive(:content_length).and_return(1_000)
+      disposition = ->(url) { CGI.parse(URI(url).query)["response-content-disposition"] }
+
+      expect(disposition.(signed_download_url_for_s3_key_and_filename(file.s3_key, file.s3_filename))).to eq(["attachment"])
+      expect(disposition.(signed_download_url_for_s3_key_and_filename("attachments/#{SecureRandom.hex}/original/Book", "Book.pdf")))
+        .to eq([%(attachment; filename="Book.pdf"; filename*=UTF-8''Book.pdf)])
+    end
+
     it "raises a descriptive exception if the S3 object doesn't exist" do
       RSpec::Mocks.space.proxy_for(Aws::S3::Client).reset
       RSpec::Mocks.space.proxy_for(Aws::S3::Resource).reset

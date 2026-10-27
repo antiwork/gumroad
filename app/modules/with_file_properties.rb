@@ -47,10 +47,11 @@ module WithFileProperties
     rescue Aws::S3::Errors::NotFound => e
       raise e.exception("Key = #{s3_key} -- #{self.class.name}.id = #{id}")
     end
+    set_filetype_from_content
     file_uuid = SecureRandom.uuid
     logger.info("Analyze -- writing #{s3_url} to #{file_uuid}")
     FILE_REGEX.each do |file_type, regex|
-      next unless filetype.match(regex)
+      next unless filetype&.match(regex)
 
       if methods.grep(/assign_#{file_type}_attributes/) != [] && size && size < MAX_DOWNLOAD_SIZE
         temp_file = Tempfile.new([file_uuid, File.extname(s3_url)], encoding: "ascii-8bit")
@@ -226,6 +227,9 @@ module WithFileProperties
     end
 
     def video_file_analysis_completed
+    end
+
+    def set_filetype_from_content
     end
 
     # Boxes are read from byte 0 in these containers, so an ID3v2 tag in front of

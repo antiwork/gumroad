@@ -224,7 +224,7 @@ class UpdateProductFilesArchiveWorker
           directory_info = product_files_archive.folder_archive? ? [] : [file_info[:page_title], file_info[:folder_name]]
           file_path_parts = directory_info.concat([file_info[:file_name]])
         end
-        [product_file, compose_file_path(file_path_parts, product_file.s3_extension)]
+        [product_file, compose_file_path(file_path_parts, File.extname(product_file.filename_with_extension))]
       end
     end
 

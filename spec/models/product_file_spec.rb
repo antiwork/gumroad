@@ -430,6 +430,22 @@ describe ProductFile do
     end
   end
 
+  describe "#as_json web build label" do
+    it "leaves the label nil for a file the seller uploaded by hand" do
+      expect(create(:readable_document).as_json).to include(web_build: nil)
+    end
+
+    it "labels the zip a promoted web build put in the content" do
+      product = create(:product)
+      file = create(:readable_document, link: product)
+      create(:product_build, product:, product_file: file, number: 3, status: "live",
+                             source_url: "https://example.com/game.zip", storage_key: "builds/#{product.id}/3/build.zip",
+                             byte_size: 10)
+
+      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live" })
+    end
+  end
+
   describe "file group and analyze" do
     it "enqueues analyze after file creation" do
       product_file = create(:readable_document)
@@ -582,6 +598,306 @@ describe ProductFile do
       end
     end
 
+    describe "a file stored without an extension" do
+      def fixture_bytes(name)
+        File.binread(Rails.root.join("spec/support/fixtures", name))
+      end
+
+      def mobi_bytes
+        "Synthetic Mobi".ljust(32, "\0") + ("\0" * 28) + "BOOKMOBI" + ("\0" * 100)
+      end
+
+      def stored_without_extension(bytes, **attributes)
+        key = "attachments/#{SecureRandom.hex}/original/Synthetic Book"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(key).put(body: bytes)
+        create(:product_file, url: "#{S3_BASE_URL}#{key}", **attributes)
+      end
+
+      def requested_ranges
+        ranges = []
+        allow_any_instance_of(Aws::S3::Client).to receive(:get_object).and_wrap_original do |method, *args, &block|
+          ranges << args.first[:range]
+          method.call(*args, &block)
+        end
+        ranges
+      end
+
+      it "is typed as a PDF from its bytes, so it can be read, sent to Kindle and stamped" do
+        product_file = stored_without_extension(fixture_bytes("billion-dollar-company-chapter-0.pdf"))
+        expect(product_file.filetype).to be_nil
+        allow(ProductIndexingService).to receive(:perform).and_call_original
+        expect(ProductIndexingService).to receive(:perform).with(product: product_file.link, action: "update", attributes_to_update: ["filetypes"], on_failure: :async)
+
+        product_file.analyze
+        product_file.reload
+
+        expect(product_file).to have_attributes(filetype: "pdf", filegroup: "document", size: 111_237, pagelength: 6, display_extension: "PDF")
+        expect(product_file.browser_readable?).to be(true)
+        expect(product_file.can_send_to_kindle?).to be(true)
+        product_file.update!(pdf_stamp_enabled: true)
+        expect(product_file.must_be_pdf_stamped?).to be(true)
+      end
+
+      it "checks a stamp-enabled PDF can be stamped once typed" do
+        product_file = stored_without_extension(fixture_bytes("billion-dollar-company-chapter-0.pdf"), pdf_stamp_enabled: true)
+
+        freeze_time do
+          product_file.analyze
+
+          expect(PdfUnstampableNotifierJob).to have_enqueued_sidekiq_job(product_file.link_id).in(5.seconds)
+        end
+        PdfUnstampableNotifierJob.drain
+        expect(product_file.reload.stampable_pdf).to be(true)
+        expect(BackfillPdfStampsJob.jobs.map { _1["args"] }).to eq([[product_file.link_id]])
+      end
+
+      it "keeps its type when renamed to a name with a dot", :sidekiq_inline do
+        product_file = stored_without_extension(fixture_bytes("billion-dollar-company-chapter-0.pdf"), display_name: "Synthetic Book")
+        product_file.analyze
+
+        product_file.update!(display_name: "Synthetic Book Vol. 2")
+
+        expect(product_file.reload).to have_attributes(filetype: "pdf", s3_filename: "Synthetic Book Vol. 2.pdf")
+      end
+
+      it "gives the detected extension to the names it hands out" do
+        product_file = stored_without_extension(fixture_bytes("billion-dollar-company-chapter-0.pdf"))
+
+        product_file.analyze
+
+        expect(product_file.reload.mobile_json_data[:name]).to eq("Synthetic Book.pdf")
+        expect(CGI.unescape(product_file.signed_url)).to include('filename="Synthetic Book.pdf"')
+      end
+
+      def put_object(bytes, name)
+        key = "attachments/#{SecureRandom.hex}/original/#{name}"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(key).put(body: bytes)
+        "#{S3_BASE_URL}#{key}"
+      end
+
+      it "stays a stamped PDF when a re-upload of the same bytes without an extension reuses it" do
+        bytes = fixture_bytes("billion-dollar-company-chapter-0.pdf")
+        product = create(:product)
+        product_file = create(:product_file, link: product, url: put_object(bytes, "Book.pdf"), size: bytes.bytesize, pdf_stamp_enabled: true)
+        retried_url = put_object(bytes, "Book")
+        AnalyzeFileWorker.jobs.clear
+
+        product.save_files!([{ external_id: SecureRandom.uuid, url: retried_url, size: bytes.bytesize }], delete_missing: false)
+
+        expect(product_file.reload).to have_attributes(url: retried_url, filetype: "pdf")
+        expect(product_file.must_be_pdf_stamped?).to be(true)
+        expect(AnalyzeFileWorker.jobs.map { _1["args"] }).to eq([[product_file.id, "ProductFile"]])
+        product_file.analyze
+        expect(product_file.reload).to have_attributes(filetype: "pdf", filename_with_extension: "Book.pdf")
+      end
+
+      it "stays a stream-only video when a re-upload of the same bytes without an extension reuses it" do
+        bytes = fixture_bytes("small.m4v")
+        product = create(:product)
+        product_file = create(:product_file, link: product, url: put_object(bytes, "Lesson.m4v"), size: bytes.bytesize, stream_only: true)
+        allow(FFMPEG::Movie).to receive(:new).and_return(double(frame_rate: 60, duration: 13, width: 320, height: 240, bitrate: 125_779))
+
+        retried_url = put_object(bytes, "Lesson")
+
+        product.save_files!([{ external_id: SecureRandom.uuid, url: retried_url, size: bytes.bytesize }], delete_missing: false)
+        expect(product_file.reload.url).to eq(retried_url)
+        product_file.analyze
+
+        expect(product_file.reload).to have_attributes(filetype: "m4v", filegroup: "video")
+        expect(product_file.stream_only?).to be(true)
+      end
+
+      it "is typed from its new bytes when its url moves to a key without an extension" do
+        product_file = create(:product_file, url: put_object("Synthetic notes", "notes.txt"))
+
+        product_file.update!(url: put_object(fixture_bytes("billion-dollar-company-chapter-0.pdf"), "Synthetic Book"))
+        product_file.analyze
+
+        expect(product_file.reload).to have_attributes(filetype: "pdf", filename_with_extension: "Synthetic Book.pdf")
+      end
+
+      it "is not analyzed again when its url keeps an extension or does not change" do
+        product_file = create(:product_file, url: put_object("Synthetic notes", "notes.txt"))
+        AnalyzeFileWorker.jobs.clear
+
+        product_file.update!(description: "Synthetic description")
+        product_file.update!(url: put_object("Synthetic notes", "notes-2.txt"))
+
+        expect(AnalyzeFileWorker.jobs.size).to eq(0)
+      end
+
+      # v2 API clients must echo the stored url to update a file, so typing must not move the object.
+      it "keeps its stored url once typed", :sidekiq_inline do
+        product_file = stored_without_extension(fixture_bytes("billion-dollar-company-chapter-0.pdf"), display_name: "Synthetic Book")
+        stored_url = product_file.url
+
+        product_file.analyze
+
+        expect(product_file.reload).to have_attributes(filetype: "pdf", url: stored_url)
+      end
+
+      {
+        "an EPUB" => [-> { fixture_bytes("test.epub") }, { filetype: "epub", filegroup: "document", pagelength: 13, display_extension: "EPUB" }],
+        "a MOBI" => [-> { mobi_bytes }, { filetype: "mobi", filegroup: "document", display_extension: "MOBI" }],
+        "a PNG" => [-> { fixture_bytes("kFDzu.png") }, { filetype: "png", filegroup: "image", width: 1633, height: 512, display_extension: "PNG" }],
+        "a JPEG" => [-> { fixture_bytes("test-small.jpg") }, { filetype: "jpg", filegroup: "image", width: 25, height: 25, display_extension: "JPG" }],
+        "a GIF" => [-> { fixture_bytes("test-small.gif") }, { filetype: "gif", filegroup: "image", width: 25, height: 25, display_extension: "GIF" }],
+      }.each do |description, (bytes, expected)|
+        it "is typed as #{description} from its bytes" do
+          product_file = stored_without_extension(instance_exec(&bytes))
+
+          product_file.analyze
+
+          expect(product_file.reload).to have_attributes(expected)
+        end
+      end
+
+      it "can read an EPUB and send it to Kindle once typed" do
+        product_file = stored_without_extension(fixture_bytes("test.epub"))
+
+        product_file.analyze
+        product_file.reload
+
+        expect(product_file.browser_readable?).to be(true)
+        expect(product_file.can_send_to_kindle?).to be(true)
+      end
+
+      {
+        "plain text" => -> { "Synthetic notes that mention no file format." },
+        "a ZIP archive" => -> { fixture_bytes("test.zip") },
+        "an MP3" => -> { fixture_bytes("magic.mp3") },
+      }.each do |description, bytes|
+        it "leaves #{description} untyped, reading only its leading bytes" do
+          content = instance_exec(&bytes)
+          product_file = stored_without_extension(content)
+          ranges = requested_ranges
+
+          expect { product_file.analyze }.not_to raise_error
+
+          expect(product_file.reload).to have_attributes(filetype: nil, filegroup: nil, size: content.bytesize, display_extension: "")
+          expect(ranges).to eq(["bytes=0-#{ProductFile::CONTENT_SNIFF_BYTES - 1}"])
+        end
+      end
+
+      it "does not read an empty file" do
+        product_file = stored_without_extension("")
+        ranges = requested_ranges
+
+        product_file.analyze
+
+        expect(product_file.reload).to have_attributes(filetype: nil, size: 0)
+        expect(ranges).to be_empty
+      end
+
+      it "is typed from its bytes only when the stored name has no extension" do
+        bytes = fixture_bytes("billion-dollar-company-chapter-0.pdf")
+        key = "attachments/#{SecureRandom.hex}/original/notes.txt"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(key).put(body: bytes)
+        named_file = create(:product_file, url: "#{S3_BASE_URL}#{key}")
+        unnamed_file = stored_without_extension(bytes)
+        ranges = requested_ranges
+
+        named_file.analyze
+        unnamed_file.analyze
+
+        expect(named_file.reload).to have_attributes(filetype: "txt", display_extension: "TXT")
+        expect(unnamed_file.reload).to have_attributes(filetype: "pdf", display_extension: "PDF")
+        expect(ranges).to eq(["bytes=0-#{ProductFile::CONTENT_SNIFF_BYTES - 1}", nil])
+      end
+
+      describe "ZIP archives" do
+        let(:pdf_bytes) { fixture_bytes("billion-dollar-company-chapter-0.pdf") }
+
+        def run_archive_jobs
+          allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+          GenerateProductFilesArchivesJob.drain
+          UpdateProductFilesArchiveWorker.drain
+        ensure
+          allow(Rails).to receive(:env).and_call_original
+        end
+
+        def zip_entries(archive)
+          body = Aws::S3::Client.new.get_object(bucket: S3_BUCKET, key: archive.s3_key).body.read
+          names = []
+          Zip::File.open_buffer(body) { |zip| zip.each { names << _1.name.force_encoding("UTF-8") } }
+          names.sort
+        end
+
+        def product_with_folder(*files)
+          folder_id = SecureRandom.uuid
+          create(:rich_content, entity: files.first.link, description: [
+                   { "type" => "fileEmbedGroup", "attrs" => { "name" => "Folder", "uid" => folder_id }, "content" => files.map do |file|
+                     { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+                   end }])
+          Link.find(files.first.link_id).generate_product_files_archives!
+          run_archive_jobs
+          folder_id
+        end
+
+        it "adds a file typed from its bytes to the product's folder ZIP, without serving the stale one meanwhile" do
+          product = create(:product)
+          book = create(:product_file, link: product, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          notes = create(:product_file, link: product, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          folder_id = product_with_folder(book, notes)
+          url_redirect = create(:url_redirect, link: product, purchase: create(:purchase, link: product))
+          stale_archive = url_redirect.folder_archive(folder_id)
+          expect(zip_entries(stale_archive)).to eq(["notes.txt"])
+
+          book.reload.analyze
+
+          expect(stale_archive.reload).to be_deleted
+          expect(GenerateProductFilesArchivesJob.jobs.map { _1["args"] }).to eq([[product.id]])
+          expect(url_redirect.reload.folder_archive(folder_id)).to be_nil
+          run_archive_jobs
+          expect(zip_entries(url_redirect.reload.folder_archive(folder_id))).to eq(["Synthetic Book.pdf", "notes.txt"])
+        end
+
+        it "adds a file typed from its bytes to an installment's ZIP" do
+          installment = create(:installment)
+          book = create(:product_file, link: nil, installment:, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          create(:product_file, link: nil, installment:, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          installment.generate_entity_archive!
+          run_archive_jobs
+          stale_archive = installment.product_files_archives.latest_ready_entity_archive
+          expect(zip_entries(stale_archive)).to eq(["notes.txt"])
+
+          book.reload.analyze
+
+          expect(stale_archive.reload).to be_deleted
+          run_archive_jobs
+          expect(zip_entries(installment.product_files_archives.latest_ready_entity_archive)).to eq(["Synthetic Book.pdf", "notes.txt"])
+        end
+
+        it "keeps ZIPs when analyze detects no new type" do
+          product = create(:product)
+          typed_book = create(:product_file, link: product, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          typed_book.analyze
+          unknown = create(:product_file, link: product, url: put_object(fixture_bytes("test.zip"), "Synthetic Archive"), display_name: "Synthetic Archive")
+          notes = create(:product_file, link: product, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          folder_id = product_with_folder(typed_book, unknown, notes)
+          archive = create(:url_redirect, link: product, purchase: create(:purchase, link: product)).folder_archive(folder_id)
+          GenerateProductFilesArchivesJob.jobs.clear
+
+          [typed_book, unknown, notes].each { _1.reload.analyze }
+
+          expect(archive.reload).to have_attributes(deleted?: false, product_files_archive_state: "ready")
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+          expect(zip_entries(archive)).to eq(["Synthetic Book.pdf", "notes.txt"])
+        end
+
+        it "keeps the digest of names that have their own extension, and adds the detected one" do
+          product = create(:product)
+          notes = create(:product_file, link: product, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          book = create(:product_file, link: product, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          book.analyze
+          archive = product.product_files_archives.new
+
+          expect(archive.digest_for_files([notes])).to eq(Digest::SHA1.hexdigest("#{notes.external_id}/notes"))
+          expect(archive.digest_for_files([book.reload])).to eq(Digest::SHA1.hexdigest("#{book.external_id}/Synthetic Book.pdf"))
+        end
+      end
+    end
+
     it "creates the product file with filetype set to lowercase" do
       product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/fc34ee33bae54181badd048c71209d24/original/sample.PDF")
       expect(product_file.filetype).to eq("pdf")
@@ -706,6 +1022,18 @@ describe ProductFile do
       @product_file.update!(url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/#{collaborator.external_id}/43a5363194e74e9ee75b6203eaea6705/original/black/white.mp4")
 
       expect(@product_file.s3_filename).to eq("black/white.mp4")
+    end
+  end
+
+  describe "marking a file deleted" do
+    it "marks its transcoded videos deleted so their HLS renditions are removed from S3" do
+      product_file = create(:streamable_video, is_transcoded_for_hls: true)
+      transcoded_video = create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key)
+
+      product_file.mark_deleted
+
+      expect(transcoded_video.reload).to be_deleted
+      expect(product_file.reload.is_transcoded_for_hls?).to be(false)
     end
   end
 
@@ -1479,6 +1807,21 @@ describe ProductFile do
         it "enqueues a job to stamp existing PDFs if needed" do
           file.update!(pdf_stamp_enabled: true)
           expect(BackfillPdfStampsJob).to have_enqueued_sidekiq_job(file.link.id)
+        end
+      end
+
+      context "when the same save makes the file a PDF" do
+        it "checks it can be stamped once and starts one backfill" do
+          key = "attachments/#{SecureRandom.hex}/original/notes.pdf"
+          Aws::S3::Resource.new.bucket(S3_BUCKET).object(key).put(body: File.binread(Rails.root.join("spec/support/fixtures/billion-dollar-company-chapter-0.pdf")))
+          text_file = create(:product_file, url: "#{S3_BASE_URL}attachments/#{SecureRandom.hex}/original/notes.txt")
+
+          text_file.link.save_files!([{ external_id: text_file.external_id, url: "#{S3_BASE_URL}#{key}", pdf_stamp_enabled: true }])
+
+          expect(PdfUnstampableNotifierJob.jobs.size).to eq(1)
+          PdfUnstampableNotifierJob.drain
+          expect(text_file.reload.stampable_pdf).to be(true)
+          expect(BackfillPdfStampsJob.jobs.map { _1["args"] }).to eq([[text_file.link_id]])
         end
       end
 

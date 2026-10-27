@@ -98,14 +98,15 @@ class ProductFilesArchive < ApplicationRecord
       files.map do |file|
         parts = []
         parts.concat([file.link&.external_id, file.link&.name]) if bundle_purchase_archive?
-        parts.concat([file.folder&.external_id, file.folder&.name, file.external_id, file.name_displayable])
+        parts.concat([file.folder&.external_id, file.folder&.name, file.external_id, file.name_displayable&.then { "#{_1}#{file.detected_extension}" }])
         parts.compact.join("/")
       end.sort
     else
       rich_content_files = rich_content_files.select { |key, value| value[:folder_id] == folder_id } if folder_archive?
-      rich_content_files.values.map do |info|
+      detected_extensions = files.to_h { [_1.id, _1.detected_extension] }
+      rich_content_files.map do |file_id, info|
         page_info = folder_archive? ? [] : [info[:page_id], info[:page_title]]
-        page_info.concat([info[:folder_id], info[:folder_name], info[:file_id], info[:file_name]]).flatten.compact.join("/")
+        page_info.concat([info[:folder_id], info[:folder_name], info[:file_id], info[:file_name]&.then { "#{_1}#{detected_extensions[file_id]}" }]).flatten.compact.join("/")
       end.sort
     end
 

@@ -22,7 +22,7 @@ class UrlRedirectPresenter
   end
 
   def download_attributes
-    files = url_redirect.alive_product_files.includes(:alive_subtitle_files).with_attached_thumbnail.in_order
+    files = url_redirect.alive_product_files.includes(:alive_subtitle_files, :product_build).with_attached_thumbnail.in_order
     folder_ids_with_files = files.map(&:folder_id).compact
     product_folders = url_redirect.referenced_link&.product_folders&.where(id: folder_ids_with_files)&.in_order || []
     commission = purchase&.commission
@@ -263,12 +263,15 @@ class UrlRedirectPresenter
     def map_file(file)
       media_location = media_locations_by_file[file.id]
       download_url = url_redirect.is_file_downloadable?(file) ? url_redirect_download_product_files_path(url_redirect.token, { product_file_ids: [file.external_id] }) : nil
+      # A promoted web build's zip is labelled for the buyer; every hand-uploaded file leaves it nil.
+      web_build = file.is_a?(ProductFile) ? file.web_build_summary : nil
 
       {
         type: "file",
         file_name: file.name_displayable,
         description: file.description,
         extension: file.display_extension,
+        web_build:,
         file_size: file.size,
         pagelength: (file.epub? ? nil : file.pagelength),
         duration: file.duration,

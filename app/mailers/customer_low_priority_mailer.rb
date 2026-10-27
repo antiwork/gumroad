@@ -169,7 +169,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       end
     @date = @subscription.end_time_of_subscription.strftime("%B %e, %Y")
     original_purchase = @subscription.original_purchase
-    @price = original_purchase.format_price_in_currency(@subscription.current_subscription_price_cents)
+    @price = original_purchase.format_displayed_price_cents(@subscription.current_subscription_price_cents)
     @delivery_options = { reply_to: @subscription.seller.support_or_form_email }
   end
 
@@ -188,8 +188,8 @@ class CustomerLowPriorityMailer < ApplicationMailer
       ) + "You can modify or cancel your membership at any time."
     @next_payment_date = @subscription.end_time_of_subscription.strftime("%B %e, %Y")
     original_purchase = @subscription.original_purchase
-    @previous_price = original_purchase.format_price_in_currency(original_purchase.displayed_price_cents)
-    @new_price = original_purchase.format_price_in_currency(new_price)
+    @previous_price = original_purchase.format_displayed_price_cents(original_purchase.displayed_price_cents)
+    @new_price = original_purchase.format_displayed_price_cents(new_price)
     if original_purchase.has_tax_label?
       @previous_price += " (plus taxes)"
       @new_price += " (plus taxes)"
