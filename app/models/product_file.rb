@@ -80,6 +80,10 @@ class ProductFile < ApplicationRecord
   after_save :invalidate_product_cache
   after_commit :schedule_rename_in_storage, on: :update, if: :saved_change_to_display_name?
   after_commit :update_product_filetypes_index, on: :update, if: -> { link.present? && saved_change_to_filetype? }
+  # A type detected for a key without an extension adds the file to ZIPs and renames its entry, so stale
+  # archives go with the save and the product's are rebuilt.
+  after_update :invalidate_archives_for_detected_type, if: :detected_type_changed?
+  after_commit :rebuild_archives_for_detected_type, on: :update, if: :detected_type_changed?
   # Keeps the current type until analyze has read the bytes at the new key, so a stamped PDF stays stamped meanwhile.
   after_commit :reanalyze_moved_file, on: :update, if: -> { saved_change_to_url? && s3? && s3_extension.empty? }
   # A save that turns stamping on already queues this check (WithProductFiles#save_files!); one that
@@ -357,6 +361,11 @@ class ProductFile < ApplicationRecord
     "#{s3_filename}.#{filetype}"
   end
 
+  # Empty when the stored key has its own extension, so archive digests for those files are unchanged.
+  def detected_extension
+    s3? && s3_extension.empty? ? File.extname(filename_with_extension) : ""
+  end
+
   def rename_in_storage
     return if display_name == s3_display_name
 
@@ -563,6 +572,19 @@ class ProductFile < ApplicationRecord
 
     def reanalyze_moved_file
       schedule_file_analyze
+    end
+
+    def detected_type_changed?
+      saved_change_to_filetype? && s3? && s3_extension.empty?
+    end
+
+    def invalidate_archives_for_detected_type
+      link&.invalidate_stale_product_files_archives!(for_files: [self])
+      installment.generate_entity_archive! if installment&.needs_updated_entity_archive?
+    end
+
+    def rebuild_archives_for_detected_type
+      GenerateProductFilesArchivesJob.perform_async(link_id) if link_id
     end
 
     def update_product_filetypes_index

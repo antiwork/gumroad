@@ -788,6 +788,98 @@ describe ProductFile do
         expect(unnamed_file.reload).to have_attributes(filetype: "pdf", display_extension: "PDF")
         expect(ranges).to eq(["bytes=0-#{ProductFile::CONTENT_SNIFF_BYTES - 1}", nil])
       end
+
+      describe "ZIP archives" do
+        let(:pdf_bytes) { fixture_bytes("billion-dollar-company-chapter-0.pdf") }
+
+        def run_archive_jobs
+          allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+          GenerateProductFilesArchivesJob.drain
+          UpdateProductFilesArchiveWorker.drain
+        ensure
+          allow(Rails).to receive(:env).and_call_original
+        end
+
+        def zip_entries(archive)
+          body = Aws::S3::Client.new.get_object(bucket: S3_BUCKET, key: archive.s3_key).body.read
+          names = []
+          Zip::File.open_buffer(body) { |zip| zip.each { names << _1.name.force_encoding("UTF-8") } }
+          names.sort
+        end
+
+        def product_with_folder(*files)
+          folder_id = SecureRandom.uuid
+          create(:rich_content, entity: files.first.link, description: [
+                   { "type" => "fileEmbedGroup", "attrs" => { "name" => "Folder", "uid" => folder_id }, "content" => files.map do |file|
+                     { "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+                   end }])
+          Link.find(files.first.link_id).generate_product_files_archives!
+          run_archive_jobs
+          folder_id
+        end
+
+        it "adds a file typed from its bytes to the product's folder ZIP, without serving the stale one meanwhile" do
+          product = create(:product)
+          book = create(:product_file, link: product, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          notes = create(:product_file, link: product, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          folder_id = product_with_folder(book, notes)
+          url_redirect = create(:url_redirect, link: product, purchase: create(:purchase, link: product))
+          stale_archive = url_redirect.folder_archive(folder_id)
+          expect(zip_entries(stale_archive)).to eq(["notes.txt"])
+
+          book.reload.analyze
+
+          expect(stale_archive.reload).to be_deleted
+          expect(GenerateProductFilesArchivesJob.jobs.map { _1["args"] }).to eq([[product.id]])
+          expect(url_redirect.reload.folder_archive(folder_id)).to be_nil
+          run_archive_jobs
+          expect(zip_entries(url_redirect.reload.folder_archive(folder_id))).to eq(["Synthetic Book.pdf", "notes.txt"])
+        end
+
+        it "adds a file typed from its bytes to an installment's ZIP" do
+          installment = create(:installment)
+          book = create(:product_file, link: nil, installment:, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          create(:product_file, link: nil, installment:, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          installment.generate_entity_archive!
+          run_archive_jobs
+          stale_archive = installment.product_files_archives.latest_ready_entity_archive
+          expect(zip_entries(stale_archive)).to eq(["notes.txt"])
+
+          book.reload.analyze
+
+          expect(stale_archive.reload).to be_deleted
+          run_archive_jobs
+          expect(zip_entries(installment.product_files_archives.latest_ready_entity_archive)).to eq(["Synthetic Book.pdf", "notes.txt"])
+        end
+
+        it "keeps ZIPs when analyze detects no new type" do
+          product = create(:product)
+          typed_book = create(:product_file, link: product, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          typed_book.analyze
+          unknown = create(:product_file, link: product, url: put_object(fixture_bytes("test.zip"), "Synthetic Archive"), display_name: "Synthetic Archive")
+          notes = create(:product_file, link: product, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          folder_id = product_with_folder(typed_book, unknown, notes)
+          archive = create(:url_redirect, link: product, purchase: create(:purchase, link: product)).folder_archive(folder_id)
+          GenerateProductFilesArchivesJob.jobs.clear
+
+          [typed_book, unknown, notes].each { _1.reload.analyze }
+
+          expect(archive.reload).to have_attributes(deleted?: false, product_files_archive_state: "ready")
+          expect(GenerateProductFilesArchivesJob.jobs.size).to eq(0)
+          expect(zip_entries(archive)).to eq(["Synthetic Book.pdf", "notes.txt"])
+        end
+
+        it "keeps the digest of names that have their own extension, and adds the detected one" do
+          product = create(:product)
+          notes = create(:product_file, link: product, url: put_object("Synthetic notes", "notes.txt"), display_name: "notes")
+          book = create(:product_file, link: product, url: put_object(pdf_bytes, "Synthetic Book"), display_name: "Synthetic Book")
+          book.analyze
+          archive = product.product_files_archives.new
+
+          expect(archive.digest_for_files([notes])).to eq(Digest::SHA1.hexdigest("#{notes.external_id}/notes"))
+          expect(archive.digest_for_files([book.reload])).to eq(Digest::SHA1.hexdigest("#{book.external_id}/Synthetic Book.pdf"))
+        end
+      end
     end
 
     it "creates the product file with filetype set to lowercase" do
