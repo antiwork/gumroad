@@ -5441,26 +5441,22 @@ class PurchaseTest < ActiveSupport::TestCase
     assert_equal "$10.81", purchase.formatted_affiliate_credit_amount
   end
 
-  # --- #format_price_in_currency ---------------------------------------------
+  # --- #format_displayed_price_cents -----------------------------------------
 
-  test "#format_price_in_currency formats the amount in the purchase's currency" do
-    Purchase.any_instance.stubs(:rate_converted_to_usd).returns(0.5)
-
+  test "#format_displayed_price_cents formats the amount in the purchase's currency" do
     purchase = create_purchase
-    assert_equal "$5.50", purchase.format_price_in_currency(5_50)
+    assert_equal "$5.50", purchase.format_displayed_price_cents(5_50)
 
     purchase.displayed_price_currency_type = "gbp"
-    assert_equal "£2.75", purchase.format_price_in_currency(5_50)
+    assert_equal "£5.50", purchase.format_displayed_price_cents(5_50)
   end
 
-  test "#format_price_in_currency formats the amount for a subscription purchase in the purchase's currency" do
-    Purchase.any_instance.stubs(:rate_converted_to_usd).returns(0.5)
-
+  test "#format_displayed_price_cents formats the amount for a subscription purchase in the purchase's currency" do
     purchase = create_membership_purchase
-    assert_equal "$5.50 a month", purchase.format_price_in_currency(5_50)
+    assert_equal "$5.50 a month", purchase.format_displayed_price_cents(5_50)
 
     purchase.displayed_price_currency_type = "eur"
-    assert_equal "€2.75 a month", purchase.format_price_in_currency(5_50)
+    assert_equal "€5.50 a month", purchase.format_displayed_price_cents(5_50)
   end
 
   # --- #enqueue_update_sales_related_products_infos_job -----------------------
