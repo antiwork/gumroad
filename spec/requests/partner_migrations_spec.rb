@@ -278,11 +278,12 @@ describe "Partner migration onboarding", type: :request do
 
   it "does not open the status page for a row ID, another case, or extra characters" do
     migration.claim!(seller, expected_code_digest: migration.code_digest)
-    sign_in seller
 
     [migration.id.to_s, migration.public_id.swapcase, "#{migration.public_id} ", "#{migration.public_id}x"].each do |value|
       next if value == migration.public_id
 
+      # A 404 raises before the session is written, so each request signs in again.
+      sign_in seller
       get partner_migration_status_path(value)
 
       expect(response).to have_http_status(:not_found), "returned #{response.status} for #{value.inspect}"
