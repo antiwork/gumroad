@@ -18,13 +18,13 @@ class PartnerMigration::RemoteFileTransfer
   MAX_DOWNLOAD_DURATION = 3.hours
 
   # Streams `url` into a tempfile, yields the tempfile and a safe filename, and deletes the tempfile.
-  def self.download(url, max_bytes:)
+  def self.download(url, max_bytes:, max_duration: MAX_DOWNLOAD_DURATION)
     uri = URI.parse(url)
     raise Error, "Only https URLs are supported." unless uri.is_a?(URI::HTTPS)
 
     tempfile = Tempfile.new("partner-migration", binmode: true)
     begin
-      content_disposition = stream(url, tempfile, max_bytes)
+      content_disposition = stream(url, tempfile, max_bytes, max_duration)
       tempfile.flush
       tempfile.rewind
       yield tempfile, filename_for(uri, content_disposition, tempfile)
@@ -34,9 +34,9 @@ class PartnerMigration::RemoteFileTransfer
   end
 
   # Returns the response's Content-Disposition header.
-  def self.stream(url, tempfile, max_bytes)
+  def self.stream(url, tempfile, max_bytes, max_duration = MAX_DOWNLOAD_DURATION)
     too_large = "The file is larger than #{ActiveSupport::NumberHelper.number_to_human_size(max_bytes)}."
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + MAX_DOWNLOAD_DURATION
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + max_duration
     # Net::HTTP otherwise accepts a short response as a complete file.
     response = SsrfFilter.get(url, scheme_whitelist: ALLOWED_SCHEMES, http_options: { ignore_eof: false }) do |http_response|
       raise Error, too_large if http_response["content-length"].to_i > max_bytes
@@ -46,7 +46,7 @@ class PartnerMigration::RemoteFileTransfer
       http_response.read_body do |chunk|
         received_bytes += chunk.bytesize
         raise Error, too_large if received_bytes > max_bytes
-        raise TemporaryError, "The file download took longer than #{MAX_DOWNLOAD_DURATION.inspect}." if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+        raise TemporaryError, "The file download took longer than #{max_duration.inspect}." if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
 
         tempfile.write(chunk) if write_file
       end

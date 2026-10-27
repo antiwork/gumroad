@@ -2,7 +2,8 @@
 
 class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
   # Stores a creator's products and returns a one-time link. The creator opens the link to log in or
-  # sign up, and the products are then imported as drafts in that Gumroad account.
+  # sign up, and the products are then imported as drafts in that Gumroad account. The response never
+  # says whether `email` has a Gumroad account; the link checks that when the creator opens it.
   def create
     external_user_id = params[:external_user_id]
     max_length = PartnerMigration::MAX_EXTERNAL_USER_ID_LENGTH
@@ -13,7 +14,10 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
     products, error = PartnerMigration.normalize_products(params[:products])
     return render_bad_request(error) if error
 
-    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:)
+    seller, error = PartnerMigration.normalize_seller(email: params[:email], profile: params[:profile])
+    return render_bad_request(error) if error
+
+    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:, **seller)
 
     render json: {
       success: true,

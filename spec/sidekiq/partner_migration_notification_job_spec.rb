@@ -15,23 +15,56 @@ describe PartnerMigrationNotificationJob do
     migration
   end
 
+  it "does not email a new account again when its import completes, because the setup email covered it" do
+    migration.update!(account_created: true, account_setup_token_digest: "pending")
+
+    described_class.new.perform(migration.id)
+
+    expect(ActionMailer::Base.deliveries).to be_empty
+    expect(migration.reload.notified_at).to be_present
+  end
+
+  it "emails a new account whose setup link expired, so the seller still hears that the import finished" do
+    migration.update!(account_created: true, account_setup_token_digest: "pending", claimed_at: (PartnerMigration::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).ago)
+
+    described_class.new.perform(migration.id)
+
+    expect(ActionMailer::Base.deliveries.sole.subject).to eq("Your products are ready to review")
+  end
+
+  it "emails a new account that already set its password, for example after a retry" do
+    migration.update!(account_created: true, account_setup_token_digest: nil)
+
+    described_class.new.perform(migration.id)
+
+    expect(ActionMailer::Base.deliveries.sole.subject).to eq("Your products are ready to review")
+  end
+
+  it "emails a new account when its import needs attention" do
+    migration.update!(account_created: true, account_setup_token_digest: "pending", status: PartnerMigration::STATUS_FAILED)
+
+    described_class.new.perform(migration.id)
+
+    mail = ActionMailer::Base.deliveries.sole
+    expect(mail.subject).to eq("Some products did not import")
+    expect(Capybara.string(mail.html_part.body.decoded)).to have_text("first set your password with the link in the email \"Your Gumroad account is ready\"")
+  end
+
   it "emails the account once with a link and keeps import details behind authentication" do
     2.times { described_class.new.perform(migration.id) }
 
     mail = ActionMailer::Base.deliveries.sole
     body = Capybara.string(mail.html_part.body.decoded)
     expect(mail.to).to eq([seller.email])
-    expect(mail.subject).to eq("Your import is ready to review")
-    expect(body).to have_text("Your product import on Gumroad is ready to review.")
-    expect(body).not_to have_text("Example App")
+    expect(mail.subject).to eq("Your products are ready to review")
+    expect(body).to have_text("Your products from Example App are on Gumroad as drafts.")
     expect(body).not_to have_text("Texture Pack")
-    expect(body).to have_text("Imported products start as drafts.")
-    status_url = Rails.application.routes.url_helpers.partner_migration_status_url(migration.public_id, host: DOMAIN, protocol: PROTOCOL)
-    expect(body).to have_link("Review products", href: status_url)
+    products_url = Rails.application.routes.url_helpers.products_url(host: DOMAIN, protocol: PROTOCOL)
+    expect(body).to have_link("Review drafts", href: products_url)
     expect(migration.reload.notified_at).to be_present
   end
 
-  it "reports a partial import and sends an updated result after a manual retry" do
+  it "reports a partial import and sends an updated result after an automatic retry" do
     migration.update!(status: PartnerMigration::STATUS_FAILED, results: {
                         "0" => { "product_id" => "texture-pack" }, "1" => { "error" => "The file link expired." },
                       })
@@ -39,10 +72,10 @@ describe PartnerMigrationNotificationJob do
 
     mail = ActionMailer::Base.deliveries.sole
     body = Capybara.string(mail.html_part.body.decoded)
-    expect(mail.subject).to eq("Your import needs attention")
-    expect(body).to have_text("retry the products that did not import")
+    expect(mail.subject).to eq("Some products did not import")
+    expect(body).to have_text("We try them again when Example App sends them again.")
 
-    migration.reload.retry!(seller)
+    migration.reload.retry_failed_products!
     described_class.new.perform(migration.id)
     expect(ActionMailer::Base.deliveries.size).to eq(1)
     expect(migration.reload).to have_attributes(notified_at: nil, completed_at: nil)
@@ -53,8 +86,22 @@ describe PartnerMigrationNotificationJob do
     described_class.new.perform(migration.id)
 
     expect(ActionMailer::Base.deliveries.size).to eq(2)
-    expect(ActionMailer::Base.deliveries.last.subject).to eq("Your import is ready to review")
-    expect(Capybara.string(ActionMailer::Base.deliveries.last.html_part.body.decoded)).to have_text("Your product import on Gumroad is ready to review.")
+    expect(ActionMailer::Base.deliveries.last.subject).to eq("Your products are ready to review")
+  end
+
+  it "emails a failure once, however often the partner sends the export again" do
+    failed_results = { "0" => { "product_id" => "texture-pack" }, "1" => { "error" => "The file link expired." } }
+    migration.update!(status: PartnerMigration::STATUS_FAILED, results: failed_results)
+    described_class.new.perform(migration.id)
+
+    2.times do
+      migration.reload.retry_failed_products!
+      migration.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current, results: failed_results)
+      described_class.new.perform(migration.id)
+    end
+
+    expect(ActionMailer::Base.deliveries.map(&:subject)).to eq(["Some products did not import"])
+    expect(migration.reload.notified_at).to be_present
   end
 
   it "sends to the checked address if the account changes its email while the mailer starts" do

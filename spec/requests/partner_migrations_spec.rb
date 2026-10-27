@@ -47,7 +47,7 @@ describe "Partner migration onboarding", type: :request do
     follow_redirect!
 
     expect(response).to have_http_status(:ok)
-    expect(response.body).to include("Import 2 products from")
+    expect(response.body).to include("Move 2 products from")
     expect(response.body).to include("Example App")
     expect(Nokogiri::HTML(response.body).at_css("input[name='partner_migration_id']")["value"]).to eq(migration.public_id)
   end
@@ -65,7 +65,7 @@ describe "Partner migration onboarding", type: :request do
     get partner_migration_path
 
     expect(response).to have_http_status(:ok)
-    expect(response.body).to include("Import 2 products from", "seller@example.com")
+    expect(response.body).to include("Move 2 products from", "seller@example.com")
   end
 
   it "lets an account without an email switch accounts before importing" do
@@ -82,7 +82,7 @@ describe "Partner migration onboarding", type: :request do
     expect(response).to redirect_to(login_path(next: partner_migration_path))
     sign_in create(:named_user)
     get partner_migration_path
-    expect(response.body).to include("Import 2 products from", "Example App")
+    expect(response.body).to include("Move 2 products from", "Example App")
   end
 
   it "claims the migration and starts the import" do
@@ -91,8 +91,8 @@ describe "Partner migration onboarding", type: :request do
 
     claim
 
-    expect(response).to have_http_status(:ok)
-    expect(response.body).to include("Importing your products")
+    expect(response).to redirect_to(products_path)
+    expect(flash[:notice]).to eq("We're importing your 2 products from Example App. They appear here as drafts.")
     expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_CLAIMED, user: seller)
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
   end
@@ -185,15 +185,14 @@ describe "Partner migration onboarding", type: :request do
     sign_in seller
     get partner_migration_path(migration_code: code)
     claim
-    expect(response.body).to include("Importing your products")
+    expect(response).to redirect_to(products_path)
     sign_out seller
 
     sign_in other_seller
     get partner_migration_path(migration_code: other_code)
     claim
 
-    expect(response).to have_http_status(:ok)
-    expect(response.body).to include("Importing your products")
+    expect(response).to redirect_to(products_path)
     expect(migration.reload.user).to eq(seller)
     expect(other_migration.reload.user).to eq(other_seller)
     expect(partner_application.partner_sellers.pluck(:external_user_id, :user_id)).to contain_exactly(["ext-1", seller.id], ["EXT-1", other_seller.id])
@@ -210,7 +209,7 @@ describe "Partner migration onboarding", type: :request do
     expect(response).to redirect_to(login_path(next: partner_migration_path))
     sign_in create(:named_user)
     get partner_migration_path
-    expect(response.body).to include("Import 2 products from", "Example App")
+    expect(response.body).to include("Move 2 products from", "Example App")
   end
 
   it "keeps the return path after a failed login" do
@@ -224,156 +223,15 @@ describe "Partner migration onboarding", type: :request do
     expect(response).to redirect_to(login_path(next: partner_migration_path))
   end
 
-  it "shows results on a persistent page without the onboarding code" do
+  it "sends a seller who opens the link again after claiming to the products page" do
     sign_in seller
     get partner_migration_path(migration_code: code)
     claim
-    status_address = request.path
-    expect(status_address).to eq(partner_migration_status_path(migration.public_id))
-    PartnerMigrationImportJob.new.perform(migration.id)
 
-    get status_address
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
 
-    expect(response).to have_http_status(:ok)
-    expect(response.body).to include("Your products are ready to review", "2 of 2 products imported", "Review drafts")
-    expect(status_address).not_to include(code)
-    sign_out seller
-    sign_in create(:named_user)
-    get status_address
-    expect(response).to have_http_status(:not_found)
-  end
-
-  it "keeps the resume warning on screen when the import is still running" do
-    migration.claim!(seller, expected_code_digest: migration.code_digest)
-    allow(PartnerMigrationImportJob).to receive(:perform_async).and_return(nil)
-    sign_in seller
-
-    travel_to(PartnerMigration::STALLED_AFTER.from_now + 1.minute) do
-      get partner_migration_status_path(migration.public_id)
-      form = Nokogiri::HTML(response.body).at_css("form[action='#{retry_partner_migration_path(migration.public_id)}']")
-      post retry_partner_migration_path(migration.public_id), params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
-      follow_redirect!
-    end
-
-    expect(response.body).to include("The import is still running.")
-    expect(response.headers["Refresh"]).to be_nil
-  end
-
-  it "offers to retry the whole import when it failed before any product" do
-    migration.claim!(seller, expected_code_digest: migration.code_digest)
-    migration.update!(status: PartnerMigration::STATUS_FAILED, failure_reason: "The file host did not answer.")
-    sign_in seller
-
-    get partner_migration_status_path(migration.public_id)
-
-    expect(response.body).to include("Your import stopped", "Retry import", "The file host did not answer.")
-    expect(response.body).not_to include("Some products did not import")
-  end
-
-  it "shows each imported product's current state" do
-    migration.claim!(seller, expected_code_digest: migration.code_digest)
-    draft = create(:product, user: seller, draft: true, purchase_disabled_at: Time.current)
-    unpublished = create(:product, user: seller, purchase_disabled_at: Time.current)
-    deleted = create(:product, user: seller, deleted_at: Time.current)
-    banned = create(:product, user: seller, banned_at: Time.current)
-    migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current, results: {
-                        "0" => { "product_id" => draft.external_id },
-                        "1" => { "product_id" => unpublished.external_id },
-                      })
-    sign_in seller
-
-    get partner_migration_status_path(migration.public_id)
-    rows = Nokogiri::HTML(response.body).css("ol > li").map { _1.text.squish }
-    expect(rows).to eq(["Texture Pack Draft", "Brush Set Unpublished"])
-
-    migration.update!(results: { "0" => { "product_id" => deleted.external_id }, "1" => { "product_id" => banned.external_id } })
-    get partner_migration_status_path(migration.public_id)
-    rows = Nokogiri::HTML(response.body).css("ol > li").map { _1.text.squish }
-    expect(rows).to eq(["Texture Pack Removed from your account.", "Brush Set Removed"])
-  end
-
-  it "offers to resume an import only after it stops recording products" do
-    migration.claim!(seller, expected_code_digest: migration.code_digest)
-    sign_in seller
-
-    get partner_migration_status_path(migration.public_id)
-    expect(response.body).not_to include("Resume import")
-    expect(response.body).not_to include("Before you sell")
-
-    travel_to(PartnerMigration::STALLED_AFTER.from_now + 1.minute) do
-      get partner_migration_status_path(migration.public_id)
-      expect(response.body).to include("Your import stopped", "Resume import", "The import stopped responding.")
-      expect(response.headers["Refresh"]).to eq("60")
-      expect(response.body).not_to include("we email you")
-      form = Nokogiri::HTML(response.body).at_css("form[action='#{retry_partner_migration_path(migration.public_id)}']")
-
-      post retry_partner_migration_path(migration.public_id), params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
-      follow_redirect!
-    end
-    expect(response.body).to include("Importing your products")
-    expect(response.body).not_to include("Resume import")
-  end
-
-  it "shows product errors and media warnings without losing successful products" do
-    migration.claim!(seller, expected_code_digest: migration.code_digest)
-    product = create(:product, user: seller, name: "Texture Pack")
-    migration.update!(status: PartnerMigration::STATUS_FAILED, results: {
-                        "0" => { "product_id" => product.external_id, "warnings" => ["Cover could not be imported."] },
-                        "1" => { "error" => "The file link expired." },
-                      })
-    sign_in seller
-
-    get partner_migration_status_path(migration.public_id)
-
-    expect(response.body).to include("Published")
-    expect(Nokogiri::HTML(response.body).at_css("a[href='#{products_path}']").text).to eq("Review drafts")
-    expect(response.body).to include("Some products did not import", "1 of 2 products imported, 1 did not import", "Cover could not be imported.", "The file link expired.", "Retry failed products")
-    form = Nokogiri::HTML(response.body).at_css("form[action='#{retry_partner_migration_path(migration.public_id)}']")
-    post retry_partner_migration_path(migration.public_id), params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
-    expect(response).to have_http_status(:see_other)
-    expect(migration.reload.results).to eq("0" => { "product_id" => product.external_id, "warnings" => ["Cover could not be imported."] })
-  end
-
-  it "opens the status page from a link issued before Nano IDs, only for its owner" do
-    migration.claim!(seller, expected_code_digest: migration.code_digest)
-    legacy_path = partner_migration_status_path(migration.signed_id(purpose: :partner_migration))
-    sign_in seller
-
-    get legacy_path
-
-    expect(response).to have_http_status(:ok)
-    expect(response.body).to include("Importing your products")
-    sign_out seller
-    sign_in create(:named_user)
-    get legacy_path
-    expect(response).to have_http_status(:not_found)
-  end
-
-  it "does not open the status page for a row ID, another case, or extra characters" do
-    migration.claim!(seller, expected_code_digest: migration.code_digest)
-
-    [migration.id.to_s, migration.public_id.swapcase, "#{migration.public_id} ", "#{migration.public_id}x"].each do |value|
-      next if value == migration.public_id
-
-      # A 404 raises before the session is written, so each request signs in again.
-      sign_in seller
-      get partner_migration_status_path(value)
-
-      expect(response).to have_http_status(:not_found), "returned #{response.status} for #{value.inspect}"
-    end
-  end
-
-  it "does not open the status page while the owner is impersonating another user" do
-    admin = create(:admin_user)
-    migration.claim!(admin, expected_code_digest: migration.code_digest)
-    sign_in admin
-    $redis.set(RedisKey.impersonated_user(admin.id), seller.id)
-
-    get partner_migration_status_path(migration.public_id)
-
-    expect(response).to have_http_status(:not_found)
-  ensure
-    $redis.del(RedisKey.impersonated_user(admin.id)) if defined?(admin) && admin&.persisted?
+    expect(response).to redirect_to(products_path)
   end
 
   def claim
@@ -386,7 +244,6 @@ describe "Partner migration onboarding", type: :request do
       partner_migration_id: form&.at_css("input[name='partner_migration_id']")&.[]("value"),
       partner_migration_code_digest: form&.at_css("input[name='partner_migration_code_digest']")&.[]("value"),
     }
-    follow_redirect! if response.redirect?
   end
 
   def stub_vite_layout_helpers

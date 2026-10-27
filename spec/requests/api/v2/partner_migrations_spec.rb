@@ -39,6 +39,24 @@ describe "Partner API migrations", type: :request do
     expect(migration_id).to match(/\A[A-Za-z0-9_-]{21}\z/)
   end
 
+  it "stores the seller's email and profile without saying whether the email has an account" do
+    create(:user, email: "taken@example.com")
+
+    post_migration(external_user_id: "ext-1", products:, email: "Taken@Example.com", profile: { name: "Ada", bio: "3D artist" })
+    existing_keys = response.parsed_body.keys
+    post_migration(external_user_id: "ext-2", products:, email: "new-seller@example.com")
+
+    expect(response.parsed_body.keys).to eq(existing_keys)
+    expect(PartnerMigration.find_by!(external_user_id: "ext-1")).to have_attributes(email: "taken@example.com", profile: { "name" => "Ada", "bio" => "3D artist" })
+  end
+
+  it "rejects an email that is not valid" do
+    post_migration(external_user_id: "ext-1", products:, email: "not-an-email")
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["message"]).to eq("email must be a valid email address with at most 255 characters.")
+  end
+
   it "rejects a missing external user ID" do
     post_migration(products:)
 

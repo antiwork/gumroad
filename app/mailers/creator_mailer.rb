@@ -8,9 +8,18 @@ class CreatorMailer < ApplicationMailer
 
   def partner_migration_finished(partner_migration_id, recipient:)
     @migration = PartnerMigration.find(partner_migration_id)
-    @subject = @migration.status == PartnerMigration::STATUS_COMPLETED ? "Your import is ready to review" : "Your import needs attention"
+    @subject = @migration.status == PartnerMigration::STATUS_COMPLETED ? "Your products are ready to review" : "Some products did not import"
 
     mail to: recipient, subject: @subject
+  end
+
+  def partner_migration_account_setup(partner_migration_id, encrypted_token:)
+    @migration = PartnerMigration.find(partner_migration_id)
+    token = PartnerMigration.decrypt_account_setup_token(encrypted_token)
+    @setup_url = partner_migration_account_setup_url(account_setup_token: token, host: DOMAIN, protocol: PROTOCOL)
+    @subject = "Your Gumroad account is ready"
+
+    mail to: @migration.user.email, subject: @subject
   end
 
   def gumroad_day_fee_saved(seller_id:, to_email: nil)

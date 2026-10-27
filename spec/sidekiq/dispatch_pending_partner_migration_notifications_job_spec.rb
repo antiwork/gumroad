@@ -25,7 +25,7 @@ describe DispatchPendingPartnerMigrationNotificationsJob do
 
     expect(PartnerMigrationNotificationJob.jobs.map { _1["args"] }).to eq([[pending.id]])
     PartnerMigrationNotificationJob.drain
-    expect(ActionMailer::Base.deliveries.sole.subject).to eq("Your import needs attention")
+    expect(ActionMailer::Base.deliveries.sole.subject).to eq("Some products did not import")
     expect(pending.reload.notified_at).to be_present
   end
 end

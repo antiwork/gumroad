@@ -8,6 +8,8 @@ class PartnerMigrationImportJob
   include Sidekiq::Job
   sidekiq_options queue: :long, retry: 5, lock: :until_executed
 
+  AVATAR_DOWNLOAD_DURATION = 1.minute
+
   # Errors that a retry cannot fix. The product is recorded as failed and the import continues.
   # Other errors, such as a network error or PartnerMigration::RemoteFileTransfer::TemporaryError,
   # reach Sidekiq, which retries the job.
@@ -41,6 +43,8 @@ class PartnerMigrationImportJob
         return
       end
 
+      attach_profile_avatar(migration)
+
       # An error that a retry may fix does not hold back the products after it. The job imports them,
       # then raises the first such error, so the Sidekiq retry imports only the products left.
       retry_error = nil
@@ -67,6 +71,30 @@ class PartnerMigrationImportJob
   end
 
   private
+    # Only an account that this import created takes the partner's avatar. A missing or invalid
+    # picture is skipped: the seller can add one in their profile. The first run tries it once, briefly,
+    # so a slow picture never holds back the products or their retries.
+    def attach_profile_avatar(migration)
+      user = migration.user
+      url = migration.profile.to_h["avatar_url"]
+      return if url.blank? || !migration.account_created || user.avatar.attached? || migration.results.present?
+
+      migration.touch
+      PartnerMigration::RemoteFileTransfer.download(url, max_bytes: User::Validations::MAXIMUM_AVATAR_FILE_SIZE, max_duration: AVATAR_DOWNLOAD_DURATION) do |tempfile, filename|
+        content_type = Marcel::MimeType.for(tempfile, name: filename)
+        next unless user.valid_avatar_content_type?(content_type)
+
+        blob = ActiveStorage::Blob.create_and_upload!(io: tempfile, filename:, content_type:)
+        blob.purge unless user.avatar.attach(blob)
+      rescue StandardError
+        blob&.purge
+        raise
+      end
+    # The avatar is optional, so no error from it may stop the products from importing.
+    rescue StandardError => e
+      Rails.logger.info("Partner migration #{migration.id}: avatar not imported (#{e.class})")
+    end
+
     def import_product(migration, index, attributes)
       importer = PartnerMigration::ProductImporter.new(seller: migration.user, attributes:, heartbeat: -> { migration.touch })
       migration.touch

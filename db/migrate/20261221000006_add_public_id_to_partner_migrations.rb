@@ -8,7 +8,8 @@ class AddPublicIdToPartnerMigrations < ActiveRecord::Migration[8.1]
   # utf8mb4_bin still pads trailing spaces; utf8mb4_0900_bin compares the exact bytes.
   EXACT_COLLATION = "utf8mb4_0900_bin"
   INDEX_NAME = "index_partner_migrations_on_public_id"
-  PUBLIC_ID_FORMAT = /\A[A-Za-z0-9_-]{21}\z/
+  PUBLIC_ID_LENGTH = 21
+  PUBLIC_ID_FORMAT = /\A[A-Za-z0-9_-]{#{PUBLIC_ID_LENGTH}}\z/
 
   class PartnerMigrationRow < ActiveRecord::Base
     self.table_name = "partner_migrations"
@@ -18,9 +19,9 @@ class AddPublicIdToPartnerMigrations < ActiveRecord::Migration[8.1]
     PartnerMigrationRow.reset_column_information
     column = connection.columns(:partner_migrations).find { _1.name == "public_id" }
     if column.nil?
-      add_column :partner_migrations, :public_id, :string, limit: 21, collation: EXACT_COLLATION
-    elsif [column.sql_type, column.collation] != ["varchar(21)", EXACT_COLLATION]
-      raise "partner_migrations.public_id exists as #{column.sql_type} #{column.collation}, not varchar(21) #{EXACT_COLLATION}"
+      add_column :partner_migrations, :public_id, :string, limit: PUBLIC_ID_LENGTH, collation: EXACT_COLLATION
+    elsif [column.sql_type, column.collation] != ["varchar(#{PUBLIC_ID_LENGTH})", EXACT_COLLATION]
+      raise "partner_migrations.public_id exists as #{column.sql_type} #{column.collation}, not varchar(#{PUBLIC_ID_LENGTH}) #{EXACT_COLLATION}"
     end
 
     index = connection.indexes(:partner_migrations).find { _1.name == INDEX_NAME }
@@ -35,7 +36,7 @@ class AddPublicIdToPartnerMigrations < ActiveRecord::Migration[8.1]
     return if column&.null == false && index
 
     change_table :partner_migrations, bulk: true do |t|
-      t.change :public_id, :string, limit: 21, null: false, collation: EXACT_COLLATION if column.nil? || column.null
+      t.change :public_id, :string, limit: PUBLIC_ID_LENGTH, null: false, collation: EXACT_COLLATION if column.nil? || column.null
       t.index :public_id, unique: true unless index
     end
   end

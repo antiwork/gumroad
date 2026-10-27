@@ -8,6 +8,11 @@ dispatch_pending_partner_migration_notifications:
   class: DispatchPendingPartnerMigrationNotificationsJob
   description: Re-enqueues finished partner imports whose result email is still pending
 
+resume_stalled_partner_migrations:
+  cron: "*/30 * * * *"
+  class: ResumeStalledPartnerMigrationsJob
+  description: Re-enqueues partner imports whose job stopped without finishing
+
 # Every minute
 dispatch_pending_workflow_installment_schedule_intents:
   cron: "* * * * *" # Every minute

@@ -64,26 +64,21 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     expect(page).to have_content("Texture Pack")
     expect(page).to have_content("and 6 more")
     click_on "Import 11 products"
-    expect(page).to have_content("Importing your products")
-    expect(page).to have_content("This page updates on its own. You can also close it: we email you when the import finishes.")
-    expect(page).not_to have_button("Resume import")
-    expect(page).not_to have_content("Before you sell")
-    status_path = page.current_path
-    migration = PartnerMigration.find_by!(public_id: status_path.split("/").last)
+    expect(page).to have_current_path(products_path)
+    migration = PartnerMigration.sole
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
     visit logout_path
     PartnerMigrationImportJob.new.perform(migration.id)
     PartnerMigrationNotificationJob.new.perform(migration.id)
-    mail = ActionMailer::Base.deliveries.find { _1.subject == "Your import is ready to review" }
-    review_link = Nokogiri::HTML(mail.html_part.body.decoded).css("a").find { _1.text == "Review products" }
-    expect(review_link["href"]).to end_with(partner_migration_status_path(migration.public_id))
+    mail = ActionMailer::Base.deliveries.find { _1.subject == "Your products are ready to review" }
+    review_link = Nokogiri::HTML(mail.html_part.body.decoded).css("a").find { _1.text == "Review drafts" }
+    expect(review_link["href"]).to end_with(products_path)
     visit review_link["href"]
     fill_in "Email", with: seller.email
     fill_in "Password", with: seller.password
     click_on "Login"
 
-    expect(page).to have_content("11 of 11 products imported.")
-    expect(page).to have_link("Review drafts", href: products_path)
+    expect(page).to have_current_path(products_path)
     expect(seller.links.count).to eq(11)
     product = seller.links.find_by!(name: "Texture Pack")
     expect(product).to be_draft
@@ -99,7 +94,7 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     expect(partner_application.partner_sellers.sole.migrated_at).to eq(product.first_published_at)
   end
 
-  it "returns a new account to the export and explains the setup steps" do
+  it "returns an account created at signup to the export and lands it on its drafts" do
     visit export_catalog([product_attributes])
     click_on "Sign up"
     expect(page).to have_content("Sign up to import your product")
@@ -111,44 +106,36 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     expect(page).to have_button("Import 1 product")
     expect(page).to have_content("new-seller@example.com")
     click_on "Import 1 product"
-    expect(page).to have_content("Importing your products")
-    status_path = page.current_path
+    expect(page).to have_current_path(products_path)
     migration = PartnerMigration.last
     PartnerMigrationImportJob.new.perform(migration.id)
-    visit status_path
+    visit products_path
 
-    expect(page).to have_content("Your products are ready to review")
-    expect(page).to have_link("Confirm your email", href: settings_main_path)
-    expect(page).to have_link("Set up payouts", href: settings_payments_path)
-    expect(page).to have_link("Update your profile", href: profile_path)
+    expect(page).to have_content("Texture Pack")
     expect(migration.reload.user.email).to eq("new-seller@example.com")
     expect(migration.user.links.sole).to be_draft
     expect(partner_application.partner_sellers.sole.migrated_at).to be_nil
   end
 
-  it "retries a failed file after the partner refreshes its URL without duplicating successful products" do
+  it "retries a failed file by itself when the partner refreshes its URL, without duplicating successful products" do
     stub_request(:get, file_url).to_return(status: 403)
     catalog = [product_attributes, { name: "Brush Set", price: 500 }]
     visit export_catalog(catalog)
     log_in
     click_on "Import 2 products"
-    expect(page).to have_content("Importing your products")
-    status_path = page.current_path
+    expect(page).to have_current_path(products_path)
     migration = PartnerMigration.last
     PartnerMigrationImportJob.new.perform(migration.id)
-    visit status_path
-    expect(page).to have_content("Some products did not import")
-    expect(page).to have_content("1 of 2 products imported, 1 did not import.")
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_FAILED)
+    expect(seller.links.pluck(:name)).to eq(["Brush Set"])
 
     refreshed_url = "#{file_url}?signature=refreshed"
     stub_request(:get, refreshed_url).to_return(status: 200, body: file_bytes)
     export_catalog([product_attributes.merge(files: [{ url: refreshed_url, display_name: "Texture" }]), catalog.last])
-    click_on "Retry failed products"
-    expect(page).to have_content("Importing your products")
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_CLAIMED)
     PartnerMigrationImportJob.new.perform(migration.id)
-    visit status_path
 
-    expect(page).to have_content("2 of 2 products imported.")
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_COMPLETED)
     expect(seller.links.pluck(:name)).to contain_exactly("Texture Pack", "Brush Set")
     expect(PartnerMigration.count).to eq(1)
   end
