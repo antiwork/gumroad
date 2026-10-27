@@ -1667,7 +1667,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_21_000002) do
   create_table "partner_sellers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.integer "oauth_application_id", null: false
     t.bigint "user_id", null: false
-    t.string "external_user_id", null: false
+    t.string "external_user_id", null: false, collation: "utf8mb4_0900_bin"
     t.datetime "migrated_at"
     t.datetime "deleted_at"
     t.datetime "created_at", null: false

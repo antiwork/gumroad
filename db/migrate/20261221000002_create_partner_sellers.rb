@@ -5,7 +5,9 @@ class CreatePartnerSellers < ActiveRecord::Migration[8.1]
     create_table :partner_sellers do |t|
       t.integer :oauth_application_id, null: false
       t.bigint :user_id, null: false
-      t.string :external_user_id, null: false
+      # Partner user IDs are opaque, so "aB3x" and "Ab3X", or "id" and "id ", are different users.
+      # utf8mb4_0900_bin compares the exact bytes; the table's collation ignores case, accents and trailing spaces.
+      t.string :external_user_id, null: false, collation: "utf8mb4_0900_bin"
       t.datetime :migrated_at
       t.datetime :deleted_at
       t.timestamps
