@@ -1025,6 +1025,18 @@ describe ProductFile do
     end
   end
 
+  describe "marking a file deleted" do
+    it "marks its transcoded videos deleted so their HLS renditions are removed from S3" do
+      product_file = create(:streamable_video, is_transcoded_for_hls: true)
+      transcoded_video = create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key)
+
+      product_file.mark_deleted
+
+      expect(transcoded_video.reload).to be_deleted
+      expect(product_file.reload.is_transcoded_for_hls?).to be(false)
+    end
+  end
+
   describe "#delete!" do
     it "deletes all associated subtitle files for an mp4 file" do
       mp4_file = create(:product_file)

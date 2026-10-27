@@ -81,6 +81,9 @@ class ProductFile < ApplicationRecord
   validate :thumbnail_is_vaild
 
   after_save :invalidate_product_cache
+  # Editor removals, product deletion and build replacement each mark a file deleted differently, so
+  # its HLS renditions are retired here and RemoveDeletedFilesFromS3Job removes them with the source.
+  after_save :delete_transcoded_videos, if: -> { saved_change_to_deleted_at?(from: nil) }
   after_commit :schedule_rename_in_storage, on: :update, if: :saved_change_to_display_name?
   after_commit :update_product_filetypes_index, on: :update, if: -> { link.present? && saved_change_to_filetype? }
   # A type detected for a key without an extension adds the file to ZIPs and renames its entry, so stale
@@ -628,6 +631,10 @@ class ProductFile < ApplicationRecord
 
     def invalidate_product_cache
       link.invalidate_cache if link.present?
+    end
+
+    def delete_transcoded_videos
+      transcoded_videos.alive.each(&:mark_deleted!)
     end
 
     def thumbnail_is_vaild

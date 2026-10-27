@@ -52,6 +52,25 @@ describe RemoveDeletedFilesFromS3Job do
     expect(subtitle_file_2.reload.deleted_from_cdn_at).to be_nil
   end
 
+  it "removes the HLS renditions of a recently deleted transcoded video" do
+    transcoded_video = create(:transcoded_video, deleted_at: 26.hours.ago)
+    hls_dir = transcoded_video.transcoded_video_key.delete_suffix("index.m3u8")
+    allow_any_instance_of(described_class).to receive(:gather_transcoded_video_keys).and_return(["#{hls_dir}index.m3u8", "#{hls_dir}index_480p.m3u8"])
+
+    expect_any_instance_of(described_class).to receive(:delete_s3_objects!).with(["#{hls_dir}index.m3u8", "#{hls_dir}index_480p.m3u8"])
+    described_class.new.perform
+    expect(transcoded_video.reload.deleted_from_cdn_at).to be_present
+  end
+
+  it "keeps HLS renditions that another file's alive transcoded video still uses" do
+    transcoded_video = create(:transcoded_video, deleted_at: 26.hours.ago)
+    create(:transcoded_video, original_video_key: transcoded_video.original_video_key, transcoded_video_key: transcoded_video.transcoded_video_key)
+
+    expect_any_instance_of(described_class).not_to receive(:delete_s3_objects!)
+    described_class.new.perform
+    expect(transcoded_video.reload.deleted_from_cdn_at).to be_nil
+  end
+
   it "notifies error tracker and continues when there's an error removing a file" do
     instance = described_class.new
     product_file_1 = create(:product_file, deleted_at: 26.hours.ago)
