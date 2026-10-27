@@ -83,12 +83,13 @@ describe "Partner migration onboarding", type: :request do
     sign_in seller
     get partner_migration_path(migration_code: code)
     get partner_migration_path
-    form = Nokogiri::HTML(response.body)
+    form = Nokogiri::HTML(response.body).at_css("form[action='#{partner_migration_path}']")
 
     get partner_migration_path(migration_code: other_code)
     post partner_migration_path, params: {
       authenticity_token: form.at_css("input[name='authenticity_token']")["value"],
       partner_migration_id: form.at_css("input[name='partner_migration_id']")["value"],
+      partner_migration_code_digest: form.at_css("input[name='partner_migration_code_digest']")["value"],
     }
 
     expect(response).to have_http_status(:unprocessable_entity)
@@ -104,6 +105,23 @@ describe "Partner migration onboarding", type: :request do
     claim
 
     expect(response).to have_http_status(:unprocessable_entity)
+    expect(migration.reload).to be_pending
+  end
+
+  it "requires a new confirmation when another tab opens an updated export for the same seller" do
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    get partner_migration_path
+    form = Nokogiri::HTML(response.body).at_css("form[action='#{partner_migration_path}']")
+    old_params = form.css("input").to_h { [_1["name"], _1["value"]] }
+    products, = PartnerMigration.normalize_products([{ name: "Updated catalog", price: 500 }])
+    _migration, refreshed_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: migration.external_user_id, products:)
+    get partner_migration_path(migration_code: refreshed_code)
+
+    post partner_migration_path, params: old_params
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response.body).to include("This page is out of date.")
     expect(migration.reload).to be_pending
   end
 
@@ -129,11 +147,78 @@ describe "Partner migration onboarding", type: :request do
     expect(partner_application.partner_sellers.pluck(:external_user_id, :user_id)).to contain_exactly(["ext-1", seller.id], ["EXT-1", other_seller.id])
   end
 
+  it "keeps the migration when the seller switches accounts" do
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
+    form = Nokogiri::HTML(response.body).at_css("form[action='#{switch_partner_migration_account_path}']")
+
+    post switch_partner_migration_account_path, params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
+
+    expect(response).to redirect_to(login_path(next: partner_migration_path))
+    sign_in create(:named_user)
+    get partner_migration_path
+    expect(response.body).to include("Import 2 products from", "Example App")
+  end
+
+  it "keeps the return path after a failed login" do
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
+    follow_redirect!
+    doc = Nokogiri::HTML(response.body)
+
+    post login_path, params: { user: { login_identifier: seller.email, password: "wrong" }, next: partner_migration_path, authenticity_token: doc.at_css("meta[name='csrf-token']")["content"] }
+
+    expect(response).to redirect_to(login_path(next: partner_migration_path))
+  end
+
+  it "shows results on a persistent page without the onboarding code" do
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    claim
+    status_address = request.path
+    PartnerMigrationImportJob.new.perform(migration.id)
+
+    get status_address
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include("Import complete", "2 of 2 products imported", "Review product")
+    expect(status_address).not_to include(code)
+    sign_out seller
+    sign_in create(:named_user)
+    get status_address
+    expect(response).to have_http_status(:not_found)
+  end
+
+  it "shows product errors and media warnings without losing successful products" do
+    migration.claim!(seller)
+    product = create(:product, user: seller, name: "Texture Pack")
+    migration.update!(status: PartnerMigration::STATUS_FAILED, results: {
+                        "0" => { "product_id" => product.external_id, "warnings" => ["Cover could not be imported."] },
+                        "1" => { "error" => "The file link expired." },
+                      })
+    sign_in seller
+
+    get partner_migration_status_path(migration.status_id)
+
+    expect(response.body).to include("Import needs attention", "1 of 2 products imported", "Cover could not be imported.", "The file link expired.", "Retry failed products")
+    form = Nokogiri::HTML(response.body).at_css("form[action='#{retry_partner_migration_path(migration.status_id)}']")
+    post retry_partner_migration_path(migration.status_id), params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
+    expect(response).to have_http_status(:see_other)
+    expect(migration.reload.results).to eq("0" => { "product_id" => product.external_id, "warnings" => ["Cover could not be imported."] })
+  end
+
   def claim
     get partner_migration_path
     doc = Nokogiri::HTML(response.body)
-    authenticity_token = doc.at_css("input[name='authenticity_token']")&.[]("value") || doc.at_css("meta[name='csrf-token']")["content"]
-    post partner_migration_path, params: { authenticity_token:, partner_migration_id: doc.at_css("input[name='partner_migration_id']")&.[]("value") }
+    form = doc.at_css("form[action='#{partner_migration_path}']")
+    authenticity_token = form&.at_css("input[name='authenticity_token']")&.[]("value") || doc.at_css("meta[name='csrf-token']")["content"]
+    post partner_migration_path, params: {
+      authenticity_token:,
+      partner_migration_id: form&.at_css("input[name='partner_migration_id']")&.[]("value"),
+      partner_migration_code_digest: form&.at_css("input[name='partner_migration_code_digest']")&.[]("value"),
+    }
+    follow_redirect! if response.redirect?
   end
 
   def stub_vite_layout_helpers

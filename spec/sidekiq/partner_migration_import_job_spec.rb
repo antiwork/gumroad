@@ -82,7 +82,17 @@ describe PartnerMigrationImportJob do
       "0" => { "error" => "The file download failed with HTTP 404." },
       "1" => { "product_id" => seller.links.sole.external_id },
     )
-    expect(migration.status).to eq(PartnerMigration::STATUS_COMPLETED)
+    expect(migration.status).to eq(PartnerMigration::STATUS_FAILED)
+  end
+
+  it "imports a catalog above the daily editor quota", :enforce_product_creation_limit do
+    migration = create_claimed_migration(Array.new(11) { |index| { name: "Asset #{index}", price: 500 } })
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.links.count).to eq(11)
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_COMPLETED)
+    expect(migration.results.values).to all(include("product_id"))
   end
 
   it "keeps the product and returns a warning when a cover cannot be imported" do

@@ -17,8 +17,19 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
 
     render json: {
       success: true,
+      migration_id: migration.status_id,
+      status: migration.status,
       onboarding_url: partner_migration_url(migration_code: code, host: DOMAIN, protocol: PROTOCOL),
       expires_at: migration.expires_at.iso8601,
-    }, status: :created
+    }, status: migration.previously_new_record? ? :created : :ok
+  rescue PartnerMigration::CatalogConflict => e
+    render json: { success: false, message: e.message }, status: :conflict
+  end
+
+  def show
+    migration = PartnerMigration.find_signed(params[:id], purpose: :partner_migration)
+    return head :not_found unless migration&.oauth_application_id == current_partner_application.id
+
+    render json: { success: true, status: migration.status, **migration.progress, results: migration.results, failure_reason: migration.failure_reason }
   end
 end

@@ -60,6 +60,10 @@ class LinkPolicy < ApplicationPolicy
     update?
   end
 
+  def remove_file?
+    update?
+  end
+
   def update_purchases_content?
     update?
   end

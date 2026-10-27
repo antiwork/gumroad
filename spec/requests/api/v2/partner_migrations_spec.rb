@@ -69,4 +69,50 @@ describe "Partner API migrations", type: :request do
 
     expect(response).to have_http_status(:forbidden)
   end
+
+  it "returns the same migration when the partner sends an export again" do
+    post_migration(external_user_id: "ext-1", products:)
+    first_id = response.parsed_body.fetch("migration_id")
+
+    expect { post_migration(external_user_id: "ext-1", products:) }.not_to change { PartnerMigration.count }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("migration_id")).to eq(first_id)
+  end
+
+  it "keeps the accepted catalog when a changed export conflicts with it" do
+    post_migration(external_user_id: "ext-1", products:)
+    migration = PartnerMigration.last
+    migration.claim!(create(:user))
+
+    post_migration(external_user_id: "ext-1", products: [{ name: "Another product", price: 1500 }])
+
+    expect(response).to have_http_status(:conflict)
+    expect(migration.reload.products.first["name"]).to eq("Texture Pack")
+  end
+
+  it "rejects an option name that does not fit the product model" do
+    categories = [{ title: "License", variants: [{ name: "x" * (PartnerMigration::MAX_NAME_LENGTH + 1) }] }]
+
+    post_migration(external_user_id: "ext-1", products: [{ name: "Asset", price: 1500, variant_categories: categories }])
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["message"]).to include("products[0]", "variant name")
+  end
+
+  it "returns import progress only to the partner that created it" do
+    post_migration(external_user_id: "ext-1", products:)
+    migration_id = response.parsed_body.fetch("migration_id")
+
+    get "/api/v2/partner/migrations/#{migration_id}", params: { access_token: token.token }
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).to include("status" => "pending", "total" => 1, "imported" => 0, "remaining" => 1)
+    another_application = create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api")
+    another_token = create("doorkeeper/access_token", application: another_application, resource_owner_id: nil, scopes: "partner_api")
+
+    get "/api/v2/partner/migrations/#{migration_id}", params: { access_token: another_token.token }
+
+    expect(response).to have_http_status(:not_found)
+  end
 end

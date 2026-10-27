@@ -29,6 +29,7 @@ const PASSKEY_ERROR = "We couldn't sign you in with that passkey. Please try aga
 type PageProps = {
   email: string | null;
   application_name: string | null;
+  migration_product_count?: number;
   authenticity_token: string;
   passkey_login_options: PasskeyAuthenticationOptions | null;
   is_gumroad_mobile_app: boolean;
@@ -47,6 +48,7 @@ function LoginPage() {
   const {
     email: initialEmail,
     application_name,
+    migration_product_count,
     authenticity_token,
     passkey_login_options,
     is_gumroad_mobile_app,
@@ -165,6 +167,7 @@ function LoginPage() {
     <Layout
       header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
       headerActions={<Link href={Routes.signup_path({ next })}>Sign up</Link>}
+      migrationProductCount={migration_product_count}
     >
       <form onSubmit={handleSubmit}>
         <SocialAuth />

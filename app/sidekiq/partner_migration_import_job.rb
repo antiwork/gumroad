@@ -24,7 +24,8 @@ class PartnerMigrationImportJob
     # The claim may not have replicated yet.
     ApplicationRecord.connected_to(role: :writing) do
       migration = PartnerMigration.find(partner_migration_id)
-      return unless migration.status == PartnerMigration::STATUS_CLAIMED
+      # A manual retry enqueues inside its transaction, so wait for that transaction to commit.
+      return unless migration.with_lock { migration.status == PartnerMigration::STATUS_CLAIMED }
 
       # An error that a retry may fix does not hold back the products after it. The job imports them,
       # then raises the first such error, so the Sidekiq retry imports only the products left.
@@ -45,7 +46,8 @@ class PartnerMigrationImportJob
       end
       raise retry_error if retry_error
 
-      migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current)
+      status = migration.results.to_h.values.any? { _1["error"].present? } ? PartnerMigration::STATUS_FAILED : PartnerMigration::STATUS_COMPLETED
+      migration.update!(status:, completed_at: Time.current)
     end
   end
 

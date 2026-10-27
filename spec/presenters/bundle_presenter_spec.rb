@@ -103,6 +103,33 @@ describe BundlePresenter do
       expect(props).to include(:sales_count_for_inventory, :ratings)
       expect(props[:currency_type]).to eq(bundle.price_currency_type)
     end
+
+    it "lists the files the bundle itself still carries, so the editor can remove them" do
+      file = create(
+        :product_file,
+        link: bundle,
+        url: "#{S3_BASE_URL}specs/vol-1.zip",
+        display_name: "vol-1.zip",
+        size: 139.megabytes
+      )
+
+      expect(described_class.new(bundle:).edit_product_props[:bundle][:retained_files]).to eq(
+        [
+          {
+            id: file.external_id,
+            name: "vol-1.zip",
+            filetype: "zip",
+            size: "139 MB",
+          }
+        ]
+      )
+    end
+
+    it "omits files that are no longer attached to the bundle" do
+      create(:product_file, link: bundle, deleted_at: Time.current)
+
+      expect(described_class.new(bundle:).edit_product_props[:bundle][:retained_files]).to eq([])
+    end
   end
 
   describe "#edit_content_props" do

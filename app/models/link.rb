@@ -303,6 +303,7 @@ class Link < ApplicationRecord
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
   after_commit :submit_to_indexnow, on: :update, if: :indexnow_submission_needed?
+  after_update -> { PartnerMigration.record_first_publication(self) }, if: -> { saved_change_to_first_published_at? && first_published_at.present? }
 
   enum :subscription_duration, %i[monthly yearly quarterly biannually every_two_years]
   enum :purchase_type, %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
@@ -883,7 +884,11 @@ class Link < ApplicationRecord
   end
 
   # Public: Returns the file info (size, dimensions, etc) if there's only one file associated with this product.
+  # A bundle's own files are not what its page describes — buyers get its members' files — so one of
+  # them must not stand in for the bundle's size.
   def multifile_aware_product_file_info
+    return {} if is_bundle?
+
     multifile_aware_product_file_info = {}
     if alive_product_files.count == 1
       multifile_aware_product_file_info = alive_product_files.first.file_info(require_shipping)

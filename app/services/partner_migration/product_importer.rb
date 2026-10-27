@@ -56,7 +56,8 @@ class PartnerMigration::ProductImporter
     )
 
     ActiveRecord::Base.transaction do
-      product.save!
+      # The partner endpoint bounds the catalog; the daily editor quota must not truncate an import.
+      Link.bypass_product_creation_limit { product.save! }
       product.set_template_properties_if_needed
       product.save_tags!(attributes["tags"]) if attributes["tags"].present?
       create_variant_categories!(product)
