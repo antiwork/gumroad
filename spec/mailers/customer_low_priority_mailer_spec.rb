@@ -66,20 +66,6 @@ describe CustomerLowPriorityMailer do
       end
     end
 
-    context "non-USD memberships" do
-      it "shows the renewal price in the display currency without converting it again" do
-        purchase = create(:membership_purchase)
-        purchase.update!(displayed_price_currency_type: "twd", displayed_price_cents: 297_00, rate_converted_to_usd: "31.555814")
-        subscription = purchase.subscription
-        allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(297_00)
-
-        mail = CustomerLowPriorityMailer.subscription_renewal_reminder(subscription.id)
-
-        expect(mail.body.encoded).to include "NT$297"
-        expect(mail.body.encoded).not_to include "9,372"
-      end
-    end
-
     context "installment plans" do
       let(:installment_plan_purchase) { create(:installment_plan_purchase) }
       let(:subscription) { installment_plan_purchase.subscription }
@@ -249,6 +235,15 @@ describe CustomerLowPriorityMailer do
         expect(mail.body.encoded).to include "You're paying $5."
         expect(mail.body.encoded).not_to include "You're paying $10."
       end
+
+      it "shows a non-USD renewal price in the display currency without converting it again" do
+        purchase = create(:membership_purchase)
+        purchase.update!(displayed_price_currency_type: "twd", displayed_price_cents: 297_00, rate_converted_to_usd: "31.555814")
+
+        mail = CustomerLowPriorityMailer.subscription_renewal_reminder(purchase.subscription.id)
+
+        expect(mail.body.encoded).to include "You're paying NT$297 a month."
+      end
     end
 
     context "installment plans" do
@@ -285,6 +280,15 @@ describe CustomerLowPriorityMailer do
       expect(mail.body.encoded).to include "$9.99 a month"
       expect(mail.body.encoded).to include subscription.end_time_of_subscription.strftime("%B %e, %Y")
       expect(mail.body.encoded).not_to include "plus taxes"
+    end
+
+    it "shows both prices in the display currency without converting them again" do
+      purchase.update!(displayed_price_currency_type: "twd", displayed_price_cents: 297_00, rate_converted_to_usd: "31.555814")
+
+      mail = CustomerLowPriorityMailer.subscription_price_change_notification(subscription_id: subscription.id, new_price: 397_00)
+
+      expect(mail.body.encoded).to include "NT$297 a month"
+      expect(mail.body.encoded).to include "NT$397 a month"
     end
 
     it "includes tax details if applicable" do
