@@ -156,6 +156,12 @@ const ResourceSubscriptionsDescription = () => (
         <br />
         <strong>restarted_at</strong>: timestamp at which the subscription was restarted
       </p>
+
+      <p>
+        <em>Testing:</em> refund, dispute and dispute_won events only fire from real charges. A test purchase of your
+        own product creates no charge, so it cannot be refunded or disputed. To exercise any handler without moving
+        money, use <a href="#post-/resource_subscriptions/:resource_subscription_id/test_event">send a test event</a>.
+      </p>
     </div>
   </>
 );
@@ -235,6 +241,42 @@ export const GetResourceSubscriptions = () => (
     "resource_name": "sale",
     "post_url": "https://postatmebro.com"
   }, {...}, {...}]
+}`}
+    </CodeSnippet>
+  </ApiEndpoint>
+);
+
+export const TestResourceSubscription = () => (
+  <ApiEndpoint
+    method="post"
+    path="/resource_subscriptions/:resource_subscription_id/test_event"
+    description={
+      <>
+        Send a test event to a resource subscription's post_url. The payload uses the subscription's resource_name and
+        is marked with <code>test: true</code>. It is built from your most recent matching event when one exists
+        (source "last_event"), otherwise from sample data with the documented fields (source "sample"). It is a copy
+        of the data only: no purchase, refund or dispute is created, and the sale is not changed. Only subscriptions
+        created by the calling application can be tested.
+      </>
+    }
+  >
+    <CodeSnippet caption="cURL example">
+      {`curl https://api.gumroad.com/v2/resource_subscriptions/G_-mnBf9b1j9A7a4ub4nFQ==/test_event \\
+  -d "access_token=ACCESS_TOKEN" \\
+  -X POST`}
+    </CodeSnippet>
+    <CodeSnippet caption="Example response:">
+      {`{
+  "success": true,
+  "message": "A test refund event has been queued for https://postatmebro.com.",
+  "source": "sample",
+  "payload": {
+    "sale_id": "sample-sale-id",
+    "refunded": true,
+    "resource_name": "refund",
+    "test": true,
+    ...
+  }
 }`}
     </CodeSnippet>
   </ApiEndpoint>

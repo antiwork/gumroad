@@ -65,6 +65,7 @@ import {
   CreateResourceSubscription,
   DeleteResourceSubscription,
   GetResourceSubscriptions,
+  TestResourceSubscription,
 } from "$app/components/ApiDocumentation/Endpoints/ResourceSubscriptions";
 import {
   MarkSaleAsShipped,
@@ -265,6 +266,7 @@ export default function Api() {
               <ApiResource name="Resource subscriptions" id="resource-subscriptions">
                 <CreateResourceSubscription />
                 <GetResourceSubscriptions />
+                <TestResourceSubscription />
                 <DeleteResourceSubscription />
               </ApiResource>
 
