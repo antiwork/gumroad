@@ -33,7 +33,7 @@ const PING_PARAMETERS: PingParameter[] = [
   { name: "recurrence", description: "If present, the recurrence of the payment option chosen by the buyer such as 'monthly', 'yearly', etc" },
   { name: "variants", description: <>If present, a dictionary <Code>{"{'size' : 'large', 'color' : 'red'}"}</Code></> },
   { name: "offer_code", description: "If present" },
-  { name: "test", description: "If you are buying your own product, for testing purposes" },
+  { name: "test", description: "true if you bought your own product, or for a test ping or test event" },
   { name: "custom_fields", description: <>If present, a dictionary <Code>{"{'name' : 'john smith', 'spouse name' : 'jane smith'}"}</Code></> },
   { name: "shipping_information", description: "If present, a dictionary" },
   { name: "is_recurring_charge", description: "If relevant, a boolean" },
@@ -103,6 +103,14 @@ const PublicPing = () => (
               Because the payload is unsigned and deliveries can be dropped once the retries run out, treat a ping as a trigger
               rather than as data: take <Code>sale_id</Code>, read the sale back through the API, and reconcile periodically
               against your own records.
+            </p>
+
+            <p>
+              Testing: "Send test ping" in your account settings posts your most recent sale with <Code>test</Code> set to{" "}
+              <Code>true</Code>. Refund and dispute pings only fire from real charges. Buying your own product records a test
+              purchase with no charge, which cannot be refunded or disputed. To exercise refund, dispute or dispute_won
+              handlers without moving money, send a test event to that{" "}
+              <a href="/api#resource-subscriptions">resource subscription</a>.
             </p>
 
             <p>In each request, Gumroad sends the parameters in the table below.</p>

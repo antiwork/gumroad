@@ -149,7 +149,7 @@ class ProductPresenter
     scope
         .limit(existing_product_files_limit)
         .order(id: :desc)
-        .includes(:alive_subtitle_files, thumbnail_attachment: :blob).map { _1.as_json(existing_product_file: true) }
+        .includes(:alive_subtitle_files, :product_build, thumbnail_attachment: :blob).map { _1.as_json(existing_product_file: true) }
   end
 
   def edit_props

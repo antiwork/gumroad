@@ -95,6 +95,15 @@ describe ProductFilesUtilityController, :vcr do
       expect(response.parsed_body["files"]).to eq(product.product_files.map { { "url" => "https://example.com/#{_1.display_name}.pdf", "filename" => _1.s3_filename } })
     end
 
+    it "returns the name with the detected extension for a file stored without one" do
+      file = create(:readable_document, link: product, url: "#{S3_BASE_URL}attachments/#{SecureRandom.hex}/original/Synthetic Book")
+      allow_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file, allow_unstamped: true).and_return("https://example.com/file")
+
+      get :download_product_files, format: :json, params: { product_file_ids: [file.external_id], product_id: product.external_id }
+
+      expect(response.parsed_body["files"].sole["filename"]).to eq("Synthetic Book.pdf")
+    end
+
     it "redirects to the first product file if the format is HTML" do
       file = create(:product_file, link: product)
       expect_any_instance_of(UrlRedirect).to receive(:signed_location_for_file).with(file, allow_unstamped: true).and_return("https://example.com/file.srt")

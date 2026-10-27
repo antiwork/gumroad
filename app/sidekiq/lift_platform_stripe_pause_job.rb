@@ -233,10 +233,14 @@ class LiftPlatformStripePauseJob
       end
     end
 
+    # A missing reason is not a different cause: `Payment#sync_with_stripe` marks the no-transfer path
+    # failed without one, which leaves `failure_reason` nil while `error_message` keeps Stripe's
+    # capability message. That message is the evidence the pause caused the failure, so it is accepted
+    # on its own; any other message with a nil reason still keeps the hold.
     def caused_by_platform_pause?(payment, lifted_at_by_account)
       lifted_at = lifted_at_by_account[payment.stripe_connect_account_id]
       payment.processor == PayoutProcessorType::STRIPE &&
-        payment.failure_reason == Payment::FailureReason::CANNOT_PAY &&
+        payment.failure_reason.in?([Payment::FailureReason::CANNOT_PAY, nil]) &&
         payment.error_message.to_s.match?(StripePayoutProcessor::MISSING_CAPABILITY_MESSAGE) &&
         lifted_at.present? && payment.created_at <= lifted_at
     end

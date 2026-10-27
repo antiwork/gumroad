@@ -1889,6 +1889,28 @@ describe UrlRedirectsController, inertia: true do
       @token = create(:url_redirect, purchase: create(:purchase, link: @product)).token
     end
 
+    context "when a file typed from its bytes is stored without an extension" do
+      let(:file) do
+        key = "attachments/#{SecureRandom.hex}/original/Synthetic Book"
+        Aws::S3::Resource.new.bucket(S3_BUCKET).object(key).put(body: File.binread(Rails.root.join("spec/support/fixtures/billion-dollar-company-chapter-0.pdf")))
+        create(:product_file, link: @product, url: "#{S3_BASE_URL}#{key}").tap(&:analyze)
+      end
+
+      it "downloads under a name with the detected extension" do
+        get :download_product_files, params: { product_file_ids: [file.external_id], id: @token }
+
+        download = Net::HTTP.get_response(URI(response.location))
+        expect(download).to be_a(Net::HTTPOK)
+        expect(download["Content-Disposition"]).to eq('attachment; filename="Synthetic Book.pdf"')
+      end
+
+      it "returns the name with the extension for Dropbox" do
+        get :download_product_files, format: :json, params: { product_file_ids: [file.external_id], id: @token }
+
+        expect(response.parsed_body["files"].sole["filename"]).to eq("Synthetic Book.pdf")
+      end
+    end
+
     it "returns a 404 if no files exist" do
       expect { get :download_product_files, format: :json, params: { product_file_ids: [], id: @token } }.to raise_error(ActionController::RoutingError)
       expect { get :download_product_files, format: :json, params: { product_file_ids: ["non-existent"], id: @token } }.to raise_error(ActionController::RoutingError)

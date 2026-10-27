@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::V2::ResourceSubscriptionsController < Api::V2::BaseController
-  before_action(only: [:index, :create, :destroy]) { doorkeeper_authorize! :view_sales }
+  before_action(only: [:index, :create, :destroy, :test_event]) { doorkeeper_authorize! :view_sales }
 
   def index
     resource_name = params[:resource_name]
@@ -46,6 +46,22 @@ class Api::V2::ResourceSubscriptionsController < Api::V2::BaseController
     else
       error_with_object(:resource_subscription, nil)
     end
+  end
+
+  # Posts a sample payload marked test: true to this subscription's own post_url. Never touches a
+  # purchase or charge, so refund/dispute handlers can be exercised without moving money.
+  def test_event
+    resource_subscription = current_resource_owner.resource_subscriptions.alive
+      .where(oauth_application_id: doorkeeper_token.application_id)
+      .find_by_external_id(params[:id])
+    return error_with_object(:resource_subscription, nil) if resource_subscription.nil?
+
+    test_event = ResourceSubscription::TestEvent.new(resource_subscription)
+    test_event.deliver
+    render_response(true,
+                    message: "A test #{resource_subscription.resource_name} event has been queued for #{resource_subscription.post_url}.",
+                    source: test_event.from_last_event? ? "last_event" : "sample",
+                    payload: test_event.payload)
   end
 
   def error_with_subscription_resource(resource_name)

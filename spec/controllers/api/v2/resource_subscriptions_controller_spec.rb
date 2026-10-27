@@ -254,4 +254,93 @@ describe Api::V2::ResourceSubscriptionsController do
       expect(ResourceSubscription.last.deleted_at).to be_present
     end
   end
+
+  describe "POST 'test_event'" do
+    let(:product) { create(:product, user: @user) }
+
+    it "requires the view_sales scope" do
+      resource_subscription = create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "refund")
+      token = create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "edit_products")
+
+      post :test_event, params: { access_token: token.token, id: resource_subscription.external_id }
+
+      expect(response.status).to eq(403)
+      expect(PostToIndividualPingEndpointWorker.jobs).to be_empty
+    end
+
+    it "refuses another seller's subscription" do
+      other_user = create(:user)
+      resource_subscription = create(:resource_subscription, user: other_user, oauth_application: @app, resource_name: "refund")
+
+      post :test_event, params: @params.merge(id: resource_subscription.external_id)
+
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["message"]).to eq("The resource_subscription was not found.")
+      expect(PostToIndividualPingEndpointWorker.jobs).to be_empty
+    end
+
+    it "refuses a subscription created by another application" do
+      another_app = create(:oauth_application, owner: create(:user))
+      resource_subscription = create(:resource_subscription, user: @user, oauth_application: another_app, resource_name: "refund")
+
+      post :test_event, params: @params.merge(id: resource_subscription.external_id)
+
+      expect(response.parsed_body["success"]).to be(false)
+      expect(PostToIndividualPingEndpointWorker.jobs).to be_empty
+    end
+
+    it "refuses a deleted subscription" do
+      resource_subscription = create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "refund", deleted_at: Time.current)
+
+      post :test_event, params: @params.merge(id: resource_subscription.external_id)
+
+      expect(response.parsed_body["success"]).to be(false)
+      expect(PostToIndividualPingEndpointWorker.jobs).to be_empty
+    end
+
+    it "posts a sample refund payload to only this subscription's post_url without touching any purchase" do
+      resource_subscription = create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "refund", post_url: "https://example.com/refunds")
+      create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "refund", post_url: "https://example.com/other")
+      @user.update!(notification_endpoint: "https://example.com/ping")
+
+      expect do
+        post :test_event, params: @params.merge(id: resource_subscription.external_id)
+      end.to not_change { Purchase.count }.and not_change { Refund.count }.and not_change { Dispute.count }
+
+      body = response.parsed_body
+      expect(body["success"]).to be(true)
+      expect(body["source"]).to eq("sample")
+      expect(body["payload"]).to include("resource_name" => "refund", "test" => true, "refunded" => true, "sale_id" => "sample-sale-id")
+      expect(PostToPingEndpointsWorker.jobs).to be_empty
+      expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(1)
+      url, params, content_type, user_id = PostToIndividualPingEndpointWorker.jobs.first["args"]
+      expect(url).to eq("https://example.com/refunds")
+      expect(params).to include("resource_name" => "refund", "test" => true)
+      expect(content_type).to eq(resource_subscription.content_type)
+      expect(user_id).to eq(@user.id)
+    end
+
+    it "uses the seller's last refunded sale when there is one and leaves it unchanged" do
+      purchase = create(:refunded_purchase, link: product, seller: @user)
+      resource_subscription = create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "refund")
+
+      expect do
+        post :test_event, params: @params.merge(id: resource_subscription.external_id)
+      end.to not_change { purchase.reload.updated_at }.and not_change { Refund.count }
+
+      body = response.parsed_body
+      expect(body["source"]).to eq("last_event")
+      expect(body["payload"]).to include("sale_id" => ObfuscateIds.encrypt(purchase.id), "resource_name" => "refund", "test" => true, "refunded" => true)
+    end
+
+    it "uses the seller's last disputed sale for a dispute subscription" do
+      purchase = create(:purchase, link: product, seller: @user, chargeback_date: 1.day.ago)
+      resource_subscription = create(:resource_subscription, user: @user, oauth_application: @app, resource_name: "dispute")
+
+      post :test_event, params: @params.merge(id: resource_subscription.external_id)
+
+      expect(response.parsed_body["source"]).to eq("last_event")
+      expect(response.parsed_body["payload"]).to include("sale_id" => ObfuscateIds.encrypt(purchase.id), "disputed" => true, "resource_name" => "dispute", "test" => true)
+    end
+  end
 end

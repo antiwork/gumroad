@@ -354,3 +354,19 @@ describe("FileList", () => {
     });
   });
 });
+
+describe("FileRow web build label", () => {
+  it("says a promoted build's zip is a web build, before the size", () => {
+    renderFileRow({
+      ...videoFile({ extension: "ZIP", stream_url: null, file_size: 2048, web_build: { number: 3, status: "live" } }),
+    });
+
+    expect(screen.getByText("Web build v3")).toBeTruthy();
+  });
+
+  it("leaves a file the seller uploaded by hand unlabelled", () => {
+    renderFileRow(videoFile({ extension: "ZIP", stream_url: null, file_size: 2048 }));
+
+    expect(screen.queryByText(/Web build/u)).toBeNull();
+  });
+});

@@ -253,7 +253,7 @@ class CustomerMailer < ApplicationMailer
     temp_file = Tempfile.new
     s3_retrievable.s3_object.download_file(temp_file.path)
     temp_file.rewind
-    attachments[product_file.s3_filename] = temp_file.read
+    attachments[product_file.filename_with_extension] = temp_file.read
 
     # tell amazon to convert the pdf to kindle-readable format
     mail(
