@@ -10,6 +10,9 @@
 # OS produces by default) is unpacked from the inside of that folder, so `game/index.html` plays
 # the same as a zip whose index.html is at its root. Every other layout is a bad build: no
 # index.html once that folder is stripped, or more than one top-level entry.
+#
+# The entry count an archive declares is checked from its end-of-central-directory record before
+# the archive is opened, because rubyzip reads every entry's metadata into memory on open.
 class ProductBuilds::UnpackSiteService
   class UnpackError < StandardError; end
 
@@ -47,6 +50,18 @@ class ProductBuilds::UnpackSiteService
   }.freeze
   DEFAULT_CONTENT_TYPE = "application/octet-stream"
   ENTRY_NAME_MAX_LENGTH = 100
+
+  # rubyzip materialises every central-directory entry the moment the archive is opened, so the
+  # file cap cannot be the only guard: by the time the iteration starts, the memory is already
+  # spent. The count the archive declares is read from its own end-of-central-directory record
+  # first, and an archive that declares more entries than a build may hold is rejected unopened.
+  EOCD_SIGNATURE = "PK\x05\x06".b
+  ZIP64_EOCD_SIGNATURE = "PK\x06\x06".b
+  ZIP64_ENTRY_COUNT_MARKER = 0xFFFF
+  # The end-of-central-directory record plus the longest comment a zip can carry behind it.
+  EOCD_SEARCH_WINDOW = 70_000
+  # Room for the folder entries an archive carries on top of the files they hold.
+  ARCHIVE_ENTRY_SLACK = 1_024
 
   def self.perform(build) = new(build).perform
 
@@ -91,6 +106,8 @@ class ProductBuilds::UnpackSiteService
     end
 
     def unpack(zip_path)
+      raise UnpackError, "The zip declares more entries than a build may hold." if declared_entry_count(zip_path) > max_archive_entries
+
       s3 = Aws::S3::Client.new
       file_count = 0
       byte_size = 0
@@ -122,6 +139,33 @@ class ProductBuilds::UnpackSiteService
       # An archive rubyzip cannot read is a seller input error like the ones above, not a transient
       # one: reject it the same way instead of letting the job retry a zip that will never open.
       raise UnpackError, "The zip could not be read, so there is nothing to play."
+    end
+
+    # The entries a build may hold: its files, plus the folder entries an archive carries for them.
+    def max_archive_entries = ProductBuild::MAX_SITE_FILES * 2 + ARCHIVE_ENTRY_SLACK
+
+    # The number of entries the archive declares, read from the record every zip ends with rather
+    # than from the archive itself: opening it is what costs the memory this guard exists to save.
+    # A zip whose count does not fit its 16-bit field keeps the count in its ZIP64 record instead.
+    def declared_entry_count(zip_path)
+      tail = File.open(zip_path, "rb") do |file|
+        file.seek([file.size - EOCD_SEARCH_WINDOW, 0].max)
+        file.read
+      end
+
+      eocd = tail.rindex(EOCD_SIGNATURE)
+      return 0 unless eocd
+
+      declared = tail[eocd + 10, 2]&.unpack1("v")
+      return 0 unless declared
+      return declared unless declared == ZIP64_ENTRY_COUNT_MARKER
+
+      # A 16-bit field cannot hold the count, so it is in the ZIP64 record; when even that is
+      # missing the archive is over any cap a build has, and the marker itself says so.
+      zip64 = tail.rindex(ZIP64_EOCD_SIGNATURE)
+      return ZIP64_ENTRY_COUNT_MARKER unless zip64
+
+      tail[zip64 + 32, 8]&.unpack1("Q<") || ZIP64_ENTRY_COUNT_MARKER
     end
 
     # Copies one entry into the build's site prefix, stopping as soon as it passes the bytes left in
