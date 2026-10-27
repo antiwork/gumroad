@@ -8,48 +8,20 @@ describe User::MoneyBalance do
   end
 
   describe "#unpaid_balance_cents" do
-    context "via SQL" do
-      it "returns sum of unpaid balance in cents" do
-        create(:balance, user: @user, amount_cents: 100, state: "unpaid", date: 1.day.ago)
-        create(:balance, user: @user, amount_cents: 200, state: "unpaid", date: 3.days.ago)
-        expect(@user.unpaid_balance_cents).to eq 300
-      end
-
-      it "ignores paid balance" do
-        create(:balance, user: @user, amount_cents: 100, state: "paid")
-        expect(@user.unpaid_balance_cents).to eq 0
-      end
-
-      it "ignores someone else's balance" do
-        create(:balance, user: create(:user), amount_cents: 100, state: "paid")
-        expect(@user.unpaid_balance_cents).to eq 0
-      end
+    it "returns sum of unpaid balance in cents" do
+      create(:balance, user: @user, amount_cents: 100, state: "unpaid", date: 1.day.ago)
+      create(:balance, user: @user, amount_cents: 200, state: "unpaid", date: 3.days.ago)
+      expect(@user.unpaid_balance_cents).to eq 300
     end
 
-    context "via Elasticsearch", :sidekiq_inline, :elasticsearch_wait_for_refresh do
-      it "returns sum of unpaid balance in cents" do
-        create(:balance, user: @user, amount_cents: 100, state: "unpaid", date: 1.day.ago)
-        create(:balance, user: @user, amount_cents: 200, state: "unpaid", date: 3.days.ago)
-        expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 300
-      end
+    it "ignores paid balance" do
+      create(:balance, user: @user, amount_cents: 100, state: "paid")
+      expect(@user.unpaid_balance_cents).to eq 0
+    end
 
-      it "ignores paid balance" do
-        create(:balance, user: @user, amount_cents: 100, state: "paid")
-        expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 0
-      end
-
-      it "ignores someone else's balance" do
-        create(:balance, user: create(:user), amount_cents: 100, state: "paid")
-        expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 0
-      end
-
-      it "still returns the correct balance if Elasticsearch call failed and sends error notification" do
-        create(:balance, user: @user, amount_cents: 100, state: "unpaid", date: 1.day.ago)
-        create(:balance, user: @user, amount_cents: 200, state: "unpaid", date: 3.days.ago)
-        expect(Balance).to receive(:amount_cents_sum_for).with(@user).and_raise(Net::OpenTimeout)
-        expect(ErrorNotifier).to receive(:notify).and_call_original
-        expect(@user.unpaid_balance_cents(via: :elasticsearch)).to eq 300
-      end
+    it "ignores someone else's balance" do
+      create(:balance, user: create(:user), amount_cents: 100, state: "paid")
+      expect(@user.unpaid_balance_cents).to eq 0
     end
   end
 

@@ -61,7 +61,7 @@ describe Purchase do
         purchase.update_balance_and_mark_successful!
 
         expect(purchase.reload.purchase_state).to eq("successful")
-        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(purchase.link_id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"])
+        expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(purchase.link_id, "update", %w[is_recommendable sales_volume total_fee_cents past_year_fee_cents])
       end
 
       it "persists the successful purchase when reporting the failure also fails" do

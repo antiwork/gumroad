@@ -30,6 +30,16 @@ describe ElasticsearchIndexerWorker, :elasticsearch_wait_for_refresh do
     end
   end
 
+  it "drops index and update jobs for the retired Balance index" do
+    expect(EsClient).not_to receive(:index)
+    expect(EsClient).not_to receive(:update)
+
+    expect do
+      described_class.new.perform("index", { "class_name" => "Balance", "record_id" => 1 })
+      described_class.new.perform("update", { "class_name" => "Balance", "record_id" => 1, "fields" => ["amount_cents"] })
+    end.not_to raise_error
+  end
+
   describe "#perform without ActiveRecord objects" do
     before do
       class TravelEvent
