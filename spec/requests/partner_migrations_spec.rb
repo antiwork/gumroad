@@ -98,6 +98,48 @@ describe "Partner migration onboarding", type: :request do
     expect(other_migration.reload).to be_pending
   end
 
+  it "rejects a confirmation form from before the partner replaced the catalog" do
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    get partner_migration_path
+    form = Nokogiri::HTML(response.body).at_css("form[action='#{partner_migration_path}']")
+    products, _error = PartnerMigration.normalize_products([{ name: "Replacement", price: 500 }])
+    _same_migration, new_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+
+    get partner_migration_path(migration_code: new_code)
+    post partner_migration_path, params: {
+      authenticity_token: form.at_css("input[name='authenticity_token']")["value"],
+      partner_migration_id: form.at_css("input[name='partner_migration_id']")["value"],
+      partner_migration_code_digest: form.at_css("input[name='partner_migration_code_digest']")["value"],
+    }
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response.body).to include(PartnerMigration::OUT_OF_DATE_MESSAGE)
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_PENDING, user: nil)
+    expect(partner_application.partner_sellers).to be_empty
+    expect(PartnerMigrationImportJob.jobs.size).to eq(0)
+  end
+
+  it "does not import a catalog that the partner replaces after the form check" do
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    products, _error = PartnerMigration.normalize_products([{ name: "Replacement", price: 500 }])
+    # The partner's refresh commits after the controller compares the form and before claim! locks.
+    allow_any_instance_of(PartnerMigration).to receive(:claim!).and_wrap_original do |original, *args, **kwargs|
+      PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+      original.call(*args, **kwargs)
+    end
+
+    claim
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response.body).to include(PartnerMigration::OUT_OF_DATE_MESSAGE)
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_PENDING, user: nil)
+    expect(migration.products.first["name"]).to eq("Replacement")
+    expect(partner_application.partner_sellers).to be_empty
+    expect(PartnerMigrationImportJob.jobs.size).to eq(0)
+  end
+
   it "shows an error for an unknown code" do
     sign_in seller
 
@@ -191,7 +233,7 @@ describe "Partner migration onboarding", type: :request do
   end
 
   it "shows product errors and media warnings without losing successful products" do
-    migration.claim!(seller)
+    migration.claim!(seller, code_digest: migration.code_digest)
     product = create(:product, user: seller, name: "Texture Pack")
     migration.update!(status: PartnerMigration::STATUS_FAILED, results: {
                         "0" => { "product_id" => product.external_id, "warnings" => ["Cover could not be imported."] },

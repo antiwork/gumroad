@@ -27,6 +27,8 @@ class PartnerMigration < ApplicationRecord
   STATUS_FAILED = "failed"
   STATUSES = [STATUS_PENDING, STATUS_CLAIMED, STATUS_COMPLETED, STATUS_FAILED].freeze
 
+  OUT_OF_DATE_MESSAGE = "This page is out of date. Open the link from the application again."
+
   class ClaimError < StandardError; end
   class CatalogConflict < StandardError; end
 
@@ -224,12 +226,16 @@ class PartnerMigration < ApplicationRecord
 
   # Links `claimer` to the partner's user ID, then starts the import. Raises ClaimError with a
   # message for the creator when the link was used, expired, or belongs to a different account.
-  def claim!(claimer)
+  #
+  # `code_digest` is the one the creator's confirmation form carried. create_for! can replace a
+  # pending catalog and its digest at any time, so only a match under the lock is consent.
+  def claim!(claimer, code_digest:)
     raise ClaimError, "This account cannot import products." unless claimer.account_active?
 
     oauth_application.with_lock do
       with_lock do
         raise ClaimError, "This link is invalid or expired." unless claimable_by?(claimer)
+        raise ClaimError, OUT_OF_DATE_MESSAGE unless ActiveSupport::SecurityUtils.secure_compare(code_digest.to_s, self.code_digest)
         next if status == STATUS_CLAIMED
 
         link_partner_seller!(claimer)

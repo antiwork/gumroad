@@ -22,11 +22,11 @@ class PartnerMigrationsController < ApplicationController
   def create
     # The session holds the last link opened, which may differ from the page this form came from.
     if params[:partner_migration_id].to_s != @migration.id.to_s || params[:partner_migration_code_digest] != @migration.code_digest
-      @error_message = "This page is out of date. Open the link from the application again."
+      @error_message = PartnerMigration::OUT_OF_DATE_MESSAGE
       return render :show, status: :unprocessable_entity
     end
 
-    @migration.claim!(current_user)
+    @migration.claim!(current_user, code_digest: params[:partner_migration_code_digest].to_s)
     session.delete(SESSION_KEY)
     redirect_to partner_migration_status_path(@migration.status_id), status: :see_other
   rescue PartnerMigration::ClaimError => e

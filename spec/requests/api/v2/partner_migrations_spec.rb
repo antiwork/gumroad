@@ -83,7 +83,7 @@ describe "Partner API migrations", type: :request do
   it "keeps the accepted catalog when a changed export conflicts with it" do
     post_migration(external_user_id: "ext-1", products:)
     migration = PartnerMigration.last
-    migration.claim!(create(:user))
+    migration.claim!(create(:user), code_digest: migration.code_digest)
 
     post_migration(external_user_id: "ext-1", products: [{ name: "Another product", price: 1500 }])
 
