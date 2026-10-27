@@ -27,6 +27,7 @@ describe SubdomainRedirectorService do
 
     it "reads Redis again once the config is updated" do
       expect(described_class.new.redirects).to eq({})
+      expect(Rails.cache.read("subdomain_redirects_cache_key")).to eq({})
 
       service.update("live.gumroad.com=example.com")
 
