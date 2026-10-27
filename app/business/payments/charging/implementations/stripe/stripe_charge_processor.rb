@@ -26,6 +26,11 @@ class StripeChargeProcessor
   REFUND_REASON_FRAUDULENT = "fraudulent"
   EXTERNAL_REFUND_REVERSAL_METADATA_KEY = "external_refund_id"
 
+  # Concurrent refunds of one seller can each see room on the same payout transfer; Stripe
+  # refuses whichever reversal no longer fits, and that fee can still come from another transfer.
+  REFUND_FEE_REVERSAL_CAPACITY_ERROR = /remaining to reverse|already fully reversed/i
+  MAX_REFUND_FEE_REVERSAL_TRANSFERS = 3
+
   MANDATE_PREFIX = "Mandate-"
   INDIA_CARD_MANDATE_RELIABILITY_FEATURE = :india_card_mandate_reliability
   # Stripe's India mandate currency list for non-IN businesses. Every currency here is also
@@ -862,33 +867,9 @@ class StripeChargeProcessor
         transfer = nil
       end
     end
+    lookup_error = nil
     unless transfer
-      # First, try and reverse an internal transfer made from gumroad platform account
-      # to the connect account, if possible.
-      transfer_ids = credit.user.payments.completed
-                           .where(stripe_connect_account_id: stripe_account_id)
-                           .order(:created_at)
-                           .pluck(:stripe_internal_transfer_id)
-      lookup_error = nil
-      transfers = transfer_ids.compact_blank.lazy.filter_map do |tr_id|
-        Stripe::Transfer.retrieve(tr_id)
-      rescue StandardError => error
-        lookup_error = error
-        nil
-      end
-      transfer = transfers.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
-      unless transfer
-        # Recent sale transfers must remain available for buyer refunds.
-        params = { destination: stripe_account_id, created: { lt: 120.days.ago.to_i }, limit: 100 }
-        loop do
-          # Stripe list pages are ListObjects: the rows are on #data, and Enumerable has no #last.
-          page = Stripe::Transfer.list(**params)
-          transfer = page.find { |tr| tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
-          break if transfer || page.count < params[:limit]
-
-          params[:starting_after] = page.data.last.id
-        end
-      end
+      transfer, lookup_error = find_refund_fee_transfer(credit:, amount_to_reverse_for:)
     end
     unless transfer
       collected = adopt_existing_refund_fee_collection(credit:)
@@ -900,34 +881,82 @@ class StripeChargeProcessor
       raise NoRefundFeeTransferError, "No reversible transfer for refund fee retention"
     end
 
-    refund.with_lock do
-      refund.reload
-      return if refund.fee_retention_written_off_at.present?
-      return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
-      current_pin = refund.fee_retention_source_transfer
-      if current_pin.present? && current_pin != observed_pin
-        return
-      end
-      if current_pin != transfer.id
-        refund.fee_retention_source_transfer = transfer.id
-        refund.save!
-      end
-    end
-
+    refused_reversals = 0
     begin
+      refund.with_lock do
+        refund.reload
+        return if refund.fee_retention_written_off_at.present?
+        return recorded_refund_fee_collection(credit:) if refund.debited_stripe_transfer.present?
+        current_pin = refund.fee_retention_source_transfer
+        if current_pin.present? && current_pin != observed_pin
+          return
+        end
+        if current_pin != transfer.id
+          refund.fee_retention_source_transfer = transfer.id
+          refund.save!
+        end
+      end
+
       transfer_reversal ||= Stripe::Transfer.create_reversal(
         transfer.id,
         { amount: amount_to_reverse_for.call(transfer), metadata: { refund_id: refund.id.to_s } },
         { idempotency_key: refund_fee_retention_reversal_key(refund, transfer.id) }
       )
     rescue Stripe::InvalidRequestError => error
-      raise unless error.message.match?(/no longer supported/i)
+      return debit_refund_fee_from_account(credit:) if error.message.match?(/no longer supported/i)
+      raise unless error.message.match?(REFUND_FEE_REVERSAL_CAPACITY_ERROR)
 
-      return debit_refund_fee_from_account(credit:)
+      refused_reversals += 1
+      raise error if refused_reversals >= MAX_REFUND_FEE_REVERSAL_TRANSFERS
+
+      # The pin only moves once Stripe shows no reversal of this refund on it; a failed lookup raises.
+      observed_pin = transfer.id
+      transfer_reversal = existing_refund_fee_reversal(transfer.id, refund.id)
+      unless transfer_reversal
+        # A refused transfer stays out: its refreshed remaining capacity no longer fits the fee.
+        transfer, = find_refund_fee_transfer(credit:, amount_to_reverse_for:)
+        raise error unless transfer
+
+        retry
+      end
     end
     refund.debited_stripe_transfer = transfer_reversal.id
     refund.save!
     record_reversal_collected_cents!(refund, transfer_reversal, stripe_account_id)
+  end
+
+  # Returns [transfer, lookup_error]; lookup_error is the last failed internal-transfer retrieve.
+  def self.find_refund_fee_transfer(credit:, amount_to_reverse_for:)
+    stripe_account_id = credit.merchant_account.charge_processor_merchant_id
+    reversible = ->(tr) { tr.amount - tr.amount_reversed > amount_to_reverse_for.call(tr) }
+
+    # First, try and reverse an internal transfer made from gumroad platform account
+    # to the connect account, if possible.
+    transfer_ids = credit.user.payments.completed
+                         .where(stripe_connect_account_id: stripe_account_id)
+                         .order(:created_at)
+                         .pluck(:stripe_internal_transfer_id)
+    lookup_error = nil
+    transfers = transfer_ids.compact_blank.lazy.filter_map do |tr_id|
+      Stripe::Transfer.retrieve(tr_id)
+    rescue StandardError => error
+      lookup_error = error
+      nil
+    end
+    transfer = transfers.find(&reversible)
+    unless transfer
+      # Recent sale transfers must remain available for buyer refunds.
+      params = { destination: stripe_account_id, created: { lt: 120.days.ago.to_i }, limit: 100 }
+      loop do
+        # Stripe list pages are ListObjects: the rows are on #data, and Enumerable has no #last.
+        page = Stripe::Transfer.list(**params)
+        transfer = page.find(&reversible)
+        break if transfer || page.count < params[:limit]
+
+        params[:starting_after] = page.data.last.id
+      end
+    end
+    [transfer, lookup_error]
   end
 
   def self.debit_refund_fee_from_account(credit:)
