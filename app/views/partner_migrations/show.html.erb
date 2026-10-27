@@ -13,7 +13,10 @@
         Import <%= pluralize(@migration.products.size, "product") %> from
         <strong><%= @migration.oauth_application.name %></strong>?
       </h2>
-      <p>The products are imported as drafts in <strong><%= current_user.email %></strong>. Nothing is published until you publish it.</p>
+      <p>The products are imported as drafts in <strong><%= current_user.form_email.presence || "your Gumroad account" %></strong>. Nothing is published until you publish it.</p>
+      <% if current_user.form_email.blank? %>
+        <p>Before you import, <%= link_to "add an email address", settings_main_path, class: "underline" %>.</p>
+      <% end %>
       <%= button_to "Use another account", switch_partner_migration_account_path, method: :post, class: "min-h-11 cursor-pointer border-0 bg-transparent px-2 py-2 text-base leading-snug text-current underline" %>
       <p>This also links this Gumroad account to your <%= @migration.oauth_application.name %> account.</p>
     </header>
@@ -21,7 +24,7 @@
       <%= form_tag partner_migration_path, method: :post, style: "display: contents" do %>
         <%= hidden_field_tag :partner_migration_id, @migration.id %>
         <%= hidden_field_tag :partner_migration_code_digest, @migration.code_digest %>
-        <%= button_tag "Import products", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
+        <%= button_tag "Import products", disabled: current_user.form_email.blank?, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
       <% end %>
     </footer>
   <% end %>

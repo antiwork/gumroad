@@ -17,7 +17,17 @@ class PartnerMigrationImportJob
   ].freeze
 
   sidekiq_retries_exhausted do |job, exception|
-    PartnerMigration.find_by(id: job["args"].first)&.update!(status: PartnerMigration::STATUS_FAILED, failure_reason: exception.message.truncate(PartnerMigration::MAX_FAILURE_REASON_LENGTH))
+    ApplicationRecord.connected_to(role: :writing) do
+      migration = PartnerMigration.find_by(id: job["args"].first)
+      next unless migration
+
+      migration.with_lock do
+        if migration.status == PartnerMigration::STATUS_CLAIMED
+          migration.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current, failure_reason: exception.message.truncate(PartnerMigration::MAX_FAILURE_REASON_LENGTH))
+        end
+      end
+      PartnerMigrationNotificationJob.perform_async(migration.id) if migration.completed_at
+    end
   end
 
   def perform(partner_migration_id)
@@ -25,7 +35,11 @@ class PartnerMigrationImportJob
     ApplicationRecord.connected_to(role: :writing) do
       migration = PartnerMigration.find(partner_migration_id)
       # A manual retry enqueues inside its transaction, so wait for that transaction to commit.
-      return unless migration.with_lock { migration.status == PartnerMigration::STATUS_CLAIMED }
+      unless migration.with_lock { migration.status == PartnerMigration::STATUS_CLAIMED }
+        # Retry a failed notification enqueue without importing the products again.
+        PartnerMigrationNotificationJob.perform_async(migration.id) if migration.completed_at
+        return
+      end
 
       # An error that a retry may fix does not hold back the products after it. The job imports them,
       # then raises the first such error, so the Sidekiq retry imports only the products left.
@@ -48,6 +62,7 @@ class PartnerMigrationImportJob
 
       status = migration.results.to_h.values.any? { _1["error"].present? } ? PartnerMigration::STATUS_FAILED : PartnerMigration::STATUS_COMPLETED
       migration.update!(status:, completed_at: Time.current)
+      PartnerMigrationNotificationJob.perform_async(migration.id)
     end
   end
 

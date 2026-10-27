@@ -10,10 +10,11 @@
       <% else %>Import complete
       <% end %>
     </h1>
-    <p>From <strong><%= @migration.oauth_application.name %></strong> to <strong><%= current_user.email %></strong>.</p>
+    <p>From <strong><%= @migration.oauth_application.name %></strong> to <strong><%= current_user.form_email.presence || "your Gumroad account" %></strong>.</p>
     <p role="status"><%= progress[:imported] %> of <%= progress[:total] %> products imported. <%= progress[:failed] %> failed. <%= progress[:remaining] %> remaining.</p>
     <% if @migration.status == PartnerMigration::STATUS_CLAIMED %>
-      <p>This page updates every five seconds. You can close it and return to this address later.</p>
+      <p>You can close this page. Gumroad emails you when the import finishes or needs attention.</p>
+      <p>This page updates every five seconds. You can review products as they appear.</p>
     <% end %>
     <p>Your products stay as drafts until you publish them. Review the files, license options, and prices before publication.</p>
     <% if @migration.failure_reason.present? %>

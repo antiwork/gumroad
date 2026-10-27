@@ -51,6 +51,39 @@ describe "Partner migration onboarding", type: :request do
     expect(response.body).to include("Example App")
   end
 
+  it "keeps the export while an account without an email adds an address" do
+    seller.update_columns(provider: "apple", email: nil, unconfirmed_email: nil)
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include("add an email address", "Use another account")
+    expect(migration.reload).to be_pending
+
+    seller.update!(email: "seller@example.com")
+    get partner_migration_path
+
+    expect(response).to have_http_status(:ok)
+    expect(response.body).to include("Import 2 products from", "seller@example.com")
+  end
+
+  it "lets an account without an email switch accounts before importing" do
+    seller.update_columns(provider: "apple", email: nil, unconfirmed_email: nil)
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
+    doc = Nokogiri::HTML(response.body)
+    expect(doc.at_css("form[action='#{partner_migration_path}'] button[disabled]")).to be_present
+    form = doc.at_css("form[action='#{switch_partner_migration_account_path}']")
+
+    post switch_partner_migration_account_path, params: { authenticity_token: form.at_css("input[name='authenticity_token']")["value"] }
+
+    expect(response).to redirect_to(login_path(next: partner_migration_path))
+    sign_in create(:named_user)
+    get partner_migration_path
+    expect(response.body).to include("Import 2 products from", "Example App")
+  end
+
   it "claims the migration and starts the import" do
     sign_in seller
     get partner_migration_path(migration_code: code)
@@ -125,6 +158,24 @@ describe "Partner migration onboarding", type: :request do
     expect(migration.reload).to be_pending
   end
 
+  it "rejects a catalog refreshed after the form check and before the claim locks" do
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    allow_any_instance_of(PartnerMigration).to receive(:claim!).and_wrap_original do |original, claimer, **kwargs|
+      products, = PartnerMigration.normalize_products([{ name: "Updated catalog", price: 500 }])
+      PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: migration.external_user_id, products:)
+      original.call(claimer, **kwargs)
+    end
+
+    claim
+
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response.body).to include("This page is out of date.")
+    expect(migration.reload).to be_pending
+    expect(partner_application.partner_sellers).to be_empty
+    expect(PartnerMigrationImportJob.jobs).to be_empty
+  end
+
   it "lets two partner users whose IDs differ only in case each claim their own link" do
     products, _error = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
     other_migration, other_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "EXT-1", products:)
@@ -191,7 +242,7 @@ describe "Partner migration onboarding", type: :request do
   end
 
   it "shows product errors and media warnings without losing successful products" do
-    migration.claim!(seller)
+    migration.claim!(seller, expected_code_digest: migration.code_digest)
     product = create(:product, user: seller, name: "Texture Pack")
     migration.update!(status: PartnerMigration::STATUS_FAILED, results: {
                         "0" => { "product_id" => product.external_id, "warnings" => ["Cover could not be imported."] },

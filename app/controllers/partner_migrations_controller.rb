@@ -12,6 +12,8 @@ class PartnerMigrationsController < ApplicationController
   before_action :hide_from_search_results
   before_action :move_code_to_session, only: :show
   before_action :authenticate_user!
+  include RequireAccountEmail
+  skip_before_action :require_account_email, only: [:show, :status, :switch_account]
   before_action :load_migration, only: [:show, :create]
   before_action :load_owned_migration, only: [:status, :retry_import]
 
@@ -26,7 +28,7 @@ class PartnerMigrationsController < ApplicationController
       return render :show, status: :unprocessable_entity
     end
 
-    @migration.claim!(current_user)
+    @migration.claim!(current_user, expected_code_digest: params[:partner_migration_code_digest])
     session.delete(SESSION_KEY)
     redirect_to partner_migration_status_path(@migration.status_id), status: :see_other
   rescue PartnerMigration::ClaimError => e

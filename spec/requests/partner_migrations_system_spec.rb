@@ -63,11 +63,19 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     expect(page).to have_content(seller.email)
     click_on "Import products"
     expect(page).to have_content("Import started")
+    expect(page).to have_content("You can close this page. Gumroad emails you when the import finishes or needs attention.")
     status_path = page.current_path
     migration = PartnerMigration.find_signed!(status_path.split("/").last, purpose: :partner_migration)
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
+    visit logout_path
     PartnerMigrationImportJob.new.perform(migration.id)
-    visit status_path
+    PartnerMigrationNotificationJob.new.perform(migration.id)
+    mail = ActionMailer::Base.deliveries.find { _1.subject == "Your import is ready to review" }
+    review_link = Nokogiri::HTML(mail.html_part.body.decoded).css("a").find { _1.text == "Review products" }
+    visit review_link["href"]
+    fill_in "Email", with: seller.email
+    fill_in "Password", with: seller.password
+    click_on "Login"
 
     expect(page).to have_content("11 of 11 products imported. 0 failed. 0 remaining.")
     expect(page).to have_link("Review product", count: 11)

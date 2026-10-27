@@ -3,6 +3,11 @@ recover_pending_refund_fee_retention:
   class: RecoverPendingRefundFeeRetentionJob
   description: Retries fee collection without issuing another customer refund
 
+dispatch_pending_partner_migration_notifications:
+  cron: "*/10 * * * *"
+  class: DispatchPendingPartnerMigrationNotificationsJob
+  description: Re-enqueues finished partner imports whose result email is still pending
+
 # Every minute
 dispatch_pending_workflow_installment_schedule_intents:
   cron: "* * * * *" # Every minute
