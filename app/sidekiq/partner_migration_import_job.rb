@@ -72,8 +72,9 @@ class PartnerMigrationImportJob
 
   private
     # Only an account that this import created takes the partner's avatar. A missing or invalid
-    # picture is skipped: the seller can add one in their profile. Only runs before the first product
-    # result try it, each briefly, so a slow picture cannot hold back the products or their retries.
+    # picture is skipped: the seller can add one in their profile. Each attempt runs only while no product
+    # result exists, and stops after AVATAR_DOWNLOAD_DURATION, so a slow picture cannot hold back the
+    # products or their retries.
     def attach_profile_avatar(migration)
       user = migration.user
       url = migration.profile.to_h["avatar_url"]
