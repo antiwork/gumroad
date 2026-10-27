@@ -150,7 +150,7 @@ describe PartnerMigration do
       original = product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip?signature=old" }])
       products, = described_class.normalize_products([original])
       migration, = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
       migration.update!(results: { "0" => { "product_id" => "saved-product" } })
       products, = described_class.normalize_products([original.merge(files: [{ url: "https://files.example.com/pack.zip?signature=new" }])])
 
@@ -163,7 +163,7 @@ describe PartnerMigration do
 
     it "rejects catalog changes after the seller confirms" do
       migration, = create_migration
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
       products, = described_class.normalize_products([product_attributes.merge(name: "Another product")])
 
       expect { described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:) }.to raise_error(described_class::CatalogConflict)
@@ -172,10 +172,32 @@ describe PartnerMigration do
   end
 
   describe "#claim!" do
+    it "requires an email address for the result notification" do
+      migration, = create_migration
+      seller.update_columns(provider: "apple", email: nil, unconfirmed_email: nil)
+
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, /Add an email address/)
+
+      expect(migration.reload).to be_pending
+      expect(PartnerMigrationImportJob.jobs).to be_empty
+    end
+
+    it "rejects a catalog refreshed after the confirmation page loads" do
+      migration, = create_migration
+      products, = described_class.normalize_products([product_attributes.merge(name: "Replacement catalog")])
+      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, /out of date/)
+
+      expect(migration.reload).to be_pending
+      expect(partner_application.partner_sellers).to be_empty
+      expect(PartnerMigrationImportJob.jobs).to be_empty
+    end
+
     it "links the seller to the partner user ID and starts the import" do
       migration, _code = create_migration
 
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
 
       expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, user: seller, claimed_at: be_present)
       expect(partner_application.partner_sellers.alive.find_by(external_user_id: "ext-1")).to have_attributes(user: seller, migrated_at: nil)
@@ -184,42 +206,42 @@ describe PartnerMigration do
 
     it "cannot be claimed by a second account" do
       migration, _code = create_migration
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
 
-      expect { migration.claim!(create(:user), code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
+      expect { migration.claim!(create(:user), expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
     it "queues the import again when the same seller claims again before it finishes" do
       migration, _code = create_migration
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
       Sidekiq::Worker.clear_all
 
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
 
       expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
       migration.update!(status: described_class::STATUS_COMPLETED)
-      expect { migration.claim!(seller, code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
     it "rejects an expired link" do
       migration, _code = create_migration
       migration.update!(expires_at: 1.minute.ago)
 
-      expect { migration.claim!(seller, code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
     it "rejects a link from an application that is no longer a partner" do
       migration, _code = create_migration
       partner_application.update!(is_partner: false)
 
-      expect { migration.claim!(seller, code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This link is invalid or expired.")
     end
 
     it "rejects a partner user ID that is linked to a different Gumroad account" do
       create(:partner_seller, oauth_application: partner_application, user: create(:user), external_user_id: "ext-1")
       migration, _code = create_migration
 
-      expect { migration.claim!(seller, code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This Example App account is already linked to a different Gumroad account.")
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This Example App account is already linked to a different Gumroad account.")
       expect(migration.reload).to be_pending
     end
 
@@ -227,7 +249,7 @@ describe PartnerMigration do
       create(:partner_seller, oauth_application: partner_application, user: seller, external_user_id: "ext-2")
       migration, _code = create_migration
 
-      expect { migration.claim!(seller, code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "Your Gumroad account is already linked to a different Example App account.")
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "Your Gumroad account is already linked to a different Example App account.")
     end
 
     it "restores a seller that was removed from the program" do
@@ -235,7 +257,7 @@ describe PartnerMigration do
       partner_seller.mark_deleted!
       migration, _code = create_migration
 
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
 
       expect(partner_seller.reload).to be_alive
     end
@@ -247,37 +269,23 @@ describe PartnerMigration do
         migration, _code = create_migration(external_user_id:)
         claimer = create(:user)
 
-        migration.claim!(claimer, code_digest: migration.code_digest)
+        migration.claim!(claimer, expected_code_digest: migration.code_digest)
 
         expect(partner_application.partner_sellers.where(external_user_id:).sole).to have_attributes(user: claimer, external_user_id:)
       end
       expect(partner_application.partner_sellers.pluck(:external_user_id)).to match_array(external_user_ids)
     end
 
-    it "refuses a catalog that the partner replaced after the seller confirmed another one" do
-      migration, _code = create_migration
-      confirmed_digest = migration.code_digest
-      products, = described_class.normalize_products([product_attributes.merge(name: "Replacement")])
-      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
-
-      expect { migration.claim!(seller, code_digest: confirmed_digest) }.to raise_error(described_class::ClaimError, described_class::OUT_OF_DATE_MESSAGE)
-
-      expect(migration.reload).to have_attributes(status: described_class::STATUS_PENDING, user: nil, claimed_at: nil)
-      expect(migration.products.first["name"]).to eq("Replacement")
-      expect(partner_application.partner_sellers).to be_empty
-      expect(PartnerMigrationImportJob.jobs.size).to eq(0)
-    end
-
     it "rejects a suspended account" do
       migration, _code = create_migration
       seller.update!(user_risk_state: "suspended_for_fraud")
 
-      expect { migration.claim!(seller, code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This account cannot import products.")
+      expect { migration.claim!(seller, expected_code_digest: migration.code_digest) }.to raise_error(described_class::ClaimError, "This account cannot import products.")
     end
 
     it "starts the migration date when an imported product first goes live" do
       migration, = create_migration
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
       PartnerMigrationImportJob.new.perform(migration.id)
       partner_seller = partner_application.partner_sellers.sole
       expect(partner_seller.migrated_at).to be_nil
@@ -289,7 +297,7 @@ describe PartnerMigration do
 
     it "retries only failed products and preserves saved products" do
       migration, = create_migration
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
       migration.update!(status: described_class::STATUS_FAILED, results: { "0" => { "product_id" => "saved" }, "1" => { "error" => "Missing file" } })
 
       migration.retry!(seller)
@@ -300,13 +308,25 @@ describe PartnerMigration do
 
     it "keeps failed results when the previous job still holds its queue lock" do
       migration, = create_migration
-      migration.claim!(seller, code_digest: migration.code_digest)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
       results = { "0" => { "error" => "Missing file" } }
       migration.update!(status: described_class::STATUS_FAILED, results:)
       allow(PartnerMigrationImportJob).to receive(:perform_async).with(migration.id).and_return(nil)
 
       expect { migration.retry!(seller) }.to raise_error(described_class::ClaimError, /still finishing/)
       expect(migration.reload).to have_attributes(status: described_class::STATUS_FAILED, results:)
+    end
+
+    it "rejects a retry from a stale form after the import finishes" do
+      migration, = create_migration
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
+      migration.update!(status: described_class::STATUS_COMPLETED, completed_at: Time.current, notified_at: Time.current)
+      notified_at = migration.reload.notified_at
+
+      expect { migration.retry!(seller) }.to raise_error(described_class::ClaimError, "This import is already complete.")
+
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_COMPLETED, notified_at:)
+      expect(PartnerMigrationImportJob.jobs.size).to eq(1)
     end
   end
 end

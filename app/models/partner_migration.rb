@@ -27,8 +27,6 @@ class PartnerMigration < ApplicationRecord
   STATUS_FAILED = "failed"
   STATUSES = [STATUS_PENDING, STATUS_CLAIMED, STATUS_COMPLETED, STATUS_FAILED].freeze
 
-  OUT_OF_DATE_MESSAGE = "This page is out of date. Open the link from the application again."
-
   class ClaimError < StandardError; end
   class CatalogConflict < StandardError; end
 
@@ -226,16 +224,14 @@ class PartnerMigration < ApplicationRecord
 
   # Links `claimer` to the partner's user ID, then starts the import. Raises ClaimError with a
   # message for the creator when the link was used, expired, or belongs to a different account.
-  #
-  # `code_digest` is the one the creator's confirmation form carried. create_for! can replace a
-  # pending catalog and its digest at any time, so only a match under the lock is consent.
-  def claim!(claimer, code_digest:)
+  def claim!(claimer, expected_code_digest:)
     raise ClaimError, "This account cannot import products." unless claimer.account_active?
+    raise ClaimError, "Add an email address to your Gumroad account before importing products." if claimer.form_email.blank?
 
     oauth_application.with_lock do
       with_lock do
+        raise ClaimError, "This page is out of date. Open the link from the application again." unless code_digest == expected_code_digest
         raise ClaimError, "This link is invalid or expired." unless claimable_by?(claimer)
-        raise ClaimError, OUT_OF_DATE_MESSAGE unless ActiveSupport::SecurityUtils.secure_compare(code_digest.to_s, self.code_digest)
         next if status == STATUS_CLAIMED
 
         link_partner_seller!(claimer)
@@ -251,9 +247,11 @@ class PartnerMigration < ApplicationRecord
     raise ClaimError, "This partner connection is no longer active." unless oauth_application.alive? && oauth_application.is_partner? && oauth_application.partner_sellers.alive.exists?(user_id: requester.id, external_user_id:)
 
     with_lock do
+      raise ClaimError, "This import is already complete." if status == STATUS_COMPLETED
+
       restarting = status != STATUS_CLAIMED
       if restarting
-        update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil)
+        update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil, notified_at: nil, notification_failed_email: nil)
       end
       if PartnerMigrationImportJob.perform_async(id).nil? && restarting
         raise ClaimError, "The previous import is still finishing. Wait a moment, then try again."

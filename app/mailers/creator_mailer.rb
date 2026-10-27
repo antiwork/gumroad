@@ -6,6 +6,13 @@ class CreatorMailer < ApplicationMailer
   helper CurrencyHelper
   layout "layouts/email"
 
+  def partner_migration_finished(partner_migration_id, recipient:)
+    @migration = PartnerMigration.find(partner_migration_id)
+    @subject = @migration.status == PartnerMigration::STATUS_COMPLETED ? "Your import is ready to review" : "Your import needs attention"
+
+    mail to: recipient, subject: @subject
+  end
+
   def gumroad_day_fee_saved(seller_id:, to_email: nil)
     @announcement = true
 

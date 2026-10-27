@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_21_000004) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_21_000005) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1689,8 +1689,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_21_000004) do
     t.datetime "claimed_at"
     t.datetime "completed_at"
     t.string "failure_reason"
+    t.datetime "notified_at"
+    t.string "notification_failed_email"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["notified_at", "completed_at"], name: "index_partner_migrations_on_notified_at_and_completed_at"
     t.index ["code_digest"], name: "index_partner_migrations_on_code_digest", unique: true
     t.index ["oauth_application_id", "external_user_id"], name: "index_partner_migrations_on_application_and_external_user"
     t.index ["user_id"], name: "index_partner_migrations_on_user_id"

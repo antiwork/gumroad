@@ -1,0 +1,10 @@
+<%= header_section(@subject) %>
+<div>
+  <% if @migration.status == PartnerMigration::STATUS_FAILED %>
+    <p>The import needs attention. Review the results and retry the products that did not import.</p>
+  <% else %>
+    <p>Your product import on Gumroad is ready to review.</p>
+  <% end %>
+  <p>Imported products start as drafts. Review the files, license options, and prices before you publish.</p>
+  <p><%= link_to "Review products", partner_migration_status_url(@migration.status_id), class: "button primary" %></p>
+</div>

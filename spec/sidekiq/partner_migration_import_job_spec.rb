@@ -67,6 +67,7 @@ describe PartnerMigrationImportJob do
     expect(product.asset_previews.alive.count).to eq(1)
     expect(product.thumbnail).to be_present
     expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_COMPLETED, completed_at: be_present, results: { "0" => { "product_id" => product.external_id } })
+    expect(PartnerMigrationNotificationJob).to have_enqueued_sidekiq_job(migration.id)
   end
 
   it "records a product that cannot be imported and continues with the others" do
@@ -148,6 +149,7 @@ describe PartnerMigrationImportJob do
 
     expect(seller.links).to be_empty
     expect(migration.reload.results).to be_nil
+    expect(PartnerMigrationNotificationJob.jobs).to be_empty
   end
 
   it "imports the other products before letting Sidekiq retry a temporary failure" do
@@ -275,6 +277,29 @@ describe PartnerMigrationImportJob do
 
     described_class.sidekiq_retries_exhausted_block.call({ "args" => [migration.id] }, StandardError.new("Network down"))
 
-    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_FAILED, failure_reason: "Network down")
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_FAILED, completed_at: be_present, failure_reason: "Network down")
+    expect(PartnerMigrationNotificationJob).to have_enqueued_sidekiq_job(migration.id)
+  end
+
+  it "retries a failed notification enqueue without importing products again" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    allow(PartnerMigrationNotificationJob).to receive(:perform_async).and_raise(Redis::BaseError, "Redis unavailable")
+
+    expect { described_class.new.perform(migration.id) }.to raise_error(Redis::BaseError)
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_COMPLETED)
+    allow(PartnerMigrationNotificationJob).to receive(:perform_async).and_call_original
+
+    expect { described_class.new.perform(migration.id) }.not_to change { seller.links.count }
+    expect(PartnerMigrationNotificationJob).to have_enqueued_sidekiq_job(migration.id)
+  end
+
+  it "keeps a completed import when notification enqueues exhaust their retries" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current)
+
+    described_class.sidekiq_retries_exhausted_block.call({ "args" => [migration.id] }, StandardError.new("Redis unavailable"))
+
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_COMPLETED, failure_reason: nil)
+    expect(PartnerMigrationNotificationJob).to have_enqueued_sidekiq_job(migration.id)
   end
 end
