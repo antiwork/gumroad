@@ -535,6 +535,87 @@ describe Subscription::UpdaterService, :vcr do
           end
         end
 
+        context "when an earlier plan change left another original purchase unarchived" do
+          let(:lowered_price_cents) { 2_99 }
+          let(:lowered_price_params) do
+            existing_card_params.merge(perceived_price_cents: lowered_price_cents, perceived_upgrade_price_cents: lowered_price_cents)
+          end
+
+          before do
+            @stale_original = @subscription.update_current_plan!(new_variants: [@original_tier], new_price: @quarterly_product_price)
+            @original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
+            @original_tier_quarterly_price.update!(price_cents: lowered_price_cents)
+          end
+
+          def unarchived_originals
+            @subscription.reload.purchases.is_original_subscription_purchase.not_is_archived_original_subscription_purchase.order(:id).to_a
+          end
+
+          it "restarts at the lowered price and leaves only the restarted plan unarchived" do
+            expect(unarchived_originals).to eq [@original_purchase, @stale_original]
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: lowered_price_params,
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to eq true
+            expect(@subscription.reload).to be_alive
+            expect(@subscription.last_successful_charge.displayed_price_cents).to eq lowered_price_cents
+            expect(unarchived_originals).to eq [@subscription.original_purchase]
+            expect(@subscription.original_purchase.id).not_to be_in([@original_purchase.id, @stale_original.id])
+            expect(@subscription.current_subscription_price_cents).to eq lowered_price_cents
+          end
+
+          it "keeps both earlier originals unarchived when the restart charge fails" do
+            service = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: lowered_price_params,
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            )
+            allow(service).to receive(:charge_user!).and_raise(Subscription::UpdateFailed, "Your card was declined.")
+
+            expect do
+              expect(service.perform).to eq(success: false, error_message: "Your card was declined.")
+            end.not_to change { @subscription.reload.purchases.count }
+
+            expect(unarchived_originals).to eq [@original_purchase, @stale_original]
+            expect(@subscription).not_to be_alive
+          end
+
+          it "restores both earlier originals when a restart within the paid period defers the price change" do
+            travel_to(@originally_subscribed_at + 1.month)
+            @subscription.update!(cancelled_at: Time.current, deactivated_at: Time.current, cancelled_by_buyer: true)
+
+            result = Subscription::UpdaterService.new(
+              subscription: @subscription,
+              gumroad_guid: @gumroad_guid,
+              params: lowered_price_params.merge(perceived_upgrade_price_cents: 0),
+              logged_in_user: @user,
+              remote_ip: @remote_ip,
+            ).perform
+
+            expect(result[:success]).to eq true
+            expect(@subscription.reload).to be_alive
+            expect(unarchived_originals).to eq [@original_purchase, @stale_original]
+          end
+
+          it "keeps renewing an active membership at the honored price" do
+            @subscription.update!(cancelled_at: nil, cancelled_by_buyer: false)
+
+            renewal = @subscription.charge!
+
+            expect(renewal.displayed_price_cents).to eq @original_purchase.displayed_price_cents
+            expect(renewal.displayed_price_cents).not_to eq lowered_price_cents
+            expect(unarchived_originals).to eq [@original_purchase, @stale_original]
+          end
+        end
+
         context "changing plans" do
           it "allows downgrading recurrence immediately" do
             expect do

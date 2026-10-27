@@ -157,6 +157,7 @@ class Subscription::UpdaterService
         end
 
         if !same_plan_and_price? || (is_resubscribing && discount_changed) || seller_price_changed
+          archive_other_unarchived_originals! if is_resubscribing
           self.new_purchase = subscription.update_current_plan!(
             new_variants: variants,
             new_price: price,
@@ -587,7 +588,17 @@ class Subscription::UpdaterService
         Rails.logger.info("Destroyed purchase #{new_purchase.id}")
       end
       original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
+      @other_archived_originals&.each { _1.update_flag!(:is_archived_original_subscription_purchase, false, true) }
       subscription.last_payment_option.update!(price: original_price)
+    end
+
+    # `update_current_plan!` archives only the original it read. Any other unarchived original would still be
+    # resolvable as `Subscription#original_purchase` after the restart, setting the charge floor and renewal price.
+    def archive_other_unarchived_originals!
+      @other_archived_originals = subscription.purchases.is_original_subscription_purchase
+                                              .not_is_archived_original_subscription_purchase
+                                              .where.not(id: original_purchase.id).to_a
+      @other_archived_originals.each { _1.update_flag!(:is_archived_original_subscription_purchase, true, true) }
     end
 
     def charge_user!

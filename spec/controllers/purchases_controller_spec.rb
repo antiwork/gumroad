@@ -1380,6 +1380,27 @@ describe PurchasesController, :vcr do
         expect(response.parsed_body["success"]).to eq true
       end
 
+      it "restarts a lapsed membership at a lowered price when an earlier plan change left another original unarchived" do
+        travel_to(@originally_subscribed_at + 4.months) do
+          @subscription.update!(cancelled_at: 1.day.ago, cancelled_by_buyer: true)
+          @subscription.update_current_plan!(new_variants: [@original_tier], new_price: @quarterly_product_price)
+          @original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
+          @original_tier_quarterly_price.update!(price_cents: 2_99)
+
+          put :update_subscription, params: params_existing_card.merge(
+            price_id: @quarterly_product_price.external_id,
+            variants: [@original_tier.external_id],
+            perceived_price_cents: 2_99,
+            perceived_upgrade_price_cents: 2_99,
+          )
+
+          expect(response.parsed_body["success"]).to eq true
+          expect(response.parsed_body["success_message"]).to eq "Membership restarted"
+          expect(@subscription.reload.last_successful_charge.displayed_price_cents).to eq 2_99
+          expect(@subscription.purchases.is_original_subscription_purchase.not_is_archived_original_subscription_purchase.sole.displayed_price_cents).to eq 2_99
+        end
+      end
+
       it "updates the variant, price, and contact information associated with the subscription" do
         travel_to(@originally_subscribed_at + 1.month) do
           put :update_subscription, params: params_new_card
