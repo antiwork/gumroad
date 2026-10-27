@@ -2706,6 +2706,34 @@ describe ContactingCreatorMailer do
         expect(mail.body.encoded).to include(download_url)
       end
     end
+
+    it "uploads under a key unique to the recipient rather than the shared attachment name" do
+      expect(MailerAttachmentOrLinkService).to receive(:new).with(
+        file: tempfile,
+        extension:,
+        filename: match(%r{\Apayout-data/Payouts_#{recipient.id}_\d+_\h{32}\.csv\z})
+      ).and_call_original
+
+      ContactingCreatorMailer.payout_data("Payout of 2026-10-24.csv", extension, tempfile, recipient.id).message
+    end
+
+    it "uploads two same-named exports over the size limit under different keys" do
+      large_tempfile = Tempfile.new
+      large_tempfile.write("x" * (MailerAttachmentOrLinkService::MAX_FILE_SIZE + 1))
+      keys = []
+
+      allow_any_instance_of(ExpiringS3FileService).to receive(:perform) do |service|
+        keys << service.instance_variable_get(:@key)
+        "https://example.com/download/payout_data.csv"
+      end
+
+      2.times do
+        ContactingCreatorMailer.payout_data("Payout of 2026-10-24.csv", extension, large_tempfile, recipient.id).message
+      end
+
+      expect(keys.length).to eq(2)
+      expect(keys.uniq.length).to eq(2)
+    end
   end
 
   describe ".affiliates_data" do
