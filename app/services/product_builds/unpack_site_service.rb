@@ -5,6 +5,11 @@
 # site prefix (no absolute paths, no `..`, no backslashes, no symlinks) and the unpack stops as
 # soon as the file count or the total uncompressed size passes its limit, so a zip bomb cannot
 # fill the bucket or the disk. The size an entry declares in the archive is never trusted.
+#
+# A zip whose files all sit inside one top-level folder (`zip -r game.zip game/`, what a seller's
+# OS produces by default) is unpacked from the inside of that folder, so `game/index.html` plays
+# the same as a zip whose index.html is at its root. Every other layout is a bad build: no
+# index.html once that folder is stripped, or more than one top-level entry.
 class ProductBuilds::UnpackSiteService
   class UnpackError < StandardError; end
 
@@ -92,12 +97,17 @@ class ProductBuilds::UnpackSiteService
       has_index = false
 
       Zip::File.open(zip_path) do |zip|
-        zip.each do |entry|
-          next if entry.directory?
+        files = zip.reject(&:directory?)
+        # Whether the zip wraps the site in a folder is a property of the whole archive, so it is
+        # decided from the names before anything is copied: a layout we reject must not leave a
+        # half-written site behind.
+        folder = folder_to_strip(files.map { normalize_entry_name(_1.name) })
+
+        files.each do |entry|
           raise UnpackError, "A build cannot contain symlinks: #{shown(entry.name)}." if entry.symlink?
           raise UnpackError, "A build can have at most #{ProductBuild::MAX_SITE_FILES} files." if file_count >= ProductBuild::MAX_SITE_FILES
 
-          path = normalize_entry_name(entry.name)
+          path = relative_entry_name(entry.name, folder)
           written = copy_entry(entry, path, s3, ProductBuild::MAX_SITE_BYTE_SIZE - byte_size)
           file_count += 1
           byte_size += written
@@ -136,6 +146,25 @@ class ProductBuilds::UnpackSiteService
         written_keys << key
         copied
       end
+    end
+
+    # The single folder the zip wraps the whole site in, or nil when the site sits at its root.
+    # `zip -r game.zip game/` is what a seller's own machine produces, so that one shape is
+    # unpacked from the inside; a zip with more than one top-level entry has no single site to
+    # play, and one whose single top-level name is a file is left to the index.html check.
+    def folder_to_strip(paths)
+      return nil if paths.include?("index.html")
+
+      top_level = paths.map { |path| path.split("/").first }.uniq
+      raise UnpackError, "The zip has more than one top-level entry, so there is no single site to play." if top_level.size > 1
+
+      top_level.first if paths.all? { |path| path.start_with?("#{top_level.first}/") }
+    end
+
+    # The entry's path relative to the site prefix, once the folder the zip wraps it in is gone.
+    def relative_entry_name(name, folder)
+      path = normalize_entry_name(name)
+      folder ? path.delete_prefix("#{folder}/") : path
     end
 
     # The entry's path relative to the site prefix, or an error when the entry tries to leave it.

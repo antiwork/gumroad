@@ -33,11 +33,11 @@ describe ProductBuildUnpackJob do
   end
 
   it "records a zip it cannot unpack instead of retrying it" do
-    upload_zip("game/index.html" => "<html></html>")
+    upload_zip("game/index.html" => "<html></html>", "readme.md" => "x")
 
     expect { described_class.new.perform(build.id) }.not_to raise_error
 
-    expect(build.reload.site_unpack_error).to match(/no index.html at its root/)
+    expect(build.reload.site_unpack_error).to match(/more than one top-level entry/)
   end
 
   it "does nothing when the build is gone" do

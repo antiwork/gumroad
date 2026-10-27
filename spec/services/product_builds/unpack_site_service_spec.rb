@@ -88,6 +88,35 @@ describe ProductBuilds::UnpackSiteService do
       expect(body_of("#{site_prefix}/index.html")).to eq("<html>game</html>")
     end
 
+    it "unpacks a zip that wraps the site in a single folder, as `zip -r game.zip game/` produces" do
+      upload_zip({
+                   "game/index.html" => "<html>wrapped</html>",
+                   "game/assets/game.js" => "console.log(1)",
+                 })
+
+      described_class.perform(build)
+
+      expect(site_keys).to eq([
+                                "#{site_prefix}/assets/game.js",
+                                "#{site_prefix}/index.html",
+                              ])
+      expect(body_of("#{site_prefix}/index.html")).to eq("<html>wrapped</html>")
+      expect(content_type_of("#{site_prefix}/assets/game.js")).to eq("text/javascript")
+      expect(build.reload.site_ready?).to be true
+      expect(build.site_file_count).to eq(2)
+    end
+
+    it "rejects a zip whose index.html is more than one folder deep" do
+      # Only a single wrapping folder is stripped, so a second one leaves no index.html at the root.
+      upload_zip({
+                   "dist/game/index.html" => "<html>nested</html>",
+                   "dist/game/assets/game.js" => "x",
+                 })
+
+      expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /no index.html at its root/)
+      expect(site_keys).to be_empty
+    end
+
     it "keeps the zip next to the files it came from" do
       upload_zip({ "index.html" => "<html></html>" })
 
@@ -181,11 +210,28 @@ describe ProductBuilds::UnpackSiteService do
         expect(site_keys).to be_empty
       end
 
-      it "rejects a zip with no index.html at its root" do
-        upload_zip({ "game/index.html" => "<html></html>" })
+      it "rejects a zip with no index.html at its root, even after a wrapping folder is stripped" do
+        upload_zip({ "game/play.html" => "<html></html>" })
 
         expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /no index.html at its root/)
         expect(build.reload.site_unpack_error).to match(/no index.html at its root/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects a zip whose files are not all inside one folder" do
+        upload_zip({ "game/index.html" => "<html></html>", "readme.md" => "x" })
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /more than one top-level entry/)
+        expect(build.reload.site_unpack_error).to match(/more than one top-level entry/)
+        expect(site_keys).to be_empty
+      end
+
+      it "rejects a zip with more than one top-level folder" do
+        upload_zip({ "game/index.html" => "<html></html>", "other/index.html" => "<html></html>" })
+
+        expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /more than one top-level entry/)
+        expect(site_keys).to be_empty
+        expect(s3.list_objects_v2(bucket: S3_BUCKET, prefix: "builds/#{product.id}/1/").contents.map(&:key)).to eq([build.storage_key])
       end
 
       it "rejects bytes that are not an archive at all" do
