@@ -165,9 +165,21 @@ function LoginPage() {
 
   return (
     <Layout
-      header={<h1>{application_name ? `Connect ${application_name} to Gumroad` : "Log in"}</h1>}
+      header={
+        <h1>
+          {migration_product_count !== undefined
+            ? `Log in to import your ${migration_product_count === 1 ? "product" : "products"}`
+            : application_name
+              ? `Connect ${application_name} to Gumroad`
+              : "Log in"}
+        </h1>
+      }
       headerActions={<Link href={Routes.signup_path({ next })}>Sign up</Link>}
-      migrationProductCount={migration_product_count}
+      migration={
+        migration_product_count !== undefined
+          ? { productCount: migration_product_count, applicationName: application_name }
+          : undefined
+      }
     >
       <form onSubmit={handleSubmit}>
         <SocialAuth />

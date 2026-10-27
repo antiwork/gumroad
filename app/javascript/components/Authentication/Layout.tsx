@@ -10,12 +10,12 @@ export const Layout = ({
   children,
   header,
   headerActions,
-  migrationProductCount,
+  migration,
 }: {
   children: React.ReactNode;
   header: React.ReactNode;
   headerActions?: React.ReactNode;
-  migrationProductCount?: number | undefined;
+  migration?: { productCount: number; applicationName: string | null } | undefined;
 }) => {
   const { rootDomain, scheme } = useDomains();
 
@@ -32,10 +32,12 @@ export const Layout = ({
           className="p-8 sm:p-16"
         >
           {header}
-          {migrationProductCount !== undefined ? (
+          {migration ? (
             <p className="mt-4">
-              Gumroad imports your {migrationProductCount} {migrationProductCount === 1 ? "product" : "products"} as{" "}
-              {migrationProductCount === 1 ? "a draft" : "drafts"}. After you continue, confirm the destination account.
+              {migration.productCount === 1 ? "Your product" : `Your ${migration.productCount} products`}
+              {migration.applicationName ? ` from ${migration.applicationName}` : ""}{" "}
+              {migration.productCount === 1 ? "arrives on Gumroad as a draft" : "arrive on Gumroad as drafts"}. Next,
+              you confirm the import.
             </p>
           ) : null}
         </PageHeader>

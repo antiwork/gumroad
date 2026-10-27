@@ -136,6 +136,17 @@ describe PartnerMigrationImportJob do
     expect(migration.reload.results["0"]["warnings"]).to include(a_string_matching(/\AThumbnail .* was not imported: The file download took longer than/))
   end
 
+  it "touches the migration around each transfer" do
+    migration = create_claimed_migration([product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/pack.zip" }])])
+    touches = 0
+    allow_any_instance_of(PartnerMigration).to receive(:touch).and_wrap_original { |original, *args| touches += 1; original.call(*args) }
+
+    described_class.new.perform(migration.id)
+
+    # Once for the product, before and after each of 2 files, then before 1 cover and 1 thumbnail.
+    expect(touches).to eq(7)
+  end
+
   it "lets Sidekiq retry a temporary download failure" do
     remote_files["https://files.example.com/pack.zip"] = nil
     allow(SsrfFilter).to receive(:get).and_wrap_original do |original, url, &block|

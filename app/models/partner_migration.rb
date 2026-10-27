@@ -9,6 +9,12 @@ require "digest"
 # user ID and imports the products as drafts. Only a SHA-256 digest of the link's code is stored.
 class PartnerMigration < ApplicationRecord
   EXPIRES_IN = 7.days
+  # The job touches the migration around each transfer, and one download stops after
+  # RemoteFileTransfer::MAX_DOWNLOAD_DURATION. A longer gap usually means the job was lost. When the job
+  # is only queued, a resume reports that the import is still running (see #retry!).
+  # Twice the download limit leaves the same time again for the upload that follows it.
+  STALLED_AFTER = PartnerMigration::RemoteFileTransfer::MAX_DOWNLOAD_DURATION * 2
+  CONFIRMATION_PREVIEW_SIZE = 5
   MAX_PRODUCTS = 500
   MAX_EXTERNAL_USER_ID_LENGTH = 255
   MAX_NAME_LENGTH = 255
@@ -227,6 +233,8 @@ class PartnerMigration < ApplicationRecord
   def pending? = status == STATUS_PENDING
   def expired?(at = Time.current) = expires_at <= at
 
+  def stalled? = status == STATUS_CLAIMED && updated_at < STALLED_AFTER.ago
+
   def claimable?
     pending? && !expired? && oauth_application.alive? && oauth_application.is_partner?
   end
@@ -268,9 +276,12 @@ class PartnerMigration < ApplicationRecord
       if restarting
         update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil, notified_at: nil, notification_failed_email: nil)
       end
-      if PartnerMigrationImportJob.perform_async(id).nil? && restarting
-        raise ClaimError, "The previous import is still finishing. Wait a moment, then try again."
+      # A nil enqueue means the job's lock is held: an import for this migration is still queued or running.
+      if PartnerMigrationImportJob.perform_async(id).nil?
+        raise ClaimError, restarting ? "The previous import is still finishing. Wait a moment, then try again." : "The import is still running. Large files can take a few hours."
       end
+      # A resumed import counts as alive again, so the status page stops offering to resume it.
+      touch unless restarting
     end
   end
 

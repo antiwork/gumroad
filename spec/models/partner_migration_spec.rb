@@ -365,6 +365,14 @@ describe PartnerMigration do
       expect(migration.reload).to have_attributes(status: described_class::STATUS_FAILED, results:)
     end
 
+    it "tells the seller when a resumed import is still running" do
+      migration, = create_migration
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
+      allow(PartnerMigrationImportJob).to receive(:perform_async).with(migration.id).and_return(nil)
+
+      expect { migration.retry!(seller) }.to raise_error(described_class::ClaimError, "The import is still running. Large files can take a few hours.")
+    end
+
     it "rejects a retry from a stale form after the import finishes" do
       migration, = create_migration
       migration.claim!(seller, expected_code_digest: migration.code_digest)

@@ -5,27 +5,38 @@
       <p><%= @error_message %></p>
     </header>
   <% else %>
-    <header class="flex flex-col gap-4 p-4 text-center">
-      <div>
-        <%= image_tag @migration.oauth_application.icon_url || image_path("gumroad_app.png"), size: "72" %>
+    <% application_name = @migration.oauth_application.name %>
+    <% product_names = @migration.products.map { _1["name"] } %>
+    <% email = current_user.form_email.presence %>
+    <header class="flex flex-col gap-4 p-4">
+      <div class="text-center">
+        <%= image_tag @migration.oauth_application.icon_url || image_path("gumroad_app.png"), size: "72", alt: "" %>
       </div>
-      <h2>
-        Import <%= pluralize(@migration.products.size, "product") %> from
-        <strong><%= @migration.oauth_application.name %></strong>?
-      </h2>
-      <p>The products are imported as drafts in <strong><%= current_user.form_email.presence || "your Gumroad account" %></strong>. Nothing is published until you publish it.</p>
-      <% if current_user.form_email.blank? %>
-        <p>Before you import, <%= link_to "add an email address", settings_main_path, class: "underline" %>.</p>
+      <h2 class="text-center">Import <%= pluralize(product_names.size, "product") %> from <strong><%= application_name %></strong></h2>
+      <ul class="m-0 flex list-disc flex-col gap-1 pl-6">
+        <% product_names.first(PartnerMigration::CONFIRMATION_PREVIEW_SIZE).each do |name| %>
+          <li><%= name %></li>
+        <% end %>
+        <% if product_names.size > PartnerMigration::CONFIRMATION_PREVIEW_SIZE %>
+          <li>and <%= product_names.size - PartnerMigration::CONFIRMATION_PREVIEW_SIZE %> more</li>
+        <% end %>
+      </ul>
+      <p>They arrive as drafts. Nothing is published until you publish it.</p>
+      <div class="flex flex-wrap items-center gap-x-2">
+        <span>Importing to <strong><%= email || "this Gumroad account" %></strong>.</span>
+        <%= button_to "Use another account", switch_partner_migration_account_path, method: :post, class: "min-h-11 cursor-pointer border-0 bg-transparent px-0 py-2 font-[inherit] text-base text-current underline" %>
+      </div>
+      <% if email.nil? %>
+        <p role="alert">Before you import, <%= link_to "add an email address", settings_main_path, class: "underline" %>. We email you there when the import finishes. Then open the link from <%= application_name %> again.</p>
       <% end %>
-      <%= button_to "Use another account", switch_partner_migration_account_path, method: :post, class: "min-h-11 cursor-pointer border-0 bg-transparent px-2 py-2 text-base leading-snug text-current underline" %>
-      <p>This also links this Gumroad account to your <%= @migration.oauth_application.name %> account.</p>
     </header>
-    <footer class="flex flex-col gap-4 p-4 text-center">
+    <footer class="flex flex-col gap-2 p-4 text-center">
       <%= form_tag partner_migration_path, method: :post, style: "display: contents" do %>
         <%= hidden_field_tag :partner_migration_id, @migration.public_id %>
         <%= hidden_field_tag :partner_migration_code_digest, @migration.code_digest %>
-        <%= button_tag "Import products", disabled: current_user.form_email.blank?, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
+        <%= button_tag "Import #{pluralize(product_names.size, "product")}", disabled: email.nil?, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
       <% end %>
+      <small>This links this Gumroad account to your <%= application_name %> account.</small>
     </footer>
   <% end %>
 </main>

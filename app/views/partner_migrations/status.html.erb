@@ -1,56 +1,82 @@
+<% progress = @migration.progress %>
+<% importing = @migration.status == PartnerMigration::STATUS_CLAIMED %>
+<% failed = @migration.status == PartnerMigration::STATUS_FAILED %>
+<% stopped = @migration.stalled? || (failed && progress[:failed] == 0) %>
+<% button_class = "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none px-4 py-3 text-base leading-snug" %>
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-xl w-[calc(100%-2rem)]">
-  <% progress = @migration.progress %>
   <header class="flex flex-col gap-4 p-4">
     <% if flash[:warning].present? %>
       <p role="alert"><%= flash[:warning] %></p>
     <% end %>
     <h1>
-      <% if @migration.status == PartnerMigration::STATUS_CLAIMED %>Import started
-      <% elsif @migration.status == PartnerMigration::STATUS_FAILED %>Import needs attention
-      <% else %>Import complete
+      <% if stopped %>Your import stopped
+      <% elsif importing %>Importing your products
+      <% elsif failed %>Some products did not import
+      <% else %>Your products are ready to review
       <% end %>
     </h1>
-    <p>From <strong><%= @migration.oauth_application.name %></strong> to <strong><%= current_user.form_email.presence || "your Gumroad account" %></strong>.</p>
-    <p role="status"><%= progress[:imported] %> of <%= progress[:total] %> products imported. <%= progress[:failed] %> failed. <%= progress[:remaining] %> remaining.</p>
-    <% if @migration.status == PartnerMigration::STATUS_CLAIMED %>
-      <p>You can close this page. Gumroad emails you when the import finishes or needs attention.</p>
-      <p>This page updates every five seconds. You can review products as they appear.</p>
-    <% end %>
-    <p>Your products stay as drafts until you publish them. Review the files, license options, and prices before publication.</p>
+    <div class="flex flex-col gap-2" role="status">
+      <progress class="w-full" aria-label="Import progress" value="<%= progress[:imported] + progress[:failed] %>" max="<%= progress[:total] %>"></progress>
+      <p>
+        <%= progress[:imported] %> of <%= pluralize(progress[:total], "product") %> imported<% if progress[:failed] > 0 %>, <%= progress[:failed] %> did not import<% end %>.
+        From <strong><%= @migration.oauth_application.name %></strong> to <strong><%= current_user.form_email.presence || "your Gumroad account" %></strong>.
+      </p>
+    </div>
+    <p>
+      <% if @migration.stalled? %>The import stopped responding.
+      <% elsif importing %>This page updates on its own. You can also close it: we email you when the import finishes.
+      <% end %>
+      Products stay as drafts until you publish them.
+    </p>
     <% if @migration.failure_reason.present? %>
       <p role="alert"><%= @migration.failure_reason %></p>
     <% end %>
-    <% if @migration.status != PartnerMigration::STATUS_COMPLETED %>
-      <%= button_to @migration.status == PartnerMigration::STATUS_CLAIMED ? "Resume import" : "Retry failed products", retry_partner_migration_path(@migration.public_id), method: :post, class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none bg-accent-with-text text-accent-foreground px-4 py-3 text-base leading-snug" %>
-      <p>A retry keeps the products that already imported. If a file link has expired, ask <%= @migration.oauth_application.name %> to refresh it.</p>
+    <% if failed || @migration.stalled? %>
+      <%= button_to importing ? "Resume import" : stopped ? "Retry import" : "Retry failed products", retry_partner_migration_path(@migration.public_id), method: :post, class: "#{button_class} bg-accent-with-text text-accent-foreground" %>
+      <p>Products that already imported stay as they are. If a file link expired, ask <%= @migration.oauth_application.name %> to refresh it first.</p>
+      <%# A failed import always keeps a way out of this page, even when nothing imported. %>
+      <% if failed || progress[:imported] > 0 %>
+        <%= link_to "Review drafts", products_path, class: "underline" %>
+      <% end %>
+    <% elsif !importing %>
+      <%= link_to "Review drafts", products_path, class: "#{button_class} bg-accent-with-text text-accent-foreground" %>
     <% end %>
-    <%= link_to "Go to products", products_path, class: "underline" %>
-    <% unless current_user.confirmed? %>
-      <p>Before you publish, <%= link_to "confirm your email", settings_main_path, class: "underline" %>.</p>
+    <% unless importing %>
+      <% steps = [] %>
+      <% steps << link_to("Confirm your email", settings_main_path, class: "underline") unless current_user.confirmed? %>
+      <% steps << link_to("Set up payouts", settings_payments_path, class: "underline") unless current_user.can_publish_products? %>
+      <% steps << link_to("Update your profile", profile_path, class: "underline") %>
+      <div class="flex flex-col gap-2">
+        <h2>Before you sell</h2>
+        <ul class="m-0 flex list-disc flex-col gap-1 pl-6">
+          <% steps.each do |step| %>
+            <li><%= step %></li>
+          <% end %>
+        </ul>
+      </div>
     <% end %>
-    <% unless current_user.can_publish_products? %>
-      <p>Before you sell, <%= link_to "set up payouts", settings_payments_path, class: "underline" %>.</p>
-    <% end %>
-    <p>You can <%= link_to "update your profile", profile_path, class: "underline" %> before you share your store.</p>
   </header>
-  <ol class="divide-y divide-border">
+  <ol class="m-0 list-none divide-y divide-border p-0">
     <% @migration.products.each_with_index do |attributes, index| %>
       <% result = @migration.results.to_h[index.to_s] || {} %>
-      <li class="flex flex-col gap-2 p-4">
-        <h2><%= attributes["name"] %></h2>
-        <% if result["error"].present? %>
-          <p>Not imported: <%= result["error"] %></p>
-        <% elsif result["product_id"].present? %>
-          <% if (product = @products[result["product_id"]]) %>
-            <%= link_to "Review product", edit_link_path(product.unique_permalink), class: "underline" %>
-          <% else %>
-            <p>This product was removed from your account.</p>
-          <% end %>
-          <% Array(result["warnings"]).each do |warning| %>
-            <p><%= warning %></p>
-          <% end %>
+      <% product = result["product_id"].present? ? @products[result["product_id"]] : nil %>
+      <% product = nil if product&.deleted? %>
+      <li class="flex flex-col gap-1 p-4">
+        <% if product %>
+          <%= link_to attributes["name"], edit_link_path(product.unique_permalink), class: "underline" %>
+          <span><%= product.banned_at? ? "Removed" : product.draft? ? "Draft" : product.alive? ? "Published" : "Unpublished" %></span>
         <% else %>
-          <p>Waiting to import.</p>
+          <span><%= attributes["name"] %></span>
+          <% if result["error"].present? %>
+            <span>Did not import: <%= result["error"] %></span>
+          <% elsif result["product_id"].present? %>
+            <span>Removed from your account.</span>
+          <% else %>
+            <span>Waiting</span>
+          <% end %>
+        <% end %>
+        <% Array(result["warnings"]).each do |warning| %>
+          <span><%= warning %></span>
         <% end %>
       </li>
     <% end %>

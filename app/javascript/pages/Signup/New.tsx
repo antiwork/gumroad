@@ -66,17 +66,24 @@ function SignupPage() {
     form.post(Routes.signup_path());
   };
 
-  const headerText = referrer
-    ? `Join ${referrer.name} on Gumroad`
-    : application_name
-      ? `Sign up for Gumroad and connect ${application_name}`
-      : `Join over ${number_of_creators.toLocaleString()} creators who have earned over ${formatPrice("$", total_made, 0, { noCentsIfWhole: true })} on Gumroad selling digital products and memberships.`;
+  const headerText =
+    migration_product_count !== undefined
+      ? `Sign up to import your ${migration_product_count === 1 ? "product" : "products"}`
+      : referrer
+        ? `Join ${referrer.name} on Gumroad`
+        : application_name
+          ? `Sign up for Gumroad and connect ${application_name}`
+          : `Join over ${number_of_creators.toLocaleString()} creators who have earned over ${formatPrice("$", total_made, 0, { noCentsIfWhole: true })} on Gumroad selling digital products and memberships.`;
 
   return (
     <Layout
       header={<h1>{headerText}</h1>}
       headerActions={<Link href={Routes.login_path({ next })}>Log in</Link>}
-      migrationProductCount={migration_product_count}
+      migration={
+        migration_product_count !== undefined
+          ? { productCount: migration_product_count, applicationName: application_name }
+          : undefined
+      }
     >
       <form onSubmit={handleSubmit}>
         <SocialAuth />

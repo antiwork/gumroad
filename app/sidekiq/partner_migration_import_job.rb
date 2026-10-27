@@ -68,7 +68,8 @@ class PartnerMigrationImportJob
 
   private
     def import_product(migration, index, attributes)
-      importer = PartnerMigration::ProductImporter.new(seller: migration.user, attributes:)
+      importer = PartnerMigration::ProductImporter.new(seller: migration.user, attributes:, heartbeat: -> { migration.touch })
+      migration.touch
       file_urls = importer.download_files
       product = begin
         ActiveRecord::Base.transaction do

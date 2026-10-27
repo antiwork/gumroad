@@ -14,15 +14,21 @@ class PartnerMigration::ProductImporter
     *INTERNET_EXCEPTIONS
   ].freeze
 
-  def initialize(seller:, attributes:)
+  # `heartbeat` runs around each remote transfer, so the caller can record that the import is alive.
+  def initialize(seller:, attributes:, heartbeat: -> { })
     @seller = seller
     @attributes = attributes
+    @heartbeat = heartbeat
   end
 
   # Returns the S3 URLs of the product files, in order. On an error, deletes the files it uploaded.
   def download_files
     @uploaded_urls = []
-    attributes["files"].each { @uploaded_urls << PartnerMigration::RemoteFileTransfer.new(seller:, url: _1["url"]).perform }
+    attributes["files"].each do |file|
+      heartbeat.call
+      @uploaded_urls << PartnerMigration::RemoteFileTransfer.new(seller:, url: file["url"]).perform
+      heartbeat.call
+    end
     @uploaded_urls
   rescue StandardError
     discard_uploaded_files
@@ -73,7 +79,7 @@ class PartnerMigration::ProductImporter
   end
 
   private
-    attr_reader :seller, :attributes
+    attr_reader :seller, :attributes, :heartbeat
 
     def create_variant_categories!(product)
       attributes["variant_categories"].each do |category_attributes|
@@ -102,6 +108,7 @@ class PartnerMigration::ProductImporter
     # AssetPreview#url= reads the whole response into memory, so covers use the bounded download.
     def attach_covers(product)
       attributes["covers"].filter_map do |cover|
+        heartbeat.call
         PartnerMigration::RemoteFileTransfer.download(cover["url"], max_bytes: AssetPreview::MAX_IMAGE_FILE_SIZE) do |tempfile, filename|
           blob = ActiveStorage::Blob.create_and_upload!(io: tempfile, filename:, content_type: Marcel::MimeType.for(tempfile, name: filename))
           asset_preview = product.asset_previews.build
@@ -124,6 +131,7 @@ class PartnerMigration::ProductImporter
     def attach_thumbnail(product)
       return [] if attributes["thumbnail_url"].blank?
 
+      heartbeat.call
       PartnerMigration::RemoteFileTransfer.download(attributes["thumbnail_url"], max_bytes: Thumbnail::MAX_FILE_SIZE) do |tempfile, filename|
         blob = ActiveStorage::Blob.create_and_upload!(io: tempfile, filename:, content_type: Marcel::MimeType.for(tempfile, name: filename))
         thumbnail = product.build_thumbnail

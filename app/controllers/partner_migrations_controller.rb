@@ -37,7 +37,11 @@ class PartnerMigrationsController < ApplicationController
   end
 
   def status
-    response.headers["Refresh"] = "5" if @migration.status == PartnerMigration::STATUS_CLAIMED
+    # A reload would hide a resume warning, so that one view does not refresh. A stalled import
+    # refreshes slowly, so the page still recovers when a queued job starts.
+    if @migration.status == PartnerMigration::STATUS_CLAIMED && flash[:warning].blank?
+      response.headers["Refresh"] = @migration.stalled? ? "60" : "5"
+    end
     @products = current_user.links.by_external_ids(@migration.results.to_h.values.filter_map { _1["product_id"] }).index_by(&:external_id)
   end
 
