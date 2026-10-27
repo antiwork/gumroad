@@ -6,16 +6,11 @@ class TranscodeVideoForStreamingWorker
   include SignedUrlHelper
   sidekiq_options retry: 13, queue: :default
 
-  # Enforced by AWS Elastic Transcoder
-  MAX_OUTPUT_KEY_PREFIX_BYTESIZE = 255
   MEDIACONVERT = "mediaconvert"
   GRMC = "grmc"
   GRMC_ENDPOINT = "https://production-mediaconverter.gumroad.net/convert"
   GRMC_VIDEO_URL_VALID_FOR = 24.hours
-  ETS = "ets"
-  ETS_PLAYLIST_FILENAME = "index.m3u8"
   MEDIACONVERT_OUTPUT_FILENAME = "index"
-
 
   def perform(id, klass_name = ProductFile.name, transcoder = GRMC, allowed_when_processing = false)
     ApplicationRecord.connected_to(role: :writing) do
@@ -42,77 +37,6 @@ class TranscodeVideoForStreamingWorker
   end
 
   def create_hls_transcode_job(streamable, original_video_key, input_video_height, transcoder)
-    if mediaconvert_transcodable?(transcoder)
-      create_hls_mediaconvert_transcode_job(streamable, original_video_key, input_video_height, transcoder)
-    else
-      create_hls_ets_transcode_job(streamable, original_video_key, input_video_height)
-    end
-  end
-
-  def create_hls_ets_transcode_job(streamable, original_video_key, input_video_height)
-    input = {
-      key: original_video_key,
-      frame_rate: "auto",
-      resolution: "auto",
-      aspect_ratio: "auto",
-      interlaced: "auto",
-      container: "auto"
-    }
-
-    # Every video gets transcoded to 480p regardless of its height. HD Videos get transcoded to at most one more preset depending on their resolution:
-    preset_keys = ["hls_480p"]
-
-    if input_video_height >= 1080
-      preset_keys << "hls_1080p"
-    elsif input_video_height >= 720
-      preset_keys << "hls_720p"
-    end
-
-    outputs = []
-    preset_keys.each do |preset_key|
-      hls_preset_id = HLS_PRESETS[preset_key]
-      outputs << {
-        key: "#{preset_key}_",
-        thumbnail_pattern: "",
-        rotate: "auto",
-        preset_id: hls_preset_id,
-        segment_duration: "10"
-      }
-    end
-
-    playlists = [
-      {
-        name: "index",
-        format: "HLSv3",
-        output_keys: outputs.map { |output| output[:key] }
-      }
-    ]
-
-    extension = File.extname(original_video_key)
-    relative_hls_path = "/hls/"
-    # Fails to transcode if the 'output_key_prefix' length exceeds 255.
-    video_key_without_extension = original_video_key.delete_suffix(extension)
-                                                    .truncate_bytes(MAX_OUTPUT_KEY_PREFIX_BYTESIZE - relative_hls_path.length,
-                                                                    omission: nil)
-    output_key_prefix = "#{video_key_without_extension}#{relative_hls_path}"
-    response = Aws::ElasticTranscoder::Client.new.create_job(pipeline_id: HLS_PIPELINE_ID,
-                                                             input:,
-                                                             outputs:,
-                                                             output_key_prefix:,
-                                                             playlists:)
-
-    job = response.data[:job]
-    job_id = job[:id]
-    TranscodedVideo.create!(
-      streamable:,
-      original_video_key:,
-      transcoded_video_key: "#{output_key_prefix}#{ETS_PLAYLIST_FILENAME}",
-      job_id:,
-      is_hls: true
-    )
-  end
-
-  def create_hls_mediaconvert_transcode_job(streamable, original_video_key, input_video_height, transcoder)
     # Every video gets transcoded to 480p regardless of its height. HD Videos get transcoded to at most one more preset depending on their resolution:
     presets = ["hls_480p"]
 
@@ -203,10 +127,6 @@ class TranscodeVideoForStreamingWorker
   end
 
   private
-    def mediaconvert_transcodable?(transcoder)
-      transcoder.in?([MEDIACONVERT, GRMC])
-    end
-
     # GRMC runs outside AWS, so reading S3 directly is billed as internet egress; S3 to CloudFront is free.
     # This distribution skips Cloudflare, so source videos stay out of its cache.
     def grmc_source_video_link(original_video_key)

@@ -84,7 +84,6 @@ gem "apple_id", "~> 1.5"
 # AWS SDK Gems
 gem "aws-sdk-s3", "~> 1.117"
 gem "aws-sdk-sqs", "~> 1.69"
-gem "aws-sdk-elastictranscoder", "~> 1.39"
 gem "aws-sdk-autoscaling", "~> 1.84"
 gem "aws-sdk-mediaconvert", "~> 1.96"
 gem "aws-sdk-sns", "~> 1.57"

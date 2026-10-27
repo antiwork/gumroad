@@ -38,29 +38,24 @@ describe HandleSnsMediaconvertEventWorker do
         expect(described_class.new.perform(notification)).to be_nil
 
         expect(TranscodeVideoForStreamingWorker.jobs.size).to eq(0)
-        expect(HandleSnsTranscoderEventWorker.jobs.size).to eq(0)
       end
     end
 
     context "when MediaConvert fails to transcode the video" do
-      before do
-        @transcoded_video = create(:transcoded_video, job_id: "abcd", state: "processing")
-      end
+      let!(:transcoded_video) { create(:transcoded_video, job_id: "abcd", state: "processing") }
 
-      it "deletes the transcoded_video object" do
+      it "marks the transcoded_video object as errored and notifies the creator" do
         expect do
           described_class.new.perform(error_notification)
-        end.to change { TranscodedVideo.count }.by(-1)
+        end.to have_enqueued_mail(ContactingCreatorMailer, :video_transcode_failed).with(transcoded_video.streamable_id)
 
-        expect { @transcoded_video.reload }.to raise_error(ActiveRecord::RecordNotFound)
+        expect(transcoded_video.reload.state).to eq "error"
       end
 
-      it "enqueues a job to transcode the video using ETS" do
+      it "does not enqueue another transcoding job" do
         described_class.new.perform(error_notification)
 
-        ets_transcoder = TranscodeVideoForStreamingWorker::ETS
-        expect(TranscodeVideoForStreamingWorker).to have_enqueued_sidekiq_job(@transcoded_video.streamable.id, ProductFile.name, ets_transcoder)
-        expect(HandleSnsTranscoderEventWorker.jobs.size).to eq(0)
+        expect(TranscodeVideoForStreamingWorker.jobs.size).to eq(0)
       end
     end
 
