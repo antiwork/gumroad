@@ -157,6 +157,19 @@ describe ConfirmationsController do
         expect(mobile_token.reload.revoked_at).to be_nil
       end
 
+      it "still invalidates the confirmed account's browser sessions when its stored data no longer passes validation" do
+        brand_account.update_column(:payment_address, "not-an-email")
+
+        freeze_time do
+          get :show, params: { confirmation_token: brand_account.confirmation_token }
+
+          expect(response).to redirect_to(dashboard_path)
+          expect(brand_account.reload).to be_confirmed
+          expect(brand_account.last_active_sessions_invalidated_at).to eq(DateTime.current)
+          expect(request.env["warden"].user(:user)).to eq(seller)
+        end
+      end
+
       it "sends the signed-in user to their own home, not the confirmed account's" do
         buyer = create(:user, confirmed_at: nil)
         create(:purchase, purchaser: buyer)
@@ -229,6 +242,37 @@ describe ConfirmationsController do
             get :show, params: { confirmation_token: @user.confirmation_token }
           end.to change { @user.reload.reset_password_token }.to(nil)
           .and change { @user.reset_password_sent_at }.to(nil)
+        end
+
+        [false, true].each do |affiliate_requests_processed|
+          it "completes confirmation when the account's stored data no longer passes validation (affiliate requests processed: #{affiliate_requests_processed})" do
+            @user.update!(pre_signup_affiliate_request_processed: affiliate_requests_processed)
+            @user.update_column(:payment_address, "not-an-email")
+            expect(@user.reload.reset_password_token).to be_present
+            expect(@user.pre_signup_affiliate_request_processed).to be(affiliate_requests_processed)
+            guest_purchase = create(:purchase, email: @user.email, purchaser: nil)
+            token_when_queued = :not_queued
+            allow(AttachPastPurchasesToUserWorker).to receive(:perform_async).and_wrap_original do |original, *args|
+              token_when_queued = User.find(@user.id).reset_password_token
+              original.call(*args)
+            end
+
+            freeze_time do
+              get :show, params: { confirmation_token: @user.confirmation_token }
+
+              expect(response).to redirect_to dashboard_url
+              expect(flash[:notice]).to eq("Your account has been successfully confirmed!")
+              expect(@user.reload).to be_confirmed
+              expect(@user.reset_password_token).to be_nil
+              expect(@user.last_active_sessions_invalidated_at).to eq(DateTime.current)
+              expect(request.env["warden"].session["last_sign_in_at"]).to eq(DateTime.current.to_i)
+            end
+            expect(token_when_queued).to be_nil
+
+            AttachPastPurchasesToUserWorker.drain
+
+            expect(@user.purchases.visible_in_library).to contain_exactly(guest_purchase)
+          end
         end
       end
 

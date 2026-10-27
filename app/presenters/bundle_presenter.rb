@@ -108,6 +108,17 @@ class BundlePresenter
       }
     end
 
+    def retained_files_props
+      bundle.alive_product_files.map do |file|
+        {
+          id: file.external_id,
+          name: file.name_displayable,
+          filetype: file.filetype,
+          size: file.size_displayable,
+        }
+      end
+    end
+
     def shared_props
       collaborator = bundle.collaborator_for_display
       default_offer_code = bundle.default_offer_code
@@ -141,6 +152,8 @@ class BundlePresenter
           products: bundle.bundle_products.alive.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).map { self.class.bundle_product(product: _1.product, quantity: _1.quantity, selected_variant_id: _1.variant&.external_id) },
           collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
           public_files: bundle.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
+          # A converted bundle keeps files of its own; its members' files are separate.
+          retained_files: retained_files_props,
           default_offer_code: default_offer_code ? {
             id: default_offer_code.external_id,
             code: default_offer_code.code,

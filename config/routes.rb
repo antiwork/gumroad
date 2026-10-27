@@ -969,7 +969,11 @@ Rails.application.routes.draw do
 
     resources :bundles, only: [] do
       scope module: :bundles do
-        resource :product, only: [:edit, :update], controller: "product"
+        resource :product, only: [:edit, :update], controller: "product" do
+          # Its own request: the product form is the bundle save, and a retained file is not
+          # part of it. See Bundles::ProductController#remove_file.
+          post :remove_file
+        end
         resource :content, only: [:edit, :update], controller: "content" do
           post :update_purchases_content
         end
