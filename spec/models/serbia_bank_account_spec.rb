@@ -40,6 +40,12 @@ describe SerbiaBankAccount do
       expect(build(:serbia_bank_account)).to be_valid
       expect(build(:serbia_bank_account, account_number: "RS35105008123123123173")).to be_valid
 
+      [18, 19, 21].each do |digits|
+        rs_bank_account = build(:serbia_bank_account, account_number: "RS#{"1" * digits}")
+        expect(rs_bank_account).to_not be_valid
+        expect(rs_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      end
+
       rs_bank_account = build(:serbia_bank_account, account_number: "MA12345")
       expect(rs_bank_account).to_not be_valid
       expect(rs_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
@@ -55,6 +61,13 @@ describe SerbiaBankAccount do
       rs_bank_account = build(:serbia_bank_account, account_number: "CRABCDE")
       expect(rs_bank_account).to_not be_valid
       expect(rs_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    end
+
+    it "does not re-validate a legacy account number on unrelated saves" do
+      bank_account = create(:serbia_bank_account, account_number: "RS559081234567890123")
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      expect(BankAccount.find(bank_account.id)).to be_valid
     end
   end
 end
