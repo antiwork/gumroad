@@ -162,6 +162,16 @@ describe "Web build player", type: :request do
       expect(response.body).to eq("console.log(1)")
     end
 
+    it "streams a script larger than the page limit, since only pages are read into memory" do
+      stub_const("ProductBuild::MAX_PAGE_BYTE_SIZE", 4)
+
+      get "#{frame_path}game.js"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["Content-Length"]).to eq("console.log(1)".bytesize.to_s)
+      expect(response.body).to eq("console.log(1)")
+    end
+
     it "redirects other files to a signed link that serves them inline, with CORS for the opaque origin" do
       get "#{frame_path}engine.wasm"
 

@@ -12,6 +12,10 @@ class ProductBuild < ApplicationRecord
   SITE_DIRECTORY = "site"
   MAX_SITE_FILES = 5_000
   MAX_SITE_BYTE_SIZE = 4.gigabytes
+  # The player reads a page into memory to put the save shim in it, so pages have a limit of their
+  # own. Every other file is streamed.
+  PAGE_EXTENSIONS = %w[html htm].freeze
+  MAX_PAGE_BYTE_SIZE = 10.megabytes
   PUBLIC_ID_LENGTH = 21
   DISPLAY_NAME_MAX_LENGTH = 200
   STORAGE_PREFIX = "builds"

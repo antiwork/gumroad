@@ -12,10 +12,8 @@ class ProductBuildPlayerFilesController < ApplicationController
   include SignedUrlHelper
 
   INDEX = "index.html"
-  HTML_EXTENSIONS = %w[html htm].freeze
-  DOCUMENT_EXTENSIONS = (HTML_EXTENSIONS + %w[svg xml]).freeze
+  DOCUMENT_EXTENSIONS = (ProductBuild::PAGE_EXTENSIONS + %w[svg xml]).freeze
   SERVED_EXTENSIONS = (DOCUMENT_EXTENSIONS + %w[js mjs cjs css]).freeze
-  MAX_SERVED_BYTE_SIZE = 25.megabytes
   # Shorter than the signed link it points at, so a cached redirect never hands out an expired link.
   CACHE_MAX_AGE = 5.minutes
 
@@ -35,7 +33,7 @@ class ProductBuildPlayerFilesController < ApplicationController
     return serve_file if SERVED_EXTENSIONS.include?(extension)
 
     expires_in CACHE_MAX_AGE, public: false
-    redirect_to signed_build_site_url(s3_key), allow_other_host: true
+    redirect_to signed_build_site_location(s3_key), allow_other_host: true
   end
 
   private
@@ -56,33 +54,43 @@ class ProductBuildPlayerFilesController < ApplicationController
     def s3_key = "#{@grant["site_prefix"]}/#{@path}"
 
     def serve_file
-      html = HTML_EXTENSIONS.include?(extension)
+      page = ProductBuild::PAGE_EXTENSIONS.include?(extension)
       # Each page load is a new play session, so the kill switch is checked here and not per file.
-      return e404 if html && !Feature.active?(:product_build_player, User.find_by(id: @grant["seller_id"]))
+      return e404 if page && !Feature.active?(:product_build_player, User.find_by(id: @grant["seller_id"]))
 
       s3 = Aws::S3::Client.new
-      return e404 if s3.head_object(bucket: S3_BUCKET, key: s3_key).content_length > MAX_SERVED_BYTE_SIZE
-
-      object = s3.get_object(bucket: S3_BUCKET, key: s3_key)
-      body = object.body.read
-      if html
-        save = ProductBuildSave.find_by(purchase_id: @grant["purchase_id"])
-        body = ProductBuilds::PlayerDocument.render(body, save_data: save&.data || {})
-        # The page carries the buyer's save.
-        response.set_header("Cache-Control", "private, no-store")
-      else
-        expires_in CACHE_MAX_AGE, public: false
-      end
-
+      head = s3.head_object(bucket: S3_BUCKET, key: s3_key)
       if DOCUMENT_EXTENSIONS.include?(extension)
         SecureHeaders.opt_out_of_header(request, :csp)
         response.set_header("Content-Security-Policy", ProductBuilds::PlayerDocument.content_security_policy(request_origin: request.base_url, cdn_origin:))
       end
       # The path holds the content-page token and the grant, so it must not reach the CDN or a game's server.
       response.set_header("Referrer-Policy", "no-referrer")
-      send_data body, type: object.content_type, disposition: "inline"
+      page ? serve_page(s3, head) : stream_file(s3, head)
     rescue Aws::S3::Errors::NotFound, Aws::S3::Errors::NoSuchKey
       e404
+    end
+
+    def serve_page(s3, head)
+      # The unpack rejects larger pages; this guards pages unpacked before that limit.
+      return e404 if head.content_length > ProductBuild::MAX_PAGE_BYTE_SIZE
+
+      save = ProductBuildSave.find_by(purchase_id: @grant["purchase_id"])
+      body = ProductBuilds::PlayerDocument.render(s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read, save_data: save&.data || {})
+      # The page carries the buyer's save.
+      response.set_header("Cache-Control", "private, no-store")
+      send_data body, type: head.content_type, disposition: "inline"
+    end
+
+    # Streamed, not read into memory: a bundled script can be as large as the build allows.
+    def stream_file(s3, head)
+      expires_in CACHE_MAX_AGE, public: false
+      response.set_header("Content-Type", head.content_type)
+      response.set_header("Content-Length", head.content_length.to_s)
+      key = s3_key
+      self.response_body = Enumerator.new do |chunks|
+        s3.get_object(bucket: S3_BUCKET, key:) { |chunk| chunks << chunk }
+      end
     end
 
     def cdn_origin

@@ -320,6 +320,9 @@ class ProductBuilds::UnpackSiteService
         if copied > remaining_bytes
           raise UnpackError, "A build's files can unpack to at most #{ProductBuild::MAX_SITE_BYTE_SIZE / 1.gigabyte} GB."
         end
+        if copied > ProductBuild::MAX_PAGE_BYTE_SIZE && ProductBuild::PAGE_EXTENSIONS.include?(File.extname(path).delete_prefix(".").downcase)
+          raise UnpackError, "An HTML page can be at most #{ProductBuild::MAX_PAGE_BYTE_SIZE / 1.megabyte} MB: #{shown(path)}."
+        end
 
         file.rewind
         key = "#{build.site_prefix}/#{path}"
