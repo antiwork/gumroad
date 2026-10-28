@@ -598,3 +598,39 @@ describe("AccountDetailsSection personal country", () => {
     expect(personalCountryCodes()).toEqual(["US", "GB"]);
   });
 });
+
+describe("AccountDetailsSection address length", () => {
+  // Stripe refuses an address line1 over 200 characters behind a message naming no field, so a form
+  // without the cap saves a value that can never reach the payout rail.
+  const STRIPE_LINE1_MAX_LENGTH = 200;
+  const inputById = (suffix: string) => document.querySelector<HTMLInputElement>(`input[id$="${suffix}"]`);
+
+  it("caps the individual and business address inputs", () => {
+    renderSection(makeUser(), {
+      is_business: true,
+      business_country: "US",
+      business_street_address: "1 Main St",
+    });
+
+    expect(inputById("-creator-street-address")?.maxLength).toBe(STRIPE_LINE1_MAX_LENGTH);
+    expect(inputById("-business-street-address")?.maxLength).toBe(STRIPE_LINE1_MAX_LENGTH);
+  });
+
+  // For a Japanese account Stripe reads the block/building number as line1.
+  it("caps the Japanese block-number inputs", () => {
+    renderSection(makeUser({ country_code: "JP", payout_currency: "jpy" }), {
+      country: "JP",
+      is_business: true,
+      business_country: "JP",
+    });
+
+    for (const suffix of [
+      "-creator-building-number",
+      "-creator-building-number-kana",
+      "-business-building-number",
+      "-business-building-number-kana",
+    ]) {
+      expect(inputById(suffix)?.maxLength).toBe(STRIPE_LINE1_MAX_LENGTH);
+    }
+  });
+});
