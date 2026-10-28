@@ -439,7 +439,11 @@ class StripeChargeProcessor
       end
     end
 
-    validate_resolved_mandate_active!(mandate, merchant_account, reference) if mandate.present? && !chargeable.try(:validated_stripe_mandate_id).present?
+    # Only a first-time checkout charge (multi-seller cart) can resolve a mandate that is still
+    # pending: a rebill reads a mandate registered at an earlier purchase, where a non-active
+    # status is already handled by the rebill validation and must keep its existing behaviour
+    # (submit and let Stripe report it), so this check is scoped to `!mandate_expected`.
+    validate_resolved_mandate_active!(mandate, merchant_account, reference) if mandate.present? && !mandate_expected && !chargeable.try(:validated_stripe_mandate_id).present?
 
     # Stripe does not update a mandate. Use the mandate from a completed SetupIntent instead
     # of asking the PaymentIntent to create different terms.
