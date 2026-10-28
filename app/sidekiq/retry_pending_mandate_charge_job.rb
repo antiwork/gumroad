@@ -25,6 +25,11 @@ class RetryPendingMandateChargeJob
     purchases.map(&:created_at).min + MAX_WAIT <= Time.current
   end
 
+  # When FailAbandonedPurchaseWorker fails a held purchase whose retry chain was lost.
+  def self.backstop_at(purchase)
+    purchase.created_at + MAX_WAIT + ChargeProcessor::TIME_TO_COMPLETE_SCA
+  end
+
   # A buyer retry can charge the group between the caller's read and this lock, so recheck first.
   def self.fail_unpaid!(purchase)
     purchase.with_lock do

@@ -189,6 +189,35 @@ describe RetryPendingMandateChargeJob do
         purchases.each { expect(responses[_1.id]).to include(success: false, error_message: described_class::PENDING_MESSAGE) }
       end
 
+      it "keeps the retry for a browser confirm after the wait when its row lock stays contended" do
+        age_purchases(described_class::MAX_WAIT + 1.minute)
+        allow_any_instance_of(Purchase).to receive(:lock!).and_raise(ActiveRecord::LockWaitTimeout)
+
+        responses = nil
+        expect { responses, = Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform }.not_to raise_error
+
+        purchases.each { expect(responses[_1.id]).to include(success: true, processing: true) }
+        expect(described_class.jobs.size).to eq(1)
+      end
+
+      it "keeps the retry when a browser confirm's deadline failure cannot take the row lock" do
+        age_purchases(described_class::MAX_WAIT - 1.second)
+        allow(ChargeProcessor).to receive(:get_setup_intent) do
+          travel 2.minutes
+          raise ChargeProcessorUnavailableError
+        end
+        lock_calls = 0
+        allow_any_instance_of(Purchase).to receive(:lock!).and_wrap_original do |original, *args|
+          (lock_calls += 1) == 1 ? original.call(*args) : raise(ActiveRecord::LockWaitTimeout)
+        end
+
+        responses = nil
+        expect { responses, = Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform }.not_to raise_error
+
+        purchases.each { expect(responses[_1.id]).to include(success: true, processing: true) }
+        expect(described_class.jobs.size).to eq(1)
+      end
+
       it "reconciles a group whose charge was already submitted instead of failing it after the wait" do
         age_purchases(described_class::MAX_WAIT + 1.minute)
         purchases.first.charge.update!(client_confirmed: true)
@@ -356,6 +385,120 @@ describe RetryPendingMandateChargeJob do
         expect(described_class.jobs.size).to eq(1)
       end
 
+      it "refuses a browser confirm that arrives after the wait when its retry chain was lost" do
+        age_purchases(described_class::MAX_WAIT + 5.minutes)
+        mandate_statuses["mandate_job_1"] = "active"
+        expect(Charge::CreateService).not_to receive(:new)
+
+        responses, = Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform
+
+        expect_failed_with_pending_mandate_error
+        purchases.each { expect(responses[_1.id]).to include(success: false, error_message: described_class::PENDING_MESSAGE) }
+      end
+
+      it "keeps waiting when Stripe cannot be read on its first retry inside the wait" do
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError)
+
+        described_class.new.perform(order.id)
+
+        expect(purchases.map { _1.reload.purchase_state }).to all(eq("in_progress"))
+        expect(described_class.jobs.size).to eq(1)
+      end
+
+      it "keeps waiting instead of charging when its mandate cannot be read on its first retry inside the wait" do
+        allow(ChargeProcessor).to receive(:get_mandate).and_raise(ChargeProcessorUnavailableError)
+        expect(Charge::CreateService).not_to receive(:new)
+
+        described_class.new.perform(order.id)
+
+        expect(purchases.map { _1.reload.purchase_state }).to all(eq("in_progress"))
+        expect(described_class.jobs.size).to eq(1)
+      end
+
+      it "protects it from a repeat purchase while a temporary Stripe error keeps it waiting" do
+        age_purchases(ChargeProcessor::TIME_TO_COMPLETE_SCA + 5.minutes)
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError)
+
+        described_class.new.perform(order.id)
+
+        held = purchases.first.reload
+        expect(held.stripe_status).to eq(StripeIntentStatus::PROCESSING)
+        free_code = create(:offer_code, products: [held.link], amount_cents: nil, amount_percentage: 100)
+        params = {
+          purchase: {
+            email: held.email, quantity: 1, perceived_price_cents: 0, discount_code: free_code.code,
+            ip_address: "0.0.0.0", session_id: "a107d0b7ab5ab3c1eeb7d3aaf9792977", is_mobile: false, browser_guid: SecureRandom.uuid
+          }
+        }
+        expect do
+          _, error = Purchase::CreateService.new(product: held.link, params:).perform
+          expect(error).to be_present
+        end.not_to change { Purchase.where(link: held.link).successful.count }
+      end
+
+      it "schedules the abandoned-purchase backstop when it is marked after that check already ran" do
+        age_purchases(ChargeProcessor::TIME_TO_COMPLETE_SCA + 5.minutes)
+
+        described_class.new.perform(order.id)
+
+        backstop_at = (purchases.first.reload.created_at + described_class::MAX_WAIT + ChargeProcessor::TIME_TO_COMPLETE_SCA).to_f
+        expect(FailAbandonedPurchaseWorker.jobs.map { [_1["args"], _1["at"]] }).to match_array(
+          purchases.map { [[_1.id], a_value_within(1).of(backstop_at)] }
+        )
+      end
+
+      it "schedules the backstop when a temporary Stripe error marks it after that check already ran" do
+        age_purchases(ChargeProcessor::TIME_TO_COMPLETE_SCA + 5.minutes)
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError)
+
+        described_class.new.perform(order.id)
+
+        expect(FailAbandonedPurchaseWorker.jobs.map { _1["args"] }).to match_array(purchases.map { [_1.id] })
+      end
+
+      it "leaves the marker off during a temporary Stripe error inside the authentication window" do
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError)
+
+        described_class.new.perform(order.id)
+
+        purchases.each do |purchase|
+          purchase.reload
+          expect(purchase.purchase_state).to eq("in_progress")
+          expect(purchase.stripe_status).to be_nil
+        end
+      end
+
+      it "fails it with the pending-mandate error when the wait ends during a temporary Stripe error" do
+        age_purchases(described_class::MAX_WAIT - 1.second)
+        allow(ChargeProcessor).to receive(:get_setup_intent) do
+          travel 2.minutes
+          raise ChargeProcessorUnavailableError
+        end
+
+        described_class.new.perform(order.id)
+
+        expect_failed_with_pending_mandate_error
+      end
+
+      it "keeps waiting without raising when its row lock stays contended" do
+        age_purchases(ChargeProcessor::TIME_TO_COMPLETE_SCA + 5.minutes)
+        allow_any_instance_of(Purchase).to receive(:lock!).and_raise(ActiveRecord::LockWaitTimeout)
+
+        expect { described_class.new.perform(order.id) }.not_to raise_error
+
+        expect(purchases.map { _1.reload.purchase_state }).to all(eq("in_progress"))
+        expect(described_class.jobs.size).to eq(1)
+      end
+
+      it "still fails it right away on an error that waiting cannot fix" do
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorInvalidRequestError)
+
+        described_class.new.perform(order.id)
+
+        expect(purchases.map { _1.reload.purchase_state }).to all(eq("failed"))
+        expect(described_class.jobs).to be_empty
+      end
+
       it "reconciles it after the wait when its charge was already submitted" do
         age_purchases(described_class::MAX_WAIT + 1.minute)
         purchases.first.charge.update!(client_confirmed: true)
@@ -364,6 +507,38 @@ describe RetryPendingMandateChargeJob do
 
         expect(purchases.map { _1.reload.purchase_state }).to all(eq("in_progress"))
         expect(ReconcileClientConfirmedChargeJob.jobs.map { _1["args"].first }).to include(purchases.first.charge.id)
+      end
+    end
+
+    context "with a group that was never held" do
+      before do
+        mandate_statuses["mandate_job_1"] = "active"
+        outcomes[:charge] = ->(kwargs) { processing_outcome(kwargs) }
+      end
+
+      it "charges a late browser confirm whose SetupIntent carries no mandate" do
+        setup_intents["seti_job_1"] = instance_double(StripeSetupIntent, succeeded?: true, mandate: nil)
+        age_purchases(described_class::MAX_WAIT + 5.minutes)
+
+        Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform
+
+        purchases.each { expect(_1.reload.processor_payment_intent).to be_present }
+      end
+
+      it "charges a browser confirm inside the wait" do
+        Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform
+
+        purchases.each { expect(_1.reload.processor_payment_intent).to be_present }
+      end
+
+      it "still fails a browser confirm when Stripe cannot be read" do
+        allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError)
+
+        responses, = Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform
+
+        expect(purchases.map { _1.reload.purchase_state }).to all(eq("failed"))
+        purchases.each { expect(responses[_1.id]).to include(success: false) }
+        expect(described_class.jobs).to be_empty
       end
     end
 

@@ -53,7 +53,7 @@ class FailAbandonedPurchaseWorker
     # RetryPendingMandateChargeJob fails a held group at MAX_WAIT. This later pass only catches a hold
     # whose retry chain was lost, so the payment_settling marker cannot block repeat buys forever.
     def fail_lost_mandate_hold
-      backstop_at = purchase.created_at + RetryPendingMandateChargeJob::MAX_WAIT + ChargeProcessor::TIME_TO_COMPLETE_SCA
+      backstop_at = RetryPendingMandateChargeJob.backstop_at(purchase)
       if backstop_at > Time.current
         FailAbandonedPurchaseWorker.perform_at(backstop_at, purchase.id)
       else
