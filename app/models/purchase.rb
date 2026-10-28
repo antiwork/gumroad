@@ -6372,12 +6372,18 @@ class Purchase < ApplicationRecord
       formatted_price_with_recurrence(formatted_price, price.recurrence, charge_occurrence_count, format:)
     end
 
+    # Runs inside the success transition's transaction, so a raise here rolls back a purchase the
+    # processor already charged. The update is async because sales_volume reads the purchases index,
+    # which this sale has not reached yet; the unique job collapses a burst into one update.
     def update_product_search_index!
-      # Nothing here talks to Elasticsearch from the request. sales_volume is based on Product::Stats#total_usd_cents,
-      # which reads the purchases index, and this purchase is indexed asynchronously (the index also refreshes
-      # asynchronously), so computing it now would miss the sale just made. The job is unique while it waits, so a
-      # burst of sales for one product collapses into a single update.
       SendToElasticsearchWorker.perform_in(5.seconds, link.id, "update", %w[is_recommendable sales_volume total_fee_cents past_year_fee_cents])
+    rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS => e
+      Rails.logger.warn("update_product_search_index! enqueue failed (#{e.class}) purchase=#{id} link=#{link_id}")
+      begin
+        ErrorNotifier.notify(e, purchase_id: id, link_id:, product_search_index_enqueue_failed: true)
+      rescue StandardError => notifier_error
+        Rails.logger.warn("update_product_search_index! failure could not be reported (#{id}): #{notifier_error.class}")
+      end
     end
 
     def enqueue_product_search_refresh_after_refund
