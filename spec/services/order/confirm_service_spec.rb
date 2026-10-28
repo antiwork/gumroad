@@ -267,6 +267,46 @@ describe Order::ConfirmService, :vcr do
         allow_any_instance_of(Purchase).to receive(:financial_transaction_validation)
       end
 
+      context "when the SetupIntent's mandate is still pending" do
+        let(:setup_intent) { instance_double(StripeSetupIntent, succeeded?: true, mandate: "mandate_pending") }
+
+        before do
+          allow(ChargeProcessor).to receive(:get_setup_intent).and_return(setup_intent)
+        end
+
+        it "holds the groups in progress, does not create a charge, and schedules the retry job" do
+          allow(ChargeProcessor).to receive(:get_mandate).with(merchant_account, "mandate_pending").and_return(double(status: "pending"))
+          expect(Charge::CreateService).not_to receive(:new)
+
+          responses, = Order::ConfirmService.new(order:, params: { buyer_currency_quote: "quote-token" }).perform
+
+          purchases.each do |purchase|
+            expect(purchase.reload.purchase_state).to eq("in_progress")
+            expect(responses[purchase.id]).to eq(success: true, processing: true, permalink: purchase.link.unique_permalink)
+          end
+          expect(RetryPendingMandateChargeJob.jobs.size).to eq(1)
+          expect(RetryPendingMandateChargeJob.jobs.first["args"]).to eq([order.id, "quote-token"])
+        end
+
+        it "charges the groups once the mandate is active" do
+          allow(ChargeProcessor).to receive(:get_mandate).and_return(double(status: "active"))
+          create_service = instance_double(Charge::CreateService, perform: charge, processor_outcome_unknown: false)
+          expect(Charge::CreateService).to receive(:new).once.and_return(create_service)
+
+          Order::ConfirmService.new(order:, params: {}).perform
+
+          expect(RetryPendingMandateChargeJob.jobs).to be_empty
+        end
+
+        it "charges anyway when the mandate cannot be read" do
+          allow(ChargeProcessor).to receive(:get_mandate).and_raise(ChargeProcessorError)
+          create_service = instance_double(Charge::CreateService, perform: charge, processor_outcome_unknown: false)
+          expect(Charge::CreateService).to receive(:new).once.and_return(create_service)
+
+          Order::ConfirmService.new(order:, params: {}).perform
+        end
+      end
+
       it "creates one combined off-session charge and reports the group's processing debit as pending" do
         setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
         expect(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_confirm_india").once.and_return(setup_intent)
