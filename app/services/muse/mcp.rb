@@ -437,6 +437,9 @@ module Muse
 
         # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
         ActiveRecord::Base.transaction do
+          # Reloads under the lock: the upsell diff below must compare against the committed
+          # description, or an overlapping edit's new upsell card is dropped with its offer left active.
+          product.lock!
           if changes.key?("name")
             name = changes["name"].strip
             raise Error.new("name must not be blank", code: -32602) if name.blank?
