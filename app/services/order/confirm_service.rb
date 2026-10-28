@@ -11,6 +11,17 @@ class Order::ConfirmService
     @params = params
   end
 
+  # Setup-confirmed groups held back because the buyer's e-mandate is still `pending`.
+  def mandate_pending_purchases
+    @mandate_pending_purchases ||= []
+  end
+
+  # Used by RetryPendingMandateChargeJob to charge the held groups once the mandate is active.
+  def charge_pending_setup_groups!
+    charge_seller_groups_awaiting_setup_confirmation!
+    setup_charge_results
+  end
+
   def perform
     retry_candidates = Order::OfferCodeRecoveryService.sanitize_retry_candidates(params[:retry_offer_codes])
     purchase_responses = {}
@@ -23,6 +34,11 @@ class Order::ConfirmService
       error =
         if setup_charge_results.key?(purchase.id)
           result = setup_charge_results[purchase.id]
+          if mandate_pending_purchases.include?(purchase)
+            # Charged by RetryPendingMandateChargeJob once the mandate is active.
+            purchase_responses[purchase.id] = { success: true, processing: true, permalink: purchase.link.unique_permalink }
+            next
+          end
           if result == :pending
             # Match FinalizeConfirmedChargeService: India debits stay processing for hours.
             purchase_responses[purchase.id] = { success: true, processing: true, permalink: purchase.link.unique_permalink }
@@ -54,6 +70,10 @@ class Order::ConfirmService
       else
         purchase_responses[purchase.id] = purchase.purchase_response
       end
+    end
+
+    if mandate_pending_purchases.any?
+      RetryPendingMandateChargeJob.perform_in(RetryPendingMandateChargeJob::RETRY_INTERVAL, order.id, params[:buyer_currency_quote].presence)
     end
 
     offer_codes = offer_codes.filter_map do |offer_code, products|
@@ -213,6 +233,17 @@ class Order::ConfirmService
       Chargeable.new([stripe_chargeable])
     end
 
+    def setup_intent_mandate_pending?(merchant_account, setup_intent)
+      mandate_id = setup_intent.try(:mandate)
+      return false if mandate_id.blank?
+
+      ChargeProcessor.get_mandate(merchant_account, mandate_id)&.status == "pending"
+    rescue ChargeProcessorError => e
+      # The charge still fails closed in StripeChargeProcessor if the mandate is pending.
+      ErrorNotifier.notify(e, order_id: order.id, mandate_id:)
+      false
+    end
+
     def finalize_setup_charged_purchases!(purchases)
       reference_purchase = purchases.first
       intent_id = reference_purchase.processor_payment_intent&.intent_id
@@ -289,6 +320,14 @@ class Order::ConfirmService
           setup_charge_results[purchase.id] = :pending
         end
         ReconcileClientConfirmedChargeJob.perform_in(30.seconds, existing_charge.id)
+        return
+      end
+
+      if setup_intent_mandate_pending?(merchant_account, setup_intent)
+        # Stripe rejects an off-session charge on a mandate that is still `pending` (it turns
+        # `active` minutes after 3DS). Keep the groups in progress and charge them once active.
+        mandate_pending_purchases.concat(purchases)
+        purchases.each { |purchase| setup_charge_results[purchase.id] = :mandate_pending }
         return
       end
 

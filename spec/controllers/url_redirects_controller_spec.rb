@@ -2716,6 +2716,12 @@ describe UrlRedirectsController, inertia: true do
       end
     end
 
+    it "returns to the web build player when the email is correct" do
+      post :confirm, params: { id: @token, email: @url_redirect.purchase.email, destination: "play" }
+
+      expect(response).to redirect_to(url_redirect_play_path(@url_redirect.token))
+    end
+
     it "redirects and reset counter if email is correct" do
       post :confirm, params: { id: @token, email: @url_redirect.purchase.email }
       expect(response).to redirect_to(url_redirect_path(@url_redirect.token))
@@ -3786,6 +3792,115 @@ describe UrlRedirectsController, inertia: true do
         expect(response.parsed_body.count).to eq(2)
         expect(response.parsed_body[@audio.external_id]).to eq([@url_redirect.signed_location_for_file(@audio)])
         expect(response.parsed_body[@video.external_id]).to eq([@url_redirect.hls_playlist_or_smil_xml_path(@video), @url_redirect.signed_location_for_file(@video)])
+      end
+    end
+  end
+
+  describe "build saves" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:purchase) { create(:purchase, link: product) }
+    let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
+
+    before do
+      create(:product_build, :live, product:)
+      Feature.activate_user(:product_build_player, seller)
+    end
+
+    describe "GET 'build_save'" do
+      it "returns an empty save before the first write" do
+        get :build_save, params: { id: url_redirect.token }, format: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true, "data" => {})
+      end
+
+      it "returns the purchase's save" do
+        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
+
+        get :build_save, params: { id: url_redirect.token }, format: :json
+
+        expect(response.parsed_body).to eq("success" => true, "data" => { "level" => "3" })
+      end
+
+      it "returns 404 when the flag is off for the seller" do
+        Feature.deactivate_user(:product_build_player, seller)
+
+        get :build_save, params: { id: url_redirect.token }, format: :json
+
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "returns 404 when the product has no live build" do
+        product.product_builds.update_all(status: "superseded")
+
+        get :build_save, params: { id: url_redirect.token }, format: :json
+
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "returns 404 when the link has no purchase" do
+        url_redirect_without_purchase = create(:url_redirect, link: product, purchase: nil)
+
+        get :build_save, params: { id: url_redirect_without_purchase.token }, format: :json
+
+        expect(response).to have_http_status(:not_found)
+      end
+
+      it "does not return the save of a refunded purchase" do
+        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
+        purchase.update!(stripe_refunded: true)
+
+        expect do
+          get :build_save, params: { id: url_redirect.token }, format: :json
+        end.to raise_error(ActionController::RoutingError)
+      end
+    end
+
+    describe "PATCH 'update_build_save'" do
+      it "applies a batch of changes to the purchase's save" do
+        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3", "name" => "Ana" })
+
+        patch :update_build_save, params: { id: url_redirect.token, set: { "level" => "4" }, remove: ["name"] }, as: :json
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true, "byte_size" => "level4".bytesize)
+        expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "4")
+      end
+
+      it "clears the save" do
+        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
+
+        patch :update_build_save, params: { id: url_redirect.token, clear: true }, as: :json
+
+        expect(response).to be_successful
+        expect(ProductBuildSave.find_by(purchase:).data).to eq({})
+      end
+
+      it "returns 422 with the reason when a limit is passed" do
+        patch :update_build_save, params: { id: url_redirect.token, set: { "level" => 4 } }, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Keys and values must be strings.")
+        expect(ProductBuildSave.count).to eq(0)
+      end
+
+      it "rejects a malformed batch whole, so its clear does not erase the save" do
+        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
+
+        patch :update_build_save, params: { id: url_redirect.token, clear: true, set: ["level", "4"] }, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "3")
+      end
+
+      it "returns 404 and saves nothing when the flag is off for the seller" do
+        Feature.deactivate_user(:product_build_player, seller)
+
+        patch :update_build_save, params: { id: url_redirect.token, set: { "level" => "4" } }, as: :json
+
+        expect(response).to have_http_status(:not_found)
+        expect(ProductBuildSave.count).to eq(0)
       end
     end
   end

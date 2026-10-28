@@ -12,10 +12,18 @@ class ProductBuild < ApplicationRecord
   SITE_DIRECTORY = "site"
   MAX_SITE_FILES = 5_000
   MAX_SITE_BYTE_SIZE = 4.gigabytes
+  # The player reads a page into memory to put the save shim in it, so pages have a limit of their
+  # own. Every other file is streamed.
+  PAGE_EXTENSIONS = %w[html htm].freeze
+  MAX_PAGE_BYTE_SIZE = 10.megabytes
   PUBLIC_ID_LENGTH = 21
   DISPLAY_NAME_MAX_LENGTH = 200
   STORAGE_PREFIX = "builds"
   PUBLIC_ID_ALPHABET = [*"0".."9", *"A".."Z", *"a".."z", "_", "-"].freeze
+  PLAYER_GRANT_PURPOSE = "product_build_player"
+  # Long enough for one play session. A refund or revoked access stops new sessions at once, and
+  # running ones when the grant expires.
+  PLAYER_GRANT_VALID_FOR = 12.hours
 
   belongs_to :product, class_name: "Link"
   belongs_to :product_file, optional: true
@@ -42,6 +50,34 @@ class ProductBuild < ApplicationRecord
   def site_ready? = site_unpacked_at.present?
 
   def live? = status == "live"
+
+  # An encrypted path segment that lets the player's frame load this build's files for one purchase.
+  # The frame is an opaque origin, so its file requests carry no session cookies: the access check
+  # runs once, on the content-page token, and the grant carries the result until it expires.
+  def player_grant(url_redirect_token:, purchase_id:)
+    self.class.player_grant_encryptor.encrypt_and_sign(
+      { "token" => url_redirect_token, "purchase_id" => purchase_id, "seller_id" => product.user_id, "site_prefix" => site_prefix },
+      purpose: PLAYER_GRANT_PURPOSE,
+      expires_in: PLAYER_GRANT_VALID_FOR,
+    )
+  end
+
+  # The grant's payload when it is valid and was issued for this content-page token, or nil.
+  def self.verified_player_grant(grant, url_redirect_token:)
+    payload = player_grant_encryptor.decrypt_and_verify(grant.to_s, purpose: PLAYER_GRANT_PURPOSE)
+    payload if payload.is_a?(Hash) && payload["token"] == url_redirect_token
+  rescue ActiveSupport::MessageEncryptor::InvalidMessage
+    nil
+  end
+
+  # Encrypted, not only signed: the grant is in the frame's URL, and it holds internal ids.
+  # url_safe because it is a path segment.
+  def self.player_grant_encryptor
+    @player_grant_encryptor ||= ActiveSupport::MessageEncryptor.new(
+      Rails.application.key_generator.generate_key("product_build_player_grant", ActiveSupport::MessageEncryptor.key_len),
+      url_safe: true, serializer: JSON,
+    )
+  end
 
   # Makes this build the one buyers get, superseding the current one. Promoting the live build again
   # restores its download if the seller deleted it and delivers it to versions added since.

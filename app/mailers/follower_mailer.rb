@@ -6,9 +6,10 @@ class FollowerMailer < ApplicationMailer
 
   around_deliver :hold_back_for_retired_newsletter
 
-  def confirm_follower(followed_user_id, follower_id)
+  def confirm_follower(followed_user_id, follower_id, waitlist_product_id = nil)
     @follower = Follower.find(follower_id)
     @followed_username = User.find(followed_user_id).name_or_username
+    @waitlist_product = Link.find_by(id: waitlist_product_id) if waitlist_product_id
     @confirm_follow_url = confirm_follow_url(@follower.external_id)
 
     mail to: @follower.email,

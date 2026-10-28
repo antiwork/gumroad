@@ -54,6 +54,18 @@ module SignedUrlHelper
     end
   end
 
+  # A file of an unpacked web build, for the player to load. Unlike a download it carries no
+  # content-disposition, so the browser runs the file inline with the type the unpack stored. A build
+  # is far below CLOUDFLARE_CACHE_LIMIT, so it always goes through the Cloudflare host and needs no
+  # size lookup.
+  def signed_build_site_location(s3_key, expires_in: SIGNED_S3_URL_VALID_FOR_MINIMUM)
+    object = Aws::S3::Resource.new.bucket(S3_BUCKET).object(s3_key)
+    return object.presigned_url(:get, expires_in: expires_in.to_i) if USING_MINIO
+
+    path = URI.parse(object.public_url).path.sub(%r{^/#{Regexp.escape(S3_BUCKET)}}o, "").sub(%r{^/}, "")
+    signed_cloudflare_url("#{FILE_DOWNLOAD_DISTRIBUTION_URL}#{path}?", expires_in)
+  end
+
   # Public: Signs the cloudfront url or path and returns the result.
   #
   # url - The url or path of the resource on cloudfront.

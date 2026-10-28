@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module Muse
-  # JSON-RPC MCP surface for Meta Muse (and any other MCP client).
+module Mcp
+  # JSON-RPC MCP surface shared by every connector path (/muse, /claude, /chatgpt).
   # Tools are a slim, agent-oriented view of the public v2 API — same auth, same records.
-  class Mcp
+  class Server
     LEGACY_PROTOCOL_VERSION = "2025-03-26"
     # A client on this revision declares its version per request and never handshakes.
     MODERN_PROTOCOL_VERSION = "2026-07-28"
@@ -83,7 +83,7 @@ module Muse
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft a product, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
@@ -297,7 +297,7 @@ module Muse
           tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description and covers. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.", {
@@ -305,6 +305,16 @@ module Muse
                  "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
                  "description" => { type: "string", description: "HTML or plain-text description." }
                }, required: %w[name price_cents]),
+          tool("update_product", "Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "name" => { type: "string", description: "New product name." },
+                 "description" => { type: "string", description: "New HTML or plain-text description." },
+                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." }
+               }, required: %w[id], destructive: true),
+          tool("add_cover", "Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "url" => { type: "string", description: "Public https URL of an image, or a YouTube or Vimeo link." }
+               }, required: %w[id url]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], destructive: true),
@@ -390,7 +400,7 @@ module Muse
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
-        details = { description: product.description }
+        details = { description: product.description, covers: covers_payload(product) }
         # The same rule as the public API: sales figures need a sales scope.
         details.merge!(sales_count: product.successful_sales_count, sales_usd_cents: product.total_usd_cents) if (token.scopes.to_a & %w[view_sales account]).any?
         { product: product_payload(product).merge(details) }
@@ -417,6 +427,67 @@ module Muse
         product.taxonomy = Taxonomy.find_by(slug: "other")
         product.save!
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
+      end
+
+      def tool_update_product(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        changes = args.slice("name", "description", "price_cents")
+        raise Error.new("Pass at least one of name, description, or price_cents", code: -32602) if changes.empty?
+
+        # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
+        ActiveRecord::Base.transaction do
+          # Reloads under the lock: the upsell diff below must compare against the committed
+          # description, or an overlapping edit's new upsell card is dropped with its offer left active.
+          product.lock!
+          if changes.key?("name")
+            name = changes["name"].strip
+            raise Error.new("name must not be blank", code: -32602) if name.blank?
+
+            product.name = name
+          end
+          if changes.key?("price_cents")
+            raise Error.new("price_cents must be zero or more", code: -32602) if changes["price_cents"].negative?
+            # Tier prices live on the variants; the product-level price is a placeholder.
+            raise ToolError, "Price cannot be changed for a membership with tiers. Edit the tier prices in the product editor." if product.is_tiered_membership
+
+            product.price_cents = changes["price_cents"]
+          end
+          if changes.key?("description")
+            product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
+          end
+          product.save!
+        end
+        result = { product: product_payload(product.reload).merge(description: product.description) }
+        # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
+        if changes.key?("price_cents")
+          invalid_codes = product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(product) }.map(&:code)
+          result[:warning] = "These discount codes would discount this product below #{product.min_price_formatted}: #{invalid_codes.join(', ')}. Edit or delete them in Gumroad." if invalid_codes.any?
+        end
+        result
+      end
+
+      def tool_add_cover(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        cover = product.asset_previews.build
+        begin
+          cover.url = args["url"]
+        rescue *INTERNET_EXCEPTIONS => e
+          status = " The link returned HTTP #{e.message}." if e.is_a?(OpenURI::HTTPError)
+          raise ToolError, "Could not fetch an image from that URL.#{status} Use a public https link to the image file."
+        end
+        cover.analyze_file
+        unless cover.save
+          cover.file.blob&.purge if cover.file.attached?
+          raise ToolError, cover.errors.full_messages.to_sentence
+        end
+
+        { product: product_payload(product), covers: covers_payload(product.reload) }
+      end
+
+      def covers_payload(product)
+        product.display_asset_previews.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } }
       end
 
       def tool_publish_product(args)

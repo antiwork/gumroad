@@ -414,7 +414,7 @@ export default function SettingsPage() {
         <div className="border-b border-border p-4 md:p-8">{tabBar}</div>
       ) : (
         <PageHeader
-          className="sticky-top"
+          className="sticky top-0 z-10 bg-body"
           title="Profile settings"
           actions={
             <Button color="accent" onClick={() => void save()} disabled={!canSave}>

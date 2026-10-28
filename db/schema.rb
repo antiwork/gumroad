@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_21_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_22_000003) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1907,6 +1907,15 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.index ["purchase_id"], name: "index_processor_payment_intents_on_purchase_id", unique: true
   end
 
+  create_table "product_build_saves", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "purchase_id", null: false
+    t.json "data", null: false
+    t.integer "byte_size", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["purchase_id"], name: "index_product_build_saves_on_purchase_id", unique: true
+  end
+
   create_table "product_builds", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "product_id", null: false
     t.string "public_id", limit: 21, null: false
@@ -3457,6 +3466,15 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.bigint "user_id", null: false
     t.index ["record_type", "record_id"], name: "index_video_files_on_record"
     t.index ["user_id"], name: "index_video_files_on_user_id"
+  end
+
+  create_table "waitlist_entries", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "follower_id", null: false
+    t.bigint "product_id", null: false
+    t.datetime "updated_at", null: false
+    t.index ["follower_id", "product_id"], name: "index_waitlist_entries_on_follower_id_and_product_id", unique: true
+    t.index ["product_id"], name: "index_waitlist_entries_on_product_id"
   end
 
   create_table "watched_users", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

@@ -173,6 +173,7 @@ describe ProductPresenter do
             has_third_party_analytics: false,
             ppp_details: nil,
             can_edit: false,
+            waitlist: nil,
             refund_policy: {
               title: "30-day money back guarantee",
               fine_print: nil,
@@ -499,6 +500,7 @@ describe ProductPresenter do
             can_enable_quantity: true,
             should_show_sales_count: true,
             hide_sold_out_variants: false,
+            waitlist_enabled: false,
             is_epublication: false,
             product_refund_policy_enabled: false,
             section_ids: [profile_section.external_id],
@@ -965,6 +967,7 @@ describe ProductPresenter do
               can_enable_quantity: false,
               should_show_sales_count: false,
               hide_sold_out_variants: false,
+              waitlist_enabled: false,
               is_epublication: false,
               product_refund_policy_enabled: false,
               refund_policy: {
@@ -1281,6 +1284,7 @@ describe ProductPresenter do
               can_enable_quantity: true,
               should_show_sales_count: false,
               hide_sold_out_variants: false,
+              waitlist_enabled: false,
               is_epublication: false,
               product_refund_policy_enabled: false,
               section_ids: [],

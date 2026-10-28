@@ -283,7 +283,7 @@ const NewProductPage = () => {
   return (
     <>
       <PageHeader
-        className="sticky-top"
+        className="sticky top-0 z-10 bg-body"
         title={show_orientation_text ? "Publish your first product" : "What are you creating?"}
         actions={
           <>

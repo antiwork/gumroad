@@ -37,6 +37,9 @@ var Evaporate = function(config){
 
 
   var PENDING = 0, EVAPORATING = 2, COMPLETE = 3, CANCELED = 5, ERROR = 10, ABORTED = 20, ETAG_OF_0_LENGTH_BLOB = '"d41d8cd98f00b204e9800998ecf8427e"';
+  // Every S3 request first waits on these two app-server GETs, so a hung one would hold the
+  // file in "uploading" before any S3 timeout starts.
+  var SERVER_TIME_TIMEOUT_MS = 30 * 1000, SIGNER_TIMEOUT_MS = 60 * 1000;
 
   var _ = this;
   var files = [];
@@ -198,8 +201,12 @@ var Evaporate = function(config){
 
   function FileUpload(file){
 
-    var me = this, parts = [], progressTotalInterval, progressPartsInterval, countUploadAttempts = 0, xhrs = [];
+    var me = this, parts = [], progressTotalInterval, progressPartsInterval, countUploadAttempts = 0, xhrs = [], requestTimers = [];
     extend(me,file);
+
+    function isFinished(){
+      return me.status == COMPLETE || me.status == ERROR || me.status == CANCELED || me.status == ABORTED;
+    }
 
     me.start = function(){
 
@@ -214,6 +221,7 @@ var Evaporate = function(config){
     me.stop = function(){
 
       l.d('stopping FileUpload ', me.id);
+      if (isFinished()) return;
       me.cancelled();
       me.info('upload canceled');
       setStatus(CANCELED);
@@ -222,9 +230,12 @@ var Evaporate = function(config){
 
 
     function setStatus(s){
+      // A finished file stays finished: late aborts or responses must not flip it to another outcome.
+      if (isFinished()) return;
       if (s == COMPLETE || s == ERROR || s == CANCELED || s == ABORTED){
         clearInterval(progressTotalInterval);
         clearInterval(progressPartsInterval);
+        requestTimers.forEach(clearTimeout);
       }
       me.status = s;
       me.onStatusChange();
@@ -353,13 +364,14 @@ var Evaporate = function(config){
 
         var eTag = xhr.getResponseHeader('ETag'), msg;
         l.d('uploadPart 200 response for part #' + partNumber + '     ETag: ' + eTag);
-        if (eTag != ETAG_OF_0_LENGTH_BLOB){
+        // Without a readable ETag the part cannot be listed in the completion manifest.
+        if (eTag && eTag != ETAG_OF_0_LENGTH_BLOB){
           part.eTag = eTag;
           part.status = COMPLETE;
         }else{
           part.status = ERROR;
           part.loadedBytes = 0;
-          msg = 'eTag matches MD5 of 0 length blob for part #' + partNumber  + '   Retrying part.';
+          msg = (eTag ? 'eTag matches MD5 of 0 length blob' : 'no readable eTag') + ' for part #' + partNumber  + '   Retrying part.';
           l.w(msg);
           me.warn(msg);
         }
@@ -447,6 +459,12 @@ var Evaporate = function(config){
       };
 
       complete.on200 = function(xhr){
+        // S3 can answer a completion with 200 and an <Error> body; the object does not exist then.
+        if (typeof xhr.response == 'string' && /<Error>/.test(xhr.response)){
+          l.w('complete returned 200 with an error body: ' + xhr.response);
+          complete.onErr(xhr);
+          return;
+        }
         me.complete(xhr);
         setStatus(COMPLETE);
       };
@@ -599,25 +617,36 @@ var Evaporate = function(config){
     }
 
 
+    // Delivers one outcome per request, and only while the file is still uploading: browsers fire
+    // both readystatechange and error for a network failure, and aborts from cancel/fail arrive late.
+    function watchRequest(xhr, timeoutMs, onSettled){
+      var settled = false, timer = null;
+
+      function settle(isOnError){
+        clearTimeout(timer);
+        if (settled) return;
+        settled = true;
+        if (me.status != EVAPORATING) return;
+        onSettled(!!isOnError);
+      }
+
+      if (timeoutMs){
+        timer = setTimeout(function(){
+          xhr.abort();
+          settle();
+        }, timeoutMs);
+        requestTimers.push(timer);
+      }
+      xhr.onreadystatechange = function(){
+        if (xhr.readyState == 4) settle();
+      };
+      xhr.onerror = function(){ settle(true); };
+    }
+
+
     function setupRequest(requester){
 
       l.d('setupRequest()',requester);
-
-      var dateString = new Date().toUTCString();
-
-      if (con.fetchCurrentServerTimeUrl) {
-        var timeXhr = new XMLHttpRequest();
-        timeXhr.open("GET", con.fetchCurrentServerTimeUrl, false);
-        timeXhr.send();
-        if (timeXhr.status === 200) {
-          dateString = timeXhr.responseText;
-        }
-      }
-
-      requester.dateString = dateString;
-      requester.x_amz_headers = extend(requester.x_amz_headers,{
-        'x-amz-date': requester.dateString
-      });
 
       requester.onGotAuth = function (){
 
@@ -648,23 +677,15 @@ var Evaporate = function(config){
             xhr.setRequestHeader(key, requester.x_amz_headers[key]);
           }
         }
-        var stallTimer = requester.timeoutMs ? setTimeout(function(){ xhr.abort(); }, requester.timeoutMs) : null;
 
-        xhr.onreadystatechange = function(){
-
-          if (xhr.readyState == 4){
-            clearTimeout(stallTimer);
-
-            if(payload){l.d('  ### ' + payload.size);} // Test, per http://code.google.com/p/chromium/issues/detail?id=167111#c20
-            if (xhr.status == 200){
-              requester.on200(xhr);
-            } else {
-              requester.onErr(xhr);
-            }
+        watchRequest(xhr, requester.timeoutMs, function(isOnError){
+          if(payload){l.d('  ### ' + payload.size);} // Test, per http://code.google.com/p/chromium/issues/detail?id=167111#c20
+          if (xhr.status == 200){
+            requester.on200(xhr);
+          } else {
+            requester.onErr(xhr, isOnError);
           }
-        };
-
-        xhr.onerror = function(){clearTimeout(stallTimer); requester.onErr(xhr,true);};
+        });
 
         if (typeof requester.onProgress == 'function'){
           xhr.upload.onprogress = function(evt){
@@ -674,17 +695,49 @@ var Evaporate = function(config){
         xhr.send(payload);
       };
 
+      // onErr reports the failure; reporting here too would call error twice.
       requester.onFailedAuth = requester.onFailedAuth || function(xhr){
-        me.error('Error onFailedAuth for step: ' + requester.step);
+        me.warn('Error onFailedAuth for step: ' + requester.step);
         requester.onErr(xhr);
       };
     }
 
 
-//see: http://docs.amazonwebservices.com/AmazonS3/latest/dev/RESTAuthentication.html#ConstructingTheAuthenticationHeader
     function authorizedSend(authRequester){
 
       l.d('authorizedSend() ' + authRequester.step);
+      fetchServerTime(function(dateString){
+        authRequester.dateString = dateString;
+        authRequester.x_amz_headers = extend(authRequester.x_amz_headers,{
+          'x-amz-date': authRequester.dateString
+        });
+        requestSignature(authRequester);
+      });
+    }
+
+
+    // Asynchronous so it can be timed out; a synchronous lookup blocks the page with no limit.
+    // Any failure falls back to the local clock, as a non-200 always has.
+    function fetchServerTime(onDate){
+
+      if (!con.fetchCurrentServerTimeUrl) {
+        onDate(new Date().toUTCString());
+        return;
+      }
+
+      var xhr = new XMLHttpRequest();
+      xhrs.push(xhr);
+      watchRequest(xhr, SERVER_TIME_TIMEOUT_MS, function(){
+        onDate(xhr.status === 200 ? xhr.responseText : new Date().toUTCString());
+      });
+      xhr.open('GET', con.fetchCurrentServerTimeUrl);
+      xhr.send();
+    }
+
+
+//see: http://docs.amazonwebservices.com/AmazonS3/latest/dev/RESTAuthentication.html#ConstructingTheAuthenticationHeader
+    function requestSignature(authRequester){
+
       var xhr = new XMLHttpRequest();
       xhrs.push(xhr);
       authRequester.authXhr = xhr;
@@ -697,31 +750,21 @@ var Evaporate = function(config){
       }
 
 
-      xhr.onreadystatechange = function(){
+      watchRequest(xhr, SIGNER_TIMEOUT_MS, function(isOnError){
 
-        if (xhr.readyState == 4){
+        if (xhr.status == 200 && xhr.response.length == 28){
 
-          if (xhr.status == 200 && xhr.response.length == 28){
+          l.d('authorizedSend got signature for step: \'' + authRequester.step + '\'    sig: '+ xhr.response);
+          authRequester.auth = xhr.response;
+          authRequester.onGotAuth();
 
-            l.d('authorizedSend got signature for step: \'' + authRequester.step + '\'    sig: '+ xhr.response);
-            authRequester.auth = xhr.response;
-            authRequester.onGotAuth();
-
-          } else {
-            warnMsg = 'failed to get authorization (readyState=4) for ' + authRequester.step + '.  xhr.status: ' + xhr.status + '.  xhr.response: ' + xhr.response;
-            l.w(warnMsg);
-            me.warn(warnMsg);
-            authRequester.onFailedAuth(xhr);
-          }
+        } else {
+          warnMsg = 'failed to get authorization (' + (isOnError ? 'onerror' : 'readyState=4') + ') for ' + authRequester.step + '.  xhr.status: ' + xhr.status + '.  xhr.response: ' + xhr.response;
+          l.w(warnMsg);
+          me.warn(warnMsg);
+          authRequester.onFailedAuth(xhr);
         }
-      };
-
-      xhr.onerror = function(){
-        warnMsg = 'failed to get authorization (onerror) for ' + authRequester.step + '.  xhr.status: ' + xhr.status + '.  xhr.response: ' + xhr.response;
-        l.w(warnMsg);
-        me.warn(warnMsg);
-        authRequester.onFailedAuth(xhr);
-      };
+      });
 
       xhr.open('GET', url);
       xhr.send();

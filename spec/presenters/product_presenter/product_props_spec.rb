@@ -133,6 +133,7 @@ describe ProductPresenter::ProductProps do
               has_third_party_analytics: false,
               ppp_details: nil,
               can_edit: false,
+              waitlist: nil,
               refund_policy: {
                 title: "30-day money back guarantee",
                 fine_print: nil,
@@ -198,6 +199,29 @@ describe ProductPresenter::ProductProps do
             },
             wishlists: [],
           )
+        end
+
+        context "when the product shows the waitlist" do
+          before do
+            product.update!(waitlist_enabled: true, purchase_disabled_at: Time.current)
+            create(:waitlist_entry, product:, follower: create(:active_follower, user: seller))
+            create(:waitlist_entry, product:, follower: create(:follower, user: seller))
+          end
+
+          it "sends the confirmed waitlist count to the seller only" do
+            seller_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user: SellerContext.new(user: seller, seller:))
+            visitor_props = presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil)
+
+            expect(seller_props[:product][:waitlist][:count]).to eq(1)
+            expect(visitor_props[:product][:waitlist]).to be_present
+            expect(visitor_props[:product][:waitlist][:count]).to be_nil
+          end
+
+          it "sends no waitlist once the product is published" do
+            product.update!(purchase_disabled_at: nil)
+
+            expect(presenter.props(seller_custom_domain_url: nil, request:, pundit_user: nil)[:product][:waitlist]).to be_nil
+          end
         end
 
         context "when the user has read-only access" do
@@ -412,6 +436,7 @@ describe ProductPresenter::ProductProps do
               has_third_party_analytics: false,
               ppp_details: nil,
               can_edit: false,
+              waitlist: nil,
               refund_policy: {
                 title: product.user.refund_policy.title,
                 fine_print: product.user.refund_policy.fine_print,

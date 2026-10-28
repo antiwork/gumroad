@@ -10,13 +10,15 @@ export const followSeller = async (
   // the name Google's verification API expects, which is also what the server
   // reads it from.
   recaptchaResponse: string | null = null,
+  // Joins this product's waitlist as well as following the seller.
+  productId: string | null = null,
 ): Promise<FollowResponse> => {
   try {
     const response = await request({
       method: "POST",
       accept: "json",
       url: Routes.follow_user_path(),
-      data: { email, seller_id, "g-recaptcha-response": recaptchaResponse },
+      data: { email, seller_id, "g-recaptcha-response": recaptchaResponse, product_id: productId },
     });
     return cast<FollowResponse>(await response.json());
   } catch (e) {

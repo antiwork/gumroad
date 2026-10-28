@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Muse MCP" do
+describe "MCP server" do
   include Devise::Test::IntegrationHelpers
 
   before do
@@ -55,7 +55,7 @@ describe "Muse MCP" do
     expect(body["mcp"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(body["oauth"]["authorization_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/authorize")
     expect(body["oauth"]["registration_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/register")
-    expect(body["oauth"]["scopes"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+    expect(body["oauth"]["scopes"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
     expect(body["clients"]).to include(
       "muse" => "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp",
       "claude" => "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
@@ -69,13 +69,13 @@ describe "Muse MCP" do
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(response.parsed_body["authorization_servers"]).to eq(["#{PROTOCOL}://#{DOMAIN}"])
-    expect(response.parsed_body["scopes_supported"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
 
     get "/.well-known/oauth-protected-resource/claude/v1/mcp", headers: { "HOST" => DOMAIN }
 
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp")
-    expect(response.parsed_body["scopes_supported"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
   end
 
   it "registers a public OAuth client for MCP" do
@@ -180,7 +180,7 @@ describe "Muse MCP" do
   end
 
   it "rejects more redirect URIs than a registration may hold without creating a client" do
-    redirect_uris = (1..(Muse::OauthClientRegistration::REDIRECT_URIS_MAX + 1)).map { |i| "https://example.com/callback/#{i}" }
+    redirect_uris = (1..(Mcp::OauthClientRegistration::REDIRECT_URIS_MAX + 1)).map { |i| "https://example.com/callback/#{i}" }
 
     expect do
       post "/claude/v1/oauth2/register",
@@ -191,13 +191,13 @@ describe "Muse MCP" do
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body).to eq(
       "error" => "invalid_client_metadata",
-      "error_description" => "redirect_uris must contain at most #{Muse::OauthClientRegistration::REDIRECT_URIS_MAX} entries"
+      "error_description" => "redirect_uris must contain at most #{Mcp::OauthClientRegistration::REDIRECT_URIS_MAX} entries"
     )
   end
 
   it "rejects redirect URIs the stored allowlist column would truncate without creating a client" do
     redirect_uris = ["https://example.com/#{"a" * 200}", "https://example.org/#{"b" * 60}"]
-    limit = Muse::OauthClientRegistration::REDIRECT_URIS_MAX_LENGTH
+    limit = Mcp::OauthClientRegistration::REDIRECT_URIS_MAX_LENGTH
     expect(redirect_uris.map(&:length).max).to be <= limit
     expect(redirect_uris.join("\n").length).to be > limit
 
@@ -225,7 +225,7 @@ describe "Muse MCP" do
     expect(body["code_challenge_methods_supported"]).to include("S256")
     expect(body["registration_endpoint"]).to end_with("/muse/v1/oauth2/register")
     expect(body["token_endpoint_auth_methods_supported"]).to include("none")
-    expect(body["scopes_supported"]).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+    expect(body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
   end
 
   it "issues a Claude token with every scope discovered from the MCP metadata" do
@@ -312,7 +312,7 @@ describe "Muse MCP" do
          headers: { "CONTENT_TYPE" => "application/json" }
     expect(response).to have_http_status(:created)
     client_id = response.parsed_body.fetch("client_id")
-    expect(response.parsed_body.fetch("scope").split).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body.fetch("scope").split).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
 
     authorize = lambda do |scope|
       code_verifier = SecureRandom.urlsafe_base64(48)
@@ -336,7 +336,7 @@ describe "Muse MCP" do
     # Omitting scope would leave the client on Doorkeeper's default (view_public only); a dynamic
     # client gets everything it registered instead.
     full_token = authorize.call(nil)
-    expect(full_token.fetch("scope").split).to match_array(Muse::OauthClientRegistration::MCP_SCOPES)
+    expect(full_token.fetch("scope").split).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
     expect { call_tool.call(full_token.fetch("access_token"), "create_draft_product") }.to change(Link, :count).by(1)
     expect(response).to have_http_status(:ok)
     expect(response.headers["WWW-Authenticate"]).to be_nil
@@ -447,6 +447,8 @@ describe "Muse MCP" do
         "list_products" => "List products",
         "get_product" => "Get product",
         "create_draft_product" => "Create draft product",
+        "update_product" => "Update product",
+        "add_cover" => "Add cover",
         "publish_product" => "Publish product",
         "unpublish_product" => "Unpublish product",
         "list_sales" => "List sales",
@@ -503,12 +505,12 @@ describe "Muse MCP" do
       expect(names).to include("get_account", "list_products", "list_sales", "create_draft_product", "publish_product")
     end
 
-    it "labels reads, drafts, and sale-state changes for the host" do
+    it "labels reads, drafts, edits, and sale-state changes for the host" do
       post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })
 
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
-        "get_account", "list_products", "get_product", "create_draft_product",
+        "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
         "publish_product", "unpublish_product", "list_sales", "list_payouts"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
@@ -516,8 +518,10 @@ describe "Muse MCP" do
       %w[get_account list_products get_product list_sales list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
       end
-      expect(annotations["create_draft_product"]).to include("readOnlyHint" => false, "destructiveHint" => false)
-      %w[publish_product unpublish_product].each do |name|
+      %w[create_draft_product add_cover].each do |name|
+        expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => false)
+      end
+      %w[update_product publish_product unpublish_product].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => true)
       end
     end
@@ -549,6 +553,18 @@ describe "Muse MCP" do
       expect { post_mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Nope", price_cents: 500 } } }) }.not_to change(Link, :count)
 
       expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+    end
+
+    it "refuses to edit a product or add a cover" do
+      allow(SsrfFilter).to receive(:get)
+
+      expect do
+        post_mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "update_product", arguments: { id: @product.external_id, name: "Nope" } } })
+        expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+        post_mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "add_cover", arguments: { id: @product.external_id, url: "https://example.com/cover.png" } } })
+        expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+      end.not_to change { [@product.reload.attributes, AssetPreview.count] }
+      expect(SsrfFilter).not_to have_received(:get)
     end
   end
 
@@ -603,6 +619,145 @@ describe "Muse MCP" do
       expect(response).to be_successful
       expect(response.parsed_body["result"]).to include("isError" => true, "content" => [{ "type" => "text", "text" => Link::UNPUBLISHED_BY_ADMIN_MESSAGE }])
       expect(@product.reload.purchase_disabled_at).to be_present
+    end
+
+    def call_tool(name, arguments)
+      post_mcp({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name:, arguments: } })
+    end
+
+    it "updates the name, description, and price of a published product" do
+      call_tool("update_product", { id: @product.unique_permalink, name: "Field notes, vol. 2", description: "<p>Now with maps.</p>", price_cents: 2500 })
+
+      expect(response).to be_successful
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload).to include("name" => "Field notes, vol. 2", "price_cents" => 2500, "published" => true, "description" => "<p>Now with maps.</p>")
+      @product.reload
+      expect(@product.name).to eq("Field notes, vol. 2")
+      expect(@product.description).to eq("<p>Now with maps.</p>")
+      expect(@product.price_cents).to eq(2500)
+    end
+
+    it "changes only the fields it is given" do
+      @product.update!(description: "Original")
+
+      call_tool("update_product", { id: @product.external_id, description: "Rewritten" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.description).to eq("Rewritten")
+      expect(@product.name).to eq("Field notes")
+      expect(@product.price_cents).to eq(1900)
+    end
+
+    it "rejects an update with no fields to change" do
+      expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, or price_cents")
+    end
+
+    it "rejects a blank name without changing the product" do
+      expect { call_tool("update_product", { id: @product.external_id, name: "  ", description: "Kept out" }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "name must not be blank")
+    end
+
+    it "warns when a lower price pushes an existing discount below the minimum" do
+      create(:offer_code, user: @seller, products: [@product], code: "save18", amount_cents: 1800)
+
+      call_tool("update_product", { id: @product.external_id, price_cents: 1850 })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "price_cents")).to eq(1850)
+      expect(content["warning"]).to include("save18")
+    end
+
+    it "rolls back the whole update when the product fails validation" do
+      expect do
+        call_tool("update_product", { id: @product.external_id, price_cents: 1, description: "Kept out" })
+      end.not_to change { [@product.reload.attributes, @product.prices.map(&:attributes)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+    end
+
+    it "refuses a price change on a membership with tiers and leaves its prices unchanged" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: @seller)
+
+      expect do
+        call_tool("update_product", { id: membership.external_id, price_cents: 100 })
+      end.not_to change { [membership.reload.attributes, membership.alive_prices.map(&:attributes)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("membership with tiers")
+    end
+
+    it "refuses to update another seller's product" do
+      other_product = create(:product, name: "Theirs")
+
+      expect { call_tool("update_product", { id: other_product.external_id, name: "Mine now" }) }.not_to change { other_product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+    end
+
+    def http_response(response_class, code, body: "", content_type: "text/html")
+      response = response_class.new("1.1", code, Rack::Utils::HTTP_STATUS_CODES[code.to_i])
+      response["Content-Type"] = content_type
+      allow(response).to receive(:body).and_return(body)
+      response
+    end
+
+    it "adds a cover from an image URL" do
+      image = File.binread(Rails.root.join("spec/support/fixtures/kFDzu.png"))
+      allow(SsrfFilter).to receive(:get).with("https://example.com/cover.png").and_return(http_response(Net::HTTPOK, "200", body: image, content_type: "image/png"))
+
+      expect { call_tool("add_cover", { id: @product.external_id, url: "https://example.com/cover.png" }) }.to change { @product.asset_previews.alive.count }.by(1)
+
+      expect(response).to be_successful
+      covers = response.parsed_body.dig("result", "structuredContent", "covers")
+      cover = @product.asset_previews.alive.last
+      expect(covers).to eq([{ "id" => cover.guid, "url" => cover.url, "type" => "image" }])
+      expect(cover.file).to be_attached
+      expect([cover.width, cover.height]).to eq([1633, 512])
+    end
+
+    it "reports a URL it cannot fetch as a tool error without adding a cover" do
+      allow(SsrfFilter).to receive(:get).and_raise(SsrfFilter::PrivateIPAddress)
+
+      expect { call_tool("add_cover", { id: @product.external_id, url: "https://example.com/internal.png" }) }.not_to change { AssetPreview.count }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("Could not fetch an image from that URL")
+    end
+
+    it "names the HTTP status when the cover URL is a broken link, without adding a cover" do
+      allow(SsrfFilter).to receive(:get).and_return(http_response(Net::HTTPNotFound, "404", body: "<html>Not found</html>"))
+
+      expect { call_tool("add_cover", { id: @product.external_id, url: "https://example.com/missing.png" }) }.not_to change { AssetPreview.count }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("Could not fetch an image from that URL. The link returned HTTP 404 Not Found. Use a public https link to the image file.")
+    end
+
+    it "returns a product's covers, main cover first" do
+      second = create(:asset_preview, link: @product)
+      first = create(:asset_preview, link: @product)
+      @product.reorder_previews(first.guid => 0, second.guid => 1)
+
+      call_tool("get_product", { id: @product.external_id })
+
+      covers = response.parsed_body.dig("result", "structuredContent", "product", "covers")
+      expect(covers.map { _1["id"] }).to eq([first.guid, second.guid])
+      expect(covers.first).to eq("id" => first.guid, "url" => first.reload.url, "type" => "image")
+    end
+
+    it "refuses a cover for another seller's product without fetching the URL" do
+      other_product = create(:product)
+      allow(SsrfFilter).to receive(:get)
+
+      expect { call_tool("add_cover", { id: other_product.external_id, url: "https://example.com/cover.png" }) }.not_to change { AssetPreview.count }
+
+      expect(SsrfFilter).not_to have_received(:get)
+      expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
     end
   end
 
@@ -1306,19 +1461,19 @@ describe "Muse MCP" do
       Feature.activate(:mcp_protocol_2026_07_28)
     end
 
-    def declared_request(method, version: Muse::Mcp::MODERN_PROTOCOL_VERSION, **params)
-      request = { jsonrpc: "2.0", id: 1, method: method, _meta: { Muse::Mcp::VERSION_META_KEY => version } }
+    def declared_request(method, version: Mcp::Server::MODERN_PROTOCOL_VERSION, **params)
+      request = { jsonrpc: "2.0", id: 1, method: method, _meta: { Mcp::Server::VERSION_META_KEY => version } }
       request[:params] = params if params.any?
       request
     end
 
-    def post_declared(payload, headers: {}, declared: Muse::Mcp::MODERN_PROTOCOL_VERSION)
+    def post_declared(payload, headers: {}, declared: Mcp::Server::MODERN_PROTOCOL_VERSION)
       post "/muse/v1/mcp", params: payload.to_json, headers: {
         "CONTENT_TYPE" => "application/json",
         "HOST" => DOMAIN,
         "Authorization" => "Bearer #{@token.token}",
-        Muse::Mcp::VERSION_HEADER => declared,
-        Muse::Mcp::METHOD_HEADER => payload[:method].to_s
+        Mcp::Server::VERSION_HEADER => declared,
+        Mcp::Server::METHOD_HEADER => payload[:method].to_s
       }.merge(headers).compact
     end
 
@@ -1336,7 +1491,7 @@ describe "Muse MCP" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
       JSON
     end
 
@@ -1351,7 +1506,7 @@ describe "Muse MCP" do
       it "keeps the legacy initialize bytes on #{client} when only the version header is declared" do
         post "/#{client}/v1/mcp",
              params: { jsonrpc: "2.0", id: 1, method: "initialize" }.to_json,
-             headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+             headers: undeclared_headers.merge(Mcp::Server::VERSION_HEADER => Mcp::Server::LEGACY_PROTOCOL_VERSION)
 
         expect(response).to be_successful
         expect(response.body).to eq(legacy_initialize_body)
@@ -1367,8 +1522,8 @@ describe "Muse MCP" do
 
     it "keeps the legacy bytes when the client declares the legacy revision explicitly" do
       post "/muse/v1/mcp",
-           params: declared_request("initialize", version: Muse::Mcp::LEGACY_PROTOCOL_VERSION).to_json,
-           headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+           params: declared_request("initialize", version: Mcp::Server::LEGACY_PROTOCOL_VERSION).to_json,
+           headers: undeclared_headers.merge(Mcp::Server::VERSION_HEADER => Mcp::Server::LEGACY_PROTOCOL_VERSION)
 
       expect(response).to be_successful
       expect(response.body).to eq(legacy_initialize_body)
@@ -1377,7 +1532,7 @@ describe "Muse MCP" do
     it "treats a revision declared only in the header as undeclared" do
       post "/muse/v1/mcp",
            params: { jsonrpc: "2.0", id: 1, method: "initialize" }.to_json,
-           headers: undeclared_headers.merge(Muse::Mcp::VERSION_HEADER => Muse::Mcp::MODERN_PROTOCOL_VERSION)
+           headers: undeclared_headers.merge(Mcp::Server::VERSION_HEADER => Mcp::Server::MODERN_PROTOCOL_VERSION)
 
       expect(response).to be_successful
       expect(response.body).to eq(legacy_initialize_body)
@@ -1409,7 +1564,7 @@ describe "Muse MCP" do
     it "serves a tool call that repeats its name in the header" do
       create(:purchase, seller: @seller, link: @product, email: "modern@example.com", price_cents: 1900)
 
-      post_declared(declared_request("tools/call", name: "list_sales", arguments: {}), headers: { Muse::Mcp::NAME_HEADER => "list_sales" })
+      post_declared(declared_request("tools/call", name: "list_sales", arguments: {}), headers: { Mcp::Server::NAME_HEADER => "list_sales" })
 
       expect(response).to be_successful
       result = response.parsed_body["result"]
@@ -1434,7 +1589,7 @@ describe "Muse MCP" do
     end
 
     it "rejects a version the header and _meta disagree about" do
-      post_declared(declared_request("server/discover"), declared: Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+      post_declared(declared_request("server/discover"), declared: Mcp::Server::LEGACY_PROTOCOL_VERSION)
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
@@ -1442,21 +1597,21 @@ describe "Muse MCP" do
     end
 
     it "rejects a version declared only in _meta" do
-      post_declared(declared_request("server/discover"), headers: { Muse::Mcp::VERSION_HEADER => nil })
+      post_declared(declared_request("server/discover"), headers: { Mcp::Server::VERSION_HEADER => nil })
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
     end
 
     it "rejects a modern request without the method header" do
-      post_declared(declared_request("server/discover"), headers: { Muse::Mcp::METHOD_HEADER => nil })
+      post_declared(declared_request("server/discover"), headers: { Mcp::Server::METHOD_HEADER => nil })
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
     end
 
     it "rejects a modern tool call whose name header does not match" do
-      post_declared(declared_request("tools/call", name: "list_sales", arguments: {}), headers: { Muse::Mcp::NAME_HEADER => "list_payouts" })
+      post_declared(declared_request("tools/call", name: "list_sales", arguments: {}), headers: { Mcp::Server::NAME_HEADER => "list_payouts" })
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
@@ -1464,7 +1619,7 @@ describe "Muse MCP" do
     end
 
     it "rejects a modern tool call with no name header and no name" do
-      post_declared(declared_request("tools/call", arguments: {}), headers: { Muse::Mcp::NAME_HEADER => nil })
+      post_declared(declared_request("tools/call", arguments: {}), headers: { Mcp::Server::NAME_HEADER => nil })
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
@@ -1495,22 +1650,22 @@ describe "Muse MCP" do
     end
 
     # The request shape the 2026-07-28 schema specifies: the declaration lives in params._meta.
-    def canonical_request(method, version: Muse::Mcp::MODERN_PROTOCOL_VERSION, **params)
+    def canonical_request(method, version: Mcp::Server::MODERN_PROTOCOL_VERSION, **params)
       meta = {
-        Muse::Mcp::VERSION_META_KEY => version,
+        Mcp::Server::VERSION_META_KEY => version,
         "io.modelcontextprotocol/clientInfo" => { "name" => "spec-client", "version" => "1.0.0" },
         "io.modelcontextprotocol/clientCapabilities" => {}
       }
       { jsonrpc: "2.0", id: 1, method:, params: params.merge(_meta: meta) }
     end
 
-    def post_canonical(client, payload, headers: {}, declared: Muse::Mcp::MODERN_PROTOCOL_VERSION)
+    def post_canonical(client, payload, headers: {}, declared: Mcp::Server::MODERN_PROTOCOL_VERSION)
       post "/#{client}/v1/mcp", params: payload.to_json, headers: {
         "CONTENT_TYPE" => "application/json",
         "HOST" => DOMAIN,
         "Authorization" => "Bearer #{@token.token}",
-        Muse::Mcp::VERSION_HEADER => declared,
-        Muse::Mcp::METHOD_HEADER => payload[:method].to_s
+        Mcp::Server::VERSION_HEADER => declared,
+        Mcp::Server::METHOD_HEADER => payload[:method].to_s
       }.merge(headers).compact
     end
 
@@ -1533,7 +1688,7 @@ describe "Muse MCP" do
       end
 
       it "serves tools/call get_account on the modern lane on #{client}" do
-        post_canonical(client, get_account_call, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+        post_canonical(client, get_account_call, headers: { Mcp::Server::NAME_HEADER => "get_account" })
 
         expect(response).to have_http_status(:ok)
         result = response.parsed_body["result"]
@@ -1544,7 +1699,7 @@ describe "Muse MCP" do
       it "answers tools/call with -32022 rather than the legacy lane while the flag is off on #{client}" do
         Feature.deactivate(:mcp_protocol_2026_07_28)
 
-        post_canonical(client, get_account_call, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+        post_canonical(client, get_account_call, headers: { Mcp::Server::NAME_HEADER => "get_account" })
 
         expect(response).to have_http_status(:bad_request)
         expect(response.parsed_body).not_to have_key("result")
@@ -1557,9 +1712,9 @@ describe "Muse MCP" do
       it "counts the declaration under its revision on #{client}, with the flag off and on" do
         post_canonical(client, canonical_request("server/discover"))
         Feature.deactivate(:mcp_protocol_2026_07_28)
-        post_canonical(client, get_account_call, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+        post_canonical(client, get_account_call, headers: { Mcp::Server::NAME_HEADER => "get_account" })
 
-        expect(Muse::ProtocolTelemetry.mix[client]).to eq("2026-07-28" => { "server/discover" => 1, "tools/call" => 1 })
+        expect(Mcp::ProtocolTelemetry.mix[client]).to eq("2026-07-28" => { "server/discover" => 1, "tools/call" => 1 })
       end
     end
 
@@ -1573,7 +1728,7 @@ describe "Muse MCP" do
     end
 
     it "rejects a declaration the version header disagrees with" do
-      post_canonical("muse", canonical_request("server/discover"), declared: Muse::Mcp::LEGACY_PROTOCOL_VERSION)
+      post_canonical("muse", canonical_request("server/discover"), declared: Mcp::Server::LEGACY_PROTOCOL_VERSION)
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
@@ -1581,14 +1736,14 @@ describe "Muse MCP" do
     end
 
     it "rejects a declaration with no version header" do
-      post_canonical("muse", canonical_request("server/discover"), headers: { Muse::Mcp::VERSION_HEADER => nil })
+      post_canonical("muse", canonical_request("server/discover"), headers: { Mcp::Server::VERSION_HEADER => nil })
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
     end
 
     it "rejects a tool call whose name header does not match" do
-      post_canonical("muse", get_account_call, headers: { Muse::Mcp::NAME_HEADER => "list_sales" })
+      post_canonical("muse", get_account_call, headers: { Mcp::Server::NAME_HEADER => "list_sales" })
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body["error"]).to include("code" => -32020)
@@ -1603,16 +1758,16 @@ describe "Muse MCP" do
     end
 
     it "serves a request that declares the same revision in params._meta and at the top level" do
-      post_canonical("muse", canonical_request("server/discover").merge(_meta: { Muse::Mcp::VERSION_META_KEY => Muse::Mcp::MODERN_PROTOCOL_VERSION }))
+      post_canonical("muse", canonical_request("server/discover").merge(_meta: { Mcp::Server::VERSION_META_KEY => Mcp::Server::MODERN_PROTOCOL_VERSION }))
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["result"]["resultType"]).to eq("complete")
     end
 
     it "rejects a request whose params._meta and top-level _meta declare different revisions" do
-      payload = get_account_call.merge(_meta: { Muse::Mcp::VERSION_META_KEY => Muse::Mcp::LEGACY_PROTOCOL_VERSION })
+      payload = get_account_call.merge(_meta: { Mcp::Server::VERSION_META_KEY => Mcp::Server::LEGACY_PROTOCOL_VERSION })
 
-      post_canonical("muse", payload, headers: { Muse::Mcp::NAME_HEADER => "get_account" })
+      post_canonical("muse", payload, headers: { Mcp::Server::NAME_HEADER => "get_account" })
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).not_to have_key("result")
@@ -1625,13 +1780,13 @@ describe "Muse MCP" do
       post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list" }.to_json, headers: headers
       undeclared = response.body
 
-      [{ _meta: "2026-07-28" }, { _meta: { Muse::Mcp::VERSION_META_KEY => "" } }, { _meta: { "progressToken" => 7 } }].each do |params|
+      [{ _meta: "2026-07-28" }, { _meta: { Mcp::Server::VERSION_META_KEY => "" } }, { _meta: { "progressToken" => 7 } }].each do |params|
         post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/list", params: }.to_json, headers: headers
 
         expect(response).to have_http_status(:ok)
         expect(response.body).to eq(undeclared)
       end
-      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 4 })
+      expect(Mcp::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 4 })
     end
   end
 
@@ -1654,12 +1809,12 @@ describe "Muse MCP" do
         jsonrpc: "2.0",
         id: 1,
         method:,
-        _meta: { Muse::Mcp::VERSION_META_KEY => version },
+        _meta: { Mcp::Server::VERSION_META_KEY => version },
       }
     end
 
     def declare(version)
-      { Muse::Mcp::VERSION_HEADER => version }
+      { Mcp::Server::VERSION_HEADER => version }
     end
 
     def counter_key = RedisKey.mcp_protocol_requests(Date.current)
@@ -1684,11 +1839,11 @@ describe "Muse MCP" do
     it "counts an undeclared caller apart from one that declares a revision, on every connector path" do
       %w[muse claude chatgpt].each do |client|
         post_mcp_on(client, { jsonrpc: "2.0", id: 1, method: "tools/list" })
-        post_mcp_on(client, declaring(Muse::Mcp::LEGACY_PROTOCOL_VERSION), headers: declare(Muse::Mcp::LEGACY_PROTOCOL_VERSION))
-        post_mcp_on(client, declaring(Muse::Mcp::MODERN_PROTOCOL_VERSION), headers: declare(Muse::Mcp::MODERN_PROTOCOL_VERSION))
+        post_mcp_on(client, declaring(Mcp::Server::LEGACY_PROTOCOL_VERSION), headers: declare(Mcp::Server::LEGACY_PROTOCOL_VERSION))
+        post_mcp_on(client, declaring(Mcp::Server::MODERN_PROTOCOL_VERSION), headers: declare(Mcp::Server::MODERN_PROTOCOL_VERSION))
       end
 
-      mix = Muse::ProtocolTelemetry.mix
+      mix = Mcp::ProtocolTelemetry.mix
       expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt")
       expect(mix.values).to all(eq(
         "undeclared" => { "tools/list" => 1 },
@@ -1703,7 +1858,7 @@ describe "Muse MCP" do
                     { jsonrpc: "2.0", id: 2, method: "tools/list" },
                   ])
 
-      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 2 })
+      expect(Mcp::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 2 })
     end
 
     it "counts no caller identity" do
@@ -1718,7 +1873,7 @@ describe "Muse MCP" do
       end
       post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "prompts/list" })
 
-      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq(
+      expect(Mcp::ProtocolTelemetry.mix["muse"]).to eq(
         "2025-06-18" => { "tools/list" => 1 },
         "other" => { "tools/list" => 4 },
         "undeclared" => { "other" => 1 }
@@ -1727,14 +1882,14 @@ describe "Muse MCP" do
 
     it "stores no client-supplied value and keeps every count, however many distinct values a batch sends" do
       adversarial = Array.new(1000) do |index|
-        { jsonrpc: "2.0", id: index, method: "tools/call/#{index}", _meta: { Muse::Mcp::VERSION_META_KEY => (Date.new(2100, 1, 1) + index).iso8601 } }
+        { jsonrpc: "2.0", id: index, method: "tools/call/#{index}", _meta: { Mcp::Server::VERSION_META_KEY => (Date.new(2100, 1, 1) + index).iso8601 } }
       end
       known = [
         { jsonrpc: "2.0", id: 1000, method: "tools/list" },
-        declaring(Muse::Mcp::LEGACY_PROTOCOL_VERSION).merge(id: 1001),
+        declaring(Mcp::Server::LEGACY_PROTOCOL_VERSION).merge(id: 1001),
       ]
 
-      post_mcp_on("muse", adversarial + known, headers: declare(Muse::Mcp::LEGACY_PROTOCOL_VERSION))
+      post_mcp_on("muse", adversarial + known, headers: declare(Mcp::Server::LEGACY_PROTOCOL_VERSION))
 
       expect($redis.hgetall(counter_key)).to eq(
         "muse|other|other" => "1000",
@@ -1749,8 +1904,8 @@ describe "Muse MCP" do
       end
 
       expect(commands).to eq(["eval"])
-      expect(Muse::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 3 })
-      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+      expect(Mcp::ProtocolTelemetry.mix["muse"]).to eq("undeclared" => { "tools/list" => 3 })
+      expect($redis.ttl(counter_key)).to be_within(5).of(Mcp::ProtocolTelemetry::RETENTION.to_i)
     end
 
     it "never leaves a counted day without its retention when the connection drops after the first write" do
@@ -1758,7 +1913,7 @@ describe "Muse MCP" do
 
       expect(response).to be_successful
       expect($redis.hgetall(counter_key)).to eq("muse|undeclared|tools/list" => "1")
-      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+      expect($redis.ttl(counter_key)).to be_within(5).of(Mcp::ProtocolTelemetry::RETENTION.to_i)
     end
 
     it "restores the retention of a day that already has counts but lost its expiry" do
@@ -1767,7 +1922,7 @@ describe "Muse MCP" do
       post_mcp_on("muse", { jsonrpc: "2.0", id: 1, method: "tools/list" })
 
       expect($redis.hgetall(counter_key)).to eq("muse|undeclared|tools/list" => "2")
-      expect($redis.ttl(counter_key)).to be_within(5).of(Muse::ProtocolTelemetry::RETENTION.to_i)
+      expect($redis.ttl(counter_key)).to be_within(5).of(Mcp::ProtocolTelemetry::RETENTION.to_i)
     end
 
     it "serves the same response when the counter cannot be written, with one class-only warning" do
@@ -1794,7 +1949,7 @@ describe "Muse MCP" do
         "Authorization" => "Bearer #{@token.token}"
       }
 
-      expect(Muse::ProtocolTelemetry.mix.keys).to eq(["muse"])
+      expect(Mcp::ProtocolTelemetry.mix.keys).to eq(["muse"])
     end
 
     it "counts no unauthenticated request" do

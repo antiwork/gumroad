@@ -435,7 +435,10 @@ class StripeChargeProcessor
       # A PaymentMethod chargeable carries the SetupIntent submitted for this checkout. A
       # stored CreditCard carries historical intent IDs that can describe another subscription.
       elsif mandate_options.blank? || chargeable.is_a?(StripeChargeablePaymentMethod)
-        get_mandate_id_from_chargeable(chargeable, merchant_account)
+        resolved_mandate = get_mandate_id_from_chargeable(chargeable, merchant_account)
+        # Rebills (mandate_expected) keep Stripe's rejection: their failure handling retries it.
+        reject_pending_checkout_mandate!(resolved_mandate, merchant_account, reference) if resolved_mandate.present? && !mandate_expected
+        resolved_mandate
       end
     end
 
@@ -1961,6 +1964,24 @@ class StripeChargeProcessor
 
       ErrorNotifier.notify("UPI Autopay renewal rejected before Stripe submit", reason:)
       raise ChargeProcessorCardError.new(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED, UPI_PAYMENT_METHOD_UPDATE_MESSAGE)
+    end
+
+    # Stripe rejects a PaymentIntent that references a mandate that is not active yet
+    # (`payment_intent_mandate_invalid`), and a new India mandate stays pending for minutes.
+    def reject_pending_checkout_mandate!(mandate_id, merchant_account, reference)
+      status = begin
+        get_mandate(mandate_id, merchant_account:).status
+      rescue ChargeProcessorError => e
+        ErrorNotifier.notify(e, reference:, mandate_id:)
+        return
+      end
+      return unless status == "pending"
+
+      ErrorNotifier.notify("Off-session checkout charge on an Indian card references a pending mandate", reference:, mandate_id:)
+      raise ChargeProcessorCardError.new(
+        PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING,
+        "Your bank is still confirming your card for recurring payments. Please try again in a few minutes, or buy from one creator at a time."
+      )
     end
 
     def get_mandate_id_from_chargeable(chargeable, merchant_account)

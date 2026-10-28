@@ -20,10 +20,10 @@ class Oauth::TokensController < Doorkeeper::TokensController
       case params[:grant_type].presence || Doorkeeper::OAuth::AUTHORIZATION_CODE
       when Doorkeeper::OAuth::AUTHORIZATION_CODE
         grant = Doorkeeper.config.access_grant_model.by_token(params[:code])
-        Muse::DynamicClientOauth.code_exchange_error(grant, resource: params[:resource], code_verifier: params[:code_verifier]) if grant
+        Mcp::DynamicClientOauth.code_exchange_error(grant, resource: params[:resource], code_verifier: params[:code_verifier]) if grant
       when Doorkeeper::OAuth::REFRESH_TOKEN
         token = Doorkeeper.config.access_token_model.by_refresh_token(params[:refresh_token])
-        Muse::DynamicClientOauth.refresh_error(token, resource: params[:resource]) if token
+        Mcp::DynamicClientOauth.refresh_error(token, resource: params[:resource]) if token
       end
     end
 

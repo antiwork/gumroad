@@ -128,7 +128,7 @@ export default function AffiliatesNew() {
   return (
     <div>
       <PageHeader
-        className="sticky-top"
+        className="sticky top-0 z-10 bg-body"
         title="New Affiliate"
         actions={
           <>

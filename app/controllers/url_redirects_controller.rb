@@ -15,7 +15,8 @@ class UrlRedirectsController < ApplicationController
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file subtitle_file_vtt read
                                              download_archive download_product_files
-                                             save_last_content_page]
+                                             save_last_content_page build_save update_build_save play]
+  before_action :require_product_build_player, only: %i[build_save update_build_save play]
   before_action :hide_layouts, only: %i[
     show download_product_files smil hls_playlist download_subtitle_file subtitle_file_vtt
   ]
@@ -23,7 +24,7 @@ class UrlRedirectsController < ApplicationController
   # Otherwise a leaked token starts the viewing window and the request still 404s.
   before_action :require_seller_for_test_purchase, only: %i[media_urls smil change_purchaser]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
-  after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
+  after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read play]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ) }, only: [:read]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_WATCH) }, only: [:hls_playlist, :smil]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:show]
@@ -318,6 +319,8 @@ class UrlRedirectsController < ApplicationController
         redirect_to url_redirect_download_page_path(@url_redirect.token, **forwardable_query_params)
       elsif params[:destination] == "stream"
         redirect_to url_redirect_stream_page_path(@url_redirect.token, **forwardable_query_params)
+      elsif params[:destination] == "play"
+        redirect_to url_redirect_play_path(@url_redirect.token)
       else
         redirect_to url_redirect_path(@url_redirect.token, **forwardable_query_params)
       end
@@ -397,6 +400,40 @@ class UrlRedirectsController < ApplicationController
 
     @url_redirect.purchase.update!(last_content_page_id: params[:page_id])
     render json: { success: true }
+  end
+
+  # Opens the live build in the player's frame. Access is checked here, with the buyer's cookies,
+  # and the frame then loads the build under a grant (see ProductBuild#player_grant).
+  def play
+    build = @url_redirect.referenced_link.product_builds.live.where.not(site_unpacked_at: nil).first
+    return e404 if build.nil?
+
+    # Playing starts a rental's viewing window, the same as streaming a video.
+    @url_redirect.mark_rental_as_viewed!
+    grant = build.player_grant(url_redirect_token: @url_redirect.token, purchase_id: @url_redirect.purchase_id)
+    # The trailing slash makes the build's relative file paths resolve under the grant.
+    redirect_to "#{request.path.chomp("/")}/#{grant}/"
+  end
+
+  def build_save
+    save = ProductBuildSave.find_by(purchase: @url_redirect.purchase)
+    render json: { success: true, data: save&.data || {} }
+  end
+
+  # One batch of changes from the player's storage shims: `clear`, then `remove`, then `set`.
+  # The batch goes to the model unfiltered: `permit` would drop a malformed `set` and let its
+  # `clear` erase the save, so the model rejects the whole batch instead.
+  def update_build_save
+    set = params.fetch(:set, {})
+    save = ProductBuildSave.apply_changes!(
+      @url_redirect.purchase,
+      set: set.is_a?(ActionController::Parameters) ? set.to_unsafe_h : set,
+      remove: params.fetch(:remove, []),
+      clear: params.fetch(:clear, false),
+    )
+    render json: { success: true, byte_size: save.byte_size }
+  rescue ProductBuildSave::LimitError => e
+    render json: { success: false, error: e.message }, status: :unprocessable_entity
   end
 
   private
@@ -615,6 +652,17 @@ class UrlRedirectsController < ApplicationController
       return if test_purchase_viewer?
 
       request.format.json? ? e404_json : e404
+    end
+
+    # Saves are only for a purchase of a product that has a live build, so the store cannot be used
+    # as general storage. The flag is the player's kill switch.
+    def require_product_build_player
+      product = @url_redirect.referenced_link
+      not_found = -> { request.format.json? ? e404_json : e404 }
+      return not_found.call if @url_redirect.purchase.nil? || product.nil?
+      return not_found.call unless Feature.active?(:product_build_player, product.user)
+
+      not_found.call unless product.product_builds.live.exists?
     end
 
     def redirect_to_app_login(next_path)

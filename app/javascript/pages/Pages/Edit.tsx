@@ -363,7 +363,7 @@ export default function PagesEdit() {
     return (
       <>
         <PageHeader
-          className="sticky-top"
+          className="sticky top-0 z-10 bg-body"
           // "Home" matches the pinned entry in the Pages list — the same page
           // shouldn't change names between the list and its editor.
           title="Home"
@@ -407,7 +407,7 @@ export default function PagesEdit() {
   return (
     <>
       <PageHeader
-        className="sticky-top"
+        className="sticky top-0 z-10 bg-body"
         title={is_new ? "New page" : page.title}
         actions={
           // Read-only roles get no save button: its request would fail.

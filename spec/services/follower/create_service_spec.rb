@@ -39,6 +39,100 @@ describe Follower::CreateService do
     service.perform
   end
 
+  it "records the waitlist entry for a visitor who already follows the seller" do
+    product = create(:product, user:)
+
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+  end
+
+  it "records a repeat signup without logging a write failure" do
+    product = create(:product, user:)
+    allow(Rails.logger).to receive(:error)
+
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+
+    expect(Rails.logger).not_to have_received(:error)
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+  end
+
+  it "sends the product-aware confirmation email" do
+    product = create(:product, user:)
+    follower = create(:follower, user:, email: "waitlist@example.com")
+
+    expect do
+      described_class.perform(followed_user: user, follower_email: follower.email, waitlist_product: product)
+    end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, follower.id, product.id)
+  end
+
+  it "sends no confirmation email to a confirmed follower joining a waitlist" do
+    product = create(:product, user:)
+
+    expect do
+      described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+    end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
+
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+    expect(active_follower.reload.confirmed?).to be(true)
+  end
+
+  it "records no waitlist entry when no product is given" do
+    expect do
+      described_class.perform(followed_user: user, follower_email: "plain@example.com")
+    end.not_to change { WaitlistEntry.count }
+  end
+
+  describe "recording the waitlist entry" do
+    let(:product) { create(:product, user:) }
+
+    before { allow(Rails.logger).to receive(:error).and_call_original }
+
+    # Commits the same entry right after the service's lookup misses, outside the savepoint its insert runs in.
+    def write_competing_entry_after_lookup
+      @competed = false
+      allow_any_instance_of(ActiveRecord::Relation).to receive(:find_by).and_wrap_original do |original, *args|
+        original.call(*args).tap do |found|
+          next if found || @competed || original.receiver.klass != WaitlistEntry
+
+          WaitlistEntry.insert_all([{ follower_id: follower.id, product_id: product.id }])
+          @competed = true
+        end
+      end
+    end
+
+    { "the uniqueness validation" => false, "the unique index" => true }.each do |guard, skip_validation|
+      it "uses the entry a concurrent signup wrote when #{guard} rejects the insert" do
+        write_competing_entry_after_lookup
+        allow_any_instance_of(WaitlistEntry).to receive(:valid?).and_return(true) if skip_validation
+
+        expect do
+          described_class.perform(followed_user: user, follower_email: follower.email, waitlist_product: product)
+        end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, follower.id, product.id)
+
+        expect(@competed).to be(true)
+        expect(WaitlistEntry.where(follower:, product:).count).to eq 1
+        expect(Rails.logger).not_to have_received(:error).with(/Cannot record waitlist entry/)
+      end
+    end
+
+    it "logs an entry it cannot write and still asks the visitor to confirm" do
+      allow_any_instance_of(WaitlistEntry).to receive(:valid?).and_wrap_original do |original, *args|
+        original.call(*args)
+        original.receiver.errors.add(:product, :blank)
+        false
+      end
+
+      expect do
+        described_class.perform(followed_user: user, follower_email: follower.email, waitlist_product: product)
+      end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, follower.id)
+
+      expect(WaitlistEntry.count).to eq 0
+      expect(Rails.logger).to have_received(:error).with(/Cannot record waitlist entry for follower #{follower.id}/)
+    end
+  end
+
   context "when follower is present" do
     it "updates the source of the follow and follower_user_id" do
       Follower::CreateService.perform(
