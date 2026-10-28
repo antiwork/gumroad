@@ -200,6 +200,7 @@ class PaypalMerchantAccountManager
     #   PERMISSION_DENIED
     #   DATA_RETRIEVAL
     #   CONNECTION_ERROR
+    # A PayPal-side fault comes back as INTERNAL_SERVER_ERROR, not the documented INTERNAL_SERVICE_ERROR.
     def partner_referral_error_message
       case response_error_name
       when "VALIDATION_ERROR"
@@ -214,7 +215,7 @@ class PaypalMerchantAccountManager
     end
 
     def notify_partner_referral_error
-      return if %w[INTERNAL_SERVICE_ERROR PERMISSION_DENIED CONNECTION_ERROR].include?(response_error_name)
+      return if %w[INTERNAL_SERVICE_ERROR INTERNAL_SERVER_ERROR PERMISSION_DENIED CONNECTION_ERROR].include?(response_error_name)
 
       notify_error
     end

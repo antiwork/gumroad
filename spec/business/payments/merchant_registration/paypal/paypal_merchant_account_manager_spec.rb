@@ -26,6 +26,39 @@ describe PaypalMerchantAccountManager, :vcr do
         expect(@response[:error_message]).to eq("Please try again later.")
       end
     end
+
+    context "when the partner referral fails with a PayPal internal error" do
+      let(:paypal_response) { double(success?: false, parsed_response: { "name" => "INTERNAL_SERVER_ERROR" }, request: nil) }
+
+      before do
+        allow_any_instance_of(described_class).to receive(:authorization_header).and_return(" ")
+        allow_any_instance_of(PaypalIntegrationRestApi).to receive(:create_partner_referral).and_return(paypal_response)
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      it "returns failure response data without notifying" do
+        response = described_class.new.create_partner_referral(user, "http://redirecturl.com")
+
+        expect(response[:success]).to eq(false)
+        expect(ErrorNotifier).not_to have_received(:notify)
+      end
+    end
+
+    context "when the partner referral fails with an unrecognised error name" do
+      let(:paypal_response) { double(success?: false, parsed_response: { "name" => "SOMETHING_NEW" }, request: nil) }
+
+      before do
+        allow_any_instance_of(described_class).to receive(:authorization_header).and_return(" ")
+        allow_any_instance_of(PaypalIntegrationRestApi).to receive(:create_partner_referral).and_return(paypal_response)
+        allow(ErrorNotifier).to receive(:notify)
+      end
+
+      it "notifies" do
+        described_class.new.create_partner_referral(user, "http://redirecturl.com")
+
+        expect(ErrorNotifier).to have_received(:notify).with("PayPal partner referral error", request: nil, response: paypal_response)
+      end
+    end
   end
 
   describe "handle_paypal_event" do
