@@ -293,6 +293,20 @@ describe PartnerMigrationImportJob do
     expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").count).to eq(0)
   end
 
+  it "keeps the results that an overlapping run recorded" do
+    migration = create_claimed_migration([product_attributes, product_attributes.merge(name: "Brush Set")])
+    other_result = { "product_id" => "saved-by-another-run" }
+    allow_any_instance_of(PartnerMigration::ProductImporter).to receive(:attach_media).and_wrap_original do |original, *args|
+      PartnerMigration.where(id: migration.id).update_all(results: PartnerMigration.find(migration.id).results.merge("1" => other_result))
+      original.call(*args)
+    end
+
+    described_class.new.perform(migration.id)
+
+    expect(migration.reload.results["1"]).to eq(other_result)
+    expect(migration.results["0"]).to include("product_id" => Link.where(user_id: seller.id).sole.external_id)
+  end
+
   it "deletes the files it uploaded when a later file fails" do
     migration = create_claimed_migration([product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/missing.zip" }])])
 

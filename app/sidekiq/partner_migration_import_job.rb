@@ -169,7 +169,9 @@ class PartnerMigrationImportJob
       PartnerMigration.where(id: migration.id).pick(:results)&.key?(index.to_s)
     end
 
+    # Merges into the stored results under the lock, so a run that overlaps after a resume cannot
+    # overwrite results that the other run recorded.
     def record_result(migration, index, result)
-      migration.update!(results: (migration.results || {}).merge(index.to_s => result))
+      migration.with_lock { migration.update!(results: (migration.results || {}).merge(index.to_s => result)) }
     end
 end
