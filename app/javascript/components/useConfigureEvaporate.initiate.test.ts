@@ -15,7 +15,8 @@ vi.stubGlobal(
 );
 
 class FakeXHR {
-  static queue: { status: number; response: string }[] = [];
+  // A `hang` entry never answers.
+  static queue: ({ status: number; response: string } | { hang: true })[] = [];
 
   status = 0;
   readyState = 0;
@@ -28,11 +29,12 @@ class FakeXHR {
   open() {}
   setRequestHeader() {}
   abort() {}
-  getResponseHeader() {
-    return null;
+  getResponseHeader(name: string) {
+    return name === "ETag" ? '"part-etag"' : null;
   }
   send() {
     const next = FakeXHR.queue.shift() ?? { status: 500, response: "" };
+    if ("hang" in next) return;
     this.status = next.status;
     this.response = next.response;
     this.responseText = next.response;
@@ -44,6 +46,7 @@ class FakeXHR {
 const OriginalXHR = globalThis.XMLHttpRequest;
 
 afterEach(() => {
+  vi.useRealTimers();
   FakeXHR.queue = [];
   globalThis.XMLHttpRequest = OriginalXHR;
 });
@@ -113,4 +116,49 @@ it("forwards a signer failure to onError only once", async () => {
   await vi.waitFor(() => {
     expect(onError).toHaveBeenCalledTimes(1);
   });
+});
+
+it("forwards a completion whose signer never answers to onError once and still uploads the next file", async () => {
+  vi.useFakeTimers();
+  const time = { status: 200, response: "Wed, 26 Aug 2026 00:00:00 GMT" };
+  const signature = { status: 200, response: "1234567890123456789012345678" };
+  const initiate = { status: 200, response: "<UploadId>upload-1</UploadId>" };
+  const part = { status: 200, response: "" };
+  FakeXHR.queue = [
+    ...[time, signature, initiate, time, signature, part, time, { hang: true as const }],
+    ...[time, signature, initiate, time, signature, part, time, signature],
+    { status: 200, response: "<CompleteMultipartUploadResult/>" },
+  ];
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- test double implements the XHR methods Evaporate uses
+  globalThis.XMLHttpRequest = FakeXHR as unknown as typeof XMLHttpRequest;
+
+  const { result } = renderHook(() =>
+    useConfigureEvaporate({
+      aws_access_key_id: "key",
+      s3_url: "https://s3.amazonaws.com/bucket",
+      user_id: "user-1",
+    }),
+  );
+  const first = { onComplete: vi.fn(), onError: vi.fn() };
+  const second = { onComplete: vi.fn(), onError: vi.fn() };
+  for (const [key, callbacks] of [
+    ["file_first", first],
+    ["file_second", second],
+  ] as const) {
+    result.current.evaporateUploader.scheduleUpload({
+      cancellationKey: key,
+      name: key,
+      file: new File(["x"], `${key}.zip`, { type: "application/zip" }),
+      mimeType: "application/zip",
+      onProgress: () => {},
+      ...callbacks,
+    });
+  }
+
+  await vi.advanceTimersByTimeAsync(61 * 1000);
+
+  expect(first.onError).toHaveBeenCalledTimes(1);
+  expect(first.onComplete).not.toHaveBeenCalled();
+  expect(second.onComplete).toHaveBeenCalledTimes(1);
+  expect(second.onError).not.toHaveBeenCalled();
 });
