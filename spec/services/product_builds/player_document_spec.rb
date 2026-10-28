@@ -23,6 +23,14 @@ describe ProductBuilds::PlayerDocument do
       expect(rendered).to start_with(%(\xEF\xBB\xBF<!doctype html><script data-cfasync="false">).b)
     end
 
+    it "writes the save as ASCII, so a page in another encoding reads it the same" do
+      rendered = described_class.render("<title>Game</title>", save_data: { "name" => "Zoë 🎮", "x" => "</script>" })
+      json = rendered[/JSON\.parse\((".*?")\);/, 1]
+
+      expect(json).to be_ascii_only
+      expect(JSON.parse(JSON.parse(json.gsub("\\u003c", "<").gsub("\\u003e", ">")))).to eq("name" => "Zoë 🎮", "x" => "</script>")
+    end
+
     it "puts the scripts at the very start of a page with no doctype" do
       rendered = described_class.render(%(<script src="game.js"></script>), save_data: {})
 

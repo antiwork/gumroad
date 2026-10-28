@@ -87,7 +87,9 @@ module ProductBuilds::PlayerDocument
   # for them, so no tag has to be found, and a <head> inside a comment or a script cannot mislead it.
   # Anything before the doctype would put the page in quirks mode.
   def self.render(html, save_data:)
-    script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save_data.to_json.to_json) }
+    # ASCII only, so the save reads the same whatever encoding the seller's page is in.
+    save = JSON.generate(JSON.generate(save_data, ascii_only: true), ascii_only: true)
+    script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save) }
     # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
     injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
     html = html.b
