@@ -26,12 +26,14 @@ module User::Followers
   def add_follower(email, options = {})
     follower_attributes = options.dup
     logged_in_user = follower_attributes.delete(:logged_in_user)
+    waitlist_product = follower_attributes.delete(:waitlist_product)
 
     Follower::CreateService.perform(
       followed_user: self,
       follower_email: email,
       follower_attributes:,
-      logged_in_user:
+      logged_in_user:,
+      waitlist_product:,
     )
   end
 end

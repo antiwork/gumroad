@@ -247,8 +247,19 @@ class FollowersController < ApplicationController
         follower_email,
         follower_user_id:,
         logged_in_user:,
-        source:
+        source:,
+        waitlist_product: waitlist_product_from_params(followed_user)
       )
+    end
+
+    # The product a visitor joined the waitlist from, resolved among the followed seller's own
+    # products so a posted id can never attach a follow to someone else's product. An id that
+    # doesn't resolve is ignored: the follow itself is still valid.
+    def waitlist_product_from_params(followed_user)
+      product_id = params[:product_id]
+      return if product_id.blank?
+
+      followed_user.products.find_by_external_id(product_id)
     end
 
     def fetch_follower
