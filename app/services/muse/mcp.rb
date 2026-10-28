@@ -83,7 +83,7 @@ module Muse
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft a product, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
@@ -305,6 +305,16 @@ module Muse
                  "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
                  "description" => { type: "string", description: "HTML or plain-text description." }
                }, required: %w[name price_cents]),
+          tool("update_product", "Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "name" => { type: "string", description: "New product name." },
+                 "description" => { type: "string", description: "New HTML or plain-text description." },
+                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." }
+               }, required: %w[id], destructive: true),
+          tool("add_cover", "Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "url" => { type: "string", description: "Public https URL of an image, or a YouTube or Vimeo link." }
+               }, required: %w[id url]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], destructive: true),
@@ -417,6 +427,63 @@ module Muse
         product.taxonomy = Taxonomy.find_by(slug: "other")
         product.save!
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
+      end
+
+      def tool_update_product(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        changes = args.slice("name", "description", "price_cents")
+        raise Error.new("Pass at least one of name, description, or price_cents", code: -32602) if changes.empty?
+
+        # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
+        ActiveRecord::Base.transaction do
+          # Reloads under the lock: the upsell diff below must compare against the committed
+          # description, or an overlapping edit's new upsell card is dropped with its offer left active.
+          product.lock!
+          if changes.key?("name")
+            name = changes["name"].strip
+            raise Error.new("name must not be blank", code: -32602) if name.blank?
+
+            product.name = name
+          end
+          if changes.key?("price_cents")
+            raise Error.new("price_cents must be zero or more", code: -32602) if changes["price_cents"].negative?
+            # Tier prices live on the variants; the product-level price is a placeholder.
+            raise ToolError, "Price cannot be changed for a membership with tiers. Edit the tier prices in the product editor." if product.is_tiered_membership
+
+            product.price_cents = changes["price_cents"]
+          end
+          if changes.key?("description")
+            product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
+          end
+          product.save!
+        end
+        result = { product: product_payload(product.reload).merge(description: product.description) }
+        # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
+        if changes.key?("price_cents")
+          invalid_codes = product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(product) }.map(&:code)
+          result[:warning] = "These discount codes would discount this product below #{product.min_price_formatted}: #{invalid_codes.join(', ')}. Edit or delete them in Gumroad." if invalid_codes.any?
+        end
+        result
+      end
+
+      def tool_add_cover(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        cover = product.asset_previews.build
+        begin
+          cover.url = args["url"]
+        rescue *INTERNET_EXCEPTIONS
+          raise ToolError, "Could not fetch an image from that URL. Use a public https link to the image file."
+        end
+        cover.analyze_file
+        unless cover.save
+          cover.file.blob&.purge if cover.file.attached?
+          raise ToolError, cover.errors.full_messages.to_sentence
+        end
+
+        covers = product.display_asset_previews.reload
+        { product: product_payload(product), covers: covers.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } } }
       end
 
       def tool_publish_product(args)

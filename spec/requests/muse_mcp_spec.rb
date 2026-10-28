@@ -447,6 +447,8 @@ describe "Muse MCP" do
         "list_products" => "List products",
         "get_product" => "Get product",
         "create_draft_product" => "Create draft product",
+        "update_product" => "Update product",
+        "add_cover" => "Add cover",
         "publish_product" => "Publish product",
         "unpublish_product" => "Unpublish product",
         "list_sales" => "List sales",
@@ -503,12 +505,12 @@ describe "Muse MCP" do
       expect(names).to include("get_account", "list_products", "list_sales", "create_draft_product", "publish_product")
     end
 
-    it "labels reads, drafts, and sale-state changes for the host" do
+    it "labels reads, drafts, edits, and sale-state changes for the host" do
       post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/list" })
 
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
-        "get_account", "list_products", "get_product", "create_draft_product",
+        "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
         "publish_product", "unpublish_product", "list_sales", "list_payouts"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
@@ -516,8 +518,10 @@ describe "Muse MCP" do
       %w[get_account list_products get_product list_sales list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
       end
-      expect(annotations["create_draft_product"]).to include("readOnlyHint" => false, "destructiveHint" => false)
-      %w[publish_product unpublish_product].each do |name|
+      %w[create_draft_product add_cover].each do |name|
+        expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => false)
+      end
+      %w[update_product publish_product unpublish_product].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => true)
       end
     end
@@ -549,6 +553,18 @@ describe "Muse MCP" do
       expect { post_mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Nope", price_cents: 500 } } }) }.not_to change(Link, :count)
 
       expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+    end
+
+    it "refuses to edit a product or add a cover" do
+      allow(SsrfFilter).to receive(:get)
+
+      expect do
+        post_mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "update_product", arguments: { id: @product.external_id, name: "Nope" } } })
+        expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+        post_mcp({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "add_cover", arguments: { id: @product.external_id, url: "https://example.com/cover.png" } } })
+        expect(response.parsed_body.dig("error", "message")).to include("edit_products")
+      end.not_to change { [@product.reload.attributes, AssetPreview.count] }
+      expect(SsrfFilter).not_to have_received(:get)
     end
   end
 
@@ -603,6 +619,117 @@ describe "Muse MCP" do
       expect(response).to be_successful
       expect(response.parsed_body["result"]).to include("isError" => true, "content" => [{ "type" => "text", "text" => Link::UNPUBLISHED_BY_ADMIN_MESSAGE }])
       expect(@product.reload.purchase_disabled_at).to be_present
+    end
+
+    def call_tool(name, arguments)
+      post_mcp({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name:, arguments: } })
+    end
+
+    it "updates the name, description, and price of a published product" do
+      call_tool("update_product", { id: @product.unique_permalink, name: "Field notes, vol. 2", description: "<p>Now with maps.</p>", price_cents: 2500 })
+
+      expect(response).to be_successful
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload).to include("name" => "Field notes, vol. 2", "price_cents" => 2500, "published" => true, "description" => "<p>Now with maps.</p>")
+      @product.reload
+      expect(@product.name).to eq("Field notes, vol. 2")
+      expect(@product.description).to eq("<p>Now with maps.</p>")
+      expect(@product.price_cents).to eq(2500)
+    end
+
+    it "changes only the fields it is given" do
+      @product.update!(description: "Original")
+
+      call_tool("update_product", { id: @product.external_id, description: "Rewritten" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.description).to eq("Rewritten")
+      expect(@product.name).to eq("Field notes")
+      expect(@product.price_cents).to eq(1900)
+    end
+
+    it "rejects an update with no fields to change" do
+      expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, or price_cents")
+    end
+
+    it "rejects a blank name without changing the product" do
+      expect { call_tool("update_product", { id: @product.external_id, name: "  ", description: "Kept out" }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "name must not be blank")
+    end
+
+    it "warns when a lower price pushes an existing discount below the minimum" do
+      create(:offer_code, user: @seller, products: [@product], code: "save18", amount_cents: 1800)
+
+      call_tool("update_product", { id: @product.external_id, price_cents: 1850 })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "price_cents")).to eq(1850)
+      expect(content["warning"]).to include("save18")
+    end
+
+    it "rolls back the whole update when the product fails validation" do
+      expect do
+        call_tool("update_product", { id: @product.external_id, price_cents: 1, description: "Kept out" })
+      end.not_to change { [@product.reload.attributes, @product.prices.map(&:attributes)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+    end
+
+    it "refuses a price change on a membership with tiers and leaves its prices unchanged" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: @seller)
+
+      expect do
+        call_tool("update_product", { id: membership.external_id, price_cents: 100 })
+      end.not_to change { [membership.reload.attributes, membership.alive_prices.map(&:attributes)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("membership with tiers")
+    end
+
+    it "refuses to update another seller's product" do
+      other_product = create(:product, name: "Theirs")
+
+      expect { call_tool("update_product", { id: other_product.external_id, name: "Mine now" }) }.not_to change { other_product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+    end
+
+    it "adds a cover from an image URL" do
+      image = File.binread(Rails.root.join("spec/support/fixtures/kFDzu.png"))
+      allow(SsrfFilter).to receive(:get).with("https://example.com/cover.png").and_return(instance_double(Net::HTTPOK, body: image, content_type: "image/png"))
+
+      expect { call_tool("add_cover", { id: @product.external_id, url: "https://example.com/cover.png" }) }.to change { @product.asset_previews.alive.count }.by(1)
+
+      expect(response).to be_successful
+      covers = response.parsed_body.dig("result", "structuredContent", "covers")
+      cover = @product.asset_previews.alive.last
+      expect(covers).to eq([{ "id" => cover.guid, "url" => cover.url, "type" => "image" }])
+      expect(cover.file).to be_attached
+      expect([cover.width, cover.height]).to eq([1633, 512])
+    end
+
+    it "reports a URL it cannot fetch as a tool error without adding a cover" do
+      allow(SsrfFilter).to receive(:get).and_raise(SsrfFilter::PrivateIPAddress)
+
+      expect { call_tool("add_cover", { id: @product.external_id, url: "https://example.com/internal.png" }) }.not_to change { AssetPreview.count }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("Could not fetch an image from that URL")
+    end
+
+    it "refuses a cover for another seller's product without fetching the URL" do
+      other_product = create(:product)
+      allow(SsrfFilter).to receive(:get)
+
+      expect { call_tool("add_cover", { id: other_product.external_id, url: "https://example.com/cover.png" }) }.not_to change { AssetPreview.count }
+
+      expect(SsrfFilter).not_to have_received(:get)
+      expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
     end
   end
 
@@ -1336,7 +1463,7 @@ describe "Muse MCP" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
       JSON
     end
 
