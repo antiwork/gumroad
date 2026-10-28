@@ -6,13 +6,14 @@ class SerbiaBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /^([a-zA-Z]){4}([a-zA-Z]){2}([0-9a-zA-Z]){2}([0-9a-zA-Z]{3})?$/
   private_constant :BANK_CODE_FORMAT_REGEX
 
-  ACCOUNT_NUMBER_FORMAT_REGEX = /^RS([0-9]){18,20}$/
+  ACCOUNT_NUMBER_FORMAT_REGEX = /\ARS[0-9]{20}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
-  validate :validate_account_number, if: -> { Rails.env.production? }
+  # Legacy 20/21-character rows must not block unrelated saves.
+  validate :validate_account_number, if: -> { Rails.env.production? && (new_record? || will_save_change_to_account_number?) }
 
   def routing_number
     "#{bank_code}"
@@ -49,7 +50,9 @@ private
   end
 
   def validate_account_number
-    return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
+    decrypted = account_number_decrypted
+    # Stripe also enforces the IBAN mod-97 check digits, so a 22-char value with wrong ones still fails at bank-sync.
+    return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(decrypted) && Ibandit::IBAN.new(decrypted).valid_check_digits?
     errors.add :base, "The account number is invalid."
   end
 end

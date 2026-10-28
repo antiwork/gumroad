@@ -20,9 +20,6 @@ module ElasticsearchModelAsyncCallbacks
 
         delay = action == "index" ? 2.seconds : 4.seconds
         ElasticsearchIndexerWorker.perform_in(delay, action, options)
-
-        # Mitigation of small replica lag issues:
-        ElasticsearchIndexerWorker.perform_in(3.minutes, action, options) if action.in?(%w[index update])
       end
   end
 end

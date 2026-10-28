@@ -4723,7 +4723,9 @@ class Purchase < ApplicationRecord
       # Videos uploaded in the future would be automatically transcoded since the product would contain at least one
       # successful purchase. We can disable transcode on purchase to avoid unnecessary transcode attempts.
       link.transcode_videos_on_purchase = false
-      link.save!
+      # Flag bookkeeping only: validating here would let an unrelated product validation (a published
+      # bundle that has lost all its products) abort the transition and leave a paid purchase stuck.
+      link.save!(validate: false)
     end
 
     def process_without_charging!(reservable_offer_code: nil, locked_rate: nil)
@@ -6370,15 +6372,18 @@ class Purchase < ApplicationRecord
       formatted_price_with_recurrence(formatted_price, price.recurrence, charge_occurrence_count, format:)
     end
 
+    # Runs inside the success transition's transaction, so a raise here rolls back a purchase the
+    # processor already charged. The update is async because sales_volume reads the purchases index,
+    # which this sale has not reached yet; the unique job collapses a burst into one update.
     def update_product_search_index!
-      link.enqueue_index_update_for(%w[is_recommendable])
-
-      # sales_volume needs to be updated asynchronously, because:
-      # - it's based on Product::Stats#total_usd_cents, which itself uses the Purchase index data
-      # - purchases are indexed asynchronously, and the index is also internally refreshed asynchronously
-      # If we indexed sales_volume synchronously, it's likely to fetch outdated data from the purchases index,
-      # thus not reflecting the latest purchase that was just made here.
-      SendToElasticsearchWorker.perform_in(5.seconds, link.id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"])
+      SendToElasticsearchWorker.perform_in(5.seconds, link.id, "update", %w[is_recommendable sales_volume total_fee_cents past_year_fee_cents])
+    rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS => e
+      Rails.logger.warn("update_product_search_index! enqueue failed (#{e.class}) purchase=#{id} link=#{link_id}")
+      begin
+        ErrorNotifier.notify(e, purchase_id: id, link_id:, product_search_index_enqueue_failed: true)
+      rescue StandardError => notifier_error
+        Rails.logger.warn("update_product_search_index! failure could not be reported (#{id}): #{notifier_error.class}")
+      end
     end
 
     def enqueue_product_search_refresh_after_refund

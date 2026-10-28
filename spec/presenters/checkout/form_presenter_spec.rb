@@ -193,6 +193,24 @@ describe Checkout::FormPresenter do
         end
       end
 
+      context "when the seller is in China" do
+        before do
+          create(:user_compliance_info, user: seller, country: "China")
+        end
+
+        it "does not show the PayPal Connect section to a seller with no PayPal connection" do
+          expect(owner_presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(false)
+        end
+
+        it "keeps the section for a seller who already connected PayPal" do
+          create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "B66YJBBNCRW6L", charge_processor_verified_at: Time.current)
+          allow_any_instance_of(PaypalIntegrationRestApi).to receive(:get_merchant_account_by_merchant_id).and_return(double(parsed_response: {}))
+          allow(PaypalPartnerRestCredentials).to receive(:new).and_return(double(auth_token: "token"))
+
+          expect(owner_presenter.form_props[:paypal_connect][:show_paypal_connect]).to eq(true)
+        end
+      end
+
       context "when the seller has a connected PayPal merchant account" do
         before do
           create(:user_compliance_info, user: seller)

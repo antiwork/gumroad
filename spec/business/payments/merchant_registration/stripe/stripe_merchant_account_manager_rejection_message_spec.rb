@@ -91,6 +91,42 @@ describe StripeMerchantAccountManager, ".payout_setup_rejection_seller_message" 
     expect(message).to include("couldn't accept the address you entered")
   end
 
+  # Stripe names the key inside an address sub-hash, while the form shows one Address field, so the
+  # lookup has to answer for the whole block instead of falling through to the generic sentence.
+  it "names the address for a rejection inside the address sub-hash" do
+    create(:user_compliance_info, user:, country: "Pakistan")
+
+    message = described_class.payout_setup_rejection_seller_message(
+      rejection('Invalid string: "…"; must be at most 200 characters', "individual[address][line1]"), user
+    )
+
+    expect(message).to include("couldn't accept the address you entered")
+    expect(message).to include("It has to be 200 characters or fewer.")
+  end
+
+  it "names the business address for a company address rejection" do
+    create(:user_compliance_info_business, user:, country: "Pakistan",
+                                           business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP)
+
+    message = described_class.payout_setup_rejection_seller_message(
+      rejection('Invalid string: "…"; must be at most 200 characters', "company[address][line1]"), user
+    )
+
+    expect(message).to include("couldn't accept the address you entered")
+  end
+
+  # Stripe states the cap only inside the message it refuses with, so a seller over it re-saves the
+  # same value and reads the same sentence back.
+  it "states no cap for a rejection whose message carries none" do
+    create(:user_compliance_info, user:, country: "United States")
+
+    message = described_class.payout_setup_rejection_seller_message(
+      rejection("Invalid SSN last 4. 0000 is not an allowed value.", "individual[ssn_last_4]"), user
+    )
+
+    expect(message).not_to include("characters or fewer")
+  end
+
   # These two already have dedicated seller-facing copy and their own retry loops; a second message
   # here would compete with the branch the controller checks first.
   it "returns nothing for a postal-code rejection" do

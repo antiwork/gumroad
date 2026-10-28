@@ -17,7 +17,7 @@ class ForeignWebhooksController < ApplicationController
     ErrorNotifier.notify(e, action: action_name)
     head :service_unavailable
   end
-  before_action :validate_sns_webhook, only: [:sns, :mediaconvert, :sns_aws_config]
+  before_action :validate_sns_webhook, only: [:mediaconvert, :sns_aws_config]
 
   before_action only: [:stripe] do
     endpoint_secret = GlobalConfig.dig(:stripe, :endpoint_secret)
@@ -90,20 +90,6 @@ class ForeignWebhooksController < ApplicationController
     render json: { success: true }
   end
 
-  def sns
-    # The SNS post has json body but the content-type is set to plain text. Read via raw_post
-    # (not request.body.read) — validate_sns_webhook already consumed the body stream to EOF, and
-    # raw_post is what caches and replays that read.
-    notification_message = request.raw_post
-
-    Rails.logger.info("Incoming SNS (Transcoder): #{notification_message}")
-
-    notification_message = notification_message.gsub("#012", "")
-    HandleSnsTranscoderEventWorker.perform_in(5.seconds, JSON.parse(notification_message))
-
-    head :ok
-  end
-
   def mediaconvert
     notification = JSON.parse(request.raw_post)
     Rails.logger.info "Incoming SNS (MediaConvert): #{notification}"
@@ -133,24 +119,16 @@ class ForeignWebhooksController < ApplicationController
     end
 
     # The endpoint is public and SNS posts with a text/plain content type, so the body is whatever
-    # an arbitrary client sent. Anything that is not a JSON object is a rejected sender, not a 500
-    # — #012 is the escaped-newline sequence the sns action strips before parsing.
+    # an arbitrary client sent. Anything that is not a JSON object is a rejected sender, not a 500.
     def validate_sns_webhook
       body = request.raw_post
-      return if sns_notification?(body) && sns_authentic?(body)
+      return if sns_notification?(body) && Aws::SNS::MessageVerifier.new.authentic?(body)
 
       render json: { success: false }, status: :bad_request
     end
 
-    # The verifier parses the raw body, which can still carry #012 after the guard above accepted it.
-    def sns_authentic?(body)
-      Aws::SNS::MessageVerifier.new.authentic?(body)
-    rescue Aws::Json::ParseError
-      false
-    end
-
     def sns_notification?(body)
-      JSON.parse(body.gsub("#012", "")).is_a?(Hash)
+      JSON.parse(body).is_a?(Hash)
     rescue JSON::ParserError
       false
     end

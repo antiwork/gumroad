@@ -15,6 +15,14 @@ describe BraintreeController, :vcr do
       get :client_token
       expect(response.body).to eq({ clientToken: nil }.to_json)
     end
+
+    it "returns nil in response when the gateway times out" do
+      allow(Braintree::ClientToken).to receive(:generate).and_raise(Braintree::GatewayTimeoutError)
+      get :client_token
+      expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq("application/json")
+      expect(response.body).to eq({ clientToken: nil }.to_json)
+    end
   end
 
   describe "#generate_transient_customer_token" do

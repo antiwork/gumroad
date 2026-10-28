@@ -5,7 +5,6 @@ describe ElasticsearchModelAsyncCallbacks do
     @model = create_mock_model
     @model.include(described_class)
     @model.const_set("ATTRIBUTE_TO_SEARCH_FIELDS", "title" => "title")
-    @multiplier = 2 # we're queuing index and updates jobs twice to mitigate replica lag issues
   end
 
   after do
@@ -16,14 +15,14 @@ describe ElasticsearchModelAsyncCallbacks do
     it "enqueues sidekiq job" do
       @record = @model.create!(title: "original")
 
-      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1 * @multiplier)
+      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1)
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("index", "record_id" => @record.id, "class_name" => @model.name)
     end
 
     it "enqueues sidekiq job even if no permitted value has changed" do
       @record = @model.create!
 
-      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1 * @multiplier)
+      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1)
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("index", "record_id" => @record.id, "class_name" => @model.name)
     end
   end
@@ -37,7 +36,7 @@ describe ElasticsearchModelAsyncCallbacks do
     it "enqueues sidekiq job" do
       @record.update!(title: "new", subtitle: "new")
 
-      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1 * @multiplier)
+      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1)
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @record.id, "fields" => ["title"], "class_name" => @model.name)
     end
 
@@ -49,7 +48,7 @@ describe ElasticsearchModelAsyncCallbacks do
         @record.update!(subtitle: "new")
       end
 
-      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1 * @multiplier)
+      expect(ElasticsearchIndexerWorker.jobs.size).to eq(1)
       expect(ElasticsearchIndexerWorker).to have_enqueued_sidekiq_job("update", "record_id" => @record.id, "fields" => ["title", "subtitle"], "class_name" => @model.name)
     end
 

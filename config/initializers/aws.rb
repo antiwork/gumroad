@@ -55,7 +55,6 @@ PUBLIC_STORAGE_S3_BUCKET = {
 if Rails.env.production?
   # Streaming
   HLS_DISTRIBUTION_URL = GlobalConfig.get("HLS_DISTRIBUTION_URL_PROD", "https://d1bdh6c3ceakz5.cloudfront.net/")
-  HLS_PIPELINE_ID = GlobalConfig.get("HLS_PIPELINE_ID_PROD", "1390492023700-rfbrn0")
 
   # File Download
   FILE_DOWNLOAD_DISTRIBUTION_URL = GlobalConfig.get("FILE_DOWNLOAD_DISTRIBUTION_URL_PROD", "https://files.gumroad.com/")
@@ -63,7 +62,6 @@ if Rails.env.production?
 else
   # Streaming
   HLS_DISTRIBUTION_URL = GlobalConfig.get("HLS_DISTRIBUTION_URL_DEV", "https://d1jmbc8d0c0hid.cloudfront.net/")
-  HLS_PIPELINE_ID = GlobalConfig.get("HLS_PIPELINE_ID_DEV", "1390090734092-rg9pq5")
 
   # File Download - use MinIO if AWS_S3_ENDPOINT is set (local dev with MinIO)
   if USING_MINIO
@@ -76,12 +74,6 @@ else
     CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL = GlobalConfig.get("CLOUDFRONT_DOWNLOAD_DISTRIBUTION_URL_DEV", "https://d3t5lixau6dhwk.cloudfront.net/")
   end
 end
-
-HLS_PRESETS = {
-  "hls_1080p" => "1591945283540-xff1kg",
-  "hls_720p" => "1591945673240-8jq7vk",
-  "hls_480p" => "1591945700851-ma7v1l"
-}
 
 AWS_ACCOUNT_ID = GlobalConfig.get("AWS_ACCOUNT_ID")
 mediaconvert_queue_name = Rails.env.production? ? "production" : "staging"

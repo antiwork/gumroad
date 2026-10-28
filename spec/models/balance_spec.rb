@@ -59,6 +59,14 @@ describe Balance do
     end
   end
 
+  describe "search indexing" do
+    it "does not index balances into Elasticsearch" do
+      expect do
+        create(:balance, user:, merchant_account:, date: Date.today)
+      end.not_to change { ElasticsearchIndexerWorker.jobs.size }
+    end
+  end
+
   describe "forfeited balances" do
     let(:balance) { create(:balance) }
 

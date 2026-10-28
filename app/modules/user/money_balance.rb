@@ -2,17 +2,8 @@
 
 class User
   module MoneyBalance
-    def unpaid_balance_cents(via: :sql)
-      if via == :elasticsearch
-        begin
-          Balance.amount_cents_sum_for(self)
-        rescue => e
-          ErrorNotifier.notify(e)
-          unpaid_balance_cents(via: :sql)
-        end
-      else
-        balances.unpaid.sum(:amount_cents)
-      end
+    def unpaid_balance_cents
+      balances.unpaid.sum(:amount_cents)
     end
 
     def unpaid_balance_cents_up_to_date(date)
