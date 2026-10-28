@@ -392,6 +392,15 @@ module StripeMerchantAccountManager
     "dob" => "date of birth",
     "first_name" => "first name",
     "last_name" => "last name",
+    # Stripe names the keys inside an address sub-hash, which the settings form shows as one
+    # Address block (line1 and town are its street and town inputs).
+    "line1" => "address",
+    "line2" => "address",
+    "town" => "address",
+    "city" => "city",
+    "state" => "state",
+    "postal_code" => "postal code",
+    "country" => "country",
   }.freeze
   private_constant :PAYOUT_SETUP_REJECTED_FIELD_LABELS
 
@@ -410,6 +419,7 @@ module StripeMerchantAccountManager
     [
       field ? "Our payment partner couldn't accept the #{field} you entered." : "Our payment partner couldn't accept the details you entered.",
       us_individual_phone_rule_note(error, user),
+      stripe_length_rule_note(error),
       "Please correct it here and save again — until it goes through you have no payout method, which also stops you publishing new products.",
     ].compact.join(" ")
   end
@@ -429,6 +439,16 @@ module StripeMerchantAccountManager
     "For a US individual or sole-proprietorship account it has to be a US number, even if you live elsewhere."
   end
   private_class_method :us_individual_phone_rule_note
+
+  # Stripe quotes the character cap only inside the message it refuses with, so a seller who is over
+  # it re-saves the same value and reads the same sentence.
+  def self.stripe_length_rule_note(error)
+    cap = error.message.to_s[/must be at most (\d+) characters/, 1]
+    return unless cap
+
+    "It has to be #{cap} characters or fewer."
+  end
+  private_class_method :stripe_length_rule_note
 
   def self.stripe_rejected_field(error)
     param = error.respond_to?(:param) ? error.param.to_s : ""
