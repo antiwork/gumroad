@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
-module Muse
+module Mcp
   # Counts who calls the MCP endpoint on which revision: one counter per connector path, declared
   # protocol version (or none) and method. Kept in Redis so a client that has moved is visible from
-  # `Muse::ProtocolTelemetry.mix` without a table or a metrics vendor.
+  # `Mcp::ProtocolTelemetry.mix` without a table or a metrics vendor.
   #
   # Every bucket comes from a closed list, so a day holds at most CONNECTORS × VERSIONS × METHODS
   # fields and no client-supplied string is ever stored.
   module ProtocolTelemetry
     CONNECTORS = %w[muse claude chatgpt].freeze
     # Every published revision, so a client declaring one we do not serve is still named.
-    VERSIONS = (Mcp::SUPPORTED_VERSIONS + %w[2024-11-05 2025-06-18 2025-11-25]).uniq.freeze
+    VERSIONS = (Server::SUPPORTED_VERSIONS + %w[2024-11-05 2025-06-18 2025-11-25]).uniq.freeze
     # The methods this endpoint dispatches.
     METHODS = %w[initialize notifications/cancelled notifications/initialized ping server/discover tools/call tools/list].freeze
     UNDECLARED = "undeclared"

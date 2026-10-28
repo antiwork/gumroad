@@ -566,18 +566,18 @@ Rails.application.routes.draw do
     end
     get "/mcp", to: "mcp_connectors#index", as: :mcp
     %w[muse claude chatgpt].each do |client|
-      get "/#{client}/v1/status" => "api/v2/muse#status"
+      get "/#{client}/v1/status" => "api/v2/mcp#status"
       get "/#{client}/v1/oauth2/authorize/:code(.:format)" => "oauth/authorizations#show"
       get "/#{client}/v1/oauth2/authorize(.:format)" => "oauth/authorizations#new"
       post "/#{client}/v1/oauth2/token(.:format)" => "oauth/tokens#create"
-      post "/#{client}/v1/oauth2/register" => "api/v2/muse#register"
-      match "/#{client}/v1/mcp" => "api/v2/muse#mcp", via: [:get, :post], defaults: { client: }
+      post "/#{client}/v1/oauth2/register" => "api/v2/mcp#register"
+      match "/#{client}/v1/mcp" => "api/v2/mcp#mcp", via: [:get, :post], defaults: { client: }
     end
-    get "/.well-known/mcp.json" => "api/v2/muse#mcp_discovery"
-    get "/.well-known/openai-apps-challenge" => "api/v2/muse#openai_apps_challenge"
-    get "/.well-known/oauth-authorization-server" => "api/v2/muse#oauth_metadata"
-    get "/.well-known/oauth-protected-resource" => "api/v2/muse#protected_resource_metadata"
-    get "/.well-known/oauth-protected-resource/*resource_path" => "api/v2/muse#protected_resource_metadata"
+    get "/.well-known/mcp.json" => "api/v2/mcp#mcp_discovery"
+    get "/.well-known/openai-apps-challenge" => "api/v2/mcp#openai_apps_challenge"
+    get "/.well-known/oauth-authorization-server" => "api/v2/mcp#oauth_metadata"
+    get "/.well-known/oauth-protected-resource" => "api/v2/mcp#protected_resource_metadata"
+    get "/.well-known/oauth-protected-resource/*resource_path" => "api/v2/mcp#protected_resource_metadata"
     get "/careers", to: redirect("/gumclaw")
     get "/careers/:slug", to: redirect("/gumclaw")
     get "/jobs", to: redirect("/gumclaw")

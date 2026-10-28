@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe Muse::ProtocolTelemetry do
+describe Mcp::ProtocolTelemetry do
   describe ".bucket" do
     it "keeps an exact known revision and method" do
       expect(described_class.bucket("2026-07-28", "server/discover")).to eq("2026-07-28|server/discover")
@@ -56,7 +56,7 @@ describe Muse::ProtocolTelemetry do
       batch = Array.new(3) { |id| { "jsonrpc" => "2.0", "id" => id, "method" => "tools/list" } }
 
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      result = Muse::Mcp.new(user: create(:user), token: nil, connector: "muse").handle(batch)
+      result = Mcp::Server.new(user: create(:user), token: nil, connector: "muse").handle(batch)
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
 
       expect(result.map { _1[:id] }).to eq([0, 1, 2])

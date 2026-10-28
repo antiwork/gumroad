@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-module Muse
-  # JSON-RPC MCP surface for Meta Muse (and any other MCP client).
+module Mcp
+  # JSON-RPC MCP surface shared by every connector path (/muse, /claude, /chatgpt).
   # Tools are a slim, agent-oriented view of the public v2 API — same auth, same records.
-  class Mcp
+  class Server
     LEGACY_PROTOCOL_VERSION = "2025-03-26"
     # A client on this revision declares its version per request and never handshakes.
     MODERN_PROTOCOL_VERSION = "2026-07-28"
