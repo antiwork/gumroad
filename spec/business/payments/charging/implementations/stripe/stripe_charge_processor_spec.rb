@@ -945,6 +945,45 @@ describe StripeChargeProcessor, :vcr do
       )
     end
 
+    context "when the India card's checkout mandate is not active" do
+      let(:india_chargeable) do
+        instance_double(
+          StripeChargeablePaymentMethod,
+          requires_mandate?: true,
+          stripe_setup_intent_id: "seti_india",
+          stripe_charge_params: { customer: "cus_india", payment_method: "pm_india" }
+        )
+      end
+
+      before do
+        allow(india_chargeable).to receive(:validated_stripe_mandate_id).and_return(nil)
+        allow(Stripe::SetupIntent).to receive(:retrieve).with("seti_india").and_return(double(mandate: "mandate_india"))
+      end
+
+      def create_charge
+        subject.create_payment_intent_or_charge!(merchant_account, india_chargeable, 1_00, 30, "reference", "desc", off_session: true)
+      end
+
+      %w[pending inactive].each do |status|
+        it "rejects a #{status} mandate before submitting the PaymentIntent" do
+          allow(Stripe::Mandate).to receive(:retrieve).with("mandate_india").and_return(double(status:))
+          expect(Stripe::PaymentIntent).not_to receive(:create)
+
+          expect { create_charge }.to raise_error(ChargeProcessorCardError) do |error|
+            expect(error.error_code).to eq("india_card_mandate_#{status}")
+          end
+        end
+      end
+
+      it "submits the PaymentIntent with an active mandate" do
+        allow(Stripe::Mandate).to receive(:retrieve).with("mandate_india").and_return(double(status: "active"))
+        payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india", status: StripeIntentStatus::PROCESSING, client_secret: "s")
+        expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_india")).and_return(payment_intent)
+
+        create_charge
+      end
+    end
+
     context "with a saved UPI Autopay instrument" do
       let(:chargeable) do
         StripeChargeableUpi.new(
@@ -1224,6 +1263,7 @@ describe StripeChargeProcessor, :vcr do
           context "when the saved card has a registered e-mandate" do
             it "references the mandate on the payment intent" do
               allow(subject).to receive(:get_mandate_id_from_chargeable).with(chargeable, merchant_account).and_return("mandate_123")
+              allow(subject).to receive(:get_mandate).and_return(double(status: "active"))
               payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
 
               expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_123")).and_return(payment_intent)
@@ -1264,6 +1304,7 @@ describe StripeChargeProcessor, :vcr do
             it "reuses the mandate authenticated for the current checkout",
                vcr: { cassette_name: "StripeChargeProcessor/_create_payment_intent_or_charge_/Support_for_RBI_regulations_for_Indian_cards/when_off-session/for_an_Indian_card_with_SCA_support/when_the_saved_card_has_a_registered_e-mandate/references_the_mandate_on_the_payment_intent" } do
               allow(subject).to receive(:get_mandate_id_from_chargeable).with(chargeable, merchant_account).and_return("mandate_checkout")
+              allow(subject).to receive(:get_mandate).and_return(double(status: "active"))
               payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_checkout", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
               mandate_options = { payment_method_options: { card: { mandate_options: { amount: 1_00 } } } }
 
