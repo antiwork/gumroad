@@ -17,6 +17,12 @@ describe ProductBuilds::PlayerDocument do
       expect(rendered).to start_with(%(<!-- built by x -->\n<!doctype html><script data-cfasync="false">))
     end
 
+    it "keeps a UTF-8 byte order mark at the start" do
+      rendered = described_class.render("\xEF\xBB\xBF<!doctype html><title>Game</title>".b, save_data: {})
+
+      expect(rendered).to start_with(%(\xEF\xBB\xBF<!doctype html><script data-cfasync="false">).b)
+    end
+
     it "puts the scripts at the very start of a page with no doctype" do
       rendered = described_class.render(%(<script src="game.js"></script>), save_data: {})
 

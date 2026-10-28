@@ -79,8 +79,8 @@ module ProductBuilds::PlayerDocument
     })();
   JS
 
-  # Leading whitespace and comments, then the doctype if there is one.
-  PROLOGUE = /\A(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>)?/imn
+  # A UTF-8 byte order mark, leading whitespace and comments, then the doctype if there is one.
+  PROLOGUE = /\A(?:\xEF\xBB\xBF)?(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>)?/imn
 
   # The seller's page is bytes in whatever encoding they wrote it in, so the scripts go in as ASCII
   # bytes right after the doctype, before any tag of the page. There the parser opens <html> and <head>
