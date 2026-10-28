@@ -24,7 +24,7 @@ class UrlRedirectsController < ApplicationController
   # Otherwise a leaked token starts the viewing window and the request still 404s.
   before_action :require_seller_for_test_purchase, only: %i[media_urls smil change_purchaser]
   before_action :mark_rental_as_viewed, only: %i[smil hls_playlist]
-  after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read]
+  after_action :register_that_user_has_downloaded_product, only: %i[download_page show stream read play]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_READ) }, only: [:read]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_WATCH) }, only: [:hls_playlist, :smil]
   after_action -> { create_consumption_event!(ConsumptionEvent::EVENT_TYPE_DOWNLOAD) }, only: [:show]

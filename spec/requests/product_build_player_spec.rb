@@ -51,6 +51,10 @@ describe "Web build player", type: :request do
       expect(grant).not_to include(Base64.strict_encode64(build.site_prefix).delete("="))
     end
 
+    it "marks the link as seen, so a later visitor from another IP has to confirm the email" do
+      expect { frame_path }.to change { url_redirect.reload.has_been_seen }.from(false).to(true)
+    end
+
     it "returns 404 when the live build has not been unpacked" do
       build.update!(site_unpacked_at: nil)
 
@@ -96,6 +100,16 @@ describe "Web build player", type: :request do
       expect(body.index("gumroad:build-save")).to be < body.index(%(<script src="game.js">))
       expect(body).not_to include("</script><script>alert(1)")
       expect(body).to include("<title>Game</title>")
+    end
+
+    it "never writes the visitor's CSRF token into the seller's page" do
+      placeholder = CsrfTokenInjector::TOKEN_PLACEHOLDER
+      s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/index.html", content_type: "text/html",
+                    body: %(<html><head><meta name="csrf-token" content="#{placeholder}"></head></html>))
+
+      get frame_path
+
+      expect(response.body).to include(%(content="#{placeholder}"))
     end
 
     it "serves the same document for an explicit index.html" do

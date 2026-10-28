@@ -22,6 +22,8 @@ class ProductBuildPlayerFilesController < ApplicationController
   # Rails refuses a JavaScript response to a plain <script> GET, to keep it from leaking session
   # data cross-origin. These responses are the build's own files, read with no session.
   skip_forgery_protection
+  # The seller writes these files, so the visitor's CSRF token must never be written into them.
+  skip_after_action :inject_csrf_token
 
   before_action :verify_grant
   before_action :set_path
