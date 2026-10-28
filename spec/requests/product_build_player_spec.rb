@@ -16,6 +16,7 @@ describe "Web build player", type: :request do
     Feature.activate_user(:product_build_player, seller)
     s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/index.html", body: index_html, content_type: "text/html")
     s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/game.js", body: "console.log(1)", content_type: "text/javascript")
+    s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/engine.wasm", body: "\0asm", content_type: "application/wasm")
     s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/art/logo.svg", body: "<svg xmlns='http://www.w3.org/2000/svg'/>", content_type: "image/svg+xml")
   end
 
@@ -110,6 +111,7 @@ describe "Web build player", type: :request do
       expect(response).to have_http_status(:ok)
       expect(response.media_type).to eq("image/svg+xml")
       expect(response.headers["Content-Security-Policy"]).to start_with("sandbox allow-scripts allow-pointer-lock;")
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
       expect(response.body).not_to include("gumroad:build-save")
     end
 
@@ -130,15 +132,25 @@ describe "Web build player", type: :request do
   end
 
   describe "the build's other files" do
-    it "redirects to a signed link that serves the file inline, with CORS for the opaque origin" do
+    it "serves scripts from the app, so their relative imports resolve under the grant" do
       get "#{frame_path}game.js"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq("text/javascript")
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
+      expect(response.headers["Cache-Control"]).to include("private").and include("max-age=300")
+      expect(response.body).to eq("console.log(1)")
+    end
+
+    it "redirects other files to a signed link that serves them inline, with CORS for the opaque origin" do
+      get "#{frame_path}engine.wasm"
 
       expect(response).to have_http_status(:redirect)
       expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
       expect(response.headers["Cache-Control"]).to include("private").and include("max-age=300")
-      expect(response.location).to include("#{build.site_prefix}/game.js")
+      expect(response.location).to include("#{build.site_prefix}/engine.wasm")
       expect(response.location).not_to include("content-disposition")
-      expect(Net::HTTP.get(URI.parse(response.location))).to eq("console.log(1)")
+      expect(Net::HTTP.get(URI.parse(response.location))).to eq("\0asm")
     end
 
     it "returns 404 for a grant that was issued for another content-page token" do
