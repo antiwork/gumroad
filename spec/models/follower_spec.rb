@@ -272,12 +272,12 @@ RSpec.describe Follower do
 
         expect do
           unconfirmed_follower.send_confirmation_email
-        end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(unconfirmed_follower.followed_id, unconfirmed_follower.id, nil)
+        end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(unconfirmed_follower.followed_id, unconfirmed_follower.id)
 
         # Try sending again
         expect do
           unconfirmed_follower.send_confirmation_email
-        end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower).with(unconfirmed_follower.followed_id, unconfirmed_follower.id, nil)
+        end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower).with(unconfirmed_follower.followed_id, unconfirmed_follower.id)
       end
     end
   end

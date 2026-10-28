@@ -253,13 +253,14 @@ class FollowersController < ApplicationController
     end
 
     # The product a visitor joined the waitlist from, resolved among the followed seller's own
-    # products so a posted id can never attach a follow to someone else's product. An id that
-    # doesn't resolve is ignored: the follow itself is still valid.
+    # products so a posted id can never attach a follow to someone else's product. Deleted and
+    # banned products 404 on their page, so they take no entries. An id that doesn't resolve is
+    # ignored: the follow itself is still valid.
     def waitlist_product_from_params(followed_user)
       product_id = params[:product_id]
       return if product_id.blank?
 
-      followed_user.products.find_by_external_id(product_id)
+      followed_user.products.visible.where(banned_at: nil).find_by_external_id(product_id)
     end
 
     def fetch_follower
