@@ -147,7 +147,8 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     can_edit: false,
     // The preview pane shows the waitlist the moment the switch is on, so the seller sees what
     // buyers get before publishing.
-    waitlist_enabled: product.waitlist_enabled && product.waitlist_available,
+    waitlist_enabled: product.waitlist_enabled && product.waitlist_available && !product.is_published,
+    waitlist_preview: true,
     waitlist_count: null,
     follow_recaptcha_site_key: null,
     refund_policy: previewRefundPolicy({

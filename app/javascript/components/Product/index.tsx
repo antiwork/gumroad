@@ -163,6 +163,7 @@ export type Product = {
   has_third_party_analytics: boolean;
   ppp_details: PurchasingPowerParityDetails | null;
   can_edit: boolean;
+  waitlist_preview?: boolean;
   // The waitlist form stands in for the buy button while the product is not on sale.
   waitlist_enabled: boolean;
   // Only the seller's own view knows how many people are waiting.

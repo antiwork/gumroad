@@ -206,8 +206,8 @@ class ProductPresenter
         can_enable_quantity: product.can_enable_quantity?,
         should_show_sales_count: product.should_show_sales_count,
         waitlist_enabled: product.waitlist_enabled?,
-        # The switch is offered only where the waitlist can show, so a live product hides it.
-        waitlist_available: product.waitlist_offered?,
+        # The editor also requires the product to be off sale, so publishing hides the switch without a reload.
+        waitlist_available: product.waitlist_allowed?,
         hide_sold_out_variants: product.hide_sold_out_variants?,
         is_epublication: product.is_epublication?,
         product_refund_policy_enabled: product.product_refund_policy_enabled?,

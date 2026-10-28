@@ -514,9 +514,11 @@ class Link < ApplicationRecord
   # Where a waitlist can stand in for the buy button: a product that is not on sale yet. A
   # deleted, banned or staff-unpublished product keeps it off — that page is not a launch page.
   def waitlist_offered?
-    return false if banned_at.present? || deleted_at.present? || is_unpublished_by_admin?
+    waitlist_allowed? && (draft? || purchase_disabled_at.present?)
+  end
 
-    draft? || purchase_disabled_at.present?
+  def waitlist_allowed?
+    banned_at.nil? && deleted_at.nil? && !is_unpublished_by_admin?
   end
 
   def waitlist_available?

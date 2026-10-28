@@ -85,7 +85,7 @@ class ProductPresenter::ProductProps
         # The waitlist form stands in for the buy button while the product is not on sale.
         waitlist_enabled:,
         # Only the seller's own view shows how many people are waiting.
-        waitlist_count: can_edit ? product.waitlist_entries.count : nil,
+        waitlist_count: can_edit ? product.waitlist_entries.joins(:follower).merge(Follower.alive).count : nil,
         # Non-null only for a seller whose follows need a CAPTCHA; the waitlist form runs the
         # challenge in the same shape as the subscribe form.
         follow_recaptcha_site_key: waitlist_enabled && FollowRecaptcha.required?(seller) ? FollowRecaptcha.site_key : nil,

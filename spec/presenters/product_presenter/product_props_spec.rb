@@ -1155,6 +1155,8 @@ describe ProductPresenter::ProductProps do
       product.update_flag!(:waitlist_enabled, true, true)
       create(:waitlist_entry, follower: create(:follower, user: seller), product:)
 
+      create(:waitlist_entry, follower: create(:follower, user: seller, deleted_at: Time.current), product:)
+
       expect(props(pundit_user: SellerContext.new(user: seller, seller:))[:waitlist_count]).to eq(1)
       expect(props(pundit_user: nil)[:waitlist_count]).to be_nil
     end

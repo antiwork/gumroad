@@ -22,21 +22,18 @@ import {
 // email exactly like a subscribe.
 export const WaitlistForm = ({ product }: { product: Product }) => {
   const loggedInUser = useLoggedInUser();
-  // The seller's own page keeps the form visible so they can see what buyers get, with the button
-  // inactive — a preview click must not create a follower. `can_edit` covers a team member; the id
-  // comparison covers the editor's own preview pane, which serializes the seller as a visitor.
-  const isOwner = product.can_edit || (loggedInUser !== null && loggedInUser.id === product.seller?.id);
+  // The seller's own page and the editor preview keep the form visible with the button inactive —
+  // a click there must not create a follower.
+  const isOwner =
+    product.can_edit ||
+    product.waitlist_preview === true ||
+    (loggedInUser !== null && loggedInUser.id === product.seller?.id);
   const [email, setEmail] = React.useState(isOwner ? "" : (loggedInUser?.email ?? ""));
   const [formStatus, setFormStatus] = React.useState<"initial" | "submitting" | "success" | "invalid">("initial");
   const [confirmed, setConfirmed] = React.useState(false);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const emailInputRef = React.useRef<HTMLInputElement>(null);
   const recaptcha = useRecaptcha({ siteKey: product.follow_recaptcha_site_key ?? null });
-
-  React.useEffect(() => {
-    setFormStatus("initial");
-    setErrorMessage(null);
-  }, [email]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +90,12 @@ export const WaitlistForm = ({ product }: { product: Product }) => {
           ref={emailInputRef}
           type="email"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={(event) => {
+            setEmail(event.target.value);
+            setFormStatus("initial");
+            setErrorMessage(null);
+          }}
+          disabled={formStatus === "submitting"}
           placeholder="Your email address"
           aria-label="Your email address"
           aria-invalid={formStatus === "invalid"}

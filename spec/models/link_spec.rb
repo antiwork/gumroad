@@ -591,6 +591,10 @@ describe Link do
       expect(product.waitlist_available?).to eq(false)
     end
 
+    it "allows the switch on a live product so the editor can show it after an unpublish" do
+      expect(create(:product).waitlist_allowed?).to eq(true)
+    end
+
     it "keeps the waitlist off a product staff unpublished" do
       product.update_flag!(:waitlist_enabled, true, true)
       product.unpublish!(is_unpublished_by_admin: true)
