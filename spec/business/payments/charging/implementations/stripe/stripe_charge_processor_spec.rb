@@ -945,7 +945,7 @@ describe StripeChargeProcessor, :vcr do
       )
     end
 
-    context "when the India card's checkout mandate is not active" do
+    context "when the India card's checkout mandate is not active yet" do
       let(:india_chargeable) do
         instance_double(
           StripeChargeablePaymentMethod,
@@ -954,33 +954,50 @@ describe StripeChargeProcessor, :vcr do
           stripe_charge_params: { customer: "cus_india", payment_method: "pm_india" }
         )
       end
+      let(:payment_intent) { Stripe::PaymentIntent.construct_from(id: "pi_india", status: StripeIntentStatus::PROCESSING, client_secret: "s") }
 
       before do
         allow(india_chargeable).to receive(:validated_stripe_mandate_id).and_return(nil)
         allow(Stripe::SetupIntent).to receive(:retrieve).with("seti_india").and_return(double(mandate: "mandate_india"))
       end
 
-      def create_charge
-        subject.create_payment_intent_or_charge!(merchant_account, india_chargeable, 1_00, 30, "reference", "desc", off_session: true)
+      def create_charge(**options)
+        subject.create_payment_intent_or_charge!(merchant_account, india_chargeable, 1_00, 30, "reference", "desc", off_session: true, **options)
       end
 
-      %w[pending inactive].each do |status|
-        it "rejects a #{status} mandate before submitting the PaymentIntent" do
-          allow(Stripe::Mandate).to receive(:retrieve).with("mandate_india").and_return(double(status:))
-          expect(Stripe::PaymentIntent).not_to receive(:create)
+      it "rejects a pending mandate before submitting the PaymentIntent" do
+        allow(Stripe::Mandate).to receive(:retrieve).with("mandate_india").and_return(double(status: "pending"))
+        expect(Stripe::PaymentIntent).not_to receive(:create)
+        expect(ErrorNotifier).to receive(:notify).with(anything, hash_including(reference: "reference", mandate_id: "mandate_india"))
 
-          expect { create_charge }.to raise_error(ChargeProcessorCardError) do |error|
-            expect(error.error_code).to eq("india_card_mandate_#{status}")
-          end
+        expect { create_charge }.to raise_error(ChargeProcessorCardError) do |error|
+          expect(error.error_code).to eq(PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING)
+          expect(error.message).to include("buy from one creator at a time")
         end
       end
 
-      it "submits the PaymentIntent with an active mandate" do
-        allow(Stripe::Mandate).to receive(:retrieve).with("mandate_india").and_return(double(status: "active"))
-        payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india", status: StripeIntentStatus::PROCESSING, client_secret: "s")
+      %w[active inactive].each do |status|
+        it "submits the PaymentIntent with an #{status} mandate" do
+          allow(Stripe::Mandate).to receive(:retrieve).with("mandate_india").and_return(double(status:))
+          expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_india")).and_return(payment_intent)
+
+          create_charge
+        end
+      end
+
+      it "submits the PaymentIntent with the resolved mandate when the mandate lookup fails" do
+        allow(Stripe::Mandate).to receive(:retrieve).with("mandate_india").and_raise(Stripe::APIConnectionError.new("timeout"))
+        expect(ErrorNotifier).to receive(:notify).with(instance_of(ChargeProcessorUnavailableError), hash_including(mandate_id: "mandate_india"))
         expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_india")).and_return(payment_intent)
 
         create_charge
+      end
+
+      it "does not check the mandate of a saved-card rebill" do
+        expect(Stripe::Mandate).not_to receive(:retrieve)
+        expect(Stripe::PaymentIntent).to receive(:create).with(hash_including(mandate: "mandate_india")).and_return(payment_intent)
+
+        create_charge(mandate_expected: true)
       end
     end
 
@@ -1330,6 +1347,7 @@ describe StripeChargeProcessor, :vcr do
                vcr: { cassette_name: "StripeChargeProcessor/_create_payment_intent_or_charge_/Support_for_RBI_regulations_for_Indian_cards/when_off-session/for_an_Indian_card_with_SCA_support/when_the_saved_card_has_a_registered_e-mandate/references_the_mandate_on_the_payment_intent" } do
               chargeable.validated_stripe_mandate_id = "mandate_subscription"
               expect(subject).not_to receive(:get_mandate_id_from_chargeable)
+              expect(Stripe::Mandate).not_to receive(:retrieve)
               payment_intent = Stripe::PaymentIntent.construct_from(id: "pi_india_renewal", status: StripeIntentStatus::PROCESSING, client_secret: "secret")
               mandate_options = { payment_method_options: { card: { mandate_options: { amount: 1_00 } } } }
 

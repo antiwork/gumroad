@@ -75,6 +75,7 @@ module Purchase::Blockable
     "processing_error",
     "3000", # Braintree: Processor Network Unavailable - Try Again
     PurchaseErrorCode::PAYPAL_MERCHANT_ACCOUNT_RESTRICTED, # PayPal refused the seller, not the buyer's wallet
+    PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING, # We stopped the charge before Stripe contacted the card
   ].freeze
   private_constant :CARD_TESTING_UNCOUNTED_DECLINE_CODES
 
