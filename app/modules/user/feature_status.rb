@@ -27,7 +27,12 @@ class User
     end
 
     def paypal_connect_enabled?
-      alive_user_compliance_info.present? && PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.exclude?(::Compliance::Countries.find_by_name(alive_user_compliance_info.country)&.alpha2)
+      return false if alive_user_compliance_info.blank?
+
+      country_code = ::Compliance::Countries.find_by_name(alive_user_compliance_info.country)&.alpha2
+      return true if PaypalMerchantAccountManager::COUNTRY_CODES_NOT_SUPPORTED_BY_PCP.exclude?(country_code)
+
+      PaypalMerchantAccountManager::COUNTRY_CODES_WITH_GRANDFATHERED_PCP.include?(country_code) && has_paypal_account_connected?
     end
 
     def paypal_connect_allowed?

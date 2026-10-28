@@ -7,6 +7,7 @@ class PaypalMerchantAccountManager
   COUNTRY_CODES_NOT_SUPPORTED_BY_PCP = [
     Compliance::Countries::DZA,
     Compliance::Countries::BRA,
+    Compliance::Countries::CHN,
     Compliance::Countries::EGY,
     Compliance::Countries::IND,
     Compliance::Countries::ISR,
@@ -15,6 +16,9 @@ class PaypalMerchantAccountManager
     Compliance::Countries::MAR,
     Compliance::Countries::TUR,
   ].map(&:alpha2).freeze
+
+  # Sellers here who already connected PayPal keep the connection; only new connections are refused.
+  COUNTRY_CODES_WITH_GRANDFATHERED_PCP = [Compliance::Countries::CHN].map(&:alpha2).freeze
 
   def create_partner_referral(user, return_url)
     payment_integration_api = PaypalIntegrationRestApi.new(user, authorization_header:)
