@@ -2716,6 +2716,12 @@ describe UrlRedirectsController, inertia: true do
       end
     end
 
+    it "returns to the web build player when the email is correct" do
+      post :confirm, params: { id: @token, email: @url_redirect.purchase.email, destination: "play" }
+
+      expect(response).to redirect_to(url_redirect_play_path(@url_redirect.token))
+    end
+
     it "redirects and reset counter if email is correct" do
       post :confirm, params: { id: @token, email: @url_redirect.purchase.email }
       expect(response).to redirect_to(url_redirect_path(@url_redirect.token))

@@ -191,6 +191,23 @@ describe ProductBuilds::UnpackSiteService do
       expect(build.reload.site_file_count).to eq(1)
     end
 
+    it "rejects an HTML page over the page limit, which the player could not serve" do
+      stub_const("ProductBuild::MAX_PAGE_BYTE_SIZE", 10)
+      upload_zip({ "index.html" => "<html></html>", "game.js" => "x" * 100 })
+
+      expect { described_class.perform(build) }.to raise_error(described_class::UnpackError, /HTML page can be at most/)
+      expect(build.reload.site_unpack_error).to match(/index\.html/)
+    end
+
+    it "accepts a script over the page limit" do
+      stub_const("ProductBuild::MAX_PAGE_BYTE_SIZE", 10)
+      upload_zip({ "index.html" => "<html>", "game.js" => "x" * 100 })
+
+      described_class.perform(build)
+
+      expect(build.reload).to be_site_ready
+    end
+
     it "rejects a zip whose index.html is more than one folder deep" do
       # Only a single wrapping folder is stripped, so a second one leaves no index.html at the root.
       upload_zip({
