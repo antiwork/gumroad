@@ -284,6 +284,19 @@ describe PartnerMigration do
       expect(migration.user.reload.valid_password?("a-reset-password-789")).to be(true)
     end
 
+    it "locks the seller before the migration, in the order that the import job uses" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      locked_tables = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        locked_tables << payload[:sql][/FROM `(\w+)`/, 1] if payload[:sql].include?("FOR UPDATE")
+      end
+
+      migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest)
+
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+      expect(locked_tables).to eq(%w[users partner_migrations])
+    end
+
     it "sets the password, confirms the email, records the terms, and ends the setup" do
       migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 

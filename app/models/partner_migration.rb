@@ -373,12 +373,17 @@ class PartnerMigration < ApplicationRecord
     account.tos_agreements.build(ip:)
     # Validation calls the breached-password API, so it runs before the lock that the import job waits on.
     account.validate!
-    with_lock do
-      # The page that the seller submitted showed this token; a resend since then replaced it.
-      raise AccountSetupError, INVALID_LINK_MESSAGE unless account_setup_open? && account_setup_token_digest == expected_token_digest
+    transaction do
+      # The seller row first, then this row, in the order that the import job takes them. The check below
+      # then reads the seller as it is now, so a password reset that committed first ends the setup.
+      User.lock.find(user_id)
+      with_lock do
+        # The page that the seller submitted showed this token; a resend since then replaced it.
+        raise AccountSetupError, INVALID_LINK_MESSAGE unless account_setup_open? && account_setup_token_digest == expected_token_digest
 
-      account.save!(validate: false)
-      update!(account_setup_token_digest: nil)
+        account.save!(validate: false)
+        update!(account_setup_token_digest: nil)
+      end
     end
   end
 
