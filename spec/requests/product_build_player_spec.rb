@@ -162,14 +162,15 @@ describe "Web build player", type: :request do
       expect(response.body).to eq("console.log(1)")
     end
 
-    it "streams a script larger than the page limit, since only pages are read into memory" do
-      stub_const("ProductBuild::MAX_PAGE_BYTE_SIZE", 4)
+    it "streams a script far larger than any page, since only pages are read into memory" do
+      script = "x" * (ProductBuild::MAX_PAGE_BYTE_SIZE * 3)
+      s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/engine.js", body: script, content_type: "text/javascript")
 
-      get "#{frame_path}game.js"
+      get "#{frame_path}engine.js"
 
       expect(response).to have_http_status(:ok)
-      expect(response.headers["Content-Length"]).to eq("console.log(1)".bytesize.to_s)
-      expect(response.body).to eq("console.log(1)")
+      expect(response.headers["Content-Length"]).to eq(script.bytesize.to_s)
+      expect(response.body.bytesize).to eq(script.bytesize)
     end
 
     it "redirects other files to a signed link that serves them inline, with CORS for the opaque origin" do
