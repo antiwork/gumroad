@@ -12,12 +12,49 @@ describe SendToElasticsearchWorker do
     expect(described_class.get_sidekiq_options["lock"]).to eq(:until_executing)
   end
 
-  it "drops a duplicate instead of replacing the waiting job, because :replace scans the whole schedule set in Lua" do
-    expect(described_class.get_sidekiq_options["on_conflict"]).to eq(:log)
-  end
-
   it "bounds a stranded lock with a TTL" do
     expect(described_class.get_sidekiq_options["lock_ttl"]).to eq(10.minutes.to_i)
+  end
+
+  it "marks a duplicate instead of replacing the waiting job, because :replace scans the whole schedule set in Lua" do
+    expect(described_class.get_sidekiq_options["on_conflict"]).to eq(:mark_for_trailing_run)
+
+    args = [@product.id, "update", %w[sales_volume]]
+    described_class::MarkForTrailingRun.new("args" => args).call
+
+    expect(Sidekiq.redis { _1.call("EXISTS", described_class.trailing_key(args)) }).to eq(1)
+    expect(Sidekiq.redis { _1.call("TTL", described_class.trailing_key(args)) }).to be_between(1, 10.minutes.to_i)
+  end
+
+  context "when a duplicate was dropped while the job waited" do
+    let(:args) { [@product.id, "update", %w[sales_volume]] }
+
+    before { described_class::MarkForTrailingRun.new("args" => args).call }
+
+    it "queues one trailing run so a later sale still reaches the totals" do
+      allow(ProductIndexingService).to receive(:perform)
+
+      expect(described_class).to receive(:perform_in).with(5.seconds, *args).once
+
+      described_class.new.perform(*args)
+      described_class.new.perform(*args)
+    end
+
+    it "does not queue a trailing run when indexing raises" do
+      allow(ProductIndexingService).to receive(:perform).and_raise("boom")
+
+      expect(described_class).not_to receive(:perform_in)
+
+      expect { described_class.new.perform(*args) }.to raise_error("boom")
+    end
+  end
+
+  it "does not queue a trailing run when no duplicate was dropped" do
+    allow(ProductIndexingService).to receive(:perform)
+
+    expect(described_class).not_to receive(:perform_in)
+
+    described_class.new.perform(@product.id, "update", %w[sales_volume])
   end
 
   it "reads the product from the primary" do
