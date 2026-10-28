@@ -173,6 +173,22 @@ RSpec.describe Purchase::Blockable do
       end
     end
 
+    context "when Indian cards fail because their new e-mandate is still pending" do
+      before { 4.times { |i| declined(PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING, fingerprint: "pending#{i}") } }
+
+      it "does not block the buyer" do
+        live_attempt.send(:block_buyer_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: email)).to be_nil
+      end
+
+      it "does not block the ip address" do
+        live_attempt.send(:block_ip_address_based_on_recent_failures!)
+
+        expect(PlatformBlock.active.find_by(object_value: ip)).to be_nil
+      end
+    end
+
     context "when PayPal rejects the seller as the payee" do
       # Realistic row: PayPal's per-attempt billing-agreement token is the fingerprint, and the
       # processor's issue code rides in stripe_error_code next to our own error_code. card_visual

@@ -435,15 +435,12 @@ class StripeChargeProcessor
       # A PaymentMethod chargeable carries the SetupIntent submitted for this checkout. A
       # stored CreditCard carries historical intent IDs that can describe another subscription.
       elsif mandate_options.blank? || chargeable.is_a?(StripeChargeablePaymentMethod)
-        get_mandate_id_from_chargeable(chargeable, merchant_account)
+        resolved_mandate = get_mandate_id_from_chargeable(chargeable, merchant_account)
+        # Rebills (mandate_expected) keep Stripe's rejection: their failure handling retries it.
+        reject_pending_checkout_mandate!(resolved_mandate, merchant_account, reference) if resolved_mandate.present? && !mandate_expected
+        resolved_mandate
       end
     end
-
-    # Only a first-time checkout charge (multi-seller cart) can resolve a mandate that is still
-    # pending: a rebill reads a mandate registered at an earlier purchase, where a non-active
-    # status is already handled by the rebill validation and must keep its existing behaviour
-    # (submit and let Stripe report it), so this check is scoped to `!mandate_expected`.
-    validate_resolved_mandate_active!(mandate, merchant_account, reference) if mandate.present? && !mandate_expected && !chargeable.try(:validated_stripe_mandate_id).present?
 
     # Stripe does not update a mandate. Use the mandate from a completed SetupIntent instead
     # of asking the PaymentIntent to create different terms.
@@ -1969,20 +1966,20 @@ class StripeChargeProcessor
       raise ChargeProcessorCardError.new(PurchaseErrorCode::UPI_RECURRING_AUTHORIZATION_REQUIRED, UPI_PAYMENT_METHOD_UPDATE_MESSAGE)
     end
 
-    # Stripe rejects a PaymentIntent that references a mandate that is not yet active
-    # (`payment_intent_mandate_invalid`); a fresh India mandate stays pending for minutes.
-    def validate_resolved_mandate_active!(mandate_id, merchant_account, reference)
+    # Stripe rejects a PaymentIntent that references a mandate that is not active yet
+    # (`payment_intent_mandate_invalid`), and a new India mandate stays pending for minutes.
+    def reject_pending_checkout_mandate!(mandate_id, merchant_account, reference)
       status = begin
         get_mandate(mandate_id, merchant_account:).status
-      rescue ChargeProcessorError
+      rescue ChargeProcessorError => e
+        ErrorNotifier.notify(e, reference:, mandate_id:)
         return
       end
-      return if status == "active"
+      return unless status == "pending"
 
-      error_code = status == "pending" ? PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING : PurchaseErrorCode::INDIA_CARD_MANDATE_INACTIVE
-      ErrorNotifier.notify("Off-session charge on an Indian card references a mandate that is not active", reference:, mandate_status: status)
+      ErrorNotifier.notify("Off-session checkout charge on an Indian card references a pending mandate", reference:, mandate_id:)
       raise ChargeProcessorCardError.new(
-        error_code,
+        PurchaseErrorCode::INDIA_CARD_MANDATE_PENDING,
         "Your bank is still confirming your card for recurring payments. Please try again in a few minutes, or buy from one creator at a time."
       )
     end
