@@ -4,7 +4,7 @@
 # because the buyer's e-mandate was still `pending`, and fails them once the wait runs out.
 class RetryPendingMandateChargeJob
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :default, lock: :until_executed
+  sidekiq_options retry: 5, queue: :default, lock: :until_executing
 
   MAX_WAIT = 30.minutes
   RETRY_INTERVAL = 1.minute
