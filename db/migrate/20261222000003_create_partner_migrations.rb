@@ -43,6 +43,8 @@ class CreatePartnerMigrations < ActiveRecord::Migration[8.1]
       t.index [:notified_at, :completed_at]
       t.index [:status, :updated_at]
     end
+    # A preview database that ran the old number before this column was added to it skips the table above.
+    add_column :partner_migrations, :account_setup_password_digest, :string, if_not_exists: true
   end
 
   def down
