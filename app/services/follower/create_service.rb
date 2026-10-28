@@ -67,7 +67,10 @@ class Follower::CreateService
     def record_waitlist_entry
       return if waitlist_product.blank? || !@follower.persisted?
 
-      @waitlist_entry = @follower.waitlist_entries.create_or_find_by!(product: waitlist_product)
+      # Look up first: the uniqueness validation makes a repeat signup raise RecordInvalid before any
+      # INSERT, so create_or_find_by! alone would log a write failure for every expected repeat.
+      @waitlist_entry = @follower.waitlist_entries.find_by(product: waitlist_product) ||
+                        @follower.waitlist_entries.create_or_find_by!(product: waitlist_product)
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
       Rails.logger.error("Cannot record waitlist entry for follower #{@follower.id}. Exception: #{e.message}")
       @waitlist_entry = @follower.waitlist_entries.find_by(product: waitlist_product)

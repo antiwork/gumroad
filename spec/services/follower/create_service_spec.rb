@@ -47,6 +47,17 @@ describe Follower::CreateService do
     expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
   end
 
+  it "records a repeat signup without logging a write failure" do
+    product = create(:product, user:)
+    allow(Rails.logger).to receive(:error)
+
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+
+    expect(Rails.logger).not_to have_received(:error)
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+  end
+
   it "sends the product-aware confirmation email" do
     product = create(:product, user:)
     follower = create(:follower, user:, email: "waitlist@example.com")
