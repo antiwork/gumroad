@@ -38,6 +38,21 @@ describe ProductBuildSave do
       expect(described_class.find_by(purchase: other_purchase).data).to eq("level" => "9")
     end
 
+    it "rejects a batch with the wrong shape and keeps the stored save" do
+      described_class.apply_changes!(purchase, set: { "level" => "3" })
+
+      [
+        { set: ["level", "4"], clear: true },
+        { remove: "level" },
+        { clear: "yes" },
+      ].each do |batch|
+        expect do
+          described_class.apply_changes!(purchase, **batch)
+        end.to raise_error(described_class::LimitError, /A batch needs/)
+      end
+      expect(described_class.find_by(purchase:).data).to eq("level" => "3")
+    end
+
     it "rejects values that are not strings" do
       expect do
         described_class.apply_changes!(purchase, set: { "level" => 3 })

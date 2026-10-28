@@ -406,13 +406,15 @@ class UrlRedirectsController < ApplicationController
   end
 
   # One batch of changes from the player's storage shims: `clear`, then `remove`, then `set`.
+  # The batch goes to the model unfiltered: `permit` would drop a malformed `set` and let its
+  # `clear` erase the save, so the model rejects the whole batch instead.
   def update_build_save
-    changes = params.permit(:clear, remove: [], set: {})
+    set = params.fetch(:set, {})
     save = ProductBuildSave.apply_changes!(
       @url_redirect.purchase,
-      set: changes[:set]&.to_h || {},
-      remove: changes[:remove] || [],
-      clear: ActiveModel::Type::Boolean.new.cast(changes[:clear]) || false,
+      set: set.is_a?(ActionController::Parameters) ? set.to_unsafe_h : set,
+      remove: params.fetch(:remove, []),
+      clear: params.fetch(:clear, false),
     )
     render json: { success: true, byte_size: save.byte_size }
   rescue ProductBuildSave::LimitError => e

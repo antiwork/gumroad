@@ -3879,6 +3879,15 @@ describe UrlRedirectsController, inertia: true do
         expect(ProductBuildSave.count).to eq(0)
       end
 
+      it "rejects a malformed batch whole, so its clear does not erase the save" do
+        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
+
+        patch :update_build_save, params: { id: url_redirect.token, clear: true, set: ["level", "4"] }, as: :json
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "3")
+      end
+
       it "returns 404 and saves nothing when the flag is off for the seller" do
         Feature.deactivate_user(:product_build_player, seller)
 
