@@ -76,17 +76,7 @@ describe RetryPendingMandateChargeJob do
         create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
     end
     let(:india_card) do
-      CreditCard.create!(
-        charge_processor_id: StripeChargeProcessor.charge_processor_id,
-        stripe_customer_id: "cus_job_india",
-        processor_payment_method_id: "pm_job_india",
-        stripe_fingerprint: "job_india_fingerprint",
-        visual: "**** **** **** 4242",
-        card_type: CardType::VISA,
-        card_country: Compliance::Countries::IND.alpha2,
-        expiry_month: 12,
-        expiry_year: 2030
-      )
+      create(:indian_stripe_credit_card, stripe_customer_id: "cus_job_india", processor_payment_method_id: "pm_job_india", stripe_fingerprint: "job_india_fingerprint")
     end
     let(:order) { create(:order) }
     let(:mandate_statuses) { { "mandate_job_1" => "pending" } }
@@ -226,6 +216,52 @@ describe RetryPendingMandateChargeJob do
         end.not_to change { Purchase.where(link: held.link).successful.count }
       end
 
+      context "when the wait ends while this run is talking to Stripe" do
+        before do
+          age_purchases(described_class::MAX_WAIT - 1.second)
+          mandate_statuses["mandate_job_1"] = "active"
+          outcomes[:charge] = ->(kwargs) { processing_outcome(kwargs) }
+        end
+
+        it "does not start a charge when the deadline passes during the mandate read" do
+          allow(ChargeProcessor).to receive(:get_mandate) do
+            travel 2.minutes
+            double(status: "active")
+          end
+          expect(Charge::CreateService).not_to receive(:new)
+
+          described_class.new.perform(order.id)
+
+          expect_failed_with_pending_mandate_error
+        end
+
+        it "does not start a charge when the deadline passes while preparing the payment method" do
+          allow_any_instance_of(Chargeable).to receive(:prepare_with_trusted_setup_intent!).and_wrap_original do |original, *args|
+            original.call(*args).tap { travel 2.minutes }
+          end
+          expect(Charge::CreateService).not_to receive(:new)
+
+          described_class.new.perform(order.id)
+
+          expect_failed_with_pending_mandate_error
+        end
+
+        it "keeps a charge submitted before the deadline even when Stripe answers after it" do
+          outcomes[:charge] = ->(kwargs) do
+            travel 2.minutes
+            processing_outcome(kwargs)
+          end
+
+          described_class.new.perform(order.id)
+
+          purchases.each do |purchase|
+            purchase.reload
+            expect(purchase.purchase_state).to eq("in_progress")
+            expect(purchase.processor_payment_intent).to be_present
+          end
+        end
+      end
+
       it "keeps waiting when Stripe cannot be read inside the wait" do
         allow(ChargeProcessor).to receive(:get_setup_intent).and_raise(ChargeProcessorUnavailableError)
 
@@ -293,6 +329,41 @@ describe RetryPendingMandateChargeJob do
         purchases.each { FailAbandonedPurchaseWorker.new.perform(_1.id) }
 
         expect_failed_with_pending_mandate_error
+      end
+    end
+
+    # Held before held groups were marked: stripe_status is still nil.
+    context "with a hold saved before the processing marker existed" do
+      it "does not charge it after the wait even once the mandate is active" do
+        age_purchases(described_class::MAX_WAIT + 1.minute)
+        mandate_statuses["mandate_job_1"] = "active"
+        expect(Charge::CreateService).not_to receive(:new)
+
+        described_class.new.perform(order.id)
+
+        expect_failed_with_pending_mandate_error
+        expect(described_class.jobs).to be_empty
+      end
+
+      it "marks it for repeat-purchase protection when it is rechecked inside the wait" do
+        described_class.new.perform(order.id)
+
+        purchases.each do |purchase|
+          purchase.reload
+          expect(purchase.purchase_state).to eq("in_progress")
+          expect(purchase.stripe_status).to eq(StripeIntentStatus::PROCESSING)
+        end
+        expect(described_class.jobs.size).to eq(1)
+      end
+
+      it "reconciles it after the wait when its charge was already submitted" do
+        age_purchases(described_class::MAX_WAIT + 1.minute)
+        purchases.first.charge.update!(client_confirmed: true)
+
+        described_class.new.perform(order.id)
+
+        expect(purchases.map { _1.reload.purchase_state }).to all(eq("in_progress"))
+        expect(ReconcileClientConfirmedChargeJob.jobs.map { _1["args"].first }).to include(purchases.first.charge.id)
       end
     end
 

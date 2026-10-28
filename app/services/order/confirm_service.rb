@@ -25,6 +25,7 @@ class Order::ConfirmService
 
   # Used by RetryPendingMandateChargeJob to charge the held groups once the mandate is active.
   def charge_pending_setup_groups!
+    @retrying_held_groups = true
     charge_seller_groups_awaiting_setup_confirmation!
     setup_charge_results
   end
@@ -258,6 +259,21 @@ class Order::ConfirmService
       held && MANDATE_WAIT_TRANSIENT_ERRORS.any? { e.is_a?(_1) }
     end
 
+    # The retry job only runs for held groups, so there it also covers holds saved before
+    # held purchases were marked. A submitted charge keeps its reconciliation path.
+    def mandate_wait_over?(purchases, held:)
+      return false if purchases.first.charge&.client_confirmed?
+
+      (held || @retrying_held_groups) && RetryPendingMandateChargeJob.wait_over?(purchases)
+    end
+
+    def fail_expired_hold!(purchases)
+      purchases.each do |purchase|
+        RetryPendingMandateChargeJob.fail_unpaid!(purchase)
+        setup_charge_results[purchase.id] = RetryPendingMandateChargeJob::PENDING_MESSAGE if purchase.failed?
+      end
+    end
+
     def hold_for_pending_mandate(purchases)
       mandate_pending_purchases.concat(purchases)
       purchases.each { |purchase| setup_charge_results[purchase.id] = :mandate_pending }
@@ -287,12 +303,9 @@ class Order::ConfirmService
 
     def charge_setup_confirmed_purchases_locked!(purchases)
       held = purchases.any? { |purchase| RetryPendingMandateChargeJob.held?(purchase) }
-      if held && RetryPendingMandateChargeJob.wait_over?(purchases)
+      if mandate_wait_over?(purchases, held:)
         # Checked before any Stripe call: no new charge after the wait, even once the mandate is active.
-        purchases.each do |purchase|
-          RetryPendingMandateChargeJob.fail_unpaid!(purchase)
-          setup_charge_results[purchase.id] = RetryPendingMandateChargeJob::PENDING_MESSAGE if purchase.failed?
-        end
+        fail_expired_hold!(purchases)
         return
       end
 
@@ -369,6 +382,12 @@ class Order::ConfirmService
         chargeable.prepare_with_trusted_setup_intent!
       else
         chargeable.prepare!
+      end
+
+      # Rechecked here because the Stripe calls above can outlast the deadline.
+      if mandate_wait_over?(purchases, held:)
+        fail_expired_hold!(purchases)
+        return
       end
 
       create_service = Charge::CreateService.new(
