@@ -15,8 +15,8 @@ class UrlRedirectsController < ApplicationController
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file subtitle_file_vtt read
                                              download_archive download_product_files
-                                             save_last_content_page build_save update_build_save]
-  before_action :require_product_build_player, only: %i[build_save update_build_save]
+                                             save_last_content_page build_save update_build_save play]
+  before_action :require_product_build_player, only: %i[build_save update_build_save play]
   before_action :hide_layouts, only: %i[
     show download_product_files smil hls_playlist download_subtitle_file subtitle_file_vtt
   ]
@@ -400,6 +400,17 @@ class UrlRedirectsController < ApplicationController
     render json: { success: true }
   end
 
+  # Opens the live build in the player's frame. Access is checked here, with the buyer's cookies,
+  # and the frame then loads the build under a grant (see ProductBuild#player_grant).
+  def play
+    build = @url_redirect.referenced_link.product_builds.live.where.not(site_unpacked_at: nil).first
+    return e404 if build.nil?
+
+    grant = build.player_grant(url_redirect_token: @url_redirect.token, purchase_id: @url_redirect.purchase_id)
+    # The trailing slash makes the build's relative file paths resolve under the grant.
+    redirect_to "#{request.path.chomp("/")}/#{grant}/"
+  end
+
   def build_save
     save = ProductBuildSave.find_by(purchase: @url_redirect.purchase)
     render json: { success: true, data: save&.data || {} }
@@ -643,10 +654,11 @@ class UrlRedirectsController < ApplicationController
     # as general storage. The flag is the player's kill switch.
     def require_product_build_player
       product = @url_redirect.referenced_link
-      return e404_json if @url_redirect.purchase.nil? || product.nil?
-      return e404_json unless Feature.active?(:product_build_player, product.user)
+      not_found = -> { request.format.json? ? e404_json : e404 }
+      return not_found.call if @url_redirect.purchase.nil? || product.nil?
+      return not_found.call unless Feature.active?(:product_build_player, product.user)
 
-      e404_json unless product.product_builds.live.exists?
+      not_found.call unless product.product_builds.live.exists?
     end
 
     def redirect_to_app_login(next_path)
