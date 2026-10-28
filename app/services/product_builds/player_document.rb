@@ -79,20 +79,19 @@ module ProductBuilds::PlayerDocument
     })();
   JS
 
-  HEAD_TAG = /<head(?:\s[^>]*)?>/in
-  HTML_TAG = /<html(?:\s[^>]*)?>/in
-  DOCTYPE = /\A\s*<!doctype[^>]*>/in
+  # Leading whitespace and comments, then the doctype if there is one.
+  PROLOGUE = /\A(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>)?/imn
 
   # The seller's page is bytes in whatever encoding they wrote it in, so the scripts go in as ASCII
-  # bytes right after <head> (or <html>, or the doctype, or at the very start), before any script of
-  # the page. Both tags are optional in HTML, and anything before the doctype puts the page in quirks mode.
+  # bytes right after the doctype, before any tag of the page. There the parser opens <html> and <head>
+  # for them, so no tag has to be found, and a <head> inside a comment or a script cannot mislead it.
+  # Anything before the doctype would put the page in quirks mode.
   def self.render(html, save_data:)
     script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save_data.to_json.to_json) }
     # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
     injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
     html = html.b
-    tag = html.match(HEAD_TAG) || html.match(HTML_TAG) || html.match(DOCTYPE)
-    tag ? html.insert(tag.end(0), injected) : injected + html
+    html.insert(html.match(PROLOGUE).end(0), injected)
   end
 
   # `request_origin` is the app or custom-domain origin serving the frame, and `cdn_origin` the

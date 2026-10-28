@@ -4,11 +4,23 @@ require "spec_helper"
 
 describe ProductBuilds::PlayerDocument do
   describe ".render" do
-    it "puts the scripts right after <head>" do
+    it "puts the scripts right after the doctype, before the page's own scripts" do
       rendered = described_class.render(%(<!doctype html><html><head><script src="game.js"></script></head></html>), save_data: {})
 
-      expect(rendered).to start_with('<!doctype html><html><head><script data-cfasync="false">')
+      expect(rendered).to start_with('<!doctype html><script data-cfasync="false">')
       expect(rendered.index("gumroad:build-save")).to be < rendered.index(%(src="game.js"))
+    end
+
+    it "is not misled by a <head> inside a comment, and keeps leading comments before the doctype" do
+      rendered = described_class.render(%(<!-- built by x -->\n<!doctype html><!-- <head> --><title>Game</title>), save_data: {})
+
+      expect(rendered).to start_with(%(<!-- built by x -->\n<!doctype html><script data-cfasync="false">))
+    end
+
+    it "puts the scripts at the very start of a page with no doctype" do
+      rendered = described_class.render(%(<script src="game.js"></script>), save_data: {})
+
+      expect(rendered).to start_with('<script data-cfasync="false">')
     end
 
     it "puts the scripts after the doctype when the page omits <html> and <head>" do
