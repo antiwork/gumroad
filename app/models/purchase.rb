@@ -6376,9 +6376,9 @@ class Purchase < ApplicationRecord
     def update_product_search_index!
       SendToElasticsearchWorker.perform_in(5.seconds, link.id, "update", %w[is_recommendable sales_volume total_fee_cents past_year_fee_cents])
     rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS => e
-      Rails.logger.warn("update_product_search_index! enqueue failed (#{e.class}) purchase=#{id} link=#{link.id}")
+      Rails.logger.warn("update_product_search_index! enqueue failed (#{e.class}) purchase=#{id} link=#{link_id}")
       begin
-        ErrorNotifier.notify(e, purchase_id: id, link_id: link.id, product_search_index_enqueue_failed: true)
+        ErrorNotifier.notify(e, purchase_id: id, link_id:, product_search_index_enqueue_failed: true)
       rescue StandardError => notifier_error
         Rails.logger.warn("update_product_search_index! failure could not be reported (#{id}): #{notifier_error.class}")
       end

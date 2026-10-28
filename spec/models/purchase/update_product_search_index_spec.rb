@@ -51,5 +51,31 @@ describe Purchase do
 
       expect { purchase.send(:update_product_search_index!) }.to raise_error(NoMethodError)
     end
+
+    describe "through the paid purchase's success transition" do
+      let(:purchase) { create(:purchase, purchase_state: "in_progress") }
+      let(:timeout_error) { RedisClient::ReadTimeoutError.new("Waited 3 seconds") }
+
+      before do
+        allow(SendToElasticsearchWorker).to receive(:perform_in).and_raise(timeout_error)
+      end
+
+      it "persists the successful purchase and reports the failure" do
+        expect(purchase.price_cents).to be > 0
+        expect(ErrorNotifier).to receive(:notify).with(timeout_error, purchase_id: purchase.id, link_id: purchase.link_id, product_search_index_enqueue_failed: true)
+
+        purchase.update_balance_and_mark_successful!
+
+        expect(purchase.reload.purchase_state).to eq("successful")
+      end
+
+      it "persists the successful purchase when reporting the failure also fails" do
+        allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "notifier down")
+
+        purchase.update_balance_and_mark_successful!
+
+        expect(purchase.reload.purchase_state).to eq("successful")
+      end
+    end
   end
 end
