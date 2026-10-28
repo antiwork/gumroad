@@ -55,6 +55,12 @@ describe "Web build player", type: :request do
       expect { frame_path }.to change { url_redirect.reload.has_been_seen }.from(false).to(true)
     end
 
+    it "starts a rental's viewing window" do
+      url_redirect.update!(is_rental: true)
+
+      expect { frame_path }.to change { url_redirect.reload.rental_first_viewed_at }.from(nil)
+    end
+
     it "returns 404 when the live build has not been unpacked" do
       build.update!(site_unpacked_at: nil)
 

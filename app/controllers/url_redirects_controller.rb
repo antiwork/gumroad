@@ -408,6 +408,8 @@ class UrlRedirectsController < ApplicationController
     build = @url_redirect.referenced_link.product_builds.live.where.not(site_unpacked_at: nil).first
     return e404 if build.nil?
 
+    # Playing starts a rental's viewing window, the same as streaming a video.
+    @url_redirect.mark_rental_as_viewed!
     grant = build.player_grant(url_redirect_token: @url_redirect.token, purchase_id: @url_redirect.purchase_id)
     # The trailing slash makes the build's relative file paths resolve under the grant.
     redirect_to "#{request.path.chomp("/")}/#{grant}/"
