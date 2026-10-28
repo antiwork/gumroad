@@ -706,6 +706,25 @@ describe("Product Edit Scenario", type: :system, js: true) do
     end.to(change { product.reload.should_show_sales_count }.to(false))
   end
 
+  it "allows creator to let people join a waitlist while the product is unpublished" do
+    product.unpublish!
+
+    visit edit_link_path(product.unique_permalink)
+    check "Let people join a waitlist on your product page"
+    in_preview do
+      expect(page).to have_button("Notify me", disabled: true)
+    end
+    expect do
+      click_on "Save and continue"
+      expect(page).to have_alert(text: "Changes saved!")
+    end.to(change { product.reload.waitlist_enabled? }.to(true))
+
+    product.publish!
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_text("Publicly show the number of sales on your product page")
+    expect(page).not_to have_text("Let people join a waitlist on your product page")
+  end
+
   it "allows creator to limit the number of sales" do
     product = create(:product, user: seller)
     product.product_files << create(:product_file)

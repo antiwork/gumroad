@@ -454,6 +454,14 @@ export const ProductTab = () => {
                       label="Hide sold out versions"
                     />
                   ) : null}
+                  {/* A coffee page has no product controls to swap for the form. */}
+                  {product.is_published || product.native_type === "coffee" ? null : (
+                    <Switch
+                      checked={product.waitlist_enabled}
+                      onChange={(e) => updateProduct({ waitlist_enabled: e.target.checked })}
+                      label="Let people join a waitlist on your product page"
+                    />
+                  )}
                   <Switch
                     checked={product.should_show_sales_count}
                     onChange={(e) => updateProduct({ should_show_sales_count: e.target.checked })}

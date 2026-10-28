@@ -44,6 +44,7 @@ class Link < ApplicationRecord
             32 => :DEPRECATED_moderated_by_iffy,
             33 => :hide_sold_out_variants,
             34 => :hide_bundle_product_reviews,
+            35 => :waitlist_enabled,
             :column => "flags",
             :flag_query_mode => :bit_operator,
             check_for_column: false
@@ -140,6 +141,7 @@ class Link < ApplicationRecord
   has_many :sold_calls, through: :sales, source: :call
   has_many :asset_previews
   has_many :product_builds, -> { order(:number) }, foreign_key: :product_id, dependent: :destroy
+  has_many :waitlist_entries, foreign_key: :product_id
   has_one :thumbnail, foreign_key: "product_id"
   has_one :thumbnail_alive, -> { alive }, class_name: "Thumbnail", foreign_key: "product_id"
   has_many :display_asset_previews, -> { alive.in_order }, class_name:  "AssetPreview"
@@ -512,6 +514,12 @@ class Link < ApplicationRecord
 
   def published?
     deleted_at.nil? && purchase_disabled_at.nil? && !draft
+  end
+
+  # Signups close at launch. A staff takedown also leaves the product unpublished, but it is not a launch
+  # to wait for.
+  def accepts_waitlist_signups?
+    waitlist_enabled? && !published? && deleted_at.nil? && banned_at.nil? && !is_unpublished_by_admin?
   end
 
   def compliance_blocked(ip)

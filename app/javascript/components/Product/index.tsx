@@ -78,6 +78,7 @@ import { Ribbon } from "$app/components/Product/Ribbon";
 import type { SelectionDiscounts, SelectionQuote } from "$app/components/Product/selectionDiscounts";
 import { ShareSection } from "$app/components/Product/ShareSection";
 import { Thumbnail } from "$app/components/Product/Thumbnail";
+import { WaitlistForm } from "$app/components/Product/WaitlistForm";
 import { InstallmentPlan } from "$app/components/ProductEdit/state";
 import { RatingStars } from "$app/components/RatingStars";
 import { Review as ReviewComponent } from "$app/components/Review";
@@ -162,6 +163,8 @@ export type Product = {
   has_third_party_analytics: boolean;
   ppp_details: PurchasingPowerParityDetails | null;
   can_edit: boolean;
+  // Present while the page takes waitlist signups in place of purchases. The count is only sent to the seller.
+  waitlist?: { recaptcha_site_key: string | null; count: number | null } | null;
   refund_policy: RefundPolicy | null;
   bundle_products: {
     id: string;
@@ -333,6 +336,16 @@ export const Product = ({
   scaleLongTitle?: boolean;
 }) => {
   const notForSaleMessage = getNotForSaleMessage(product);
+  // Past buyers of a product that went back to a waitlist still need a way to their purchase.
+  const purchaseRecoveryLink =
+    purchase === null && !product.can_edit ? (
+      <PurchaseRecoveryLink
+        permalink={product.permalink}
+        isLicensed={product.is_licensed}
+        hasDownload={!product.is_physical && product.native_type !== "call" && product.native_type !== "commission"}
+        disableAnalytics={disableAnalytics}
+      />
+    ) : null;
   // Kept by code, so another option's quote for an expired code cannot bring it back.
   const [expiredCodes, setExpiredCodes] = React.useState<string[]>([]);
   const isExpired = (code: ProductDiscount | null | undefined) => !!code?.valid && expiredCodes.includes(code.code);
@@ -709,195 +722,195 @@ export const Product = ({
       {showsExistingPurchase ? details : null}
       <section className="[grid-area:controls]">
         <section className="grid gap-4 border-t p-6 lg:border-t-0">
-          {notForSaleMessage ? (
-            <Alert role="status" variant="warning">
-              {notForSaleMessage}
-            </Alert>
-          ) : product.native_type === "commission" ? (
-            <Alert role="status" variant="info">
-              Secure your order with a {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} deposit today; the remaining balance
-              will be charged upon completion.
-            </Alert>
-          ) : null}
-          {discountCode ? (
-            discountCode.valid ? (
-              (
-                showSaleLabel
-                  ? hasDiscountTerms
-                  : (discountedPriceCents < priceCents ||
-                      discountCode.discount.minimum_quantity ||
-                      discountCode.discount.minimum_amount_cents ||
-                      (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
-                    !pppDiscounted
-              ) ? (
-                <Alert role="status" variant="success">
+          {product.waitlist ? (
+            <>
+              <WaitlistForm product={product} waitlist={product.waitlist} />
+              {purchaseRecoveryLink}
+            </>
+          ) : (
+            <>
+              {notForSaleMessage ? (
+                <Alert role="status" variant="warning">
+                  {notForSaleMessage}
+                </Alert>
+              ) : product.native_type === "commission" ? (
+                <Alert role="status" variant="info">
+                  Secure your order with a {`${COMMISSION_DEPOSIT_PROPORTION * 100}%`} deposit today; the remaining
+                  balance will be charged upon completion.
+                </Alert>
+              ) : null}
+              {discountCode ? (
+                discountCode.valid ? (
+                  (
+                    showSaleLabel
+                      ? hasDiscountTerms
+                      : (discountedPriceCents < priceCents ||
+                          discountCode.discount.minimum_quantity ||
+                          discountCode.discount.minimum_amount_cents ||
+                          (discountCode.discount.type === "fixed" && discountCode.discount.once_per_cart)) &&
+                        !pppDiscounted
+                  ) ? (
+                    <Alert role="status" variant="success">
+                      <div className="flex flex-col gap-4">
+                        {showSaleLabel ? (
+                          discountCode.discount.minimum_quantity ? (
+                            <div>Applies when you buy {discountCode.discount.minimum_quantity} or more.</div>
+                          ) : null
+                        ) : discountCode.discount.minimum_quantity ? (
+                          `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
+                        ) : discountCode.discount.new_customers_only ? (
+                          `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} for new customers of this store (Code ${discountCode.code.toUpperCase()})`
+                        ) : (
+                          `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
+                        )}
+                        {/* Shown before checkout knows who the buyer is, so the price above is conditional. */}
+                        {discountCode.discount.new_customers_only ? (
+                          <div>
+                            {discountCode.discount.minimum_quantity ? "For new customers of this store. " : null}
+                            We check previous purchases at checkout.
+                          </div>
+                        ) : null}
+                        {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
+                          <div>This discount will only apply to the first payment of your subscription.</div>
+                        ) : null}
+                        {discountCode.discount.minimum_amount_cents ? (
+                          <div>
+                            {(discountCode.discount.product_ids?.length ?? 0) === 1
+                              ? `This discount will apply when you spend ${formatBuyerLocalOrSetPrice(
+                                  discountCode.discount.minimum_amount_cents,
+                                  buyerLocalContextFor(product),
+                                  { symbolFormat: "short" },
+                                )} or more.`
+                              : `This discount will apply when you spend ${formatBuyerLocalOrSetPrice(
+                                  discountCode.discount.minimum_amount_cents,
+                                  buyerLocalContextFor(product),
+                                  { symbolFormat: "short" },
+                                )} or more in ${
+                                  !discountCode.discount.product_ids && product.seller
+                                    ? `${product.seller.name}'s`
+                                    : "selected"
+                                } products.`}
+                          </div>
+                        ) : null}
+                        {discountCode.discount.expires_at ? (
+                          <DiscountExpirationCountdown
+                            // The countdown reads its deadline on mount, and another selection can show another code.
+                            key={`${discountCode.code}:${discountCode.discount.expires_at}`}
+                            expiresAt={new Date(discountCode.discount.expires_at)}
+                            showEndDate={showSaleLabel}
+                            onExpiration={() => setExpiredCodes((codes) => [...codes, discountCode.code])}
+                          />
+                        ) : null}
+                      </div>
+                    </Alert>
+                  ) : null
+                ) : (
+                  <Alert role="status" variant="danger">
+                    {discountCode.error_code === "sold_out"
+                      ? "Sorry, the discount code you wish to use has reached its usage limit."
+                      : discountCode.error_code === "invalid_offer"
+                        ? "Sorry, the discount code you wish to use is invalid."
+                        : discountCode.error_code === "not_existing_customer"
+                          ? "Sorry, this discount code is only for existing customers."
+                          : discountCode.error_code === "not_new_customer"
+                            ? "Sorry, this discount code is only for new customers."
+                            : "Sorry, the discount code you wish to use is inactive."}
+                  </Alert>
+                )
+              ) : null}
+              <ConfigurationSelector
+                product={product}
+                selection={selection}
+                setSelection={setSelection}
+                discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
+                rowDiscount={selectionDiscountCode ? rowDiscount : undefined}
+                discountPending={!!quote && quote.state !== "ready"}
+                ref={configurationSelectorRef}
+              />
+              {product.ppp_details && pppDiscounted ? (
+                <Alert role="status" variant="info">
+                  This product supports purchasing power parity. Because you're located in{" "}
+                  <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
+                  <b>
+                    {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
+                      style: "percent",
+                    })}
+                  </b>{" "}
+                  to{" "}
+                  <b>
+                    {formatBuyerLocalOrSetPrice(discountedPriceCents, buyerLocalContextFor(product), {
+                      symbolFormat: "long",
+                    })}
+                  </b>
+                  .
+                  {discountCode?.valid
+                    ? " This discount will be applied because it is greater than the offer code discount."
+                    : null}
+                </Alert>
+              ) : null}
+              {product.free_trial ? (
+                <Alert role="status" variant="info">
+                  All memberships include a {product.free_trial.duration.amount} {product.free_trial.duration.unit} free
+                  trial
+                </Alert>
+              ) : null}
+              {product.duration_in_months ? (
+                <Alert role="status" variant="info">
+                  This membership will automatically end after{" "}
+                  {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
+                </Alert>
+              ) : null}
+              {renewalNotice ? (
+                <p className="text-sm" role="note">
+                  {renewalNotice}
+                </p>
+              ) : null}
+              {quote?.state === "failed" ? (
+                <Alert role="alert" variant="danger">
                   <div className="flex flex-col gap-4">
-                    {showSaleLabel ? (
-                      discountCode.discount.minimum_quantity ? (
-                        <div>Applies when you buy {discountCode.discount.minimum_quantity} or more.</div>
-                      ) : null
-                    ) : discountCode.discount.minimum_quantity ? (
-                      `Get ${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} when you buy ${discountCode.discount.minimum_quantity} or more (Code ${discountCode.code.toUpperCase()})`
-                    ) : discountCode.discount.new_customers_only ? (
-                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} for new customers of this store (Code ${discountCode.code.toUpperCase()})`
-                    ) : (
-                      `${formatDiscountAmount(discountCode.discount, buyerLocalContextFor(product))} off${discountScope} will be applied at checkout (Code ${discountCode.code.toUpperCase()})`
-                    )}
-                    {/* Shown before checkout knows who the buyer is, so the price above is conditional. */}
-                    {discountCode.discount.new_customers_only ? (
-                      <div>
-                        {discountCode.discount.minimum_quantity ? "For new customers of this store. " : null}
-                        We check previous purchases at checkout.
-                      </div>
-                    ) : null}
-                    {discountCode.discount.duration_in_billing_cycles && product.is_recurring_billing ? (
-                      <div>This discount will only apply to the first payment of your subscription.</div>
-                    ) : null}
-                    {discountCode.discount.minimum_amount_cents ? (
-                      <div>
-                        {(discountCode.discount.product_ids?.length ?? 0) === 1
-                          ? `This discount will apply when you spend ${formatBuyerLocalOrSetPrice(
-                              discountCode.discount.minimum_amount_cents,
-                              buyerLocalContextFor(product),
-                              { symbolFormat: "short" },
-                            )} or more.`
-                          : `This discount will apply when you spend ${formatBuyerLocalOrSetPrice(
-                              discountCode.discount.minimum_amount_cents,
-                              buyerLocalContextFor(product),
-                              { symbolFormat: "short" },
-                            )} or more in ${
-                              !discountCode.discount.product_ids && product.seller
-                                ? `${product.seller.name}'s`
-                                : "selected"
-                            } products.`}
-                      </div>
-                    ) : null}
-                    {discountCode.discount.expires_at ? (
-                      <DiscountExpirationCountdown
-                        // The countdown reads its deadline on mount, and another selection can show another code.
-                        key={`${discountCode.code}:${discountCode.discount.expires_at}`}
-                        expiresAt={new Date(discountCode.discount.expires_at)}
-                        showEndDate={showSaleLabel}
-                        onExpiration={() => setExpiredCodes((codes) => [...codes, discountCode.code])}
-                      />
-                    ) : null}
+                    We couldn't check the discount for this selection.
+                    <Button onClick={quote.retry}>Try again</Button>
                   </div>
                 </Alert>
-              ) : null
-            ) : (
-              <Alert role="status" variant="danger">
-                {discountCode.error_code === "sold_out"
-                  ? "Sorry, the discount code you wish to use has reached its usage limit."
-                  : discountCode.error_code === "invalid_offer"
-                    ? "Sorry, the discount code you wish to use is invalid."
-                    : discountCode.error_code === "not_existing_customer"
-                      ? "Sorry, this discount code is only for existing customers."
-                      : discountCode.error_code === "not_new_customer"
-                        ? "Sorry, this discount code is only for new customers."
-                        : "Sorry, the discount code you wish to use is inactive."}
-              </Alert>
-            )
-          ) : null}
-          <ConfigurationSelector
-            product={product}
-            selection={selection}
-            setSelection={setSelection}
-            discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
-            rowDiscount={selectionDiscountCode ? rowDiscount : undefined}
-            discountPending={!!quote && quote.state !== "ready"}
-            ref={configurationSelectorRef}
-          />
-          {product.ppp_details && pppDiscounted ? (
-            <Alert role="status" variant="info">
-              This product supports purchasing power parity. Because you're located in{" "}
-              <b>{product.ppp_details.country}</b>, the price has been discounted by{" "}
-              <b>
-                {(Math.round((1 - discountedPriceCents / priceCents) * 100) / 100).toLocaleString(undefined, {
-                  style: "percent",
-                })}
-              </b>{" "}
-              to{" "}
-              <b>
-                {formatBuyerLocalOrSetPrice(discountedPriceCents, buyerLocalContextFor(product), {
-                  symbolFormat: "long",
-                })}
-              </b>
-              .
-              {discountCode?.valid
-                ? " This discount will be applied because it is greater than the offer code discount."
-                : null}
-            </Alert>
-          ) : null}
-          {product.free_trial ? (
-            <Alert role="status" variant="info">
-              All memberships include a {product.free_trial.duration.amount} {product.free_trial.duration.unit} free
-              trial
-            </Alert>
-          ) : null}
-          {product.duration_in_months ? (
-            <Alert role="status" variant="info">
-              This membership will automatically end after{" "}
-              {product.duration_in_months === 1 ? "one month" : `${product.duration_in_months} months`}
-            </Alert>
-          ) : null}
-          {renewalNotice ? (
-            <p className="text-sm" role="note">
-              {renewalNotice}
-            </p>
-          ) : null}
-          {quote?.state === "failed" ? (
-            <Alert role="alert" variant="danger">
-              <div className="flex flex-col gap-4">
-                We couldn't check the discount for this selection.
-                <Button onClick={quote.retry}>Try again</Button>
-              </div>
-            </Alert>
-          ) : null}
-          <PurchaseButton
-            ref={ctaButtonRef}
-            product={product}
-            purchase={purchase}
-            discountCode={discountCode ?? null}
-            pricePending={!!quote && quote.state !== "ready"}
-            priceLoading={quote?.state === "loading"}
-            selection={selection}
-            showInstallmentPlanNotes
-            setSelection={setSelection}
-            configurationSelectorRef={configurationSelectorRef}
-          />
-          {purchase === null && !product.can_edit ? (
-            <PurchaseRecoveryLink
-              permalink={product.permalink}
-              isLicensed={product.is_licensed}
-              hasDownload={
-                !product.is_physical && product.native_type !== "call" && product.native_type !== "commission"
-              }
-              disableAnalytics={disableAnalytics}
-            />
-          ) : null}
-          {product.sales_count !== null ? (
-            <Alert role="status" variant="info">
-              <strong>{product.sales_count.toLocaleString()}</strong>{" "}
-              {product.recurrences
-                ? "member"
-                : product.preorder
-                  ? "pre-order"
-                  : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
-                    ? "sale"
-                    : "download"}
-              {product.sales_count === 1 ? "" : "s"}
-            </Alert>
-          ) : null}
-          {product.preorder ? (
-            <Alert role="status" variant="info">
-              Available on {formatDate(parseISO(product.preorder.release_date))}
-            </Alert>
-          ) : null}
-          {product.streamable ? (
-            <Alert role="status" variant="info">
-              Video link provided after purchase
-            </Alert>
-          ) : null}
+              ) : null}
+              <PurchaseButton
+                ref={ctaButtonRef}
+                product={product}
+                purchase={purchase}
+                discountCode={discountCode ?? null}
+                pricePending={!!quote && quote.state !== "ready"}
+                priceLoading={quote?.state === "loading"}
+                selection={selection}
+                showInstallmentPlanNotes
+                setSelection={setSelection}
+                configurationSelectorRef={configurationSelectorRef}
+              />
+              {purchaseRecoveryLink}
+              {product.sales_count !== null ? (
+                <Alert role="status" variant="info">
+                  <strong>{product.sales_count.toLocaleString()}</strong>{" "}
+                  {product.recurrences
+                    ? "member"
+                    : product.preorder
+                      ? "pre-order"
+                      : product.price_cents > 0 || product.options.some((option) => option.price_difference_cents)
+                        ? "sale"
+                        : "download"}
+                  {product.sales_count === 1 ? "" : "s"}
+                </Alert>
+              ) : null}
+              {product.preorder ? (
+                <Alert role="status" variant="info">
+                  Available on {formatDate(parseISO(product.preorder.release_date))}
+                </Alert>
+              ) : null}
+              {product.streamable ? (
+                <Alert role="status" variant="info">
+                  Video link provided after purchase
+                </Alert>
+              ) : null}
+            </>
+          )}
           {product.summary || product.attributes.length > 0 ? (
             <Card>
               {product.summary ? (
@@ -913,8 +926,8 @@ export const Product = ({
               ))}
             </Card>
           ) : null}
-          <ShareSection product={product} selection={selection} wishlists={wishlists} />
-          {product.refund_policy ? (
+          {product.waitlist ? null : <ShareSection product={product} selection={selection} wishlists={wishlists} />}
+          {product.refund_policy && !product.waitlist ? (
             <RefundPolicyInfo refundPolicy={product.refund_policy} permalink={product.permalink} />
           ) : null}
         </section>

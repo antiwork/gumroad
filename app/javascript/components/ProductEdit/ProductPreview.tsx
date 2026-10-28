@@ -48,6 +48,8 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     };
   }, [product.default_offer_code]);
 
+  const showsWaitlist = product.waitlist_enabled && !product.is_published;
+
   const serializedProduct: Product = {
     id,
     name: product.name,
@@ -87,6 +89,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     is_multiseat_license: false,
     is_licensed: false,
     hide_sold_out_variants: product.hide_sold_out_variants,
+    waitlist: showsWaitlist ? { recaptcha_site_key: null, count: null } : null,
     sales_count: product.should_show_sales_count ? successfulSalesCount : null,
     custom_button_text_option: product.custom_button_text_option,
     summary: product.custom_summary,
@@ -144,7 +147,8 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     },
     has_third_party_analytics: false,
     ppp_details: null,
-    can_edit: false,
+    // The seller is the one viewing this preview, so the waitlist form shows inactive, as on their own page.
+    can_edit: showsWaitlist,
     refund_policy: previewRefundPolicy({
       sellerRefundPolicyEnabled: seller_refund_policy_enabled,
       sellerRefundPolicy: seller_refund_policy,

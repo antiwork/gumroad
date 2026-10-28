@@ -133,6 +133,7 @@ it("saves changed state after the active save reconciles server ids", async () =
     can_enable_quantity: true,
     should_show_sales_count: false,
     hide_sold_out_variants: false,
+    waitlist_enabled: false,
     is_epublication: false,
     product_refund_policy_enabled: false,
     refund_policy: {
@@ -305,6 +306,7 @@ it("reconciles same-id pages in different variant scopes using each variant's ow
     can_enable_quantity: true,
     should_show_sales_count: false,
     hide_sold_out_variants: false,
+    waitlist_enabled: false,
     is_epublication: false,
     product_refund_policy_enabled: false,
     refund_policy: {
@@ -504,6 +506,7 @@ it("keeps a newly-created variant's move provenance after its own id is remapped
     can_enable_quantity: true,
     should_show_sales_count: false,
     hide_sold_out_variants: false,
+    waitlist_enabled: false,
     is_epublication: false,
     product_refund_policy_enabled: false,
     refund_policy: {
@@ -681,6 +684,7 @@ const buildTieredProduct = (variants: Version[]): Product => ({
   can_enable_quantity: true,
   should_show_sales_count: false,
   hide_sold_out_variants: false,
+  waitlist_enabled: false,
   is_epublication: false,
   product_refund_policy_enabled: false,
   refund_policy: {

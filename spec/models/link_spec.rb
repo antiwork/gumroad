@@ -562,4 +562,42 @@ describe Link do
       expect(product.recurrences[:free_trial_reminder_days]).to be_nil
     end
   end
+
+  describe "#accepts_waitlist_signups?" do
+    let(:product) { create(:product, waitlist_enabled: true, purchase_disabled_at: Time.current) }
+
+    it "is true for an unpublished product with the waitlist on" do
+      expect(product.accepts_waitlist_signups?).to be(true)
+    end
+
+    it "is true for a draft" do
+      product.update!(purchase_disabled_at: nil, draft: true)
+
+      expect(product.accepts_waitlist_signups?).to be(true)
+    end
+
+    it "is false with the waitlist off" do
+      product.update!(waitlist_enabled: false)
+
+      expect(product.accepts_waitlist_signups?).to be(false)
+    end
+
+    it "is false for a product that still has the retired Iffy moderation flag" do
+      product = create(:product, DEPRECATED_moderated_by_iffy: true, purchase_disabled_at: Time.current)
+
+      expect(product.accepts_waitlist_signups?).to be(false)
+    end
+
+    it "is false once the product is published" do
+      product.update!(purchase_disabled_at: nil)
+
+      expect(product.accepts_waitlist_signups?).to be(false)
+    end
+
+    it "is false for a product that staff unpublished, banned, or deleted" do
+      expect(create(:product, waitlist_enabled: true, purchase_disabled_at: Time.current, is_unpublished_by_admin: true).accepts_waitlist_signups?).to be(false)
+      expect(create(:product, waitlist_enabled: true, purchase_disabled_at: Time.current, banned_at: Time.current).accepts_waitlist_signups?).to be(false)
+      expect(create(:product, waitlist_enabled: true, purchase_disabled_at: Time.current, deleted_at: Time.current).accepts_waitlist_signups?).to be(false)
+    end
+  end
 end
