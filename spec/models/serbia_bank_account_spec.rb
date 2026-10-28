@@ -46,6 +46,13 @@ describe SerbiaBankAccount do
         expect(rs_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
       end
 
+      %w[RS00908000000001650142 RS99908000000001650142].each do |iban|
+        rs_bank_account = build(:serbia_bank_account, account_number: iban)
+        expect(rs_bank_account).to_not be_valid
+        expect(rs_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      end
+      expect(build(:serbia_bank_account, account_number: "RS35908000000001650142")).to be_valid
+
       rs_bank_account = build(:serbia_bank_account, account_number: "MA12345")
       expect(rs_bank_account).to_not be_valid
       expect(rs_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")

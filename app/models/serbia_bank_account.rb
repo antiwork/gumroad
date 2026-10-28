@@ -50,7 +50,9 @@ private
   end
 
   def validate_account_number
-    return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(account_number_decrypted)
+    decrypted = account_number_decrypted
+    # Stripe also enforces the IBAN mod-97 check digits, so a 22-char value with wrong ones still fails at bank-sync.
+    return if ACCOUNT_NUMBER_FORMAT_REGEX.match?(decrypted) && Ibandit::IBAN.new(decrypted).valid_check_digits?
     errors.add :base, "The account number is invalid."
   end
 end
