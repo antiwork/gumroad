@@ -42,6 +42,14 @@ describe "Web build player", type: :request do
       )
     end
 
+    it "does not show the internal ids in the frame's URL" do
+      grant = frame_path.split("/")[4]
+
+      decoded = Base64.urlsafe_decode64(grant.split("--").first + "==") rescue ""
+      expect(decoded).not_to include(build.site_prefix)
+      expect(grant).not_to include(Base64.strict_encode64(build.site_prefix).delete("="))
+    end
+
     it "returns 404 when the live build has not been unpacked" do
       build.update!(site_unpacked_at: nil)
 

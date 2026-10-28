@@ -47,11 +47,11 @@ class ProductBuild < ApplicationRecord
 
   def live? = status == "live"
 
-  # A signed path segment that lets the player's frame load this build's files for one purchase.
+  # An encrypted path segment that lets the player's frame load this build's files for one purchase.
   # The frame is an opaque origin, so its file requests carry no session cookies: the access check
   # runs once, on the content-page token, and the grant carries the result until it expires.
   def player_grant(url_redirect_token:, purchase_id:)
-    self.class.player_grant_verifier.generate(
+    self.class.player_grant_encryptor.encrypt_and_sign(
       { "token" => url_redirect_token, "purchase_id" => purchase_id, "seller_id" => product.user_id, "site_prefix" => site_prefix },
       purpose: PLAYER_GRANT_PURPOSE,
       expires_in: PLAYER_GRANT_VALID_FOR,
@@ -60,14 +60,18 @@ class ProductBuild < ApplicationRecord
 
   # The grant's payload when it is valid and was issued for this content-page token, or nil.
   def self.verified_player_grant(grant, url_redirect_token:)
-    payload = player_grant_verifier.verified(grant.to_s, purpose: PLAYER_GRANT_PURPOSE)
+    payload = player_grant_encryptor.decrypt_and_verify(grant.to_s, purpose: PLAYER_GRANT_PURPOSE)
     payload if payload.is_a?(Hash) && payload["token"] == url_redirect_token
+  rescue ActiveSupport::MessageEncryptor::InvalidMessage
+    nil
   end
 
-  def self.player_grant_verifier
-    # url_safe because the grant is a path segment.
-    @player_grant_verifier ||= ActiveSupport::MessageVerifier.new(
-      Rails.application.key_generator.generate_key("product_build_player_grant"), url_safe: true, serializer: JSON,
+  # Encrypted, not only signed: the grant is in the frame's URL, and it holds internal ids.
+  # url_safe because it is a path segment.
+  def self.player_grant_encryptor
+    @player_grant_encryptor ||= ActiveSupport::MessageEncryptor.new(
+      Rails.application.key_generator.generate_key("product_build_player_grant", ActiveSupport::MessageEncryptor.key_len),
+      url_safe: true, serializer: JSON,
     )
   end
 
