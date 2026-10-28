@@ -70,7 +70,7 @@ class PartnerMigrationImportJob
         elsif result["media_pending"]
           # A previous attempt stopped after it created the product. Retrying the media could add
           # the same covers twice, so report it instead.
-          record_result(migration, index, "product_id" => result["product_id"], "warnings" => ["The import stopped before the covers and thumbnail were added."])
+          record_result(migration, index, { "product_id" => result["product_id"], "warnings" => ["The import stopped before the covers and thumbnail were added."] }, only_while_media_pending: true)
         end
       rescue AccountInactive
         return stop_for_inactive_account(migration)
@@ -143,7 +143,7 @@ class PartnerMigrationImportJob
             next
           end
 
-          importer.create_product!(file_urls).tap { record_result(migration, index, "product_id" => _1.external_id, "media_pending" => true) }
+          importer.create_product!(file_urls).tap { record_result(migration, index, { "product_id" => _1.external_id, "media_pending" => true }) }
         end
       rescue StandardError
         # An after_commit callback can raise after the product is saved. Its files must stay.
@@ -162,7 +162,7 @@ class PartnerMigrationImportJob
       # A saved product keeps its result. The retry reports its unfinished media.
       raise if product_recorded?(migration, index)
 
-      record_result(migration, index, "error" => e.message)
+      record_result(migration, index, { "error" => e.message })
     end
 
     def product_recorded?(migration, index)
@@ -171,10 +171,12 @@ class PartnerMigrationImportJob
 
     # Merges into the stored results under the lock, so a run that overlaps after a resume cannot
     # overwrite results that the other run recorded.
-    def record_result(migration, index, result)
+    def record_result(migration, index, result, only_while_media_pending: false)
       migration.with_lock do
         # An overlapping run may have saved this product after this run checked, so keep its product.
         next if result.key?("error") && migration.results&.dig(index.to_s, "product_id")
+        # ... or finished its media, so keep that run's warnings.
+        next if only_while_media_pending && !migration.results&.dig(index.to_s, "media_pending")
 
         migration.update!(results: (migration.results || {}).merge(index.to_s => result))
       end

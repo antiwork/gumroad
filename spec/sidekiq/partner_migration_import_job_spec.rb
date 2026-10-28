@@ -320,6 +320,20 @@ describe PartnerMigrationImportJob do
     expect(migration.results["0"]).to include("product_id" => Link.where(user_id: seller.id).sole.external_id)
   end
 
+  it "keeps the media result that an overlapping run recorded instead of reporting the media as stopped" do
+    migration = create_claimed_migration([product_attributes.merge(files: [], covers: [], thumbnail_url: nil)])
+    migration.update!(results: { "0" => { "product_id" => "saved-product", "media_pending" => true } })
+    finished = { "product_id" => "saved-product", "warnings" => ["Cover could not be imported."] }
+    allow_any_instance_of(described_class).to receive(:record_result).and_wrap_original do |original, *args, **options|
+      PartnerMigration.where(id: migration.id).update_all(results: { "0" => finished })
+      original.call(*args, **options)
+    end
+
+    described_class.new.perform(migration.id)
+
+    expect(migration.reload.results).to eq("0" => finished)
+  end
+
   it "deletes the files it uploaded when a later file fails" do
     migration = create_claimed_migration([product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/missing.zip" }])])
 
