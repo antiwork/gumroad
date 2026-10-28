@@ -87,9 +87,9 @@ class PartnerMigrationsController < ApplicationController
       return render :setup, status: :unprocessable_entity
     end
 
-    @migration.complete_account_setup!(password: params[:password].to_s, ip: request.remote_ip, expected_token_digest: params[:account_setup_token_digest])
+    seller = @migration.complete_account_setup!(password: params[:password].to_s, ip: request.remote_ip, expected_token_digest: params[:account_setup_token_digest])
     session.delete(SETUP_SESSION_KEY)
-    sign_in_new_seller(@migration.user)
+    sign_in_new_seller(seller)
     redirect_to_products(@migration)
   rescue ActiveRecord::RecordInvalid => e
     @error_message = e.record.errors.full_messages.first

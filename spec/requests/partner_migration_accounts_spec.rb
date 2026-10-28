@@ -149,6 +149,18 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     expect(flash[:notice]).to eq("Your 2 products from Example App are here as drafts.")
   end
 
+  it "signs in with the new password's session salt, so the session survives the next request" do
+    create_account
+    get partner_migration_account_setup_path(account_setup_token: emailed_tokens.sole)
+    follow_redirect!
+    post partner_migration_account_setup_path, params: { password: "a-long-new-password-123", terms_accepted: "1", **setup_form_fields }
+
+    _user_key, session_salt = session["warden.user.user.key"]
+    expect(session_salt).to eq(migration.reload.user.authenticatable_salt)
+    follow_redirect!
+    expect(response).to have_http_status(:ok)
+  end
+
   it "remembers this browser, so the seller's next login skips two-factor authentication, as after signup" do
     create_account
     get partner_migration_account_setup_path(account_setup_token: emailed_tokens.sole)

@@ -172,6 +172,11 @@ class PartnerMigrationImportJob
     # Merges into the stored results under the lock, so a run that overlaps after a resume cannot
     # overwrite results that the other run recorded.
     def record_result(migration, index, result)
-      migration.with_lock { migration.update!(results: (migration.results || {}).merge(index.to_s => result)) }
+      migration.with_lock do
+        # An overlapping run may have saved this product after this run checked, so keep its product.
+        next if result.key?("error") && migration.results&.dig(index.to_s, "product_id")
+
+        migration.update!(results: (migration.results || {}).merge(index.to_s => result))
+      end
     end
 end

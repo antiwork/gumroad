@@ -388,6 +388,8 @@ class PartnerMigration < ApplicationRecord
     end
     # skip_confirmation! skips User#after_confirmation, which attaches the address's guest purchases.
     AttachPastPurchasesToUserWorker.perform_async(account.id, account.email)
+    # The saved account, because Devise signs in with the password hash that it holds.
+    account
   end
 
   # The same creator can claim again while the import has not finished, so a failed enqueue can be
