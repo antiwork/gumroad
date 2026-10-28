@@ -133,6 +133,9 @@ describe ProductPresenter::ProductProps do
               has_third_party_analytics: false,
               ppp_details: nil,
               can_edit: false,
+              waitlist_enabled: false,
+              waitlist_count: nil,
+              follow_recaptcha_site_key: nil,
               refund_policy: {
                 title: "30-day money back guarantee",
                 fine_print: nil,
@@ -412,6 +415,9 @@ describe ProductPresenter::ProductProps do
               has_third_party_analytics: false,
               ppp_details: nil,
               can_edit: false,
+              waitlist_enabled: false,
+              waitlist_count: nil,
+              follow_recaptcha_site_key: nil,
               refund_policy: {
                 title: product.user.refund_policy.title,
                 fine_print: product.user.refund_policy.fine_print,
@@ -1119,6 +1125,48 @@ describe ProductPresenter::ProductProps do
       product = create(:product, user: seller)
 
       expect(described_class.new(product:).selection_discounts(url_code: nil, quantity: 1, recurrence: nil, buyer:)[:options]).to eq({})
+    end
+  end
+
+  describe "#props for a waitlist" do
+    let(:seller) { create(:user, name: "Testy", username: "testy") }
+    let(:request) { OpenStruct.new(remote_ip: "12.12.128.128", host: "example.com", host_with_port: "example.com", params: {}, cookie_jar: {}) }
+    let(:product) { create(:product, user: seller, draft: true) }
+
+    before do
+      create(:payment_completed, user: seller)
+      allow(request).to receive(:cookie_jar).and_return({})
+      allow(request).to receive(:params).and_return({})
+    end
+
+    def props(pundit_user:)
+      described_class.new(product:).props(seller_custom_domain_url: nil, request:, pundit_user:)[:product]
+    end
+
+    it "turns the form on only while the product is not on sale" do
+      product.update_flag!(:waitlist_enabled, true, true)
+      expect(props(pundit_user: SellerContext.new(user: seller, seller:))[:waitlist_enabled]).to eq(true)
+
+      product.publish!
+      expect(props(pundit_user: SellerContext.new(user: seller, seller:))[:waitlist_enabled]).to eq(false)
+    end
+
+    it "gives the count to the seller and no one else" do
+      product.update_flag!(:waitlist_enabled, true, true)
+      create(:waitlist_entry, follower: create(:follower, user: seller), product:)
+
+      expect(props(pundit_user: SellerContext.new(user: seller, seller:))[:waitlist_count]).to eq(1)
+      expect(props(pundit_user: nil)[:waitlist_count]).to be_nil
+    end
+
+    it "gives the visitor a CAPTCHA key only while the form is on and the seller needs one" do
+      allow(GlobalConfig).to receive(:get).and_call_original
+      allow(GlobalConfig).to receive(:get).with("RECAPTCHA_FOLLOW_SITE_KEY").and_return("follow-key")
+
+      expect(props(pundit_user: nil)[:follow_recaptcha_site_key]).to be_nil
+
+      product.update_flag!(:waitlist_enabled, true, true)
+      expect(props(pundit_user: nil)[:follow_recaptcha_site_key]).to eq("follow-key")
     end
   end
 end

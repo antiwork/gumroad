@@ -562,4 +562,53 @@ describe Link do
       expect(product.recurrences[:free_trial_reminder_days]).to be_nil
     end
   end
+
+  describe "waitlist" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, draft: true) }
+
+    it "offers the waitlist on a product that has never been published" do
+      expect(product.waitlist_offered?).to eq(true)
+
+      product.update_flag!(:waitlist_enabled, true, true)
+      expect(product.waitlist_available?).to eq(true)
+    end
+
+    it "offers the waitlist on a product the seller took off sale" do
+      product.update_flag!(:waitlist_enabled, true, true)
+      product.publish!
+      expect(product.waitlist_available?).to eq(false)
+
+      product.unpublish!
+      expect(product.reload.waitlist_available?).to eq(true)
+    end
+
+    it "keeps the waitlist off a live product" do
+      product.update_flag!(:waitlist_enabled, true, true)
+      product.publish!
+
+      expect(product.reload.waitlist_offered?).to eq(false)
+      expect(product.waitlist_available?).to eq(false)
+    end
+
+    it "keeps the waitlist off a product staff unpublished" do
+      product.update_flag!(:waitlist_enabled, true, true)
+      product.unpublish!(is_unpublished_by_admin: true)
+
+      expect(product.reload.waitlist_available?).to eq(false)
+    end
+
+    it "keeps the waitlist off a banned or deleted product" do
+      product.update_flag!(:waitlist_enabled, true, true)
+      product.update_columns(banned_at: Time.current)
+      expect(product.reload.waitlist_available?).to eq(false)
+
+      product.update_columns(banned_at: nil, deleted_at: Time.current)
+      expect(product.reload.waitlist_available?).to eq(false)
+    end
+
+    it "shows nothing while the switch is off" do
+      expect(product.waitlist_available?).to eq(false)
+    end
+  end
 end

@@ -79,7 +79,7 @@ class FollowersController < ApplicationController
           return
         end
 
-        render json: { success: true, message: follow_confirmation_message(follower) }
+        render json: { success: true, message: follow_confirmation_message(follower), confirmed: follower.confirmed? }
       end
     end
   end

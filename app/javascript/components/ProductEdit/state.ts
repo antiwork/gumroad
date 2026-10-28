@@ -150,6 +150,10 @@ export type Product = {
   quantity_enabled: boolean;
   can_enable_quantity: boolean;
   should_show_sales_count: boolean;
+  waitlist_enabled: boolean;
+  // The waitlist can only show while the product is not on sale, so the editor hides its
+  // switch on a live product.
+  waitlist_available: boolean;
   hide_sold_out_variants: boolean;
   is_epublication: boolean;
   product_refund_policy_enabled: boolean;

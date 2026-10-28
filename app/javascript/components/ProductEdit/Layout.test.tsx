@@ -97,6 +97,8 @@ const product: Product = {
   quantity_enabled: false,
   can_enable_quantity: true,
   should_show_sales_count: false,
+  waitlist_enabled: false,
+  waitlist_available: false,
   hide_sold_out_variants: false,
   is_epublication: false,
   product_refund_policy_enabled: false,

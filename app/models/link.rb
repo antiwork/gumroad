@@ -41,7 +41,7 @@ class Link < ApplicationRecord
             29 => :is_unpublished_by_admin,
             30 => :community_chat_enabled,
             31 => :created_via_cli,
-            32 => :DEPRECATED_moderated_by_iffy,
+            32 => :waitlist_enabled,
             33 => :hide_sold_out_variants,
             34 => :hide_bundle_product_reviews,
             :column => "flags",
@@ -170,6 +170,7 @@ class Link < ApplicationRecord
   has_many :sales_holds, class_name: "ProductSalesHold", foreign_key: :product_id
   has_many :workflows
   has_many :dropbox_files
+  has_many :waitlist_entries, foreign_key: :product_id, inverse_of: :product, dependent: :destroy
   has_many :shipping_destinations
   has_many :shipping_exclusions, foreign_key: :product_id
   has_many :product_affiliates
@@ -509,6 +510,18 @@ class Link < ApplicationRecord
     purchase_disabled_at.nil? && banned_at.nil? && deleted_at.nil?
   end
   alias_method :alive, :alive?
+
+  # Where a waitlist can stand in for the buy button: a product that is not on sale yet. A
+  # deleted, banned or staff-unpublished product keeps it off — that page is not a launch page.
+  def waitlist_offered?
+    return false if banned_at.present? || deleted_at.present? || is_unpublished_by_admin?
+
+    draft? || purchase_disabled_at.present?
+  end
+
+  def waitlist_available?
+    waitlist_enabled? && waitlist_offered?
+  end
 
   def published?
     deleted_at.nil? && purchase_disabled_at.nil? && !draft

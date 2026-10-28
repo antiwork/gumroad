@@ -94,90 +94,100 @@ export const ShareSection = ({
 
   return (
     <>
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        <ComboBox
-          input={(props) => (
-            <div
-              {...props}
-              className={classNames(
-                "flex cursor-pointer items-center rounded border border-border bg-background px-4 py-3",
-                dropdownState.state !== "closed" && "rounded-b-none",
-              )}
-              aria-label="Add to wishlist"
-            >
-              <span className="flex-1 truncate">
-                {saveState.type === "success"
-                  ? saveState.wishlist.name
-                  : saveState.type === "saving"
-                    ? "Adding to wishlist..."
-                    : "Add to wishlist"}
-              </span>
-              <ChevronDown className="size-5" />
-            </div>
-          )}
-          disabled={saveState.type === "saving"}
-          options={[...wishlists, { id: null }]}
-          option={(wishlist, props) =>
-            wishlist.id ? (
+      <div
+        className={classNames(
+          "grid gap-2",
+          // With the wishlist hidden the share button is the only child, and it should keep its
+          // own width instead of stretching across the column.
+          product.waitlist_enabled ? "grid-cols-[auto]" : "grid-cols-[1fr_auto]",
+        )}
+      >
+        {/* A wishlist is a purchase intent, so it has no place on a page that is not on sale yet. */}
+        {product.waitlist_enabled ? null : (
+          <ComboBox
+            input={(props) => (
               <div
                 {...props}
-                inert={isSelectionInWishlist(wishlist)}
-                className={classNames(props.className, isSelectionInWishlist(wishlist) ? "opacity-30" : undefined)}
-                onClick={(e) => {
-                  props.onClick?.(e);
-                  void addProduct(Promise.resolve({ newlyCreated: false, wishlist }));
-                }}
+                className={classNames(
+                  "flex cursor-pointer items-center rounded border border-border bg-background px-4 py-3",
+                  dropdownState.state !== "closed" && "rounded-b-none",
+                )}
+                aria-label="Add to wishlist"
               >
-                <div>
-                  <FileDetail className="size-5" /> {wishlist.name}
-                </div>
+                <span className="flex-1 truncate">
+                  {saveState.type === "success"
+                    ? saveState.wishlist.name
+                    : saveState.type === "saving"
+                      ? "Adding to wishlist..."
+                      : "Add to wishlist"}
+                </span>
+                <ChevronDown className="size-5" />
               </div>
-            ) : dropdownState.state === "creating" ? (
-              <form
-                role={props.role}
-                className="flex gap-2 p-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (!dropdownState.newWishlistName.trim()) {
-                    showAlert("Please enter a wishlist name", "error");
-                    return;
-                  }
-                  void addProduct(newWishlist(dropdownState.newWishlistName));
-                }}
-              >
-                <Input
-                  type="text"
-                  autoFocus
-                  placeholder="Wishlist name"
-                  value={dropdownState.newWishlistName}
-                  onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
-                  aria-label="Wishlist name"
-                />
-                <Button type="submit" size="icon" aria-label="Create wishlist" color="primary">
-                  <Check className="size-5" />
-                </Button>
-              </form>
-            ) : (
-              <div {...props} onClick={() => setDropdownState({ state: "creating", newWishlistName: "" })}>
-                <div>
-                  <Plus className="size-5" /> New wishlist
+            )}
+            disabled={saveState.type === "saving"}
+            options={[...wishlists, { id: null }]}
+            option={(wishlist, props) =>
+              wishlist.id ? (
+                <div
+                  {...props}
+                  inert={isSelectionInWishlist(wishlist)}
+                  className={classNames(props.className, isSelectionInWishlist(wishlist) ? "opacity-30" : undefined)}
+                  onClick={(e) => {
+                    props.onClick?.(e);
+                    void addProduct(Promise.resolve({ newlyCreated: false, wishlist }));
+                  }}
+                >
+                  <div>
+                    <FileDetail className="size-5" /> {wishlist.name}
+                  </div>
                 </div>
-              </div>
-            )
-          }
-          open={loggedInUser ? dropdownState.state !== "closed" : false}
-          onToggle={(open) => {
-            if (!loggedInUser) {
-              window.location.href = Routes.login_url({ host: appDomain, next: product.long_url });
-              return;
+              ) : dropdownState.state === "creating" ? (
+                <form
+                  role={props.role}
+                  className="flex gap-2 p-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!dropdownState.newWishlistName.trim()) {
+                      showAlert("Please enter a wishlist name", "error");
+                      return;
+                    }
+                    void addProduct(newWishlist(dropdownState.newWishlistName));
+                  }}
+                >
+                  <Input
+                    type="text"
+                    autoFocus
+                    placeholder="Wishlist name"
+                    value={dropdownState.newWishlistName}
+                    onChange={(e) => setDropdownState({ state: "creating", newWishlistName: e.target.value })}
+                    aria-label="Wishlist name"
+                  />
+                  <Button type="submit" size="icon" aria-label="Create wishlist" color="primary">
+                    <Check className="size-5" />
+                  </Button>
+                </form>
+              ) : (
+                <div {...props} onClick={() => setDropdownState({ state: "creating", newWishlistName: "" })}>
+                  <div>
+                    <Plus className="size-5" /> New wishlist
+                  </div>
+                </div>
+              )
             }
-            if (open) {
-              setDropdownState({ state: "open" });
-            } else {
-              setDropdownState({ state: "closed" });
-            }
-          }}
-        />
+            open={loggedInUser ? dropdownState.state !== "closed" : false}
+            onToggle={(open) => {
+              if (!loggedInUser) {
+                window.location.href = Routes.login_url({ host: appDomain, next: product.long_url });
+                return;
+              }
+              if (open) {
+                setDropdownState({ state: "open" });
+              } else {
+                setDropdownState({ state: "closed" });
+              }
+            }}
+          />
+        )}
 
         <Popover>
           <PopoverAnchor>

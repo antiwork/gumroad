@@ -21,6 +21,8 @@ class ProductPresenter::ProductProps
     buyer_currency_display = buyer_currency_display_props(product:, price_cents: displayed_price_cents, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request))
     options = product.options
     rental = product.rental
+    can_edit = pundit_user&.user ? Pundit.policy!(pundit_user, product).edit? : false
+    waitlist_enabled = product.waitlist_available?
 
     {
       product: {
@@ -79,7 +81,14 @@ class ProductPresenter::ProductProps
         analytics: product.analytics_data,
         has_third_party_analytics: product.has_third_party_analytics?("product"),
         ppp_details:,
-        can_edit: pundit_user&.user ? Pundit.policy!(pundit_user, product).edit? : false,
+        can_edit:,
+        # The waitlist form stands in for the buy button while the product is not on sale.
+        waitlist_enabled:,
+        # Only the seller's own view shows how many people are waiting.
+        waitlist_count: can_edit ? product.waitlist_entries.count : nil,
+        # Non-null only for a seller whose follows need a CAPTCHA; the waitlist form runs the
+        # challenge in the same shape as the subscribe form.
+        follow_recaptcha_site_key: waitlist_enabled && FollowRecaptcha.required?(seller) ? FollowRecaptcha.site_key : nil,
         refund_policy: refund_policy_props,
         bundle_products: product.bundle_products.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },

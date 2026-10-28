@@ -80,6 +80,9 @@ const product = (overrides: Partial<Product> = {}): Product => ({
   has_third_party_analytics: false,
   ppp_details: null,
   can_edit: false,
+  waitlist_enabled: false,
+  waitlist_count: null,
+  follow_recaptcha_site_key: null,
   refund_policy: null,
   bundle_products: [],
   public_files: [],
@@ -94,6 +97,9 @@ const creatorProfile = {
   subdomain: "seller",
   is_verified: false,
   can_edit: false,
+  waitlist_enabled: false,
+  waitlist_count: null,
+  follow_recaptcha_site_key: null,
 };
 
 const renderPage = (overrides: Partial<Product> = {}) => {

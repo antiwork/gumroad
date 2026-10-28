@@ -463,6 +463,13 @@ export const ProductTab = () => {
                         : "Publicly show the number of sales on your product page"
                     }
                   />
+                  {product.waitlist_available ? (
+                    <Switch
+                      checked={product.waitlist_enabled}
+                      onChange={(e) => updateProduct({ waitlist_enabled: e.target.checked })}
+                      label="Let people join a waitlist on your product page"
+                    />
+                  ) : null}
                   {product.native_type !== "physical" ? (
                     <Switch
                       checked={product.is_epublication}

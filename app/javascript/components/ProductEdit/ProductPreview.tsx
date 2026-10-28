@@ -145,6 +145,11 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     has_third_party_analytics: false,
     ppp_details: null,
     can_edit: false,
+    // The preview pane shows the waitlist the moment the switch is on, so the seller sees what
+    // buyers get before publishing.
+    waitlist_enabled: product.waitlist_enabled && product.waitlist_available,
+    waitlist_count: null,
+    follow_recaptcha_site_key: null,
     refund_policy: previewRefundPolicy({
       sellerRefundPolicyEnabled: seller_refund_policy_enabled,
       sellerRefundPolicy: seller_refund_policy,

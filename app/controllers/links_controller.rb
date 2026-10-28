@@ -1436,7 +1436,7 @@ class LinksController < ApplicationController
                                    :risk_score, :risk_score_updated_at, :customizable_price,
                                    :is_recurring_billing, :subscription_duration, :json_data,
                                    :is_physical, :skus_enabled, :block_access_after_membership_cancellation, :purchase_type,
-                                   :should_include_last_post, :should_show_all_posts, :should_show_sales_count, :duration_in_months,
+                                   :should_include_last_post, :should_show_all_posts, :should_show_sales_count, :waitlist_enabled, :duration_in_months,
                                    :free_trial_enabled, :free_trial_duration_amount, :free_trial_duration_unit,
                                    :is_adult, :is_epublication, :product_refund_policy_enabled, :seller_refund_policy_enabled,
                                    :refund_policy, :taxonomy_id)

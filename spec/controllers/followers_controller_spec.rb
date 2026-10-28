@@ -243,6 +243,17 @@ describe FollowersController, inertia: true do
         expect(WaitlistEntry.last.product).to eq unpublished_product
       end
 
+      # The waitlist form picks its success copy from this flag: a confirmed subscriber is
+      # already on the list, everyone else still has to open the confirmation email.
+      it "reports whether the follower is already confirmed" do
+        post :create, params: { email: "follower@example.com", seller_id: seller.external_id }, format: :json
+        expect(response.parsed_body["confirmed"]).to eq(false)
+
+        create(:active_follower, email: "confirmed@example.com", followed_id: seller.id)
+        post :create, params: { email: "confirmed@example.com", seller_id: seller.external_id }, format: :json
+        expect(response.parsed_body["confirmed"]).to eq(true)
+      end
+
       it "redirects to subscribe page with alert when email is invalid" do
         post :create, params: { email: "invalid email", seller_id: seller.external_id }
         expect(response).to redirect_to(custom_domain_subscribe_path)

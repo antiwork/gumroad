@@ -81,6 +81,7 @@ class LinkPolicy < ApplicationPolicy
       :max_purchase_count,
       :quantity_enabled,
       :should_show_sales_count,
+      :waitlist_enabled,
       :hide_sold_out_variants,
       :custom_button_text_option,
       :custom_summary,

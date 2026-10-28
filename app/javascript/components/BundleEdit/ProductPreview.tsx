@@ -127,6 +127,9 @@ export const ProductPreview = ({
           has_third_party_analytics: false,
           ppp_details: null,
           can_edit: false,
+          waitlist_enabled: false,
+          waitlist_count: null,
+          follow_recaptcha_site_key: null,
           refund_policy: previewRefundPolicy({
             sellerRefundPolicyEnabled,
             sellerRefundPolicy,
