@@ -81,13 +81,13 @@ describe AudienceMember::Searchable, :freeze_time do
       member = nil
       expect do
         member = create(:audience_member, purchases: [{ "id" => 1 }])
-      end.to change { ElasticsearchIndexerWorker.jobs.size }.by(2)
+      end.to change { ElasticsearchIndexerWorker.jobs.size }.by(1)
       expect(ElasticsearchIndexerWorker.jobs.last["args"]).to eq(["index", { "record_id" => member.id, "class_name" => "AudienceMember" }])
 
       expect do
         member.details["purchases"] << { "id" => 2, "product_id" => 2, "price_cents" => 200, "created_at" => 1.day.ago.iso8601 }
         member.save!
-      end.to change { ElasticsearchIndexerWorker.jobs.size }.by(2)
+      end.to change { ElasticsearchIndexerWorker.jobs.size }.by(1)
       operation, options = ElasticsearchIndexerWorker.jobs.last["args"]
       expect(operation).to eq("update")
       expect(options["record_id"]).to eq(member.id)

@@ -2916,18 +2916,29 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
+      # The refusal depends on MerchantAccount#paypal_account_details mapping PayPal's "C2" to "CN".
       context "when PayPal returns C2 instead of CN as country code for Chinese accounts" do
         before do
           seller.alive_user_compliance_info.update_columns(country: "China")
         end
 
-        it "still connects the paypal account" do
+        it "refuses the connection and leaves no live merchant account behind" do
+          get :paypal_connect, params: paypal_params(paypal_merchant_reference: "MUWSRAF6QLQJG")
+
+          expect(response).to redirect_to(checkout_form_path)
+          expect(flash[:notice]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
+          expect(seller.merchant_accounts.alive.count).to eq(0)
+        end
+
+        it "does not re-run the country check on an already verified mainland-China account" do
+          create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "MUWSRAF6QLQJG",
+                                           charge_processor_verified_at: Time.current, charge_processor_alive_at: Time.current)
+
           get :paypal_connect, params: paypal_params(paypal_merchant_reference: "MUWSRAF6QLQJG")
 
           expect(response).to redirect_to(checkout_form_path)
           expect(flash[:notice]).to eq("You have successfully connected your PayPal account with Gumroad.")
-          expect(seller.merchant_accounts.count).to eq(1)
-          expect(seller.merchant_accounts.paypal.last.country).to eq("CN")
+          expect(seller.merchant_accounts.alive.paypal.count).to eq(1)
         end
       end
 

@@ -150,6 +150,17 @@ describe "Product builds API" do
       expect(build.reload.product_file).to eq(file)
     end
 
+    it "queues the unpack of the zip it just made live" do
+      deploy(upload_zip)
+      build = product.product_builds.sole
+
+      expect do
+        post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/promote", params: { access_token: token.token }
+      end.to change { ProductBuildUnpackJob.jobs.size }.by(1)
+
+      expect(ProductBuildUnpackJob.jobs.last["args"]).to eq([build.id])
+    end
+
     it "supersedes the previous live build and swaps the download" do
       deploy(upload_zip)
       deploy(upload_zip)

@@ -439,17 +439,17 @@ describe "Product::Searchable - Indexing scenarios" do
       @product.save_files!([{ external_id: SecureRandom.uuid, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachment/pic.jpg" }])
     end
 
-    it "enqueues the job when a purchase transitions to the successful state" do
-      expect_product_update %w[is_recommendable]
+    it "enqueues one delayed job, and nothing synchronous, when a purchase transitions to the successful state" do
+      expect(ProductIndexingService).not_to receive(:perform)
       create(:purchase_with_balance, link: @product, seller: @product.user, price_cents: @product.price_cents)
-      expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(@product.id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"])
+      expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(@product.id, "update", %w[is_recommendable sales_volume total_fee_cents past_year_fee_cents]).in(5.seconds)
     end
 
-    it "enqueues the job when a purchase transitions to the preorder_authorization_successful state" do
-      expect_product_update %w[is_recommendable]
+    it "enqueues one delayed job, and nothing synchronous, when a purchase transitions to the preorder_authorization_successful state" do
+      expect(ProductIndexingService).not_to receive(:perform)
       purchase = create(:purchase_in_progress, link: @product, seller: @product.user, is_preorder_authorization: true)
       purchase.mark_preorder_authorization_successful
-      expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(@product.id, "update", ["sales_volume", "total_fee_cents", "past_year_fee_cents"])
+      expect(SendToElasticsearchWorker).to have_enqueued_sidekiq_job(@product.id, "update", %w[is_recommendable sales_volume total_fee_cents past_year_fee_cents]).in(5.seconds)
     end
   end
 

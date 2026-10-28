@@ -33,11 +33,9 @@ class DevTools
         print "Importing purchases where affiliate_credit.affiliate_user_id=#{user.id} => #{rel.count} records..."
         es_import_with_time(rel)
 
-        [Link, Balance].each do |model|
-          rel = model.where(user_id: user.id)
-          print "Importing #{model.name} user_id=#{user.id} => #{rel.count} records..."
-          es_import_with_time(rel)
-        end
+        rel = Link.where(user_id: user.id)
+        print "Importing Link user_id=#{user.id} => #{rel.count} records..."
+        es_import_with_time(rel)
 
         rel = AudienceMember.where(seller_id: user.id)
         print "Importing audience members seller_id=#{user.id} => #{rel.count} records..."
@@ -58,7 +56,7 @@ class DevTools
       end
       ActiveRecord::Base.connection.enable_query_cache!
       without_loggers do
-        [Purchase, Link, Balance, Installment, AudienceMember].each do |model|
+        [Purchase, Link, Installment, AudienceMember].each do |model|
           print "Recreating index and importing #{model.name} => #{model.count} records..."
           es_import_with_time(model, force: true)
         end

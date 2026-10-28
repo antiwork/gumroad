@@ -38,6 +38,10 @@ type PrefectureConfig = {
 // The longest reason Show.tsx sets beside a (Kanji) field; keep the two in step.
 const LONGEST_FIELD_ERROR_MESSAGE = "Must include Japanese characters.";
 
+// Stripe caps an address's line1 at 200 characters and rejects the save behind a message naming no
+// field, so an over-long address looks accepted and never reaches the payout rail.
+const STRIPE_LINE1_MAX_LENGTH = 200;
+
 export const getBusinessTypes = (country: string | null, lists: Record<string, { code: string; name: string }[]>) =>
   (country ? lists[country] : null) ?? [
     { code: "llc", name: "LLC" },
@@ -521,6 +525,7 @@ const AccountDetailsSection = ({
                   <Input
                     id={`${uid}-business-building-number`}
                     type="text"
+                    maxLength={STRIPE_LINE1_MAX_LENGTH}
                     placeholder="1-1"
                     value={complianceInfo.business_building_number || ""}
                     disabled={isFormDisabled}
@@ -536,6 +541,7 @@ const AccountDetailsSection = ({
                   <Input
                     id={`${uid}-business-building-number-kana`}
                     type="text"
+                    maxLength={STRIPE_LINE1_MAX_LENGTH}
                     placeholder="イチノイチ"
                     value={complianceInfo.business_building_number_kana || ""}
                     disabled={isFormDisabled}
@@ -621,6 +627,7 @@ const AccountDetailsSection = ({
               </FieldsetTitle>
               <Input
                 id={`${uid}-business-street-address`}
+                maxLength={STRIPE_LINE1_MAX_LENGTH}
                 placeholder="123 smith street"
                 value={complianceInfo.business_street_address || ""}
                 disabled={isFormDisabled}
@@ -911,6 +918,7 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-creator-building-number`}
                   type="text"
+                  maxLength={STRIPE_LINE1_MAX_LENGTH}
                   placeholder="1-1"
                   value={complianceInfo.building_number || ""}
                   disabled={isFormDisabled}
@@ -926,6 +934,7 @@ const AccountDetailsSection = ({
                 <Input
                   id={`${uid}-creator-building-number-kana`}
                   type="text"
+                  maxLength={STRIPE_LINE1_MAX_LENGTH}
                   placeholder="イチノイチ"
                   value={complianceInfo.building_number_kana || ""}
                   disabled={isFormDisabled}
@@ -1012,6 +1021,7 @@ const AccountDetailsSection = ({
             <Input
               id={`${uid}-creator-street-address`}
               type="text"
+              maxLength={STRIPE_LINE1_MAX_LENGTH}
               required
               value={complianceInfo.street_address || ""}
               disabled={isFormDisabled}

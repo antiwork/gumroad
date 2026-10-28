@@ -1370,7 +1370,6 @@ describe "Balance Pages Scenario", js: true, type: :system do
             create_payout(Time.current, PayoutProcessorType::PAYPAL, seller)
           end
         end
-        index_model_records(Balance)
         index_model_records(Purchase)
 
         visit balance_path

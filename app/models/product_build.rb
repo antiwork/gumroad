@@ -7,6 +7,11 @@ class ProductBuild < ApplicationRecord
   STATUSES = %w[uploaded live superseded].freeze
   MAX_BUILDS_PER_PRODUCT = 50
   MAX_BYTE_SIZE = 2.gigabytes
+  # Limits on what a zip may unpack to. The zip itself is capped at MAX_BYTE_SIZE, but a small
+  # archive can still expand into far more, so the unpack stops at these.
+  SITE_DIRECTORY = "site"
+  MAX_SITE_FILES = 5_000
+  MAX_SITE_BYTE_SIZE = 4.gigabytes
   PUBLIC_ID_LENGTH = 21
   DISPLAY_NAME_MAX_LENGTH = 200
   STORAGE_PREFIX = "builds"
@@ -26,6 +31,15 @@ class ProductBuild < ApplicationRecord
   def self.storage_key_for(product_id, number)
     "#{STORAGE_PREFIX}/#{product_id}/#{number}/build.zip"
   end
+
+  # Where the player serves this build's files from. The zip stays next to it as build.zip.
+  def site_prefix
+    "#{STORAGE_PREFIX}/#{product_id}/#{number}/#{SITE_DIRECTORY}"
+  end
+
+  # True once the zip has been unpacked into site_prefix. A build whose zip was rejected is not
+  # ready: the seller has to upload a fixed zip as a new build.
+  def site_ready? = site_unpacked_at.present?
 
   def live? = status == "live"
 
@@ -57,6 +71,11 @@ class ProductBuild < ApplicationRecord
       product.generate_product_files_archives!
       self
     end
+
+    # The player serves the unpacked site/, so the zip is unpacked as soon as the build is the one
+    # buyers get. Queued outside the lock: the job reads this row and must not run before it commits.
+    ProductBuildUnpackJob.perform_async(id)
+    self
   end
 
   private

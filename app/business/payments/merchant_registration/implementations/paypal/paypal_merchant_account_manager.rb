@@ -7,6 +7,7 @@ class PaypalMerchantAccountManager
   COUNTRY_CODES_NOT_SUPPORTED_BY_PCP = [
     Compliance::Countries::DZA,
     Compliance::Countries::BRA,
+    Compliance::Countries::CHN,
     Compliance::Countries::EGY,
     Compliance::Countries::IND,
     Compliance::Countries::ISR,
@@ -15,6 +16,9 @@ class PaypalMerchantAccountManager
     Compliance::Countries::MAR,
     Compliance::Countries::TUR,
   ].map(&:alpha2).freeze
+
+  # Unlike the rest of the list, sellers here keep PayPal Connect enabled while they still have a connected account.
+  COUNTRY_CODES_WITH_GRANDFATHERED_PCP = [Compliance::Countries::CHN].map(&:alpha2).freeze
 
   def create_partner_referral(user, return_url)
     payment_integration_api = PaypalIntegrationRestApi.new(user, authorization_header:)
@@ -200,6 +204,7 @@ class PaypalMerchantAccountManager
     #   PERMISSION_DENIED
     #   DATA_RETRIEVAL
     #   CONNECTION_ERROR
+    # A PayPal-side fault comes back as INTERNAL_SERVER_ERROR, not the documented INTERNAL_SERVICE_ERROR.
     def partner_referral_error_message
       case response_error_name
       when "VALIDATION_ERROR"
@@ -214,7 +219,7 @@ class PaypalMerchantAccountManager
     end
 
     def notify_partner_referral_error
-      return if %w[INTERNAL_SERVICE_ERROR PERMISSION_DENIED CONNECTION_ERROR].include?(response_error_name)
+      return if %w[INTERNAL_SERVICE_ERROR INTERNAL_SERVER_ERROR PERMISSION_DENIED CONNECTION_ERROR].include?(response_error_name)
 
       notify_error
     end

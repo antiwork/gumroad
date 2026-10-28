@@ -108,6 +108,27 @@ describe PaypalController, :vcr do
       expect(flash[:alert]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
     end
 
+    context "when the user is in China" do
+      before do
+        create(:user_compliance_info, user: @user, country: "China")
+      end
+
+      it "returns an error alert if the user has no PayPal account connected" do
+        get :connect
+
+        expect(response).to redirect_to(checkout_form_path)
+        expect(flash[:alert]).to eq("Your PayPal account could not be connected because this PayPal integration is not supported in your country.")
+      end
+
+      it "creates the partner-referral if the user already has a PayPal account connected" do
+        create(:merchant_account_paypal, user: @user, charge_processor_verified_at: Time.current)
+
+        get :connect
+
+        expect(response).to redirect_to(partner_referral_success_response[:redirect_url])
+      end
+    end
+
     it "returns an error alert if user is not allowed to connect their PayPal account" do
       @user.update!(payment_address: "")
 

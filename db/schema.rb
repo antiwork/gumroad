@@ -1918,6 +1918,10 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.datetime "promoted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "site_unpacked_at"
+    t.integer "site_file_count"
+    t.bigint "site_byte_size"
+    t.text "site_unpack_error"
     t.index ["product_file_id"], name: "index_product_builds_on_product_file_id"
     t.index ["product_id", "number"], name: "index_product_builds_on_product_id_and_number", unique: true
     t.index ["product_id", "source_url"], name: "index_product_builds_on_product_id_and_source_url", unique: true, length: { source_url: 191 }

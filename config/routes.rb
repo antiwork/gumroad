@@ -1396,7 +1396,6 @@ Rails.application.routes.draw do
     post "/stripe-connect-webhook", to: "foreign_webhooks#stripe_connect"
     post "/paypal-webhook", to: "foreign_webhooks#paypal"
     post "/sendgrid-webhook", to: "foreign_webhooks#sendgrid"
-    post "/sns-webhook", to: "foreign_webhooks#sns"
     post "/sns-mediaconvert-webhook", to: "foreign_webhooks#mediaconvert"
     post "/sns-aws-config-webhook", to: "foreign_webhooks#sns_aws_config"
     post "/grmc-webhook", to: "foreign_webhooks#grmc"
