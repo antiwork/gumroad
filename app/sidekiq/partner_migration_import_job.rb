@@ -18,6 +18,9 @@ class PartnerMigrationImportJob
     ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved, Link::LinkInvalid
   ].freeze
 
+  # The seller closed the account or was suspended after the claim.
+  class AccountInactive < StandardError; end
+
   sidekiq_retries_exhausted do |job, exception|
     ApplicationRecord.connected_to(role: :writing) do
       migration = PartnerMigration.find_by(id: job["args"].first)
@@ -43,6 +46,9 @@ class PartnerMigrationImportJob
         return
       end
 
+      # Closing an account deletes the products it has, so an import must not add more after that.
+      return stop_for_inactive_account(migration) unless account_active?(migration)
+
       attach_profile_avatar(migration)
 
       # An error that a retry may fix does not hold back the products after it. The job imports them,
@@ -51,12 +57,16 @@ class PartnerMigrationImportJob
       migration.products.each_with_index do |attributes, index|
         result = migration.results&.dig(index.to_s)
         if result.nil?
+          raise AccountInactive unless account_active?(migration)
+
           import_product(migration, index, attributes)
         elsif result["media_pending"]
           # A previous attempt stopped after it created the product. Retrying the media could add
           # the same covers twice, so report it instead.
           record_result(migration, index, "product_id" => result["product_id"], "warnings" => ["The import stopped before the covers and thumbnail were added."])
         end
+      rescue AccountInactive
+        return stop_for_inactive_account(migration)
       rescue StandardError => e
         retry_error ||= e
         # A rolled-back transaction can leave a result in memory that was never saved.
@@ -96,10 +106,27 @@ class PartnerMigrationImportJob
       Rails.logger.info("Partner migration #{migration.id}: avatar not imported (#{e.class})")
     end
 
+    def account_active?(migration)
+      migration.user.reload.account_active?
+    end
+
+    def stop_for_inactive_account(migration)
+      migration.with_lock do
+        next unless migration.status == PartnerMigration::STATUS_CLAIMED
+
+        migration.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current, failure_reason: PartnerMigration::INACTIVE_ACCOUNT_MESSAGE)
+      end
+    end
+
     def import_product(migration, index, attributes)
       importer = PartnerMigration::ProductImporter.new(seller: migration.user, attributes:, heartbeat: -> { migration.touch })
       migration.touch
       file_urls = importer.download_files
+      # A download can take hours, so check the account again before the product is saved.
+      unless account_active?(migration)
+        importer.discard_uploaded_files
+        raise AccountInactive
+      end
       product = begin
         ActiveRecord::Base.transaction do
           importer.create_product!(file_urls).tap { record_result(migration, index, "product_id" => _1.external_id, "media_pending" => true) }

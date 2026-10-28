@@ -257,6 +257,29 @@ describe PartnerMigrationImportJob do
     expect(migration.results).to eq("0" => { "product_id" => product_id, "warnings" => ["The import stopped before the covers and thumbnail were added."] })
   end
 
+  it "does not import into an account that was closed before the job ran" do
+    migration = create_claimed_migration([product_attributes])
+    seller.update_columns(deleted_at: Time.current)
+
+    described_class.new.perform(migration.id)
+
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_FAILED, failure_reason: PartnerMigration::INACTIVE_ACCOUNT_MESSAGE)
+    expect(Link.where(user_id: seller.id)).to be_empty
+  end
+
+  it "stops, and deletes the downloaded files, when the account closes during a download" do
+    migration = create_claimed_migration([product_attributes, product_attributes.merge(name: "Brush Set")])
+    allow_any_instance_of(PartnerMigration::ProductImporter).to receive(:download_files).and_wrap_original do |original, *args|
+      original.call(*args).tap { seller.update_columns(user_risk_state: "suspended_for_fraud") }
+    end
+
+    described_class.new.perform(migration.id)
+
+    expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_FAILED, failure_reason: PartnerMigration::INACTIVE_ACCOUNT_MESSAGE, results: nil)
+    expect(Link.where(user_id: seller.id)).to be_empty
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").count).to eq(0)
+  end
+
   it "deletes the files it uploaded when a later file fails" do
     migration = create_claimed_migration([product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/missing.zip" }])])
 

@@ -48,6 +48,7 @@ class PartnerMigration < ApplicationRecord
 
   INVALID_LINK_MESSAGE = "This link is invalid or expired."
   OUT_OF_DATE_MESSAGE = "This page is out of date. Open the link from the application again."
+  INACTIVE_ACCOUNT_MESSAGE = "This account cannot import products."
 
   belongs_to :oauth_application
   belongs_to :user, optional: true
@@ -386,7 +387,7 @@ class PartnerMigration < ApplicationRecord
   # Links `claimer` to the partner's user ID, then starts the import. Raises ClaimError with a
   # message for the creator when the link was used, expired, or belongs to a different account.
   def claim!(claimer, expected_code_digest:)
-    raise ClaimError, "This account cannot import products." unless claimer.account_active?
+    raise ClaimError, INACTIVE_ACCOUNT_MESSAGE unless claimer.account_active?
     raise ClaimError, "Add an email address to your Gumroad account before importing products." if claimer.form_email.blank?
 
     oauth_application.with_lock do
@@ -432,7 +433,7 @@ class PartnerMigration < ApplicationRecord
       next unless stalled?
 
       if !user&.account_active?
-        failure_reason = "This account cannot import products."
+        failure_reason = INACTIVE_ACCOUNT_MESSAGE
       elsif resumes_count >= MAX_RESUMES
         failure_reason = "The import stopped #{MAX_RESUMES + 1} times before it finished."
       # A nil enqueue means a job still holds the lock, so nothing resumed and the attempt does not count.
