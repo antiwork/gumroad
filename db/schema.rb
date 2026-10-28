@@ -1695,6 +1695,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_21_000003) do
     t.json "profile"
     t.boolean "account_created", default: false, null: false
     t.string "account_setup_token_digest"
+    t.string "account_setup_password_digest"
     t.datetime "account_setup_sent_at"
     t.integer "account_setup_emails_count", default: 0, null: false
     t.datetime "notified_at"

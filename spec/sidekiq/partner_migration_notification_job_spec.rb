@@ -16,7 +16,7 @@ describe PartnerMigrationNotificationJob do
   end
 
   it "does not email a new account again when its import completes, because the setup email covered it" do
-    migration.update!(account_created: true, account_setup_token_digest: "pending")
+    migration.update!(account_created: true, account_setup_token_digest: "pending", account_setup_password_digest: PartnerMigration.digest(seller.encrypted_password))
 
     described_class.new.perform(migration.id)
 
@@ -25,7 +25,7 @@ describe PartnerMigrationNotificationJob do
   end
 
   it "emails a new account whose setup link expired, so the seller still hears that the import finished" do
-    migration.update!(account_created: true, account_setup_token_digest: "pending", claimed_at: (PartnerMigration::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).ago)
+    migration.update!(account_created: true, account_setup_token_digest: "pending", account_setup_password_digest: PartnerMigration.digest(seller.encrypted_password), claimed_at: (PartnerMigration::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).ago)
 
     described_class.new.perform(migration.id)
 
@@ -41,7 +41,7 @@ describe PartnerMigrationNotificationJob do
   end
 
   it "emails a new account when its import needs attention" do
-    migration.update!(account_created: true, account_setup_token_digest: "pending", status: PartnerMigration::STATUS_FAILED)
+    migration.update!(account_created: true, account_setup_token_digest: "pending", account_setup_password_digest: PartnerMigration.digest(seller.encrypted_password), status: PartnerMigration::STATUS_FAILED)
 
     described_class.new.perform(migration.id)
 

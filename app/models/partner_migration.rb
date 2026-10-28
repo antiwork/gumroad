@@ -298,9 +298,13 @@ class PartnerMigration < ApplicationRecord
     claimable? && email.present? && !User.by_email(email).exists?
   end
 
-  # Setup ends once anyone gets into the account, for example through a password reset or Google, so an
-  # older setup link cannot replace credentials that the seller set another way.
-  def account_setup_pending? = account_created && account_setup_token_digest.present? && user&.sign_in_count.to_i.zero?
+  # Setup ends once the seller gets into the account another way, by a password reset or by signing in
+  # with Google, so an older setup link cannot replace those credentials.
+  def account_setup_pending?
+    account_created && account_setup_token_digest.present? && user.present? && user.sign_in_count.zero? &&
+      self.class.digest(user.encrypted_password) == account_setup_password_digest
+  end
+
   def account_setup_expired? = claimed_at.nil? || claimed_at + ACCOUNT_SETUP_EXPIRES_IN <= Time.current
   # The seller can still set a password from the setup email.
   def account_setup_open? = account_setup_pending? && !account_setup_expired?
@@ -330,7 +334,7 @@ class PartnerMigration < ApplicationRecord
         next unless account_creatable? && user.email == email
 
         user.save!(validate: false)
-        token = issue_account_setup_token!(account_created: true)
+        token = issue_account_setup_token!(account_created: true, account_setup_password_digest: self.class.digest(user.encrypted_password))
         claim!(user, expected_code_digest:)
       end
     end

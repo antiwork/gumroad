@@ -275,6 +275,15 @@ describe PartnerMigration do
       expect(migration.resend_account_setup!).to eq(:expired)
     end
 
+    it "ends the setup when a password reset changes the password, even before a two-factor sign-in" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      migration.user.reload.update!(password: "a-reset-password-789")
+
+      expect(migration.reload.account_setup_pending?).to be(false)
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+      expect(migration.user.reload.valid_password?("a-reset-password-789")).to be(true)
+    end
+
     it "sets the password, confirms the email, records the terms, and ends the setup" do
       migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 

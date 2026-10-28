@@ -122,13 +122,12 @@ class PartnerMigrationImportJob
       importer = PartnerMigration::ProductImporter.new(seller: migration.user, attributes:, heartbeat: -> { migration.touch })
       migration.touch
       file_urls = importer.download_files
-      # A download can take hours, so check the account again before the product is saved.
-      unless account_active?(migration)
-        importer.discard_uploaded_files
-        raise AccountInactive
-      end
       product = begin
         ActiveRecord::Base.transaction do
+          # A download can take hours, so check the account again. Account closure updates this row, so the
+          # lock also makes a closure wait for this product, which the closure then deletes.
+          raise AccountInactive unless migration.user.lock!.account_active?
+
           importer.create_product!(file_urls).tap { record_result(migration, index, "product_id" => _1.external_id, "media_pending" => true) }
         end
       rescue StandardError

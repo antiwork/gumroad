@@ -24,6 +24,7 @@ class CreatePartnerMigrations < ActiveRecord::Migration[8.1]
       t.json :profile
       t.boolean :account_created, null: false, default: false
       t.string :account_setup_token_digest
+      t.string :account_setup_password_digest
       t.datetime :account_setup_sent_at
       t.integer :account_setup_emails_count, null: false, default: 0
       t.datetime :notified_at
