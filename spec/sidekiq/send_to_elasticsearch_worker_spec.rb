@@ -12,8 +12,12 @@ describe SendToElasticsearchWorker do
     expect(described_class.get_sidekiq_options["lock"]).to eq(:until_executing)
   end
 
-  it "replaces the waiting job so the last change in a burst still gets a trailing refresh" do
-    expect(described_class.get_sidekiq_options["on_conflict"]).to eq(:replace)
+  it "drops a duplicate instead of replacing the waiting job, because :replace scans the whole schedule set in Lua" do
+    expect(described_class.get_sidekiq_options["on_conflict"]).to eq(:log)
+  end
+
+  it "bounds a stranded lock with a TTL" do
+    expect(described_class.get_sidekiq_options["lock_ttl"]).to eq(10.minutes.to_i)
   end
 
   it "reads the product from the primary" do
