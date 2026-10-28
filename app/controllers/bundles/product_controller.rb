@@ -90,27 +90,39 @@ class Bundles::ProductController < Bundles::BaseController
     redirect_to edit_bundle_product_path(@bundle.external_id), alert: error_message
   end
 
-  # Mirrors SaveFilesService's seller-facing removal, so the memoized file list and the filetypes
-  # index stay consistent.
+  # Separate from `update`: retained files aren't part of the bundle form.
   def remove_file
     authorize @bundle
 
-    file = @bundle.alive_product_files.find { |product_file| product_file.external_id == params[:file_id] }
+    file = nil
+    begin
+      @bundle.with_lock do
+        file = @bundle.product_files.alive.find_by_external_id(params[:file_id])&.tap do |product_file|
+          # Unvalidated: a legacy file failing an unrelated validation must still be removable here.
+          product_file.mark_deleted!(validate: false)
+          @bundle.cached_alive_product_files = nil
+          # Both download endpoints serve the newest ready archive without checking its contents, so archives
+          # holding this file must die with the commit. The entity archive's replacement builds after it.
+          @bundle.invalidate_stale_product_files_archives!
+          @bundle.generate_entity_archive!
+          @bundle.enqueue_index_update_for(["filetypes"])
+        end
+      end
+    rescue StandardError => e
+      # Commit callbacks raise after COMMIT, so only a fresh read tells a durable removal from a rolled-back one.
+      raise unless file && ProductFile.where(id: file.id).pick(:deleted_at)
+      ErrorNotifier.notify(e, product_id: @bundle.id, seller_id: @bundle.user_id, commit_callback_failed: true)
+      enqueue_pending_entity_archive_builds
+    end
     if file.nil?
       return render json: { success: false, error_message: "That file is no longer attached to this bundle." },
                     status: :not_found
     end
 
-    file.mark_deleted
-    @bundle.cached_alive_product_files = nil
-    @bundle.enqueue_index_update_for(["filetypes"])
-    # Downloads serve the newest ready archive without checking its contents, so an archive built
-    # while the file was attached is rebuilt from the files that are left.
-    @bundle.generate_entity_archive!
-    @bundle.invalidate_stale_folder_archives!(for_files: [file])
-    GenerateProductFilesArchivesJob.perform_async(@bundle.id)
-
+    enqueue_product_files_archives_generation
     render json: { success: true }
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotSaved => e
+    render json: { success: false, error_message: e.message }, status: :unprocessable_entity
   end
 
   private
@@ -153,6 +165,22 @@ class Bundles::ProductController < Bundles::BaseController
       if product_permitted_params[:installment_plan].present?
         @bundle.create_installment_plan!(product_permitted_params[:installment_plan])
       end
+    end
+
+    # Rails skips commit callbacks after one raises, so the new entity archive may never queue its build. No reindex
+    # redo: the filetypes update is an after_commit_everywhere block, and those run even after an earlier one raises.
+    def enqueue_pending_entity_archive_builds
+      @bundle.product_files_archives.entity_archives.alive.where(product_files_archive_state: "queueing").each(&:generate_zip_archive!)
+    rescue StandardError => e
+      ErrorNotifier.notify(e, product_id: @bundle.id, seller_id: @bundle.user_id, entity_archive_enqueue_failed: true)
+    end
+
+    # Post-commit, like LinksController's: the file is already gone, so a queue failure must not
+    # answer the deletion as failed.
+    def enqueue_product_files_archives_generation
+      GenerateProductFilesArchivesJob.perform_async(@bundle.id)
+    rescue StandardError => e
+      ErrorNotifier.notify(e, product_id: @bundle.id, seller_id: @bundle.user_id, archive_generation_enqueue_failed: true)
     end
 
     # Mirrors LinksController#update_default_offer_code so bundles support the
