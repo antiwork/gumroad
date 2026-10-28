@@ -401,6 +401,8 @@ class AssetPreview < ApplicationRecord
       self.oembed = nil
 
       response = SsrfFilter.get(new_url)
+      # Otherwise an error page is stored as the cover, and validation then blames the file type.
+      raise OpenURI::HTTPError.new("#{response.code} #{response.message}", response) unless response.is_a?(Net::HTTPSuccess)
       tempfile = Tempfile.new(binmode: true)
       tempfile.write(response.body)
       tempfile.rewind

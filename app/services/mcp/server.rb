@@ -297,7 +297,7 @@ module Mcp
           tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description and covers. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.", {
@@ -400,7 +400,7 @@ module Mcp
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
-        details = { description: product.description }
+        details = { description: product.description, covers: covers_payload(product) }
         # The same rule as the public API: sales figures need a sales scope.
         details.merge!(sales_count: product.successful_sales_count, sales_usd_cents: product.total_usd_cents) if (token.scopes.to_a & %w[view_sales account]).any?
         { product: product_payload(product).merge(details) }
@@ -473,8 +473,9 @@ module Mcp
         cover = product.asset_previews.build
         begin
           cover.url = args["url"]
-        rescue *INTERNET_EXCEPTIONS
-          raise ToolError, "Could not fetch an image from that URL. Use a public https link to the image file."
+        rescue *INTERNET_EXCEPTIONS => e
+          status = " The link returned HTTP #{e.message}." if e.is_a?(OpenURI::HTTPError)
+          raise ToolError, "Could not fetch an image from that URL.#{status} Use a public https link to the image file."
         end
         cover.analyze_file
         unless cover.save
@@ -482,8 +483,11 @@ module Mcp
           raise ToolError, cover.errors.full_messages.to_sentence
         end
 
-        covers = product.display_asset_previews.reload
-        { product: product_payload(product), covers: covers.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } } }
+        { product: product_payload(product), covers: covers_payload(product.reload) }
+      end
+
+      def covers_payload(product)
+        product.display_asset_previews.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } }
       end
 
       def tool_publish_product(args)
