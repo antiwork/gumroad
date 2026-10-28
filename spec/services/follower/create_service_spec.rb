@@ -39,6 +39,51 @@ describe Follower::CreateService do
     service.perform
   end
 
+  it "records the waitlist entry for a visitor who already follows the seller" do
+    product = create(:product, user:)
+
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+  end
+
+  it "records a repeat signup without logging a write failure" do
+    product = create(:product, user:)
+    allow(Rails.logger).to receive(:error)
+
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+    described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+
+    expect(Rails.logger).not_to have_received(:error)
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+  end
+
+  it "sends the product-aware confirmation email" do
+    product = create(:product, user:)
+    follower = create(:follower, user:, email: "waitlist@example.com")
+
+    expect do
+      described_class.perform(followed_user: user, follower_email: follower.email, waitlist_product: product)
+    end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, follower.id, product.id)
+  end
+
+  it "sends no confirmation email to a confirmed follower joining a waitlist" do
+    product = create(:product, user:)
+
+    expect do
+      described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+    end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
+
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+    expect(active_follower.reload.confirmed?).to be(true)
+  end
+
+  it "records no waitlist entry when no product is given" do
+    expect do
+      described_class.perform(followed_user: user, follower_email: "plain@example.com")
+    end.not_to change { WaitlistEntry.count }
+  end
+
   context "when follower is present" do
     it "updates the source of the follow and follower_user_id" do
       Follower::CreateService.perform(
@@ -104,7 +149,7 @@ describe Follower::CreateService do
               followed_user: user,
               follower_email: follower.email,
             )
-          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, follower.id)
+          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, follower.id, nil)
         end
       end
 
@@ -144,7 +189,7 @@ describe Follower::CreateService do
               follower_email: deleted_follower.email
             )
             expect(follower.confirmed?).to be_falsey
-          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, deleted_follower.id)
+          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, deleted_follower.id, nil)
         end
 
         it "sends the confirmation email even if follower is confirmed" do
@@ -153,7 +198,7 @@ describe Follower::CreateService do
               followed_user: user,
               follower_email: active_follower.email
             )
-          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, active_follower.id)
+          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, active_follower.id, nil)
         end
 
         it "does not send the confirmation email if the new email is invalid" do
@@ -164,7 +209,7 @@ describe Follower::CreateService do
               follower_attributes: { email: "invalid email" }
             )
             expect(follower.valid?).to eq(false)
-          end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, active_follower.id)
+          end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, active_follower.id, nil)
         end
       end
 
@@ -192,7 +237,7 @@ describe Follower::CreateService do
               logged_in_user: unconfirmed_user
             )
             expect(follower.confirmed?).to be_falsey
-          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, anything)
+          end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, anything, nil)
         end
       end
     end

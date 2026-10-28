@@ -16,6 +16,14 @@ describe FollowerMailer do
       expect(mail.body.encoded).to include confirm_follow_route
     end
 
+    it "names the product when the signup came from a product waitlist" do
+      product = create(:product, user: followee, name: "Espresso Machine")
+
+      mail = FollowerMailer.confirm_follower(followee.id, unconfirmed_follower.id, product.id)
+
+      expect(mail.body.encoded).to include "confirm you want to hear when Espresso Machine launches"
+    end
+
     it "sets the correct SendGrid account" do
       stub_const(
         "EMAIL_CREDENTIALS",

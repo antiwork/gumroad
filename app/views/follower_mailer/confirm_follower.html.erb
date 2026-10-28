@@ -1,6 +1,10 @@
 <%= header_section("Please confirm your follow request.") %>
 <div>
-  <p>Click the button below to confirm your subscription to <%= @followed_username %>:</p>
+  <% if @waitlist_product %>
+    <p>Click the button below to confirm you want to hear when <%= @waitlist_product.name %> launches:</p>
+  <% else %>
+    <p>Click the button below to confirm your subscription to <%= @followed_username %>:</p>
+  <% end %>
   <p>
     <%= link_to "Confirm", @confirm_follow_url, class: "button primary" %>
   </p>

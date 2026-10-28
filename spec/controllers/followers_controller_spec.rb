@@ -200,6 +200,27 @@ describe FollowersController, inertia: true do
         expect(follower.user).to eq seller
       end
 
+      it "records a waitlist entry for the posted product" do
+        product = create(:product, user: seller)
+
+        expect do
+          post :create, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: product.external_id }
+        end.to change { WaitlistEntry.count }.by(1)
+
+        expect(WaitlistEntry.last.product).to eq product
+        expect(WaitlistEntry.last.follower.email).to eq "follower@example.com"
+      end
+
+      it "ignores a product that belongs to another seller" do
+        other_product = create(:product)
+
+        expect do
+          post :create, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: other_product.external_id }
+        end.not_to change { WaitlistEntry.count }
+
+        expect(Follower.last.user).to eq seller
+      end
+
       it "redirects to subscribe page with alert when email is invalid" do
         post :create, params: { email: "invalid email", seller_id: seller.external_id }
         expect(response).to redirect_to(custom_domain_subscribe_path)

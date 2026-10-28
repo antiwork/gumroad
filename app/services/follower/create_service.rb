@@ -9,11 +9,12 @@ class Follower::CreateService
     new(**args).perform
   end
 
-  def initialize(followed_user:, follower_email:, follower_attributes: {}, logged_in_user: nil)
+  def initialize(followed_user:, follower_email:, follower_attributes: {}, logged_in_user: nil, waitlist_product: nil)
     @followed_user = followed_user
     @follower_email = follower_email
     @follower_attributes = follower_attributes
     @logged_in_user = logged_in_user
+    @waitlist_product = waitlist_product
   end
 
   def perform
@@ -44,7 +45,10 @@ class Follower::CreateService
       create_new_follower
     end
 
-    ApplicationRecord.connected_to(role: :writing) { confirm_follower }
+    ApplicationRecord.connected_to(role: :writing) do
+      record_waitlist_entry
+      confirm_follower
+    end
 
     @follower
   rescue ActiveRecord::RecordInvalid => e
@@ -55,7 +59,22 @@ class Follower::CreateService
   end
 
   private
-    attr_reader :followed_user, :follower_email, :follower_attributes, :logged_in_user
+    attr_reader :followed_user, :follower_email, :follower_attributes, :logged_in_user, :waitlist_product
+
+    # One row per (follower, product), so a visitor who already follows the seller can still join a
+    # product's waitlist — a column on `followers` could not, since a follow is unique per seller.
+    # A waitlist row that cannot be written must not fail the follow itself.
+    def record_waitlist_entry
+      return if waitlist_product.blank? || !@follower.persisted?
+
+      # Look up first: the uniqueness validation makes a repeat signup raise RecordInvalid before any
+      # INSERT, so create_or_find_by! alone would log a write failure for every expected repeat.
+      @waitlist_entry = @follower.waitlist_entries.find_by(product: waitlist_product) ||
+                        @follower.waitlist_entries.create_or_find_by!(product: waitlist_product)
+    rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
+      Rails.logger.error("Cannot record waitlist entry for follower #{@follower.id}. Exception: #{e.message}")
+      @waitlist_entry = @follower.waitlist_entries.find_by(product: waitlist_product)
+    end
 
     def retired_newsletter_follower
       Follower.new(user: followed_user, email: follower_email).tap { _1.errors.add(:base, RETIRED_NEWSLETTER_MESSAGE) }
@@ -102,9 +121,16 @@ class Follower::CreateService
 
       if @follower.imported_from_csv? || active_session_with_verified_email?
         @follower.confirm!
+      elsif confirmed_waitlist_follower?
+        # A confirmed follower joining a waitlist has nothing to confirm, so no email goes out.
+        true
       else
         request_confirmation
       end
+    end
+
+    def confirmed_waitlist_follower?
+      waitlist_product.present? && @follower.confirmed?
     end
 
     # Ordered against retiring the newsletter like the follow itself, so no request is queued once it has retired.
@@ -114,7 +140,7 @@ class Follower::CreateService
           @follower.errors.add(:base, RETIRED_NEWSLETTER_MESSAGE)
           raise ActiveRecord::RecordInvalid, @follower
         end
-        @follower.send_confirmation_email
+        @follower.send_confirmation_email(waitlist_product_id: @waitlist_entry&.product_id)
       end
     end
 
