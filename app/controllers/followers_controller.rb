@@ -217,6 +217,12 @@ class FollowersController < ApplicationController
     # #from_embed_form so the subscribe page, the third-party embed form, and
     # the custom-page follow bridge can never drift apart.
     def follow_confirmation_message(follower)
+      if @waitlist_product
+        return follower.confirmed? ?
+          "You're on the list. #{follower.user.name_or_username} will email you when it launches." :
+          "You're on the list. Check your inbox to confirm."
+      end
+
       follower.confirmed? ?
         "You are now following #{follower.user.name_or_username}!" :
         "Check your inbox to confirm your follow request."
@@ -253,14 +259,15 @@ class FollowersController < ApplicationController
     end
 
     # The product a visitor joined the waitlist from, resolved among the followed seller's own
-    # products so a posted id can never attach a follow to someone else's product. Deleted and
-    # banned products 404 on their page, so they take no entries. An id that doesn't resolve is
-    # ignored: the follow itself is still valid.
+    # products so a posted id can never attach a follow to someone else's product. Only a product
+    # whose page shows the waitlist takes entries; any other id is ignored, and the follow itself is
+    # still valid.
     def waitlist_product_from_params(followed_user)
       product_id = params[:product_id]
       return if product_id.blank?
 
-      followed_user.products.visible.where(banned_at: nil).find_by_external_id(product_id)
+      product = followed_user.products.find_by_external_id(product_id)
+      @waitlist_product = product if product&.accepts_waitlist_signups?
     end
 
     def fetch_follower

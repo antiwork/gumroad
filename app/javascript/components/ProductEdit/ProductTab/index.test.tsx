@@ -106,6 +106,7 @@ const baseProduct: Product = {
   can_enable_quantity: true,
   should_show_sales_count: false,
   hide_sold_out_variants: false,
+  waitlist_enabled: false,
   is_epublication: false,
   product_refund_policy_enabled: false,
   refund_policy: {

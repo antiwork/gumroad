@@ -200,19 +200,44 @@ describe FollowersController, inertia: true do
         expect(follower.user).to eq seller
       end
 
-      it "records a waitlist entry for the posted product" do
-        product = create(:product, user: seller)
+      it "records a waitlist entry for a product that shows the waitlist" do
+        product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
 
         expect do
-          post :create, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: product.external_id }
+          post :create, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: product.external_id }, format: :json
         end.to change { WaitlistEntry.count }.by(1)
 
         expect(WaitlistEntry.last.product).to eq product
         expect(WaitlistEntry.last.follower.email).to eq "follower@example.com"
+        expect(response.parsed_body).to eq("success" => true, "message" => "You're on the list. Check your inbox to confirm.")
+      end
+
+      it "tells a confirmed follower that they are on the waitlist" do
+        product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
+        create(:active_follower, user: seller, email: "follower@example.com")
+
+        post :create, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: product.external_id }, format: :json
+
+        expect(response.parsed_body).to eq("success" => true, "message" => "You're on the list. #{seller.name_or_username} will email you when it launches.")
+      end
+
+      it "follows the seller without a waitlist entry when the product does not show the waitlist" do
+        published_product = create(:product, user: seller, waitlist_enabled: true)
+        product_without_waitlist = create(:product, user: seller, purchase_disabled_at: Time.current)
+        taken_down_product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current, is_unpublished_by_admin: true)
+
+        expect do
+          post :create, params: { email: "published@example.com", seller_id: seller.external_id, product_id: published_product.external_id }, format: :json
+          expect(response.parsed_body["message"]).to eq("Check your inbox to confirm your follow request.")
+          post :create, params: { email: "off@example.com", seller_id: seller.external_id, product_id: product_without_waitlist.external_id }
+          post :create, params: { email: "takedown@example.com", seller_id: seller.external_id, product_id: taken_down_product.external_id }
+        end.to change { seller.followers.count }.by(3)
+
+        expect(WaitlistEntry.count).to eq 0
       end
 
       it "ignores a product that belongs to another seller" do
-        other_product = create(:product)
+        other_product = create(:product, waitlist_enabled: true, purchase_disabled_at: Time.current)
 
         expect do
           post :create, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: other_product.external_id }
@@ -222,8 +247,8 @@ describe FollowersController, inertia: true do
       end
 
       it "ignores a deleted or banned product" do
-        deleted_product = create(:product, user: seller, deleted_at: Time.current)
-        banned_product = create(:product, user: seller, banned_at: Time.current)
+        deleted_product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current, deleted_at: Time.current)
+        banned_product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current, banned_at: Time.current)
 
         expect do
           post :create, params: { email: "deleted@example.com", seller_id: seller.external_id, product_id: deleted_product.external_id }
@@ -234,7 +259,7 @@ describe FollowersController, inertia: true do
       end
 
       it "records a waitlist entry for the seller's own unpublished product" do
-        unpublished_product = create(:product, user: seller, purchase_disabled_at: Time.current)
+        unpublished_product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
 
         expect do
           post :create, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: unpublished_product.external_id }
@@ -483,7 +508,7 @@ describe FollowersController, inertia: true do
       end
 
       it "records a waitlist entry for the seller's own unpublished product" do
-        unpublished_product = create(:product, user: seller, purchase_disabled_at: Time.current)
+        unpublished_product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
 
         expect do
           post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: unpublished_product.external_id }
@@ -493,8 +518,8 @@ describe FollowersController, inertia: true do
       end
 
       it "ignores a deleted or banned product" do
-        deleted_product = create(:product, user: seller, deleted_at: Time.current)
-        banned_product = create(:product, user: seller, banned_at: Time.current)
+        deleted_product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current, deleted_at: Time.current)
+        banned_product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current, banned_at: Time.current)
 
         expect do
           post :from_embed_form, params: { email: "deleted@example.com", seller_id: seller.external_id, product_id: deleted_product.external_id }

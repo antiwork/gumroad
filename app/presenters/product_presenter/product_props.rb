@@ -21,6 +21,7 @@ class ProductPresenter::ProductProps
     buyer_currency_display = buyer_currency_display_props(product:, price_cents: displayed_price_cents, ip: request.remote_ip, preferred_currency: buyer_currency_preference(request))
     options = product.options
     rental = product.rental
+    can_edit = pundit_user&.user ? Pundit.policy!(pundit_user, product).edit? : false
 
     {
       product: {
@@ -79,7 +80,8 @@ class ProductPresenter::ProductProps
         analytics: product.analytics_data,
         has_third_party_analytics: product.has_third_party_analytics?("product"),
         ppp_details:,
-        can_edit: pundit_user&.user ? Pundit.policy!(pundit_user, product).edit? : false,
+        can_edit:,
+        waitlist: waitlist_props(can_edit:),
         refund_policy: refund_policy_props,
         bundle_products: product.bundle_products.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
@@ -122,6 +124,16 @@ class ProductPresenter::ProductProps
 
   private
     attr_reader :product, :seller
+
+    # The count is for the seller's own view of the page; visitors never get it.
+    def waitlist_props(can_edit:)
+      return unless product.accepts_waitlist_signups?
+
+      {
+        recaptcha_site_key: FollowRecaptcha.required?(seller) ? FollowRecaptcha.site_key : nil,
+        count: can_edit ? product.waitlist_entries.joins(:follower).merge(Follower.active).count : nil,
+      }
+    end
 
     # The amount the pay-what-you-want box starts with. It is 0 only when nothing the buyer can pick
     # (option or rental) raises the minimum above $0 and the seller suggests no amount,
