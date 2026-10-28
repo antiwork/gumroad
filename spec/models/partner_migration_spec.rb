@@ -305,6 +305,14 @@ describe PartnerMigration do
       expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
     end
 
+    it "attaches the address's guest purchases, as email confirmation does" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest)
+
+      expect(AttachPastPurchasesToUserWorker.jobs.map { _1["args"] }).to eq([[migration.user_id, migration.email]])
+    end
+
     it "sets the password, confirms the email, records the terms, and ends the setup" do
       migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 

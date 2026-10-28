@@ -386,6 +386,8 @@ class PartnerMigration < ApplicationRecord
         update!(account_setup_token_digest: nil)
       end
     end
+    # skip_confirmation! skips User#after_confirmation, which attaches the address's guest purchases.
+    AttachPastPurchasesToUserWorker.perform_async(account.id, account.email)
   end
 
   # The same creator can claim again while the import has not finished, so a failed enqueue can be
@@ -446,8 +448,10 @@ class PartnerMigration < ApplicationRecord
         failure_reason = INACTIVE_ACCOUNT_MESSAGE
       elsif resumes_count >= MAX_RESUMES
         failure_reason = "The import stopped #{MAX_RESUMES + 1} times before it finished."
-      # A nil enqueue means a job still holds the lock, so nothing resumed and the attempt does not count.
-      elsif PartnerMigrationImportJob.perform_async(id)
+      # A running import touches this row at least once per STALLED_AFTER, so a stalled import has no live
+      # worker, and a rejected enqueue means a killed worker left its lock behind. The job skips products
+      # that another run saved, so a job still waiting in the queue cannot import them twice.
+      elsif PartnerMigrationImportJob.perform_async(id) || PartnerMigrationImportJob.enqueue_releasing_lock(id)
         update!(resumes_count: resumes_count + 1)
       end
       update!(status: STATUS_FAILED, completed_at: Time.current, failure_reason:) if failure_reason

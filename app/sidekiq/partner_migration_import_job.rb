@@ -10,6 +10,13 @@ class PartnerMigrationImportJob
 
   AVATAR_DOWNLOAD_DURATION = 1.minute
 
+  # Releases the lock that a killed worker left, then queues the import. Only for a stalled import,
+  # which has no live worker.
+  def self.enqueue_releasing_lock(partner_migration_id)
+    SidekiqUniqueJobs::Unlockable.delete!("class" => name, "queue" => get_sidekiq_options["queue"].to_s, "lock" => get_sidekiq_options["lock"].to_s, "args" => [partner_migration_id])
+    perform_async(partner_migration_id)
+  end
+
   # Errors that a retry cannot fix. The product is recorded as failed and the import continues.
   # Other errors, such as a network error or PartnerMigration::RemoteFileTransfer::TemporaryError,
   # reach Sidekiq, which retries the job.
@@ -128,6 +135,14 @@ class PartnerMigrationImportJob
           # lock also makes a closure wait for this product, which the closure then deletes.
           raise AccountInactive unless migration.user.lock!.account_active?
 
+          # Another run may have saved this product meanwhile, for example a job that waited in the queue
+          # while a stalled import was resumed.
+          migration.lock!
+          if product_recorded?(migration, index)
+            importer.discard_uploaded_files
+            next
+          end
+
           importer.create_product!(file_urls).tap { record_result(migration, index, "product_id" => _1.external_id, "media_pending" => true) }
         end
       rescue StandardError
@@ -135,6 +150,8 @@ class PartnerMigrationImportJob
         importer.discard_uploaded_files unless product_recorded?(migration, index)
         raise
       end
+
+      return if product.nil?
 
       warnings = importer.attach_media(product)
       record_result(migration, index, { "product_id" => product.external_id, "warnings" => warnings.presence }.compact)

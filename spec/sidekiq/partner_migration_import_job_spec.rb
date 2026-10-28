@@ -280,6 +280,19 @@ describe PartnerMigrationImportJob do
     expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").count).to eq(0)
   end
 
+  it "skips a product that another run saved while this run downloaded it, and deletes this run's files" do
+    migration = create_claimed_migration([product_attributes])
+    allow_any_instance_of(PartnerMigration::ProductImporter).to receive(:download_files).and_wrap_original do |original, *args|
+      original.call(*args).tap { PartnerMigration.where(id: migration.id).update_all(results: { "0" => { "product_id" => "saved-by-another-run" } }) }
+    end
+
+    described_class.new.perform(migration.id)
+
+    expect(Link.where(user_id: seller.id)).to be_empty
+    expect(migration.reload.results).to eq("0" => { "product_id" => "saved-by-another-run" })
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").count).to eq(0)
+  end
+
   it "deletes the files it uploaded when a later file fails" do
     migration = create_claimed_migration([product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/missing.zip" }])])
 

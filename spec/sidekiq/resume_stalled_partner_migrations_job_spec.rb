@@ -25,9 +25,20 @@ describe ResumeStalledPartnerMigrationsJob do
     expect(stalled.reload.resumes_count).to eq(1)
   end
 
-  it "does not count a resume while a job still holds the import lock" do
+  it "releases the lock that a killed worker left, then resumes the import" do
+    stalled = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago)
+    allow(PartnerMigrationImportJob).to receive(:perform_async).with(stalled.id).and_return(nil, "jid")
+    expect(SidekiqUniqueJobs::Unlockable).to receive(:delete!).with(hash_including("class" => "PartnerMigrationImportJob", "args" => [stalled.id]))
+
+    described_class.new.perform
+
+    expect(stalled.reload).to have_attributes(status: PartnerMigration::STATUS_CLAIMED, resumes_count: 1)
+  end
+
+  it "does not count a resume that could not queue the import" do
     stalled = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago, resumes_count: PartnerMigration::MAX_RESUMES - 1)
     allow(PartnerMigrationImportJob).to receive(:perform_async).with(stalled.id).and_return(nil)
+    allow(SidekiqUniqueJobs::Unlockable).to receive(:delete!)
 
     2.times { described_class.new.perform }
 
