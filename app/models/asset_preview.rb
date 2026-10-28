@@ -402,7 +402,8 @@ class AssetPreview < ApplicationRecord
 
       response = SsrfFilter.get(new_url)
       # Otherwise an error page is stored as the cover, and validation then blames the file type.
-      raise OpenURI::HTTPError.new("#{response.code} #{response.message}", response) unless response.is_a?(Net::HTTPSuccess)
+      # By status code: the test suites swap in HTTParty, whose response is not a Net::HTTPSuccess.
+      raise OpenURI::HTTPError.new("#{response.code} #{response.message}", response) unless response.code.to_i.between?(200, 299)
       tempfile = Tempfile.new(binmode: true)
       tempfile.write(response.body)
       tempfile.rewind
