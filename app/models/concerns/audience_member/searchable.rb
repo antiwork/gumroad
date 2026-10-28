@@ -101,7 +101,8 @@ module AudienceMember::Searchable
       # it: that refresh rewrote the buyer's audience_members row on every activation, and
       # the row lock it took made concurrent activations queue until the license-verify
       # endpoint timed out with a 500.
-      if params[:minimum_license_uses].present?
+      # Waitlist entries live in their own table, so that filter counts through SQL too.
+      if params[:minimum_license_uses].present? || params[:waitlisted_product_ids].present?
         relation = AudienceMember.filter(seller_id:, params:)
         relation = relation.limit(limit) if limit
         return relation.count

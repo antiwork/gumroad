@@ -160,7 +160,8 @@ class SaveInstallmentService
                                           :bought_from, :active_customers_only, :minimum_license_uses,
                                           :shown_on_profile, :send_emails, :allow_comments,
                                           bought_products: [], bought_variants: [], affiliate_products: [],
-                                          not_bought_products: [], not_bought_variants: [], shown_in_profile_sections: [])
+                                          not_bought_products: [], not_bought_variants: [], waitlisted_products: [],
+                                          shown_in_profile_sections: [])
     end
 
     def installment_attrs

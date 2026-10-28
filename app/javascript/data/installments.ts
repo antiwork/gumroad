@@ -23,6 +23,7 @@ export type Installment = {
   unique_permalink?: string;
   variant_external_id?: string;
   affiliate_products?: string[];
+  waitlisted_products?: string[];
   paid_more_than_cents: number | null;
   paid_less_than_cents: number | null;
   created_after?: string;
@@ -100,6 +101,8 @@ export type InstallmentFormContext = {
   audience_types: AudienceType[];
   products: { permalink: string; name: string; archived: boolean; variants: { id: string; name: string }[] }[];
   affiliate_products: { permalink: string; name: string; archived: boolean }[];
+  // The seller's products that have waitlist signups.
+  waitlist_products: { permalink: string; name: string }[];
   timezone: string;
   currency_type: CurrencyCode;
   countries: string[];
@@ -137,6 +140,7 @@ type RecipientCountRequestPayload = {
   not_bought_products: string[] | null;
   not_bought_variants: string[] | null;
   affiliate_products: string[] | null;
+  waitlisted_products: string[] | null;
 };
 export function getRecipientCount(requestPayload: RecipientCountRequestPayload) {
   const abort = new AbortController();

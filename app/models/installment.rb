@@ -1028,6 +1028,10 @@ class Installment < ApplicationRecord
     end
     params[:bought_from] = bought_from if bought_from.present?
     params[:affiliate_product_ids] = seller.products.where(unique_permalink: affiliate_products).ids if affiliate_products.present?
+    if waitlisted_products.present?
+      # An unresolved selection must match nobody: compact_blank! below would drop an empty list and send to every follower.
+      params[:waitlisted_product_ids] = seller.products.where(unique_permalink: waitlisted_products).ids.presence || [nil]
+    end
 
     params.compact_blank!
   end

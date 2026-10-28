@@ -233,6 +233,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     installment?.shown_in_profile_sections ?? [],
   );
   const [affiliatedProducts, setAffiliatedProducts] = React.useState<string[]>(installment?.affiliate_products ?? []);
+  const [waitlisted, setWaitlisted] = React.useState<string[]>(installment?.waitlisted_products ?? []);
   const [recipientCount, setRecipientCount] = React.useState<{
     count: number;
     total: number;
@@ -542,6 +543,10 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
       })),
     [context.affiliate_products],
   );
+  const waitlistProductOptions = React.useMemo(
+    () => context.waitlist_products.map((product) => ({ id: product.permalink, label: product.name })),
+    [context.waitlist_products],
+  );
 
   const filterByType = (type: ProductOrVariantOption["type"], ids: string[]) =>
     productOptions.filter((option) => option.type === type && ids.includes(option.id));
@@ -572,6 +577,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     not_bought_products: audienceType === "affiliates" ? null : notBoughtProducts.map(({ id }) => id),
     not_bought_variants: audienceType === "affiliates" ? null : notBoughtVariants.map(({ id }) => id),
     affiliate_products: audienceType === "affiliates" ? affiliatedProducts : null,
+    waitlisted_products: audienceType === "followers" ? waitlisted : null,
     send_emails: channel.email,
     shown_on_profile: channel.profile,
     allow_comments: allowComments,
@@ -1129,6 +1135,22 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         tagIds={bought}
                         tagList={selectableProductOptions(productOptions, bought)}
                         onChangeTagIds={setBought}
+                        isDisabled={isPublished}
+                      />
+                    </Fieldset>
+                  </CardContent>
+                ) : null}
+                {audienceType === "followers" && (waitlistProductOptions.length > 0 || waitlisted.length > 0) ? (
+                  <CardContent>
+                    <Fieldset className="grow basis-0">
+                      <FieldsetTitle>
+                        <Label htmlFor={`${uid}-waitlisted`}>Joined the waitlist for</Label>
+                      </FieldsetTitle>
+                      <TagInput
+                        inputId={`${uid}-waitlisted`}
+                        tagIds={waitlisted}
+                        tagList={waitlistProductOptions}
+                        onChangeTagIds={setWaitlisted}
                         isDisabled={isPublished}
                       />
                     </Fieldset>

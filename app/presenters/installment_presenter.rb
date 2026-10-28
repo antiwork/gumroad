@@ -242,6 +242,8 @@ class InstallmentPresenter
             archived: product.archived?
           }
         end,
+        waitlist_products: seller.products.visible.where(WaitlistEntry.where("waitlist_entries.product_id = links.id").arel.exists)
+          .order(created_at: :desc).map { { permalink: _1.unique_permalink, name: _1.name } },
         timezone: ActiveSupport::TimeZone[seller.timezone].now.strftime("%Z"),
         currency_type: seller.currency_type.to_s,
         countries: ([Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.map(&:last)).uniq,

@@ -329,6 +329,42 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(page).to have_table_row({ "Subject" => "Hello", "Sent to" => "Your followers", "Audience" => "2" })
   end
 
+  it "creates a follower-type email for the people on a product's waitlist" do
+    product = create(:product, name: "Snooze Bar", user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
+    create(:product, name: "Sample product", user: seller)
+    on_waitlist = create(:active_follower, user: seller)
+    create(:waitlist_entry, follower: on_waitlist, product:)
+    create(:active_follower, user: seller)
+    index_audience_members_into_elasticsearch
+
+    visit emails_path
+    click_on "New email", match: :first
+
+    expect(page).not_to have_combo_box("Joined the waitlist for")
+    choose "Followers only"
+    expect(page).to have_text("Audience 2 / 2", normalize_ws: true)
+
+    find(:combo_box, "Joined the waitlist for").click
+    expect(page).to have_combo_box("Joined the waitlist for", expanded: true, with_options: ["Snooze Bar"])
+    select_combo_box_option "Snooze Bar", from: "Joined the waitlist for"
+    expect(page).to have_text("Audience 1 / 2", normalize_ws: true)
+
+    fill_in "Title", with: "Snooze Bar is out"
+    set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "It launched today.")
+    click_on "Save"
+    expect(page).to have_alert(text: "Email created!")
+
+    installment = Installment.last
+    expect(installment.follower_type?).to be(true)
+    expect(installment.waitlisted_products).to eq([product.unique_permalink])
+    expect(installment.audience_members_count).to eq(1)
+
+    visit current_path
+    within :fieldset, "Joined the waitlist for" do
+      expect(page).to have_button("Snooze Bar")
+    end
+  end
+
   it "creates an affiliate-type email" do
     product = create(:product, name: "Sample product", user: seller)
     another_product = create(:product, name: "Another product", user: seller)
