@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Muse
+module Mcp
   # Authorization-server rules for clients created by dynamic registration (RFC 7591). They are
   # keyed on the persisted `oauth_applications.mcp_dynamic_client` flag, so manually created and
   # first-party applications never reach them and keep Doorkeeper's default behaviour.

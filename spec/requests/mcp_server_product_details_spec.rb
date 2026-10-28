@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Muse MCP product details" do
+describe "MCP server product details" do
   before do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")

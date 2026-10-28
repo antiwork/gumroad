@@ -18,7 +18,7 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
     # Dynamically registered MCP clients must send an S256 challenge and a supported resource on
     # every authorization request, including ones on the canonical /oauth path.
     def pre_auth
-      @pre_auth ||= Muse::DynamicClientOauth.screen(super)
+      @pre_auth ||= Mcp::DynamicClientOauth.screen(super)
     end
 
     # Only dynamic clients bind grants to a resource; other applications never persist one.
