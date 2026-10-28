@@ -695,7 +695,7 @@ const Form = ({
   return (
     <>
       <PageHeader
-        className="sticky-top"
+        className="sticky top-0 z-10 bg-body"
         title={title}
         actions={
           <>
