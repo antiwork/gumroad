@@ -297,6 +297,14 @@ describe PartnerMigration do
       expect(locked_tables).to eq(%w[users partner_migrations])
     end
 
+    it "ends the setup when the account is closed, because the setup link signs the holder in" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      migration.user.update_columns(deleted_at: Time.current)
+
+      expect(migration.reload.account_setup_pending?).to be(false)
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+    end
+
     it "sets the password, confirms the email, records the terms, and ends the setup" do
       migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
 

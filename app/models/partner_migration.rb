@@ -299,9 +299,10 @@ class PartnerMigration < ApplicationRecord
   end
 
   # Setup ends once the seller gets into the account another way, by a password reset or by signing in
-  # with Google, so an older setup link cannot replace those credentials.
+  # with Google, so an older setup link cannot replace those credentials. A closed or suspended account
+  # cannot finish setup either: the setup link signs the holder in.
   def account_setup_pending?
-    account_created && account_setup_token_digest.present? && user.present? && user.sign_in_count.zero? &&
+    account_created && account_setup_token_digest.present? && user.present? && user.account_active? && user.sign_in_count.zero? &&
       self.class.digest(user.encrypted_password) == account_setup_password_digest
   end
 
