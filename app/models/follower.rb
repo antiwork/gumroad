@@ -128,7 +128,8 @@ class Follower < ApplicationRecord
   def send_confirmation_email(waitlist_product_id: nil)
     # Suppress repeated sending of confirmation emails. Allow only 1 email per hour.
     Rails.cache.fetch("follower_confirmation_email_sent_#{id}", expires_in: 1.hour) do
-      FollowerMailer.confirm_follower(followed_id, id, waitlist_product_id).deliver_later(queue: "critical", wait: 3.seconds)
+      # A plain follow keeps its two-argument job, which workers still on the previous deploy can run.
+      FollowerMailer.confirm_follower(followed_id, id, *waitlist_product_id).deliver_later(queue: "critical", wait: 3.seconds)
     end
   end
 

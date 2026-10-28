@@ -72,7 +72,9 @@ class Follower::CreateService
       @waitlist_entry = @follower.waitlist_entries.find_by(product: waitlist_product) ||
                         @follower.waitlist_entries.create_or_find_by!(product: waitlist_product)
     rescue ActiveRecord::RecordNotUnique, ActiveRecord::RecordInvalid => e
-      Rails.logger.error("Cannot record waitlist entry for follower #{@follower.id}. Exception: #{e.message}")
+      # A concurrent signup (a double submit) can commit the same entry between the lookup and the validation.
+      concurrent_repeat = e.is_a?(ActiveRecord::RecordInvalid) && e.record.errors.of_kind?(:product_id, :taken)
+      Rails.logger.error("Cannot record waitlist entry for follower #{@follower.id}. Exception: #{e.message}") unless concurrent_repeat
       @waitlist_entry = @follower.waitlist_entries.find_by(product: waitlist_product)
     end
 
