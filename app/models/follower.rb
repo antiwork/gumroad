@@ -83,6 +83,11 @@ class Follower < ApplicationRecord
     errors.add(:base, "You are already following this creator.")
   end
 
+  # Memoized: a profile checks each of the seller's waitlist-filtered posts against the same follower.
+  def waitlisted_product_permalinks
+    @waitlisted_product_permalinks ||= waitlist_entries.joins(:product).pluck("links.unique_permalink")
+  end
+
   def follower_email
     User.find_by(id: follower_user_id).try(:email).presence || email
   end

@@ -132,7 +132,7 @@ module WithFiltering
   def follower_passes_filters(follower)
     return false if created_after.present? && follower.created_at < created_after
     return false if created_before.present? && follower.created_at > created_before
-    return false if waitlisted_products.present? && !follower.waitlist_entries.joins(:product).exists?(links: { unique_permalink: waitlisted_products })
+    return false if waitlisted_products.present? && (waitlisted_products & follower.waitlisted_product_permalinks).empty?
     true
   end
 

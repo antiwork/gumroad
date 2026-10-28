@@ -868,7 +868,19 @@ describe WithFiltering do
       expect(post.follower_passes_filters(follower)).to eq(false)
 
       create(:waitlist_entry, follower:, product:)
-      expect(post.follower_passes_filters(follower)).to eq(true)
+      expect(post.follower_passes_filters(Follower.find(follower.id))).to eq(true)
+    end
+
+    it "looks up the follower's waitlists once across posts" do
+      create(:waitlist_entry, follower:, product:)
+      posts = create_list(:follower_installment, 3, seller:, json_data: { waitlisted_products: [product.unique_permalink] })
+      queries = []
+      counter = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("waitlist_entries") }
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        expect(posts.map { _1.follower_passes_filters(follower) }).to eq([true, true, true])
+      end
+      expect(queries.size).to eq(1)
     end
   end
 
