@@ -15,7 +15,8 @@ module ProductBuilds::PlayerDocument
   SAVE_SHIM_SCRIPT = <<~JS
     (function () {
       var data = Object.create(null);
-      var saved = __SAVE__;
+      // Parsed, not an object literal, so a "__proto__" key stays a key.
+      var saved = JSON.parse(__SAVE__);
       Object.keys(saved).forEach(function (k) { data[k] = String(saved[k]); });
       var pending = null;
       var timer = null;
@@ -84,7 +85,7 @@ module ProductBuilds::PlayerDocument
   # The seller's page is bytes in whatever encoding they wrote it in, so the scripts go in as ASCII
   # bytes right after <head> (or <html>, or at the very start), before any script of the page.
   def self.render(html, save_data:)
-    script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save_data.to_json) }
+    script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save_data.to_json.to_json) }
     injected = "<script>#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}".b
     html = html.b
     tag = html.match(HEAD_TAG) || html.match(HTML_TAG)
