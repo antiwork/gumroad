@@ -17,7 +17,7 @@ class PaypalMerchantAccountManager
     Compliance::Countries::TUR,
   ].map(&:alpha2).freeze
 
-  # Sellers here who already connected PayPal keep the connection; only new connections are refused.
+  # Unlike the rest of the list, sellers here keep PayPal Connect enabled while they still have a connected account.
   COUNTRY_CODES_WITH_GRANDFATHERED_PCP = [Compliance::Countries::CHN].map(&:alpha2).freeze
 
   def create_partner_referral(user, return_url)

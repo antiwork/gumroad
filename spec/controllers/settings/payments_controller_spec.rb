@@ -2916,9 +2916,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
       end
 
-      # CN is in COUNTRY_CODES_NOT_SUPPORTED_BY_PCP, so a mainland-China PayPal account can no longer be
-      # connected. The refusal is only reachable because MerchantAccount#paypal_account_details maps PayPal's
-      # "C2" to "CN"; without that mapping the code would not match the list and the account would connect.
+      # The refusal depends on MerchantAccount#paypal_account_details mapping PayPal's "C2" to "CN".
       context "when PayPal returns C2 instead of CN as country code for Chinese accounts" do
         before do
           seller.alive_user_compliance_info.update_columns(country: "China")
@@ -2932,7 +2930,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           expect(seller.merchant_accounts.alive.count).to eq(0)
         end
 
-        it "keeps an already connected mainland-China PayPal account working" do
+        it "does not re-run the country check on an already verified mainland-China account" do
           create(:merchant_account_paypal, user: seller, charge_processor_merchant_id: "MUWSRAF6QLQJG",
                                            charge_processor_verified_at: Time.current, charge_processor_alive_at: Time.current)
 
