@@ -81,14 +81,17 @@ module ProductBuilds::PlayerDocument
 
   HEAD_TAG = /<head(?:\s[^>]*)?>/in
   HTML_TAG = /<html(?:\s[^>]*)?>/in
+  DOCTYPE = /\A\s*<!doctype[^>]*>/in
 
   # The seller's page is bytes in whatever encoding they wrote it in, so the scripts go in as ASCII
-  # bytes right after <head> (or <html>, or at the very start), before any script of the page.
+  # bytes right after <head> (or <html>, or the doctype, or at the very start), before any script of
+  # the page. Both tags are optional in HTML, and anything before the doctype puts the page in quirks mode.
   def self.render(html, save_data:)
     script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save_data.to_json.to_json) }
-    injected = "<script>#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}".b
+    # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
+    injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
     html = html.b
-    tag = html.match(HEAD_TAG) || html.match(HTML_TAG)
+    tag = html.match(HEAD_TAG) || html.match(HTML_TAG) || html.match(DOCTYPE)
     tag ? html.insert(tag.end(0), injected) : injected + html
   end
 
