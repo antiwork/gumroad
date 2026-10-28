@@ -320,6 +320,30 @@ describe Bundles::ProductController, inertia: true do
         expect(file.reload).to be_deleted
         expect(folder_archive.reload).to be_deleted
       end
+
+      it "reports a failed commit callback enqueue and still builds the replacement entity archive" do
+        calls = 0
+        allow(UpdateProductFilesArchiveWorker).to receive(:perform_in).and_wrap_original do |original, *args|
+          calls += 1
+          raise Redis::CannotConnectError, "redis is down" if calls == 1
+          original.call(*args)
+        end
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(Redis::CannotConnectError),
+          hash_including(product_id: bundle.id, seller_id: bundle.user_id, commit_callback_failed: true)
+        )
+        expect(ProductIndexingService).to receive(:perform).once.with(product: bundle, action: "update", attributes_to_update: ["filetypes"], on_failure: :async)
+
+        expect do
+          post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+        end.to change { GenerateProductFilesArchivesJob.jobs.size }.by(1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
+        expect(file.reload).to be_deleted
+        entity_archive = bundle.product_files_archives.entity_archives.alive.sole
+        expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"] }).to include([entity_archive.id])
+      end
     end
 
     def ready_archive(files)
