@@ -118,9 +118,16 @@ class Follower::CreateService
 
       if @follower.imported_from_csv? || active_session_with_verified_email?
         @follower.confirm!
+      elsif confirmed_waitlist_follower?
+        # A confirmed follower joining a waitlist has nothing to confirm, so no email goes out.
+        true
       else
         request_confirmation
       end
+    end
+
+    def confirmed_waitlist_follower?
+      waitlist_product.present? && @follower.confirmed?
     end
 
     # Ordered against retiring the newsletter like the follow itself, so no request is queued once it has retired.

@@ -56,6 +56,17 @@ describe Follower::CreateService do
     end.to have_enqueued_mail(FollowerMailer, :confirm_follower).with(user.id, follower.id, product.id)
   end
 
+  it "sends no confirmation email to a confirmed follower joining a waitlist" do
+    product = create(:product, user:)
+
+    expect do
+      described_class.perform(followed_user: user, follower_email: active_follower.email, waitlist_product: product)
+    end.not_to have_enqueued_mail(FollowerMailer, :confirm_follower)
+
+    expect(active_follower.reload.waitlist_entries.map(&:product_id)).to eq [product.id]
+    expect(active_follower.reload.confirmed?).to be(true)
+  end
+
   it "records no waitlist entry when no product is given" do
     expect do
       described_class.perform(followed_user: user, follower_email: "plain@example.com")
