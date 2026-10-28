@@ -4723,7 +4723,9 @@ class Purchase < ApplicationRecord
       # Videos uploaded in the future would be automatically transcoded since the product would contain at least one
       # successful purchase. We can disable transcode on purchase to avoid unnecessary transcode attempts.
       link.transcode_videos_on_purchase = false
-      link.save!
+      # Flag bookkeeping only: validating here would let an unrelated product validation (a published
+      # bundle that has lost all its products) abort the transition and leave a paid purchase stuck.
+      link.save!(validate: false)
     end
 
     def process_without_charging!(reservable_offer_code: nil, locked_rate: nil)
