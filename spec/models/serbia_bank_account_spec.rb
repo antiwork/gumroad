@@ -69,5 +69,15 @@ describe SerbiaBankAccount do
 
       expect(BankAccount.find(bank_account.id)).to be_valid
     end
+
+    it "validates the account number when it is changed on a saved account" do
+      bank_account = BankAccount.find(create(:serbia_bank_account).id)
+      allow(Rails.env).to receive(:production?).and_return(true)
+
+      bank_account.account_number = "RS559081234567890123"
+
+      expect(bank_account).to_not be_valid
+      expect(bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    end
   end
 end
