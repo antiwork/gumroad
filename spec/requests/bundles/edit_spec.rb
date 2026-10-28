@@ -511,6 +511,28 @@ describe("Bundle edit page", type: :system, js: true) do
     expect(page.current_path).to eq(edit_bundle_content_path(bundle.external_id))
   end
 
+  it "removes a file the bundle still carries without touching unsaved edits" do
+    file = create(:product_file, link: bundle, display_name: "Retained volume")
+    visit edit_bundle_product_path(bundle.external_id)
+
+    find_field("Name", with: "Bundle").fill_in with: "Unsaved name"
+    click_on "Remove Retained volume"
+    within_modal "Remove this file?" do
+      click_on "Remove"
+    end
+
+    within find("h2", text: "Files", exact_text: true).ancestor("section") do
+      expect(page).to have_text("Removed Retained volume.")
+      # The live region is display: contents, which Selenium never reports as visible.
+      expect(page).to have_selector("[role=status]", text: "Removed Retained volume.", visible: :all)
+    end
+    expect(page).not_to have_alert(text: /removed/i)
+    expect(page).not_to have_button("Remove Retained volume")
+    expect(page).to have_field("Name", with: "Unsaved name")
+    expect(file.reload).to be_deleted
+    expect(bundle.reload.name).to eq("Bundle")
+  end
+
   context "product is not a bundle" do
     let(:product) { create(:product, user: seller) }
 

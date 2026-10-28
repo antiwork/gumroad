@@ -16,7 +16,7 @@ type LayoutProps = {
 
 export const Layout = ({ title, actions, navigation, children, preview, emailFrom }: LayoutProps) => (
   <>
-    <PageHeader className="sticky-top" title={title} actions={actions}>
+    <PageHeader className="sticky top-0 z-10 bg-body" title={title} actions={actions}>
       {navigation ?? null}
     </PageHeader>
     {preview && emailFrom ? (

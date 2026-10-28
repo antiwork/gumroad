@@ -61,7 +61,8 @@ describe User::Followers do
         followed_user:,
         follower_email:,
         follower_attributes: { source: follow_source },
-        logged_in_user:
+        logged_in_user:,
+        waitlist_product: nil
       ).and_call_original
       follower = followed_user.add_follower(follower_email, source: follow_source, logged_in_user:)
       expect(follower).to be_kind_of(Follower)

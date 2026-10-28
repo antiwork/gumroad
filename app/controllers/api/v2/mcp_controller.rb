@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-class Api::V2::MuseController < Api::V2::BaseController
+class Api::V2::McpController < Api::V2::BaseController
   skip_before_action :verify_authenticity_token
   # Parse before inherited callbacks access params so malformed JSON gets a JSON-RPC error.
   prepend_before_action :validate_mcp_origin, :parse_rpc_body, only: :mcp
@@ -13,11 +13,11 @@ class Api::V2::MuseController < Api::V2::BaseController
   end
 
   def oauth_metadata
-    render json: Muse::Mcp.oauth_metadata(base_url)
+    render json: Mcp::Server.oauth_metadata(base_url)
   end
 
   def mcp_discovery
-    render json: Muse::Mcp.discovery(base_url)
+    render json: Mcp::Server.discovery(base_url)
   end
 
   # OpenAI's plugin review verifies that we control the MCP host by fetching this path and
@@ -33,15 +33,15 @@ class Api::V2::MuseController < Api::V2::BaseController
     path = params[:resource_path].to_s
     path = "/#{path}" if path.present? && !path.start_with?("/")
     path = "/muse/v1/mcp" if path.blank?
-    render json: Muse::Mcp.protected_resource_metadata(base_url, resource_path: path)
+    render json: Mcp::Server.protected_resource_metadata(base_url, resource_path: path)
   end
 
   def register
-    payload = Muse::OauthClientRegistration.create!(JSON.parse(request.raw_post.presence || "{}"))
+    payload = Mcp::OauthClientRegistration.create!(JSON.parse(request.raw_post.presence || "{}"))
     render json: payload, status: :created
   rescue JSON::ParserError
     render json: { error: "invalid_client_metadata", error_description: "JSON parse error" }, status: :bad_request
-  rescue Muse::OauthClientRegistration::Error => e
+  rescue Mcp::OauthClientRegistration::Error => e
     render json: { error: "invalid_client_metadata", error_description: e.message }, status: :bad_request
   end
 
@@ -51,13 +51,13 @@ class Api::V2::MuseController < Api::V2::BaseController
       return head :method_not_allowed
     end
 
-    mcp = Muse::Mcp.new(
+    mcp = Mcp::Server.new(
       user: current_resource_owner,
       token: doorkeeper_token,
       connector: params[:client],
-      protocol_version_header: request.headers[Muse::Mcp::VERSION_HEADER],
-      method_header: request.headers[Muse::Mcp::METHOD_HEADER],
-      name_header: request.headers[Muse::Mcp::NAME_HEADER]
+      protocol_version_header: request.headers[Mcp::Server::VERSION_HEADER],
+      method_header: request.headers[Mcp::Server::METHOD_HEADER],
+      name_header: request.headers[Mcp::Server::NAME_HEADER]
     )
     result = mcp.handle(@rpc_body)
     return head :accepted if result.nil?
@@ -80,7 +80,7 @@ class Api::V2::MuseController < Api::V2::BaseController
     end
 
     def doorkeeper_unauthorized_render_options(*)
-      response.set_header("WWW-Authenticate", bearer_challenge(scope: Muse::OauthClientRegistration::MCP_SCOPES.join(" ")))
+      response.set_header("WWW-Authenticate", bearer_challenge(scope: Mcp::OauthClientRegistration::MCP_SCOPES.join(" ")))
       nil
     end
 
@@ -103,7 +103,7 @@ class Api::V2::MuseController < Api::V2::BaseController
       return :ok unless result.is_a?(Hash) && result[:error]
 
       case result[:error][:code]
-      when -32700, -32600, Muse::Mcp::HEADER_MISMATCH, Muse::Mcp::UNSUPPORTED_PROTOCOL_VERSION then :bad_request
+      when -32700, -32600, Mcp::Server::HEADER_MISMATCH, Mcp::Server::UNSUPPORTED_PROTOCOL_VERSION then :bad_request
       # Only a modern client is told at the transport level that the method does not exist.
       when -32601 then era == :modern ? :not_found : :ok
       # Method and parameter errors need a successful transport to reach the RPC caller.

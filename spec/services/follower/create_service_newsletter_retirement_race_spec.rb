@@ -57,7 +57,7 @@ describe Follower::CreateService, "while the old Gumroad newsletter retires", :a
 
   def confirmation_jobs(email)
     enqueued_jobs.select { _1[:args].first(2) == %w[FollowerMailer confirm_follower] }
-      .select { Follower.find_by(id: _1[:args][3]["args"].last)&.email == email }
+      .select { Follower.find_by(id: _1[:args][3]["args"][1])&.email == email }
   end
 
   # Delivers the queued confirmation requests the way MailDeliveryJob does.

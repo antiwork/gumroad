@@ -312,7 +312,7 @@ export const Layout = ({
       {/* TODO: remove this legacy uploader stuff */}
       <form className="hidden" data-id={uniquePermalink} id="edit-link-basic-form" />
       <PageHeader
-        className="sticky-top"
+        className="sticky top-0 z-10 bg-body"
         title={product.name || "Untitled"}
         actions={
           product.is_published ? (

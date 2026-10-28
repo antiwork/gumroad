@@ -22,6 +22,15 @@ describe Bundles::ProductController, inertia: true do
       expect(inertia.component).to eq("Bundles/Product/Edit")
       expect(inertia.props[:currency_type]).to eq("eur")
     end
+
+    it "lists the bundle's retained files inside the bundle props, where the editor reads them" do
+      file = create(:product_file, link: bundle)
+
+      get :edit, params: { bundle_id: bundle.external_id }
+
+      expect(inertia.props[:bundle][:retained_files]).to match([hash_including(id: file.external_id)])
+      expect(inertia.props).not_to have_key(:retained_files)
+    end
   end
 
   describe "PUT update" do
@@ -202,6 +211,15 @@ describe Bundles::ProductController, inertia: true do
       expect(other.reload).to be_alive
     end
 
+    it "removes a legacy file that no longer passes its own validations" do
+      file.update_column(:isbn, "978-3-16-148410-0")
+
+      post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+
+      expect(response).to be_successful
+      expect(file.reload).to be_deleted
+    end
+
     # The download endpoints serve the newest ready archive without checking its contents, so an
     # archive built from the file would keep shipping it to buyers who purchased before the conversion.
     it "kills the archives built while the file was attached" do
@@ -221,6 +239,111 @@ describe Bundles::ProductController, inertia: true do
 
       expect(stale.reload).to be_deleted
       expect(bundle.product_files_archives.alive.entity_archives.last.product_files).to eq([kept])
+    end
+
+    it "builds the replacement product-level archive only after the removal commits" do
+      kept = create(:product_file, link: bundle, url: "#{S3_BASE_URL}specs/vol-2.zip")
+      ready_archive([file, kept])
+      allow_any_instance_of(Link).to receive(:enqueue_index_update_for).and_raise(ActiveRecord::RecordNotSaved, "boom")
+
+      expect do
+        post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+      end.not_to change { UpdateProductFilesArchiveWorker.jobs.size }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(file.reload).to be_alive
+      expect(bundle.product_files_archives.alive.entity_archives.sole.product_files).to contain_exactly(file, kept)
+    end
+
+    context "when the file is in a folder archive" do
+      let(:other_file) { create(:product_file, link: bundle, url: "#{S3_BASE_URL}specs/vol-2.zip") }
+      let(:loose_file) { create(:product_file, link: bundle, url: "#{S3_BASE_URL}specs/extras.zip") }
+      let(:folder_uid) { SecureRandom.uuid }
+      let!(:folder_archive) do
+        create(:rich_content, entity: bundle, description: [
+                 {
+                   "type" => "fileEmbedGroup",
+                   "attrs" => { "name" => "Volumes", "uid" => folder_uid },
+                   "content" => [file, other_file].map { { "type" => "fileEmbed", "attrs" => { "id" => _1.external_id, "uid" => SecureRandom.uuid } } },
+                 },
+                 { "type" => "fileEmbed", "attrs" => { "id" => loose_file.external_id, "uid" => SecureRandom.uuid } },
+               ])
+        Link.find(bundle.id).product_files_archives.create!(folder_id: folder_uid, product_files: [file, other_file]).tap do |archive|
+          archive.mark_in_progress!
+          archive.mark_ready!
+        end
+      end
+
+      it "invalidates the archive in the same commit and queues its rebuild" do
+        expect do
+          post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+        end.to change { GenerateProductFilesArchivesJob.jobs.size }.by(1)
+
+        expect(response).to be_successful
+        expect(folder_archive.reload).to be_deleted
+        expect(GenerateProductFilesArchivesJob.jobs.last["args"]).to eq([bundle.id])
+      end
+
+      it "keeps the archive when the removed file was never in it" do
+        post :remove_file, params: { bundle_id: bundle.external_id, file_id: loose_file.external_id }
+
+        expect(response).to be_successful
+        expect(loose_file.reload).to be_deleted
+        expect(folder_archive.reload).to be_alive
+      end
+
+      it "rolls the removal back and says so when the archive invalidation fails" do
+        allow_any_instance_of(ProductFilesArchive).to receive(:mark_deleted!).and_raise(ActiveRecord::RecordInvalid.new(folder_archive))
+
+        expect do
+          post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+        end.not_to change { GenerateProductFilesArchivesJob.jobs.size }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body["success"]).to eq(false)
+        expect(file.reload).to be_alive
+        expect(folder_archive.reload).to be_alive
+      end
+
+      # The file is already deleted when the enqueue runs, so the response must say so.
+      it "reports a failed rebuild enqueue without answering the removal as failed" do
+        allow(GenerateProductFilesArchivesJob).to receive(:perform_async).and_raise(Redis::CannotConnectError, "redis is down")
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(Redis::CannotConnectError),
+          hash_including(product_id: bundle.id, archive_generation_enqueue_failed: true)
+        )
+
+        post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
+        expect(file.reload).to be_deleted
+        expect(folder_archive.reload).to be_deleted
+      end
+
+      it "reports a failed commit callback enqueue and still builds the replacement entity archive" do
+        calls = 0
+        allow(UpdateProductFilesArchiveWorker).to receive(:perform_in).and_wrap_original do |original, *args|
+          calls += 1
+          raise Redis::CannotConnectError, "redis is down" if calls == 1
+          original.call(*args)
+        end
+        expect(ErrorNotifier).to receive(:notify).with(
+          instance_of(Redis::CannotConnectError),
+          hash_including(product_id: bundle.id, seller_id: bundle.user_id, commit_callback_failed: true)
+        )
+        expect(ProductIndexingService).to receive(:perform).once.with(product: bundle, action: "update", attributes_to_update: ["filetypes"], on_failure: :async)
+
+        expect do
+          post :remove_file, params: { bundle_id: bundle.external_id, file_id: file.external_id }
+        end.to change { GenerateProductFilesArchivesJob.jobs.size }.by(1)
+
+        expect(response).to be_successful
+        expect(response.parsed_body).to eq("success" => true)
+        expect(file.reload).to be_deleted
+        entity_archive = bundle.product_files_archives.entity_archives.alive.sole
+        expect(UpdateProductFilesArchiveWorker.jobs.map { _1["args"] }).to include([entity_archive.id])
+      end
     end
 
     def ready_archive(files)

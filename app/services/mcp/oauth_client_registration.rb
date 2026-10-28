@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module Muse
+module Mcp
   class OauthClientRegistration
     class Error < StandardError; end
 
