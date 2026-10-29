@@ -638,6 +638,9 @@ module Mcp
         raise Error.new("Pass at least one of #{DISCOUNT_CODE_FIELDS.keys.to_sentence(last_word_connector: ', or ')}", code: -32602) if args.slice(*DISCOUNT_CODE_FIELDS.keys).empty?
 
         offer_code = find_discount_code!(args)
+        # Checkout prices a tiered code from its tiers and ignores amount_percentage.
+        raise ToolError, "#{offer_code.code} gives a different discount by how long the buyer has owned the product. Change its amounts in the Gumroad dashboard." if offer_code.tiered? && args.slice("percent_off", "amount_cents").any?
+
         currency_type = offer_code.currency_type || offer_code.products.first&.price_currency_type || user.currency_type
         offer_code.assign_attributes(discount_amount_attributes(args, required: false, currency_type:))
         offer_code.assign_attributes(discount_window_attributes(args, default_valid_at: offer_code.valid_at || offer_code.created_at))

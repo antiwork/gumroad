@@ -2140,6 +2140,18 @@ describe "MCP server" do
       expect(offer_code.reload).to have_attributes(amount_percentage: 25, amount_cents: nil, currency_type: nil)
     end
 
+    it "refuses an amount change on a tiered code but still edits its other fields" do
+      offer_code = create(:tiered_offer_code, user: @seller, products: [@product], code: "LOYAL",
+                                              ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
+
+      expect { call_tool("update_discount_code", { code: "LOYAL", product_id: @product.external_id, percent_off: 30 }) }.not_to change { offer_code.reload.attributes }
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to include("Change its amounts in the Gumroad dashboard")
+
+      call_tool("update_discount_code", { code: "LOYAL", product_id: @product.external_id, max_purchase_count: 5 })
+      expect(offer_code.reload).to have_attributes(max_purchase_count: 5, ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
+    end
+
     it "needs product_id to find a product-specific code" do
       create(:offer_code, user: @seller, products: [@product], code: "SCOPED", amount_cents: 500)
 
