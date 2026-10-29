@@ -22,6 +22,7 @@ module Mcp
     # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
+    BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
 
     class Error < StandardError
@@ -629,7 +630,7 @@ module Mcp
           # A retained member keeps the version it already sells; only a new member falls back to the
           # first version, which is what the editor's product picker selects by default.
           variant = retained[product.id]&.variant || product.variants_or_skus.first
-          { product_id: product.external_id, variant_id: variant&.external_id, quantity: 1, position: }
+          { product_id: product.external_id, variant_id: variant&.external_id, quantity: BUNDLE_MEMBER_QUANTITY, position: }
         end
       end
 
