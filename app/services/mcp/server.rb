@@ -83,7 +83,7 @@ module Mcp
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
@@ -316,6 +316,14 @@ module Mcp
                  "id" => { type: "string", description: "Product id or permalink." },
                  "url" => { type: "string", description: "Public https URL of an image, or a YouTube or Vimeo link." }
                }, required: %w[id url]),
+          tool("list_files", "The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.", {
+                 "id" => { type: "string", description: "Product id or permalink." }
+               }, required: %w[id], read_only: true),
+          tool("add_file", "Add a file that buyers receive with the product, from a public https URL. Files up to #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "url" => { type: "string", description: "Public https URL of the file." },
+                 "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL." }
+               }, required: %w[id url]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], destructive: true),
@@ -509,8 +517,50 @@ module Mcp
         { product: product_payload(product), covers: covers_payload(product.reload) }
       end
 
+      def files_payload(product)
+        product.alive_product_files.map do |file|
+          {
+            id: file.external_id,
+            name: file.name_displayable,
+            type: file.display_extension,
+            size_bytes: file.size.to_i,
+            position: file.position
+          }
+        end
+      end
+
       def covers_payload(product)
         product.display_asset_previews.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } }
+      end
+
+      def tool_list_files(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        { product: product_payload(product), files: files_payload(product) }
+      end
+
+      def tool_add_file(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        url = args["url"].to_s.strip
+        raise Error.new("url is required", code: -32602) if url.blank?
+
+        begin
+          file = Mcp::ProductFileIngest.new(seller: user, product:, url:, display_name: args["display_name"]).perform
+        rescue Mcp::ProductFileIngest::TooLarge
+          raise ToolError, "That file is larger than #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB, which is the most this tool can fetch. Upload it in the product editor instead: #{product.long_url}/edit"
+        rescue Mcp::ProductFileIngest::InvalidUrl, *INTERNET_EXCEPTIONS
+          raise ToolError, "Could not download a file from that URL. Use a public https link to the file itself."
+        rescue Mcp::ProductFileIngest::DownloadFailed
+          raise ToolError, "That link did not return a file. Use a public https link to the file itself."
+        rescue Aws::S3::Errors::ServiceError
+          raise ToolError, "The file could not be stored. Try again, or upload it in the product editor."
+        rescue Redis::BaseError
+          raise ToolError, "The file was attached, but the processing that follows it could not be started. Add it again to retry."
+        end
+
+        product.reload
+        { product: product_payload(product), files: files_payload(product), message: "#{file&.name_displayable || 'File'} is now attached to #{product.name}." }
       end
 
       def tool_publish_product(args)

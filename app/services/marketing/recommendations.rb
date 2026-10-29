@@ -120,17 +120,7 @@ class Marketing::Recommendations
       }
     end
 
-    def email_state(installment)
-      if installment.published_at.present?
-        blast = installment.latest_regular_blast
-        return blast.delivery_status if blast&.requested_at.present?
-
-        return "published"
-      end
-      return "scheduled" if installment.ready_to_publish?
-
-      "draft"
-    end
+    def email_state(installment) = installment.delivery_state
 
     def action_for(channel)
       return @actions[channel] if (@actions ||= {}).key?(channel)
