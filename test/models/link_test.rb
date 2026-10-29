@@ -104,10 +104,18 @@ class LinkTest < ActiveSupport::TestCase
   end
 
   test "suggested price fails when it is below the minimum storable value" do
-    product = build_product(customizable_price: true, suggested_price_cents: -(BasePrice::Shared::MAX_PRICE_CENTS + 1))
+    product = build_product(suggested_price_cents: BasePrice::Shared::MIN_PRICE_CENTS - 1)
 
     assert_not product.valid?
     assert_includes product.errors.full_messages, "Sorry, the suggested price entered is too low."
+  end
+
+  test "suggested price is valid at both ends of the storable range" do
+    product = build_product(price_cents: 100, customizable_price: true, suggested_price_cents: BasePrice::Shared::MAX_PRICE_CENTS)
+    assert product.valid?
+
+    product = build_product(suggested_price_cents: BasePrice::Shared::MIN_PRICE_CENTS)
+    assert product.valid?
   end
 
   test "price fails when too low" do

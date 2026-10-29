@@ -194,7 +194,7 @@ module Product::Prices
   # after validation, so the save can only answer "something went wrong".
   def suggested_price_must_be_within_storage_range
     return if suggested_price_cents.nil?
-    return if suggested_price_cents.between?(-BasePrice::Shared::MAX_PRICE_CENTS, BasePrice::Shared::MAX_PRICE_CENTS)
+    return if suggested_price_cents.between?(BasePrice::Shared::MIN_PRICE_CENTS, BasePrice::Shared::MAX_PRICE_CENTS)
 
     errors.add(:base, suggested_price_cents.positive? ? "Sorry, the suggested price entered is too large." : "Sorry, the suggested price entered is too low.")
   end
