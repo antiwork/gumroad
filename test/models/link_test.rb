@@ -96,6 +96,20 @@ class LinkTest < ActiveSupport::TestCase
     assert_equal "Sorry, the price entered is too large.", error.message
   end
 
+  test "suggested price fails when it exceeds the maximum storable value" do
+    product = build_product(customizable_price: true, suggested_price_cents: BasePrice::Shared::MAX_PRICE_CENTS + 1)
+
+    assert_not product.valid?
+    assert_includes product.errors.full_messages, "Sorry, the suggested price entered is too large."
+  end
+
+  test "suggested price fails when it is below the minimum storable value" do
+    product = build_product(customizable_price: true, suggested_price_cents: -(BasePrice::Shared::MAX_PRICE_CENTS + 1))
+
+    assert_not product.valid?
+    assert_includes product.errors.full_messages, "Sorry, the suggested price entered is too low."
+  end
+
   test "price fails when too low" do
     product = build_product(price_cents: 98)
     assert_not product.valid?

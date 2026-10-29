@@ -1219,6 +1219,14 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_nil @product.reload.suggested_price_cents
   end
 
+  test "PUT update returns a validation error instead of raising when the suggested price overflows the column" do
+    put :update, params: @params.merge(suggested_price_cents: BasePrice::Shared::MAX_PRICE_CENTS + 1, customizable_price: true), as: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "Sorry, the suggested price entered is too large.", response.parsed_body["error_message"]
+    assert_nil @product.reload.suggested_price_cents
+  end
+
   test "PUT update reconciles a stale dead cross-product file embed before the next save" do
     own_file = @product.product_files.alive.first
     foreign_product = create_product(user: @seller)
