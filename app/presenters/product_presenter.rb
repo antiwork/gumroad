@@ -395,8 +395,6 @@ class ProductPresenter
       price_checker_enabled: Feature.active?(:price_checker, product.user),
       custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
       auto_marketing_enabled: Marketing::Eligibility.enabled_for?(product.user),
-      # A collaborator edits the product but cannot email the owner's audience.
-      waitlist: pundit_user&.seller == product.user ? WaitlistLaunchEmail.new(product:).props : nil,
       # Hostnames the landing-page preview will follow a "navigate here" request
       # to. Same list the public wrapper enforces (User#custom_html_store_hostnames),
       # so seller HTML previewed in the editor can't open an arbitrary site.

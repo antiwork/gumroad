@@ -1080,20 +1080,6 @@ class Installment < ApplicationRecord
 
   # The send whose state the seller sees; resends to non-openers have their own rows.
   def latest_regular_blast = blasts.reject(&:to_non_openers?).max_by(&:requested_at)
-
-  # "draft", "scheduled", "published" (live without an email), or the latest blast's delivery status.
-  def delivery_state
-    if published_at.present?
-      blast = latest_regular_blast
-      return blast.delivery_status if blast&.requested_at.present?
-
-      return "published"
-    end
-    return "scheduled" if ready_to_publish?
-
-    "draft"
-  end
-
   def can_be_blasted? = send_emails? && !has_been_blasted?
 
   def featured_image_url

@@ -1050,7 +1050,6 @@ Rails.application.routes.draw do
           end
         end
         resource :marketing_abandoned_cart, only: %i[show update], controller: "marketing_abandoned_carts"
-        resource :waitlist_email, only: :create
       end
     end
 

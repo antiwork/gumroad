@@ -1,6 +1,5 @@
 import * as React from "react";
 
-import { type MarketingChannel } from "$app/data/marketing_actions";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
 import { Discount } from "$app/parsers/checkout";
@@ -124,15 +123,6 @@ export type TaxonomyAttribute = {
 };
 
 export type TaxonomyAttributeValue = string | boolean | number | null;
-
-export type EmailDeliveryState = NonNullable<MarketingChannel["draft"]>["state"];
-
-export type Waitlist = {
-  count: number;
-  // Set when the seller cannot send emails yet.
-  blocked_reason: string | null;
-  email: { state: EmailDeliveryState; edit_url: string } | null;
-};
 
 export type Product = {
   name: string;
@@ -350,8 +340,6 @@ export const ProductEditContext = React.createContext<{
   priceCheckerEnabled: boolean;
   customHtmlPagesEnabled: boolean;
   autoMarketingEnabled: boolean;
-  // Null until someone confirms a signup.
-  waitlist: Waitlist | null;
   // Hostnames this seller controls (their subdomain, their live custom domain).
   // The landing-page preview only follows a navigation request from the
   // sandboxed seller HTML when the destination is one of these.

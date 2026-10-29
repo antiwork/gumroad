@@ -208,7 +208,6 @@ const renderLayout = (
             priceCheckerEnabled: false,
             customHtmlPagesEnabled: false,
             autoMarketingEnabled: false,
-            waitlist: null,
             customHtmlStoreHostnames: [],
             customHtmlGlobalNavHosts: [],
             customHtmlGlobalNavPaths: [],
