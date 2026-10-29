@@ -37,9 +37,9 @@ module SellerPlan
 
     # The offer for this product's first publish, or nil when the seller is in the control arm,
     # outside the experiment, or has an active plan.
-    def self.offer_for(link)
-      user = link.user
-      return nil unless link.draft? && enabled_for?(user)
+    def self.offer_for(product)
+      user = product.user
+      return nil unless product.draft? && enabled_for?(user)
 
       arm = arm_for(user)
       return nil if arm == "control"
@@ -48,7 +48,7 @@ module SellerPlan
       return existing if existing&.active?
       return nil if price_id(arm).blank?
 
-      existing || SellerPlanOffer.record_offer!(user:, link:, arm:, price_cents: PRICE_CENTS.fetch(arm))
+      existing || SellerPlanOffer.record_offer!(user:, product:, arm:, price_cents: PRICE_CENTS.fetch(arm))
     end
 
     def self.experiment_start

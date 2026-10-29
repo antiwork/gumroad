@@ -14,23 +14,42 @@ module SellerPlan
       price_id = Experiment.price_id(@offer.arm)
       raise "No Stripe price configured for the #{@offer.arm} arm" if price_id.blank?
 
-      session = Stripe::Checkout::Session.create(
-        mode: "subscription",
-        line_items: [{ price: price_id, quantity: 1 }],
-        customer_email: @offer.user.email,
-        client_reference_id: @offer.id.to_s,
-        metadata: offer_metadata,
-        subscription_data: { metadata: offer_metadata },
-        success_url: @success_url,
-        cancel_url: @cancel_url,
-        allow_promotion_codes: false
-      )
+      @offer.with_lock do
+        raise "Seller plan is already active" if @offer.active?
 
-      @offer.update!(stripe_checkout_session_id: session.id, status: "checkout_started")
-      session.url
+        open_session_url || create_session(price_id)
+      end
     end
 
     private
+      def open_session_url
+        return if @offer.stripe_checkout_session_id.blank?
+
+        session = Stripe::Checkout::Session.retrieve(@offer.stripe_checkout_session_id)
+        session.url if session.status == "open"
+      rescue Stripe::InvalidRequestError
+        nil
+      end
+
+      def create_session(price_id)
+        session = Stripe::Checkout::Session.create(
+          mode: "subscription",
+          line_items: [{ price: price_id, quantity: 1 }],
+          customer_email: @offer.user.email,
+          client_reference_id: @offer.id.to_s,
+          metadata: offer_metadata,
+          subscription_data: { metadata: offer_metadata },
+          success_url: @success_url,
+          cancel_url: @cancel_url,
+          allow_promotion_codes: false
+        )
+
+        attributes = { stripe_checkout_session_id: session.id }
+        attributes[:status] = "checkout_started" if %w[offered canceled].include?(@offer.status)
+        @offer.update!(attributes)
+        session.url
+      end
+
       def offer_metadata
         { "seller_plan_offer_id" => @offer.id.to_s, "user_id" => @offer.user_id.to_s }
       end

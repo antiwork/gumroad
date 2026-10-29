@@ -24,6 +24,11 @@ module SellerPlan
       offer = offer_from(session["metadata"])
       return if offer.nil?
 
+      if offer.active? && offer.stripe_subscription_id.present? && offer.stripe_subscription_id != session["subscription"]
+        ErrorNotifier.notify("Seller plan offer #{offer.id} completed a second checkout (#{session["subscription"]})")
+        return
+      end
+
       offer.update!(
         status: "active",
         stripe_customer_id: session["customer"],
@@ -36,6 +41,9 @@ module SellerPlan
     def self.sync_subscription(subscription)
       offer = offer_from(subscription["metadata"])
       return if offer.nil?
+      return if offer.stripe_subscription_id.present? && offer.stripe_subscription_id != subscription["id"]
+
+      offer.update!(stripe_subscription_id: subscription["id"]) if offer.stripe_subscription_id.blank? && subscription["id"].present?
 
       case subscription["status"]
       when "active", "trialing"

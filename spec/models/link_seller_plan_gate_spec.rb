@@ -25,7 +25,7 @@ describe Link, "paid-publish gate" do
 
   it "publishes once the plan is active" do
     allow(SellerPlan::Experiment).to receive(:arm_for).and_return("ten")
-    SellerPlanOffer.record_offer!(user: seller, link: product, arm: "ten", price_cents: 1000).update!(status: "active")
+    SellerPlanOffer.record_offer!(user: seller, product: product, arm: "ten", price_cents: 1000).update!(status: "active")
 
     product.publish!
 

@@ -7,8 +7,8 @@ describe SellerPlanOffer do
   let(:product) { create(:product, user:, draft: true) }
 
   it "records one offer per seller and keeps the first arm" do
-    first = described_class.record_offer!(user:, link: product, arm: "ten", price_cents: 1000)
-    second = described_class.record_offer!(user:, link: product, arm: "five", price_cents: 500)
+    first = described_class.record_offer!(user:, product: product, arm: "ten", price_cents: 1000)
+    second = described_class.record_offer!(user:, product: product, arm: "five", price_cents: 500)
 
     expect(second.id).to eq(first.id)
     expect(second.arm).to eq("ten")
@@ -16,7 +16,7 @@ describe SellerPlanOffer do
   end
 
   it "counts as active only while the subscription is paid" do
-    offer = described_class.record_offer!(user:, link: product, arm: "ten", price_cents: 1000)
+    offer = described_class.record_offer!(user:, product: product, arm: "ten", price_cents: 1000)
 
     expect(offer).not_to be_active
 

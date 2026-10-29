@@ -2046,9 +2046,10 @@ class Link < ApplicationRecord
       offer = SellerPlan::Experiment.offer_for(self)
       return if offer.nil? || offer.active?
 
-      message = "Publishing a product now requires the Gumroad seller plan " \
-                "($#{offer.price_cents / 100}/month). Start your plan at " \
-                "#{Rails.application.routes.url_helpers.seller_plan_checkout_path}"
+      checkout_path = Rails.application.routes.url_helpers.seller_plan_checkout_path
+      message = "<span>Publishing a product now requires the Gumroad seller plan " \
+                "($#{offer.price_cents / 100}/month). " \
+                "<a href=\"#{checkout_path}\">Start your plan</a> to continue.</span>"
       errors.add(:base, message)
       raise LinkInvalid, message
     end

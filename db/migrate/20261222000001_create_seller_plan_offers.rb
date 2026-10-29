@@ -4,7 +4,7 @@ class CreateSellerPlanOffers < ActiveRecord::Migration[8.1]
   def change
     create_table :seller_plan_offers do |t|
       t.bigint :user_id, null: false
-      t.bigint :link_id
+      t.bigint :product_id
       t.string :arm, null: false
       t.integer :price_cents, null: false
       t.string :status, null: false, default: "offered"

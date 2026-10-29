@@ -5,7 +5,7 @@ require "spec_helper"
 describe SellerPlan::StripeEventHandler do
   let(:user) { create(:user) }
   let(:product) { create(:product, user:, draft: true) }
-  let(:offer) { SellerPlanOffer.record_offer!(user:, link: product, arm: "ten", price_cents: 1000) }
+  let(:offer) { SellerPlanOffer.record_offer!(user:, product: product, arm: "ten", price_cents: 1000) }
   let(:metadata) { { "seller_plan_offer_id" => offer.id.to_s } }
 
   def event(type, object)
@@ -55,5 +55,25 @@ describe SellerPlan::StripeEventHandler do
         event("checkout.session.completed", { "metadata" => {}, "customer" => "cus_other", "subscription" => "sub_other" })
       )
     end.not_to change { offer.reload.status }
+  end
+
+  it "ignores a cancellation for a subscription the offer no longer holds" do
+    offer.update!(status: "active", stripe_subscription_id: "sub_new")
+
+    described_class.handle_stripe_event(
+      event("customer.subscription.deleted", { "id" => "sub_old", "metadata" => metadata, "status" => "canceled" })
+    )
+
+    expect(offer.reload.status).to eq("active")
+  end
+
+  it "does not replace the subscription of an already active offer with a second checkout" do
+    offer.update!(status: "active", stripe_subscription_id: "sub_first")
+
+    described_class.handle_stripe_event(
+      event("checkout.session.completed", { "metadata" => metadata, "customer" => "cus_1", "subscription" => "sub_second" })
+    )
+
+    expect(offer.reload.stripe_subscription_id).to eq("sub_first")
   end
 end

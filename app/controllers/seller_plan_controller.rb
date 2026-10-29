@@ -6,18 +6,15 @@ class SellerPlanController < Sellers::BaseController
   def checkout
     authorize SellerPlanOffer
 
-    offer = SellerPlanOffer.find_by(user_id: current_user.id)
+    offer = SellerPlanOffer.find_by(user_id: current_seller.id)
     return redirect_to root_path, alert: "That plan offer is no longer available." if offer.nil?
 
-    # A seller who already pays must not be able to open a second checkout and buy a second
-    # subscription from a stale link.
-    return redirect_to edit_link_url(offer.link.unique_permalink) if offer.active?
+    edit_url = edit_link_url(offer.product.unique_permalink)
+    # A seller who already pays must not be able to open a second checkout from a stale link.
+    return redirect_to edit_url if offer.active?
 
-    redirect_to SellerPlan::Checkout.new(
-      offer:,
-      success_url: edit_link_url(offer.link.unique_permalink),
-      cancel_url: edit_link_url(offer.link.unique_permalink)
-    ).url, allow_other_host: true
+    redirect_to SellerPlan::Checkout.new(offer:, success_url: edit_url, cancel_url: edit_url).url,
+                allow_other_host: true
   rescue StandardError => e
     ErrorNotifier.notify(e)
     redirect_to root_path, alert: "Something broke starting your plan. We're looking into it."
