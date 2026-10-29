@@ -9,14 +9,31 @@ export type JWPlayerOptions = Omit<jwplayer.SetupConfig, "playlist" | "cast"> & 
   })[];
 };
 
+const PLAYER_LIBRARY_URL = "https://cdn.jwplayer.com/libraries/3vz4Z4wu.js";
+
+let libraryLoad: null | Promise<void> = null;
+
+// The library is fetched on first play, so a failed load has to be retryable: the browser's module
+// map remembers a failed dynamic import, so a retry would reject without re-fetching. A script tag
+// re-fetches every attempt, and the shared promise keeps concurrent embeds to one download.
+const loadPlayerLibrary = (): Promise<void> => {
+  if (typeof jwplayer !== "undefined") return Promise.resolve();
+  libraryLoad ??= new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = PLAYER_LIBRARY_URL;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      script.remove();
+      libraryLoad = null;
+      reject(new Error(`Failed to load the video player library from ${PLAYER_LIBRARY_URL}`));
+    };
+    document.head.appendChild(script);
+  });
+  return libraryLoad;
+};
+
 export const createJWPlayer = async (containerId: string, options: JWPlayerOptions) => {
-  // Load the cloud-hosted player library only if it isn't on the page yet (it defines the
-  // global "jwplayer" function). The guard also lets tests provide a stubbed global instead
-  // of fetching the real library over the network.
-  if (typeof jwplayer === "undefined") {
-    // @ts-expect-error no types for dynamic import, but we're not using the return value anyway
-    await import(/* @vite-ignore */ "https://cdn.jwplayer.com/libraries/3vz4Z4wu.js");
-  }
+  await loadPlayerLibrary();
 
   // JW Player merges our setup options over the cloud player config (window.jwplayer.defaults,
   // from the library script above), which currently ships with casting enabled ("cast": {}).
