@@ -17,8 +17,6 @@ let libraryLoad: null | Promise<void> = null;
 // map remembers a failed dynamic import, so a retry would reject without re-fetching. A script tag
 // re-fetches every attempt, and the shared promise keeps concurrent embeds to one download.
 const loadPlayerLibrary = (): Promise<void> => {
-  // The global means the library is already on the page (or a test stubbed it), so there is
-  // nothing to fetch.
   if (typeof jwplayer !== "undefined") return Promise.resolve();
   libraryLoad ??= new Promise<void>((resolve, reject) => {
     const script = document.createElement("script");
