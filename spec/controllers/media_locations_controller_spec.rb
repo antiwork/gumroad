@@ -144,6 +144,37 @@ describe MediaLocationsController do
       expect(media_location.consumed_at).to eq(Time.current.to_json) # to_json so it only has second precision
     end
 
+    it "rejects a platform outside the known list without raising" do
+      params = {
+        product_file_id: @product_file.external_id,
+        url_redirect_id: @url_redirect.external_id,
+        purchase_id: @purchase.external_id,
+        platform: "i22989_regress",
+        location: 1,
+      }
+
+      post(:create, params:)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(false)
+      expect(MediaLocation.count).to eq(0)
+    end
+
+    it "rejects a request with no platform without raising" do
+      params = {
+        product_file_id: @product_file.external_id,
+        url_redirect_id: @url_redirect.external_id,
+        purchase_id: @purchase.external_id,
+        location: 1,
+      }
+
+      post(:create, params:)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(false)
+      expect(MediaLocation.count).to eq(0)
+    end
+
     context "avoid creating new media_location if valid existing media_location is present" do
       it "updates existing media_location instead of creating a new one if it exists" do
         MediaLocation.create!(product_file_id: @product_file.id, product_id: @product.id, url_redirect_id: @url_redirect.id,

@@ -95,5 +95,36 @@ describe ConsumptionAnalyticsController do
 
       expect(response.parsed_body["success"]).to be(false)
     end
+
+    it "rejects an undecryptable url_redirect_id without raising" do
+      params = {
+        event_type: "view",
+        url_redirect_id: "AAAA-not-a-valid-ciphertext",
+        purchase_id: @purchase.external_id,
+        platform: "web"
+      }
+
+      post(:create, params:)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(false)
+      expect(ConsumptionEvent.count).to eq(0)
+    end
+
+    it "rejects a platform outside the known list without raising" do
+      params = {
+        event_type: "view",
+        product_file_id: @product_file.external_id,
+        url_redirect_id: @url_redirect.external_id,
+        purchase_id: @purchase.external_id,
+        platform: "i22989_regress"
+      }
+
+      post(:create, params:)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(false)
+      expect(ConsumptionEvent.count).to eq(0)
+    end
   end
 end
