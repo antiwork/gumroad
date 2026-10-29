@@ -124,10 +124,18 @@ class TranscodeVideoForStreamingWorker
       end
     end
 
-    client = Aws::MediaConvert::Client.new(endpoint: MEDIACONVERT_ENDPOINT)
-    response = client.create_job(build_mediaconvert_job(original_video_key, output_key_prefix, outputs))
-    job = response.job
-    transcoded_video.update!(job_id: job.id)
+    begin
+      client = Aws::MediaConvert::Client.new(endpoint: MEDIACONVERT_ENDPOINT)
+      response = client.create_job(build_mediaconvert_job(original_video_key, output_key_prefix, outputs))
+      job = response.job
+      transcoded_video.update!(job_id: job.id)
+    rescue
+      # A raise here leaves this row processing with no job_id, and `attempt_to_transcode?` reads that as
+      # an in-flight job, so this worker's own retry returns early and the file never gets a job at all.
+      # Erroring the row frees the retry to submit again.
+      transcoded_video.mark_error
+      raise
+    end
   end
 
   private

@@ -212,6 +212,36 @@ describe TranscodeVideoForStreamingWorker do
           expect(TranscodedVideo.last.transcoded_video_key).to eq "specs/ScreenRecording/hls/"
         end
 
+        context "when the transcoder rejects the submission" do
+          before do
+            allow_any_instance_of(Aws::MediaConvert::Client).to receive(:create_job)
+              .and_raise(Aws::MediaConvert::Errors::BadRequestException.new(nil, "Invalid input"))
+          end
+
+          it "marks the created record as error instead of leaving it processing without a job" do
+            expect do
+              described_class.new.perform(product_file.id)
+            end.to raise_error(Aws::MediaConvert::Errors::BadRequestException).and change { TranscodedVideo.count }.by(1)
+
+            expect(TranscodedVideo.last.state).to eq "error"
+            expect(TranscodedVideo.last.job_id).to be_nil
+            expect(product_file.reload.transcoding_in_progress?).to be(false)
+          end
+
+          it "leaves the next attempt free to submit the job again" do
+            expect { described_class.new.perform(product_file.id) }.to raise_error(Aws::MediaConvert::Errors::BadRequestException)
+
+            allow_any_instance_of(Aws::MediaConvert::Client).to receive(:create_job)
+              .and_return(OpenStruct.new({ job: OpenStruct.new({ id: "abc-123" }) }))
+
+            expect do
+              described_class.new.perform(product_file.id)
+            end.to change { TranscodedVideo.count }.by(1)
+
+            expect(TranscodedVideo.last.job_id).to eq "abc-123"
+          end
+        end
+
         context "with GRMC", :freeze_time do
           before do
             allow(GlobalConfig).to receive(:get).with("GRMC_API_KEY").and_return("test_api_key")
