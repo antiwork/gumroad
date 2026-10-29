@@ -510,6 +510,9 @@ module StripeMerchantAccountManager
       # a company phone withheld while the countries disagree would otherwise diff out as
       # unchanged on every later save and never be sent again, even once they reconcile.
       last_attributes[:company][:phone] = nil
+      # deep_merge copies last-only keys into the diff, so a tax ID from an earlier company record
+      # would be sent even though company_hash omitted it from the current one.
+      last_attributes[:company].delete(:tax_id) unless company_tax_id_accepted?(user_compliance_info)
     end
 
     diff_attributes = get_diff_attributes(current_attributes, last_attributes)
@@ -695,6 +698,7 @@ module StripeMerchantAccountManager
     # clearing on any success reverts to a seller-visible note vanishing for a still-unfixed
     # rejection (Greptile finding on this PR).
     clear_stale_payout_setup_rejection_notes(user, resolved_fields: submitted_field_names(account_update.sent_attributes))
+    clear_unresolvable_business_tax_id_notes(user)
     # After the clear above, or the seller-visible half of the note would be retired by this same save.
     record_account_rejection_note(user, jp_address_rejection) if notify && jp_address_rejection
   rescue Stripe::InvalidRequestError => e
@@ -2644,6 +2648,25 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
+  # A business-tax-ID rejection can never be resolved by resubmitting the field when Stripe has no
+  # accepted type for it on this account shape (see company_tax_id_accepted?), so the seller-visible
+  # note would otherwise sit there forever blaming a field they cannot satisfy.
+  def self.clear_unresolvable_business_tax_id_notes(user)
+    return if company_tax_id_accepted?(user.alive_user_compliance_info)
+
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("json_data LIKE ?", "%#{PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTED_FIELD_KEY] == "tax_id" }
+        .each { |note| note.update!(deleted_at: Time.current) }
+  rescue => e
+    Rails.logger.error "Failed to clear unresolvable business-tax-ID notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
   def self.disconnect(user:)
     return false unless user.stripe_disconnect_allowed?
 
@@ -3072,6 +3095,16 @@ module StripeMerchantAccountManager
     end
   end
 
+  # Stripe keeps an India sole-proprietorship account as an individual, so it has no accepted type
+  # for `company[tax_id]` there and refuses every save with `tax_id_invalid`. Both the payload and
+  # the rejection note that names the field follow this one answer.
+  def self.company_tax_id_accepted?(user_compliance_info)
+    return true unless user_compliance_info&.legal_entity_country_code == Compliance::Countries::IND.alpha2
+
+    user_compliance_info.business_type != UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP
+  end
+  private_class_method :company_tax_id_accepted?
+
   def self.company_hash(user_compliance_info, passphrase)
     return unless user_compliance_info.present?
 
@@ -3093,6 +3126,8 @@ module StripeMerchantAccountManager
         executives_provided: true,
       }
     }
+
+    hash[:company].delete(:tax_id) unless company_tax_id_accepted?(user_compliance_info)
 
     # The kanji/kana blocks below carry a hardcoded country and are only populated for a Japanese
     # legal entity, so they follow the same account-country rule as the AE branch below.
