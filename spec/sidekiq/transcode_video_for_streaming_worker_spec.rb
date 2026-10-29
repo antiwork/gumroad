@@ -89,6 +89,15 @@ describe TranscodeVideoForStreamingWorker do
         expect(transcoded_video.streamable).to eq(product_file)
       end
 
+      it "submits a job when the only duplicate processing row never got a job_id and is older than the grace period" do
+        create(:transcoded_video, original_video_key: product_file.s3_key, transcoded_video_key: product_file.s3_key + ".transcoded",
+                                  state: "processing", job_id: nil, created_at: TranscodedVideo::UNSUBMITTED_GRACE_PERIOD.ago - 1.minute)
+
+        described_class.new.perform(product_file.id, ProductFile.name, described_class::MEDIACONVERT)
+
+        expect(TranscodedVideo.last.job_id).to eq("abc-123")
+      end
+
       it "transcodes the video and does not send the transcoding error email", :vcr do
         expect(ContactingCreatorMailer).to_not receive(:video_transcode_failed)
 

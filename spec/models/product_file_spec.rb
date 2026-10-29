@@ -1002,6 +1002,26 @@ describe ProductFile do
     it "returns `true` if the there are no 'processing' or 'completed' transcoding jobs" do
       expect(product_file.attempt_to_transcode?).to be(true)
     end
+
+    it "returns `true` when the only 'processing' row never got a job_id and is older than the grace period" do
+      create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key, state: "processing",
+                                job_id: nil, created_at: TranscodedVideo::UNSUBMITTED_GRACE_PERIOD.ago - 1.minute)
+
+      expect(product_file.attempt_to_transcode?).to be(true)
+    end
+
+    it "returns `false` while a row that never got a job_id is still within the grace period" do
+      create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key, state: "processing", job_id: nil)
+
+      expect(product_file.attempt_to_transcode?).to be(false)
+    end
+
+    it "returns `false` for a job that was submitted, however old the row is" do
+      create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key, state: "processing",
+                                job_id: "job-1", created_at: 6.months.ago)
+
+      expect(product_file.attempt_to_transcode?).to be(false)
+    end
   end
 
   describe "s3 properties" do
