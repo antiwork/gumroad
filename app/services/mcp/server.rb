@@ -40,6 +40,18 @@ module Mcp
 
     class ToolError < StandardError; end
 
+    DISCOUNT_PERCENT_RANGE = (1..100)
+    # DATETIME's range: MySQL, outside strict mode, stores a later year as a zero date that reads back as nil.
+    DISCOUNT_YEAR_RANGE = (1000..9999)
+    DISCOUNT_MIN_VALIDITY_WINDOW = 1.second
+    DISCOUNT_CODE_FIELDS = {
+      "percent_off" => { type: "integer", description: "Percent off, #{DISCOUNT_PERCENT_RANGE.min}-#{DISCOUNT_PERCENT_RANGE.max}. Not with amount_cents." },
+      "amount_cents" => { type: "integer", description: "Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off." },
+      "valid_at" => { type: "string", description: "ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one." },
+      "expires_at" => { type: "string", description: "ISO 8601 time the code stops working." },
+      "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
+    }.freeze
+
     # A tool's scope check failed. `scope` is what the client should re-authorize with: the
     # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
     class InsufficientScope < Error
@@ -373,7 +385,21 @@ module Mcp
           tool("update_bundle", "Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.", {
                  "id" => { type: "string", description: "Bundle id or permalink." },
                  "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity." }
-               }, required: %w[id product_ids], destructive: true)
+               }, required: %w[id product_ids], destructive: true),
+          tool("create_discount_code", "Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.", {
+                 "code" => { type: "string", description: "The code buyers enter. Letters, numbers, dashes, and underscores." },
+                 "product_id" => { type: "string", description: "Product id or permalink. Omit for a code that covers all of the creator's products." },
+                 **DISCOUNT_CODE_FIELDS
+               }, required: %w[code]),
+          tool("update_discount_code", "Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.", {
+                 "code" => { type: "string", description: "The existing code." },
+                 "product_id" => { type: "string", description: "Product id or permalink, for a code made for specific products. Omit for a code that covers all products." },
+                 **DISCOUNT_CODE_FIELDS
+               }, required: %w[code], destructive: true),
+          tool("expire_discount_code", "End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.", {
+                 "code" => { type: "string", description: "The existing code." },
+                 "product_id" => { type: "string", description: "Product id or permalink, for a code made for specific products. Omit for a code that covers all products." }
+               }, required: %w[code], destructive: true)
         ]
       end
 
@@ -826,6 +852,150 @@ module Mcp
           Bundle::UpdateProductsService.new(bundle:, products: members).perform
         end
         { product: product_payload(bundle.reload), bundle_products: bundle_products_payload(bundle) }
+      end
+
+      def tool_create_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        code = args["code"].strip
+        raise Error.new("code is required", code: -32602) if code.blank?
+        product = find_discount_product!(args) if args.key?("product_id")
+        attributes = discount_amount_attributes(args, required: true, currency_type: product&.price_currency_type || user.currency_type)
+        attributes.merge!(discount_window_attributes(args, default_valid_at: Time.current))
+        attributes[:max_purchase_count] = discount_max_purchase_count(args) if args.key?("max_purchase_count")
+
+        offer_code = user.offer_codes.build(code:, universal: product.nil?, products: Array(product), **attributes)
+        # offer_codes has no unique index on code, so two overlapping calls from this tool would both
+        # pass the uniqueness validation; the seller lock makes the second one see the first row.
+        ActiveRecord::Base.transaction do
+          User.where(id: user.id).lock.pick(:id)
+          save_discount_code!(offer_code)
+        end
+        { discount_code: discount_code_payload(offer_code) }
+      end
+
+      def tool_update_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        raise Error.new("Pass at least one of #{DISCOUNT_CODE_FIELDS.keys.to_sentence(last_word_connector: ', or ')}", code: -32602) if args.slice(*DISCOUNT_CODE_FIELDS.keys).empty?
+
+        offer_code = find_discount_code!(args)
+        # Checkout prices a tiered code from its tiers and ignores amount_percentage.
+        raise ToolError, "#{offer_code.code} gives a different discount by how long the buyer has owned the product. Change its amounts in the Gumroad dashboard." if offer_code.tiered? && args.slice("percent_off", "amount_cents").any?
+
+        currency_type = offer_code.currency_type || offer_code.products.first&.price_currency_type || user.currency_type
+        offer_code.assign_attributes(discount_amount_attributes(args, required: false, currency_type:))
+        offer_code.assign_attributes(discount_window_attributes(args, default_valid_at: offer_code.valid_at || offer_code.created_at))
+        offer_code.max_purchase_count = discount_max_purchase_count(args) if args.key?("max_purchase_count")
+        save_discount_code!(offer_code)
+        { discount_code: discount_code_payload(offer_code) }
+      end
+
+      def tool_expire_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        offer_code = find_discount_code!(args)
+        now = Time.current.change(usec: 0)
+        return { discount_code: discount_code_payload(offer_code), message: "Already expired." } if offer_code.expires_at.present? && offer_code.expires_at <= now
+
+        # The model requires a start date before the end date, as the editor's "Valid until" does.
+        offer_code.valid_at = [offer_code.valid_at || offer_code.created_at, now - DISCOUNT_MIN_VALIDITY_WINDOW].min
+        offer_code.expires_at = now
+        # Expiring narrows the code to nothing, so the price check, which the current prices can
+        # already fail, must not leave the creator unable to end it from here.
+        offer_code.save!(context: :expiring)
+        { discount_code: discount_code_payload(offer_code), message: "Expired. Buyers can no longer use this code." }
+      end
+
+      def find_discount_code!(args)
+        code = args["code"].strip
+        raise Error.new("code is required", code: -32602) if code.blank?
+
+        if args.key?("product_id")
+          product = find_discount_product!(args)
+          offer_code = product.offer_codes.alive.where(universal: false, user_id: user.id).find_by(code:)
+          raise ToolError, "No discount code #{code} is limited to this product. Omit product_id for a code that covers all products." if offer_code.nil?
+        else
+          offer_code = user.offer_codes.alive.universal.find_by(code:)
+          raise ToolError, "No discount code #{code} covers all products. Pass product_id for a code made for specific products." if offer_code.nil?
+        end
+        offer_code
+      end
+
+      def find_discount_product!(args)
+        raise Error.new("product_id must not be blank", code: -32602) if args["product_id"].blank?
+
+        find_product!(args["product_id"])
+      end
+
+      # The columns are 4-byte integers; the editor answers an overflow the same way.
+      def save_discount_code!(offer_code)
+        offer_code.save!
+      rescue ActiveModel::RangeError
+        raise ToolError, "The value entered is too large. Please enter a smaller number."
+      end
+
+      def discount_amount_attributes(args, required:, currency_type:)
+        percent, cents = args.values_at("percent_off", "amount_cents")
+        raise Error.new("Pass only one of percent_off or amount_cents", code: -32602) if percent && cents
+        raise Error.new("Pass one of percent_off or amount_cents", code: -32602) if required && percent.nil? && cents.nil?
+
+        if percent
+          raise Error.new("percent_off must be between #{DISCOUNT_PERCENT_RANGE.min} and #{DISCOUNT_PERCENT_RANGE.max}", code: -32602) unless DISCOUNT_PERCENT_RANGE.cover?(percent)
+
+          { amount_percentage: percent, amount_cents: nil, currency_type: nil, once_per_cart: false }
+        elsif cents
+          raise Error.new("amount_cents must be greater than zero", code: -32602) unless cents.positive?
+
+          { amount_cents: cents, amount_percentage: nil, currency_type: }
+        else
+          {}
+        end
+      end
+
+      def discount_window_attributes(args, default_valid_at:)
+        attributes = {}
+        attributes[:valid_at] = parse_discount_time(args, "valid_at") if args.key?("valid_at")
+        if args.key?("expires_at")
+          attributes[:expires_at] = parse_discount_time(args, "expires_at")
+          attributes[:valid_at] ||= default_valid_at
+        end
+        attributes
+      end
+
+      def parse_discount_time(args, key)
+        time = begin
+          Time.zone.iso8601(args[key])
+        rescue ArgumentError
+          raise Error.new("#{key} must be an ISO 8601 time", code: -32602)
+        end
+        raise Error.new("#{key} must have a year from #{DISCOUNT_YEAR_RANGE.min} to #{DISCOUNT_YEAR_RANGE.max}", code: -32602) unless DISCOUNT_YEAR_RANGE.cover?(time.year)
+
+        time
+      end
+
+      def discount_max_purchase_count(args)
+        count = args["max_purchase_count"]
+        raise Error.new("max_purchase_count must be zero or more", code: -32602) if count.negative?
+
+        count
+      end
+
+      def discount_code_payload(offer_code)
+        product_ids = offer_code.universal? ? [] : offer_code.products.map(&:external_id)
+        {
+          id: offer_code.external_id,
+          code: offer_code.code,
+          # A code made in the editor can cover several products; product_ids lists them all.
+          scope: offer_code.universal? ? "universal" : product_ids.first,
+          product_ids:,
+          # A tiered code's amount_percentage is a placeholder; checkout uses the tiers.
+          percent_off: offer_code.tiered? ? nil : offer_code.amount_percentage,
+          tiers: offer_code.normalized_ownership_duration_tiers,
+          amount_cents: offer_code.amount_cents,
+          currency: offer_code.is_cents? ? offer_code.currency_type : nil,
+          valid_at: offer_code.valid_at&.iso8601,
+          expires_at: offer_code.expires_at&.iso8601,
+          max_purchase_count: offer_code.max_purchase_count,
+          expired: offer_code.expires_at.present? && offer_code.expires_at <= Time.current
+        }
       end
 
       def product_payload(product)
