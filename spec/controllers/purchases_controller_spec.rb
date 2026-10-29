@@ -186,10 +186,10 @@ describe PurchasesController, :vcr do
 
       it "allows to update giftee_email when the recipient never claimed the gift" do
         product = create(:product, user: seller)
-        gift = create(:gift, gifter_email: "gifter@foo.com", giftee_email: "giftee@foo.com", link: product)
+        gift = create(:gift, gifter_email: "gifter@example.com", giftee_email: "giftee@example.com", link: product)
         gifter_purchase = create(:purchase, link: product,
                                             seller:,
-                                            email: "gifter@foo.com",
+                                            email: "gifter@example.com",
                                             purchase_state: "successful",
                                             is_gift_sender_purchase: true,
                                             stripe_transaction_id: "ch_zitkxbhds3zqlt",
