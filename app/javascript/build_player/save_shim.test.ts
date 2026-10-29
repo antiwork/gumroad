@@ -17,7 +17,8 @@ const runShim = ({
   save = {},
   windowName = "",
   replies = [],
-}: { save?: Record<string, string>; windowName?: string; replies?: Reply[] } = {}) => {
+  beaconMaxBytes = 60000,
+}: { save?: Record<string, string>; windowName?: string; replies?: Reply[]; beaconMaxBytes?: number } = {}) => {
   const listeners: Record<string, () => void> = {};
   const timers: (() => void)[] = [];
   const sent: Batch[] = [];
@@ -42,7 +43,7 @@ const runShim = ({
     save,
     saveUrl: "/save",
     flushDelayMs: 1000,
-    beaconMaxBytes: 60000,
+    beaconMaxBytes,
     failedMessageType: "gumroad:build-save-failed",
     failuresBeforeAlert: 3,
     carriedPrefix: CARRIED_PREFIX,
@@ -172,20 +173,36 @@ describe("save shim", () => {
     expect(sent.at(-1)?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
   });
 
-  it("on closing after a hide, sends only what changed since the hide beacon, so both fit the quota", () => {
-    const closing = runShim();
-    closing.storage.setItem("a", "1");
-    closing.hide();
-    closing.leave();
-    expect(closing.beacons).toHaveLength(1);
+  it("on closing right after a hide, sends no second beacon", () => {
+    const { storage, beacons, hide, leave } = runShim();
+    storage.setItem("a", "1");
+    hide();
+    leave();
 
-    const writesWhileHidden = runShim();
-    writesWhileHidden.storage.setItem("a", "1");
-    writesWhileHidden.hide();
-    writesWhileHidden.storage.setItem("b", "2");
-    writesWhileHidden.leave();
-    expect(writesWhileHidden.beacons.map((b) => b.set)).toEqual([{ a: "1" }, { b: "2" }]);
-    expect(writesWhileHidden.beacons[1]?.sequence).toBeGreaterThan(writesWhileHidden.beacons[0]?.sequence ?? Infinity);
+    expect(beacons).toHaveLength(1);
+  });
+
+  it("on closing after writes while hidden, sends a beacon that also holds the hide beacon's changes", () => {
+    const { storage, beacons, hide, leave } = runShim();
+    storage.setItem("a", "1");
+    hide();
+    storage.setItem("b", "2");
+    leave();
+
+    // The second beacon has the higher number, so if it lands first the server skips the first one.
+    expect(beacons.map((b) => b.set)).toEqual([{ a: "1" }, { a: "1", b: "2" }]);
+    expect(beacons[1]?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
+  });
+
+  it("does not let the two beacons pass the quota together", () => {
+    const { storage, beacons, sent, hide, leave } = runShim({ beaconMaxBytes: 200 });
+    storage.setItem("a", "1".repeat(25));
+    hide();
+    storage.setItem("b", "2".repeat(25));
+    leave();
+
+    expect(beacons).toHaveLength(1);
+    expect(sent.at(-1)?.set).toEqual({ a: "1".repeat(25), b: "2".repeat(25) });
   });
 
   it("hands every change made on the page to the next page, which applies it and keeps numbering", async () => {

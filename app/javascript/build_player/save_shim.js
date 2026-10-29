@@ -35,8 +35,10 @@
   let pending = null;
   let unconfirmed = null;
   let sincePageLoad = null;
-  // Changes made after a hide beacon went out; null while no hide beacon is outstanding.
+  // Changes made after a hide beacon went out; null while no hide beacon is outstanding. The beacon's
+  // own changes and size are kept for the leave beacon.
   let sinceHidden = null;
+  let hiddenBeacon = null;
   let timer = null;
   let failures = 0;
 
@@ -165,12 +167,15 @@
   }
 
   // A beacon is delivered even as the page closes, but the browser only says it was queued.
-  function beacon(changes) {
+  // Returns the size it sent, for a later beacon that has to share the quota with this one.
+  function beacon(changes, maxBytes) {
     const payload = body(changes);
-    if (new Blob([payload]).size <= config.beaconMaxBytes && navigator.sendBeacon(saveUrl, payload)) {
-      return;
+    const size = new Blob([payload]).size;
+    if (size <= maxBytes && navigator.sendBeacon(saveUrl, payload)) {
+      return size;
     }
     fetch(saveUrl, { method: "POST", body: payload }).catch(() => {});
+    return 0;
   }
 
   // A hidden tab may be discarded without another event, so its unconfirmed changes go as a beacon
@@ -183,24 +188,31 @@
     }
     unconfirmed = null;
     pending = changes;
-    beacon(changes);
+    hiddenBeacon = { changes, bytes: beacon(changes, config.beaconMaxBytes) };
     sinceHidden = emptyBatch();
     changed();
   }
   // Everything unconfirmed, including a batch still in flight, goes in one beacon; a reply to the batch
   // in flight is then ignored. When a hide beacon is outstanding (closing a tab fires hidden, then
-  // pagehide), it already holds all of that, so only the changes made since go now: two full beacons
-  // could together pass the browser's keepalive quota, and the second would be dropped. The next page
-  // keeps this writer and numbers on from the beacon, so if the beacon lands after that page's first
-  // save, the server skips it as stale.
+  // pagehide), it already holds all of that: nothing goes if nothing changed since, and otherwise the
+  // leave beacon repeats the hide beacon's changes with the new ones. It has a higher number, so the
+  // server skips the hide beacon if it lands second, and it must hold everything. It gets only the
+  // quota the hide beacon left; when it does not fit, the hide beacon still holds the earlier changes.
+  // The next page keeps this writer and numbers on from the beacon, so if the beacon lands after that
+  // page's first save, the server skips it as stale.
   function leave() {
     clearTimeout(timer);
     timer = null;
-    const changes = sinceHidden ? (isEmpty(sinceHidden) ? null : sinceHidden) : merge(unconfirmed, pending);
+    let changes = merge(unconfirmed, pending);
+    let maxBytes = config.beaconMaxBytes;
+    if (sinceHidden) {
+      changes = isEmpty(sinceHidden) ? null : merge(hiddenBeacon.changes, sinceHidden);
+      maxBytes -= hiddenBeacon.bytes;
+    }
     unconfirmed = null;
     pending = null;
     if (changes) {
-      beacon(changes);
+      beacon(changes, maxBytes);
     }
     if (sincePageLoad) {
       try {
@@ -330,6 +342,7 @@
       hidden();
     } else {
       sinceHidden = null;
+      hiddenBeacon = null;
     }
   });
 })();
