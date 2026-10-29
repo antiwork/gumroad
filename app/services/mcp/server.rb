@@ -26,6 +26,7 @@ module Mcp
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
     TIER_KEYS = %w[name price_cents recurrence].freeze
+    MICROSECONDS_PER_SECOND = 1_000_000
 
     class Error < StandardError
       attr_reader :code, :data
@@ -880,12 +881,12 @@ module Mcp
           at, id = args["cursor"].to_s.split("_", 2)
           raise Error.new("cursor is not valid", code: -32602) unless at.match?(/\A\d+\z/) && id.to_s.match?(/\A\d+\z/)
 
-          time = Time.zone.at(Rational(at.to_i, 1_000_000))
+          time = Time.zone.at(Rational(at.to_i, MICROSECONDS_PER_SECOND))
           scope = scope.where("#{table}.created_at < :t OR (#{table}.created_at = :t AND #{table}.id < :id)", t: time, id: id.to_i)
         end
         rows = scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
         page = rows.first(limit)
-        next_cursor = "#{(page.last.created_at.to_r * 1_000_000).to_i}_#{page.last.id}" if rows.size > limit
+        next_cursor = "#{(page.last.created_at.to_r * MICROSECONDS_PER_SECOND).to_i}_#{page.last.id}" if rows.size > limit
         [page, next_cursor]
       end
 
