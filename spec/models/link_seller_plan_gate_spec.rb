@@ -32,6 +32,17 @@ describe Link, "paid-publish gate" do
     expect(product.reload).to be_published
   end
 
+  it "keeps the free flow while the flag is off" do
+    allow(Feature).to receive(:active?).and_call_original
+    allow(Feature).to receive(:active?).with(SellerPlan::Experiment::FLAG, anything).and_return(false)
+    allow(SellerPlan::Experiment).to receive(:arm_for).and_return("ten")
+
+    product.publish!
+
+    expect(product.reload).to be_published
+    expect(SellerPlanOffer.count).to eq(0)
+  end
+
   it "leaves the control arm on the free flow" do
     allow(SellerPlan::Experiment).to receive(:arm_for).and_return("control")
 
