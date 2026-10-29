@@ -1,12 +1,24 @@
 import type { ComplianceInfo, User } from "$app/types/payments";
 import { COLOMBIA_ID_MAX_INPUT_LENGTH, COLOMBIA_ID_MIN_DIGITS } from "$app/utils/colombiaIdNumbers";
-import { isValidPakistanCnic, PAKISTAN_CNIC_DIGITS, PAKISTAN_CNIC_ERROR_MESSAGE } from "$app/utils/pakistanCnic";
+import {
+  isValidPakistanCnic,
+  PAKISTAN_CNIC_DIGITS,
+  PAKISTAN_CNIC_ERROR_MESSAGE,
+  PAKISTAN_CNIC_HELP_TEXT,
+} from "$app/utils/pakistanCnic";
+import {
+  isValidUaeEmiratesId,
+  UAE_EMIRATES_ID_DIGITS,
+  UAE_EMIRATES_ID_ERROR_MESSAGE,
+  UAE_EMIRATES_ID_HELP_TEXT,
+} from "$app/utils/uaeEmiratesId";
 
 export type TaxIdConfig = {
   label: string;
   placeholder: string;
   minLength?: number;
   maxLength?: number;
+  helpText?: string;
   idSuffix: string;
 };
 
@@ -49,9 +61,16 @@ export const usesPakistanCnic = (complianceInfo: ComplianceInfo): boolean => {
   return accountCountry === "PK" && complianceInfo.country === "PK";
 };
 
+// Same representative/account rule as usesPakistanCnic, mirroring the server's AE guard.
+export const usesUaeEmiratesId = (complianceInfo: ComplianceInfo): boolean => {
+  const accountCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
+  return accountCountry === "AE" && complianceInfo.country === "AE";
+};
+
 export const personalTaxIdError = (complianceInfo: ComplianceInfo, user: User, value: string): string | null => {
   if (!value) return null;
   if (usesPakistanCnic(complianceInfo)) return isValidPakistanCnic(value) ? null : PAKISTAN_CNIC_ERROR_MESSAGE;
+  if (usesUaeEmiratesId(complianceInfo)) return isValidUaeEmiratesId(value) ? null : UAE_EMIRATES_ID_ERROR_MESSAGE;
   if (!usesUsTaxId(complianceInfo, user)) return null;
   const lastFourAllowed =
     complianceInfo.country === "US" && !user.need_full_ssn && !user.has_outstanding_full_ssn_requirement;
@@ -136,9 +155,11 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
     },
     AE: {
       label: "Emirates ID",
-      placeholder: "123456789123456",
-      minLength: 15,
-      maxLength: 15,
+      placeholder: "784-1234-1234567-1",
+      minLength: UAE_EMIRATES_ID_DIGITS,
+      // No maxLength: the ID is printed with three dashes, so a 15-character cap cuts it to 13 digits.
+      // isValidUaeEmiratesId and the server check the actual shape.
+      helpText: UAE_EMIRATES_ID_HELP_TEXT,
       idSuffix: "uae-id-number",
     },
     MX: {
@@ -169,6 +190,7 @@ export const getIndividualTaxIdConfig = (complianceInfo: ComplianceInfo, user: U
       minLength: PAKISTAN_CNIC_DIGITS,
       // No maxLength: a cap cuts a CNIC pasted with its dashes and a stray space. isValidPakistanCnic
       // and the server check the actual shape.
+      helpText: PAKISTAN_CNIC_HELP_TEXT,
       idSuffix: "snic",
     },
     CR: {

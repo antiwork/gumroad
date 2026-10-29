@@ -2109,6 +2109,45 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("AE070331234567890123456")
       end
 
+      it "sends Stripe all 15 digits of an Emirates ID typed with the dashes printed on the card" do
+        visit settings_payments_path
+
+        choose "Bank Account"
+
+        fill_in("Legal business name", with: "uae biz")
+        select("LLC", from: "Type")
+        find_field("Address", match: :first).set("address_full_match")
+        find_field("City", match: :first).set("Dubai")
+        find_field("Province", match: :first).select("Dubai")
+        find_field("Postal code", match: :first).set("51133")
+        fill_in("Business phone number", with: "98765432")
+        fill_in("Company tax ID", with: "000000000")
+
+        check "Same as business"
+        fill_in("First name", with: "uae")
+        fill_in("Last name", with: "creator")
+        fill_in("Phone number", with: "98765432")
+        select("India", from: "Nationality")
+        change_masked_tax_field("Emirates ID")
+        fill_in("Emirates ID", with: "784-1990-1234567-1")
+        expect(page).to have_field("Emirates ID", with: "784-1990-1234567-1")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "uae biz")
+        fill_in("IBAN", with: "AE070331234567890123456")
+        fill_in("Confirm IBAN", with: "AE070331234567890123456")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("784199012345671")
+        expect(Stripe::Account).to have_received(:create_person)
+          .with(anything, hash_including(id_number: "784199012345671", relationship: hash_including(representative: true)))
+      end
+
       it "allows the creator to enter their business vat number and updates it on stripe connect account" do
         user = create(:user, username: nil, payment_address: nil)
         create(:user_compliance_info_uae_business, user:, birthday: Date.new(1901, 1, 2))
@@ -2180,6 +2219,44 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           old_user_compliance_info.mark_deleted!
           new_user_compliance_info.save!
         end
+      end
+
+      it "keeps a typed or pasted Emirates ID whole, stores its 15 digits, and rejects a truncated one" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "barnabasville")
+        select("Abu Dhabi", from: "Province")
+        fill_in("Phone number", with: "98765432")
+        fill_in("Postal code", with: "51133")
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        select("India", from: "Nationality")
+        fill_in("PayPal Email", with: "uaecr@gumroad.com")
+
+        change_masked_tax_field("Emirates ID")
+        emirates_id = find_field("Emirates ID")
+        ["784-1990-1234567-1", " 784 1990 1234567 1", "784-1990-1234567-1\u00a0"].each do |pasted|
+          emirates_id.set("")
+          emirates_id.click
+          page.execute_script("document.execCommand('insertText', false, arguments[0])", pasted)
+          expect(emirates_id.value).to eq(pasted)
+        end
+
+        emirates_id.set("784-1990-123456")
+        click_on("Update settings")
+
+        expect(page).to have_status(text: "Your Emirates ID must be 15 digits")
+        expect(emirates_id["aria-invalid"]).to eq("true")
+
+        emirates_id.set("784-1990-1234567-1")
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("784199012345671")
       end
 
       it "allows entering KYC info and PayPal email" do
