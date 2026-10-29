@@ -149,6 +149,9 @@ class UpdateUserComplianceInfo
         cnic_error = pakistan_cnic_error(old_compliance_info)
         return { success: false, error_message: cnic_error } if cnic_error
 
+        emirates_id_error = uae_emirates_id_error(old_compliance_info)
+        return { success: false, error_message: emirates_id_error } if emirates_id_error
+
         dominican_republic_cie_error = dominican_republic_individual_cie_error(old_compliance_info)
         return { success: false, error_message: dominican_republic_cie_error } if dominican_republic_cie_error
 
@@ -382,9 +385,10 @@ class UpdateUserComplianceInfo
       # longer string than the guard measured, so strip them and keep the two in agreement.
       return Compliance::ColombiaIdNumber.normalize(stripped) if country_code == Compliance::Countries::COL.alpha2
       return Compliance::GuatemalaNit.normalize(stripped) if country_code == Compliance::Countries::GTM.alpha2
-      # Pakistan is the same shape of exception: a CNIC is 13 digits printed 5-7-1 with dashes, and
-      # Stripe's id_number takes the digits only.
+      # Pakistan and the UAE are the same shape of exception: a CNIC (5-7-1) and an Emirates ID (3-4-7-1)
+      # are printed with dashes, and Stripe's id_number takes the digits only.
       return Compliance::PakistanCnic.normalize(stripped) if country_code == Compliance::Countries::PAK.alpha2
+      return Compliance::UaeEmiratesId.normalize(stripped) if country_code == Compliance::Countries::ARE.alpha2
       stripped
     end
 
@@ -431,6 +435,14 @@ class UpdateUserComplianceInfo
       return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::PAK.alpha2)
       return if Compliance::PakistanCnic.valid?(submitted)
       Compliance::PakistanCnic::ERROR_MESSAGE
+    end
+
+    def uae_emirates_id_error(old_compliance_info)
+      submitted = submitted_tax_id_for(:individual_tax_id).presence || submitted_tax_id_for(:ssn_last_four).presence
+      return if submitted.blank?
+      return unless individual_id_country_matches?(old_compliance_info, Compliance::Countries::ARE.alpha2)
+      return if Compliance::UaeEmiratesId.valid?(submitted)
+      Compliance::UaeEmiratesId::ERROR_MESSAGE
     end
 
     def dominican_republic_individual_cie_error(old_compliance_info)
