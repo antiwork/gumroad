@@ -70,4 +70,22 @@ describe SellerPlanController, type: :controller do
     expect(response).to redirect_to("https://checkout.stripe.com/c/pay/cs_team")
     expect(offer.reload.stripe_checkout_session_id).to eq("cs_team")
   end
+
+  it "tells the seller to retry when Stripe is unreachable" do
+    allow(Stripe::Checkout::Session).to receive(:create).and_raise(Stripe::APIConnectionError.new("down"))
+
+    get :checkout
+
+    expect(response).to redirect_to(edit_link_url(product.unique_permalink))
+    expect(flash[:alert]).to include("publish again to retry")
+  end
+
+  it "points the seller to support on an unexpected failure" do
+    allow(Stripe::Checkout::Session).to receive(:create).and_raise(StandardError, "boom")
+
+    get :checkout
+
+    expect(response).to redirect_to(root_path)
+    expect(flash[:alert]).to include("support@gumroad.com")
+  end
 end

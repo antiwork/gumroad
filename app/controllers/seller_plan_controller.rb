@@ -15,8 +15,11 @@ class SellerPlanController < Sellers::BaseController
 
     redirect_to SellerPlan::Checkout.new(offer:, success_url: edit_url, cancel_url: edit_url).url,
                 allow_other_host: true
+  rescue Stripe::APIConnectionError, Stripe::RateLimitError => e
+    ErrorNotifier.notify(e)
+    redirect_to edit_url, alert: "We couldn't reach our payment provider. Wait a minute, then publish again to retry."
   rescue StandardError => e
     ErrorNotifier.notify(e)
-    redirect_to root_path, alert: "Something broke starting your plan. We're looking into it."
+    redirect_to root_path, alert: "We couldn't start your plan checkout. Email support@gumroad.com and we'll sort it out."
   end
 end
