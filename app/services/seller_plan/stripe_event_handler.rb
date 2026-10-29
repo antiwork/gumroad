@@ -43,9 +43,15 @@ module SellerPlan
       return if offer.nil?
       return if offer.stripe_subscription_id.present? && offer.stripe_subscription_id != subscription["id"]
 
+      status = subscription["status"]
+
+      # A terminal event for a subscription this offer never held must not claim it: adopting that id
+      # would make every later event from the live subscription look stale and get dropped.
+      return if offer.stripe_subscription_id.blank? && subscription["id"].present? && %w[canceled incomplete_expired].include?(status)
+
       offer.update!(stripe_subscription_id: subscription["id"]) if offer.stripe_subscription_id.blank? && subscription["id"].present?
 
-      case subscription["status"]
+      case status
       when "active", "trialing"
         offer.update!(status: "active", activated_at: offer.activated_at || Time.current, canceled_at: nil)
       when "past_due", "unpaid"

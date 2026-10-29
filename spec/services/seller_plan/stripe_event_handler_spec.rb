@@ -67,6 +67,18 @@ describe SellerPlan::StripeEventHandler do
     expect(offer.reload.status).to eq("active")
   end
 
+  it "does not adopt a canceled subscription the offer never held" do
+    offer.update!(status: "offered")
+
+    described_class.handle_stripe_event(
+      event("customer.subscription.deleted", { "id" => "sub_old", "metadata" => metadata, "status" => "canceled" })
+    )
+
+    offer.reload
+    expect(offer.stripe_subscription_id).to be_nil
+    expect(offer.status).to eq("offered")
+  end
+
   it "does not replace the subscription of an already active offer with a second checkout" do
     offer.update!(status: "active", stripe_subscription_id: "sub_first")
 
