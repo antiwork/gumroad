@@ -86,23 +86,24 @@ module Product::Stats
 
   def total_usd_cents_earned_by_user(for_user, extra_search_options = {})
     for_seller = for_user.id == user.id
+    aggs = if for_seller
+      {
+        price_cents_total: { sum: { field: "price_cents" } },
+        amount_refunded_cents_total: { sum: { field: "amount_refunded_cents" } },
+        affiliate_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
+        affiliate_fees_total: { sum: { field: "affiliate_credit_fee_cents" } },
+        direct_affiliate_cents_total: { sum: { field: "direct_affiliate_credit_amount_cents" } },
+        direct_affiliate_fees_total: { sum: { field: "direct_affiliate_credit_fee_cents" } },
+      }
+    else
+      # The affiliate is paid through one of the purchase's credits, so each is scoped to them: the
+      # query also finds a collab purchase (:collab_and_affiliates) through the other credit.
+      PurchaseSearchService.affiliate_credit_aggs_for_user(for_user.id)
+    end
     search_options = Purchase::CHARGED_SALES_SEARCH_OPTIONS.merge(
       product: self,
       size: 0,
-      aggs: if for_seller
-        {
-          price_cents_total: { sum: { field: "price_cents" } },
-          amount_refunded_cents_total: { sum: { field: "amount_refunded_cents" } },
-          affiliate_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
-          affiliate_fees_total: { sum: { field: "affiliate_credit_fee_cents" } },
-          direct_affiliate_cents_total: { sum: { field: "direct_affiliate_credit_amount_cents" } },
-          direct_affiliate_fees_total: { sum: { field: "direct_affiliate_credit_fee_cents" } },
-        }
-      else
-        # The affiliate is paid through one of the purchase's credits, so each is scoped to them: the
-        # query also finds a collab purchase (:collab_and_affiliates) through the other credit.
-        PurchaseSearchService.affiliate_credit_aggs_for_user(for_user.id)
-      end
+      aggs:,
     ).merge(extra_search_options)
     search_options[for_seller ? :seller : :affiliate_user] = for_user
     aggregations = PurchaseSearchService.search(search_options).aggregations

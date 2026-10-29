@@ -12,15 +12,16 @@ describe Purchase, "collab purchase that also credits a direct affiliate" do
     create(:direct_affiliate, seller:, affiliate_user: create(:user), affiliate_basis_points: 5000, products: [product])
   end
   let(:purchase) do
-    purchase = Purchase.new(link: product, seller:, affiliate: collaborator, price_cents: 100, fee_cents: 60)
-    purchase.direct_affiliate_id = direct_affiliate.id
-    purchase.direct_affiliate_credit_cents = 0
-    purchase.affiliate_credit_cents = 19
-    purchase
+    build(:purchase, link: product, seller:, affiliate: collaborator, price_cents: 100).tap do |purchase|
+      purchase.fee_cents = 60
+      purchase.direct_affiliate_id = direct_affiliate.id
+      purchase.direct_affiliate_credit_cents = 0
+      purchase.affiliate_credit_cents = 19
+    end
   end
   let(:collaborator_credit) do
-    AffiliateCredit.new(purchase:, affiliate: collaborator, amount_cents: 19, fee_cents: 0, basis_points: 5000,
-                        is_direct_affiliate_credit: false)
+    build(:affiliate_credit, purchase:, affiliate: collaborator, affiliate_user: collaborator.affiliate_user,
+                             amount_cents: 19, fee_cents: 0, basis_points: 5000, is_direct_affiliate_credit: false)
   end
 
   before { purchase.affiliate_credit = collaborator_credit }

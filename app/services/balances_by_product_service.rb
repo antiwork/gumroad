@@ -77,6 +77,10 @@ class BalancesByProductService
     def search_options
       {
         revenue_sharing_user: @user,
+        # `revenue_sharing_user` also matches a purchase where @user is the direct affiliate on a collab
+        # sale, which can be a product missing from `@products`; the agg returns one bucket per requested
+        # product, so an off-page product would take a bucket and hide a row below.
+        product: @products.map(&:id),
         state: "successful",
         price_greater_than: 0,
         exclude_bundle_product_purchases: true,
