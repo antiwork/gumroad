@@ -27,6 +27,8 @@ module Mcp
     PRODUCT_TYPES = %w[digital membership].freeze
     TIER_KEYS = %w[name price_cents recurrence].freeze
     MICROSECONDS_PER_SECOND = 1_000_000
+    # The last year MySQL DATETIME holds; a bound outside 0..this year fails in SQL instead of as a bad argument.
+    MAX_DATETIME_YEAR = 9999
 
     class Error < StandardError
       attr_reader :code, :data
@@ -882,6 +884,7 @@ module Mcp
           raise Error.new("cursor is not valid", code: -32602) unless at.match?(/\A\d+\z/) && id.to_s.match?(/\A\d+\z/)
 
           time = Time.zone.at(Rational(at.to_i, MICROSECONDS_PER_SECOND))
+          raise Error.new("cursor is not valid", code: -32602) if time.year > MAX_DATETIME_YEAR
           scope = scope.where("#{table}.created_at < :t OR (#{table}.created_at = :t AND #{table}.id < :id)", t: time, id: id.to_i)
         end
         rows = scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
@@ -891,7 +894,10 @@ module Mcp
       end
 
       def parse_time!(value, name)
-        Time.use_zone("UTC") { Time.zone.parse(value) } || raise(ArgumentError)
+        time = Time.use_zone("UTC") { Time.zone.parse(value) }
+        raise ArgumentError if time.nil? || !time.year.between?(0, MAX_DATETIME_YEAR)
+
+        time
       rescue ArgumentError
         raise Error.new("#{name} must be a date or ISO 8601 time", code: -32602)
       end
