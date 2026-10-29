@@ -297,7 +297,8 @@ module Mcp
         [
           tool("get_account", "The connected creator's public profile: name, username, storefront URL, currency.", {}, read_only: true),
           tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
-                 "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
+                 "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
           tool("get_product", "Fetch one product by id or permalink, with its description and covers. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
@@ -348,12 +349,19 @@ module Mcp
           tool("unpublish_product", "Take a product off sale without deleting it.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], destructive: true),
-          tool("list_sales", "Recent successful sales. Includes buyer email, product, amount, and time.", {
+          tool("list_sales", "Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.", {
                  "limit" => { type: "integer", description: "Max sales to return (1-50, default 25)." },
-                 "email" => { type: "string", description: "Filter by buyer email." }
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." },
+                 "email" => { type: "string", description: "Filter by buyer email." },
+                 "product_id" => { type: "string", description: "Only sales of this product (id from list_products)." },
+                 "after" => { type: "string", description: "Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01." },
+                 "before" => { type: "string", description: "Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01." },
+                 "payment" => { type: "string", enum: %w[paid free], description: "paid = price above zero, free = zero-price sales." },
+                 "kind" => { type: "string", enum: %w[subscription one_time], description: "subscription = membership charges, one_time = everything else." }
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
-                 "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." }
+                 "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true)
         ]
       end
@@ -420,9 +428,9 @@ module Mcp
 
       def tool_list_products(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
-        products = user.products.visible.order(created_at: :desc, id: :desc).limit(limit_for(args, default: 25))
-          .includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
-        { products: products.map { |product| product_payload(product) } }
+        products = user.products.visible.includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
+        page, next_cursor = paginate(products, args, default: 25, table: "links")
+        { products: page.map { |product| product_payload(product) }, next_cursor: }.compact
       end
 
       def tool_get_product(args)
@@ -671,31 +679,50 @@ module Mcp
 
       def tool_list_sales(args)
         require_scopes!(:view_sales, :account)
-        sales = user.sales.successful_or_preorder_authorization_successful.order(created_at: :desc)
+        sales = user.sales.successful_or_preorder_authorization_successful
+          .includes(:link, :offer_code, :utm_link)
         sales = sales.where(email: args["email"].to_s.strip) if args["email"].present?
-        sales = sales.limit(limit_for(args, default: 25))
+        sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
+        sales = sales.where(purchases: { created_at: parse_time!(args["after"], "after").. }) if args["after"].present?
+        sales = sales.where(purchases: { created_at: ...parse_time!(args["before"], "before") }) if args["before"].present?
+        sales = sales.where(args["payment"] == "paid" ? "purchases.price_cents > 0" : "purchases.price_cents = 0") if args["payment"]
+        sales = sales.where(args["kind"] == "subscription" ? "purchases.subscription_id IS NOT NULL" : "purchases.subscription_id IS NULL") if args["kind"]
+        page, next_cursor = paginate(sales, args, default: 25, table: "purchases")
+        { sales: page.map { |sale| sale_payload(sale) }, next_cursor: }.compact
+      end
+
+      def sale_payload(sale)
+        utm = sale.utm_link
         {
-          sales: sales.map do |sale|
-            {
-              id: sale.external_id,
-              email: sale.email,
-              product_id: sale.link.external_id,
-              product_name: sale.link.name,
-              price_cents: sale.price_cents,
-              currency: Currency::USD,
-              created_at: sale.created_at.iso8601,
-              refunded: sale.refunded?,
-              chargedback: sale.chargedback?
-            }
-          end
+          id: sale.external_id,
+          email: sale.email,
+          product_id: sale.link.external_id,
+          product_name: sale.link.name,
+          price_cents: sale.price_cents,
+          fee_cents: sale.fee_cents.to_i,
+          affiliate_commission_cents: sale.affiliate_credit_cents.to_i,
+          net_cents: sale.price_cents - sale.fee_cents.to_i - sale.affiliate_credit_cents.to_i,
+          currency: Currency::USD,
+          created_at: sale.created_at.iso8601,
+          refunded: sale.refunded?,
+          chargedback: sale.chargedback?,
+          subscription: sale.subscription_id.present?,
+          country: sale.country_or_ip_country,
+          discount_code: sale.offer_code&.code,
+          referrer: sale.referrer.presence,
+          utm_source: utm&.utm_source,
+          utm_medium: utm&.utm_medium,
+          utm_campaign: utm&.utm_campaign,
+          utm_term: utm&.utm_term,
+          utm_content: utm&.utm_content
         }
       end
 
       def tool_list_payouts(args)
         require_scopes!(:view_payouts, :account)
-        payouts = user.payments.order(created_at: :desc).limit(limit_for(args, default: 10))
+        page, next_cursor = paginate(user.payments, args, default: 10, table: "payments")
         {
-          payouts: payouts.map do |payout|
+          payouts: page.map do |payout|
             {
               id: payout.external_id,
               amount_cents: payout.amount_cents,
@@ -703,8 +730,9 @@ module Mcp
               state: payout.state,
               created_at: payout.created_at&.iso8601
             }
-          end
-        }
+          end,
+          next_cursor:
+        }.compact
       end
 
       def product_payload(product)
@@ -748,6 +776,28 @@ module Mcp
         raise ToolError, "The product was not found." if product.nil? || product.deleted_at.present?
 
         product
+      end
+
+      # Keyset pages over (created_at, id) descending; fetches one extra row to know whether another page exists.
+      def paginate(scope, args, default:, table:)
+        limit = limit_for(args, default:)
+        if args["cursor"].present?
+          at, id = args["cursor"].to_s.split("_", 2)
+          raise Error.new("cursor is not valid", code: -32602) unless at.match?(/\A\d+\z/) && id.to_s.match?(/\A\d+\z/)
+
+          time = Time.zone.at(at.to_i)
+          scope = scope.where("#{table}.created_at < :t OR (#{table}.created_at = :t AND #{table}.id < :id)", t: time, id: id.to_i)
+        end
+        rows = scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
+        page = rows.first(limit)
+        next_cursor = "#{page.last.created_at.to_i}_#{page.last.id}" if rows.size > limit
+        [page, next_cursor]
+      end
+
+      def parse_time!(value, name)
+        Time.use_zone("UTC") { Time.zone.parse(value) } || raise(ArgumentError)
+      rescue ArgumentError
+        raise Error.new("#{name} must be a date or ISO 8601 time", code: -32602)
       end
 
       def limit_for(args, default:)
