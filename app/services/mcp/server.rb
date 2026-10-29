@@ -22,7 +22,7 @@ module Mcp
     # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
-    BUNDLE_MEMBER_QUANTITY = 1
+    DEFAULT_BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
 
     class Error < StandardError
@@ -344,7 +344,7 @@ module Mcp
                }, required: %w[name price_cents product_ids]),
           tool("update_bundle", "Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.", {
                  "id" => { type: "string", description: "Bundle id or permalink." },
-                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products." }
+                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity." }
                }, required: %w[id product_ids], destructive: true)
         ]
       end
@@ -615,9 +615,8 @@ module Mcp
         }
       end
 
-      # Resolves every product the caller named to one of their own live products before anything is
-      # written: the update service soft-deletes each member it is not handed, so a single unknown id
-      # would otherwise empty the bundle it was meant to extend.
+      # Runs inside the caller's transaction: the update service soft-deletes each member it is not
+      # handed, so one unresolvable id must roll back the whole edit, including a bundle just created.
       def bundle_member_attributes(bundle, product_ids)
         raise Error.new("product_ids must name at least one product", code: -32602) if product_ids.empty?
 
@@ -627,10 +626,12 @@ module Mcp
           raise Error.new("product_ids[#{position}] must be a string", code: -32602) unless id.is_a?(String) && id.strip.present?
 
           product = find_product!(id)
-          # A retained member keeps the version it already sells; only a new member falls back to the
-          # first version, which is what the editor's product picker selects by default.
-          variant = retained[product.id]&.variant || product.variants_or_skus.first
-          { product_id: product.external_id, variant_id: variant&.external_id, quantity: BUNDLE_MEMBER_QUANTITY, position: }
+          # The service rewrites the version and quantity of every member it is handed, so a retained
+          # member carries over what it already sells. Only a new member takes the defaults, and its
+          # first version is what the editor's product picker selects.
+          kept = retained[product.id]
+          variant = kept&.variant || product.variants_or_skus.first
+          { product_id: product.external_id, variant_id: variant&.external_id, quantity: kept&.quantity || DEFAULT_BUNDLE_MEMBER_QUANTITY, position: }
         end
       end
 
