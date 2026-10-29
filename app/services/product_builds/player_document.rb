@@ -12,6 +12,8 @@ module ProductBuilds::PlayerDocument
   SAVE_FAILED_MESSAGE_TYPE = "gumroad:build-save-failed"
   # Network errors are retried quietly at first; the buyer hears about it only if they keep failing.
   SAVE_FAILURES_BEFORE_ALERT = 3
+  # Prefix of the window.name that carries unconfirmed changes from one page of a build to the next.
+  CARRIED_CHANGES_PREFIX = "gumroad-build-save:"
 
   # On the opaque origin, localStorage throws. The shim puts the purchase's save back in its place:
   # reads come from the save served with the page, and writes go in batches (clear, then remove,
@@ -25,6 +27,11 @@ module ProductBuilds::PlayerDocument
       // Parsed, not an object literal, so a "__proto__" key stays a key.
       var saved = JSON.parse(__SAVE__);
       Object.keys(saved).forEach(function (k) { data[k] = String(saved[k]); });
+      var carried = null;
+      if (typeof window.name === "string" && window.name.indexOf("#{CARRIED_CHANGES_PREFIX}") === 0) {
+        try { carried = JSON.parse(window.name.slice(#{CARRIED_CHANGES_PREFIX.length})); } catch (e) {}
+        window.name = "";
+      }
       var saveUrl = __SAVE_URL__;
       var writer = (Math.random().toString(36) + Date.now().toString(36)).replace(/[^a-z0-9]/g, "").slice(0, #{ProductBuildSave::MAX_WRITER_ID_LENGTH});
       var sequence = 0;
@@ -68,7 +75,10 @@ module ProductBuilds::PlayerDocument
         var changes = pending;
         pending = null;
         unconfirmed = changes;
-        fetch(saveUrl, { method: "POST", body: body(changes) })
+        var payload = body(changes);
+        // keepalive lets a small batch finish if the browser discards a hidden tab; only one is ever in flight.
+        var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES};
+        fetch(saveUrl, { method: "POST", body: payload, keepalive: small })
           .then(function (response) {
             if (unconfirmed !== changes) { return; }
             unconfirmed = null;
@@ -89,6 +99,8 @@ module ProductBuilds::PlayerDocument
       }
       // Everything not yet confirmed, including a batch still in flight, goes in one beacon, which the
       // browser still delivers as the page closes. A reply to the batch in flight is then ignored.
+      // The browser may fetch a next page of the build before the beacon lands, so the changes also
+      // ride in window.name, which the next page in this frame reads, applies, and sends again.
       function leave() {
         clearTimeout(timer);
         timer = null;
@@ -96,12 +108,20 @@ module ProductBuilds::PlayerDocument
         unconfirmed = null;
         pending = null;
         if (!changes) { return; }
+        try { window.name = "#{CARRIED_CHANGES_PREFIX}" + JSON.stringify(changes); } catch (e) {}
         var payload = body(changes);
         var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES};
         if (small && navigator.sendBeacon(saveUrl, payload)) { return; }
         fetch(saveUrl, { method: "POST", body: payload, keepalive: small }).catch(function () {});
       }
       function changed() { if (!timer) { timer = setTimeout(flush, #{SAVE_FLUSH_DELAY_MS}); } }
+      if (carried && typeof carried === "object" && Array.isArray(carried.remove) && carried.set && typeof carried.set === "object") {
+        if (carried.clear) { data = Object.create(null); }
+        carried.remove.forEach(function (k) { delete data[k]; });
+        Object.keys(carried.set).forEach(function (k) { data[k] = String(carried.set[k]); });
+        pending = merge(carried, pending);
+        changed();
+      }
       var api = {
         getItem: function (k) { k = String(k); return k in data ? data[k] : null; },
         setItem: function (k, v) {
@@ -147,7 +167,8 @@ module ProductBuilds::PlayerDocument
         try { Object.defineProperty(window, "localStorage", { value: storage, configurable: true }); } catch (e) {}
       }
       window.addEventListener("pagehide", leave);
-      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { leave(); } });
+      // A hidden tab may never come back, so its changes go now, by the ordinary retried path.
+      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { flush(); } });
     })();
   JS
 

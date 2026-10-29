@@ -1864,8 +1864,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.integer "byte_size", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.string "writer_id", limit: 32
-    t.integer "writer_sequence"
+    t.json "writer_sequences"
     t.index ["purchase_id"], name: "index_product_build_saves_on_purchase_id", unique: true
   end
 

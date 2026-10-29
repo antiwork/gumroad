@@ -66,6 +66,22 @@ describe ProductBuildSave do
       expect(described_class.find_by(purchase:).data).to eq("level" => "5")
     end
 
+    it "skips a page's stale batch even after another page saved in between" do
+      described_class.apply_changes!(purchase, set: { "level" => "4" }, writer: "page1", sequence: 2)
+      described_class.apply_changes!(purchase, set: { "coins" => "10" }, writer: "page2", sequence: 1)
+
+      described_class.apply_changes!(purchase, set: { "level" => "3" }, writer: "page1", sequence: 1)
+
+      expect(described_class.find_by(purchase:).data).to eq("level" => "4", "coins" => "10")
+    end
+
+    it "remembers only the most recent writers" do
+      stub_const("#{described_class}::MAX_TRACKED_WRITERS", 2)
+      %w[page1 page2 page3].each { described_class.apply_changes!(purchase, set: { _1 => "1" }, writer: _1, sequence: 1) }
+
+      expect(described_class.find_by(purchase:).writer_sequences).to eq("page2" => 1, "page3" => 1)
+    end
+
     it "rejects a writer or sequence it cannot store" do
       [["page-1", 1], ["page1", 0], ["page1", "2"], ["page1", described_class::MAX_SEQUENCE + 1], ["a" * 33, 1], ["page1", nil]].each do |writer, sequence|
         expect do

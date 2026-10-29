@@ -345,8 +345,9 @@ export const FileRow = ({
         ) : null}
 
         {/* A game wants the whole window and the keyboard, so it gets its own tab, like Watch. Not
-            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. */}
-        {file.web_build?.playable ? (
+            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. Saves
+            belong to a purchase, so a link without one (an imported customer's) has no Play. */}
+        {file.web_build?.playable && purchaseInfo.purchaseId ? (
           <NavigationButton
             color="primary"
             href={Routes.url_redirect_play_path(purchaseInfo.token)}
