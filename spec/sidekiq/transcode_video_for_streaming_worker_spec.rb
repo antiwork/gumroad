@@ -240,6 +240,14 @@ describe TranscodeVideoForStreamingWorker do
 
             expect(TranscodedVideo.last.job_id).to eq "abc-123"
           end
+
+          it "raises the transcoder's error even when the record cannot be marked as error" do
+            allow_any_instance_of(TranscodedVideo).to receive(:mark_error).and_raise(ActiveRecord::ConnectionNotEstablished)
+
+            expect do
+              described_class.new.perform(product_file.id)
+            end.to raise_error(Aws::MediaConvert::Errors::BadRequestException)
+          end
         end
 
         context "with GRMC", :freeze_time do
@@ -321,6 +329,54 @@ describe TranscodeVideoForStreamingWorker do
               expect(transcoded_video.transcoded_video_key).to eq "specs/ScreenRecording/hls/"
               expect(transcoded_video.via_grmc).to be(false)
               expect(transcoded_video.streamable).to eq(product_file)
+            end
+          end
+
+          context "when a Sidekiq shutdown interrupts the job" do
+            it "marks its transcoded video as failed while the GRMC request is in flight, so the requeued job can submit it again" do
+              stub_request(:post, described_class::GRMC_ENDPOINT).to_raise(Sidekiq::Shutdown)
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to raise_error(Sidekiq::Shutdown)
+
+              expect(TranscodedVideo.last!.state).to eq("error")
+
+              stub_request(:post, described_class::GRMC_ENDPOINT)
+                .to_return(status: 200, body: { job_id: "grmc-123" }.to_json, headers: { "Content-Type" => "application/json" })
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to change { TranscodedVideo.count }.by(1)
+
+              expect(TranscodedVideo.last!.job_id).to eq("grmc-123")
+            end
+
+            it "keeps its transcoded video processing once GRMC has accepted the job" do
+              stub_request(:post, described_class::GRMC_ENDPOINT)
+                .to_return(status: 200, body: { job_id: "grmc-123" }.to_json, headers: { "Content-Type" => "application/json" })
+              allow(described_class).to receive(:perform_in).and_raise(Sidekiq::Shutdown)
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to raise_error(Sidekiq::Shutdown)
+
+              transcoded_video = TranscodedVideo.last!
+              expect(transcoded_video.state).to eq("processing")
+              expect(transcoded_video.job_id).to eq("grmc-123")
+            end
+
+            it "leaves its transcoded video completed when another job's callback settled it during the GRMC request" do
+              stub_request(:post, described_class::GRMC_ENDPOINT).to_return do
+                TranscodedVideo.last!.mark_completed
+                raise Sidekiq::Shutdown
+              end
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to raise_error(Sidekiq::Shutdown)
+
+              expect(TranscodedVideo.last!.state).to eq("completed")
             end
           end
         end
