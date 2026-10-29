@@ -35,6 +35,8 @@
   let pending = null;
   let unconfirmed = null;
   let sincePageLoad = null;
+  // Changes made after a hide beacon went out; null while no hide beacon is outstanding.
+  let sinceHidden = null;
   let timer = null;
   let failures = 0;
 
@@ -43,6 +45,12 @@
   }
   function batch() {
     return (pending ||= emptyBatch());
+  }
+  function isEmpty(b) {
+    return !b.clear && b.remove.length === 0 && Object.keys(b.set).length === 0;
+  }
+  function recordingBatches() {
+    return sinceHidden ? [batch(), pageBatch(), sinceHidden] : [batch(), pageBatch()];
   }
   function pageBatch() {
     return (sincePageLoad ||= emptyBatch());
@@ -176,16 +184,19 @@
     unconfirmed = null;
     pending = changes;
     beacon(changes);
+    sinceHidden = emptyBatch();
     changed();
   }
-
   // Everything unconfirmed, including a batch still in flight, goes in one beacon; a reply to the batch
-  // in flight is then ignored. The next page keeps this writer and numbers on from the beacon, so if
-  // the beacon lands after that page's first save, the server skips it as stale.
+  // in flight is then ignored. When a hide beacon is outstanding (closing a tab fires hidden, then
+  // pagehide), it already holds all of that, so only the changes made since go now: two full beacons
+  // could together pass the browser's keepalive quota, and the second would be dropped. The next page
+  // keeps this writer and numbers on from the beacon, so if the beacon lands after that page's first
+  // save, the server skips it as stale.
   function leave() {
     clearTimeout(timer);
     timer = null;
-    const changes = merge(unconfirmed, pending);
+    const changes = sinceHidden ? (isEmpty(sinceHidden) ? null : sinceHidden) : merge(unconfirmed, pending);
     unconfirmed = null;
     pending = null;
     if (changes) {
@@ -233,7 +244,7 @@
       k = String(k);
       v = String(v);
       data[k] = v;
-      [batch(), pageBatch()].forEach((b) => {
+      recordingBatches().forEach((b) => {
         b.set[k] = v;
         const i = b.remove.indexOf(k);
         if (i >= 0) {
@@ -248,7 +259,7 @@
         return;
       }
       delete data[k];
-      [batch(), pageBatch()].forEach((b) => {
+      recordingBatches().forEach((b) => {
         delete b.set[k];
         if (b.remove.indexOf(k) < 0) {
           b.remove.push(k);
@@ -260,6 +271,9 @@
       data = Object.create(null);
       pending = { clear: true, remove: [], set: Object.create(null) };
       sincePageLoad = { clear: true, remove: [], set: Object.create(null) };
+      if (sinceHidden) {
+        sinceHidden = { clear: true, remove: [], set: Object.create(null) };
+      }
       changed();
     },
     key(i) {
@@ -314,6 +328,8 @@
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
       hidden();
+    } else {
+      sinceHidden = null;
     }
   });
 })();

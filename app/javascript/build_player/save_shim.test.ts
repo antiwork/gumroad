@@ -172,6 +172,22 @@ describe("save shim", () => {
     expect(sent.at(-1)?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
   });
 
+  it("on closing after a hide, sends only what changed since the hide beacon, so both fit the quota", () => {
+    const closing = runShim();
+    closing.storage.setItem("a", "1");
+    closing.hide();
+    closing.leave();
+    expect(closing.beacons).toHaveLength(1);
+
+    const writesWhileHidden = runShim();
+    writesWhileHidden.storage.setItem("a", "1");
+    writesWhileHidden.hide();
+    writesWhileHidden.storage.setItem("b", "2");
+    writesWhileHidden.leave();
+    expect(writesWhileHidden.beacons.map((b) => b.set)).toEqual([{ a: "1" }, { b: "2" }]);
+    expect(writesWhileHidden.beacons[1]?.sequence).toBeGreaterThan(writesWhileHidden.beacons[0]?.sequence ?? Infinity);
+  });
+
   it("hands every change made on the page to the next page, which applies it and keeps numbering", async () => {
     const first = runShim();
     first.storage.setItem("level", "4");
