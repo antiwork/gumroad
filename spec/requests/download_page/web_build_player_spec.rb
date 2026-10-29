@@ -77,6 +77,51 @@ describe "Download page web build player", type: :system, js: true do
     end
   end
 
+  context "with a build that keeps its progress in IndexedDB" do
+    let(:game_script) do
+      <<~JS
+        const request = indexedDB.open("progress", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("values");
+        request.onsuccess = () => {
+          const db = request.result;
+          const show = (clicks) => { document.getElementById("count").textContent = `Clicks: ${clicks}`; };
+          const read = db.transaction("values").objectStore("values").get("clicks");
+          read.onsuccess = () => show(read.result || 0);
+          document.getElementById("add").addEventListener("click", () => {
+            const store = db.transaction("values", "readwrite").objectStore("values");
+            const current = store.get("clicks");
+            current.onsuccess = () => {
+              store.put((current.result || 0) + 1, "clicks");
+              show((current.result || 0) + 1);
+            };
+          });
+        };
+      JS
+    end
+
+    it "keeps the buyer's progress across a reload" do
+      player = open_player
+      within_window(player) do
+        within_frame(find("iframe[title='Clicker']")) do
+          expect(page).to have_text("Clicks: 0")
+          2.times { click_button("Add click") }
+          expect(page).to have_text("Clicks: 2")
+        end
+      end
+      wait_until_true do
+        snapshot = ProductBuildSave.find_by(purchase:)&.data&.dig(ProductBuilds::PlayerDocument::INDEXEDDB_SAVE_KEY)
+        snapshot && JSON.parse(snapshot)["databases"].sole["stores"].sole["records"] == [["clicks", 2]]
+      end
+
+      within_window(player) do
+        refresh
+        within_frame(find("iframe[title='Clicker']")) do
+          expect(page).to have_text("Clicks: 2")
+        end
+      end
+    end
+  end
+
   it "keeps a change made right before leaving the player" do
     within_window(open_player) do
       within_frame(find("iframe[title='Clicker']")) do

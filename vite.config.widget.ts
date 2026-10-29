@@ -4,6 +4,7 @@ import { defineConfig } from "vite";
 const widgets: Record<string, string> = {
   gumroad: "app/javascript/widget/overlay.ts",
   "gumroad-embed": "app/javascript/widget/embed.ts",
+  "build-player-indexeddb": "app/javascript/build_player/indexeddb_entry.ts",
 };
 
 const target = process.env.WIDGET_TARGET || "gumroad";

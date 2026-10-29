@@ -42,6 +42,7 @@
     "date-fns-tz": "^3.0.0",
     "dompurify": "^3.4.16",
     "epubjs": "^0.3.93",
+    "fake-indexeddb": "6.2.5",
     "immer": "^10.0.0",
     "js-yaml": "^4.1.0",
     "json-schema-to-ts": "^3.0.0",
@@ -128,7 +129,7 @@
   "scripts": {
     "build": "npm run build:pages-tailwind && npx vite build",
     "build:pages-tailwind": "node scripts/build_pages_tailwind.mjs",
-    "build:widget": "WIDGET_TARGET=gumroad npx vite build --config vite.config.widget.ts && WIDGET_TARGET=gumroad-embed npx vite build --config vite.config.widget.ts",
+    "build:widget": "WIDGET_TARGET=gumroad npx vite build --config vite.config.widget.ts && WIDGET_TARGET=gumroad-embed npx vite build --config vite.config.widget.ts && WIDGET_TARGET=build-player-indexeddb npx vite build --config vite.config.widget.ts",
     "lint-fast": "DISABLE_TYPE_CHECKED=1 npx eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

@@ -19,6 +19,12 @@ module ProductBuilds::PlayerDocument
   # test can run it; see the file for how it saves.
   SAVE_SHIM_SCRIPT = Rails.root.join("app/javascript/build_player/save_shim.js").read.freeze
   SAVE_SHIM_CONFIG_MARKER = "JSON.parse(__CONFIG__)"
+  # The save key of the IndexedDB snapshot, and the window property through which the save shim hands
+  # it to the IndexedDB shim (app/javascript/build_player/indexeddb_shim.ts names the same property).
+  INDEXEDDB_SAVE_KEY = "__gumroad_indexeddb__"
+  INDEXEDDB_SLOT_GLOBAL = "__gumroadIndexedDBSaveSlot"
+  # Built by `rake vite:build_widget` with the widget bundles.
+  INDEXEDDB_SHIM_PATH = Rails.public_path.join("js/build-player-indexeddb-bundle.js")
 
   # A UTF-8 byte order mark, leading whitespace and comments, then the doctype if there is one.
   PROLOGUE = /\A(?:\xEF\xBB\xBF)?(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>)?/imn
@@ -37,15 +43,28 @@ module ProductBuilds::PlayerDocument
       failuresBeforeAlert: SAVE_FAILURES_BEFORE_ALERT,
       carriedPrefix: CARRIED_CHANGES_PREFIX,
       maxWriterIdLength: ProductBuildSave::MAX_WRITER_ID_LENGTH,
+      indexedDBKey: INDEXEDDB_SAVE_KEY,
+      indexedDBSlotGlobal: INDEXEDDB_SLOT_GLOBAL,
     }
     # A JSON string of the JSON, ASCII only: it reads the same whatever encoding the seller's page is
     # in, and json_escape keeps a "</script>" in a saved value from ending the script.
     literal = JSON.generate(JSON.generate(config, ascii_only: true), ascii_only: true)
     script = SAVE_SHIM_SCRIPT.sub(SAVE_SHIM_CONFIG_MARKER) { "JSON.parse(#{ERB::Util.json_escape(literal)})" }
-    # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
-    injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
+    # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins. The
+    # IndexedDB shim is inline too: a script file would be one more blocking request before the game's.
+    injected = (%(<script data-cfasync="false">#{script}</script>) +
+      %(<script data-cfasync="false">#{indexeddb_shim_script}</script>) +
+      RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT).b
     html = html.b
     html.insert(html.match(PROLOGUE).end(0), injected)
+  end
+
+  # Checked for the same two traps as the save: the page may be in any encoding, and must keep the tag.
+  def self.indexeddb_shim_script
+    @indexeddb_shim_script ||= INDEXEDDB_SHIM_PATH.read.tap do |script|
+      raise "#{INDEXEDDB_SHIM_PATH} is not ASCII" unless script.ascii_only?
+      raise "#{INDEXEDDB_SHIM_PATH} would end its script tag" if script.match?(%r{</script}i)
+    end.freeze
   end
 
   # `request_origin` is the app or custom-domain origin serving the frame, and `cdn_origin` the

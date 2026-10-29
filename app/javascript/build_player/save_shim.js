@@ -8,6 +8,9 @@
 // that URL is the credential. Each batch is numbered for this page load (the writer), so the server
 // skips one that arrives after a newer one; a batch that fails goes back in front of newer changes
 // and is sent again.
+//
+// The IndexedDB shim keeps its snapshot in the same save, under config.indexedDBKey. That key is
+// reached only through the slot left on the window for it; the build's localStorage never shows it.
 /* global __CONFIG__ */
 (function () {
   const config = JSON.parse(__CONFIG__);
@@ -256,39 +259,59 @@
     changed();
   }
 
+  const hiddenKey = config.indexedDBKey;
+  function visible(k) {
+    return k !== hiddenKey && k in data;
+  }
+  function visibleKeys() {
+    return Object.keys(data).filter((k) => k !== hiddenKey);
+  }
+
+  function put(k, v) {
+    data[k] = v;
+    recordingBatches().forEach((b) => {
+      b.set[k] = v;
+      const i = b.remove.indexOf(k);
+      if (i >= 0) {
+        b.remove.splice(i, 1);
+      }
+    });
+    changed();
+  }
+  function drop(k) {
+    if (!(k in data)) {
+      return;
+    }
+    delete data[k];
+    recordingBatches().forEach((b) => {
+      delete b.set[k];
+      if (b.remove.indexOf(k) < 0) {
+        b.remove.push(k);
+      }
+    });
+    changed();
+  }
+
   const api = {
     getItem(k) {
       k = String(k);
-      return k in data ? data[k] : null;
+      return visible(k) ? data[k] : null;
     },
     setItem(k, v) {
       k = String(k);
-      v = String(v);
-      data[k] = v;
-      recordingBatches().forEach((b) => {
-        b.set[k] = v;
-        const i = b.remove.indexOf(k);
-        if (i >= 0) {
-          b.remove.splice(i, 1);
-        }
-      });
-      changed();
+      if (k !== hiddenKey) {
+        put(k, String(v));
+      }
     },
     removeItem(k) {
       k = String(k);
-      if (!(k in data)) {
-        return;
+      if (k !== hiddenKey) {
+        drop(k);
       }
-      delete data[k];
-      recordingBatches().forEach((b) => {
-        delete b.set[k];
-        if (b.remove.indexOf(k) < 0) {
-          b.remove.push(k);
-        }
-      });
-      changed();
     },
+    // Clears the build's keys; the IndexedDB snapshot goes back in after the clear.
     clear() {
+      const snapshot = data[hiddenKey];
       data = Object.create(null);
       pending = { clear: true, remove: [], set: Object.create(null) };
       sincePageLoad = { clear: true, remove: [], set: Object.create(null) };
@@ -296,12 +319,15 @@
         sinceHidden = { clear: true, remove: [], set: Object.create(null) };
       }
       changed();
+      if (snapshot !== undefined) {
+        put(hiddenKey, snapshot);
+      }
     },
     key(i) {
-      return Object.keys(data)[i] || null;
+      return visibleKeys()[i] || null;
     },
     get length() {
-      return Object.keys(data).length;
+      return visibleKeys().length;
     },
   };
   // Games also read and write keys as properties: localStorage.best = 10.
@@ -310,7 +336,7 @@
       if (p in api) {
         return api[p];
       }
-      return typeof p === "string" && p in data ? data[p] : undefined;
+      return typeof p === "string" && visible(p) ? data[p] : undefined;
     },
     set(t, p, v) {
       if (!(p in api)) {
@@ -323,13 +349,13 @@
       return true;
     },
     has(t, p) {
-      return p in api || p in data;
+      return p in api || (typeof p === "string" && visible(p));
     },
     ownKeys() {
-      return Object.keys(data);
+      return visibleKeys();
     },
     getOwnPropertyDescriptor(t, p) {
-      if (typeof p === "string" && p in data) {
+      if (typeof p === "string" && visible(p)) {
         return { value: data[p], writable: true, enumerable: true, configurable: true };
       }
     },
@@ -345,6 +371,22 @@
       Object.defineProperty(window, "localStorage", { value: storage, configurable: true });
     } catch {}
   }
+  Object.defineProperty(window, config.indexedDBSlotGlobal, {
+    value: {
+      get() {
+        return hiddenKey in data ? data[hiddenKey] : null;
+      },
+      set(v) {
+        if (v === null) {
+          drop(hiddenKey);
+        } else {
+          put(hiddenKey, v);
+        }
+      },
+      fail: failed,
+    },
+    configurable: true,
+  });
   window.addEventListener("pagehide", leave);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {
