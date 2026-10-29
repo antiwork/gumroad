@@ -14,6 +14,7 @@ import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { Modal } from "$app/components/Modal";
+import { SaveThenOpenButton } from "$app/components/ProductEdit/ShareTab/SaveThenOpenButton";
 import { showAlert } from "$app/components/server-components/Alert";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Alert } from "$app/components/ui/Alert";
@@ -216,9 +217,9 @@ const EmailChannelRow = ({ channel }: { channel: MarketingChannel }) => {
             {draft.state === "draft" && counts ? draftSummary(counts) : EMAIL_DRAFT_SUMMARY[draft.state](draft.subject)}
           </span>
           <div className="flex flex-wrap gap-2">
-            <NavigationButton href={draft.edit_url}>
+            <SaveThenOpenButton href={draft.edit_url}>
               {draft.state === "draft" ? "Review the draft" : "Open in Emails"}
-            </NavigationButton>
+            </SaveThenOpenButton>
           </div>
         </>
       ) : (
