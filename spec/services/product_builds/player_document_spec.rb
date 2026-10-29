@@ -4,6 +4,8 @@ require "spec_helper"
 
 describe ProductBuilds::PlayerDocument do
   describe ".render" do
+    def shim_config(rendered) = JSON.parse(JSON.parse(rendered[/(?:const|var) config = JSON\.parse\((".*")\);\n/, 1]))
+
     it "puts the scripts right after the doctype, before the page's own scripts" do
       rendered = described_class.render(%(<!doctype html><html><head><script src="game.js"></script></head></html>), save_data: {}, save_url: "/save")
 
@@ -25,17 +27,19 @@ describe ProductBuilds::PlayerDocument do
 
     it "writes the save as ASCII, so a page in another encoding reads it the same" do
       rendered = described_class.render("<title>Game</title>", save_data: { "name" => "Zoë 🎮", "x" => "</script>" }, save_url: "/save")
-      json = rendered[/JSON\.parse\((".*?")\);/, 1]
+      literal = rendered[/(?:const|var) config = JSON\.parse\((".*")\);\n/, 1]
 
-      expect(json).to be_ascii_only
-      expect(JSON.parse(JSON.parse(json.gsub("\\u003c", "<").gsub("\\u003e", ">")))).to eq("name" => "Zoë 🎮", "x" => "</script>")
+      expect(literal).to be_ascii_only
+      expect(literal).not_to include("</script>")
+      expect(shim_config(rendered)["save"]).to eq("name" => "Zoë 🎮", "x" => "</script>")
     end
 
-    it "keeps a saved value that contains a template marker as data" do
-      rendered = described_class.render("<title>Game</title>", save_data: { "note" => "__SAVE_URL__ and __SAVE__" }, save_url: "/save")
+    it "keeps a saved value that contains the template marker as data" do
+      rendered = described_class.render("<title>Game</title>", save_data: { "note" => "JSON.parse(__CONFIG__)" }, save_url: "/save")
 
-      expect(rendered).to include('var saveUrl = "/save";')
-      expect(rendered).to include("__SAVE_URL__ and __SAVE__")
+      config = shim_config(rendered)
+      expect(config["saveUrl"]).to eq("/save")
+      expect(config["save"]).to eq("note" => "JSON.parse(__CONFIG__)")
     end
 
     it "puts the scripts at the very start of a page with no doctype" do
@@ -54,7 +58,8 @@ describe ProductBuilds::PlayerDocument do
     it "keeps Rocket Loader from deferring the save shim" do
       rendered = described_class.render("<html><head></head></html>", save_data: {}, save_url: "/save")
 
-      expect(rendered).to include('<script data-cfasync="false">(function () {')
+      expect(rendered).to start_with('<script data-cfasync="false">')
+      expect(rendered).to include(ProductBuilds::PlayerDocument::CARRIED_CHANGES_PREFIX)
     end
   end
 end

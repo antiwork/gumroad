@@ -160,7 +160,10 @@ describe "Web build player", type: :request, inertia: true do
   end
 
   describe "saving from the frame" do
-    def save_path = "#{frame_path}save"
+    def save_path
+      get frame_path
+      JSON.parse(JSON.parse(response.body[/(?:const|var) config = JSON\.parse\((".*")\);\n/, 1]))["saveUrl"]
+    end
 
     def post_save(body, path: save_path)
       post path, params: body, headers: { "CONTENT_TYPE" => "text/plain;charset=UTF-8" }
@@ -179,11 +182,27 @@ describe "Web build player", type: :request, inertia: true do
       expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "4")
     end
 
-    it "serves the save path inside the frame document" do
-      path = frame_path
-      get path
+    it "gives the frame a save URL under a save grant of its own, which the file grant cannot use" do
+      path = save_path
+      save_grant = path.split("/")[4]
+      file_grant = frame_path.split("/")[4]
 
-      expect(response.body).to include(%(var saveUrl = "#{path}save"))
+      expect(path).to match(%r{\A/d/#{url_redirect.token}/play/[^/]+/save\z})
+      expect(ProductBuild.verified_player_grant(save_grant, url_redirect_token: url_redirect.token, purpose: ProductBuild::PLAYER_SAVE_GRANT_PURPOSE)).to include("purchase_id" => purchase.id)
+
+      post_save({ set: { "level" => "4" } }.to_json, path: "/d/#{url_redirect.token}/play/#{file_grant}/save")
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "keeps saving after the file grant has expired" do
+      path = save_path
+
+      travel ProductBuild::PLAYER_GRANT_VALID_FOR + 1.day do
+        post_save({ set: { "level" => "4" } }.to_json, path:)
+      end
+
+      expect(response).to have_http_status(:no_content)
+      expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "4")
     end
 
     it "rejects a batch that is not valid JSON or has the wrong shape, and keeps the save" do
@@ -210,7 +229,7 @@ describe "Web build player", type: :request, inertia: true do
 
     it "returns 404 for a grant issued for another content-page token" do
       other_redirect = create(:url_redirect, link: product, purchase: create(:purchase, link: product))
-      grant = frame_path.split("/")[4]
+      grant = save_path.split("/")[4]
 
       post_save({ set: { "level" => "4" } }.to_json, path: "/d/#{other_redirect.token}/play/#{grant}/save")
 

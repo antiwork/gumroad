@@ -9,198 +9,16 @@ module ProductBuilds::PlayerDocument
   # Browsers cap a beacon (and all keepalive requests together) at 64 KB; a larger last batch goes
   # out as an ordinary request, which the browser may cancel as the page closes.
   SAVE_BEACON_MAX_BYTES = 60_000
-  # An ordinary batch uses keepalive only up to this size, so the leave beacon keeps room in the quota.
-  SAVE_KEEPALIVE_MAX_BYTES = 30_000
   SAVE_FAILED_MESSAGE_TYPE = "gumroad:build-save-failed"
   # Network errors are retried quietly at first; the buyer hears about it only if they keep failing.
   SAVE_FAILURES_BEFORE_ALERT = 3
   # Prefix of the window.name that carries unconfirmed changes from one page of a build to the next.
   CARRIED_CHANGES_PREFIX = "gumroad-build-save:"
 
-  # On the opaque origin, localStorage throws. The shim puts the purchase's save back in its place:
-  # reads come from the save served with the page, and writes go in batches (clear, then remove,
-  # then set) to the save endpoint under the frame's grant, one batch at a time so they apply in
-  # order. The frame has no cookies, so the grant in the URL is the credential, as for its files.
-  # On leaving, the last batch goes as a beacon, which the browser still delivers as the page closes.
-  # sessionStorage and cookies get the in-memory stand-ins the custom HTML pages use.
-  SAVE_SHIM_SCRIPT = <<~JS
-    (function () {
-      var data = Object.create(null);
-      // Parsed, not an object literal, so a "__proto__" key stays a key.
-      var saved = JSON.parse(__SAVE__);
-      Object.keys(saved).forEach(function (k) { data[k] = String(saved[k]); });
-      var carried = null;
-      if (typeof window.name === "string" && window.name.indexOf("#{CARRIED_CHANGES_PREFIX}") === 0) {
-        try { carried = JSON.parse(window.name.slice(#{CARRIED_CHANGES_PREFIX.length})); } catch (e) {}
-        window.name = "";
-      }
-      var saveUrl = __SAVE_URL__;
-      var writer = (Math.random().toString(36) + Date.now().toString(36)).replace(/[^a-z0-9]/g, "").slice(0, #{ProductBuildSave::MAX_WRITER_ID_LENGTH});
-      var sequence = 0;
-      var pending = null;
-      var unconfirmed = null;
-      var timer = null;
-      var failures = 0;
-      var keepaliveBytes = 0;
-      // Every change made on this page, sent or not. The next page of the build may have fetched the
-      // save before even a confirmed batch landed, so this is what it is handed.
-      var sincePageLoad = null;
-      function emptyBatch() { return { clear: false, remove: [], set: Object.create(null) }; }
-      function batch() { return pending || (pending = emptyBatch()); }
-      function pageBatch() { return sincePageLoad || (sincePageLoad = emptyBatch()); }
-      // Applies newer on top of older, as the server would apply the two one after the other.
-      function merge(older, newer) {
-        if (!older || (newer && newer.clear)) { return newer; }
-        if (!newer) { return older; }
-        var result = { clear: older.clear, remove: older.remove.slice(), set: Object.create(null) };
-        Object.keys(older.set).forEach(function (k) { result.set[k] = older.set[k]; });
-        newer.remove.forEach(function (k) {
-          delete result.set[k];
-          if (result.remove.indexOf(k) < 0) { result.remove.push(k); }
-        });
-        Object.keys(newer.set).forEach(function (k) {
-          result.set[k] = newer.set[k];
-          var i = result.remove.indexOf(k);
-          if (i >= 0) { result.remove.splice(i, 1); }
-        });
-        return result;
-      }
-      // Each batch is numbered, so the server skips one that arrives after a newer one from this page.
-      function body(changes) {
-        sequence += 1;
-        return JSON.stringify({ clear: changes.clear, remove: changes.remove, set: changes.set, writer: writer, sequence: sequence });
-      }
-      function failed() {
-        try { window.parent.postMessage({ type: "#{SAVE_FAILED_MESSAGE_TYPE}" }, "*"); } catch (e) {}
-      }
-      // A batch that did not get through goes back in front of newer changes and is sent again.
-      function retry(changes) {
-        pending = merge(changes, pending);
-        failures += 1;
-        if (failures === #{SAVE_FAILURES_BEFORE_ALERT}) { failed(); }
-      }
-      function sendNext() {
-        var changes = pending;
-        pending = null;
-        unconfirmed = changes;
-        var payload = body(changes);
-        // keepalive lets a small batch finish if the browser discards a hidden tab. Its bytes count
-        // against the quota the leave beacon also needs, so they are tracked until it settles.
-        var size = new Blob([payload]).size;
-        var keepalive = size <= #{SAVE_KEEPALIVE_MAX_BYTES};
-        if (keepalive) { keepaliveBytes = size; }
-        fetch(saveUrl, { method: "POST", body: payload, keepalive: keepalive })
-          .then(function (response) {
-            if (unconfirmed !== changes) { return; }
-            unconfirmed = null;
-            if (response.ok) { failures = 0; } else if (response.status >= 500) { retry(changes); } else { failed(); }
-          }, function () {
-            if (unconfirmed !== changes) { return; }
-            unconfirmed = null;
-            retry(changes);
-          })
-          .then(function () {
-            if (keepalive) { keepaliveBytes = 0; }
-            if (pending) { changed(); }
-          });
-      }
-      function flush() {
-        clearTimeout(timer);
-        timer = null;
-        if (!pending) { return; }
-        if (unconfirmed) { changed(); return; }
-        sendNext();
-      }
-      // Everything not yet confirmed, including a batch still in flight, goes in one beacon, which the
-      // browser still delivers as the page closes. A reply to the batch in flight is then ignored.
-      // The browser may fetch a next page of the build before even a confirmed batch lands, so every
-      // change made on this page rides in window.name, which the next page in this frame reads,
-      // applies, and sends again.
-      function leave() {
-        clearTimeout(timer);
-        timer = null;
-        var changes = merge(unconfirmed, pending);
-        unconfirmed = null;
-        pending = null;
-        if (changes) {
-          var payload = body(changes);
-          var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES} - keepaliveBytes;
-          if (!(small && navigator.sendBeacon(saveUrl, payload))) {
-            fetch(saveUrl, { method: "POST", body: payload, keepalive: small }).catch(function () {});
-          }
-        }
-        // The next page keeps this writer and numbers on from the last batch sent, so if that batch
-        // lands after the next page's first save, the server skips it as stale.
-        if (sincePageLoad) {
-          try { window.name = "#{CARRIED_CHANGES_PREFIX}" + JSON.stringify({ writer: writer, sequence: sequence, changes: sincePageLoad }); } catch (e) {}
-        }
-      }
-      function changed() { if (!timer) { timer = setTimeout(flush, #{SAVE_FLUSH_DELAY_MS}); } }
-      var handed = carried && carried.changes;
-      if (handed && typeof handed === "object" && Array.isArray(handed.remove) && handed.set && typeof handed.set === "object") {
-        if (typeof carried.writer === "string" && typeof carried.sequence === "number") {
-          writer = carried.writer;
-          sequence = carried.sequence;
-        }
-        if (handed.clear) { data = Object.create(null); }
-        handed.remove.forEach(function (k) { delete data[k]; });
-        Object.keys(handed.set).forEach(function (k) { data[k] = String(handed.set[k]); });
-        pending = merge(handed, pending);
-        sincePageLoad = merge(handed, sincePageLoad);
-        changed();
-      }
-      var api = {
-        getItem: function (k) { k = String(k); return k in data ? data[k] : null; },
-        setItem: function (k, v) {
-          k = String(k); v = String(v);
-          data[k] = v;
-          [batch(), pageBatch()].forEach(function (b) {
-            b.set[k] = v;
-            var i = b.remove.indexOf(k);
-            if (i >= 0) { b.remove.splice(i, 1); }
-          });
-          changed();
-        },
-        removeItem: function (k) {
-          k = String(k);
-          if (!(k in data)) { return; }
-          delete data[k];
-          [batch(), pageBatch()].forEach(function (b) {
-            delete b.set[k];
-            if (b.remove.indexOf(k) < 0) { b.remove.push(k); }
-          });
-          changed();
-        },
-        clear: function () {
-          data = Object.create(null);
-          pending = { clear: true, remove: [], set: Object.create(null) };
-          sincePageLoad = { clear: true, remove: [], set: Object.create(null) };
-          changed();
-        },
-        key: function (i) { return Object.keys(data)[i] || null; },
-        get length() { return Object.keys(data).length; }
-      };
-      // Games also read and write keys as properties: localStorage.best = 10.
-      var storage = new Proxy(api, {
-        get: function (t, p) { if (p in api) { return api[p]; } return typeof p === "string" && p in data ? data[p] : undefined; },
-        set: function (t, p, v) { if (!(p in api)) { api.setItem(p, v); } return true; },
-        deleteProperty: function (t, p) { api.removeItem(p); return true; },
-        has: function (t, p) { return p in api || p in data; },
-        ownKeys: function () { return Object.keys(data); },
-        getOwnPropertyDescriptor: function (t, p) {
-          if (typeof p === "string" && p in data) { return { value: data[p], writable: true, enumerable: true, configurable: true }; }
-        }
-      });
-      var throws = false;
-      try { void window.localStorage; } catch (e) { throws = true; }
-      if (throws) {
-        try { Object.defineProperty(window, "localStorage", { value: storage, configurable: true }); } catch (e) {}
-      }
-      window.addEventListener("pagehide", leave);
-      // A hidden tab may never come back, so its changes go now, by the ordinary retried path.
-      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { flush(); } });
-    })();
-  JS
+  # The save shim, which puts localStorage back on the opaque origin. It lives in its own file so a
+  # test can run it; see the file for how it saves.
+  SAVE_SHIM_SCRIPT = Rails.root.join("app/javascript/build_player/save_shim.js").read.freeze
+  SAVE_SHIM_CONFIG_MARKER = "JSON.parse(__CONFIG__)"
 
   # A UTF-8 byte order mark, leading whitespace and comments, then the doctype if there is one.
   PROLOGUE = /\A(?:\xEF\xBB\xBF)?(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>)?/imn
@@ -210,11 +28,20 @@ module ProductBuilds::PlayerDocument
   # for them, so no tag has to be found, and a <head> inside a comment or a script cannot mislead it.
   # Anything before the doctype would put the page in quirks mode.
   def self.render(html, save_data:, save_url:)
-    # ASCII only, so the save reads the same whatever encoding the seller's page is in.
-    save = JSON.generate(JSON.generate(save_data, ascii_only: true), ascii_only: true)
-    url = JSON.generate(save_url, ascii_only: true)
-    # One pass over the template, so a marker inside the saved data is never replaced.
-    script = SAVE_SHIM_SCRIPT.gsub(/__SAVE_URL__|__SAVE__/) { ERB::Util.json_escape(_1 == "__SAVE_URL__" ? url : save) }
+    config = {
+      save: save_data,
+      saveUrl: save_url,
+      flushDelayMs: SAVE_FLUSH_DELAY_MS,
+      beaconMaxBytes: SAVE_BEACON_MAX_BYTES,
+      failedMessageType: SAVE_FAILED_MESSAGE_TYPE,
+      failuresBeforeAlert: SAVE_FAILURES_BEFORE_ALERT,
+      carriedPrefix: CARRIED_CHANGES_PREFIX,
+      maxWriterIdLength: ProductBuildSave::MAX_WRITER_ID_LENGTH,
+    }
+    # A JSON string of the JSON, ASCII only: it reads the same whatever encoding the seller's page is
+    # in, and json_escape keeps a "</script>" in a saved value from ending the script.
+    literal = JSON.generate(JSON.generate(config, ascii_only: true), ascii_only: true)
+    script = SAVE_SHIM_SCRIPT.sub(SAVE_SHIM_CONFIG_MARKER) { "JSON.parse(#{ERB::Util.json_escape(literal)})" }
     # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
     injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
     html = html.b

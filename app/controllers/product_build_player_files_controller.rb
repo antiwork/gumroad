@@ -26,7 +26,8 @@ class ProductBuildPlayerFilesController < ApplicationController
   # The seller writes these files, so the visitor's CSRF token must never be written into them.
   skip_after_action :inject_csrf_token
 
-  before_action :verify_grant
+  before_action :verify_grant, only: :show
+  before_action :verify_save_grant, only: :save
   before_action :set_path, only: :show
 
   def show
@@ -67,6 +68,11 @@ class ProductBuildPlayerFilesController < ApplicationController
       e404 if @grant.nil?
     end
 
+    def verify_save_grant
+      @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id], purpose: ProductBuild::PLAYER_SAVE_GRANT_PURPOSE)
+      e404 if @grant.nil?
+    end
+
     def set_path
       path = params[:path].presence || INDEX
       segments = path.split("/")
@@ -104,7 +110,7 @@ class ProductBuildPlayerFilesController < ApplicationController
       body = ProductBuilds::PlayerDocument.render(
         s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read,
         save_data: save&.data || {},
-        save_url: "/d/#{params[:id]}/play/#{params[:grant]}/save",
+        save_url: "/d/#{params[:id]}/play/#{ProductBuild.player_save_grant(url_redirect_token: params[:id], purchase_id: @grant["purchase_id"])}/save",
       )
       # The page carries the buyer's save.
       response.set_header("Cache-Control", "private, no-store")
