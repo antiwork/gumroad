@@ -4,7 +4,9 @@ class Api::Mobile::DevicesController < Api::Mobile::BaseController
   before_action { doorkeeper_authorize! :creator_api, :mobile_api }
 
   def create
-    device = current_resource_owner.devices.build(device_params)
+    # A brand token keeps the phone on its team member, so brand sales stop reaching it once the
+    # membership ends.
+    device = (impersonated_user || account_holder).devices.build(device_params)
 
     begin
       saved = device.save
