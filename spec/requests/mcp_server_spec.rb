@@ -972,7 +972,39 @@ describe "MCP server" do
       it "refuses a product id that is not a string" do
         expect { call_tool("create_bundle", { name: "Numbers", price_cents: 100, product_ids: [@product.external_id, 123] }) }.not_to change { Link.count }
 
-        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids[1] must be a string")
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids[1] must be a non-blank string")
+      end
+
+      it "refuses a blank product id" do
+        expect { call_tool("create_bundle", { name: "Blank", price_cents: 100, product_ids: ["  "] }) }.not_to change { Link.count }
+
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids[0] must be a non-blank string")
+      end
+
+      it "gives a retained member its product's first version once that product is sold in versions" do
+        bundle = create(:product, :bundle, user: @seller)
+        kept = bundle.bundle_products.alive.in_order.first
+        category = create(:variant_category, title: "Format", link: kept.product)
+        create(:variant, variant_category: category, name: "PDF")
+        create(:variant, variant_category: category, name: "EPUB")
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [kept.product.external_id] })
+
+        expect(response).to be_successful
+        expect(kept.reload).to have_attributes(variant: kept.product.reload.variants_or_skus.first, deleted_at: nil)
+        expect(kept.variant).to be_present
+      end
+
+      it "re-adds a removed member with the defaults rather than its old version" do
+        versioned = create(:product_with_digital_versions, user: @seller, name: "Print")
+        bundle = create(:product, :bundle, user: @seller)
+        removed = bundle.bundle_products.create!(product: versioned, variant: versioned.alive_variants.last, quantity: 2, position: 2)
+        removed.mark_deleted!
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [versioned.external_id] })
+
+        expect(response).to be_successful
+        expect(removed.reload).to have_attributes(deleted_at: nil, variant: versioned.variants_or_skus.first, quantity: 1)
       end
 
       it "refuses an empty product list without creating anything" do

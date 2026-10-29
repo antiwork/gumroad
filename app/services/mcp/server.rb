@@ -714,7 +714,7 @@ module Mcp
         retained = bundle.bundle_products.alive.includes(:variant).index_by(&:product_id)
 
         product_ids.map.with_index do |id, position|
-          raise Error.new("product_ids[#{position}] must be a string", code: -32602) unless id.is_a?(String) && id.strip.present?
+          raise Error.new("product_ids[#{position}] must be a non-blank string", code: -32602) unless id.is_a?(String) && id.strip.present?
 
           product = find_product!(id)
           # The service rewrites the version and quantity of every member it is handed, so a retained
