@@ -29,6 +29,8 @@ export const WebBuildPlayer = React.forwardRef<WebBuildPlayerHandle, { title: st
       const onMessage = (event: MessageEvent) => {
         if (alerted || event.source !== frameRef.current?.contentWindow || !isSaveFailedMessage(event.data)) return;
         alerted = true;
+        // The alert renders outside the frame, behind it while the frame is full screen.
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
         showAlert("Your progress could not be saved. Keep this tab open and try again later.", "error");
       };
       window.addEventListener("message", onMessage);

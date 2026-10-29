@@ -9,6 +9,8 @@ module ProductBuilds::PlayerDocument
   # Browsers cap a beacon (and all keepalive requests together) at 64 KB; a larger last batch goes
   # out as an ordinary request, which the browser may cancel as the page closes.
   SAVE_BEACON_MAX_BYTES = 60_000
+  # An ordinary batch uses keepalive only up to this size, so the leave beacon keeps room in the quota.
+  SAVE_KEEPALIVE_MAX_BYTES = 30_000
   SAVE_FAILED_MESSAGE_TYPE = "gumroad:build-save-failed"
   # Network errors are retried quietly at first; the buyer hears about it only if they keep failing.
   SAVE_FAILURES_BEFORE_ALERT = 3
@@ -39,6 +41,7 @@ module ProductBuilds::PlayerDocument
       var unconfirmed = null;
       var timer = null;
       var failures = 0;
+      var keepaliveBytes = 0;
       function batch() { return pending || (pending = { clear: false, remove: [], set: Object.create(null) }); }
       // Applies newer on top of older, as the server would apply the two one after the other.
       function merge(older, newer) {
@@ -76,9 +79,12 @@ module ProductBuilds::PlayerDocument
         pending = null;
         unconfirmed = changes;
         var payload = body(changes);
-        // keepalive lets a small batch finish if the browser discards a hidden tab; only one is ever in flight.
-        var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES};
-        fetch(saveUrl, { method: "POST", body: payload, keepalive: small })
+        // keepalive lets a small batch finish if the browser discards a hidden tab. Its bytes count
+        // against the quota the leave beacon also needs, so they are tracked until it settles.
+        var size = new Blob([payload]).size;
+        var keepalive = size <= #{SAVE_KEEPALIVE_MAX_BYTES};
+        if (keepalive) { keepaliveBytes = size; }
+        fetch(saveUrl, { method: "POST", body: payload, keepalive: keepalive })
           .then(function (response) {
             if (unconfirmed !== changes) { return; }
             unconfirmed = null;
@@ -88,7 +94,10 @@ module ProductBuilds::PlayerDocument
             unconfirmed = null;
             retry(changes);
           })
-          .then(function () { if (pending) { changed(); } });
+          .then(function () {
+            if (keepalive) { keepaliveBytes = 0; }
+            if (pending) { changed(); }
+          });
       }
       function flush() {
         clearTimeout(timer);
@@ -112,7 +121,7 @@ module ProductBuilds::PlayerDocument
         // The next page keeps this writer and numbers on from this beacon, so if the beacon lands after
         // that page's first save, the server skips it as stale.
         try { window.name = "#{CARRIED_CHANGES_PREFIX}" + JSON.stringify({ writer: writer, sequence: sequence, changes: changes }); } catch (e) {}
-        var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES};
+        var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES} - keepaliveBytes;
         if (small && navigator.sendBeacon(saveUrl, payload)) { return; }
         fetch(saveUrl, { method: "POST", body: payload, keepalive: small }).catch(function () {});
       }
