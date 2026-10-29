@@ -717,7 +717,7 @@ const VideoEmbedPreview = ({
       if (!isCurrentPlayer) return;
       dispatchMediaPlaybackState(videoPlayerId, isPlaying);
     };
-    const playerSetup = createJWPlayer(videoPlayerId, {
+    void createJWPlayer(videoPlayerId, {
       ...videoPlayerAspectRatio(file),
       playlist: [
         {
@@ -732,54 +732,54 @@ const VideoEmbedPreview = ({
           })),
         },
       ],
-    });
-    void playerSetup.then((player) => {
-      // A player finished loading after its embed went away: throw it away instead of wiring
-      // up callbacks that would report playback for something nobody is watching.
-      if (!isCurrentPlayer) return;
-      let initialSeekDone = false;
-      player
-        .on("ready", () => player.play())
-        .on("play", () => {
-          // Tells the page a video is playing so it can pause its own position poll — the
-          // player already reports the position below. See utils/media_playback.ts.
-          publishPlaybackState(true);
+    })
+      .then((player) => {
+        // A player finished loading after its embed went away: throw it away instead of wiring
+        // up callbacks that would report playback for something nobody is watching.
+        if (!isCurrentPlayer) return;
+        let initialSeekDone = false;
+        player
+          .on("ready", () => player.play())
+          .on("play", () => {
+            // Tells the page a video is playing so it can pause its own position poll — the
+            // player already reports the position below. See utils/media_playback.ts.
+            publishPlaybackState(true);
 
-          if (initialSeekDone) return;
+            if (initialSeekDone) return;
 
-          void createConsumptionEvent({
-            eventType: "watch",
-            urlRedirectId: redirectId,
-            productFileId: file.id,
-            purchaseId,
+            void createConsumptionEvent({
+              eventType: "watch",
+              urlRedirectId: redirectId,
+              productFileId: file.id,
+              purchaseId,
+            });
+            duration.current = player.getDuration();
+            player.seek(
+              isResumableMediaLocation(resumeLocation, file.content_length ?? file.duration ?? duration.current)
+                ? resumeLocation
+                : 0,
+            );
+            initialSeekDone = true;
+          })
+          .on("pause", () => publishPlaybackState(false))
+          .on("error", () => publishPlaybackState(false))
+          .on("seek", (event) => trackMediaLocation(event.offset))
+          .on("time", (event) => throttledTrackMediaLocation(event.position))
+          .on("complete", () => {
+            throttledTrackMediaLocation.cancel();
+            const length = file.content_length ?? file.duration ?? duration.current;
+            if (length > 0) trackMediaLocation(length);
+            publishPlaybackState(false);
+            setIsVideoPlayerShowing(false);
           });
-          duration.current = player.getDuration();
-          player.seek(
-            isResumableMediaLocation(resumeLocation, file.content_length ?? file.duration ?? duration.current)
-              ? resumeLocation
-              : 0,
-          );
-          initialSeekDone = true;
-        })
-        .on("pause", () => publishPlaybackState(false))
-        .on("error", () => publishPlaybackState(false))
-        .on("seek", (event) => trackMediaLocation(event.offset))
-        .on("time", (event) => throttledTrackMediaLocation(event.position))
-        .on("complete", () => {
-          throttledTrackMediaLocation.cancel();
-          const length = file.content_length ?? file.duration ?? duration.current;
-          if (length > 0) trackMediaLocation(length);
-          publishPlaybackState(false);
-          setIsVideoPlayerShowing(false);
-        });
-    });
-    // A vendor outage or an offline buyer must not leave the embed blank with no explanation: hand
-    // the frame back to the still and say what happened.
-    playerSetup.catch(() => {
-      if (!isCurrentPlayer) return;
-      setDidPlayerFailToLoad(true);
-      setIsVideoPlayerShowing(false);
-    });
+      })
+      .catch(() => {
+        // A vendor outage or an offline buyer must not leave the embed blank with no explanation:
+        // hand the frame back to the still and say what happened.
+        if (!isCurrentPlayer) return;
+        setDidPlayerFailToLoad(true);
+        setIsVideoPlayerShowing(false);
+      });
 
     // The player is torn down whenever this embed stops being shown (and on unmount), so make
     // sure the page never stays in the "video playing" state with no player around.
