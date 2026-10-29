@@ -442,7 +442,24 @@ describe ProductFile do
                              source_url: "https://example.com/game.zip", storage_key: "builds/#{product.id}/3/build.zip",
                              byte_size: 10)
 
-      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live" })
+      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live", playable: false })
+    end
+
+    it "marks the build playable once it is unpacked and the player is on for the seller" do
+      product = create(:product)
+      file = create(:readable_document, link: product)
+      build = create(:product_build, :live, product:, product_file: file, number: 3)
+
+      expect(file.reload.as_json[:web_build]).to include(playable: false)
+
+      build.update!(site_unpacked_at: Time.current)
+      expect(file.reload.as_json[:web_build]).to include(playable: false)
+
+      Feature.activate_user(:product_build_player, product.user)
+      expect(file.reload.as_json[:web_build]).to include(playable: true)
+
+      build.update!(status: "superseded")
+      expect(file.reload.as_json[:web_build]).to include(playable: false)
     end
   end
 

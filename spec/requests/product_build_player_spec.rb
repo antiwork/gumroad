@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe "Web build player", type: :request do
+describe "Web build player", type: :request, inertia: true do
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
   let(:purchase) { create(:purchase, link: product) }
@@ -28,12 +29,19 @@ describe "Web build player", type: :request do
 
   def frame_path
     get "/d/#{url_redirect.token}/play"
-    expect(response).to have_http_status(:redirect)
-    URI.parse(response.location).path
+    expect(response).to have_http_status(:ok)
+    inertia.props[:frame_url]
   end
 
   describe "GET /d/:token/play" do
-    it "redirects to the build under a grant, with a trailing slash so relative paths resolve under it" do
+    it "renders the player page with the product's name and a way back to the content" do
+      get "/d/#{url_redirect.token}/play"
+
+      expect_inertia.to render_component("UrlRedirects/Play")
+      expect(inertia.props).to include(title: product.name, content_page_url: url_redirect.download_page_url)
+    end
+
+    it "frames the build under a grant, with a trailing slash so relative paths resolve under it" do
       path = frame_path
 
       expect(path).to match(%r{\A/d/#{url_redirect.token}/play/[^/]+/\z})
@@ -148,6 +156,85 @@ describe "Web build player", type: :request do
       get path
 
       expect(response).to have_http_status(:not_found)
+    end
+  end
+
+  describe "saving from the frame" do
+    def save_path
+      get frame_path
+      JSON.parse(JSON.parse(response.body[/(?:const|var) config = JSON\.parse\((".*")\);\n/, 1]))["saveUrl"]
+    end
+
+    def post_save(body, path: save_path)
+      post path, params: body, headers: { "CONTENT_TYPE" => "text/plain;charset=UTF-8" }
+    end
+
+    it "applies a batch the frame sends under its grant, with no cookies, and lets the frame read the status" do
+      ProductBuildSave.apply_changes!(purchase, set: { "level" => "3", "name" => "Ana" })
+      path = save_path
+      reset!
+      host! DOMAIN
+
+      post_save({ clear: false, remove: ["name"], set: { "level" => "4" } }.to_json, path:)
+
+      expect(response).to have_http_status(:no_content)
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
+      expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "4")
+    end
+
+    it "gives the frame a save URL under a save grant of its own, which the file grant cannot use" do
+      path = save_path
+      save_grant = path.split("/")[4]
+      file_grant = frame_path.split("/")[4]
+
+      expect(path).to match(%r{\A/d/#{url_redirect.token}/play/[^/]+/save\z})
+      expect(ProductBuild.verified_player_grant(save_grant, url_redirect_token: url_redirect.token, purpose: ProductBuild::PLAYER_SAVE_GRANT_PURPOSE)).to include("purchase_id" => purchase.id)
+
+      post_save({ set: { "level" => "4" } }.to_json, path: "/d/#{url_redirect.token}/play/#{file_grant}/save")
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "keeps saving after the file grant has expired" do
+      path = save_path
+
+      travel ProductBuild::PLAYER_GRANT_VALID_FOR + 1.day do
+        post_save({ set: { "level" => "4" } }.to_json, path:)
+      end
+
+      expect(response).to have_http_status(:no_content)
+      expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "4")
+    end
+
+    it "rejects a batch that is not valid JSON or has the wrong shape, and keeps the save" do
+      ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
+
+      post_save("not json")
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.headers["Access-Control-Allow-Origin"]).to eq("*")
+
+      post_save({ clear: true, set: ["level", "4"] }.to_json)
+      expect(response).to have_http_status(:unprocessable_entity)
+
+      expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "3")
+    end
+
+    it "rejects a body larger than any save" do
+      stub_const("ProductBuildPlayerFilesController::MAX_SAVE_REQUEST_BYTES", 10)
+
+      post_save({ set: { "level" => "4" } }.to_json)
+
+      expect(response).to have_http_status(:payload_too_large)
+      expect(ProductBuildSave.count).to eq(0)
+    end
+
+    it "returns 404 for a grant issued for another content-page token" do
+      other_redirect = create(:url_redirect, link: product, purchase: create(:purchase, link: product))
+      grant = save_path.split("/")[4]
+
+      post_save({ set: { "level" => "4" } }.to_json, path: "/d/#{other_redirect.token}/play/#{grant}/save")
+
+      expect(response).to have_http_status(:not_found)
+      expect(ProductBuildSave.count).to eq(0)
     end
   end
 

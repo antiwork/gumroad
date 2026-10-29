@@ -16,6 +16,9 @@ class ProductBuildPlayerFilesController < ApplicationController
   SERVED_EXTENSIONS = (DOCUMENT_EXTENSIONS + %w[js mjs cjs css]).freeze
   # Shorter than the signed link it points at, so a cached redirect never hands out an expired link.
   CACHE_MAX_AGE = 5.minutes
+  # Room for a full save as JSON, where escaping can turn one byte into six (\u0001), plus the batch's
+  # own fields; ProductBuildSave enforces the real limits.
+  MAX_SAVE_REQUEST_BYTES = ProductBuildSave::MAX_BYTE_SIZE * 6 + 64.kilobytes
 
   # Rails refuses a JavaScript response to a plain <script> GET, to keep it from leaking session
   # data cross-origin. These responses are the build's own files, read with no session.
@@ -23,8 +26,9 @@ class ProductBuildPlayerFilesController < ApplicationController
   # The seller writes these files, so the visitor's CSRF token must never be written into them.
   skip_after_action :inject_csrf_token
 
-  before_action :verify_grant
-  before_action :set_path
+  before_action :verify_grant, only: :show
+  before_action :verify_save_grant, only: :save
+  before_action :set_path, only: :show
 
   def show
     # Module scripts, fetch and wasm from the frame are CORS requests with `Origin: null`, and the
@@ -36,9 +40,36 @@ class ProductBuildPlayerFilesController < ApplicationController
     redirect_to signed_build_site_location(s3_key), allow_other_host: true
   end
 
+  # A batch from the frame's save shim. The body is text/plain JSON, the one type a beacon can send
+  # without a CORS preflight, and the shim reads the status, so the response allows any origin.
+  def save
+    response.set_header("Access-Control-Allow-Origin", "*")
+    return head :payload_too_large if request.content_length.to_i > MAX_SAVE_REQUEST_BYTES
+
+    changes = JSON.parse(request.raw_post)
+    return head :unprocessable_entity unless changes.is_a?(Hash)
+
+    ProductBuildSave.apply_changes!(
+      Purchase.find(@grant["purchase_id"]),
+      set: changes.fetch("set", {}),
+      remove: changes.fetch("remove", []),
+      clear: changes.fetch("clear", false),
+      writer: changes["writer"],
+      sequence: changes["sequence"],
+    )
+    head :no_content
+  rescue JSON::ParserError, ProductBuildSave::LimitError
+    head :unprocessable_entity
+  end
+
   private
     def verify_grant
       @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id])
+      e404 if @grant.nil?
+    end
+
+    def verify_save_grant
+      @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id], purpose: ProductBuild::PLAYER_SAVE_GRANT_PURPOSE)
       e404 if @grant.nil?
     end
 
@@ -76,7 +107,11 @@ class ProductBuildPlayerFilesController < ApplicationController
       return e404 if head.content_length > ProductBuild::MAX_PAGE_BYTE_SIZE
 
       save = ProductBuildSave.find_by(purchase_id: @grant["purchase_id"])
-      body = ProductBuilds::PlayerDocument.render(s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read, save_data: save&.data || {})
+      body = ProductBuilds::PlayerDocument.render(
+        s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read,
+        save_data: save&.data || {},
+        save_url: "/d/#{params[:id]}/play/#{ProductBuild.player_save_grant(url_redirect_token: params[:id], purchase_id: @grant["purchase_id"])}/save",
+      )
       # The page carries the buyer's save.
       response.set_header("Cache-Control", "private, no-store")
       send_data body, type: head.content_type, disposition: "inline"
