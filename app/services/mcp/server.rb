@@ -872,18 +872,20 @@ module Mcp
       end
 
       # Keyset pages over (created_at, id) descending; fetches one extra row to know whether another page exists.
+      # The cursor carries created_at in microseconds, not whole seconds, so a timestamp column that ever
+      # stores fractional seconds cannot drop rows that fall inside the last row's second.
       def paginate(scope, args, default:, table:)
         limit = limit_for(args, default:)
         if args["cursor"].present?
           at, id = args["cursor"].to_s.split("_", 2)
           raise Error.new("cursor is not valid", code: -32602) unless at.match?(/\A\d+\z/) && id.to_s.match?(/\A\d+\z/)
 
-          time = Time.zone.at(at.to_i)
+          time = Time.zone.at(Rational(at.to_i, 1_000_000))
           scope = scope.where("#{table}.created_at < :t OR (#{table}.created_at = :t AND #{table}.id < :id)", t: time, id: id.to_i)
         end
         rows = scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
         page = rows.first(limit)
-        next_cursor = "#{page.last.created_at.to_i}_#{page.last.id}" if rows.size > limit
+        next_cursor = "#{(page.last.created_at.to_r * 1_000_000).to_i}_#{page.last.id}" if rows.size > limit
         [page, next_cursor]
       end
 
