@@ -38,6 +38,47 @@ describe StripeMerchantAccountManager, "company tax ID on an India sole propriet
 
     expect(company[:tax_id]).to eq("000000000")
   end
+
+  context "when an India company changes to a sole proprietorship" do
+    let!(:tos_agreement) { create(:tos_agreement, user:) }
+    let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_in_sole_prop_test") }
+    let!(:company_info) do
+      create(:user_compliance_info_business, user:, business_country: "India", business_type: "pvt_ltd", business_tax_id: "22AAAAA0000A1Z5")
+    end
+    let(:sent) { [] }
+
+    before do
+      create(:user_compliance_info_business,
+             user:,
+             business_country: "India",
+             business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP,
+             business_tax_id: "22AAAAA0000A1Z5")
+      live_account = Stripe::Account.construct_from(
+        id: "acct_in_sole_prop_test",
+        object: "account",
+        metadata: { "user_compliance_info_id" => company_info.external_id },
+        capabilities: {},
+        country: "IN",
+        requirements: { currently_due: [], eventually_due: [], past_due: [] },
+        future_requirements: { currently_due: [], past_due: [] },
+        external_accounts: { object: "list", data: [] }
+      )
+      allow(Stripe::Account).to receive(:retrieve).and_return(live_account)
+      allow(Stripe::Account).to receive(:list_persons).and_return(Stripe::StripeObject.construct_from(data: []))
+      allow(Stripe::Account).to receive(:update) do |_account_id, params|
+        sent << params
+        live_account
+      end
+    end
+
+    it "does not send the tax ID the earlier company record carried" do
+      described_class.update_account(user, passphrase:)
+
+      companies = sent.filter_map { |params| params[:company] if params.is_a?(Hash) }
+      expect(companies).not_to be_empty
+      expect(companies).to all(satisfy { |company| !company.key?(:tax_id) })
+    end
+  end
 end
 
 describe StripeMerchantAccountManager, ".clear_unresolvable_business_tax_id_notes" do

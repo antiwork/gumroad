@@ -510,6 +510,9 @@ module StripeMerchantAccountManager
       # a company phone withheld while the countries disagree would otherwise diff out as
       # unchanged on every later save and never be sent again, even once they reconcile.
       last_attributes[:company][:phone] = nil
+      # deep_merge copies last-only keys into the diff, so a tax ID from an earlier company record
+      # would be sent even though company_hash omitted it from the current one.
+      last_attributes[:company].delete(:tax_id) unless company_tax_id_accepted?(user_compliance_info)
     end
 
     diff_attributes = get_diff_attributes(current_attributes, last_attributes)
