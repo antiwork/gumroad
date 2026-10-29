@@ -314,11 +314,26 @@ describe Api::Mobile::SalesController, :vcr do
 
       expect(response.parsed_body["success"]).to eq(true)
       expect(@purchase.reload.original_product_review.response.message).to eq("Thank you!")
+      expect(@purchase.original_product_review.response.user).to eq(@seller)
 
       delete :destroy_review_response, params: @params.merge(id: @purchase.external_id)
 
       expect(response.parsed_body["success"]).to eq(true)
       expect(@purchase.reload.original_product_review.response).to be_nil
+    end
+
+    it "records the team member who switched in as the author of a response on the brand's review",
+       vcr: { cassette_name: "Api_Mobile_SalesController/PUT_review_response/creates_and_deletes_a_review_response" } do
+      member = create(:user)
+      membership = create(:team_membership, user: member, seller: @seller, role: TeamMembership::ROLE_ADMIN)
+      brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: @seller, team_membership: membership)
+
+      put :update_review_response, params: @params.merge(access_token: brand_token.token, id: @purchase.external_id, message: "Thank you!")
+
+      expect(response.parsed_body["success"]).to eq(true)
+      review_response = @purchase.reload.original_product_review.response
+      expect(review_response.message).to eq("Thank you!")
+      expect(review_response.user).to eq(member)
     end
   end
 
@@ -435,6 +450,22 @@ describe Api::Mobile::SalesController, :vcr do
           expect(response.parsed_body).to eq "success" => true, "id" => @purchase.external_id, "message" => "Purchase successfully refunded.", "partially_refunded" => false
         end.to change { @purchase.reload.refunded? }.from(false).to(true)
          .and change { @purchase.seller.refund_fee_notice_shown? }.from(false).to(true)
+        expect(@purchase.refunds.last.refunding_user_id).to eq(@seller.id)
+      end
+
+      it "refunds the brand's sale as the team member who switched in",
+         vcr: { cassette_name: "Api_Mobile_SalesController/PATCH_refund/when_the_purchase_is_refunded/responds_with_HTTP_success" } do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
+        member = create(:user)
+        membership = create(:team_membership, user: member, seller: @seller, role: TeamMembership::ROLE_ADMIN)
+        brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: @seller, team_membership: membership)
+
+        patch :refund, params: @params.merge(access_token: brand_token.token, id: @purchase.external_id)
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@purchase.reload.refunded?).to eq(true)
+        expect(@purchase.seller).to eq(@seller)
+        expect(@purchase.refunds.last.refunding_user_id).to eq(member.id)
       end
     end
 
