@@ -4,6 +4,12 @@ module SellerPlan
   # Hosted Stripe Checkout on Gumroad's own account (not the seller's Connect account): here Gumroad
   # is the merchant charging the seller, so the platform key is the right one.
   class Checkout
+    # Expected outcomes, so the controller can tell the seller what to do instead of showing a
+    # generic failure. A price that has not been created in Stripe is an operational gap, not a bug.
+    Error = Class.new(StandardError)
+    AlreadyActive = Class.new(Error)
+    PriceMissing = Class.new(Error)
+
     def initialize(offer:, success_url:, cancel_url:)
       @offer = offer
       @success_url = success_url
@@ -12,10 +18,10 @@ module SellerPlan
 
     def url
       price_id = Experiment.price_id(@offer.arm)
-      raise "No Stripe price configured for the #{@offer.arm} arm" if price_id.blank?
+      raise PriceMissing, "No Stripe price configured for the #{@offer.arm} arm" if price_id.blank?
 
       @offer.with_lock do
-        raise "Seller plan is already active" if @offer.active?
+        raise AlreadyActive, "Seller plan is already active" if @offer.active?
 
         existing_checkout_destination || create_session(price_id)
       end

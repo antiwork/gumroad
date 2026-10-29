@@ -80,6 +80,24 @@ describe SellerPlanController, type: :controller do
     expect(flash[:alert]).to include("publish again to retry")
   end
 
+  it "says the plan is already active when it activates mid-request" do
+    allow(SellerPlan::Checkout).to receive(:new).and_raise(SellerPlan::Checkout::AlreadyActive)
+
+    get :checkout
+
+    expect(response).to redirect_to(edit_link_path(product.unique_permalink))
+    expect(flash[:notice]).to include("already active")
+  end
+
+  it "keeps publishing free and points to support when the plan price is missing" do
+    allow(SellerPlan::Checkout).to receive(:new).and_raise(SellerPlan::Checkout::PriceMissing)
+
+    get :checkout
+
+    expect(response).to redirect_to(root_path)
+    expect(flash[:alert]).to include("still free today")
+  end
+
   it "points the seller to support on an unexpected failure" do
     allow(Stripe::Checkout::Session).to receive(:create).and_raise(StandardError, "boom")
 
