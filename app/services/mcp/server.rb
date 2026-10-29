@@ -532,7 +532,7 @@ module Mcp
           raise ToolError, "That link did not return a file. Use a public https link to the file itself."
         rescue Aws::S3::Errors::ServiceError
           raise ToolError, "The file could not be stored. Try again, or upload it in the product editor."
-        rescue Redis::BaseError
+        rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS
           raise ToolError, "The file was attached, but the processing that follows it could not be started. Add it again to retry."
         end
 

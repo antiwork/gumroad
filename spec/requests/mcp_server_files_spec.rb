@@ -126,31 +126,150 @@ describe "MCP server product files" do
       expect(page.reload.embedded_product_file_ids_in_order).to eq([existing.id, file.id])
     end
 
-    it "leaves a content page that lists no files alone" do
-      description = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Notes" }] }]
-      page = create(:rich_content, entity: @product, description:)
-      url = "https://example.com/files/blah.txt"
-      stub_remote_file(url, "blah.txt", "text/plain")
+    [RedisClient::CannotConnectError.new("connection refused"), Redis::CannotConnectError.new("connection refused")].each do |error|
+      it "keeps the copy it stored when queueing the analysis fails after the save (#{error.class})" do
+        url = "https://example.com/files/blah.txt"
+        stub_remote_file(url, "blah.txt", "text/plain")
+        allow(AnalyzeFileWorker).to receive(:perform_in).and_raise(error)
 
-      call_tool("add_file", { id: @product.unique_permalink, url: })
+        result = call_tool("add_file", { id: @product.unique_permalink, url: })
 
-      expect(page.reload.description).to eq(description)
+        expect(result.dig("isError")).to eq(true)
+        expect(result.dig("content", 0, "text")).to include("was attached")
+        expect(@product.product_files.alive.sole.s3_key).to eq(@stored_objects.sole[:key])
+        expect(@deleted_keys).to be_empty
+      end
     end
 
-    it "keeps the copy it stored when the save left a live row behind" do
+    it "saves nothing when the content page cannot take the file" do
+      existing = create(:product_file, link: @product)
+      page = create(:rich_content, entity: @product, description: [file_embed(existing)])
+      # Stored before the scheme check existed, so any change to this page now fails validation.
+      legacy_link = { "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Run", "marks" => [{ "type" => "link", "attrs" => { "href" => "javascript:run()" } }] }] }
+      page.update_column(:description, page.description + [legacy_link])
       url = "https://example.com/files/blah.txt"
       stub_remote_file(url, "blah.txt", "text/plain")
-      allow_any_instance_of(Link).to receive(:save_files!) do |product, files, **_options|
-        ProductFile.create!(link: product, url: files.sole[:url], display_name: "blah")
-        raise Redis::BaseError, "connection lost"
-      end
 
       result = call_tool("add_file", { id: @product.unique_permalink, url: })
 
       expect(result.dig("isError")).to eq(true)
-      expect(result.dig("content", 0, "text")).to include("was attached")
-      expect(@product.reload.alive_product_files.count).to eq(1)
-      expect(@deleted_keys).to be_empty
+      expect(result.dig("content", 0, "text")).to include("javascript")
+      expect(@product.product_files.alive.map(&:id)).to eq([existing.id])
+      expect(@deleted_keys).to eq([@stored_objects.sole[:key]])
+    end
+
+    context "when buyers download the product" do
+      before do
+        host! DOMAIN
+        allow_any_instance_of(Aws::S3::Client).to receive(:put_object).and_call_original
+      end
+
+      def uploaded_product_file(name, link: @product, position: 1)
+        key = "attachments/#{@seller.external_id}/#{SecureRandom.hex}/original/#{name}"
+        Aws::S3::Client.new.put_object(bucket: S3_BUCKET, key:, body: "existing")
+        create(:product_file, link:, url: "#{S3_BASE_URL}#{key}", position:)
+      end
+
+      def text(value)
+        { "type" => "paragraph", "content" => [{ "type" => "text", "text" => value }] }
+      end
+
+      # Files the buyer's download page shows (its content pages, or the plain list when there are
+      # none), after checking the download endpoint serves each one.
+      def web_file_ids(purchase)
+        token = purchase.url_redirect.token
+        get "/d/#{token}", headers: { "X-Inertia" => "true" }
+        expect(response).to have_http_status(:ok)
+        content = response.parsed_body.dig("props", "content")
+        ids =
+          if content["rich_content_pages"]
+            content["rich_content_pages"].flat_map { |page| page.dig("description", "content").select { _1["type"] == "fileEmbed" }.map { _1.dig("attrs", "id") } }
+          else
+            content["content_items"].map { _1["id"] }
+          end
+        ids.each do |id|
+          get url_redirect_download_product_files_path(token, product_file_ids: [id], format: :json)
+          expect(response).to have_http_status(:ok)
+        end
+        ids
+      end
+
+      # What the mobile app lists for the same purchase.
+      def app_file_ids(purchase)
+        UrlRedirect.find(purchase.url_redirect.id).product_file_json_data_for_mobile.map { _1[:id] }
+      end
+
+      def buyer(variant: nil)
+        create(:purchase, link: @product, variant_attributes: Array(variant), ip_address: "127.0.0.1").tap(&:create_url_redirect!)
+      end
+
+      def add_blah_file
+        url = "https://example.com/files/blah.txt"
+        stub_remote_file(url, "blah.txt", "text/plain")
+        call_tool("add_file", { id: @product.unique_permalink, url: }).tap { expect(_1["isError"]).to be_nil }
+        @product.reload.alive_product_files.max_by(&:position)
+      end
+
+      it "lists the file for earlier buyers of a product without content pages" do
+        earlier_buyer = buyer
+
+        added = add_blah_file
+
+        expect(web_file_ids(earlier_buyer)).to eq([added.external_id])
+        expect(Aws::S3::Client.new.get_object(bucket: S3_BUCKET, key: added.s3_key).body.read).to eq(File.binread(fixture_path("blah.txt")))
+      end
+
+      it "shows the file to earlier and later buyers when the content page already lists files" do
+        existing = uploaded_product_file("manual.pdf")
+        create(:rich_content, entity: @product, description: [text("Start here"), file_embed(existing)])
+        earlier_buyer = buyer
+
+        added = add_blah_file
+
+        expect(web_file_ids(earlier_buyer)).to eq([existing.external_id, added.external_id])
+        expect(web_file_ids(buyer)).to eq([existing.external_id, added.external_id])
+      end
+
+      it "shows the file on a content page that lists no files without taking the others from the app" do
+        existing = uploaded_product_file("manual.pdf")
+        page = create(:rich_content, entity: @product, description: [text("Welcome")])
+        earlier_buyer = buyer
+        expect(app_file_ids(earlier_buyer)).to eq([existing.external_id])
+
+        added = add_blah_file
+
+        expect(page.reload.description.first).to eq(text("Welcome"))
+        expect(web_file_ids(earlier_buyer)).to eq([existing.external_id, added.external_id])
+        expect(app_file_ids(earlier_buyer)).to eq([existing.external_id, added.external_id])
+      end
+
+      it "gives the file to buyers of a version when the versions share the product's content" do
+        existing = uploaded_product_file("manual.pdf")
+        create(:rich_content, entity: @product, description: [file_embed(existing)])
+        variant = create(:variant, variant_category: create(:variant_category, link: @product), name: "Deluxe")
+        @product.update!(has_same_rich_content_for_all_variants: true)
+
+        added = add_blah_file
+
+        expect(web_file_ids(buyer(variant:))).to eq([existing.external_id, added.external_id])
+      end
+
+      it "gives the file to each version's buyers when every version has its own content" do
+        category = create(:variant_category, link: @product)
+        listed, unlisted = %w[Deluxe Basic].map { create(:variant, variant_category: category, name: _1) }
+        @product.update!(has_same_rich_content_for_all_variants: false)
+        existing = uploaded_product_file("manual.pdf")
+        [listed, unlisted].each { _1.product_files << existing }
+        create(:rich_content, entity: listed, description: [file_embed(existing)])
+        create(:rich_content, entity: unlisted, description: [text("Basic notes")])
+        listed_buyer, unlisted_buyer = buyer(variant: listed), buyer(variant: unlisted)
+
+        added = add_blah_file
+
+        expect(web_file_ids(listed_buyer)).to eq([existing.external_id, added.external_id])
+        expect(web_file_ids(unlisted_buyer)).to eq([existing.external_id, added.external_id])
+        expect(app_file_ids(unlisted_buyer)).to match_array([existing.external_id, added.external_id])
+      end
     end
 
     it "refuses a file larger than the limit and stores nothing" do
