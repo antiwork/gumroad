@@ -1108,6 +1108,28 @@ describe Order::ChargeService, :vcr do
       expect(FinalizeBuyerPresentmentChargeJob.jobs.first["args"]).to eq([charge.id])
     end
 
+    it "keeps captured purchases linked to the Stripe charge and in progress when the settlement job cannot be enqueued" do
+      create(:merchant_account, user: seller_1, charge_processor_merchant_id: "acct_seller_held_missing_settlement")
+      seller_1.update!(check_merchant_account_is_linked: true)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable_for_buyer_presentment)
+      params = line_items_params.merge!(common_order_params_without_payment)
+      order, = Order::CreateService.new(params:).perform
+
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |merchant_account_arg, *_args|
+        stripe_charge_intent_without_flow_of_funds(merchant_account: merchant_account_arg)
+      end
+      allow(FinalizeBuyerPresentmentChargeJob).to receive(:perform_in).and_raise(RedisClient::CannotConnectError)
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      purchases = order.reload.purchases.order(:id).to_a
+      expect(purchases).to all(be_in_progress)
+      expect(purchases.map(&:stripe_transaction_id).uniq).to eq(["ch_missing_settlement"])
+      expect(purchases.map(&:processor_payment_intent_id).uniq).to eq(["pi_missing_settlement"])
+      expect(charge_responses.fetch("unique-id-0")).to include(success: true)
+      expect(charge_responses.fetch("unique-id-1")).to include(success: true)
+    end
+
     it "charges 2.9% + 30c of processor fee when seller has a Stripe merchant account and existing credit card is used for payment" do
       seller_stripe_account = create(:merchant_account, user: seller_1, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
 
