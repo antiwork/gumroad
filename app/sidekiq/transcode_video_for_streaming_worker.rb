@@ -124,21 +124,26 @@ class TranscodeVideoForStreamingWorker
       end
     end
 
-    begin
-      client = Aws::MediaConvert::Client.new(endpoint: MEDIACONVERT_ENDPOINT)
-      response = client.create_job(build_mediaconvert_job(original_video_key, output_key_prefix, outputs))
-      job = response.job
-      transcoded_video.update!(job_id: job.id)
-    rescue
-      # A raise here leaves this row processing with no job_id, and `attempt_to_transcode?` reads that as
-      # an in-flight job, so this worker's own retry returns early and the file never gets a job at all.
-      # Erroring the row frees the retry to submit again.
-      transcoded_video.mark_error
-      raise
-    end
+    client = Aws::MediaConvert::Client.new(endpoint: MEDIACONVERT_ENDPOINT)
+    response = client.create_job(build_mediaconvert_job(original_video_key, output_key_prefix, outputs))
+    job = response.job
+    transcoded_video.update!(job_id: job.id)
+  rescue StandardError, Sidekiq::Shutdown => e
+    # A row left processing with no job_id reads as an in-flight job to `attempt_to_transcode?`, so the rerun
+    # Sidekiq makes with the same arguments (a retry, or a requeue at shutdown, which can land during the GRMC
+    # request too) would return early and the file would never get a job. Erroring the row frees it.
+    fail_unsubmitted_transcode(transcoded_video) if transcoded_video
+    raise e
   end
 
   private
+    def fail_unsubmitted_transcode(transcoded_video)
+      transcoded_video.reload
+      transcoded_video.mark_error if transcoded_video.job_id.nil?
+    rescue StandardError => e
+      Rails.logger.warn("Failed to mark unsubmitted TranscodedVideo #{transcoded_video.id} as error: #{e.class} => #{e.message}")
+    end
+
     # GRMC runs outside AWS, so reading S3 directly is billed as internet egress; S3 to CloudFront is free.
     # This distribution skips Cloudflare, so source videos stay out of its cache.
     def grmc_source_video_link(original_video_key)
