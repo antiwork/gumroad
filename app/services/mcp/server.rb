@@ -435,14 +435,19 @@ module Mcp
 
       def tool_create_draft_product(args)
         membership = args["product_type"] == "membership"
-        # Argument errors come before the scope check, as they did when price_cents was schema-required.
-        raise Error.new("price_cents is required", code: -32602) unless membership || args.key?("price_cents")
-        raise Error.new("tiers are only accepted with product_type membership", code: -32602) if !membership && args.key?("tiers")
+        # Argument errors come before the scope check, so a bad call does not ask the creator for write access.
+        if membership
+          raise Error.new("price_cents is not accepted for a membership; set each tier's price_cents", code: -32602) if args.key?("price_cents")
+          tiers = validated_tiers!(args["tiers"])
+        else
+          raise Error.new("price_cents is required", code: -32602) unless args.key?("price_cents")
+          raise Error.new("tiers are only accepted with product_type membership", code: -32602) if args.key?("tiers")
+        end
 
         require_scopes!(:edit_products, :account)
         name = args["name"].strip
         raise Error.new("name is required", code: -32602) if name.blank?
-        return create_draft_membership(args, name) if membership
+        return create_draft_membership(args, name, tiers) if membership
 
         price_cents = args["price_cents"]
         raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
@@ -462,10 +467,7 @@ module Mcp
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
       end
 
-      def create_draft_membership(args, name)
-        raise Error.new("price_cents is not accepted for a membership; set each tier's price_cents", code: -32602) if args.key?("price_cents")
-
-        tiers = validated_tiers!(args["tiers"])
+      def create_draft_membership(args, name, tiers)
         recurrence = tiers.first["recurrence"]
         product = user.links.build(
           name:,
@@ -515,6 +517,7 @@ module Mcp
           raise Error.new("tiers[#{index}].#{missing.first} is required", code: -32602) if missing.any?
           raise Error.new("tiers[#{index}].name must be a non-blank string", code: -32602) unless tier["name"].is_a?(String) && tier["name"].strip.present?
           raise Error.new("tiers[#{index}].price_cents must be an integer of zero or more", code: -32602) unless tier["price_cents"].is_a?(Integer) && tier["price_cents"] >= 0
+          raise Error.new("tiers[#{index}].price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}", code: -32602) if tier["price_cents"] > BasePrice::Shared::MAX_PRICE_CENTS
           unless BasePrice::Recurrence::ALLOWED_RECURRENCES.include?(tier["recurrence"])
             raise Error.new("tiers[#{index}].recurrence must be one of: #{BasePrice::Recurrence::ALLOWED_RECURRENCES.join(', ')}", code: -32602)
           end

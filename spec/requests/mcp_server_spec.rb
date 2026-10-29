@@ -611,6 +611,8 @@ describe "MCP server" do
         expect(product.purchase_disabled_at).to be_present
         expect(product.taxonomy.slug).to eq("other")
         expect(product.description).to eq("Monthly notes.")
+        expect(product.should_show_all_posts).to eq(true)
+        expect(product.should_include_last_post).to eq(true)
 
         created_tiers = product.tiers.alive.order(:position_in_category)
         expect(created_tiers.map(&:name)).to eq(%w[Reader Supporter])
@@ -650,6 +652,15 @@ describe "MCP server" do
         expect(response.parsed_body.dig("result", "content", 0, "text")).to include("must be at least")
       end
 
+      it "rolls back the whole membership when a later tier is priced below the currency minimum" do
+        expect do
+          call_tool("create_draft_product", { name: "Half club", product_type: "membership", tiers: [{ name: "Reader", price_cents: 500, recurrence: "monthly" }, { name: "Cheap", price_cents: 10, recurrence: "monthly" }] })
+        end.not_to change { [Link.count, VariantCategory.count, BaseVariant.count, BasePrice.count] }
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("must be at least")
+      end
+
       {
         "no tiers" => [{ product_type: "membership" }, "tiers are required for a membership"],
         "an empty tier list" => [{ product_type: "membership", tiers: [] }, "tiers are required for a membership"],
@@ -658,6 +669,7 @@ describe "MCP server" do
         "a bad recurrence" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "weekly" }] }, "tiers[0].recurrence must be one of: monthly, quarterly, biannually, yearly, every_two_years"],
         "mixed recurrences" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }, { name: "B", price_cents: 5000, recurrence: "yearly" }] }, "every tier must use the same recurrence"],
         "a negative tier price" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: -1, recurrence: "monthly" }] }, "tiers[0].price_cents must be an integer of zero or more"],
+        "a later tier priced over the maximum" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }, { name: "B", price_cents: BasePrice::Shared::MAX_PRICE_CENTS + 1, recurrence: "monthly" }] }, "tiers[1].price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}"],
         "a fractional tier price" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 4.5, recurrence: "monthly" }] }, "tiers[0].price_cents must be an integer of zero or more"],
         "a blank tier name" => [{ product_type: "membership", tiers: [{ name: " ", price_cents: 500, recurrence: "monthly" }] }, "tiers[0].name must be a non-blank string"],
         "a tier missing its recurrence" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500 }] }, "tiers[0].recurrence is required"],
@@ -899,6 +911,14 @@ describe "MCP server" do
         %(error_description="This tool requires the edit_products or account scope.")
       )
       expect(response.parsed_body["error"]).to eq("code" => -32000, "message" => "This tool requires the edit_products or account scope.")
+    end
+
+    it "rejects bad membership arguments before asking for edit_products" do
+      expect { post_mcp({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Club", product_type: "membership" } } }) }.not_to change(Link, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body["error"]).to eq("code" => -32602, "message" => "tiers are required for a membership")
     end
 
     it "names a required scope the client registered when the first one is unregistered" do
