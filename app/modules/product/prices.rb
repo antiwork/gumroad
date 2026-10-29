@@ -189,6 +189,16 @@ module Product::Prices
     errors.add(:base, "The suggested price you entered was too low.")
   end
 
+  # The column is a 32-bit integer and both the dashboard save and API v2 assign this straight
+  # from the request. Out of range, the UPDATE's bind serialization raises ActiveModel::RangeError
+  # after validation, so the save can only answer "something went wrong".
+  def suggested_price_must_be_within_storage_range
+    return if suggested_price_cents.nil?
+    return if suggested_price_cents.between?(BasePrice::Shared::MIN_PRICE_CENTS, BasePrice::Shared::MAX_PRICE_CENTS)
+
+    errors.add(:base, suggested_price_cents.positive? ? "Sorry, the suggested price entered is too large." : "Sorry, the suggested price entered is too low.")
+  end
+
   def write_customizable_price(price_string)
     return if is_tiered_membership
     price_customizable = price_string[-1, 1] == "+" || price_cents == 0
