@@ -182,15 +182,58 @@ describe("save shim", () => {
     expect(beacons).toHaveLength(1);
   });
 
-  it("on closing after writes while hidden, sends a beacon that also holds the hide beacon's changes", () => {
+  it("on closing after new keys were written while hidden, sends only those, as a writer of their own", () => {
     const { storage, beacons, hide, leave } = runShim();
-    storage.setItem("a", "1");
+    storage.setItem("a", "1".repeat(40));
     hide();
     storage.setItem("b", "2");
     leave();
 
-    // The second beacon has the higher number, so if it lands first the server skips the first one.
-    expect(beacons.map((b) => b.set)).toEqual([{ a: "1" }, { a: "1", b: "2" }]);
+    // No key in common, so the two apply in either order without undoing each other.
+    expect(beacons.map((b) => b.set)).toEqual([{ a: "1".repeat(40) }, { b: "2" }]);
+    expect(beacons[1]?.writer).not.toBe(beacons[0]?.writer);
+    expect(beacons[1]?.sequence).toBe(1);
+  });
+
+  it("on closing after a key of the hide beacon was rewritten, sends a beacon that outranks it", () => {
+    const { storage, beacons, hide, leave } = runShim();
+    storage.setItem("a", "1");
+    storage.setItem("c", "3");
+    hide();
+    storage.setItem("a", "2");
+    leave();
+
+    // Numbered after the hide beacon and holding its changes, so the server skips the hide beacon if
+    // it lands second, and nothing is lost.
+    expect(beacons.map((b) => b.set)).toEqual([
+      { a: "1", c: "3" },
+      { a: "2", c: "3" },
+    ]);
+    expect(beacons[1]?.writer).toBe(beacons[0]?.writer);
+    expect(beacons[1]?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
+  });
+
+  it("on closing after a clear while hidden, sends only the clear, numbered after the hide beacon", () => {
+    const { storage, beacons, hide, leave } = runShim();
+    storage.setItem("a", "1");
+    hide();
+    storage.clear();
+    storage.setItem("b", "2");
+    leave();
+
+    expect(beacons[1]).toMatchObject({ clear: true, set: { b: "2" }, writer: beacons[0]?.writer });
+    expect(beacons[1]?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
+  });
+
+  it("on closing after the hide beacon cleared, sends a beacon that outranks it", () => {
+    const { storage, beacons, hide, leave } = runShim({ save: { old: "1" } });
+    storage.clear();
+    hide();
+    storage.setItem("b", "2");
+    leave();
+
+    // Landing second, the hide beacon's clear would erase "b", so it has to be skipped.
+    expect(beacons[1]).toMatchObject({ clear: true, set: { b: "2" }, writer: beacons[0]?.writer });
     expect(beacons[1]?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
   });
 
@@ -198,11 +241,11 @@ describe("save shim", () => {
     const { storage, beacons, sent, hide, leave } = runShim({ beaconMaxBytes: 200 });
     storage.setItem("a", "1".repeat(25));
     hide();
-    storage.setItem("b", "2".repeat(25));
+    storage.setItem("a", "2".repeat(25));
     leave();
 
     expect(beacons).toHaveLength(1);
-    expect(sent.at(-1)?.set).toEqual({ a: "1".repeat(25), b: "2".repeat(25) });
+    expect(sent.at(-1)?.set).toEqual({ a: "2".repeat(25) });
   });
 
   it("hands every change made on the page to the next page, which applies it and keeps numbering", async () => {
