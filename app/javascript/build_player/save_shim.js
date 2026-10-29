@@ -28,19 +28,17 @@
   }
 
   const saveUrl = config.saveUrl;
-  const newWriter = () =>
-    (Math.random().toString(36) + Date.now().toString(36))
-      .replace(/[^a-z0-9]/gu, "")
-      .slice(0, config.maxWriterIdLength);
-  let writer = newWriter();
+  let writer = (Math.random().toString(36) + Date.now().toString(36))
+    .replace(/[^a-z0-9]/gu, "")
+    .slice(0, config.maxWriterIdLength);
   let sequence = 0;
   let pending = null;
   let unconfirmed = null;
   let sincePageLoad = null;
-  // Changes made after a hide beacon went out; null while no hide beacon is outstanding. The beacon's
-  // own changes and size are kept for the leave beacon.
+  // Changes made after a hide beacon went out, and the bytes it took of the keepalive quota; null
+  // while no hide beacon is outstanding.
   let sinceHidden = null;
-  let hiddenBeacon = null;
+  let hiddenBeaconBytes = 0;
   let timer = null;
   let failures = 0;
 
@@ -49,9 +47,6 @@
   }
   function batch() {
     return (pending ||= emptyBatch());
-  }
-  function touchesSameKeys(a, b) {
-    return [...Object.keys(b.set), ...b.remove].some((k) => k in a.set || a.remove.indexOf(k) >= 0);
   }
   function isEmpty(b) {
     return !b.clear && b.remove.length === 0 && Object.keys(b.set).length === 0;
@@ -91,18 +86,7 @@
     return result;
   }
 
-  // `otherWriter` sends the batch as a writer of its own, numbered 1, for a batch that must not be
-  // ordered against this page's other batches.
-  function body(changes, otherWriter) {
-    if (otherWriter) {
-      return JSON.stringify({
-        clear: changes.clear,
-        remove: changes.remove,
-        set: changes.set,
-        writer: otherWriter,
-        sequence: 1,
-      });
-    }
+  function body(changes) {
     sequence += 1;
     return JSON.stringify({
       clear: changes.clear,
@@ -184,8 +168,8 @@
 
   // A beacon is delivered even as the page closes, but the browser only says it was queued.
   // Returns the size it sent, for a later beacon that has to share the quota with this one.
-  function beacon(changes, maxBytes, otherWriter) {
-    const payload = body(changes, otherWriter);
+  function beacon(changes, maxBytes) {
+    const payload = body(changes);
     const size = new Blob([payload]).size;
     if (size <= maxBytes && navigator.sendBeacon(saveUrl, payload)) {
       return size;
@@ -204,47 +188,28 @@
     }
     unconfirmed = null;
     pending = changes;
-    // A copy: `changes` is also `pending`, which later writes change.
-    hiddenBeacon = { changes: merge(changes, emptyBatch()), bytes: beacon(changes, config.beaconMaxBytes) };
+    hiddenBeaconBytes = beacon(changes, config.beaconMaxBytes);
     sinceHidden = emptyBatch();
     changed();
   }
   // Everything unconfirmed, including a batch still in flight, goes in one beacon; a reply to the batch
-  // in flight is then ignored. The next page keeps this writer and numbers on from the beacon, so if
-  // the beacon lands after that page's first save, the server skips it as stale.
-  //
-  // When a hide beacon is outstanding (closing a tab fires hidden, then pagehide), it already holds
-  // all of that, so nothing goes if nothing changed since. The leave beacon then gets only the quota
-  // the hide beacon left, and what it carries depends on the new changes:
-  // - If neither clears and they touch none of the hide beacon's keys, they go alone, as a writer of
-  //   their own: the server applies the two beacons in either order, and neither can undo the other.
-  // - Otherwise the leave beacon has to outrank the hide beacon, so it is numbered after it and holds
-  //   its changes too (after a clear, that is only the new batch).
+  // in flight is then ignored. When a hide beacon is outstanding (closing a tab fires hidden, then
+  // pagehide), it already holds all of that, so only the changes made since go, in the quota it left.
+  // The server orders each key by writer and number, so the two beacons apply in either order. The next
+  // page keeps this writer and numbers on from the beacon, so its saves are ordered after it too.
   function leave() {
     clearTimeout(timer);
     timer = null;
     let changes = merge(unconfirmed, pending);
     let maxBytes = config.beaconMaxBytes;
-    let otherWriter = null;
     if (sinceHidden) {
-      maxBytes -= hiddenBeacon.bytes;
-      if (isEmpty(sinceHidden)) {
-        changes = null;
-      } else if (
-        !sinceHidden.clear &&
-        !hiddenBeacon.changes.clear &&
-        !touchesSameKeys(hiddenBeacon.changes, sinceHidden)
-      ) {
-        changes = sinceHidden;
-        otherWriter = newWriter();
-      } else {
-        changes = merge(hiddenBeacon.changes, sinceHidden);
-      }
+      changes = isEmpty(sinceHidden) ? null : sinceHidden;
+      maxBytes -= hiddenBeaconBytes;
     }
     unconfirmed = null;
     pending = null;
     if (changes) {
-      beacon(changes, maxBytes, otherWriter);
+      beacon(changes, maxBytes);
     }
     if (sincePageLoad) {
       try {
@@ -374,7 +339,7 @@
       hidden();
     } else {
       sinceHidden = null;
-      hiddenBeacon = null;
+      hiddenBeaconBytes = 0;
     }
   });
 })();

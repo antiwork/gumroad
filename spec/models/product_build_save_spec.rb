@@ -53,43 +53,56 @@ describe ProductBuildSave do
       expect(described_class.find_by(purchase:).data).to eq("level" => "3")
     end
 
-    it "skips a batch older than one already applied from the same page, and applies other pages' batches" do
-      described_class.apply_changes!(purchase, set: { "level" => "4" }, writer: "page1", sequence: 2)
+    def data = described_class.find_by(purchase:).data
 
-      described_class.apply_changes!(purchase, set: { "level" => "3" }, writer: "page1", sequence: 1)
-      expect(described_class.find_by(purchase:).data).to eq("level" => "4")
+    it "applies a late batch from the same page only to keys no later batch changed" do
+      described_class.apply_changes!(purchase, set: { "b" => "new" }, writer: "page1", sequence: 2)
 
-      described_class.apply_changes!(purchase, set: { "level" => "2" }, writer: "page2", sequence: 1)
-      expect(described_class.find_by(purchase:).data).to eq("level" => "2")
+      described_class.apply_changes!(purchase, set: { "a" => "1", "b" => "old" }, writer: "page1", sequence: 1)
 
-      described_class.apply_changes!(purchase, set: { "level" => "5" }, writer: "page2", sequence: 2)
-      expect(described_class.find_by(purchase:).data).to eq("level" => "5")
+      expect(data).to eq("a" => "1", "b" => "new")
     end
 
-    it "skips a page's stale batch even after another page saved in between" do
+    it "does not bring back a key that a later batch from the same page removed" do
+      described_class.apply_changes!(purchase, set: { "a" => "1" }, writer: "page1", sequence: 1)
+      described_class.apply_changes!(purchase, remove: ["a"], writer: "page1", sequence: 3)
+
+      described_class.apply_changes!(purchase, set: { "a" => "2" }, writer: "page1", sequence: 2)
+
+      expect(data).to eq({})
+    end
+
+    it "skips a late batch older than a clear from the same page, even for keys the clear never saw" do
+      described_class.apply_changes!(purchase, clear: true, set: { "b" => "2" }, writer: "page1", sequence: 2)
+
+      described_class.apply_changes!(purchase, set: { "a" => "1" }, writer: "page1", sequence: 1)
+
+      expect(data).to eq("b" => "2")
+    end
+
+    it "keeps keys a later batch set when a late clear from the same page arrives" do
+      described_class.apply_changes!(purchase, set: { "old" => "1" })
+      described_class.apply_changes!(purchase, set: { "b" => "2" }, writer: "page1", sequence: 2)
+
+      described_class.apply_changes!(purchase, clear: true, writer: "page1", sequence: 1)
+
+      expect(data).to eq("b" => "2")
+    end
+
+    it "orders a page's batches per key even after another page saved in between" do
       described_class.apply_changes!(purchase, set: { "level" => "4" }, writer: "page1", sequence: 2)
       described_class.apply_changes!(purchase, set: { "coins" => "10" }, writer: "page2", sequence: 1)
 
       described_class.apply_changes!(purchase, set: { "level" => "3" }, writer: "page1", sequence: 1)
 
-      expect(described_class.find_by(purchase:).data).to eq("level" => "4", "coins" => "10")
+      expect(data).to eq("level" => "4", "coins" => "10")
     end
 
-    it "keeps a writer that saves again as the most recent, so it is not the next one dropped" do
-      stub_const("#{described_class}::MAX_TRACKED_WRITERS", 2)
-      described_class.apply_changes!(purchase, set: { "a" => "1" }, writer: "page1", sequence: 1)
-      described_class.apply_changes!(purchase, set: { "b" => "1" }, writer: "page2", sequence: 1)
-      described_class.apply_changes!(purchase, set: { "a" => "2" }, writer: "page1", sequence: 2)
-      described_class.apply_changes!(purchase, set: { "c" => "1" }, writer: "page3", sequence: 1)
+    it "applies batches from different pages in arrival order" do
+      described_class.apply_changes!(purchase, set: { "level" => "4" }, writer: "page1", sequence: 5)
+      described_class.apply_changes!(purchase, set: { "level" => "2" }, writer: "page2", sequence: 1)
 
-      expect(described_class.find_by(purchase:).writer_sequences).to eq([["page1", 2], ["page3", 1]])
-    end
-
-    it "remembers only the most recent writers" do
-      stub_const("#{described_class}::MAX_TRACKED_WRITERS", 2)
-      %w[page1 page2 page3].each { described_class.apply_changes!(purchase, set: { _1 => "1" }, writer: _1, sequence: 1) }
-
-      expect(described_class.find_by(purchase:).writer_sequences).to eq([["page2", 1], ["page3", 1]])
+      expect(data).to eq("level" => "2")
     end
 
     it "rejects a writer or sequence it cannot store" do
