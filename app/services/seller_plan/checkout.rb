@@ -17,12 +17,12 @@ module SellerPlan
       @offer.with_lock do
         raise "Seller plan is already active" if @offer.active?
 
-        open_session_url || create_session(price_id)
+        existing_checkout_destination || create_session(price_id)
       end
     end
 
     private
-      def open_session_url
+      def existing_checkout_destination
         return if @offer.stripe_checkout_session_id.blank?
 
         session = Stripe::Checkout::Session.retrieve(@offer.stripe_checkout_session_id)
