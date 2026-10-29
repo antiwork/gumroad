@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class Api::Internal::MobileMinimumVersionsController < Api::Internal::BaseController
-  before_action -> { doorkeeper_authorize! :account }
+  before_action -> { doorkeeper_authorize! :account, :mobile_api }
 
   def show
     # Values for these keys can be set in Rails console to force all mobile app users to upgrade to a specific version.

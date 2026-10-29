@@ -30,6 +30,9 @@ module CurrentSeller
     team_membership = MobileAccountToken.team_membership_for(doorkeeper_token)
     if team_membership.nil?
       sign_in current_api_user
+      # A brand session earlier in this browser left that brand selected.
+      cookies.delete(:current_seller_id, domain: :all)
+      @_current_seller = current_api_user
       return
     end
 

@@ -83,7 +83,11 @@ describe Api::Mobile::AccountsController do
       issued = Doorkeeper::AccessToken.by_token(body["access_token"])
       expect(issued.resource_owner_id).to eq(brand.id)
       expect(issued.application_id).to eq(app.id)
-      expect(issued.scopes.to_s).to eq("mobile_api creator_api account")
+      expect(issued.scopes.to_a).to match_array(%w[
+                                                  mobile_api creator_api view_public
+                                                  edit_products view_sales edit_emails view_profile edit_profile
+                                                  view_payouts view_tax_data edit_sales refund_sales mark_sales_as_shipped
+                                                ])
       expect(issued.team_membership_id).to eq(admin_membership.id)
       expect(admin_membership.reload.last_accessed_at).to be_present
 
@@ -106,6 +110,23 @@ describe Api::Mobile::AccountsController do
       issued = Doorkeeper::AccessToken.by_token(response.parsed_body["access_token"])
       expect(issued.resource_owner_id).to eq(user.id)
       expect(issued.team_membership_id).to be_nil
+      expect(issued.scopes.to_a).to match_array(%w[mobile_api creator_api account])
+    end
+
+    it "never gives a brand token the `account` scope, which passes every v2 check" do
+      post :create, params: auth_params.merge(id: brand.external_id)
+
+      issued = Doorkeeper::AccessToken.by_token(response.parsed_body["access_token"])
+      expect(issued.scopes).not_to include("account")
+    end
+
+    it "keeps the caller's scopes when the caller switches to its own account" do
+      own_token = create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "mobile_api")
+
+      post :create, params: auth_params(own_token).merge(id: user.external_id)
+
+      issued = Doorkeeper::AccessToken.by_token(response.parsed_body["access_token"])
+      expect(issued.scopes.to_s).to eq("mobile_api")
     end
 
     it "refuses a target the user is not a member of" do

@@ -4,6 +4,18 @@
 module MobileAccountToken
   extend self
 
+  # The app's own API surfaces. A brand token adds only the v2 scopes the member's role allows.
+  BRAND_SURFACE_SCOPES = %w[mobile_api creator_api].freeze
+  # What the app asks for at login, so switching back from a brand restores the member's own access.
+  OWN_ACCOUNT_SCOPES = %w[mobile_api creator_api account].freeze
+
+  # `account` passes every v2 check regardless of the endpoint's scope, so a brand token never
+  # carries it.
+  def brand_scopes(team_membership)
+    role_scopes = Ai::StoreAgentScopes.permitted_for(SellerContext.new(user: team_membership.user, seller: team_membership.seller))
+    Doorkeeper::OAuth::Scopes.from_array((BRAND_SURFACE_SCOPES + role_scopes - ["account"]).uniq)
+  end
+
   def team_membership_id(token)
     token&.attributes&.dig("team_membership_id")
   end

@@ -21,7 +21,7 @@ class Api::Mobile::AccountsController < Api::Mobile::BaseController
 
     token = MobileAccountToken.issue!(
       application: doorkeeper_token.application,
-      scopes: doorkeeper_token.scopes,
+      scopes: scopes_for_switch(team_membership),
       expires_in: doorkeeper_token.expires_in,
       resource_owner: target,
       team_membership:,
@@ -38,6 +38,13 @@ class Api::Mobile::AccountsController < Api::Mobile::BaseController
   end
 
   private
+    def scopes_for_switch(team_membership)
+      return MobileAccountToken.brand_scopes(team_membership) if team_membership
+      return Doorkeeper::OAuth::Scopes.from_array(MobileAccountToken::OWN_ACCOUNT_SCOPES) if brand_team_membership
+
+      doorkeeper_token.scopes
+    end
+
     def admin_memberships
       @_admin_memberships ||= account_holder.user_memberships
         .switchable
