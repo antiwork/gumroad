@@ -51,6 +51,9 @@ class ProductBuild < ApplicationRecord
 
   def live? = status == "live"
 
+  # Whether buyers get a Play action for this build on the content page.
+  def playable? = live? && site_ready? && Feature.active?(:product_build_player, product.user)
+
   # An encrypted path segment that lets the player's frame load this build's files for one purchase.
   # The frame is an opaque origin, so its file requests carry no session cookies: the access check
   # runs once, on the content-page token, and the grant carries the result until it expires.

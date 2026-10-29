@@ -44,6 +44,7 @@ import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { NativeAppLink, TrackClick } from "./Interactions";
+import { WebBuildPlayer, WebBuildPlayerHandle } from "./WebBuildPlayer";
 
 import thumbnailPlaceholder from "$assets/images/placeholders/product-cover.png";
 
@@ -72,7 +73,7 @@ export type FileItem = {
   download_url: string | null;
   // Set on the zip a promoted web build (a game, an interactive course) put in the content, so the
   // row can say so instead of reading like a file the seller uploaded by hand. Null otherwise.
-  web_build?: { number: number; status: string } | null;
+  web_build?: { number: number; status: string; playable: boolean } | null;
   // False when the shared folder ZIP leaves the file out, such as a file downloadable only through a grant.
   archivable?: boolean;
   // Set for images a browser can draw; it opens the original file, not the thumbnail.
@@ -209,6 +210,8 @@ export const FileRow = ({
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const [isViewingImage, setIsViewingImage] = React.useState(false);
+  const [isPlayingBuild, setIsPlayingBuild] = React.useState(false);
+  const buildPlayerRef = React.useRef<WebBuildPlayerHandle>(null);
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
     <TrackClick eventName="download_click" file={file}>
@@ -343,6 +346,21 @@ export const FileRow = ({
           </Button>
         ) : null}
 
+        {file.web_build?.playable ? (
+          isPlayingBuild ? (
+            <>
+              <Button onClick={() => buildPlayerRef.current?.enterFullscreen()}>Full screen</Button>
+              <Button onClick={() => setIsPlayingBuild(false)}>Close</Button>
+            </>
+          ) : (
+            <TrackClick eventName="play_click" file={file}>
+              <Button color="primary" onClick={() => setIsPlayingBuild(true)}>
+                Play
+              </Button>
+            </TrackClick>
+          )
+        ) : null}
+
         {externalLinkUrl !== null ? (
           <TrackClick eventName="external_link_click" file={file}>
             <NavigationButton color="primary" href={externalLinkUrl} target="_blank">
@@ -412,6 +430,12 @@ export const FileRow = ({
         >
           <OriginalImage src={viewUrl} alt={file.file_name} />
         </Modal>
+      ) : null}
+
+      {isPlayingBuild ? (
+        <RowDetails>
+          <WebBuildPlayer ref={buildPlayerRef} token={purchaseInfo.token} title={file.file_name} />
+        </RowDetails>
       ) : null}
 
       {FileUtils.isAudioExtension(file.extension) && isShowingAudioDrawer ? (
