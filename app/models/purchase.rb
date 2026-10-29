@@ -2925,7 +2925,26 @@ class Purchase < ApplicationRecord
     share = credit.basis_points / 10_000.0
     return share unless credits_direct_affiliate? && !credit.is_direct_affiliate_credit?
 
-    share * (1 - (direct_affiliate_credit.basis_points / 10_000.0))
+    share * (1 - direct_affiliate_price_share)
+  end
+
+  # The direct affiliate's cut, as a fraction, that checkout scaled the collaborator's cut by. Read
+  # from its credit row when one was posted; when the commission rounded to zero there is no row, so
+  # fall back to the affiliate's own rate for this product — the same source checkout read.
+  def direct_affiliate_price_share
+    basis_points = direct_affiliate_credit&.basis_points || direct_affiliate&.basis_points(product_id: link_id)
+    basis_points.to_i / 10_000.0
+  end
+
+  # Whether the direct affiliate paid a share of Gumroad's fee: that is what decides whether the
+  # collaborator's fee share is scaled by the direct affiliate's cut. With no credit row nothing was
+  # taken from the direct affiliate, but the collaborator's own fee was still reduced by the share
+  # checkout computed, so ask the same computation rather than the missing row.
+  def direct_affiliate_paid_fee_share?
+    credit = direct_affiliate_credit
+    return credit.fee_cents.to_i.nonzero? if credit
+
+    determine_direct_affiliate_fee_cents.to_i.nonzero?
   end
 
   # The part of `refunded_fee_cents` that a credit gives back: its share of the fee it paid at checkout.
@@ -2933,8 +2952,8 @@ class Purchase < ApplicationRecord
     return 0 if credit.fee_cents.to_i.zero?
 
     share = credit.basis_points / 10_000.0
-    if credits_direct_affiliate? && !credit.is_direct_affiliate_credit? && direct_affiliate_credit.fee_cents.to_i.nonzero?
-      share *= 1 - (direct_affiliate_credit.basis_points / 10_000.0)
+    if credits_direct_affiliate? && !credit.is_direct_affiliate_credit? && direct_affiliate_paid_fee_share?
+      share *= 1 - direct_affiliate_price_share
     end
     (share * refunded_fee_cents).floor
   end
@@ -5097,9 +5116,14 @@ class Purchase < ApplicationRecord
       if credits_direct_affiliate?
         # Collab purchase with a direct affiliate: the affiliate's commission comes off the top, then
         # the collaborator takes their cut of what is left. The column holds the sum of both credits.
-        self.direct_affiliate_credit_cents = (direct_affiliate_cut * displayed_price_usd_cents - determine_direct_affiliate_fee_cents).floor
+        # Either cut can floor below zero on a cheap product, where the fee leaves too little of the
+        # price. A credit that is not positive is never posted (`increment_affiliates_balance!`
+        # skips it), so it has to count as zero here too — otherwise the seller's net is debited a
+        # credit nobody received.
+        direct_cents = (direct_affiliate_cut * displayed_price_usd_cents - determine_direct_affiliate_fee_cents).floor
         collaborator_cents = (affiliate_cut * (1 - direct_affiliate_cut) * displayed_price_usd_cents - determine_affiliate_fee_cents).floor
-        return direct_affiliate_credit_cents + collaborator_cents
+        self.direct_affiliate_credit_cents = direct_cents.clamp(0, nil)
+        return self.direct_affiliate_credit_cents + collaborator_cents.clamp(0, nil)
       end
 
       affiliate_cents = affiliate_cut * displayed_price_usd_cents
