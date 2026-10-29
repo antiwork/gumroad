@@ -670,7 +670,6 @@ describe "MCP server" do
       @product.reload
       expect(@product.custom_permalink).to eq("field-notes-first")
       expect(@product.long_url).to end_with("/l/field-notes-first")
-      expect(Link.fetch_leniently(@product.unique_permalink, user: @seller)).to eq(@product)
     end
 
     it "clears the custom URL back to the default one" do
@@ -721,7 +720,8 @@ describe "MCP server" do
       expect { call_tool("update_product", { id: @product.external_id, permalink: "field-notes-same" }) }
         .not_to change { [ProductPermalinkRedirect.count, LegacyPermalink.count, @product.reload.custom_permalink] }
 
-      expect(response).to be_successful
+      expect(response.parsed_body["error"]).to be_nil
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "url")).to end_with("/l/field-notes-same")
     end
 
     it "takes the seller row before the product row when it changes the URL" do

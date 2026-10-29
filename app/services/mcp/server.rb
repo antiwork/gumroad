@@ -459,9 +459,9 @@ module Mcp
         # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
         ActiveRecord::Base.transaction do
           if changes.key?("permalink")
-            # A claim takes the seller row before the product row, the order the editor and the v2 API
-            # lock in. Taken even when the slug looks unchanged: the pre-lock read can be stale, and
-            # claiming after product.lock! would reverse that order.
+            # Seller row before product row, the order the editor and the v2 API lock in. Called even when
+            # the slug looks unchanged: the pre-lock read can be stale, and the helper raises rather than
+            # lock the seller after the product.
             product.lock_for_permalink_claim!(permalink)
           else
             # Reloads under the lock: the upsell diff below must compare against the committed
@@ -484,8 +484,7 @@ module Mcp
           if changes.key?("description")
             product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
           end
-          # Setting the column is the whole feature: Link's own validations reject the editor's rules and its
-          # after_commit records the redirect for the outgoing slug.
+          # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
           product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
         end
