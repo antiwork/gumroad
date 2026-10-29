@@ -850,7 +850,9 @@ module User::Stats
           amount_refunded_cents_total: { sum: { field: "amount_refunded_cents" } },
           fee_refunded_cents_total: { sum: { field: "fee_refunded_cents" } },
           affiliate_credit_amount_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
-          affiliate_credit_amount_partially_refunded_cents_total: { sum: { field: "affiliate_credit_amount_partially_refunded_cents" } }
+          affiliate_credit_amount_partially_refunded_cents_total: { sum: { field: "affiliate_credit_amount_partially_refunded_cents" } },
+          direct_affiliate_credit_amount_cents_total: { sum: { field: "direct_affiliate_credit_amount_cents" } },
+          direct_affiliate_credit_amount_partially_refunded_cents_total: { sum: { field: "direct_affiliate_credit_amount_partially_refunded_cents" } }
         }
       }
 
@@ -862,6 +864,9 @@ module User::Stats
       total += result.aggregations.fee_refunded_cents_total.value
       total -= result.aggregations.affiliate_credit_amount_cents_total.value
       total += result.aggregations.affiliate_credit_amount_partially_refunded_cents_total.value
+      # A collab purchase can also credit a direct affiliate (:collab_and_affiliates).
+      total -= result.aggregations.direct_affiliate_credit_amount_cents_total.value
+      total += result.aggregations.direct_affiliate_credit_amount_partially_refunded_cents_total.value
       total.to_i
     end
 

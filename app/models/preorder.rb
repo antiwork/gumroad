@@ -137,6 +137,7 @@ class Preorder < ApplicationRecord
     purchase.seller = seller
     purchase.credit_card_zipcode = authorization_purchase.credit_card_zipcode
     purchase.affiliate = authorization_purchase.affiliate if authorization_purchase.affiliate.try(:alive?)
+    purchase.inherit_direct_affiliate_from(authorization_purchase, eligible: ->(direct_affiliate) { direct_affiliate.alive? })
     authorization_purchase.purchase_custom_fields.each { purchase.purchase_custom_fields << _1.dup }
     if authorization_purchase.purchase_sales_tax_info
       purchase.business_vat_id = authorization_purchase.purchase_sales_tax_info.business_vat_id

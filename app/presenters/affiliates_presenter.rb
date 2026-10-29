@@ -71,7 +71,7 @@ class AffiliatesPresenter
         hash[product.product_id] = existing_self_service_affiliate_product_details(product)
       end
 
-    seller.links.alive.not_is_collab.each_with_object({}) do |product, hash|
+    seller.links.alive.affiliate_eligible_for(seller).each_with_object({}) do |product, hash|
       product_details = existing_self_service_affiliate_products.fetch(product.id) { disabled_product_details(product) }
       next if product.archived? && !product_details[:enabled]
 

@@ -94,6 +94,8 @@ module Product::Stats
         affiliate_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
         affiliate_fees_total: { sum: { field: "affiliate_credit_fee_cents" } },
         amount_refunded_cents_total: { sum: { field: for_seller ? "amount_refunded_cents" : "affiliate_credit_amount_partially_refunded_cents" } },
+        direct_affiliate_cents_total: { sum: { field: "direct_affiliate_credit_amount_cents" } },
+        direct_affiliate_fees_total: { sum: { field: "direct_affiliate_credit_fee_cents" } },
       }
     ).merge(extra_search_options)
     if for_seller
@@ -105,7 +107,10 @@ module Product::Stats
 
     affiliate_total = search_result.aggregations.affiliate_cents_total.value + search_result.aggregations.affiliate_fees_total.value - search_result.aggregations.amount_refunded_cents_total.value
     if for_seller
-      search_result.aggregations.price_cents_total.value - affiliate_total
+      # A direct affiliate's commission on a collab purchase (:collab_and_affiliates) also comes out
+      # of the seller's share.
+      direct_affiliate_total = search_result.aggregations.direct_affiliate_cents_total.value + search_result.aggregations.direct_affiliate_fees_total.value
+      search_result.aggregations.price_cents_total.value - affiliate_total - direct_affiliate_total
     else
       affiliate_total
     end

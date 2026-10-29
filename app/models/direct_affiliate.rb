@@ -75,7 +75,7 @@ class DirectAffiliate < Affiliate
                                .select("sum(purchases.price_cents) as volume_cents, count(purchases.id) as sales_count, affiliate_credits.link_id")
                                .group("affiliate_credits.link_id")
 
-    seller.links.alive.not_is_collab.map do |product|
+    seller.links.alive.affiliate_eligible_for(seller).map do |product|
       credit = credits.find { _1.link_id == product.id }
       product_affiliate = product_affiliates.find { _1.link_id == product.id }
       next if product.archived? && product_affiliate.blank?

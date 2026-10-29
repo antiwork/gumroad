@@ -22,8 +22,12 @@ class AffiliateCredit < ApplicationRecord
   scope :not_refunded_or_chargebacked, -> { where("affiliate_credit_refund_balance_id IS NULL AND " \
                              "affiliate_credit_chargeback_balance_id IS NULL")}
 
-  def self.create!(purchase:, affiliate:, affiliate_amount_cents:, affiliate_fee_cents:, affiliate_balance:)
+  # `is_direct_affiliate_credit` marks the direct affiliate's credit on a collab purchase that credits
+  # both a collaborator and a direct affiliate (:collab_and_affiliates); the collaborator's credit
+  # stays the purchase's `affiliate_credit`.
+  def self.create!(purchase:, affiliate:, affiliate_amount_cents:, affiliate_fee_cents:, affiliate_balance:, is_direct_affiliate_credit: false)
     affiliate_credit = new
+    affiliate_credit.is_direct_affiliate_credit = is_direct_affiliate_credit
     affiliate_credit.affiliate = affiliate
     affiliate_credit.amount_cents = affiliate_amount_cents
     affiliate_credit.fee_cents = affiliate_fee_cents
