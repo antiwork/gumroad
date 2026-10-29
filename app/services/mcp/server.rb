@@ -315,7 +315,7 @@ module Mcp
                      type: "object",
                      properties: {
                        "name" => { type: "string", description: "Tier name." },
-                       "price_cents" => { type: "integer", description: "Price per billing period in minor units of the creator's currency." },
+                       "price_cents" => { type: "integer", description: "Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want." },
                        "recurrence" => { type: "string", enum: BasePrice::Recurrence::ALLOWED_RECURRENCES, description: "Billing period." }
                      },
                      required: TIER_KEYS,
@@ -475,7 +475,7 @@ module Mcp
           is_tiered_membership: true,
           should_show_all_posts: true,
           subscription_duration: recurrence,
-          # Seeds the default tier's price, as the web create form does; a $0 seed turns that tier pay-what-you-want.
+          # Seeds the default tier's price, as the web create form does.
           price_cents: tiers.first["price_cents"],
           price_currency_type: user.currency_type,
           draft: true,
