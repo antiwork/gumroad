@@ -39,9 +39,9 @@ module Mcp
     DISCOUNT_CODE_FIELDS = {
       "percent_off" => { type: "integer", description: "Percent off, 1-100. Not with amount_cents." },
       "amount_cents" => { type: "integer", description: "Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off." },
-      "valid_at" => { type: "string", description: "ISO 8601 time the code starts working. Defaults to now when expires_at is set." },
+      "valid_at" => { type: "string", description: "ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one." },
       "expires_at" => { type: "string", description: "ISO 8601 time the code stops working." },
-      "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total." }
+      "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
     }.freeze
 
     # A tool's scope check failed. `scope` is what the client should re-authorize with: the
@@ -568,32 +568,31 @@ module Mcp
         require_scopes!(:edit_products, :account)
         code = args["code"].strip
         raise Error.new("code is required", code: -32602) if code.blank?
-        product = find_product!(args["product_id"]) if args.key?("product_id")
+        product = find_discount_product!(args) if args.key?("product_id")
         attributes = discount_amount_attributes(args, required: true, currency_type: product&.price_currency_type || user.currency_type)
         attributes.merge!(discount_window_attributes(args, default_valid_at: Time.current))
         attributes[:max_purchase_count] = discount_max_purchase_count(args) if args.key?("max_purchase_count")
 
         offer_code = user.offer_codes.build(code:, universal: product.nil?, products: Array(product), **attributes)
-        # Serializes this seller's creates so a repeated call sees the first row and fails uniqueness
-        # instead of inserting a second one; offer_codes has no unique index on code.
+        # offer_codes has no unique index on code, so two overlapping calls from this tool would both
+        # pass the uniqueness validation; the seller lock makes the second one see the first row.
         ActiveRecord::Base.transaction do
           User.where(id: user.id).lock.pick(:id)
-          offer_code.save!
+          save_discount_code!(offer_code)
         end
         { discount_code: discount_code_payload(offer_code) }
       end
 
       def tool_update_discount_code(args)
         require_scopes!(:edit_products, :account)
-        changes = args.slice(*DISCOUNT_CODE_FIELDS.keys)
-        raise Error.new("Pass at least one of #{DISCOUNT_CODE_FIELDS.keys.to_sentence(last_word_connector: ', or ')}", code: -32602) if changes.empty?
+        raise Error.new("Pass at least one of #{DISCOUNT_CODE_FIELDS.keys.to_sentence(last_word_connector: ', or ')}", code: -32602) if args.slice(*DISCOUNT_CODE_FIELDS.keys).empty?
 
         offer_code = find_discount_code!(args)
         currency_type = offer_code.currency_type || offer_code.products.first&.price_currency_type || user.currency_type
         offer_code.assign_attributes(discount_amount_attributes(args, required: false, currency_type:))
         offer_code.assign_attributes(discount_window_attributes(args, default_valid_at: offer_code.valid_at || offer_code.created_at))
         offer_code.max_purchase_count = discount_max_purchase_count(args) if args.key?("max_purchase_count")
-        offer_code.save!
+        save_discount_code!(offer_code)
         { discount_code: discount_code_payload(offer_code) }
       end
 
@@ -606,7 +605,7 @@ module Mcp
         # The model requires a start date before the end date, as the editor's "Valid until" does.
         offer_code.valid_at = [offer_code.valid_at || offer_code.created_at, now - 1.second].min
         offer_code.expires_at = now
-        offer_code.save!
+        save_discount_code!(offer_code)
         { discount_code: discount_code_payload(offer_code), message: "Expired. Buyers can no longer use this code." }
       end
 
@@ -615,7 +614,7 @@ module Mcp
         raise Error.new("code is required", code: -32602) if code.blank?
 
         if args.key?("product_id")
-          product = find_product!(args["product_id"])
+          product = find_discount_product!(args)
           offer_code = product.offer_codes.alive.where(universal: false).find_by(code:)
           raise ToolError, "No discount code #{code} is limited to this product. Omit product_id for a code that covers all products." if offer_code.nil?
         else
@@ -623,6 +622,19 @@ module Mcp
           raise ToolError, "No discount code #{code} covers all products. Pass product_id for a code made for specific products." if offer_code.nil?
         end
         offer_code
+      end
+
+      def find_discount_product!(args)
+        raise Error.new("product_id must not be blank", code: -32602) if args["product_id"].blank?
+
+        find_product!(args["product_id"])
+      end
+
+      # The columns are 4-byte integers; the editor answers an overflow the same way.
+      def save_discount_code!(offer_code)
+        offer_code.save!
+      rescue ActiveModel::RangeError
+        raise ToolError, "The value entered is too large. Please enter a smaller number."
       end
 
       def discount_amount_attributes(args, required:, currency_type:)
@@ -661,7 +673,7 @@ module Mcp
 
       def discount_max_purchase_count(args)
         count = args["max_purchase_count"]
-        raise Error.new("max_purchase_count must be greater than zero", code: -32602) unless count.positive?
+        raise Error.new("max_purchase_count must be zero or more", code: -32602) if count.negative?
 
         count
       end
