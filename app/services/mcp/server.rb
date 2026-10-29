@@ -324,11 +324,12 @@ module Mcp
                    }
                  }
                }, required: %w[name]),
-          tool("update_product", "Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
-                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." }
+                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
+                 "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
                }, required: %w[id], destructive: true),
           tool("add_cover", "Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.", {
                  "id" => { type: "string", description: "Product id or permalink." },
@@ -543,14 +544,33 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "price_cents")
-        raise Error.new("Pass at least one of name, description, or price_cents", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "price_cents", "permalink")
+        raise Error.new("Pass at least one of name, description, price_cents, or permalink", code: -32602) if changes.empty?
+
+        # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
+        # Whitespace-only is neither: allowing it through would store a value the model treats as blank
+        # (allow_blank skips the format rule), so refuse it and say how to clear instead.
+        if changes.key?("permalink")
+          permalink = changes["permalink"]
+          if permalink.empty?
+            permalink = nil
+          elsif permalink.blank?
+            raise Error.new("permalink must not be blank. Send an empty string to go back to the default URL.", code: -32602)
+          end
+        end
 
         # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
         ActiveRecord::Base.transaction do
-          # Reloads under the lock: the upsell diff below must compare against the committed
-          # description, or an overlapping edit's new upsell card is dropped with its offer left active.
-          product.lock!
+          if changes.key?("permalink")
+            # Seller row before product row, the order the editor and the v2 API lock in. Called even when
+            # the slug looks unchanged: the pre-lock read can be stale, and the helper raises rather than
+            # lock the seller after the product.
+            product.lock_for_permalink_claim!(permalink)
+          else
+            # Reloads under the lock: the upsell diff below must compare against the committed
+            # description, or an overlapping edit's new upsell card is dropped with its offer left active.
+            product.lock!
+          end
           if changes.key?("name")
             name = changes["name"].strip
             raise Error.new("name must not be blank", code: -32602) if name.blank?
@@ -567,6 +587,8 @@ module Mcp
           if changes.key?("description")
             product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
           end
+          # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
+          product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
         end
         result = { product: product_payload(product.reload).merge(description: product.description) }
@@ -576,6 +598,8 @@ module Mcp
           result[:warning] = "These discount codes would discount this product below #{product.min_price_formatted}: #{invalid_codes.join(', ')}. Edit or delete them in Gumroad." if invalid_codes.any?
         end
         result
+      rescue Link::PermalinkChangedDuringLock
+        raise ToolError, "This product's URL changed while the update was waiting. Nothing was saved; try the update again."
       end
 
       def tool_add_cover(args)
