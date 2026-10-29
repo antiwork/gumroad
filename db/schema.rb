@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_21_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_22_000001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2545,6 +2545,24 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.datetime "updated_at", null: false
     t.index ["product_id"], name: "index_self_service_affiliate_products_on_product_id", unique: true
     t.index ["seller_id"], name: "index_self_service_affiliate_products_on_seller_id"
+  end
+
+  create_table "seller_plan_offers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "link_id"
+    t.string "arm", null: false
+    t.integer "price_cents", null: false
+    t.string "status", default: "offered", null: false
+    t.string "stripe_checkout_session_id"
+    t.string "stripe_customer_id"
+    t.string "stripe_subscription_id"
+    t.datetime "offered_at", null: false
+    t.datetime "activated_at"
+    t.datetime "canceled_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["stripe_subscription_id"], name: "index_seller_plan_offers_on_stripe_subscription_id", unique: true
+    t.index ["user_id"], name: "index_seller_plan_offers_on_user_id", unique: true
   end
 
   create_table "seller_profile_sections", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
