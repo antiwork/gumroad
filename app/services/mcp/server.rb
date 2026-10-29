@@ -496,6 +496,8 @@ module Mcp
           result[:warning] = "These discount codes would discount this product below #{product.min_price_formatted}: #{invalid_codes.join(', ')}. Edit or delete them in Gumroad." if invalid_codes.any?
         end
         result
+      rescue Link::PermalinkChangedDuringLock
+        raise ToolError, "This product's URL changed while the update was waiting. Nothing was saved; try the update again."
       end
 
       def tool_add_cover(args)

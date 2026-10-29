@@ -724,6 +724,38 @@ describe "MCP server" do
       expect(response).to be_successful
     end
 
+    it "takes the seller row before the product row when it changes the URL" do
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+      begin
+        call_tool("update_product", { id: @product.external_id, permalink: "field-notes-locked" })
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(response.parsed_body.dig("result", "isError")).to be_nil
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      product_lock = statements.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(seller_lock).to be < product_lock
+    end
+
+    it "saves nothing and asks for a retry when another save moves the URL while it waits for the lock" do
+      @product.update!(custom_permalink: "field-notes-before")
+      allow_any_instance_of(Link).to receive(:lock!).and_wrap_original do |original, *args|
+        Link.where(id: @product.id).update_all(custom_permalink: "field-notes-concurrent")
+        original.call(*args)
+      end
+
+      expect { call_tool("update_product", { id: @product.external_id, name: "Field notes, vol. 3", permalink: "field-notes-before" }) }
+        .not_to change { [@product.reload.attributes, ProductPermalinkRedirect.count, LegacyPermalink.count] }
+
+      expect(response.parsed_body["result"]).to include(
+        "isError" => true,
+        "content" => [{ "type" => "text", "text" => "This product's URL changed while the update was waiting. Nothing was saved; try the update again." }]
+      )
+    end
+
     it "rejects an update with no fields to change" do
       expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
 
