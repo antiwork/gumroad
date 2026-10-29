@@ -14,6 +14,7 @@ import * as React from "react";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { trackUserActionEvent } from "$app/data/user_action_event";
 import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
@@ -44,7 +45,6 @@ import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
 import { NativeAppLink, TrackClick } from "./Interactions";
-import { WebBuildPlayer, WebBuildPlayerHandle } from "./WebBuildPlayer";
 
 import thumbnailPlaceholder from "$assets/images/placeholders/product-cover.png";
 
@@ -210,8 +210,6 @@ export const FileRow = ({
   const [isExpanded, setIsExpanded] = React.useState(false);
   const [isCollapsed, setIsCollapsed] = React.useState(initialCollapsed);
   const [isViewingImage, setIsViewingImage] = React.useState(false);
-  const [isPlayingBuild, setIsPlayingBuild] = React.useState(false);
-  const buildPlayerRef = React.useRef<WebBuildPlayerHandle>(null);
   const downloadUrl = file.download_url;
   const downloadButton = downloadUrl ? (
     <TrackClick eventName="download_click" file={file}>
@@ -346,19 +344,17 @@ export const FileRow = ({
           </Button>
         ) : null}
 
+        {/* A game wants the whole window and the keyboard, so it gets its own tab, like Watch. Not
+            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. */}
         {file.web_build?.playable ? (
-          isPlayingBuild ? (
-            <>
-              <Button onClick={() => buildPlayerRef.current?.enterFullscreen()}>Full screen</Button>
-              <Button onClick={() => setIsPlayingBuild(false)}>Close</Button>
-            </>
-          ) : (
-            <TrackClick eventName="play_click" file={file}>
-              <Button color="primary" onClick={() => setIsPlayingBuild(true)}>
-                Play
-              </Button>
-            </TrackClick>
-          )
+          <NavigationButton
+            color="primary"
+            href={Routes.url_redirect_play_path(purchaseInfo.token)}
+            target="_blank"
+            onClick={() => void trackUserActionEvent("play_click")}
+          >
+            Play
+          </NavigationButton>
         ) : null}
 
         {externalLinkUrl !== null ? (
@@ -430,12 +426,6 @@ export const FileRow = ({
         >
           <OriginalImage src={viewUrl} alt={file.file_name} />
         </Modal>
-      ) : null}
-
-      {isPlayingBuild ? (
-        <RowDetails>
-          <WebBuildPlayer ref={buildPlayerRef} token={purchaseInfo.token} title={file.file_name} />
-        </RowDetails>
       ) : null}
 
       {FileUtils.isAudioExtension(file.extension) && isShowingAudioDrawer ? (

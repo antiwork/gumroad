@@ -4,32 +4,56 @@
 # and the CSP that keeps it on an opaque origin even when the URL is opened outside the frame.
 module ProductBuilds::PlayerDocument
   SANDBOX = "allow-scripts allow-pointer-lock"
-  # How long the shim gathers storage writes before it hands them to the parent page in one batch.
+  # How long the shim gathers storage writes before it sends them in one batch.
   SAVE_FLUSH_DELAY_MS = 1_000
-  SAVE_MESSAGE_TYPE = "gumroad:build-save"
+  # Browsers cap a beacon (and all keepalive requests together) at 64 KB; a larger last batch goes
+  # out as an ordinary request, which the browser may cancel as the page closes.
+  SAVE_BEACON_MAX_BYTES = 60_000
+  SAVE_FAILED_MESSAGE_TYPE = "gumroad:build-save-failed"
 
   # On the opaque origin, localStorage throws. The shim puts the purchase's save back in its place:
-  # reads come from the save served with the page, and writes go to the parent page in batches
-  # (clear, then remove, then set), which sends them to the save store. sessionStorage and cookies
-  # get the in-memory stand-ins the custom HTML pages use.
+  # reads come from the save served with the page, and writes go in batches (clear, then remove,
+  # then set) to the save endpoint under the frame's grant, one batch at a time so they apply in
+  # order. The frame has no cookies, so the grant in the URL is the credential, as for its files.
+  # On leaving, the last batch goes as a beacon, which the browser still delivers as the page closes.
+  # sessionStorage and cookies get the in-memory stand-ins the custom HTML pages use.
   SAVE_SHIM_SCRIPT = <<~JS
     (function () {
       var data = Object.create(null);
       // Parsed, not an object literal, so a "__proto__" key stays a key.
       var saved = JSON.parse(__SAVE__);
       Object.keys(saved).forEach(function (k) { data[k] = String(saved[k]); });
+      var saveUrl = __SAVE_URL__;
       var pending = null;
       var timer = null;
+      var inFlight = false;
       function batch() { return pending || (pending = { clear: false, remove: [], set: Object.create(null) }); }
-      function flush() {
+      function failed() {
+        try { window.parent.postMessage({ type: "#{SAVE_FAILED_MESSAGE_TYPE}" }, "*"); } catch (e) {}
+      }
+      function send(changes, leaving) {
+        var body = JSON.stringify(changes);
+        var small = new Blob([body]).size <= #{SAVE_BEACON_MAX_BYTES};
+        if (leaving) {
+          if (small && navigator.sendBeacon(saveUrl, body)) { return; }
+          fetch(saveUrl, { method: "POST", body: body, keepalive: small }).catch(function () {});
+          return;
+        }
+        inFlight = true;
+        fetch(saveUrl, { method: "POST", body: body })
+          .then(function (response) { if (!response.ok) { failed(); } }, failed)
+          .then(function () { inFlight = false; if (pending) { changed(); } });
+      }
+      function flush(leaving) {
         clearTimeout(timer);
         timer = null;
         if (!pending) { return; }
+        if (inFlight && !leaving) { changed(); return; }
         var changes = pending;
         pending = null;
-        try { window.parent.postMessage({ type: "#{SAVE_MESSAGE_TYPE}", changes: changes }, "*"); } catch (e) {}
+        send(changes, leaving);
       }
-      function changed() { if (!timer) { timer = setTimeout(flush, #{SAVE_FLUSH_DELAY_MS}); } }
+      function changed() { if (!timer) { timer = setTimeout(function () { flush(false); }, #{SAVE_FLUSH_DELAY_MS}); } }
       var api = {
         getItem: function (k) { k = String(k); return k in data ? data[k] : null; },
         setItem: function (k, v) {
@@ -74,8 +98,8 @@ module ProductBuilds::PlayerDocument
       if (throws) {
         try { Object.defineProperty(window, "localStorage", { value: storage, configurable: true }); } catch (e) {}
       }
-      window.addEventListener("pagehide", flush);
-      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { flush(); } });
+      window.addEventListener("pagehide", function () { flush(true); });
+      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { flush(true); } });
     })();
   JS
 
@@ -86,10 +110,12 @@ module ProductBuilds::PlayerDocument
   # bytes right after the doctype, before any tag of the page. There the parser opens <html> and <head>
   # for them, so no tag has to be found, and a <head> inside a comment or a script cannot mislead it.
   # Anything before the doctype would put the page in quirks mode.
-  def self.render(html, save_data:)
+  def self.render(html, save_data:, save_url:)
     # ASCII only, so the save reads the same whatever encoding the seller's page is in.
     save = JSON.generate(JSON.generate(save_data, ascii_only: true), ascii_only: true)
-    script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save) }
+    script = SAVE_SHIM_SCRIPT
+      .sub("__SAVE__") { ERB::Util.json_escape(save) }
+      .sub("__SAVE_URL__") { ERB::Util.json_escape(JSON.generate(save_url, ascii_only: true)) }
     # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
     injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
     html = html.b

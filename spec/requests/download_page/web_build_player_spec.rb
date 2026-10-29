@@ -52,37 +52,48 @@ describe "Download page web build player", type: :system, js: true do
     end
   end
 
-  def play
+  def open_player
     visit("/d/#{url_redirect.token}")
-    click_button("Play")
-    expect(page).to have_selector("iframe[sandbox='allow-scripts allow-pointer-lock']")
+    window_opened_by { click_link("Play") }
   end
 
-  it "plays the build in the page and keeps the buyer's progress across a reload" do
-    play
-    within_frame(find("iframe[title='Clicker build 1.zip']")) do
-      expect(page).to have_text("Clicks: 0")
-      3.times { click_button("Add click") }
-      expect(page).to have_text("Clicks: 3")
+  it "opens the build in its own tab and keeps the buyer's progress across a reload" do
+    player = open_player
+    within_window(player) do
+      expect(page).to have_selector("iframe[title='Clicker'][sandbox='allow-scripts allow-pointer-lock']")
+      within_frame(find("iframe[title='Clicker']")) do
+        expect(page).to have_text("Clicks: 0")
+        3.times { click_button("Add click") }
+        expect(page).to have_text("Clicks: 3")
+      end
     end
     wait_until_true { ProductBuildSave.find_by(purchase:)&.data == { "clicks" => "3" } }
 
-    play
-    within_frame(find("iframe[title='Clicker build 1.zip']")) do
-      expect(page).to have_text("Clicks: 3")
+    within_window(player) do
+      refresh
+      within_frame(find("iframe[title='Clicker']")) do
+        expect(page).to have_text("Clicks: 3")
+      end
     end
   end
 
-  it "keeps the download next to Play, and closes the game" do
+  it "keeps the content page as it is, with Download next to Play" do
     visit("/d/#{url_redirect.token}")
-    expect(page).to have_link("Download")
-    expect(page).to have_text("Web build v1")
 
-    click_button("Play")
-    expect(page).to have_button("Full screen")
-    click_button("Close")
-    expect(page).not_to have_selector("iframe[title='Clicker build 1.zip']")
-    expect(page).to have_button("Play")
+    expect(page).to have_text("Web build v1")
+    expect(page).to have_link("Download")
+    expect(page).to have_link("Play", href: "/d/#{url_redirect.token}/play")
+    expect(find_link("Play")[:target]).to eq("_blank")
+    expect(page).not_to have_selector("iframe")
+  end
+
+  it "shows the game's name, Full screen, and a way back to the content on the player page" do
+    within_window(open_player) do
+      expect(page).to have_selector("h1", text: "Clicker")
+      expect(page).to have_button("Full screen")
+      click_link("Back to content")
+      expect(page).to have_current_path("/d/#{url_redirect.token}")
+    end
   end
 
   it "offers no Play action while the player is off for the seller" do
@@ -92,6 +103,6 @@ describe "Download page web build player", type: :system, js: true do
 
     expect(page).to have_text("Web build v1")
     expect(page).to have_link("Download")
-    expect(page).not_to have_button("Play")
+    expect(page).not_to have_link("Play")
   end
 end
