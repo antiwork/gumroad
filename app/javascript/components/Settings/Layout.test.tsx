@@ -15,12 +15,12 @@ vi.mock("@inertiajs/react", () => ({
 }));
 
 // happy-dom has no ResizeObserver, and the header pads its scrolling parent on resize.
-class NoopResizeObserver {
+class NoopResizeObserver implements ResizeObserver {
   observe() {}
   unobserve() {}
   disconnect() {}
 }
-globalThis.ResizeObserver = NoopResizeObserver as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver = NoopResizeObserver;
 
 beforeEach(() => {
   Object.assign(globalThis, {

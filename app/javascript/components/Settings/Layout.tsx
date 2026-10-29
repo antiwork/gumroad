@@ -34,8 +34,8 @@ const PAGE_PATHS: Record<Page, () => string> = {
   advanced: () => Routes.settings_advanced_path(),
 };
 
-// The connector page is the public setup page at /mcp, not an Inertia settings page, so the entry
-// is a plain link out of Settings. Sellers could not find the connector without digging for it.
+// The connector page is the public setup page at /mcp, not a Settings page, so this is a plain link
+// out of Settings rather than a route.
 const ConnectorTab = () => (
   <Tab isSelected={false} asChild>
     <a href={Routes.mcp_path()}>AI connectors</a>
