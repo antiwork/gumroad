@@ -110,6 +110,7 @@ module Purchase::Searchable
       indexes :affiliate_credit_fee_partially_refunded_cents, type: :long
       # The direct affiliate's credit on a collab purchase that credits both (:collab_and_affiliates).
       # The affiliate_credit_* fields above keep describing the collaborator's credit.
+      indexes :direct_affiliate_credit_affiliate_user_id, type: :long
       indexes :direct_affiliate_credit_amount_cents, type: :long
       indexes :direct_affiliate_credit_fee_cents, type: :long
       indexes :direct_affiliate_credit_amount_partially_refunded_cents, type: :long
@@ -206,7 +207,7 @@ module Purchase::Searchable
         was_product_recommended? ? REFERRER_DOMAIN_FOR_GUMROAD_RECOMMENDED_PRODUCTS : Referrer.extract_domain(referrer)
       when /\Aaffiliate_credit_(id|affiliate_user_id|amount_cents|fee_cents|amount_partially_refunded_cents|fee_partially_refunded_cents)\z/
         affiliate_credit.public_send($LAST_MATCH_INFO[1]) if affiliate_credit.present?
-      when /\Adirect_affiliate_credit_(amount_cents|fee_cents|amount_partially_refunded_cents|fee_partially_refunded_cents)\z/
+      when /\Adirect_affiliate_credit_(affiliate_user_id|amount_cents|fee_cents|amount_partially_refunded_cents|fee_partially_refunded_cents)\z/
         direct_affiliate_credit.public_send($LAST_MATCH_INFO[1]) if direct_affiliate_credit.present?
       when /\Aproduct_(id|unique_permalink|name)\z/
         link.attributes[$LAST_MATCH_INFO[1]]
@@ -416,7 +417,7 @@ module Purchase::Searchable
       return if changed_tracked_columns.blank?
 
       fields = if is_direct_affiliate_credit?
-        (changed_tracked_columns & %w[amount_cents fee_cents]).map { |name| "direct_affiliate_credit_#{name}" }
+        (changed_tracked_columns & %w[affiliate_user_id amount_cents fee_cents]).map { |name| "direct_affiliate_credit_#{name}" }
       else
         changed_tracked_columns.map { |name| "affiliate_credit_#{name}" }
       end

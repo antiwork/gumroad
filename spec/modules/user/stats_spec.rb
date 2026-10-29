@@ -1394,6 +1394,19 @@ describe User::Stats, :vcr do
         index_model_records(Purchase)
         expect(@user.sales_cents_total).to eq(expected_total)
       end
+
+      it "counts the direct affiliate's credit and not the collaborator's beside it" do
+        index_model_records(Purchase)
+        before_cents = @user.send(:revenue_as_affiliate)
+
+        purchase = create(:purchase, price_cents: 100)
+        # The collaborator's credit belongs to another user; an unscoped sum would also count it here.
+        create(:affiliate_credit, affiliate_user: create(:user), purchase:, amount_cents: 30)
+        create(:affiliate_credit, affiliate_user: @user, purchase:, amount_cents: 20, is_direct_affiliate_credit: true)
+        index_model_records(Purchase)
+
+        expect(@user.send(:revenue_as_affiliate) - before_cents).to eq(20)
+      end
     end
   end
 

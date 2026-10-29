@@ -67,6 +67,7 @@ describe Purchase::Searchable do
         "affiliate_credit_fee_cents" => nil,
         "affiliate_credit_amount_partially_refunded_cents" => nil,
         "affiliate_credit_fee_partially_refunded_cents" => nil,
+        "direct_affiliate_credit_affiliate_user_id" => nil,
         "direct_affiliate_credit_amount_cents" => nil,
         "direct_affiliate_credit_fee_cents" => nil,
         "direct_affiliate_credit_amount_partially_refunded_cents" => nil,
