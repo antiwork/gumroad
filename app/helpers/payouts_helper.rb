@@ -59,7 +59,15 @@ module PayoutsHelper
     payout_period_data = {}
     minimum_payout_amount_cents = user.minimum_payout_amount_cents
     payout_period_data[:minimum_payout_amount_cents] = minimum_payout_amount_cents
-    payout_period_data[:is_user_payable] = user.unpaid_balance_cents >= payout_period_data[:minimum_payout_amount_cents]
+    # Same settled-balance check as Payouts.is_user_payable, so the page never announces a payout the run will skip.
+    # Without a payout date there is no cut-off to apply.
+    if user.unpaid_balance_cents >= minimum_payout_amount_cents && user.next_payout_date
+      payout_period_end_date = current_payout_end_date(user)
+      payable_cents = user.unpaid_balance_cents_up_to_date(payout_period_end_date) + user.paid_payments_cents_for_date(payout_period_end_date)
+      payout_period_data[:is_user_payable] = payable_cents >= minimum_payout_amount_cents
+    else
+      payout_period_data[:is_user_payable] = user.unpaid_balance_cents >= minimum_payout_amount_cents
+    end
 
     if payout_period_data[:is_user_payable]
       payout_period_data[:status] = user.payouts_status
@@ -70,7 +78,6 @@ module PayoutsHelper
                              .first
 
       payout_period_end_date = current_payout_end_date(user)
-
       payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
       unpaid_balances = user.unpaid_balances_up_to_date(payout_period_end_date)
       if user.chargeback_rate_payout_reserve_active?
@@ -105,6 +112,16 @@ module PayoutsHelper
     else
       payout_period_data[:status] = "not_payable"
       payout_period_data[:balance_cents] = user.unpaid_balance_cents
+      # The page explains a below-minimum balance from `balance_cents`, but the whole balance can
+      # clear the minimum while the amount settled by the run's cut-off does not. Those sellers
+      # were told to reach $100 they already had, so hand the page the settled figure as well.
+      if user.next_payout_date
+        payout_period_end_date = current_payout_end_date(user)
+        settled_cents = user.unpaid_balance_cents_up_to_date(payout_period_end_date) + user.paid_payments_cents_for_date(payout_period_end_date)
+        if settled_cents < minimum_payout_amount_cents && user.unpaid_balance_cents >= minimum_payout_amount_cents
+          payout_period_data[:settled_balance_cents] = settled_cents
+        end
+      end
     end
 
     # Only notes written for the seller may be rendered here. Notes that record internal state
@@ -119,9 +136,11 @@ module PayoutsHelper
       end
 
     below_minimum_note_match = payout_note&.match(BELOW_MINIMUM_PAYOUT_NOTE_REGEX)
-    if payout_period_data[:status] == "not_payable" && below_minimum_note_match
+    if payout_period_data[:status] == "not_payable" && below_minimum_note_match && !payout_period_data[:settled_balance_cents]
       # The below-minimum skip is folded into the not-payable notice (with the
-      # current balance) instead of rendering the stored note verbatim.
+      # current balance) instead of rendering the stored note verbatim. A seller whose
+      # total clears the minimum but whose settled amount does not keeps the note: it
+      # explains the skip in the settled figure, and the notice would not fire for them.
       payout_period_data[:skipped_payout_date] = below_minimum_note_match[:date]
       payout_note = nil
     elsif payout_period_data[:status] == "not_payable" && user.not_reviewed? && payout_note&.match?(UNDER_REVIEW_PAYOUT_NOTE_REGEX)
