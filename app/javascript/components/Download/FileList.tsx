@@ -683,6 +683,7 @@ const VideoEmbedPreview = ({
   className,
 }: VideoEmbedPreviewProps) => {
   const [isVideoPlayerShowing, setIsVideoPlayerShowing] = React.useState(false);
+  const [didPlayerFailToLoad, setDidPlayerFailToLoad] = React.useState(false);
   const duration = React.useRef(0);
   const videoPlayerId = `jwplayer-${file.id}`;
   const { purchaseId, redirectId } = usePurchaseInfo();
@@ -716,7 +717,7 @@ const VideoEmbedPreview = ({
       if (!isCurrentPlayer) return;
       dispatchMediaPlaybackState(videoPlayerId, isPlaying);
     };
-    void createJWPlayer(videoPlayerId, {
+    const playerSetup = createJWPlayer(videoPlayerId, {
       ...videoPlayerAspectRatio(file),
       playlist: [
         {
@@ -731,7 +732,8 @@ const VideoEmbedPreview = ({
           })),
         },
       ],
-    }).then((player) => {
+    });
+    void playerSetup.then((player) => {
       // A player finished loading after its embed went away: throw it away instead of wiring
       // up callbacks that would report playback for something nobody is watching.
       if (!isCurrentPlayer) return;
@@ -771,6 +773,13 @@ const VideoEmbedPreview = ({
           setIsVideoPlayerShowing(false);
         });
     });
+    // A vendor outage or an offline buyer must not leave the embed blank with no explanation: hand
+    // the frame back to the still and say what happened.
+    playerSetup.catch(() => {
+      if (!isCurrentPlayer) return;
+      setDidPlayerFailToLoad(true);
+      setIsVideoPlayerShowing(false);
+    });
 
     // The player is torn down whenever this embed stops being shown (and on unmount), so make
     // sure the page never stays in the "video playing" state with no player around.
@@ -782,6 +791,7 @@ const VideoEmbedPreview = ({
 
   const startPlaying = async () => {
     if (isFetchingMediaUrls) return;
+    setDidPlayerFailToLoad(false);
     if (mediaUrls.length === 0) {
       try {
         await fetchMediaUrls();
@@ -827,21 +837,32 @@ const VideoEmbedPreview = ({
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />
-      <TrackClick eventName="watch" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
-        <LinkButton
-          style={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-          }}
-          disabled={isFetchingMediaUrls}
-          onClick={() => void startPlaying()}
-          aria-label="Watch"
-        >
-          {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
-        </LinkButton>
-      </TrackClick>
+      {didPlayerFailToLoad ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 p-4 text-center">
+          <p role="alert" className="text-white">
+            The video player could not load. Please try again.
+          </p>
+          <LinkButton className="text-white" onClick={() => void startPlaying()}>
+            Try again
+          </LinkButton>
+        </div>
+      ) : (
+        <TrackClick eventName="watch" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
+          <LinkButton
+            style={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+            }}
+            disabled={isFetchingMediaUrls}
+            onClick={() => void startPlaying()}
+            aria-label="Watch"
+          >
+            {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
+          </LinkButton>
+        </TrackClick>
+      )}
     </figure>
   );
 };
