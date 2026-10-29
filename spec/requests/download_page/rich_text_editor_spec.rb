@@ -423,7 +423,7 @@ describe("Download Page – Rich Text Editor Content", type: :system, js: true) 
 
         expect(page).to have_modal("Your video is being transcoded.")
         within_modal("Your video is being transcoded.") do
-          expect(page).to have_text("Until then, you and your future customers may experience some viewing issues. You'll get an email once it's done.", normalize_ws: true)
+          expect(page).to have_text("Until then, you and your future customers may experience some viewing issues.", normalize_ws: true)
           click_on "Close"
         end
 

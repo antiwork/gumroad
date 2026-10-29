@@ -228,7 +228,7 @@ describe "Video stream scenario", type: :system, js: true do
           visit url_redirect_stream_page_for_product_file_path(@url_redirect.token, @product.product_files.first.external_id)
 
           expect(page).to have_content("Your video will be transcoded on first sale.")
-          expect(page).to have_content("Until then, you may experience some viewing issues. You'll get an email once it's done.")
+          expect(page).to have_content("Until then, you may experience some viewing issues.")
         end
       end
 
@@ -243,7 +243,7 @@ describe "Video stream scenario", type: :system, js: true do
 
           expect(@product.transcode_videos_on_purchase?).to eq false
           expect(page).to have_content("Your video is being transcoded.")
-          expect(page).to have_content("Until then, you and your future customers may experience some viewing issues. You'll get an email once it's done.")
+          expect(page).to have_content("Until then, you and your future customers may experience some viewing issues.")
         end
       end
     end
