@@ -339,11 +339,11 @@ module Mcp
           tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
                  "name" => { type: "string", description: "Bundle name." },
                  "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
-                 "product_ids" => { type: "array", description: "Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version." }
+                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version." }
                }, required: %w[name price_cents product_ids]),
           tool("update_bundle", "Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.", {
                  "id" => { type: "string", description: "Bundle id or permalink." },
-                 "product_ids" => { type: "array", description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products." }
+                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products." }
                }, required: %w[id product_ids], destructive: true)
         ]
       end
@@ -616,16 +616,20 @@ module Mcp
 
       # Resolves every product the caller named to one of their own live products before anything is
       # written: the update service soft-deletes each member it is not handed, so a single unknown id
-      # would otherwise empty the bundle it was meant to extend. A product sold in versions is taken
-      # at its first version, which is what the editor's product picker selects by default.
-      def bundle_member_attributes(product_ids)
+      # would otherwise empty the bundle it was meant to extend.
+      def bundle_member_attributes(bundle, product_ids)
         raise Error.new("product_ids must name at least one product", code: -32602) if product_ids.empty?
+
+        retained = bundle.bundle_products.alive.includes(:variant).index_by(&:product_id)
 
         product_ids.map.with_index do |id, position|
           raise Error.new("product_ids[#{position}] must be a string", code: -32602) unless id.is_a?(String) && id.strip.present?
 
           product = find_product!(id)
-          { product_id: product.external_id, variant_id: product.variants_or_skus.first&.external_id, quantity: 1, position: }
+          # A retained member keeps the version it already sells; only a new member falls back to the
+          # first version, which is what the editor's product picker selects by default.
+          variant = retained[product.id]&.variant || product.variants_or_skus.first
+          { product_id: product.external_id, variant_id: variant&.external_id, quantity: 1, position: }
         end
       end
 
@@ -636,7 +640,6 @@ module Mcp
 
         price_cents = args["price_cents"]
         raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
-        members = bundle_member_attributes(args["product_ids"])
 
         bundle = user.links.build(
           name:,
@@ -651,6 +654,7 @@ module Mcp
         bundle.taxonomy = Taxonomy.find_by(slug: "other")
         ActiveRecord::Base.transaction do
           bundle.save!
+          members = bundle_member_attributes(bundle, args["product_ids"])
           Bundle::UpdateProductsService.new(bundle:, products: members).perform
         end
         {
@@ -665,11 +669,11 @@ module Mcp
         bundle = find_product!(args["id"])
         raise ToolError, "This product is not a bundle. Make one with create_bundle first." if bundle.not_is_bundle?
 
-        members = bundle_member_attributes(args["product_ids"])
         ActiveRecord::Base.transaction do
-          # Reloads under the lock, so the diff the service runs cannot delete a member a
-          # concurrent edit just added.
+          # Reloads under the lock, then resolves the members here so a retained member keeps the
+          # version it already sells even if a concurrent edit just changed it.
           bundle.lock!
+          members = bundle_member_attributes(bundle, args["product_ids"])
           Bundle::UpdateProductsService.new(bundle:, products: members).perform
         end
         { product: product_payload(bundle.reload), bundle_products: bundle_products_payload(bundle) }
