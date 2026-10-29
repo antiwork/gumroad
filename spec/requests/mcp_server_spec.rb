@@ -2111,6 +2111,18 @@ describe "MCP server" do
       expect(offer_code.valid_at).to be < offer_code.expires_at
     end
 
+    it "expires a code the current prices would refuse to save" do
+      offer_code = create(:universal_offer_code, user: @seller, code: "HALF", amount_cents: nil, amount_percentage: 50)
+      create(:product, user: @seller, price_cents: 100)
+      expect(offer_code.reload).not_to be_valid
+
+      call_tool("expire_discount_code", { code: "HALF" })
+
+      expect(offer_code.reload.expires_at).to be <= Time.current
+      expect(offer_code).to be_inactive
+      expect(tool_result["structuredContent"]["discount_code"]).to include("expired" => true)
+    end
+
     it "refuses to address another seller's code" do
       other_code = create(:universal_offer_code, code: "SHARED", amount_cents: nil, amount_percentage: 10)
 

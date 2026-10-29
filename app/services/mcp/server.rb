@@ -658,7 +658,9 @@ module Mcp
         # The model requires a start date before the end date, as the editor's "Valid until" does.
         offer_code.valid_at = [offer_code.valid_at || offer_code.created_at, now - 1.second].min
         offer_code.expires_at = now
-        save_discount_code!(offer_code)
+        # Expiring narrows the code to nothing, so the price check, which the current prices can
+        # already fail, must not leave the creator unable to end it from here.
+        offer_code.save!(context: :expiring)
         { discount_code: discount_code_payload(offer_code), message: "Expired. Buyers can no longer use this code." }
       end
 
