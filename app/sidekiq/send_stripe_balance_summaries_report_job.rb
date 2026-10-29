@@ -4,7 +4,7 @@ class SendStripeBalanceSummariesReportJob
   include Sidekiq::Job
   include FinanceReportFailureAlert
   include LongRunningJobTracking
-  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :log
 
   # Monthly, enqueued with no args, so the digest is constant. The attempt polls Stripe's Reporting
   # API, which generates the report asynchronously on Stripe's side.

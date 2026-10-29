@@ -16,7 +16,7 @@
 # TaxJar upload, idempotent — already-imported orders are skipped).
 class VerifyFinanceReportsDeliveryJob
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :log
   include RecurringLockTtl
   recurring_lock_ttl max_attempt: 30.minutes
 

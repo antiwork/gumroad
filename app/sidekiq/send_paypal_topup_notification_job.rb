@@ -3,7 +3,7 @@
 class SendPaypalTopupNotificationJob
   include Sidekiq::Job
   include CurrencyHelper
-  sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :replace
+  sidekiq_options retry: 1, queue: :default, lock: :until_executed, on_conflict: :log
 
   # Two static-arg daily entries, so each digest is constant. The attempt is one PayPal balance
   # check plus the upcoming-payout total.
