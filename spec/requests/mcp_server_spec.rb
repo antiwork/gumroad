@@ -2149,6 +2149,7 @@ describe "MCP server" do
       expect(tool_result.dig("content", 0, "text")).to include("Change its amounts in the Gumroad dashboard")
 
       call_tool("update_discount_code", { code: "LOYAL", product_id: @product.external_id, max_purchase_count: 5 })
+      expect(tool_result["structuredContent"]["discount_code"]).to include("percent_off" => nil, "tiers" => [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
       expect(offer_code.reload).to have_attributes(max_purchase_count: 5, ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
     end
 

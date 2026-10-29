@@ -746,7 +746,9 @@ module Mcp
           # A code made in the editor can cover several products; product_ids lists them all.
           scope: offer_code.universal? ? "universal" : product_ids.first,
           product_ids:,
-          percent_off: offer_code.amount_percentage,
+          # A tiered code's amount_percentage is a placeholder; checkout uses the tiers.
+          percent_off: offer_code.tiered? ? nil : offer_code.amount_percentage,
+          tiers: offer_code.normalized_ownership_duration_tiers,
           amount_cents: offer_code.amount_cents,
           currency: offer_code.is_cents? ? offer_code.currency_type : nil,
           valid_at: offer_code.valid_at&.iso8601,
