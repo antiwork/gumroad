@@ -42,6 +42,7 @@ module Mcp
     DISCOUNT_PERCENT_RANGE = (1..100)
     # DATETIME's range: MySQL, outside strict mode, stores a later year as a zero date that reads back as nil.
     DISCOUNT_YEAR_RANGE = (1000..9999)
+    DISCOUNT_MIN_VALIDITY_WINDOW = 1.second
     DISCOUNT_CODE_FIELDS = {
       "percent_off" => { type: "integer", description: "Percent off, #{DISCOUNT_PERCENT_RANGE.min}-#{DISCOUNT_PERCENT_RANGE.max}. Not with amount_cents." },
       "amount_cents" => { type: "integer", description: "Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off." },
@@ -863,7 +864,7 @@ module Mcp
         return { discount_code: discount_code_payload(offer_code), message: "Already expired." } if offer_code.expires_at.present? && offer_code.expires_at <= now
 
         # The model requires a start date before the end date, as the editor's "Valid until" does.
-        offer_code.valid_at = [offer_code.valid_at || offer_code.created_at, now - 1.second].min
+        offer_code.valid_at = [offer_code.valid_at || offer_code.created_at, now - DISCOUNT_MIN_VALIDITY_WINDOW].min
         offer_code.expires_at = now
         # Expiring narrows the code to nothing, so the price check, which the current prices can
         # already fail, must not leave the creator unable to end it from here.
