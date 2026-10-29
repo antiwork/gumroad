@@ -157,7 +157,10 @@ class ApplicationController < ActionController::Base
     # Tokens issued to dynamically registered MCP clients are bound to one resource; anywhere
     # else they count as absent so Doorkeeper answers 401 as for any unknown token.
     def doorkeeper_token
-      Mcp::DynamicClientOauth.token_for_request(super, request)
+      return @_bound_doorkeeper_token if defined?(@_bound_doorkeeper_token)
+
+      token = Mcp::DynamicClientOauth.token_for_request(super, request)
+      @_bound_doorkeeper_token = MobileAccountToken.valid?(token) ? token : nil
     end
 
     def redirect_to_custom_subdomain

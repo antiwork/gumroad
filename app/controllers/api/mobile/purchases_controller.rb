@@ -9,7 +9,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
   MAX_PER_PAGE = 100
 
   def index
-    purchases = current_resource_owner.purchases.for_mobile_listing
+    purchases = library_owner.purchases.for_mobile_listing
     page = (params[:page] || 1).to_i
     per_page = [[(params[:per_page] || DEFAULT_PER_PAGE).to_i, 1].max, MAX_PER_PAGE].min
     pagination = Pagy.new(count: purchases.count, page: page, limit: per_page)
@@ -18,7 +18,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
     render json: {
       success: true,
       products: purchases_json,
-      user_id: current_resource_owner.external_id,
+      user_id: library_owner.external_id,
       meta: { pagination: PagyPresenter.new(pagination).metadata }
     }
   end
@@ -33,7 +33,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
 
     render json: {
       success: true,
-      user_id: current_resource_owner.external_id,
+      user_id: library_owner.external_id,
       # `product_updates_data` (the creator posts this buyer is entitled to see for each
       # product) is deliberately left out of this response. Deciding that entitlement
       # means, for every product on the page, reading the seller's whole published-post
@@ -86,15 +86,19 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
   end
 
   private
+    def library_owner
+      impersonated_user || account_holder
+    end
+
     # Same rule as the web library: an unconfirmed account may not see purchases made with its address.
     def require_confirmed_user
-      return if current_resource_owner.confirmed?
+      return if library_owner.confirmed?
 
       render json: { success: false, message: "Please confirm your email address before you can see your purchases." }, status: :forbidden
     end
 
     def fetch_purchase
-      @purchase = current_resource_owner.purchases.find_by_external_id(params[:id])
+      @purchase = library_owner.purchases.find_by_external_id(params[:id])
       render json: { success: false, message: "Could not find purchase" }, status: :not_found if @purchase.nil? || (!@purchase.successful_and_not_reversed? && !@purchase.subscription)
     end
 
@@ -119,7 +123,7 @@ class Api::Mobile::PurchasesController < Api::Mobile::BaseController
     end
 
     def search_purchases
-      purchases = current_resource_owner.purchases.for_mobile_listing
+      purchases = library_owner.purchases.for_mobile_listing
 
       if params[:q].present?
         query = "%#{ActiveRecord::Base.sanitize_sql_like(params[:q])}%"

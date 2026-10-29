@@ -1504,9 +1504,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_22_000001) do
     t.datetime "created_at", precision: nil, null: false
     t.string "scopes"
     t.string "resource"
+    t.bigint "team_membership_id"
     t.index ["application_id", "revoked_at"], name: "index_oauth_access_tokens_on_application_id_and_revoked_at"
     t.index ["refresh_token"], name: "index_oauth_access_tokens_on_refresh_token", unique: true
     t.index ["resource_owner_id"], name: "index_oauth_access_tokens_on_resource_owner_id"
+    t.index ["team_membership_id"], name: "index_oauth_access_tokens_on_team_membership_id"
     t.index ["token"], name: "index_oauth_access_tokens_on_token", unique: true
   end
 

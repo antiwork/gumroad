@@ -23,6 +23,21 @@ module CurrentSeller
     }
   end
 
+  # A brand token signs in its team member so the website applies the member's role.
+  def sign_in_current_api_user
+    return if current_api_user.blank?
+
+    team_membership = MobileAccountToken.team_membership_for(doorkeeper_token)
+    if team_membership.nil?
+      sign_in current_api_user
+      return
+    end
+
+    sign_in team_membership.user
+    switch_seller_account(team_membership)
+    @_current_seller = team_membership.seller
+  end
+
   private
     def find_seller_from_cookie(seller_id)
       return if seller_id.nil?

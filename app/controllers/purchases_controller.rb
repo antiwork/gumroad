@@ -374,8 +374,8 @@ class PurchasesController < ApplicationController
       return if performed?
       return if current_api_user.blank?
 
-      sign_in current_api_user
-      @_current_seller = current_api_user
+      sign_in_current_api_user
+      @_current_seller ||= current_api_user
     end
 
     def mobile_export_token_matches?
