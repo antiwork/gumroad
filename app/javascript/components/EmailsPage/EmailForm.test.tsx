@@ -98,6 +98,7 @@ const context: InstallmentFormContext = {
   audience_types: ["everyone"],
   products: [],
   affiliate_products: [],
+  waitlist_products: [],
   timezone: "UTC",
   currency_type: "usd",
   countries: [],

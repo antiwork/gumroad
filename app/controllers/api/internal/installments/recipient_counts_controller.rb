@@ -20,7 +20,8 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
       bought_variants: [],
       not_bought_products: [],
       not_bought_variants: [],
-      affiliate_products: []
+      affiliate_products: [],
+      waitlisted_products: []
     )
     installment = Installment.new(permitted_params)
     installment.seller = current_seller

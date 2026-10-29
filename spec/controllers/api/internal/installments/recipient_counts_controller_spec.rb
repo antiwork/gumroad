@@ -49,6 +49,16 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 5, "audience_count" => 5)
     end
 
+    it "counts only followers on the waitlist of the selected product" do
+      waitlist_product = create(:product, user: seller)
+      create(:waitlist_entry, follower: active_follower1, product: waitlist_product)
+
+      get :show, params: { installment_type: "follower", waitlisted_products: [waitlist_product.unique_permalink] }
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("recipient_count" => 1, "audience_count" => 5)
+    end
+
     it "returns counts for seller installment type" do
       get :show, params: { installment_type: "seller" }
       expect(response).to be_successful

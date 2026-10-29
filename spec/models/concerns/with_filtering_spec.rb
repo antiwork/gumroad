@@ -834,6 +834,56 @@ describe WithFiltering do
     end
   end
 
+  describe "waitlisted products filter" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:follower) { create(:active_follower, user: seller) }
+
+    it "keeps the filter only on follower emails" do
+      follower_post = build(:follower_installment, seller:)
+      audience_post = build(:audience_installment, seller:)
+
+      [follower_post, audience_post].each { _1.add_and_validate_filters({ waitlisted_products: [product.unique_permalink] }, seller) }
+
+      expect(follower_post.waitlisted_products).to eq([product.unique_permalink])
+      expect(follower_post.json_filters[:waitlisted_products]).to eq([product.unique_permalink])
+      expect(follower_post.audience_members_filter_params[:waitlisted_product_ids]).to eq([product.id])
+      expect(audience_post.waitlisted_products).to be_blank
+      expect(audience_post.audience_members_filter_params).not_to have_key(:waitlisted_product_ids)
+    end
+
+    it "matches nobody when no listed product resolves" do
+      create(:waitlist_entry, follower:, product:)
+      post = build(:follower_installment, seller:, json_data: { waitlisted_products: ["missing"] })
+
+      expect(AudienceMember.filter(seller_id: seller.id, params: post.audience_members_filter_params, with_ids: true).to_a).to eq([])
+    end
+
+    it "passes a follower only when they joined the waitlist of a listed product" do
+      post = create(:follower_installment, seller:, json_data: { waitlisted_products: [product.unique_permalink] })
+
+      expect(post.follower_passes_filters(follower)).to eq(false)
+
+      create(:waitlist_entry, follower:, product: create(:product, user: seller))
+      expect(post.follower_passes_filters(follower)).to eq(false)
+
+      create(:waitlist_entry, follower:, product:)
+      expect(post.follower_passes_filters(Follower.find(follower.id))).to eq(true)
+    end
+
+    it "looks up the follower's waitlists once across posts" do
+      create(:waitlist_entry, follower:, product:)
+      posts = create_list(:follower_installment, 3, seller:, json_data: { waitlisted_products: [product.unique_permalink] })
+      queries = []
+      counter = ->(*, payload) { queries << payload[:sql] if payload[:sql].include?("waitlist_entries") }
+
+      ActiveSupport::Notifications.subscribed(counter, "sql.active_record") do
+        expect(posts.map { _1.follower_passes_filters(follower) }).to eq([true, true, true])
+      end
+      expect(queries.size).to eq(1)
+    end
+  end
+
   describe "#abandoned_cart_type?" do
     it "returns true if the installment type is abandoned_cart" do
       post = create(:installment, installment_type: Installment::ABANDONED_CART_TYPE)

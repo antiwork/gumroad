@@ -16,13 +16,23 @@ describe InstallmentPresenter do
       expect(described_class.new(seller:, installment:).props[:display_type]).to eq("draft")
     end
 
+    it "lists only the products that have waitlist signups" do
+      unpublished = create(:product, name: "Coming soon", user: seller, purchase_disabled_at: Time.current)
+      create(:waitlist_entry, product: unpublished, follower: create(:follower, user: seller))
+      create(:waitlist_entry, product: create(:product), follower: create(:follower))
+
+      expect(described_class.new(seller:).new_page_props[:context][:waitlist_products]).to eq(
+        [{ permalink: unpublished.unique_permalink, name: "Coming soon" }]
+      )
+    end
+
     it "returns necessary props" do
       section = create(:seller_profile_posts_section, seller:)
 
       props = described_class.new(seller:).new_page_props
 
       expect(props.keys).to include(:context)
-      expect(props[:context].keys).to match_array(%i(audience_types products affiliate_products timezone currency_type countries profile_sections has_scheduled_emails aws_access_key_id s3_url user_id allow_comments_by_default from_tab))
+      expect(props[:context].keys).to match_array(%i(audience_types products affiliate_products waitlist_products timezone currency_type countries profile_sections has_scheduled_emails aws_access_key_id s3_url user_id allow_comments_by_default from_tab))
       expect(props[:context][:products]).to match_array(
         [
           {
@@ -129,7 +139,7 @@ describe InstallmentPresenter do
       props = described_class.new(seller:, installment:).edit_page_props
 
       expect(props.keys).to match_array(%i(context installment))
-      expect(props[:context].keys).to match_array(%i(audience_types products affiliate_products timezone currency_type countries profile_sections has_scheduled_emails aws_access_key_id s3_url user_id allow_comments_by_default from_tab))
+      expect(props[:context].keys).to match_array(%i(audience_types products affiliate_products waitlist_products timezone currency_type countries profile_sections has_scheduled_emails aws_access_key_id s3_url user_id allow_comments_by_default from_tab))
       expect(props[:context][:products]).to match_array(
         [
           {
