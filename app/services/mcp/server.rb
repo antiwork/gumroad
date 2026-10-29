@@ -305,11 +305,12 @@ module Mcp
                  "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
                  "description" => { type: "string", description: "HTML or plain-text description." }
                }, required: %w[name price_cents]),
-          tool("update_product", "Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
-                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." }
+                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
+                 "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
                }, required: %w[id], destructive: true),
           tool("add_cover", "Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.", {
                  "id" => { type: "string", description: "Product id or permalink." },
@@ -432,14 +433,23 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "price_cents")
-        raise Error.new("Pass at least one of name, description, or price_cents", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "price_cents", "permalink")
+        raise Error.new("Pass at least one of name, description, price_cents, or permalink", code: -32602) if changes.empty?
+
+        # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
+        permalink = changes["permalink"].presence if changes.key?("permalink")
 
         # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
         ActiveRecord::Base.transaction do
-          # Reloads under the lock: the upsell diff below must compare against the committed
-          # description, or an overlapping edit's new upsell card is dropped with its offer left active.
-          product.lock!
+          if changes.key?("permalink") && permalink != product.custom_permalink
+            # A claim takes the seller row before the product row, the order the editor and the v2 API
+            # lock in, so an overlapping save cannot deadlock against this one.
+            product.lock_for_permalink_claim!(permalink)
+          else
+            # Reloads under the lock: the upsell diff below must compare against the committed
+            # description, or an overlapping edit's new upsell card is dropped with its offer left active.
+            product.lock!
+          end
           if changes.key?("name")
             name = changes["name"].strip
             raise Error.new("name must not be blank", code: -32602) if name.blank?
@@ -456,6 +466,9 @@ module Mcp
           if changes.key?("description")
             product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
           end
+          # Setting the column is the whole feature: Link's own validations reject the editor's rules and its
+          # after_commit records the redirect for the outgoing slug.
+          product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
         end
         result = { product: product_payload(product.reload).merge(description: product.description) }

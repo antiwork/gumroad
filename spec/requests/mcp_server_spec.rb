@@ -649,10 +649,63 @@ describe "MCP server" do
       expect(@product.price_cents).to eq(1900)
     end
 
+    it "changes the URL and keeps the old one pointing at the product" do
+      @product.update!(custom_permalink: "field-notes-original")
+
+      call_tool("update_product", { id: @product.external_id, permalink: "field-notes-renamed" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.custom_permalink).to eq("field-notes-renamed")
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "url")).to eq(@product.long_url)
+      expect(Link.fetch_leniently("field-notes-original", user: @seller)).to eq(@product)
+    end
+
+    it "gives a product its first custom URL" do
+      call_tool("update_product", { id: @product.external_id, permalink: "field-notes-first" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.custom_permalink).to eq("field-notes-first")
+      expect(@product.long_url).to end_with("/l/field-notes-first")
+      expect(Link.fetch_leniently(@product.unique_permalink, user: @seller)).to eq(@product)
+    end
+
+    it "clears the custom URL back to the default one" do
+      @product.update!(custom_permalink: "field-notes-temporary")
+
+      call_tool("update_product", { id: @product.external_id, permalink: "" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.custom_permalink).to be_nil
+      expect(@product.long_url).to end_with("/l/#{@product.unique_permalink}")
+      expect(Link.fetch_leniently("field-notes-temporary", user: @seller)).to eq(@product)
+    end
+
+    it "rejects a URL with characters the editor does not allow" do
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "field notes!" }) }
+        .not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text"))
+        .to eq("Custom permalink can only contain letters, numbers, dashes, and underscores")
+    end
+
+    it "rejects a URL another of the seller's products already uses" do
+      create(:product, user: @seller, name: "Other notes", custom_permalink: "field-notes-taken")
+
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "field-notes-taken" }) }
+        .not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "content", 0, "text"))
+        .to eq("Custom permalink is already used by another one of your products")
+    end
+
     it "rejects an update with no fields to change" do
       expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
 
-      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, or price_cents")
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, price_cents, or permalink")
     end
 
     it "rejects a blank name without changing the product" do
@@ -1491,7 +1544,7 @@ describe "MCP server" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."},"permalink":{"type":"string","description":"New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
       JSON
     end
 
