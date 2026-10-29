@@ -21,14 +21,13 @@ module Mcp
 
     # @return [ProductFile] the file now attached to the product
     def perform
-      uri = parse_url
+      uri = parse_source_uri
       key = nil
       begin
         key, byte_size = store(uri)
         attach(key, byte_size)
       rescue StandardError
-        # The bytes are already in the seller's prefix, so a failed save has to take them with it.
-        delete_object(key) if key
+        discard_upload(key) if key
         raise
       end
     end
@@ -36,7 +35,7 @@ module Mcp
     private
       attr_reader :seller, :product, :url, :display_name
 
-      def parse_url
+      def parse_source_uri
         normalized = url.start_with?("//") ? "https:#{url}" : url
         uri = URI.parse(normalized)
         raise InvalidUrl if uri.host.blank? || !uri.scheme.in?(%w[http https])
@@ -92,16 +91,44 @@ module Mcp
       end
 
       def attach(key, byte_size)
-        file_url = "#{S3_BASE_URL}#{key}"
+        stored_url = "#{S3_BASE_URL}#{key}"
         # Appends to the download list and sets the size the analyze job would only fill in later.
         # delete_missing stays false: this adds a file, it is not a full snapshot of them.
         product.save_files!(
-          [{ url: file_url, display_name:, size: byte_size, position: (product.alive_product_files.map(&:position).compact.max || 0) + 1 }],
+          [{ url: stored_url, display_name:, size: byte_size, position: (product.alive_product_files.map(&:position).compact.max || 0) + 1 }],
           [],
           delete_missing: false
         )
+        file = product.alive_product_files.find { |product_file| product_file.url == stored_url }
+        ensure_buyers_see(file) if file
         product.generate_product_files_archives!
-        product.alive_product_files.find { |file| file.url == file_url }
+        file
+      end
+
+      # Buyers get the files embedded in their content page, and a page that embeds none shows all
+      # of them (UrlRedirect#alive_product_files), so only a page already gating by embed needs the
+      # new one. A per-variant product delivers each variant's own files, hence the links.
+      def ensure_buyers_see(file)
+        append_embed(product.alive_rich_contents, file)
+        return if product.has_product_level_rich_content?
+
+        product.alive_variants.each do |variant|
+          append_embed(variant.alive_rich_contents, file)
+          variant.product_files << file unless variant.product_files.include?(file)
+        end
+      end
+
+      def append_embed(pages, file)
+        pages = pages.to_a
+        return if pages.empty? || pages.any? { _1.embedded_product_file_ids_in_order.include?(file.id) }
+        return unless pages.any? { _1.embedded_product_file_ids_in_order.any? }
+
+        first_page = pages.min_by(&:position)
+        first_page.update!(description: first_page.description.to_a + [file_embed_node(file)])
+      end
+
+      def file_embed_node(file)
+        { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
       end
 
       # URLs like ".../watch" have no filename to keep, and the display name a creator typed is
@@ -118,6 +145,13 @@ module Mcp
 
         extension = MiniMime.lookup_by_content_type(content_type.to_s)&.extension
         extension.present? ? "#{filename}.#{extension}" : filename
+      end
+
+      # save_files! has already committed the row when a callback raises, and the file is in use then.
+      def discard_upload(key)
+        return if ProductFile.alive.exists?(url: "#{S3_BASE_URL}#{key}")
+
+        delete_object(key)
       end
 
       def delete_object(key)

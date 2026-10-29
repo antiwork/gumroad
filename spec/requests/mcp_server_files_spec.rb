@@ -46,6 +46,10 @@ describe "MCP server product files" do
     allow(SsrfFilter).to receive(:get).with(url).and_yield(response).and_return(response)
   end
 
+  def file_embed(file)
+    { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+  end
+
   def call_tool(name, arguments, scopes: "edit_products")
     token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes:)
     payload = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name:, arguments: } }
@@ -108,6 +112,45 @@ describe "MCP server product files" do
       file = @product.reload.alive_product_files.sole
       expect(file.s3_filename).to eq("Field notes PDF.txt")
       expect(file.name_displayable).to eq("Field notes PDF")
+    end
+
+    it "adds the file to a content page that already lists files" do
+      existing = create(:product_file, link: @product)
+      page = create(:rich_content, entity: @product, description: [file_embed(existing)])
+      url = "https://example.com/files/blah.txt"
+      stub_remote_file(url, "blah.txt", "text/plain")
+
+      call_tool("add_file", { id: @product.unique_permalink, url: })
+
+      file = @product.reload.alive_product_files.find { _1.id != existing.id }
+      expect(page.reload.embedded_product_file_ids_in_order).to eq([existing.id, file.id])
+    end
+
+    it "leaves a content page that lists no files alone" do
+      description = [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Notes" }] }]
+      page = create(:rich_content, entity: @product, description:)
+      url = "https://example.com/files/blah.txt"
+      stub_remote_file(url, "blah.txt", "text/plain")
+
+      call_tool("add_file", { id: @product.unique_permalink, url: })
+
+      expect(page.reload.description).to eq(description)
+    end
+
+    it "keeps the copy it stored when the save left a live row behind" do
+      url = "https://example.com/files/blah.txt"
+      stub_remote_file(url, "blah.txt", "text/plain")
+      allow_any_instance_of(Link).to receive(:save_files!) do |product, files, **_options|
+        ProductFile.create!(link: product, url: files.sole[:url], display_name: "blah")
+        raise Redis::BaseError, "connection lost"
+      end
+
+      result = call_tool("add_file", { id: @product.unique_permalink, url: })
+
+      expect(result.dig("isError")).to eq(true)
+      expect(result.dig("content", 0, "text")).to include("was attached")
+      expect(@product.reload.alive_product_files.count).to eq(1)
+      expect(@deleted_keys).to be_empty
     end
 
     it "refuses a file larger than the limit and stores nothing" do
