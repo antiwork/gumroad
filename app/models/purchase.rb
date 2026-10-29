@@ -1318,8 +1318,8 @@ class Purchase < ApplicationRecord
     true
   end
 
-  def merchant_account_for_affiliate_user
-    affiliate_user = affiliate&.affiliate_user
+  def merchant_account_for_affiliate_user(affiliate_record = affiliate)
+    affiliate_user = affiliate_record&.affiliate_user
     charge_processor_id = self.charge_processor_id || StripeChargeProcessor.charge_processor_id
     merchant_account = affiliate_user&.merchant_account(charge_processor_id)
     merchant_account || MerchantAccount.gumroad(charge_processor_id)
@@ -2006,40 +2006,53 @@ class Purchase < ApplicationRecord
   end
 
   def increment_affiliates_balance!
-    increment_direct_affiliate_balance!
-
-    return unless own_affiliate_credit_cents > 0
-    return if affiliate_credit.present?
-
-    if (affiliate_balance_transaction = balance_transactions.where(user: affiliate.affiliate_user).where.not(balance_id: nil).last)
-      create_affiliate_credit!(affiliate_balance_transaction.balance)
-    else
-      create_affiliate_balances!
+    if credits_direct_affiliate?
+      post_affiliate_credit!(direct_affiliate, direct_affiliate_credit_cents.to_i, determine_direct_affiliate_fee_cents, direct: true)
     end
+
+    post_affiliate_credit!(affiliate, own_affiliate_credit_cents, determine_affiliate_fee_cents) if own_affiliate_credit_cents > 0
+  end
+
+  # Posts one affiliate's credit on this purchase — its credit row and balance, then the
+  # transfer-or-balance branch — so the collaborator and a direct affiliate credited beside it
+  # follow the same payout path. `using_gumroad_merchant_account_for_affiliate_user?` short-circuits
+  # the transfer for every affiliate today, so this only moves the balance.
+  def post_affiliate_credit!(affiliate_record, amount_cents, fee_cents, direct: false)
+    return unless amount_cents.to_i > 0
+    return if (direct ? direct_affiliate_credit : affiliate_credit).present?
+
+    affiliate_user = affiliate_record.affiliate_user
+    affiliate_balance = balance_transactions.where(user: affiliate_user).where.not(balance_id: nil).last&.balance ||
+      create_affiliate_balance_transaction!(affiliate_user, amount_cents).balance
+
+    credit = AffiliateCredit.create!(
+      purchase: self,
+      affiliate: affiliate_record,
+      affiliate_balance:,
+      affiliate_amount_cents: amount_cents,
+      affiliate_fee_cents: fee_cents.ceil,
+      is_direct_affiliate_credit: direct,
+    )
+    direct ? (self.direct_affiliate_credit = credit) : (self.affiliate_credit = credit)
 
     return if using_gumroad_merchant_account_for_affiliate_user?
 
-    if merchant_account_for_affiliate_user&.charge_processor_merchant_id
+    if (transfer_account = merchant_account_for_affiliate_user(affiliate_record))&.charge_processor_merchant_id
       logger.info("Transferring affiliate Credits for: #{id}")
 
       StripeTransferAffiliateCredits.transfer_funds_to_account(
         description: "Affiliate Credits:#{statement_description}",
         transfer_group: id,
-        stripe_account_id: merchant_account_for_affiliate_user.charge_processor_merchant_id,
-        amount_cents: own_affiliate_credit_cents,
+        stripe_account_id: transfer_account.charge_processor_merchant_id,
+        amount_cents:,
         related_charge_id: stripe_transaction_id
       )
     else
       MerchantRegistrationMailer.account_needs_registration_to_user(
-        affiliate.id,
+        affiliate_record.id,
         StripeChargeProcessor.charge_processor_id
       ).deliver_later(queue: "critical")
     end
-  end
-
-  def create_affiliate_balances!
-    affiliate_balance_transaction = create_affiliate_balance_transaction!(affiliate.affiliate_user, own_affiliate_credit_cents)
-    create_affiliate_credit!(affiliate_balance_transaction.balance)
   end
 
   def create_affiliate_balance_transaction!(affiliate_user, amount_cents)
@@ -2053,37 +2066,6 @@ class Purchase < ApplicationRecord
       issued_amount: affiliate_issued_amount,
       holding_amount: affiliate_holding_amount,
       update_user_balance: update_user_balance_in_transaction_for_affiliate
-    )
-  end
-
-  def create_affiliate_credit!(affiliate_balance)
-    self.affiliate_credit = AffiliateCredit.create!(
-      purchase: self,
-      affiliate:,
-      affiliate_balance:,
-      affiliate_amount_cents: own_affiliate_credit_cents,
-      affiliate_fee_cents: determine_affiliate_fee_cents.ceil,
-    )
-  end
-
-  # The direct affiliate of a collab purchase (see `direct_affiliate_id`) gets its own credit row
-  # and balance transaction, next to the collaborator's.
-  def increment_direct_affiliate_balance!
-    return unless credits_direct_affiliate?
-    return unless direct_affiliate_credit_cents.to_i > 0
-    return if direct_affiliate_credit.present?
-
-    affiliate_user = direct_affiliate.affiliate_user
-    affiliate_balance = balance_transactions.where(user: affiliate_user).where.not(balance_id: nil).last&.balance ||
-      create_affiliate_balance_transaction!(affiliate_user, direct_affiliate_credit_cents).balance
-
-    self.direct_affiliate_credit = AffiliateCredit.create!(
-      purchase: self,
-      affiliate: direct_affiliate,
-      affiliate_balance:,
-      affiliate_amount_cents: direct_affiliate_credit_cents,
-      affiliate_fee_cents: determine_direct_affiliate_fee_cents.ceil,
-      is_direct_affiliate_credit: true,
     )
   end
 
@@ -2869,9 +2851,7 @@ class Purchase < ApplicationRecord
       else
         # We use decrement_amount_cents instead of seller_refund_cents here. This is because
         # determine_affiliate_balance_cents makes use of displayed_price_cents and not payment_cents
-        affiliate_cut = affiliate_credit.basis_points / 10_000.0
-        affiliate_refund_fee_cents = affiliate_credit.fee_cents == 0 ? 0 : (affiliate_cut * refunded_fee_cents).floor
-        affiliate_refund_cents = (affiliate_cut * decrement_amount_cents).ceil - affiliate_refund_fee_cents
+        affiliate_refund_cents, affiliate_refund_fee_cents = affiliate_reversal_amounts(affiliate_credit, decrement_amount_cents, refunded_fee_cents)
         seller_refund_cents = seller_refund_cents - affiliate_refund_cents - affiliate_refund_fee_cents
       end
     end
@@ -2904,24 +2884,32 @@ class Purchase < ApplicationRecord
   end
 
   # Splits a partial reversal of `decrement_amount_cents` (of which `refunded_fee_cents` is Gumroad's
-  # fee) across the credits of a collab purchase with a direct affiliate. Each credit gives back its
-  # share of the price and its share of the fee, the same shares it was credited at checkout.
+  # fee) across the credits of this purchase. Each credit is reversed with the same formula a lone
+  # credit gets (see affiliate_reversal_amounts), never a second one for this case.
   # Returns [seller_cents, [[credit, amount_cents, fee_cents], ...]].
   def partial_affiliate_reversals(decrement_amount_cents, refunded_fee_cents)
     seller_cents = decrement_amount_cents - refunded_fee_cents
     reversals = all_affiliate_credits.map do |credit|
-      fee_share_cents = affiliate_reversal_fee_cents(credit, refunded_fee_cents)
-      amount_cents = (affiliate_credit_price_share(credit) * decrement_amount_cents).ceil - fee_share_cents
-      seller_cents -= amount_cents + fee_share_cents
-      [credit, amount_cents, fee_share_cents]
+      amount_cents, fee_cents = affiliate_reversal_amounts(credit, decrement_amount_cents, refunded_fee_cents)
+      seller_cents -= amount_cents + fee_cents
+      [credit, amount_cents, fee_cents]
     end
     [seller_cents, reversals]
   end
 
-  # The share of the price a credit of this purchase was paid from. For a collab purchase with a
-  # direct affiliate, the direct affiliate's cut comes off the top and the collaborator's cut applies
-  # to the rest; otherwise it is the credit's own basis points.
-  def affiliate_credit_price_share(credit)
+  # What one affiliate credit gives back on a partial refund: its share of `decrement_amount_cents`,
+  # rounded up, minus its share of the Gumroad fee that came back. Every caller uses these, so a
+  # purchase with a lone affiliate and one with a collaborator plus a direct affiliate are reversed
+  # by the same formula, applied once per credit.
+  def affiliate_reversal_amounts(credit, decrement_amount_cents, refunded_fee_cents)
+    fee_cents = affiliate_reversal_fee_cents(credit, refunded_fee_cents)
+    [(affiliate_reversal_share(credit) * decrement_amount_cents).ceil - fee_cents, fee_cents]
+  end
+
+  # The fraction of the price a credit was paid on. The direct affiliate's cut comes off the top, so
+  # the collaborator credited beside it was paid on their own rate times what is left; every other
+  # credit is paid on its own rate.
+  def affiliate_reversal_share(credit)
     share = credit.basis_points / 10_000.0
     return share unless credits_direct_affiliate? && !credit.is_direct_affiliate_credit?
 
@@ -2929,33 +2917,19 @@ class Purchase < ApplicationRecord
   end
 
   # The direct affiliate's cut, as a fraction, that checkout scaled the collaborator's cut by. Read
-  # from its credit row when one was posted; when the commission rounded to zero there is no row, so
-  # fall back to the affiliate's own rate for this product — the same source checkout read.
+  # from its credit row when one was posted; when that cut rounded to zero there is no row, so fall
+  # back to the affiliate's own rate for this product — the same source checkout read.
   def direct_affiliate_price_share
     basis_points = direct_affiliate_credit&.basis_points || direct_affiliate&.basis_points(product_id: link_id)
     basis_points.to_i / 10_000.0
   end
 
-  # Whether the direct affiliate paid a share of Gumroad's fee: that is what decides whether the
-  # collaborator's fee share is scaled by the direct affiliate's cut. With no credit row nothing was
-  # taken from the direct affiliate, but the collaborator's own fee was still reduced by the share
-  # checkout computed, so ask the same computation rather than the missing row.
-  def direct_affiliate_paid_fee_share?
-    credit = direct_affiliate_credit
-    return credit.fee_cents.to_i.nonzero? if credit
-
-    determine_direct_affiliate_fee_cents.to_i.nonzero?
-  end
-
-  # The part of `refunded_fee_cents` that a credit gives back: its share of the fee it paid at checkout.
+  # The part of `refunded_fee_cents` that a credit gives back: its share of the fee it paid at
+  # checkout.
   def affiliate_reversal_fee_cents(credit, refunded_fee_cents)
     return 0 if credit.fee_cents.to_i.zero?
 
-    share = credit.basis_points / 10_000.0
-    if credits_direct_affiliate? && !credit.is_direct_affiliate_credit? && direct_affiliate_paid_fee_share?
-      share *= 1 - direct_affiliate_price_share
-    end
-    (share * refunded_fee_cents).floor
+    (affiliate_reversal_share(credit) * refunded_fee_cents).floor
   end
 
   def variant_extra_cost

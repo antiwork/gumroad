@@ -321,11 +321,8 @@ class Purchase::HandleFailedRefundService
     # Rebuild the fee with the same calculation used when Purchase creates the row
     # so refunds with equal debits can still be told apart.
     def failed_affiliate_partial_refund_fee_cents(affiliate_credit)
-      return 0 if affiliate_credit.fee_cents.to_i.zero?
-      return purchase.affiliate_reversal_fee_cents(affiliate_credit, refund.fee_cents.to_i) if purchase.credits_direct_affiliate?
-
-      affiliate_cut = affiliate_credit.basis_points / 10_000.0
-      (affiliate_cut * refund.fee_cents.to_i).floor
+      # Same formula as the refund that failed used, for every purchase shape.
+      purchase.affiliate_reversal_fee_cents(affiliate_credit, refund.fee_cents.to_i)
     end
 
     # Recompute the purchase's refunded flags as if the failed refund never counted.
