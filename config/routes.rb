@@ -1285,10 +1285,9 @@ Rails.application.routes.draw do
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :url_redirect_change_purchaser
     post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :url_redirect_save_last_content_page
-    get "/r/:id/build_save", to: "url_redirects#build_save", as: :url_redirect_build_save
     get "/d/:id/play", to: "url_redirects#play", as: :url_redirect_play
+    post "/d/:id/play/:grant/save", to: "product_build_player_files#save", as: :product_build_player_save
     get "/d/:id/play/:grant(/*path)", to: "product_build_player_files#show", as: :product_build_player_file, format: false
-    patch "/r/:id/build_save", to: "url_redirects#update_build_save"
 
     get "crossdomain", to: "public#crossdomain"
 
@@ -1520,10 +1519,9 @@ Rails.application.routes.draw do
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :custom_domain_send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :custom_domain_url_redirect_change_purchaser
     post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :custom_domain_url_redirect_save_last_content_page
-    get "/r/:id/build_save", to: "url_redirects#build_save", as: :custom_domain_url_redirect_build_save
     get "/d/:id/play", to: "url_redirects#play", as: :custom_domain_url_redirect_play
+    post "/d/:id/play/:grant/save", to: "product_build_player_files#save", as: :custom_domain_product_build_player_save
     get "/d/:id/play/:grant(/*path)", to: "product_build_player_files#show", as: :custom_domain_product_build_player_file, format: false
-    patch "/r/:id/build_save", to: "url_redirects#update_build_save"
 
     get "/library", to: "library#index"
     patch "/library/purchase/:id/archive", to: "library#archive"
