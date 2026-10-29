@@ -2648,7 +2648,6 @@ module StripeMerchantAccountManager
   # A business-tax-ID rejection can never be resolved by resubmitting the field when Stripe has no
   # accepted type for it on this account shape (see company_tax_id_accepted?), so the seller-visible
   # note would otherwise sit there forever blaming a field they cannot satisfy.
-  private_class_method
   def self.clear_unresolvable_business_tax_id_notes(user)
     return if company_tax_id_accepted?(user.alive_user_compliance_info)
 
@@ -3118,12 +3117,14 @@ module StripeMerchantAccountManager
           postal_code: normalize_postal_code(user_compliance_info.legal_entity_zip_code, user_compliance_info.legal_entity_country_code),
           country: user_compliance_info.legal_entity_country_code
         },
-        tax_id: company_tax_id_accepted?(user_compliance_info) ? business_tax_id.presence : nil,
+        tax_id: business_tax_id.presence,
         phone: user_compliance_info.business_phone,
         directors_provided: true,
         executives_provided: true,
       }
     }
+
+    hash[:company].delete(:tax_id) unless company_tax_id_accepted?(user_compliance_info)
 
     # The kanji/kana blocks below carry a hardcoded country and are only populated for a Japanese
     # legal entity, so they follow the same account-country rule as the AE branch below.

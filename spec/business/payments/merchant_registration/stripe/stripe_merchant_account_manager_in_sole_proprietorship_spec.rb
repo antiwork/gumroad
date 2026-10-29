@@ -8,35 +8,35 @@ describe StripeMerchantAccountManager, "company tax ID on an India sole propriet
   let(:user) { create(:user) }
   let(:passphrase) { GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD") }
 
-  def company_tax_id_for(**attributes)
+  def company_hash_for(**attributes)
     info = create(:user_compliance_info_business, user:, **attributes)
-    described_class.send(:company_hash, info, passphrase)[:company][:tax_id]
+    described_class.send(:company_hash, info, passphrase)[:company]
   end
 
   it "is not sent for an India sole proprietorship" do
-    tax_id = company_tax_id_for(
+    company = company_hash_for(
       business_country: "India",
       business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP,
       business_tax_id: "22AAAAA0000A1Z5"
     )
 
-    expect(tax_id).to be_nil
+    expect(company).not_to have_key(:tax_id)
   end
 
   it "is still sent for an India company, which Stripe holds as a company" do
-    tax_id = company_tax_id_for(business_country: "India", business_type: "pvt_ltd", business_tax_id: "22AAAAA0000A1Z5")
+    company = company_hash_for(business_country: "India", business_type: "pvt_ltd", business_tax_id: "22AAAAA0000A1Z5")
 
-    expect(tax_id).to eq("22AAAAA0000A1Z5")
+    expect(company[:tax_id]).to eq("22AAAAA0000A1Z5")
   end
 
   it "is still sent for a sole proprietorship outside India" do
-    tax_id = company_tax_id_for(
+    company = company_hash_for(
       business_country: "United States",
       business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP,
       business_tax_id: "000000000"
     )
 
-    expect(tax_id).to eq("000000000")
+    expect(company[:tax_id]).to eq("000000000")
   end
 end
 
