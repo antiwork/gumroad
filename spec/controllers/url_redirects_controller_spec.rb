@@ -1233,6 +1233,20 @@ describe UrlRedirectsController, inertia: true do
 
             expect(response).to be_successful
           end
+
+          it "grants access through the staff member's brand token without selecting the brand" do
+            brand = create(:user)
+            membership = create(:team_membership, user: admin_user, seller: brand, role: TeamMembership::ROLE_ADMIN)
+            brand_token = MobileAccountToken.issue!(application: oauth_app, scopes: "mobile_api", expires_in: nil, resource_owner: brand, team_membership: membership)
+
+            get :download_page, params: { id: @token, access_token: brand_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+            expect(response).to be_successful
+            expect(controller.current_user).to eq(admin_user)
+            expect(controller.send(:logged_in_user)).to eq(purchaser)
+            expect(controller.current_seller).to eq(purchaser)
+            expect(cookies.encrypted[:current_seller_id]).to be_nil
+          end
         end
 
         it "requires mobile_token to match the expected value" do

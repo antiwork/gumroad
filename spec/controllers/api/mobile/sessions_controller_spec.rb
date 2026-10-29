@@ -53,6 +53,35 @@ describe Api::Mobile::SessionsController, :vcr do
         expect(cookies.encrypted[:current_seller_id]).to be_nil
         expect(controller.current_seller).to eq(@user)
       end
+
+      it "does not pick up the impersonation of a staff brand owner" do
+        brand = create(:admin_user)
+        membership = create(:team_membership, user: @user, seller: brand, role: TeamMembership::ROLE_ADMIN)
+        brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: brand, team_membership: membership)
+        $redis.set(RedisKey.impersonated_user(brand.id), create(:user).id)
+
+        post :create, params: @params.merge(access_token: brand_token.token)
+
+        expect(response).to be_successful
+        expect(controller.current_user).to eq(@user)
+        expect(cookies.encrypted[:current_seller_id]).to eq(brand.id)
+        expect(response.parsed_body["user"]["email"]).to eq(brand.email)
+      end
+
+      it "signs in as the seller a staff member impersonates, as their own token does" do
+        @user.update!(is_team_member: true)
+        brand = create(:user)
+        impersonated = create(:user)
+        membership = create(:team_membership, user: @user, seller: brand, role: TeamMembership::ROLE_ADMIN)
+        brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: brand, team_membership: membership)
+        $redis.set(RedisKey.impersonated_user(@user.id), impersonated.id)
+
+        post :create, params: @params.merge(access_token: brand_token.token)
+
+        expect(response).to be_successful
+        expect(controller.current_user).to eq(impersonated)
+        expect(response.parsed_body["user"]["email"]).to eq(impersonated.email)
+      end
     end
 
     context "with invalid credentials" do

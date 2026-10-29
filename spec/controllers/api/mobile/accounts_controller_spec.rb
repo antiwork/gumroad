@@ -196,5 +196,35 @@ describe Api::Mobile::AccountsController do
 
       expect(response).to have_http_status(:unauthorized)
     end
+
+    it "refuse to switch while their staff member is impersonating" do
+      user.update!(is_team_member: true)
+      $redis.set(RedisKey.impersonated_user(user.id), create(:user).id)
+
+      post :create, params: auth_params(brand_token).merge(id: user.external_id)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(Doorkeeper::AccessToken.where(resource_owner_id: user.id)).not_to exist
+    end
+
+    it "still switch while the staff brand owner is impersonating" do
+      brand.update!(is_team_member: true)
+      $redis.set(RedisKey.impersonated_user(brand.id), create(:user).id)
+
+      post :create, params: auth_params(brand_token).merge(id: user.external_id)
+
+      expect(response).to be_successful
+      expect(Doorkeeper::AccessToken.by_token(response.parsed_body["access_token"]).resource_owner_id).to eq(user.id)
+    end
+  end
+
+  it "refuses to switch while the token's staff owner is impersonating" do
+    user.update!(is_team_member: true)
+    $redis.set(RedisKey.impersonated_user(user.id), create(:user).id)
+
+    post :create, params: auth_params.merge(id: brand.external_id)
+
+    expect(response).to have_http_status(:forbidden)
+    expect(Doorkeeper::AccessToken.where(resource_owner_id: brand.id)).not_to exist
   end
 end
