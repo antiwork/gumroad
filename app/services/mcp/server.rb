@@ -36,8 +36,11 @@ module Mcp
 
     class ToolError < StandardError; end
 
+    DISCOUNT_PERCENT_RANGE = (1..100)
+    # DATETIME's range: MySQL, outside strict mode, stores a later year as a zero date that reads back as nil.
+    DISCOUNT_YEAR_RANGE = (1000..9999)
     DISCOUNT_CODE_FIELDS = {
-      "percent_off" => { type: "integer", description: "Percent off, 1-100. Not with amount_cents." },
+      "percent_off" => { type: "integer", description: "Percent off, #{DISCOUNT_PERCENT_RANGE.min}-#{DISCOUNT_PERCENT_RANGE.max}. Not with amount_cents." },
       "amount_cents" => { type: "integer", description: "Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off." },
       "valid_at" => { type: "string", description: "ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one." },
       "expires_at" => { type: "string", description: "ISO 8601 time the code stops working." },
@@ -698,7 +701,7 @@ module Mcp
         raise Error.new("Pass one of percent_off or amount_cents", code: -32602) if required && percent.nil? && cents.nil?
 
         if percent
-          raise Error.new("percent_off must be between 1 and 100", code: -32602) unless percent.between?(1, 100)
+          raise Error.new("percent_off must be between #{DISCOUNT_PERCENT_RANGE.min} and #{DISCOUNT_PERCENT_RANGE.max}", code: -32602) unless DISCOUNT_PERCENT_RANGE.cover?(percent)
 
           { amount_percentage: percent, amount_cents: nil, currency_type: nil, once_per_cart: false }
         elsif cents
@@ -720,15 +723,13 @@ module Mcp
         attributes
       end
 
-      # Ruby parses five-digit years, but MySQL (not in strict mode) stores them as a zero date that
-      # reads back as nil: a far-future start would make the code live now.
       def parse_discount_time(args, key)
         time = begin
           Time.zone.iso8601(args[key])
         rescue ArgumentError
           raise Error.new("#{key} must be an ISO 8601 time", code: -32602)
         end
-        raise Error.new("#{key} must have a year from 1000 to 9999", code: -32602) unless time.year.between?(1000, 9999)
+        raise Error.new("#{key} must have a year from #{DISCOUNT_YEAR_RANGE.min} to #{DISCOUNT_YEAR_RANGE.max}", code: -32602) unless DISCOUNT_YEAR_RANGE.cover?(time.year)
 
         time
       end
