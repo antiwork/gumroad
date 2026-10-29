@@ -34,6 +34,14 @@ const PAGE_PATHS: Record<Page, () => string> = {
   advanced: () => Routes.settings_advanced_path(),
 };
 
+// The connector page is the public setup page at /mcp, not a Settings page, so this is a plain link
+// out of Settings rather than a route.
+const ConnectorTab = () => (
+  <Tab isSelected={false} asChild>
+    <a href={Routes.mcp_path()}>AI connectors</a>
+  </Tab>
+);
+
 type Props = {
   onSave?: () => void;
   pages: Page[];
@@ -90,10 +98,14 @@ export const Layout = ({ onSave, pages, currentPage, children, canUpdate }: Prop
       >
         <Tabs>
           {pages.map((page) => (
-            <Tab key={page} isSelected={currentPage === page} asChild>
-              <Link href={PAGE_PATHS[page]()}>{PAGE_TITLES[page]}</Link>
-            </Tab>
+            <React.Fragment key={page}>
+              <Tab isSelected={currentPage === page} asChild>
+                <Link href={PAGE_PATHS[page]()}>{PAGE_TITLES[page]}</Link>
+              </Tab>
+              {page === "authorized_applications" ? <ConnectorTab /> : null}
+            </React.Fragment>
           ))}
+          {pages.includes("authorized_applications") ? null : <ConnectorTab />}
         </Tabs>
       </PageHeader>
       <div>{children}</div>
