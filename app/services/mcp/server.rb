@@ -23,6 +23,8 @@ module Mcp
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
+    PRODUCT_TYPES = %w[digital membership].freeze
+    TIER_KEYS = %w[name price_cents recurrence].freeze
 
     class Error < StandardError
       attr_reader :code, :data
@@ -300,11 +302,27 @@ module Mcp
           tool("get_product", "Fetch one product by id or permalink, with its description and covers. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
-          tool("create_draft_product", "Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.", {
+          tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
                  "name" => { type: "string", description: "Product name." },
-                 "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
-                 "description" => { type: "string", description: "HTML or plain-text description." }
-               }, required: %w[name price_cents]),
+                 "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers." },
+                 "description" => { type: "string", description: "HTML or plain-text description." },
+                 "product_type" => { type: "string", enum: PRODUCT_TYPES, description: "digital (default) or membership." },
+                 "tiers" => {
+                   type: "array",
+                   minItems: 1,
+                   description: "Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.",
+                   items: {
+                     type: "object",
+                     properties: {
+                       "name" => { type: "string", description: "Tier name." },
+                       "price_cents" => { type: "integer", description: "Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want." },
+                       "recurrence" => { type: "string", enum: BasePrice::Recurrence::ALLOWED_RECURRENCES, description: "Billing period." }
+                     },
+                     required: TIER_KEYS,
+                     additionalProperties: false
+                   }
+                 }
+               }, required: %w[name]),
           tool("update_product", "Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
@@ -383,8 +401,9 @@ module Mcp
           property = schema[:properties][key]
           raise Error.new("Unknown argument: #{key}", code: -32602) unless property
 
-          type = property[:type] == "integer" ? Integer : String
-          raise Error.new("#{key} must be a #{property[:type]}", code: -32602) unless value.is_a?(type)
+          type = { "integer" => Integer, "array" => Array }.fetch(property[:type], String)
+          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless value.is_a?(type)
+          raise Error.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
         end
       end
 
@@ -416,9 +435,20 @@ module Mcp
       end
 
       def tool_create_draft_product(args)
+        membership = args["product_type"] == "membership"
+        # Argument errors come before the scope check, so a bad call does not ask the creator for write access.
+        if membership
+          raise Error.new("price_cents is not accepted for a membership; set each tier's price_cents", code: -32602) if args.key?("price_cents")
+          tiers = validated_tiers!(args["tiers"])
+        else
+          raise Error.new("price_cents is required", code: -32602) unless args.key?("price_cents")
+          raise Error.new("tiers are only accepted with product_type membership", code: -32602) if args.key?("tiers")
+        end
+
         require_scopes!(:edit_products, :account)
         name = args["name"].strip
         raise Error.new("name is required", code: -32602) if name.blank?
+        return create_draft_membership(args, name, tiers) if membership
 
         price_cents = args["price_cents"]
         raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
@@ -436,6 +466,67 @@ module Mcp
         product.taxonomy = Taxonomy.find_by(slug: "other")
         product.save!
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
+      end
+
+      def create_draft_membership(args, name, tiers)
+        recurrence = tiers.first["recurrence"]
+        product = user.links.build(
+          name:,
+          description: args["description"].to_s,
+          native_type: Link::NATIVE_TYPE_MEMBERSHIP,
+          is_recurring_billing: true,
+          is_tiered_membership: true,
+          should_show_all_posts: true,
+          subscription_duration: recurrence,
+          # Seeds the default tier's price, as the web create form does.
+          price_cents: tiers.first["price_cents"],
+          price_currency_type: user.currency_type,
+          draft: true,
+          purchase_disabled_at: Time.current,
+          display_product_reviews: true
+        )
+        product.set_template_properties_if_needed
+        product.taxonomy = Taxonomy.find_by(slug: "other")
+        begin
+          ActiveRecord::Base.transaction do
+            # Saving a tiered membership adds an "Untitled" default tier; the first tier replaces it.
+            product.save!
+            options = tiers.each_with_index.map do |tier, index|
+              {
+                id: index.zero? ? product.default_tier.external_id : nil,
+                name: tier["name"].strip,
+                recurrence_price_values: { recurrence => { enabled: true, price_cents: tier["price_cents"] } }
+              }
+            end
+            Product::VariantsUpdaterService.new(product:, variants_params: [{ id: product.tier_category.external_id, name: product.tier_category.title, options: }]).perform
+          end
+        rescue Link::LinkInvalid => e
+          # The tier services report through product.errors and raise with no message.
+          raise ToolError, product.errors.full_messages.to_sentence.presence || e.message
+        end
+        { product: product_payload(product.reload), message: "Draft membership saved. It is not for sale until publish_product." }
+      end
+
+      def validated_tiers!(tiers)
+        raise Error.new("tiers are required for a membership", code: -32602) if tiers.blank?
+
+        tiers.each_with_index do |tier, index|
+          raise Error.new("tiers[#{index}] must be an object", code: -32602) unless tier.is_a?(Hash)
+          unknown = tier.keys - TIER_KEYS
+          raise Error.new("tiers[#{index}] has unknown argument: #{unknown.first}", code: -32602) if unknown.any?
+          missing = TIER_KEYS - tier.keys
+          raise Error.new("tiers[#{index}].#{missing.first} is required", code: -32602) if missing.any?
+          raise Error.new("tiers[#{index}].name must be a non-blank string", code: -32602) unless tier["name"].is_a?(String) && tier["name"].strip.present?
+          raise Error.new("tiers[#{index}].price_cents must be an integer of zero or more", code: -32602) unless tier["price_cents"].is_a?(Integer) && tier["price_cents"] >= 0
+          raise Error.new("tiers[#{index}].price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}", code: -32602) if tier["price_cents"] > BasePrice::Shared::MAX_PRICE_CENTS
+          unless BasePrice::Recurrence::ALLOWED_RECURRENCES.include?(tier["recurrence"])
+            raise Error.new("tiers[#{index}].recurrence must be one of: #{BasePrice::Recurrence::ALLOWED_RECURRENCES.join(', ')}", code: -32602)
+          end
+        end
+        # The product editor holds every tier to the same set of billing periods.
+        raise Error.new("every tier must use the same recurrence", code: -32602) if tiers.map { _1["recurrence"] }.uniq.size > 1
+
+        tiers
       end
 
       def tool_update_product(args)
@@ -642,7 +733,7 @@ module Mcp
         tiers = tier_records.map do |tier|
           prices = tier.alive_prices.select { _1.is_buy? && recurrences.include?(_1.recurrence) }
             .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: tier.customizable_price? ? _1.suggested_price_cents : nil }] }
-          { name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: }
+          { id: tier.external_id, name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: }
         end
         # As on the storefront (Link#has_customizable_price_option?), a closed tier counts only when all are closed.
         offered = tier_records.reject(&:closed_to_new_buyers?).presence || tier_records
