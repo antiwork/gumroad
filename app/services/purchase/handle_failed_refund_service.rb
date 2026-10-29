@@ -260,7 +260,6 @@ class Purchase::HandleFailedRefundService
     end
 
     def restore_affiliate_credit_refund_state!(affiliate_credit)
-
       # Re-read the affiliate credit under a row lock. Like the purchase flag
       # recomputation, this method runs while holding the purchase lock, but plain
       # reads inside the transaction still come from a REPEATABLE READ snapshot
