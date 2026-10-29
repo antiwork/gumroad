@@ -92,39 +92,52 @@ module Mcp
 
       def attach(key, byte_size)
         stored_url = "#{S3_BASE_URL}#{key}"
-        # Appends to the download list and sets the size the analyze job would only fill in later.
-        # delete_missing stays false: this adds a file, it is not a full snapshot of them.
-        product.save_files!(
-          [{ url: stored_url, display_name:, size: byte_size, position: (product.alive_product_files.map(&:position).compact.max || 0) + 1 }],
-          [],
-          delete_missing: false
-        )
-        file = product.alive_product_files.find { |product_file| product_file.url == stored_url }
-        ensure_buyers_see(file) if file
-        product.generate_product_files_archives!
-        file
-      end
-
-      # Buyers get the files embedded in their content page, and a page that embeds none shows all
-      # of them (UrlRedirect#alive_product_files), so only a page already gating by embed needs the
-      # new one. A per-variant product delivers each variant's own files, hence the links.
-      def ensure_buyers_see(file)
-        append_embed(product.alive_rich_contents, file)
-        return if product.has_product_level_rich_content?
-
-        product.alive_variants.each do |variant|
-          append_embed(variant.alive_rich_contents, file)
-          variant.product_files << file unless variant.product_files.include?(file)
+        # One commit for the row, its embeds and the archives, so a failed page save leaves no hidden
+        # file behind. The lock serializes concurrent adds, whose position and page appends are
+        # read-modify-write; lock! reloads associations but not the memoized file list.
+        ActiveRecord::Base.transaction do
+          product.lock!
+          product.cached_alive_product_files = nil
+          # Appends to the download list and sets the size the analyze job would only fill in later.
+          # delete_missing stays false: this adds a file, it is not a full snapshot of them.
+          product.save_files!(
+            [{ url: stored_url, display_name:, size: byte_size, position: (product.alive_product_files.map(&:position).compact.max || 0) + 1 }],
+            [],
+            delete_missing: false
+          )
+          file = product.alive_product_files.find { |product_file| product_file.url == stored_url }
+          ensure_buyers_see(file) if file
+          product.generate_product_files_archives!
+          file
         end
       end
 
-      def append_embed(pages, file)
+      # A per-variant product delivers each variant's own files, hence the links. Buyers without a
+      # version still read the product's own pages while any has content (UrlRedirect).
+      def ensure_buyers_see(file)
+        per_variant = !product.has_product_level_rich_content?
+        append_embeds(product.alive_rich_contents, product.alive_product_files, file) if !per_variant || product.alive_rich_contents.any?(&:has_editor_content?)
+        return unless per_variant
+
+        product.alive_variants.each do |variant|
+          variant.product_files << file unless variant.product_files.include?(file)
+          append_embeds(variant.alive_rich_contents, variant.product_files.alive.in_order, file)
+        end
+      end
+
+      # Once pages exist, the download page shows only the files they embed. Pages that embed none
+      # still give every file to the app and the download links (UrlRedirect#alive_product_files),
+      # so they get all of them; embedding only the new one would take the rest from those buyers.
+      def append_embeds(pages, delivered_files, file)
         pages = pages.to_a
-        return if pages.empty? || pages.any? { _1.embedded_product_file_ids_in_order.include?(file.id) }
-        return unless pages.any? { _1.embedded_product_file_ids_in_order.any? }
+        return if pages.empty?
+
+        embedded_ids = pages.flat_map(&:embedded_product_file_ids_in_order)
+        missing = (embedded_ids.empty? ? delivered_files.to_a : [file]).reject { embedded_ids.include?(_1.id) }
+        return if missing.empty?
 
         first_page = pages.min_by(&:position)
-        first_page.update!(description: first_page.description.to_a + [file_embed_node(file)])
+        first_page.update!(description: first_page.description.to_a + missing.map { file_embed_node(_1) })
       end
 
       def file_embed_node(file)
