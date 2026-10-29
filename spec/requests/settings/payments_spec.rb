@@ -2235,7 +2235,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("January", from: "Month")
         select("1980", from: "Year")
         select("India", from: "Nationality")
-        fill_in("PayPal Email", with: "uaecr@gumroad.com")
+        fill_in("PayPal Email", with: "uaecr@example.com")
 
         change_masked_tax_field("Emirates ID")
         emirates_id = find_field("Emirates ID")
