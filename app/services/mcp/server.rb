@@ -680,13 +680,16 @@ module Mcp
       def tool_list_sales(args)
         require_scopes!(:view_sales, :account)
         sales = user.sales.successful_or_preorder_authorization_successful
-          .includes(:link, :offer_code, :utm_link)
+          .includes(:link, :offer_code, :utm_link, :subscription)
         sales = sales.where(email: args["email"].to_s.strip) if args["email"].present?
         sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
         sales = sales.where(purchases: { created_at: parse_time!(args["after"], "after").. }) if args["after"].present?
         sales = sales.where(purchases: { created_at: ...parse_time!(args["before"], "before") }) if args["before"].present?
         sales = sales.where(args["payment"] == "paid" ? "purchases.price_cents > 0" : "purchases.price_cents = 0") if args["payment"]
-        sales = sales.where(args["kind"] == "subscription" ? "purchases.subscription_id IS NOT NULL" : "purchases.subscription_id IS NULL") if args["kind"]
+        if args["kind"]
+          membership = "purchases.subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM subscriptions WHERE subscriptions.id = purchases.subscription_id AND subscriptions.flags & #{Subscription.flag_mapping["flags"][:is_installment_plan]} != 0)"
+          sales = sales.where(args["kind"] == "subscription" ? membership : "NOT (#{membership})")
+        end
         page, next_cursor = paginate(sales, args, default: 25, table: "purchases")
         { sales: page.map { |sale| sale_payload(sale) }, next_cursor: }.compact
       end
@@ -706,7 +709,7 @@ module Mcp
           created_at: sale.created_at.iso8601,
           refunded: sale.refunded?,
           chargedback: sale.chargedback?,
-          subscription: sale.subscription_id.present?,
+          subscription: sale.subscription.present? && !sale.subscription.is_installment_plan?,
           country: sale.country_or_ip_country,
           discount_code: sale.offer_code&.code,
           referrer: sale.referrer.presence,

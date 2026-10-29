@@ -569,6 +569,58 @@ describe "MCP server" do
         expect(second).not_to have_key("next_cursor")
       end
 
+      it "breaks created_at ties by id across page boundaries" do
+        at = 1.hour.ago.change(usec: 0)
+        purchases = Array.new(3) { create(:purchase, seller: @seller, link: @product, created_at: at) }
+
+        first = list_sales({ "limit" => 2 })
+        second = list_sales({ "limit" => 2, "cursor" => first["next_cursor"] })
+
+        expect((first["sales"] + second["sales"]).map { |s| s["id"] }).to match_array(purchases.map(&:external_id))
+        expect(second).not_to have_key("next_cursor")
+      end
+
+      it "breaks created_at ties by id for products and payouts" do
+        @token.update!(scopes: "account")
+        at = 1.hour.ago.change(usec: 0)
+        products = Array.new(3) { create(:product, user: @seller, created_at: at) }
+        payments = Array.new(3) { create(:payment, user: @seller, created_at: at) }
+
+        { "list_products" => ["products", Link.where(id: products.map(&:id)).map(&:external_id)],
+          "list_payouts" => ["payouts", payments.map(&:external_id)] }.each do |tool, (key, expected)|
+          page = ->(args) do
+            post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: args } })
+            response.parsed_body.dig("result", "structuredContent")
+          end
+          seen = []
+          cursor = nil
+          loop do
+            result = page.call({ "limit" => 2, "cursor" => cursor }.compact)
+            seen += result[key].map { |row| row["id"] }
+            cursor = result["next_cursor"]
+            break unless cursor
+          end
+          expect(seen & expected).to match_array(expected)
+          expect(seen).to eq(seen.uniq)
+        end
+      end
+
+      it "treats installment plan payments as one-time, not subscription" do
+        membership = create(:membership_purchase, seller: @seller, link: create(:membership_product, user: @seller))
+        installment = create(:purchase, seller: @seller, link: @product)
+        plan = create(:subscription, link: @product, user: nil)
+        plan.update!(is_installment_plan: true)
+        installment.update_columns(subscription_id: plan.id)
+
+        subs = list_sales({ "kind" => "subscription" })["sales"].map { |s| s["id"] }
+        one_time = list_sales({ "kind" => "one_time" })["sales"].map { |s| s["id"] }
+        expect(subs).to include(membership.external_id)
+        expect(subs).not_to include(installment.external_id)
+        expect(one_time).to include(installment.external_id)
+        expect(one_time).not_to include(membership.external_id)
+        expect(list_sales({})["sales"].find { |s| s["id"] == installment.external_id }["subscription"]).to eq(false)
+      end
+
       it "rejects a malformed cursor" do
         list_sales({ "cursor" => "nope" })
         expect(response.parsed_body.dig("error", "message")).to eq("cursor is not valid")
