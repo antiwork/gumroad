@@ -1021,6 +1021,21 @@ describe PurchasesController, :vcr do
           expect(Exports::PurchaseExportService).to have_received(:export).with(hash_including(seller:, recipient: seller))
         end
       end
+
+      it "exports the brand's sales to the team member who holds a brand token" do
+        member = create(:user)
+        membership = create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
+        brand_token = MobileAccountToken.issue!(application: oauth_app, scopes: "creator_api", expires_in: nil, resource_owner: seller, team_membership: membership)
+
+        get :export, params: {
+          access_token: brand_token.token,
+          mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN
+        }
+
+        expect(response).to be_successful
+        expect(controller.current_user).to eq(member)
+        expect(Exports::PurchaseExportService).to have_received(:export).with(hash_including(seller:, recipient: member))
+      end
     end
 
     describe "PUT revoke_access" do

@@ -39,6 +39,20 @@ describe "Create product mobile app WebView authentication", type: :request, ine
     end
   end
 
+  context "with a team member's brand token" do
+    it "signs the member in with the brand selected" do
+      member = create(:user)
+      membership = create(:team_membership, user: member, seller: user, role: TeamMembership::ROLE_ADMIN)
+      brand_token = MobileAccountToken.issue!(application: oauth_app, scopes: "mobile_api", expires_in: nil, resource_owner: user, team_membership: membership)
+
+      get new_product_path, params: { display: "mobile_app", access_token: brand_token.token, mobile_token: }, headers: { "X-Inertia" => "true" }
+
+      expect(response).to be_successful
+      expect(controller.current_user).to eq(member)
+      expect(controller.current_seller).to eq(user)
+    end
+  end
+
   context "without an access_token" do
     it "redirects to login instead of signing anyone in" do
       get new_product_path
