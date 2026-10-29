@@ -31,6 +31,15 @@ class WaitlistLaunchEmail
     end
   end
 
+  # Nil when the seller can send emails.
+  def blocked_reason
+    return if seller.eligible_to_send_emails?
+    return "Your account can't send emails while it's suspended." if seller.suspended?
+
+    "You can email your waitlist once you've made at least " \
+      "#{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in sales and received a payout."
+  end
+
   private
     attr_reader :product, :seller
 
@@ -40,14 +49,6 @@ class WaitlistLaunchEmail
                        .where("json_data LIKE ?", "%#{PRODUCT_KEY}%")
                        .select { _1.json_data[PRODUCT_KEY].to_i == product.id }
                        .max_by(&:id)
-    end
-
-    def blocked_reason
-      return if seller.eligible_to_send_emails?
-      return "Your account can't send emails while it's suspended." if seller.suspended?
-
-      "You can email your waitlist once you've made at least " \
-        "#{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in sales and received a payout."
     end
 
     def create_email!

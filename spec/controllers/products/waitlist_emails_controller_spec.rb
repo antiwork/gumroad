@@ -42,6 +42,7 @@ describe Products::WaitlistEmailsController do
         post :create, params: { product_id: product.unique_permalink }, as: :json
       end.not_to change { Installment.count }
       expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to eq("You can email your waitlist once you've made at least $100 in sales and received a payout.")
     end
 
     it "reports the sending limit instead of failing" do

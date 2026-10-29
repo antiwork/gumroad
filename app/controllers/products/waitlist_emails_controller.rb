@@ -4,9 +4,12 @@ class Products::WaitlistEmailsController < Sellers::BaseController
   def create
     authorize Installment, :create?
     product = current_seller.products.visible.find_by(unique_permalink: params[:product_id]) || e404
-    return render json: { success: false }, status: :unprocessable_entity unless current_seller.eligible_to_send_emails?
+    waitlist_email = WaitlistLaunchEmail.new(product:)
+    if (reason = waitlist_email.blocked_reason)
+      return render json: { success: false, error: reason }, status: :unprocessable_entity
+    end
 
-    installment = WaitlistLaunchEmail.new(product:).find_or_create_email!
+    installment = waitlist_email.find_or_create_email!
     render json: { success: true, edit_url: edit_email_path(installment.external_id) }
   rescue ActiveRecord::RecordInvalid => e
     # The sending limit still applies to accounts the eligibility check lets through, such as team accounts.
