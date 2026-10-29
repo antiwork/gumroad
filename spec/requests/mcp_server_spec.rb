@@ -643,6 +643,15 @@ describe "MCP server" do
         expect(response.parsed_body.dig("error", "message")).to eq("after must be a date or ISO 8601 time")
       end
 
+      it "accepts dates inside the years a datetime column holds", :aggregate_failures do
+        sale = create(:purchase, seller: @seller, link: @product)
+        ids = ->(filter) { list_sales(filter)&.fetch("sales")&.map { |s| s["id"] } }
+
+        expect(ids.call({ "after" => "0000-01-01" })).to eq([sale.external_id])
+        expect(ids.call({ "after" => "0999-01-01" })).to eq([sale.external_id])
+        expect(ids.call({ "before" => "9999-12-31" })).to eq([sale.external_id])
+      end
+
       it "filters by product, date range, paid vs free" do
         other = create(:product, user: @seller)
         old = create(:purchase, seller: @seller, link: @product, created_at: Time.utc(2026, 9, 1, 12))
