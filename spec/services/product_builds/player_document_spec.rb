@@ -13,6 +13,30 @@ describe ProductBuilds::PlayerDocument do
       expect(rendered.index("gumroad:build-save")).to be < rendered.index(%(src="game.js"))
     end
 
+    it "puts the IndexedDB shim after the save shim, which hands it the snapshot's slot" do
+      rendered = described_class.render(%(<!doctype html><script src="game.js"></script>), save_data: { described_class::INDEXEDDB_SAVE_KEY => "{}" }, save_url: "/save")
+      indexeddb_shim = rendered.index(described_class.indexeddb_shim_script)
+
+      expect(rendered.index("gumroad:build-save")).to be < indexeddb_shim
+      expect(indexeddb_shim).to be < rendered.index(%(src="game.js"))
+      expect(shim_config(rendered)).to include(
+        "save" => { described_class::INDEXEDDB_SAVE_KEY => "{}" },
+        "indexedDBKey" => described_class::INDEXEDDB_SAVE_KEY,
+        "indexedDBSlotGlobal" => described_class::INDEXEDDB_SLOT_GLOBAL,
+      )
+    end
+
+    it "refuses an IndexedDB shim that is not ASCII or would end its script tag" do
+      ["const a = \"é\";", "const a = \"</SCRIPT>\";"].each do |script|
+        described_class.instance_variable_set(:@indexeddb_shim_script, nil)
+        allow(described_class::INDEXEDDB_SHIM_PATH).to receive(:read).and_return(script)
+
+        expect { described_class.indexeddb_shim_script }.to raise_error(RuntimeError, /not ASCII|end its script tag/)
+      end
+    ensure
+      described_class.instance_variable_set(:@indexeddb_shim_script, nil)
+    end
+
     it "is not misled by a <head> inside a comment, and keeps leading comments before the doctype" do
       rendered = described_class.render(%(<!-- built by x -->\n<!doctype html><!-- <head> --><title>Game</title>), save_data: {}, save_url: "/save")
 
