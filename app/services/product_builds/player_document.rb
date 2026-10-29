@@ -42,7 +42,12 @@ module ProductBuilds::PlayerDocument
       var timer = null;
       var failures = 0;
       var keepaliveBytes = 0;
-      function batch() { return pending || (pending = { clear: false, remove: [], set: Object.create(null) }); }
+      // Every change made on this page, sent or not. The next page of the build may have fetched the
+      // save before even a confirmed batch landed, so this is what it is handed.
+      var sincePageLoad = null;
+      function emptyBatch() { return { clear: false, remove: [], set: Object.create(null) }; }
+      function batch() { return pending || (pending = emptyBatch()); }
+      function pageBatch() { return sincePageLoad || (sincePageLoad = emptyBatch()); }
       // Applies newer on top of older, as the server would apply the two one after the other.
       function merge(older, newer) {
         if (!older || (newer && newer.clear)) { return newer; }
@@ -108,22 +113,27 @@ module ProductBuilds::PlayerDocument
       }
       // Everything not yet confirmed, including a batch still in flight, goes in one beacon, which the
       // browser still delivers as the page closes. A reply to the batch in flight is then ignored.
-      // The browser may fetch a next page of the build before the beacon lands, so the changes also
-      // ride in window.name, which the next page in this frame reads, applies, and sends again.
+      // The browser may fetch a next page of the build before even a confirmed batch lands, so every
+      // change made on this page rides in window.name, which the next page in this frame reads,
+      // applies, and sends again.
       function leave() {
         clearTimeout(timer);
         timer = null;
         var changes = merge(unconfirmed, pending);
         unconfirmed = null;
         pending = null;
-        if (!changes) { return; }
-        var payload = body(changes);
-        // The next page keeps this writer and numbers on from this beacon, so if the beacon lands after
-        // that page's first save, the server skips it as stale.
-        try { window.name = "#{CARRIED_CHANGES_PREFIX}" + JSON.stringify({ writer: writer, sequence: sequence, changes: changes }); } catch (e) {}
-        var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES} - keepaliveBytes;
-        if (small && navigator.sendBeacon(saveUrl, payload)) { return; }
-        fetch(saveUrl, { method: "POST", body: payload, keepalive: small }).catch(function () {});
+        if (changes) {
+          var payload = body(changes);
+          var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES} - keepaliveBytes;
+          if (!(small && navigator.sendBeacon(saveUrl, payload))) {
+            fetch(saveUrl, { method: "POST", body: payload, keepalive: small }).catch(function () {});
+          }
+        }
+        // The next page keeps this writer and numbers on from the last batch sent, so if that batch
+        // lands after the next page's first save, the server skips it as stale.
+        if (sincePageLoad) {
+          try { window.name = "#{CARRIED_CHANGES_PREFIX}" + JSON.stringify({ writer: writer, sequence: sequence, changes: sincePageLoad }); } catch (e) {}
+        }
       }
       function changed() { if (!timer) { timer = setTimeout(flush, #{SAVE_FLUSH_DELAY_MS}); } }
       var handed = carried && carried.changes;
@@ -136,6 +146,7 @@ module ProductBuilds::PlayerDocument
         handed.remove.forEach(function (k) { delete data[k]; });
         Object.keys(handed.set).forEach(function (k) { data[k] = String(handed.set[k]); });
         pending = merge(handed, pending);
+        sincePageLoad = merge(handed, sincePageLoad);
         changed();
       }
       var api = {
@@ -143,24 +154,27 @@ module ProductBuilds::PlayerDocument
         setItem: function (k, v) {
           k = String(k); v = String(v);
           data[k] = v;
-          var b = batch();
-          b.set[k] = v;
-          var i = b.remove.indexOf(k);
-          if (i >= 0) { b.remove.splice(i, 1); }
+          [batch(), pageBatch()].forEach(function (b) {
+            b.set[k] = v;
+            var i = b.remove.indexOf(k);
+            if (i >= 0) { b.remove.splice(i, 1); }
+          });
           changed();
         },
         removeItem: function (k) {
           k = String(k);
           if (!(k in data)) { return; }
           delete data[k];
-          var b = batch();
-          delete b.set[k];
-          if (b.remove.indexOf(k) < 0) { b.remove.push(k); }
+          [batch(), pageBatch()].forEach(function (b) {
+            delete b.set[k];
+            if (b.remove.indexOf(k) < 0) { b.remove.push(k); }
+          });
           changed();
         },
         clear: function () {
           data = Object.create(null);
           pending = { clear: true, remove: [], set: Object.create(null) };
+          sincePageLoad = { clear: true, remove: [], set: Object.create(null) };
           changed();
         },
         key: function (i) { return Object.keys(data)[i] || null; },
