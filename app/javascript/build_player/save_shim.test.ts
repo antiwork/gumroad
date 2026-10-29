@@ -200,6 +200,30 @@ describe("save shim", () => {
     expect(beacons[1]?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
   });
 
+  it("after a hide beacon that cleared, sends a leave beacon with the clear and all its changes", () => {
+    const { storage, beacons, hide, leave } = runShim({ save: { old: "1" } });
+    storage.clear();
+    storage.setItem("a", "1");
+    hide();
+    storage.setItem("b", "2");
+    leave();
+
+    // Landing first, the new key must not meet the old keys the clear removes.
+    expect(beacons[1]).toMatchObject({ clear: true, set: { a: "1", b: "2" }, writer: beacons[0]?.writer });
+    expect(beacons[1]?.sequence).toBeGreaterThan(beacons[0]?.sequence ?? Infinity);
+  });
+
+  it("after a hide beacon that removed keys, repeats those removals with the new changes", () => {
+    const { storage, beacons, hide, leave } = runShim({ save: { old: "1", keep: "1" } });
+    storage.removeItem("old");
+    storage.setItem("a", "1");
+    hide();
+    storage.setItem("b", "2");
+    leave();
+
+    expect(beacons[1]).toMatchObject({ clear: false, remove: ["old"], set: { b: "2" } });
+  });
+
   it("does not let the two beacons pass the quota together", () => {
     const { storage, beacons, sent, hide, leave } = runShim({ beaconMaxBytes: 180 });
     storage.setItem("a", "1".repeat(25));

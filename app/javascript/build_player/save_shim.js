@@ -35,9 +35,10 @@
   let pending = null;
   let unconfirmed = null;
   let sincePageLoad = null;
-  // Changes made after a hide beacon went out, and the bytes it took of the keepalive quota; null
-  // while no hide beacon is outstanding.
+  // Changes made after a hide beacon went out, and that beacon's own changes and the bytes it took of
+  // the keepalive quota; null while no hide beacon is outstanding.
   let sinceHidden = null;
+  let hiddenBeaconChanges = null;
   let hiddenBeaconBytes = 0;
   let timer = null;
   let failures = 0;
@@ -188,6 +189,8 @@
     }
     unconfirmed = null;
     pending = changes;
+    // A copy: `changes` is also `pending`, which later writes change.
+    hiddenBeaconChanges = merge(changes, emptyBatch());
     hiddenBeaconBytes = beacon(changes, config.beaconMaxBytes);
     sinceHidden = emptyBatch();
     changed();
@@ -195,16 +198,25 @@
   // Everything unconfirmed, including a batch still in flight, goes in one beacon; a reply to the batch
   // in flight is then ignored. When a hide beacon is outstanding (closing a tab fires hidden, then
   // pagehide), it already holds all of that, so only the changes made since go, in the quota it left.
-  // The server orders each key by writer and number, so the two beacons apply in either order. The next
-  // page keeps this writer and numbers on from the beacon, so its saves are ordered after it too.
+  // The server orders each key by writer and number, so the two beacons apply in either order. The one
+  // dependency is room: arriving first, the new keys must not hit the save's limits because the hide
+  // beacon's clear or removals have not applied yet. So the leave beacon repeats those removals, which
+  // are small and harmless twice, and after a clear it carries the whole hide beacon too. The next page
+  // keeps this writer and numbers on from the beacon, so its saves are ordered after it too.
   function leave() {
     clearTimeout(timer);
     timer = null;
     let changes = merge(unconfirmed, pending);
     let maxBytes = config.beaconMaxBytes;
     if (sinceHidden) {
-      changes = isEmpty(sinceHidden) ? null : sinceHidden;
       maxBytes -= hiddenBeaconBytes;
+      if (isEmpty(sinceHidden)) {
+        changes = null;
+      } else if (hiddenBeaconChanges.clear) {
+        changes = merge(hiddenBeaconChanges, sinceHidden);
+      } else {
+        changes = merge({ clear: false, remove: hiddenBeaconChanges.remove, set: Object.create(null) }, sinceHidden);
+      }
     }
     unconfirmed = null;
     pending = null;
@@ -339,6 +351,7 @@
       hidden();
     } else {
       sinceHidden = null;
+      hiddenBeaconChanges = null;
       hiddenBeaconBytes = 0;
     }
   });
