@@ -2056,6 +2056,33 @@ describe "MCP server" do
       expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "expires_at must be an ISO 8601 time")
     end
 
+    it "rejects a year the database would store as an empty date" do
+      expect { call_tool("create_discount_code", { code: "FAR", percent_off: 10, valid_at: "20271-01-01T00:00:00Z" }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "valid_at must have a year from 1000 to 9999")
+
+      offer_code = create(:universal_offer_code, user: @seller, code: "PAUSED", valid_at: 1.week.from_now)
+      expect { call_tool("update_discount_code", { code: "PAUSED", expires_at: "+10000-01-01T00:00:00Z" }) }.not_to change { offer_code.reload.attributes }
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "expires_at must have a year from 1000 to 9999")
+    end
+
+    it "rejects a blank code and a negative usage limit" do
+      expect { call_tool("create_discount_code", { code: "  ", percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "code is required")
+
+      expect { call_tool("create_discount_code", { code: "NEG", percent_off: 10, max_purchase_count: -1 }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "max_purchase_count must be zero or more")
+    end
+
+    it "ignores another seller's code attached to the caller's product" do
+      foreign_code = create(:offer_code, code: "STRAY", amount_cents: 100, products: [@product])
+      foreign_code.update_column(:user_id, create(:user).id)
+
+      call_tool("expire_discount_code", { code: "STRAY", product_id: @product.external_id })
+
+      expect(tool_result.dig("content", 0, "text")).to include("No discount code STRAY is limited to this product")
+      expect(foreign_code.reload.expires_at).to be_nil
+    end
+
     it "refuses to update or expire a code through another seller's product" do
       other_code = create(:offer_code, code: "THEIRS", amount_cents: 100)
       other_product = other_code.products.first

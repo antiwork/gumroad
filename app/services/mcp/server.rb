@@ -665,7 +665,7 @@ module Mcp
 
         if args.key?("product_id")
           product = find_discount_product!(args)
-          offer_code = product.offer_codes.alive.where(universal: false).find_by(code:)
+          offer_code = product.offer_codes.alive.where(universal: false, user_id: user.id).find_by(code:)
           raise ToolError, "No discount code #{code} is limited to this product. Omit product_id for a code that covers all products." if offer_code.nil?
         else
           offer_code = user.offer_codes.alive.universal.find_by(code:)
@@ -715,10 +715,17 @@ module Mcp
         attributes
       end
 
+      # Ruby parses five-digit years, but MySQL (not in strict mode) stores them as a zero date that
+      # reads back as nil: a far-future start would make the code live now.
       def parse_discount_time(args, key)
-        Time.zone.iso8601(args[key])
-      rescue ArgumentError
-        raise Error.new("#{key} must be an ISO 8601 time", code: -32602)
+        time = begin
+          Time.zone.iso8601(args[key])
+        rescue ArgumentError
+          raise Error.new("#{key} must be an ISO 8601 time", code: -32602)
+        end
+        raise Error.new("#{key} must have a year from 1000 to 9999", code: -32602) unless time.year.between?(1000, 9999)
+
+        time
       end
 
       def discount_max_purchase_count(args)
