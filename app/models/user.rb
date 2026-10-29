@@ -1232,13 +1232,10 @@ class User < ApplicationRecord
   def invalidate_active_sessions!
     update!(last_active_sessions_invalidated_at: DateTime.current)
 
-    application = OauthApplication.find_by(uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)
-    if application.present?
-      application.revoke_access_tokens_for(self)
-    end
+    OauthApplication.first_party_mobile.each { |application| application.revoke_access_tokens_for(self) }
   end
 
-  # `invalidate_active_sessions!` revokes only the mobile app's tokens. Closure must also revoke
+  # `invalidate_active_sessions!` revokes only the mobile apps' tokens. Closure must also revoke
   # third-party apps (MCP connectors, API clients), whose tokens never expire. Subscriptions go with
   # the tokens, as in `OauthApplication#revoke_access_for`: an alive, token-less one emails the seller.
   def revoke_all_oauth_access!

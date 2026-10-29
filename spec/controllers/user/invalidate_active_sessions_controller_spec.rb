@@ -40,6 +40,21 @@ describe User::InvalidateActiveSessionsController do
         expect(response.parsed_body["success"]).to be(true)
         expect(flash[:notice]).to eq("You have been signed out from all your active sessions. Please login again.")
       end
+
+      it "revokes the user's legacy mobile application tokens too" do
+        legacy_oauth_application = create(:oauth_application, uid: OauthApplication::LEGACY_MOBILE_API_OAUTH_APPLICATION_UID)
+        legacy_access_token = create("doorkeeper/access_token", application: legacy_oauth_application, resource_owner_id: user.id, scopes: "mobile_api creator_api")
+        legacy_access_token_of_another_user = create("doorkeeper/access_token", application: legacy_oauth_application, scopes: "mobile_api creator_api")
+        third_party_access_token = create("doorkeeper/access_token", application: create(:oauth_application, scopes: "mobile_api"), resource_owner_id: user.id, scopes: "mobile_api")
+
+        put :update
+
+        expect(response).to be_successful
+        expect(legacy_access_token.reload.revoked_at).to be_present
+        expect(active_access_token_one.reload.revoked_at).to be_present
+        expect(legacy_access_token_of_another_user.reload.revoked_at).to be_nil
+        expect(third_party_access_token.reload.revoked_at).to be_nil
+      end
     end
   end
 end
