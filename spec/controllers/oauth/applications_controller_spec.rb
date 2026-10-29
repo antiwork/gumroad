@@ -154,6 +154,26 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
         expect(application.file.attached?).to be(true)
         expect(response).to redirect_to(edit_oauth_application_path(application.external_id))
       end
+
+      ["invalid-signature", 123, 1.5, true].each do |signed_blob_id|
+        it "does not create an application for the malformed signed blob ID #{signed_blob_id.inspect}" do
+          expect do
+            post(:create, params: params.merge(signed_blob_id:))
+          end.to_not change { OauthApplication.count }
+
+          expect(response).to redirect_to(settings_advanced_path)
+          expect(flash[:alert]).to eq(Oauth::ApplicationsController::INVALID_SIGNED_BLOB_ERROR)
+        end
+      end
+
+      it "does not create an application for an expired signed blob ID" do
+        expect do
+          post(:create, params: params.merge(signed_blob_id: blob.signed_id(expires_in: -1.minute)))
+        end.to_not change { OauthApplication.count }
+
+        expect(response).to redirect_to(settings_advanced_path)
+        expect(flash[:alert]).to eq(Oauth::ApplicationsController::INVALID_SIGNED_BLOB_ERROR)
+      end
     end
 
     describe "bad create params" do
@@ -327,6 +347,30 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
           expect(app.reload.file.attached?).to be(true)
           expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
           expect(flash[:notice]).to eq("Application updated.")
+        end
+
+        ["invalid-signature", 123, 1.5, true].each do |signed_blob_id|
+          it "does not change the icon for the malformed signed blob ID #{signed_blob_id.inspect}" do
+            app.file.attach(fixture_file_upload("smilie.png"))
+            original_blob_id = app.reload.file.blob_id
+
+            put(:update, params: { id: app.external_id, signed_blob_id: })
+
+            expect(app.reload.file.blob_id).to eq(original_blob_id)
+            expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
+            expect(flash[:alert]).to eq(Oauth::ApplicationsController::INVALID_SIGNED_BLOB_ERROR)
+          end
+        end
+
+        it "does not change the icon for an expired signed blob ID" do
+          app.file.attach(fixture_file_upload("smilie.png"))
+          original_blob_id = app.reload.file.blob_id
+
+          put(:update, params: { id: app.external_id, signed_blob_id: blob.signed_id(expires_in: -1.minute) })
+
+          expect(app.reload.file.blob_id).to eq(original_blob_id)
+          expect(response).to redirect_to(edit_oauth_application_path(app.external_id))
+          expect(flash[:alert]).to eq(Oauth::ApplicationsController::INVALID_SIGNED_BLOB_ERROR)
         end
 
         it "removes the icon when signed_blob_id is null" do
