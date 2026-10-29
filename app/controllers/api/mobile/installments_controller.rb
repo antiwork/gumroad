@@ -26,7 +26,11 @@ class Api::Mobile::InstallmentsController < Api::Mobile::BaseController
         @imported_customer = ImportedCustomer.find_by_external_id(params[:imported_customer_id])
       elsif params[:follower_id].present?
         @follower = Follower.find_by_external_id(params[:follower_id])
-      else
+      end
+
+      # Without a context object there is no url redirect to serialize, so a
+      # requested id that no longer resolves has to 404 rather than 500.
+      if [@purchase, @subscription, @imported_customer, @follower].all?(&:nil?)
         render json: { success: false, message: "Could not find related object to the installment." }, status: :not_found
       end
     end

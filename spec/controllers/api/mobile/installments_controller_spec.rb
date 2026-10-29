@@ -35,4 +35,14 @@ describe Api::Mobile::InstallmentsController do
       message: "Could not find related object to the installment."
     }.as_json)
   end
+
+  it "returns error if the given purchase does not exist" do
+    get :show, params: { id: @post.external_id, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN, purchase_id: "xxx" }
+
+    assert_response :not_found
+    expect(response.parsed_body).to eq({
+      success: false,
+      message: "Could not find related object to the installment."
+    }.as_json)
+  end
 end
