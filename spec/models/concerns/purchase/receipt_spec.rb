@@ -148,6 +148,16 @@ describe Purchase::Receipt do
         expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(giftee_purchase.id, true).on("critical")
       end
     end
+
+    context "when the recipient never claimed the gift" do
+      it "resends the buyer's own receipt" do
+        unclaimed_gift = create(:gift, link: product)
+        purchase = create(:purchase, link: product, is_gift_sender_purchase: true, gift_given: unclaimed_gift)
+
+        expect { purchase.resend_receipt }.to_not raise_error
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id, true).on("critical")
+      end
+    end
   end
 
   describe "#invoiceable_charges" do

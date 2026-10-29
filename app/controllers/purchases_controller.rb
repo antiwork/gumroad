@@ -250,16 +250,19 @@ class PurchasesController < ApplicationController
     end
 
     if params[:giftee_email] && @purchase.gift
-      giftee_purchase = @purchase.gift.giftee_purchase
       gift = @purchase.gift
+      giftee_purchase = gift.giftee_purchase
 
       gift.giftee_email = params[:giftee_email]
       gift.save!
 
-      giftee_purchase.email = params[:giftee_email]
-      giftee_purchase.save!
+      # A gift the recipient never claimed has no giftee purchase to update or re-send to.
+      if giftee_purchase.present?
+        giftee_purchase.email = params[:giftee_email]
+        giftee_purchase.save!
 
-      giftee_purchase.resend_receipt
+        giftee_purchase.resend_receipt
+      end
     end
 
     if @purchase.errors.empty?
