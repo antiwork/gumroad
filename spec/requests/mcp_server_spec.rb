@@ -454,7 +454,9 @@ describe "MCP server" do
         "publish_product" => "Publish product",
         "unpublish_product" => "Unpublish product",
         "list_sales" => "List sales",
-        "list_payouts" => "List payouts"
+        "list_payouts" => "List payouts",
+        "create_bundle" => "Create bundle",
+        "update_bundle" => "Update bundle"
       )
     end
   end
@@ -513,7 +515,8 @@ describe "MCP server" do
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
         "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
-        "list_files", "add_file", "publish_product", "unpublish_product", "list_sales", "list_payouts"
+        "list_files", "add_file", "publish_product", "unpublish_product", "list_sales", "list_payouts",
+        "create_bundle", "update_bundle"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
       expect(annotations.values).to all(include("openWorldHint" => true))
@@ -523,7 +526,7 @@ describe "MCP server" do
       %w[create_draft_product add_cover add_file].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => false)
       end
-      %w[update_product publish_product unpublish_product].each do |name|
+      %w[update_product publish_product unpublish_product update_bundle].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => true)
       end
     end
@@ -760,6 +763,134 @@ describe "MCP server" do
 
       expect(SsrfFilter).not_to have_received(:get)
       expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+    end
+
+    describe "bundles" do
+      let!(:member) { create(:product, user: @seller, name: "Second notes") }
+
+      it "creates a draft bundle that sells the products it is given, in order" do
+        expect do
+          call_tool("create_bundle", { name: "Field kit", price_cents: 4500, product_ids: [@product.external_id, member.unique_permalink] })
+        end.to change { @seller.links.count }.by(1)
+
+        expect(response).to be_successful
+        content = response.parsed_body.dig("result", "structuredContent")
+        bundle = @seller.links.find_by_external_id!(content.dig("product", "id"))
+        expect(bundle).to be_is_bundle
+        expect(bundle.native_type).to eq(Link::NATIVE_TYPE_BUNDLE)
+        expect(bundle).to be_draft
+        expect(content["product"]).to include("name" => "Field kit", "price_cents" => 4500, "published" => false, "is_bundle" => true)
+        expect(content["bundle_products"]).to eq([
+                                                   { "id" => @product.external_id, "name" => "Field notes", "variant_id" => nil, "quantity" => 1 },
+                                                   { "id" => member.external_id, "name" => "Second notes", "variant_id" => nil, "quantity" => 1 }
+                                                 ])
+        expect(content["message"]).to include("not for sale until publish_product")
+        expect(bundle.bundle_products.alive.in_order.map { _1.product.external_id }).to eq([@product.external_id, member.external_id])
+      end
+
+      it "adds a product sold in versions at its first version" do
+        versioned = create(:product_with_digital_versions, user: @seller, name: "Print")
+
+        call_tool("create_bundle", { name: "Field kit", price_cents: 4500, product_ids: [versioned.external_id] })
+
+        expect(response).to be_successful
+        bundle = @seller.links.find_by_name("Field kit")
+        expect(bundle.bundle_products.alive.sole.variant).to eq(versioned.variants_or_skus.first)
+      end
+
+      it "refuses an empty product list without creating anything" do
+        expect { call_tool("create_bundle", { name: "Empty", price_cents: 100, product_ids: [] }) }.not_to change { Link.count }
+
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids must name at least one product")
+      end
+
+      it "refuses a product_ids value that is not a list" do
+        expect { call_tool("create_bundle", { name: "Empty", price_cents: 100, product_ids: "field-notes" }) }.not_to change { Link.count }
+
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids must be an array")
+      end
+
+      it "refuses another seller's product and creates nothing" do
+        theirs = create(:product, name: "Theirs")
+
+        expect { call_tool("create_bundle", { name: "Mine now", price_cents: 100, product_ids: [theirs.external_id] }) }.not_to change { [Link.count, BundleProduct.count] }
+
+        expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+      end
+
+      it "creates nothing when one of the products cannot go in a bundle" do
+        membership = create(:membership_product, user: @seller)
+
+        expect do
+          call_tool("create_bundle", { name: "Half made", price_cents: 100, product_ids: [@product.external_id, membership.external_id] })
+        end.not_to change { [Link.count, BundleProduct.count] }
+
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("A subscription product cannot be added to a bundle")
+      end
+
+      it "replaces the products a bundle sells, keeping its name, price, and published state" do
+        bundle = create(:product, :bundle, user: @seller, name: "Field kit", price_cents: 4500)
+
+        call_tool("update_bundle", { id: bundle.unique_permalink, product_ids: [member.external_id] })
+
+        expect(response).to be_successful
+        content = response.parsed_body.dig("result", "structuredContent")
+        expect(content["bundle_products"]).to eq([{ "id" => member.external_id, "name" => "Second notes", "variant_id" => nil, "quantity" => 1 }])
+        expect(bundle.reload.bundle_products.alive.map { _1.product.external_id }).to eq([member.external_id])
+        expect(bundle.name).to eq("Field kit")
+        expect(bundle.price_cents).to eq(4500)
+        expect(bundle).to be_published
+      end
+
+      it "soft deletes the members it was not handed, and keeps the order it was given" do
+        bundle = create(:product, :bundle, user: @seller)
+        dropped, kept = bundle.bundle_products.alive.in_order.to_a
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [kept.product.external_id, member.external_id] })
+
+        expect(response).to be_successful
+        expect(dropped.reload).to be_deleted
+        expect(bundle.reload.bundle_products.alive.in_order.map { _1.product.external_id }).to eq([kept.product.external_id, member.external_id])
+      end
+
+      it "changes nothing when one of the products cannot go in a bundle" do
+        bundle = create(:product, :bundle, user: @seller)
+        membership = create(:membership_product, user: @seller)
+
+        expect do
+          call_tool("update_bundle", { id: bundle.external_id, product_ids: [member.external_id, membership.external_id] })
+        end.not_to change { bundle.reload.bundle_products.alive.map(&:product_id) }
+
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("A subscription product cannot be added to a bundle")
+      end
+
+      it "refuses a product that is not a bundle, without turning it into one" do
+        call_tool("update_bundle", { id: @product.external_id, product_ids: [member.external_id] })
+
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("This product is not a bundle. Make one with create_bundle first.")
+        expect(@product.reload).not_to be_is_bundle
+        expect(@product.bundle_products).to be_empty
+      end
+
+      it "refuses another seller's bundle" do
+        theirs = create(:product, :bundle, name: "Theirs")
+
+        expect { call_tool("update_bundle", { id: theirs.external_id, product_ids: [member.external_id] }) }.not_to change { theirs.reload.bundle_products.alive.map(&:product_id) }
+
+        expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+      end
+
+      it "reads a bundle's products back, and leaves a single product's details alone" do
+        bundle = create(:product, :bundle, user: @seller)
+
+        call_tool("get_product", { id: bundle.external_id })
+        content = response.parsed_body.dig("result", "structuredContent", "product")
+        expect(content["is_bundle"]).to eq(true)
+        expect(content["bundle_products"].map { _1["id"] }).to eq(bundle.bundle_products.alive.in_order.map { _1.product.external_id })
+
+        call_tool("get_product", { id: @product.external_id })
+        expect(response.parsed_body.dig("result", "structuredContent", "product")).not_to have_key("bundle_products")
+      end
     end
   end
 
@@ -1493,7 +1624,7 @@ describe "MCP server" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
       JSON
     end
 

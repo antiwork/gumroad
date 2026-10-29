@@ -294,10 +294,10 @@ module Mcp
       def tools
         [
           tool("get_account", "The connected creator's public profile: name, username, storefront URL, currency.", {}, read_only: true),
-          tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
+          tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.", {
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description and covers. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.", {
@@ -335,7 +335,16 @@ module Mcp
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." }
-               }, read_only: true)
+               }, read_only: true),
+          tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
+                 "name" => { type: "string", description: "Bundle name." },
+                 "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
+                 "product_ids" => { type: "array", description: "Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version." }
+               }, required: %w[name price_cents product_ids]),
+          tool("update_bundle", "Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.", {
+                 "id" => { type: "string", description: "Bundle id or permalink." },
+                 "product_ids" => { type: "array", description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products." }
+               }, required: %w[id product_ids], destructive: true)
         ]
       end
 
@@ -382,8 +391,8 @@ module Mcp
           property = schema[:properties][key]
           raise Error.new("Unknown argument: #{key}", code: -32602) unless property
 
-          type = property[:type] == "integer" ? Integer : String
-          raise Error.new("#{key} must be a #{property[:type]}", code: -32602) unless value.is_a?(type)
+          type = { "integer" => Integer, "array" => Array }.fetch(property[:type], String)
+          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless value.is_a?(type)
         end
       end
 
@@ -409,6 +418,8 @@ module Mcp
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
         details = { description: product.description, covers: covers_payload(product) }
+        # A caller editing a bundle needs the members it has now, before replacing them.
+        details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
         details.merge!(sales_count: product.successful_sales_count, sales_usd_cents: product.total_usd_cents) if (token.scopes.to_a & %w[view_sales account]).any?
         { product: product_payload(product).merge(details) }
@@ -492,6 +503,17 @@ module Mcp
         end
 
         { product: product_payload(product), covers: covers_payload(product.reload) }
+      end
+
+      def bundle_products_payload(product)
+        product.bundle_products.alive.in_order.includes(:product, :variant).map do |bundle_product|
+          {
+            id: bundle_product.product.external_id,
+            name: bundle_product.product.name,
+            variant_id: bundle_product.variant&.external_id,
+            quantity: bundle_product.quantity
+          }
+        end
       end
 
       def files_payload(product)
@@ -592,6 +614,67 @@ module Mcp
         }
       end
 
+      # Resolves every product the caller named to one of their own live products before anything is
+      # written: the update service soft-deletes each member it is not handed, so a single unknown id
+      # would otherwise empty the bundle it was meant to extend. A product sold in versions is taken
+      # at its first version, which is what the editor's product picker selects by default.
+      def bundle_member_attributes(product_ids)
+        raise Error.new("product_ids must name at least one product", code: -32602) if product_ids.empty?
+
+        product_ids.map.with_index do |id, position|
+          raise Error.new("product_ids[#{position}] must be a string", code: -32602) unless id.is_a?(String) && id.strip.present?
+
+          product = find_product!(id)
+          { product_id: product.external_id, variant_id: product.variants_or_skus.first&.external_id, quantity: 1, position: }
+        end
+      end
+
+      def tool_create_bundle(args)
+        require_scopes!(:edit_products, :account)
+        name = args["name"].strip
+        raise Error.new("name is required", code: -32602) if name.blank?
+
+        price_cents = args["price_cents"]
+        raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
+        members = bundle_member_attributes(args["product_ids"])
+
+        bundle = user.links.build(
+          name:,
+          native_type: Link::NATIVE_TYPE_BUNDLE,
+          is_bundle: true,
+          price_cents:,
+          price_currency_type: user.currency_type,
+          draft: true,
+          purchase_disabled_at: Time.current,
+          display_product_reviews: true
+        )
+        bundle.taxonomy = Taxonomy.find_by(slug: "other")
+        ActiveRecord::Base.transaction do
+          bundle.save!
+          Bundle::UpdateProductsService.new(bundle:, products: members).perform
+        end
+        {
+          product: product_payload(bundle.reload),
+          bundle_products: bundle_products_payload(bundle),
+          message: "Draft bundle saved. It is not for sale until publish_product."
+        }
+      end
+
+      def tool_update_bundle(args)
+        require_scopes!(:edit_products, :account)
+        bundle = find_product!(args["id"])
+        raise ToolError, "This product is not a bundle. Make one with create_bundle first." if bundle.not_is_bundle?
+
+        members = bundle_member_attributes(args["product_ids"])
+        ActiveRecord::Base.transaction do
+          # Reloads under the lock, so the diff the service runs cannot delete a member a
+          # concurrent edit just added.
+          bundle.lock!
+          Bundle::UpdateProductsService.new(bundle:, products: members).perform
+        end
+        { product: product_payload(bundle.reload), bundle_products: bundle_products_payload(bundle) }
+      end
+
       def product_payload(product)
         {
           id: product.external_id,
@@ -600,6 +683,7 @@ module Mcp
           currency: product.price_currency_type,
           **pricing_payload(product),
           published: product.published?,
+          is_bundle: product.is_bundle?,
           url: product.long_url,
           permalink: product.unique_permalink
         }
