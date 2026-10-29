@@ -38,10 +38,12 @@ type StoreSnapshot = {
 type DatabaseSnapshot = { name: string; version: number; stores: StoreSnapshot[] };
 type Snapshot = { v: number; databases: DatabaseSnapshot[] };
 
+// Bytes passed to one String.fromCharCode call, well under the engines' argument limits.
+const BASE64_CHUNK_BYTES = 0x8000;
 const bytesToBase64 = (bytes: Uint8Array) => {
   let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  for (let i = 0; i < bytes.length; i += BASE64_CHUNK_BYTES) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + BASE64_CHUNK_BYTES));
   }
   return btoa(binary);
 };
@@ -211,6 +213,23 @@ export const takeSnapshot = (factory: IDBFactory): Snapshot | null => {
   return { v: SNAPSHOT_VERSION, databases };
 };
 
+// The library keeps every transaction, with the records it overwrote, for as long as the database
+// lives; a game that autosaves would hold every old save in memory. Finished ones are only ever
+// skipped, so they are dropped once the library is done with them.
+const release = (transaction: IDBTransaction) => {
+  const drop = () =>
+    setTimeout(() => {
+      const state = cast<RawTransaction>(transaction);
+      if (state._state !== "finished") return;
+      state._rollbackLog = [];
+      const all = cast<{ _rawDatabase: RawDatabase }>(transaction.db)._rawDatabase.transactions;
+      const i = all.indexOf(state);
+      if (i >= 0) all.splice(i, 1);
+    });
+  transaction.addEventListener("complete", drop);
+  transaction.addEventListener("abort", drop);
+};
+
 // Opens each database at its saved version and fills it in the upgrade. The factory runs opens of one
 // name in the order they were made, so a build's own open of the same database waits for this one.
 export const restoreSnapshot = (factory: IDBFactory, snapshot: Snapshot) =>
@@ -276,23 +295,8 @@ export const persist = (factory: IDBFactory, slot: SaveSlot, ready: Promise<unkn
     () => slot.fail(),
   );
 
-  // The library keeps every transaction, with the records it overwrote, for as long as the database
-  // lives; a game that autosaves would hold every old save in memory. Finished ones are only ever
-  // skipped, so they are dropped once the library is done with them.
-  const release = (transaction: IDBTransaction) => {
-    const drop = () =>
-      setTimeout(() => {
-        const state = cast<RawTransaction>(transaction);
-        if (state._state !== "finished") return;
-        state._rollbackLog = [];
-        const all = cast<{ _rawDatabase: RawDatabase }>(transaction.db)._rawDatabase.transactions;
-        const i = all.indexOf(state);
-        if (i >= 0) all.splice(i, 1);
-      });
-    transaction.addEventListener("complete", drop);
-    transaction.addEventListener("abort", drop);
-  };
-  // Registered before the build can set its own handlers, so the snapshot is taken first.
+  // Registered before the build can set its own handlers, so the snapshot is taken first. Upgrades come
+  // through here too: the library opens them with `transaction()`, after this patch is in place.
   const watch = (transaction: IDBTransaction) => {
     release(transaction);
     if (transaction.mode !== "readonly") {
@@ -309,14 +313,6 @@ export const persist = (factory: IDBFactory, slot: SaveSlot, ready: Promise<unkn
     const result = transaction.apply(this, args);
     watch(result);
     return result;
-  };
-  const open = factory.open.bind(factory);
-  factory.open = (...args: Parameters<typeof open>) => {
-    const request = open(...args);
-    request.addEventListener("upgradeneeded", () => {
-      if (request.transaction) watch(request.transaction);
-    });
-    return request;
   };
   const deleteDatabase = factory.deleteDatabase.bind(factory);
   factory.deleteDatabase = (...args: Parameters<typeof deleteDatabase>) => {

@@ -359,6 +359,20 @@ describe("indexeddb shim", () => {
     expect(save.values.at(-1)).toBeNull();
   });
 
+  it("saves after an upgrade that only changes the schema", async () => {
+    const { persist } = loaded.shim;
+    const { IDBFactory } = loaded.fake;
+    const factory = new IDBFactory();
+    const save = slot();
+    persist(factory, save, Promise.resolve());
+
+    const request = factory.open("settings", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("options");
+    (await done(request)).close();
+
+    expect(save.values.at(-1)).toContain('"options"');
+  });
+
   it("does not save again when a write leaves the databases as they were", async () => {
     const { persist } = loaded.shim;
     const { IDBFactory } = loaded.fake;
@@ -423,5 +437,8 @@ describe("indexeddb shim", () => {
     expect((await frame.indexedDB.databases()).map(({ name }) => name)).toEqual(["/userfs"]);
     const db = await done(frame.indexedDB.open("/userfs"));
     expect(await done(db.transaction("counters").objectStore("counters").getAll())).toEqual(["first"]);
+    // The restore's own upgrade is let go of too, not only the build's transactions.
+    await settle();
+    expect(cast<{ _rawDatabase: { transactions: unknown[] } }>(db)._rawDatabase.transactions).toEqual([]);
   });
 });
