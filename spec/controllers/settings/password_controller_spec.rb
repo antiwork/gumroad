@@ -112,6 +112,19 @@ describe Settings::PasswordController, :vcr, type: :controller, inertia: true do
         expect(request.env["warden"].session["last_sign_in_at"]).to eq(DateTime.current.to_i)
       end
     end
+
+    it "revokes the user's current and legacy mobile application tokens" do
+      mobile_access_token = create("doorkeeper/access_token", application: create(:oauth_application, uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID), resource_owner_id: user.id, scopes: "mobile_api")
+      legacy_access_token = create("doorkeeper/access_token", application: create(:oauth_application, uid: OauthApplication::LEGACY_MOBILE_API_OAUTH_APPLICATION_UID), resource_owner_id: user.id, scopes: "mobile_api creator_api")
+      third_party_access_token = create("doorkeeper/access_token", application: create(:oauth_application, scopes: "mobile_api"), resource_owner_id: user.id, scopes: "mobile_api")
+
+      put :update, params: { user: { password: user.password, new_password: "#{user.password}-new" } }
+
+      expect(flash[:notice]).to eq("You have successfully changed your password.")
+      expect(mobile_access_token.reload.revoked_at).to be_present
+      expect(legacy_access_token.reload.revoked_at).to be_present
+      expect(third_party_access_token.reload.revoked_at).to be_nil
+    end
   end
 
   describe "PUT update with social-provided account" do

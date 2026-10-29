@@ -20,6 +20,10 @@ class OauthApplication < Doorkeeper::Application
 
   ALLOW_CONTENT_TYPES = /jpeg|png|jpg/i
   MOBILE_API_OAUTH_APPLICATION_UID = GlobalConfig.get("MOBILE_API_OAUTH_APPLICATION_UID")
+  # Client id compiled into the pre-Expo Android and iOS apps; installs of those builds still hold its tokens.
+  LEGACY_MOBILE_API_OAUTH_APPLICATION_UID = "46410c2fb9aa741c1f03cdea099929c795d20de0282b352eac881dfa46b2b89c"
+
+  scope :first_party_mobile, -> { where(uid: [MOBILE_API_OAUTH_APPLICATION_UID, LEGACY_MOBILE_API_OAUTH_APPLICATION_UID].compact) }
 
   def validate_file
     return unless file.attached?
