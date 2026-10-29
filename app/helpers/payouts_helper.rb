@@ -59,7 +59,14 @@ module PayoutsHelper
     payout_period_data = {}
     minimum_payout_amount_cents = user.minimum_payout_amount_cents
     payout_period_data[:minimum_payout_amount_cents] = minimum_payout_amount_cents
-    payout_period_data[:is_user_payable] = user.unpaid_balance_cents >= payout_period_data[:minimum_payout_amount_cents]
+    # Same settled-balance check as Payouts.is_user_payable, so the page never announces a payout the run will skip.
+    # Without a payout date there is no cut-off to apply.
+    if user.unpaid_balance_cents >= minimum_payout_amount_cents && user.next_payout_date
+      payout_period_end_date = current_payout_end_date(user)
+      payout_period_data[:is_user_payable] = user.unpaid_balance_cents_up_to_date(payout_period_end_date) + user.paid_payments_cents_for_date(payout_period_end_date) >= minimum_payout_amount_cents
+    else
+      payout_period_data[:is_user_payable] = user.unpaid_balance_cents >= minimum_payout_amount_cents
+    end
 
     if payout_period_data[:is_user_payable]
       payout_period_data[:status] = user.payouts_status
@@ -70,7 +77,6 @@ module PayoutsHelper
                              .first
 
       payout_period_end_date = current_payout_end_date(user)
-
       payout_period_data[:displayable_payout_period_range] = displayable_payout_period_range(previous_payment, payout_period_end_date)
       unpaid_balances = user.unpaid_balances_up_to_date(payout_period_end_date)
       if user.chargeback_rate_payout_reserve_active?

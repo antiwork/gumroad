@@ -283,6 +283,35 @@ describe PayoutsHelper do
       expect(self.payout_period_data(user, payment)[:is_current_period]).to eq(false)
     end
 
+    describe "settlement window" do
+      let(:user) { create(:user) }
+      let(:cutoff) { Date.new(2015, 3, 6) }
+
+      before do
+        travel_to(Time.find_zone("UTC").local(2015, 3, 1))
+        create(:ach_account, user:)
+      end
+
+      it "is not payable when only balances after the run's cut-off date push the total over the minimum" do
+        create(:balance, user:, amount_cents: 69_74, date: cutoff)
+        create(:balance, user:, amount_cents: 360_21, date: cutoff + 3.days)
+
+        data = self.payout_period_data(user)
+        expect(user.unpaid_balance_cents).to eq(429_95)
+        expect(data[:is_user_payable]).to eq(false)
+        expect(data[:status]).to eq("not_payable")
+      end
+
+      it "is payable when settled balances alone reach the minimum" do
+        create(:balance, user:, amount_cents: 100_00, date: cutoff)
+        create(:balance, user:, amount_cents: 20_00, date: cutoff + 3.days)
+
+        data = self.payout_period_data(user)
+        expect(data[:is_user_payable]).to eq(true)
+        expect(data[:payout_cents]).to eq(100_00)
+      end
+    end
+
     describe "below-minimum payout notes" do
       let(:user) { create(:user) }
 
