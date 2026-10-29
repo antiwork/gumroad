@@ -591,6 +591,128 @@ describe "MCP server" do
       expect(product.purchase_disabled_at).to be_present
     end
 
+    describe "creating a membership" do
+      let(:tiers) do
+        [
+          { name: "Reader", price_cents: 500, recurrence: "monthly" },
+          { name: "Supporter", price_cents: 1500, recurrence: "monthly" }
+        ]
+      end
+
+      it "creates a draft membership with its tiers and their recurring prices" do
+        expect do
+          call_tool("create_draft_product", { name: "Field club", product_type: "membership", tiers:, description: "Monthly notes." })
+        end.to change(@seller.links, :count).by(1)
+
+        payload = response.parsed_body.dig("result", "structuredContent", "product")
+        product = @seller.links.find_by_external_id(payload["id"])
+        expect(product.native_type).to eq(Link::NATIVE_TYPE_MEMBERSHIP)
+        expect(product).to be_is_tiered_membership
+        expect(product).to be_is_recurring_billing
+        expect(product.subscription_duration).to eq("monthly")
+        expect(product).to be_draft
+        expect(product.purchase_disabled_at).to be_present
+        expect(product.taxonomy.slug).to eq("other")
+        expect(product.description).to eq("Monthly notes.")
+        expect(product.should_show_all_posts).to eq(true)
+        expect(product.should_include_last_post).to eq(true)
+
+        created_tiers = product.tiers.alive.order(:position_in_category)
+        expect(created_tiers.map(&:name)).to eq(%w[Reader Supporter])
+        expect(created_tiers.map { _1.alive_prices.is_buy.pluck(:recurrence, :price_cents) }).to eq([[["monthly", 500]], [["monthly", 1500]]])
+        expect(product.alive_prices.is_buy.pluck(:recurrence, :price_cents)).to eq([["monthly", 0]])
+
+        expect(payload).to include("published" => false, "price_cents" => nil, "pay_what_you_want" => false)
+        expect(payload["tiers"]).to eq([
+                                         { "id" => created_tiers.first.external_id, "name" => "Reader", "pay_what_you_want" => false,
+                                           "prices" => { "monthly" => { "price_cents" => 500, "suggested_price_cents" => nil } } },
+                                         { "id" => created_tiers.second.external_id, "name" => "Supporter", "pay_what_you_want" => false,
+                                           "prices" => { "monthly" => { "price_cents" => 1500, "suggested_price_cents" => nil } } }
+                                       ])
+      end
+
+      it "uses the tiers' recurrence as the billing period" do
+        call_tool("create_draft_product", { name: "Annual club", product_type: "membership", tiers: [{ name: "Member", price_cents: 5000, recurrence: "yearly" }] })
+
+        product = @seller.links.find_by_external_id(response.parsed_body.dig("result", "structuredContent", "product", "id"))
+        expect(product.subscription_duration).to eq("yearly")
+        expect(product.tiers.alive.sole.alive_prices.is_buy.pluck(:recurrence, :price_cents)).to eq([["yearly", 5000]])
+      end
+
+      it "makes a $0 tier pay what you want, as the editor does" do
+        call_tool("create_draft_product", { name: "Open club", product_type: "membership", tiers: [{ name: "Paid", price_cents: 500, recurrence: "monthly" }, { name: "Free", price_cents: 0, recurrence: "monthly" }] })
+
+        tiers = response.parsed_body.dig("result", "structuredContent", "product", "tiers")
+        expect(tiers.map { _1.slice("name", "pay_what_you_want") }).to eq([{ "name" => "Paid", "pay_what_you_want" => false }, { "name" => "Free", "pay_what_you_want" => true }])
+      end
+
+      it "reports a tier price below the currency minimum as a tool error and creates nothing" do
+        expect do
+          call_tool("create_draft_product", { name: "Cheap club", product_type: "membership", tiers: [{ name: "Member", price_cents: 10, recurrence: "monthly" }] })
+        end.not_to change { [Link.count, BaseVariant.count, BasePrice.count] }
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("must be at least")
+      end
+
+      it "rolls back the whole membership when a later tier is priced below the currency minimum" do
+        expect do
+          call_tool("create_draft_product", { name: "Half club", product_type: "membership", tiers: [{ name: "Reader", price_cents: 500, recurrence: "monthly" }, { name: "Cheap", price_cents: 10, recurrence: "monthly" }] })
+        end.not_to change { [Link.count, VariantCategory.count, BaseVariant.count, BasePrice.count] }
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("must be at least")
+      end
+
+      {
+        "no tiers" => [{ product_type: "membership" }, "tiers are required for a membership"],
+        "an empty tier list" => [{ product_type: "membership", tiers: [] }, "tiers are required for a membership"],
+        "tiers on a digital product" => [{ product_type: "digital", price_cents: 500, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] }, "tiers are only accepted with product_type membership"],
+        "tiers with no product_type" => [{ price_cents: 500, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] }, "tiers are only accepted with product_type membership"],
+        "a bad recurrence" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "weekly" }] }, "tiers[0].recurrence must be one of: monthly, quarterly, biannually, yearly, every_two_years"],
+        "mixed recurrences" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }, { name: "B", price_cents: 5000, recurrence: "yearly" }] }, "every tier must use the same recurrence"],
+        "a negative tier price" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: -1, recurrence: "monthly" }] }, "tiers[0].price_cents must be an integer of zero or more"],
+        "a later tier priced over the maximum" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }, { name: "B", price_cents: BasePrice::Shared::MAX_PRICE_CENTS + 1, recurrence: "monthly" }] }, "tiers[1].price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}"],
+        "a fractional tier price" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 4.5, recurrence: "monthly" }] }, "tiers[0].price_cents must be an integer of zero or more"],
+        "a blank tier name" => [{ product_type: "membership", tiers: [{ name: " ", price_cents: 500, recurrence: "monthly" }] }, "tiers[0].name must be a non-blank string"],
+        "a tier missing its recurrence" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500 }] }, "tiers[0].recurrence is required"],
+        "an unknown tier argument" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly", pay_what_you_want: true }] }, "tiers[0] has unknown argument: pay_what_you_want"],
+        "a tier that is not an object" => [{ product_type: "membership", tiers: ["Reader"] }, "tiers[0] must be an object"],
+        "tiers that are not a list" => [{ product_type: "membership", tiers: { name: "A" } }, "tiers must be an array"],
+        "a top-level price on a membership" => [{ product_type: "membership", price_cents: 500, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] }, "price_cents is not accepted for a membership; set each tier's price_cents"],
+        "a digital product with no price" => [{ product_type: "digital" }, "price_cents is required"],
+      }.each do |label, (arguments, message)|
+        it "rejects #{label} without creating a product" do
+          expect { call_tool("create_draft_product", { name: "Club", **arguments }) }.not_to change(Link, :count)
+
+          expect(response.parsed_body["error"]).to eq("code" => -32602, "message" => message)
+        end
+      end
+
+      %w[physical call bundle commission podcast coffee Membership].each do |product_type|
+        it "rejects product_type #{product_type}" do
+          expect do
+            call_tool("create_draft_product", { name: "Other", price_cents: 500, product_type:, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] })
+          end.not_to change(Link, :count)
+
+          expect(response.parsed_body["error"]).to eq("code" => -32602, "message" => "product_type must be one of: digital, membership")
+        end
+      end
+
+      it "creates a digital product exactly as before when product_type is digital" do
+        call_tool("create_draft_product", { name: "Field guide", price_cents: 1900, product_type: "digital" })
+
+        payload = response.parsed_body.dig("result", "structuredContent", "product")
+        product = @seller.links.find_by_external_id(payload["id"])
+        expect(product.native_type).to eq(Link::NATIVE_TYPE_DIGITAL)
+        expect(product.price_cents).to eq(1900)
+        expect(product).not_to be_is_tiered_membership
+        expect(product.variant_categories).to be_empty
+        expect(payload).to include("price_cents" => 1900)
+        expect(payload).not_to have_key("tiers")
+      end
+    end
+
     it "answers a batch with per-message errors and no challenge, so a retry cannot repeat the write" do
       batch = [
         { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Once", price_cents: 500 } } },
@@ -975,6 +1097,14 @@ describe "MCP server" do
         %(error_description="This tool requires the edit_products or account scope.")
       )
       expect(response.parsed_body["error"]).to eq("code" => -32000, "message" => "This tool requires the edit_products or account scope.")
+    end
+
+    it "rejects bad membership arguments before asking for edit_products" do
+      expect { post_mcp({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Club", product_type: "membership" } } }) }.not_to change(Link, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body["error"]).to eq("code" => -32602, "message" => "tiers are required for a membership")
     end
 
     it "names a required scope the client registered when the first one is unregistered" do
@@ -1679,7 +1809,7 @@ describe "MCP server" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers."},"description":{"type":"string","description":"HTML or plain-text description."},"product_type":{"type":"string","enum":["digital","membership"],"description":"digital (default) or membership."},"tiers":{"type":"array","minItems":1,"description":"Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.","items":{"type":"object","properties":{"name":{"type":"string","description":"Tier name."},"price_cents":{"type":"integer","description":"Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want."},"recurrence":{"type":"string","enum":["monthly","quarterly","biannually","yearly","every_two_years"],"description":"Billing period."}},"required":["name","price_cents","recurrence"],"additionalProperties":false}}},"additionalProperties":false,"required":["name"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
       JSON
     end
 
