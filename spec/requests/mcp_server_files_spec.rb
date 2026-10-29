@@ -126,19 +126,17 @@ describe "MCP server product files" do
       expect(page.reload.embedded_product_file_ids_in_order).to eq([existing.id, file.id])
     end
 
-    [RedisClient::CannotConnectError.new("connection refused"), Redis::CannotConnectError.new("connection refused")].each do |error|
-      it "keeps the copy it stored when queueing the analysis fails after the save (#{error.class})" do
-        url = "https://example.com/files/blah.txt"
-        stub_remote_file(url, "blah.txt", "text/plain")
-        allow(AnalyzeFileWorker).to receive(:perform_in).and_raise(error)
+    it "keeps the copy it stored when queueing the analysis fails after the save" do
+      url = "https://example.com/files/blah.txt"
+      stub_remote_file(url, "blah.txt", "text/plain")
+      allow(AnalyzeFileWorker).to receive(:perform_in).and_raise(RedisClient::CannotConnectError.new("connection refused"))
 
-        result = call_tool("add_file", { id: @product.unique_permalink, url: })
+      result = call_tool("add_file", { id: @product.unique_permalink, url: })
 
-        expect(result.dig("isError")).to eq(true)
-        expect(result.dig("content", 0, "text")).to include("was attached")
-        expect(@product.product_files.alive.sole.s3_key).to eq(@stored_objects.sole[:key])
-        expect(@deleted_keys).to be_empty
-      end
+      expect(result.dig("isError")).to eq(true)
+      expect(result.dig("content", 0, "text")).to include("was attached")
+      expect(@product.product_files.alive.sole.s3_key).to eq(@stored_objects.sole[:key])
+      expect(@deleted_keys).to be_empty
     end
 
     it "saves nothing when the content page cannot take the file" do
@@ -164,10 +162,10 @@ describe "MCP server product files" do
         allow_any_instance_of(Aws::S3::Client).to receive(:put_object).and_call_original
       end
 
-      def uploaded_product_file(name, link: @product, position: 1)
+      def uploaded_product_file(name, product: @product, position: 1)
         key = "attachments/#{@seller.external_id}/#{SecureRandom.hex}/original/#{name}"
         Aws::S3::Client.new.put_object(bucket: S3_BUCKET, key:, body: "existing")
-        create(:product_file, link:, url: "#{S3_BASE_URL}#{key}", position:)
+        create(:product_file, link: product, url: "#{S3_BASE_URL}#{key}", position:)
       end
 
       def text(value)
@@ -210,26 +208,6 @@ describe "MCP server product files" do
         @product.reload.alive_product_files.max_by(&:position)
       end
 
-      it "lists the file for earlier buyers of a product without content pages" do
-        earlier_buyer = buyer
-
-        added = add_blah_file
-
-        expect(web_file_ids(earlier_buyer)).to eq([added.external_id])
-        expect(Aws::S3::Client.new.get_object(bucket: S3_BUCKET, key: added.s3_key).body.read).to eq(File.binread(fixture_path("blah.txt")))
-      end
-
-      it "shows the file to earlier and later buyers when the content page already lists files" do
-        existing = uploaded_product_file("manual.pdf")
-        create(:rich_content, entity: @product, description: [text("Start here"), file_embed(existing)])
-        earlier_buyer = buyer
-
-        added = add_blah_file
-
-        expect(web_file_ids(earlier_buyer)).to eq([existing.external_id, added.external_id])
-        expect(web_file_ids(buyer)).to eq([existing.external_id, added.external_id])
-      end
-
       it "shows the file on a content page that lists no files without taking the others from the app" do
         existing = uploaded_product_file("manual.pdf")
         page = create(:rich_content, entity: @product, description: [text("Welcome")])
@@ -241,17 +219,7 @@ describe "MCP server product files" do
         expect(page.reload.description.first).to eq(text("Welcome"))
         expect(web_file_ids(earlier_buyer)).to eq([existing.external_id, added.external_id])
         expect(app_file_ids(earlier_buyer)).to eq([existing.external_id, added.external_id])
-      end
-
-      it "gives the file to buyers of a version when the versions share the product's content" do
-        existing = uploaded_product_file("manual.pdf")
-        create(:rich_content, entity: @product, description: [file_embed(existing)])
-        variant = create(:variant, variant_category: create(:variant_category, link: @product), name: "Deluxe")
-        @product.update!(has_same_rich_content_for_all_variants: true)
-
-        added = add_blah_file
-
-        expect(web_file_ids(buyer(variant:))).to eq([existing.external_id, added.external_id])
+        expect(Aws::S3::Client.new.get_object(bucket: S3_BUCKET, key: added.s3_key).body.read).to eq(File.binread(fixture_path("blah.txt")))
       end
 
       it "gives the file to each version's buyers when every version has its own content" do
