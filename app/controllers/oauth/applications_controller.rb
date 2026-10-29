@@ -2,6 +2,7 @@
 
 class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
   RESERVED_AGENT_APP_NAME_ERROR = "That application name is reserved."
+  INVALID_SIGNED_BLOB_ERROR = "The attached file is invalid or has expired."
 
   protect_from_forgery
 
@@ -34,7 +35,10 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
     @application.owner_type = "User"
 
     if params[:signed_blob_id].present?
-      @application.file.attach(params[:signed_blob_id])
+      blob = resolve_signed_blob
+      return redirect_to(settings_advanced_path, alert: INVALID_SIGNED_BLOB_ERROR) if blob.nil?
+
+      @application.file.attach(blob)
     elsif params.has_key?(:signed_blob_id) && @application.file.attached?
       @application.file.purge
     end
@@ -66,7 +70,10 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
     @application.name = @application_params[:name] if @application_params[:name].present?
     @application.redirect_uri = @application_params[:redirect_uri] if @application_params[:redirect_uri].present?
     if params[:signed_blob_id].present?
-      @application.file.attach(params[:signed_blob_id])
+      blob = resolve_signed_blob
+      return redirect_to(edit_oauth_application_path(@application.external_id), alert: INVALID_SIGNED_BLOB_ERROR) if blob.nil?
+
+      @application.file.attach(blob)
     elsif params.has_key?(:signed_blob_id) && @application.file.attached?
       @application.file.purge
     end
@@ -133,5 +140,13 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
       redirect_to path,
                   alert: RESERVED_AGENT_APP_NAME_ERROR,
                   inertia: { errors: { base: [RESERVED_AGENT_APP_NAME_ERROR] } }
+    end
+
+    # attach() resolves the raw string with ActiveStorage::Blob.find_signed!, which raises
+    # InvalidSignature for a tampered or expired id — resolving here so the request redirects
+    # instead of 500ing, and only a verified blob is attached.
+    def resolve_signed_blob
+      signed_blob_id = params[:signed_blob_id]
+      signed_blob_id.is_a?(String) ? ActiveStorage::Blob.find_signed(signed_blob_id) : nil
     end
 end
