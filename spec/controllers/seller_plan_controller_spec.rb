@@ -34,4 +34,14 @@ describe SellerPlanController, type: :controller do
 
     expect(response).to redirect_to(root_path)
   end
+
+  it "does not open a second checkout for a seller who already pays" do
+    offer.update!(status: "active", stripe_subscription_id: "sub_123")
+    expect(Stripe::Checkout::Session).not_to receive(:create)
+
+    get :checkout
+
+    expect(response).to redirect_to(edit_link_path(product.unique_permalink))
+    expect(offer.reload.status).to eq("active")
+  end
 end
