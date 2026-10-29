@@ -702,6 +702,26 @@ describe "MCP server" do
         .to eq("Custom permalink is already used by another one of your products")
     end
 
+    it "refuses a whitespace-only permalink instead of clearing the URL" do
+      @product.update!(custom_permalink: "field-notes-kept")
+
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "   " }) }
+        .not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include(
+        "code" => -32602, "message" => "permalink must not be blank. Send an empty string to go back to the default URL."
+      )
+    end
+
+    it "leaves the URL and the redirect rows alone when the permalink is unchanged" do
+      @product.update!(custom_permalink: "field-notes-same")
+
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "field-notes-same" }) }
+        .not_to change { [ProductPermalinkRedirect.count, LegacyPermalink.count, @product.reload.custom_permalink] }
+
+      expect(response).to be_successful
+    end
+
     it "rejects an update with no fields to change" do
       expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
 

@@ -437,13 +437,23 @@ module Mcp
         raise Error.new("Pass at least one of name, description, price_cents, or permalink", code: -32602) if changes.empty?
 
         # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
-        permalink = changes["permalink"].presence if changes.key?("permalink")
+        # Whitespace-only is neither: allowing it through would store a value the model treats as blank
+        # (allow_blank skips the format rule), so refuse it and say how to clear instead.
+        if changes.key?("permalink")
+          permalink = changes["permalink"]
+          if permalink.empty?
+            permalink = nil
+          elsif permalink.blank?
+            raise Error.new("permalink must not be blank. Send an empty string to go back to the default URL.", code: -32602)
+          end
+        end
 
         # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
         ActiveRecord::Base.transaction do
-          if changes.key?("permalink") && permalink != product.custom_permalink
+          if changes.key?("permalink")
             # A claim takes the seller row before the product row, the order the editor and the v2 API
-            # lock in, so an overlapping save cannot deadlock against this one.
+            # lock in. Taken even when the slug looks unchanged: the pre-lock read can be stale, and
+            # claiming after product.lock! would reverse that order.
             product.lock_for_permalink_claim!(permalink)
           else
             # Reloads under the lock: the upsell diff below must compare against the committed
