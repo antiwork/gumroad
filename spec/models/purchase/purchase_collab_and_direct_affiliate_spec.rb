@@ -39,4 +39,18 @@ describe Purchase, "collab purchase that also credits a direct affiliate" do
     expect(purchase.send(:determine_affiliate_balance_cents)).to eq(50)
     expect(purchase.direct_affiliate_credit_cents).to eq(50)
   end
+
+  it "gives back the fee the collaborator paid at checkout when the seller bears the fee" do
+    purchase.fee_cents = 1_000
+    collaborator_credit.fee_cents = 500
+    collaborator_credit.amount_cents = 3_500
+    collaborator_credit.basis_points = 5000
+    allow(purchase).to receive(:credits_direct_affiliate?).and_return(true)
+    allow(purchase).to receive(:direct_affiliate_price_share).and_return(0.2)
+
+    amount_cents, fee_cents = purchase.send(:affiliate_reversal_amounts, collaborator_credit, 5_000, 500)
+
+    expect(fee_cents).to eq(250)
+    expect(amount_cents).to eq(1_750)
+  end
 end

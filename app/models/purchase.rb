@@ -2928,6 +2928,7 @@ class Purchase < ApplicationRecord
   # checkout.
   def affiliate_reversal_fee_cents(credit, refunded_fee_cents)
     return 0 if credit.fee_cents.to_i.zero?
+    return (credit.fee_cents * refunded_fee_cents / fee_cents).floor if credits_direct_affiliate? && fee_cents.to_i > 0
 
     (affiliate_reversal_share(credit) * refunded_fee_cents).floor
   end
