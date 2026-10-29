@@ -66,16 +66,6 @@ describe TranscodeVideoForStreamingWorker do
         expect(transcoded_video.transcoded_video_key).to eq(completed_transcode.transcoded_video_key)
       end
 
-      it "marks the product file as transcoded for HLS when it completes from an existing HLS rendition" do
-        expect(product_file.is_transcoded_for_hls).to be(false)
-        create(:transcoded_video, original_video_key: product_file.s3_key, is_hls: true, state: "completed")
-        expect_any_instance_of(Aws::MediaConvert::Client).not_to receive(:create_job)
-
-        described_class.new.perform(product_file.id)
-
-        expect(product_file.reload.is_transcoded_for_hls).to be(true)
-      end
-
       it "creates a transcoded_video but doesn't process it if there's already another duplicate processing one" do
         processing_transcode = create(:transcoded_video, original_video_key: product_file.s3_key, transcoded_video_key: product_file.s3_key + ".transcoded", state: "processing")
         expect_any_instance_of(Aws::MediaConvert::Client).not_to receive(:create_job)

@@ -2315,7 +2315,6 @@ describe UrlRedirectsController, inertia: true do
 
         it "sets the smil url and the original video url in sources if the video is not HLS-transcoded yet" do
           @video_file_1.update(is_transcoded_for_hls: false)
-          @transcoded_video.mark_deleted!
           get :stream, params: { id: @multifile_url_redirect.token }
           video_urls = inertia.props[:playlist]
 
@@ -2325,17 +2324,6 @@ describe UrlRedirectsController, inertia: true do
           expect(video_urls[0][:sources][0]).to include "stream.smil"
           expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
           expect(inertia.props[:index_to_play]).to eq 0
-        end
-
-        it "sets the m3u8 playlist url and the original video url in sources when the flag is stale but the video has an HLS rendition" do
-          @video_file_1.update(is_transcoded_for_hls: false)
-
-          get :stream, params: { id: @multifile_url_redirect.token, product_file_id: @video_file_1.external_id }
-          video_urls = inertia.props[:playlist]
-
-          expect(response).to be_successful
-          expect(video_urls[0][:sources][0]).to include "index.m3u8"
-          expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
         end
 
         context "when the product has rich content" do

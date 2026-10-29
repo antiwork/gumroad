@@ -70,10 +70,6 @@ class TranscodeVideoForStreamingWorker
         transcoded_video_key: completed_transcode.transcoded_video_key,
         state: "completed"
       )
-      # The completion callbacks only run for a job we submit, so nothing else sets the flag on this
-      # path, and a file whose rendition was retired earlier keeps sending the web player to the legacy
-      # SMIL source while its HLS playlist is back.
-      streamable.update!(is_transcoded_for_hls: true) if completed_transcode.is_hls?
       return
     end
 

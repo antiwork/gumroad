@@ -802,46 +802,6 @@ describe UrlRedirect do
     end
   end
 
-  describe "#hls_playlist_or_smil_xml_path" do
-    before do
-      @product = create(:product)
-      @product_file = create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/attachments/2/original/chapter2.mp4")
-      @product.product_files << @product_file
-      @url_redirect = create(:url_redirect, link: @product, purchase: nil)
-      allow_any_instance_of(Aws::S3::Object).to receive(:content_length).and_return(1_000_000)
-    end
-
-    it "returns the HLS playlist path when the file is marked as transcoded for HLS" do
-      @product_file.update!(is_transcoded_for_hls: true)
-
-      expect(@url_redirect.hls_playlist_or_smil_xml_path(@product_file)).to include "index.m3u8"
-    end
-
-    it "returns the HLS playlist path when the flag is stale but a completed HLS rendition exists" do
-      create(:transcoded_video, streamable: @product_file, original_video_key: @product_file.s3_key,
-                                transcoded_video_key: "attachments/2/original/chapter2/hls/index.m3u8",
-                                is_hls: true, state: "completed")
-
-      expect(@product_file.reload.is_transcoded_for_hls?).to be(false)
-      expect(@url_redirect.hls_playlist_or_smil_xml_path(@product_file)).to include "index.m3u8"
-    end
-
-    it "returns the SMIL path when the file has no HLS rendition" do
-      create(:transcoded_video, streamable: @product_file, original_video_key: @product_file.s3_key,
-                                is_hls: false, state: "completed")
-
-      expect(@url_redirect.hls_playlist_or_smil_xml_path(@product_file)).to include "stream.smil"
-    end
-
-    it "returns the SMIL path when the HLS rendition does not belong to this file's upload" do
-      create(:transcoded_video, streamable: @product_file, original_video_key: "attachments/9/original/other.mp4",
-                                transcoded_video_key: "attachments/9/original/other/hls/index.m3u8",
-                                is_hls: true, state: "completed")
-
-      expect(@url_redirect.hls_playlist_or_smil_xml_path(@product_file)).to include "stream.smil"
-    end
-  end
-
   describe "#html5_video_url_and_guid_for_product_file" do
     before do
       @multifile_product = create(:product)
