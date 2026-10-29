@@ -310,6 +310,25 @@ describe PayoutsHelper do
         expect(data[:is_user_payable]).to eq(true)
         expect(data[:payout_cents]).to eq(100_00)
       end
+
+      it "reports the settled amount so the page can explain a below-minimum settled balance" do
+        create(:balance, user:, amount_cents: 69_74, date: cutoff)
+        create(:balance, user:, amount_cents: 360_21, date: cutoff + 3.days)
+
+        data = self.payout_period_data(user)
+        # The page reads balance_cents for its below-minimum notice; the total clears the minimum,
+        # so without the settled figure it told the seller to reach a balance they already had.
+        expect(data[:balance_cents]).to eq(429_95)
+        expect(data[:settled_balance_cents]).to eq(69_74)
+      end
+
+      it "leaves the settled amount out when the whole balance is already below the minimum" do
+        create(:balance, user:, amount_cents: 50_00, date: cutoff)
+
+        data = self.payout_period_data(user)
+        expect(data[:balance_cents]).to eq(50_00)
+        expect(data).not_to have_key(:settled_balance_cents)
+      end
     end
 
     describe "below-minimum payout notes" do
