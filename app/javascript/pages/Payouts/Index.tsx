@@ -807,7 +807,7 @@ export default function PayoutsIndex() {
                 // A seller can hold more than the minimum while only part of it has settled by the
                 // payout's cut-off. Telling them to "reach $100" then is wrong, so name the settled
                 // amount and say when the rest goes out.
-                next_payout_period_data.settled_balance_cents != null ? (
+                next_payout_period_data.settled_balance_cents != null && !next_payout_period_data.payout_note ? (
                   <Alert variant="info" role="status">
                     <p>
                       Your balance is{" "}

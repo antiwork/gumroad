@@ -136,9 +136,11 @@ module PayoutsHelper
       end
 
     below_minimum_note_match = payout_note&.match(BELOW_MINIMUM_PAYOUT_NOTE_REGEX)
-    if payout_period_data[:status] == "not_payable" && below_minimum_note_match
+    if payout_period_data[:status] == "not_payable" && below_minimum_note_match && !payout_period_data[:settled_balance_cents]
       # The below-minimum skip is folded into the not-payable notice (with the
-      # current balance) instead of rendering the stored note verbatim.
+      # current balance) instead of rendering the stored note verbatim. A seller whose
+      # total clears the minimum but whose settled amount does not keeps the note: it
+      # explains the skip in the settled figure, and the notice would not fire for them.
       payout_period_data[:skipped_payout_date] = below_minimum_note_match[:date]
       payout_note = nil
     elsif payout_period_data[:status] == "not_payable" && user.not_reviewed? && payout_note&.match?(UNDER_REVIEW_PAYOUT_NOTE_REGEX)

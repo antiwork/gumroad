@@ -334,6 +334,22 @@ describe PayoutsHelper do
     describe "below-minimum payout notes" do
       let(:user) { create(:user) }
 
+      it "keeps the stored note when the total clears the minimum but the settled amount does not" do
+        # The note explains the skip in the settled figure, and the below-minimum notice that
+        # normally absorbs it never fires for a seller whose total is above the minimum.
+        travel_to(Time.find_zone("UTC").local(2015, 3, 1)) do
+          create(:ach_account, user:)
+          create(:balance, user:, amount_cents: 50_00, date: Date.new(2015, 3, 6))
+          create(:balance, user:, amount_cents: 182_68, date: Date.new(2015, 3, 9))
+          user.add_payout_note(content: "Your payout on March 12, 2015 was skipped because your balance of $50 was below the $100 minimum. You'll be paid out automatically once your balance reaches $100.")
+
+          data = self.payout_period_data(user)
+          expect(data[:settled_balance_cents]).to eq(50_00)
+          expect(data[:payout_note]).to include("balance of $50 was below the $100 minimum")
+          expect(data[:skipped_payout_date]).to be_nil
+        end
+      end
+
       it "folds the current below-minimum note into skipped_payout_date instead of payout_note" do
         user.add_payout_note(content: "Your payout on June 12, 2026 was skipped because your balance of $59.72 was below the $100 minimum. You'll be paid out automatically once your balance reaches $100.")
 
