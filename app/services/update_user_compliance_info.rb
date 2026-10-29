@@ -130,6 +130,7 @@ class UpdateUserComplianceInfo
           UserComplianceInfoRequest.handle_new_user_compliance_info(old_compliance_info)
           unless old_compliance_info.nationality_resubmission_required?
             StripeMerchantAccountManager.attest_owners_provided_if_blocking(user)
+            StripeMerchantAccountManager.clear_unresolvable_business_tax_id_notes(user)
             return { success: true }
           end
         end

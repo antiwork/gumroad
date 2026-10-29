@@ -21,6 +21,8 @@ vi.mock("$app/data/marketing_actions", () => ({
   cancelMarketingAction: (id: string, actionId: string) => cancelMarketingAction(id, actionId),
 }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+const save = vi.fn<() => Promise<boolean>>();
+vi.mock("$app/components/ProductEdit/state", () => ({ useProductEditContext: () => ({ save }) }));
 
 const action = (overrides: Partial<MarketingAction> = {}): MarketingAction => ({
   id: "act1",
@@ -74,8 +76,16 @@ const renderCard = async (channels: MarketingChannel[]) => {
 };
 
 describe("ShareYourLaunchCard", () => {
-  beforeEach(() => vi.clearAllMocks());
-  afterEach(() => cleanup());
+  const originalLocation = window.location;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    save.mockResolvedValue(true);
+    Object.defineProperty(window, "location", { configurable: true, value: { href: "" } });
+  });
+  afterEach(() => {
+    cleanup();
+    Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
+  });
 
   it("keeps the email draft outside the posting selector while switching social destinations", async () => {
     await renderCard([
@@ -84,12 +94,12 @@ describe("ShareYourLaunchCard", () => {
       emailChannel(),
     ]);
 
-    expect(screen.getByRole("link", { name: "Review the draft" }).getAttribute("href")).toBe("/emails/draft1/edit");
+    expect(screen.getByRole("button", { name: "Review the draft" })).toBeDefined();
     expect(screen.queryByRole("radio", { name: "Email" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Post on Email" })).toBeNull();
     fireEvent.change(screen.getByLabelText("Post text"), { target: { value: "Edited X draft" } });
     fireEvent.click(screen.getByRole("radio", { name: "Instagram" }));
-    expect(screen.getByRole("link", { name: "Review the draft" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Review the draft" })).toBeDefined();
     fireEvent.click(screen.getByRole("radio", { name: "X" }));
     expect(screen.getByLabelText("Post text")).toHaveProperty("value", "Edited X draft");
     expect(approveMarketingAction).not.toHaveBeenCalled();
@@ -264,10 +274,9 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.queryByText(/We drafted an email/u)).toBeNull();
     expect(screen.queryByText(/excluding buyers of this product/u)).toBeNull();
     expect(screen.getByText("Draft")).toBeDefined();
-    expect(screen.getByRole("link", { name: "Review the draft" })).toHaveProperty(
-      "href",
-      expect.stringContaining("/emails/draft1/edit"),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Review the draft" }));
+    await waitFor(() => expect(window.location.href).toBe("/emails/draft1/edit"));
+    expect(save).toHaveBeenCalledTimes(1);
   });
 
   it("names affiliates in the draft summary only when the audience has any", async () => {
@@ -312,7 +321,7 @@ describe("ShareYourLaunchCard", () => {
         /You can email your customers once you've made at least \$100 in sales and received a payout\. You're at \$40 of \$100 in sales\./u,
       ),
     ).toBeDefined();
-    expect(screen.queryByRole("link", { name: "Review the draft" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review the draft" })).toBeNull();
   });
 
   it("labels a launch email the seller has already scheduled", async () => {
@@ -326,7 +335,7 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText(/Your launch email about Gumstein Letters is scheduled/u)).toBeDefined();
     expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
     expect(screen.queryByText(/unique recipients/u)).toBeNull();
-    expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Open in Emails" })).toBeDefined();
   });
 
   it("acknowledges a submitted email without presenting today's audience as delivered recipients", async () => {
@@ -341,7 +350,7 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText(/Check delivery details in Emails/u)).toBeDefined();
     expect(screen.queryByText(/Nothing is sent until you send it/u)).toBeNull();
     expect(screen.queryByText(/unique recipients/u)).toBeNull();
-    expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Open in Emails" })).toBeDefined();
   });
 
   it("says the deleted launch email will not be rebuilt", async () => {
@@ -374,6 +383,17 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.getByText(summary, { exact: false })).toBeDefined();
     expect(screen.queryByText("Sent")).toBeNull();
     expect(screen.queryByText(/delivered|inbox/u)).toBeNull();
-    expect(screen.getByRole("link", { name: "Open in Emails" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Open in Emails" })).toBeDefined();
+  });
+
+  it("stays in the editor when saving the product fails", async () => {
+    save.mockResolvedValue(false);
+    await renderCard([emailChannel()]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Review the draft" }));
+
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(window.location.href).toBe("");
+    expect(screen.getByRole("button", { name: "Review the draft" })).toHaveProperty("disabled", false);
   });
 });

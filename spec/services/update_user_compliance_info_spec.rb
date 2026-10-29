@@ -74,6 +74,33 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "when an unchanged save is made by an India sole proprietorship" do
+      let!(:compliance_info) do
+        create(:user_compliance_info_business,
+               user:,
+               business_country: "India",
+               business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP)
+      end
+      let(:params) { ActionController::Parameters.new(first_name: compliance_info.first_name, last_name: compliance_info.last_name) }
+
+      it "retires the old business-tax-ID rejection note" do
+        user.add_payout_note(
+          content: "Our payment partner couldn't accept the business tax ID you entered.",
+          seller_visible: true,
+          json_data: {
+            StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+            StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "tax_id",
+          }
+        )
+
+        expect do
+          described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(user.latest_payout_setup_rejection_note).to be_nil
+      end
+    end
+
     context "when an unchanged save is made by a company seller" do
       let!(:individual_info) { create(:user_compliance_info, user:) }
       let!(:compliance_info) do

@@ -14,6 +14,7 @@ import * as React from "react";
 
 import { createConsumptionEvent } from "$app/data/consumption_analytics";
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { trackUserActionEvent } from "$app/data/user_action_event";
 import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { humanizedDuration } from "$app/utils/duration";
@@ -72,7 +73,7 @@ export type FileItem = {
   download_url: string | null;
   // Set on the zip a promoted web build (a game, an interactive course) put in the content, so the
   // row can say so instead of reading like a file the seller uploaded by hand. Null otherwise.
-  web_build?: { number: number; status: string } | null;
+  web_build?: { number: number; status: string; playable: boolean } | null;
   // False when the shared folder ZIP leaves the file out, such as a file downloadable only through a grant.
   archivable?: boolean;
   // Set for images a browser can draw; it opens the original file, not the thumbnail.
@@ -341,6 +342,20 @@ export const FileRow = ({
           <Button color="primary" onClick={() => setIsCollapsed(false)}>
             Play
           </Button>
+        ) : null}
+
+        {/* A game wants the whole window and the keyboard, so it gets its own tab, like Watch. Not
+            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. Saves
+            belong to a purchase, so a link without one (an imported customer's) has no Play. */}
+        {file.web_build?.playable && purchaseInfo.purchaseId ? (
+          <NavigationButton
+            color="primary"
+            href={Routes.url_redirect_play_path(purchaseInfo.token)}
+            target="_blank"
+            onClick={() => void trackUserActionEvent("play_click")}
+          >
+            Play
+          </NavigationButton>
         ) : null}
 
         {externalLinkUrl !== null ? (
