@@ -683,7 +683,6 @@ const VideoEmbedPreview = ({
   className,
 }: VideoEmbedPreviewProps) => {
   const [isVideoPlayerShowing, setIsVideoPlayerShowing] = React.useState(false);
-  const [didPlayerFailToLoad, setDidPlayerFailToLoad] = React.useState(false);
   const duration = React.useRef(0);
   const videoPlayerId = `jwplayer-${file.id}`;
   const { purchaseId, redirectId } = usePurchaseInfo();
@@ -732,54 +731,46 @@ const VideoEmbedPreview = ({
           })),
         },
       ],
-    })
-      .then((player) => {
-        // A player finished loading after its embed went away: throw it away instead of wiring
-        // up callbacks that would report playback for something nobody is watching.
-        if (!isCurrentPlayer) return;
-        let initialSeekDone = false;
-        player
-          .on("ready", () => player.play())
-          .on("play", () => {
-            // Tells the page a video is playing so it can pause its own position poll — the
-            // player already reports the position below. See utils/media_playback.ts.
-            publishPlaybackState(true);
+    }).then((player) => {
+      // A player finished loading after its embed went away: throw it away instead of wiring
+      // up callbacks that would report playback for something nobody is watching.
+      if (!isCurrentPlayer) return;
+      let initialSeekDone = false;
+      player
+        .on("ready", () => player.play())
+        .on("play", () => {
+          // Tells the page a video is playing so it can pause its own position poll — the
+          // player already reports the position below. See utils/media_playback.ts.
+          publishPlaybackState(true);
 
-            if (initialSeekDone) return;
+          if (initialSeekDone) return;
 
-            void createConsumptionEvent({
-              eventType: "watch",
-              urlRedirectId: redirectId,
-              productFileId: file.id,
-              purchaseId,
-            });
-            duration.current = player.getDuration();
-            player.seek(
-              isResumableMediaLocation(resumeLocation, file.content_length ?? file.duration ?? duration.current)
-                ? resumeLocation
-                : 0,
-            );
-            initialSeekDone = true;
-          })
-          .on("pause", () => publishPlaybackState(false))
-          .on("error", () => publishPlaybackState(false))
-          .on("seek", (event) => trackMediaLocation(event.offset))
-          .on("time", (event) => throttledTrackMediaLocation(event.position))
-          .on("complete", () => {
-            throttledTrackMediaLocation.cancel();
-            const length = file.content_length ?? file.duration ?? duration.current;
-            if (length > 0) trackMediaLocation(length);
-            publishPlaybackState(false);
-            setIsVideoPlayerShowing(false);
+          void createConsumptionEvent({
+            eventType: "watch",
+            urlRedirectId: redirectId,
+            productFileId: file.id,
+            purchaseId,
           });
-      })
-      .catch(() => {
-        // A vendor outage or an offline buyer must not leave the embed blank with no explanation:
-        // hand the frame back to the still and say what happened.
-        if (!isCurrentPlayer) return;
-        setDidPlayerFailToLoad(true);
-        setIsVideoPlayerShowing(false);
-      });
+          duration.current = player.getDuration();
+          player.seek(
+            isResumableMediaLocation(resumeLocation, file.content_length ?? file.duration ?? duration.current)
+              ? resumeLocation
+              : 0,
+          );
+          initialSeekDone = true;
+        })
+        .on("pause", () => publishPlaybackState(false))
+        .on("error", () => publishPlaybackState(false))
+        .on("seek", (event) => trackMediaLocation(event.offset))
+        .on("time", (event) => throttledTrackMediaLocation(event.position))
+        .on("complete", () => {
+          throttledTrackMediaLocation.cancel();
+          const length = file.content_length ?? file.duration ?? duration.current;
+          if (length > 0) trackMediaLocation(length);
+          publishPlaybackState(false);
+          setIsVideoPlayerShowing(false);
+        });
+    });
 
     // The player is torn down whenever this embed stops being shown (and on unmount), so make
     // sure the page never stays in the "video playing" state with no player around.
@@ -791,7 +782,6 @@ const VideoEmbedPreview = ({
 
   const startPlaying = async () => {
     if (isFetchingMediaUrls) return;
-    setDidPlayerFailToLoad(false);
     if (mediaUrls.length === 0) {
       try {
         await fetchMediaUrls();
@@ -837,32 +827,21 @@ const VideoEmbedPreview = ({
           borderRadius: "var(--border-radius-1) var(--border-radius-1) 0 0",
         }}
       />
-      {didPlayerFailToLoad ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 p-4 text-center">
-          <p role="alert" className="text-white">
-            The video player could not load. Please try again.
-          </p>
-          <LinkButton className="text-white" onClick={() => void startPlaying()}>
-            Try again
-          </LinkButton>
-        </div>
-      ) : (
-        <TrackClick eventName="watch" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
-          <LinkButton
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-            }}
-            disabled={isFetchingMediaUrls}
-            onClick={() => void startPlaying()}
-            aria-label="Watch"
-          >
-            {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
-          </LinkButton>
-        </TrackClick>
-      )}
+      <TrackClick eventName="watch" file={file} resumeAt={resumeLocation || 0} contentLength={file.duration}>
+        <LinkButton
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+          }}
+          disabled={isFetchingMediaUrls}
+          onClick={() => void startPlaying()}
+          aria-label="Watch"
+        >
+          {isFetchingMediaUrls ? <LoadingSpinner className="size-16" /> : <PlayVideoIcon />}
+        </LinkButton>
+      </TrackClick>
     </figure>
   );
 };

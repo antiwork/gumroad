@@ -326,41 +326,6 @@ describe("FileList", () => {
     });
   });
 
-  // The library is fetched when the buyer presses play, so a vendor outage used to leave the frame
-  // blank with no explanation and no way to try again without reloading the page.
-  describe("the embedded video frame when the player cannot be set up", () => {
-    const failPlayerSetup = () => createJWPlayer.mockImplementationOnce(() => Promise.reject(new Error("library")));
-
-    it("hands the frame back to the still and says what went wrong", async () => {
-      const file = videoFile({ thumbnail_url: "/thumbnail.png" });
-      const { container } = renderEmbeddedRow(file, { [file.id]: ["https://example.test/index.m3u8"] });
-      failPlayerSetup();
-
-      fireEvent.click(screen.getByRole("button", { name: "Watch" }));
-
-      await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
-      expect(screen.getByRole("alert").textContent).toBe("The video player could not load. Please try again.");
-      // The buyer gets the still back, not an empty frame where the player would have been.
-      expect(container.querySelector(`#jwplayer-${file.id}`)).toBeNull();
-      expect(container.querySelector("figure.preview img")).not.toBeNull();
-    });
-
-    it("tries again when the buyer asks", async () => {
-      const file = videoFile();
-      const { container } = renderEmbeddedRow(file, { [file.id]: ["https://example.test/index.m3u8"] });
-      failPlayerSetup();
-
-      fireEvent.click(screen.getByRole("button", { name: "Watch" }));
-      await waitFor(() => expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy());
-
-      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-
-      await waitFor(() => expect(container.querySelector(`#jwplayer-${file.id}`)).not.toBeNull());
-      expect(screen.queryByRole("alert")).toBeNull();
-      expect(createJWPlayer).toHaveBeenCalledTimes(2);
-    });
-  });
-
   // A stream_only file never renders Download, so a missing stamped copy used to leave the row
   // with nothing clickable at all. Reading signs the unstamped original, so it stays available.
   describe("a file whose stamped copy is missing", () => {
