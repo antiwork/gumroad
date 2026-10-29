@@ -405,6 +405,20 @@ describe ProductPresenter do
     end
   end
 
+  describe "#edit_props waitlist" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+
+    before { create(:waitlist_entry, product:, follower: create(:active_follower, user: seller)) }
+
+    it "shows the waitlist to the product's seller only" do
+      collaborator = create(:user)
+
+      expect(described_class.new(product:, pundit_user: SellerContext.new(user: seller, seller:)).edit_props[:waitlist]).to include(count: 1)
+      expect(described_class.new(product:, pundit_user: SellerContext.new(user: collaborator, seller: collaborator)).edit_props[:waitlist]).to be_nil
+    end
+  end
+
   describe "#edit_props" do
     let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0", params: {}, cookie_jar: {}) }
     let(:circle_integration) { create(:circle_integration) }
@@ -688,6 +702,7 @@ describe ProductPresenter do
           price_checker_enabled: false,
           custom_html_pages_enabled: false,
           auto_marketing_enabled: false,
+          waitlist: nil,
           custom_html_store_hostnames: product.user.custom_html_store_hostnames,
           custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
           custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
@@ -1141,6 +1156,7 @@ describe ProductPresenter do
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
             auto_marketing_enabled: false,
+            waitlist: nil,
             custom_html_store_hostnames: membership.user.custom_html_store_hostnames,
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
@@ -1405,6 +1421,7 @@ describe ProductPresenter do
             price_checker_enabled: false,
             custom_html_pages_enabled: false,
             auto_marketing_enabled: false,
+            waitlist: nil,
             custom_html_store_hostnames: new_product.user.custom_html_store_hostnames,
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,

@@ -163,6 +163,7 @@ const renderPreview = ({
         priceCheckerEnabled: false,
         customHtmlPagesEnabled: false,
         autoMarketingEnabled: false,
+        waitlist: null,
         customHtmlStoreHostnames: [],
         customHtmlGlobalNavHosts: [],
         customHtmlGlobalNavPaths: [],
