@@ -559,11 +559,12 @@ class Link < ApplicationRecord
     DeleteWishlistProductsJob.perform_in(10.minutes, id)
   end
 
-  def publish!
+  def publish!(skip_seller_plan_gate: false)
     enforce_not_unpublished_by_admin!
     enforce_no_active_sales_hold!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
+    enforce_seller_plan! unless skip_seller_plan_gate
     enforce_merchant_account_exits_for_new_users!
     transcode_after_publish = auto_transcode_videos?
     caller_flags_change = changes["flags"]&.map(&:to_i)
@@ -659,7 +660,7 @@ class Link < ApplicationRecord
   # guards leaves the takedown intact.
   def publish_by_admin!
     self.is_unpublished_by_admin = false
-    publish!
+    publish!(skip_seller_plan_gate: true)
   end
 
   # Memberships are unpublished rather than deleted so existing members keep their access
@@ -2033,6 +2034,24 @@ class Link < ApplicationRecord
 
       errors.add(:base, "You have to confirm your email address before you can do that.")
       raise LinkInvalid, "You have to confirm your email address before you can do that."
+    end
+
+    # Paid-publish experiment. Only a listing's first publish is held (`draft?` is the only
+    # never-been-live signal), and the experiment module returns nil for the control arm, an
+    # unconfigured Stripe price, or a seller outside the rollout — every one of those keeps the
+    # free flow instead of blocking a publish we could not charge for.
+    def enforce_seller_plan!
+      return unless draft?
+
+      offer = SellerPlan::Experiment.offer_for(self)
+      return if offer.nil? || offer.active?
+
+      checkout_path = Rails.application.routes.url_helpers.seller_plan_checkout_path
+      message = "<span>Publishing a product now requires the Gumroad seller plan " \
+                "($#{offer.price_cents / 100}/month). " \
+                "<a href=\"#{checkout_path}\">Start your plan</a> to continue.</span>"
+      errors.add(:base, message)
+      raise LinkInvalid, message
     end
 
     def enforce_shipping_destinations_presence!
