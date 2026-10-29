@@ -1,4 +1,4 @@
-import { X } from "@boxicons/react";
+import { ArrowLeft } from "@boxicons/react";
 import { usePage } from "@inertiajs/react";
 import * as React from "react";
 
@@ -27,8 +27,10 @@ const Play = () => {
     <div className="scoped-tailwind-preflight flex h-dvh flex-col bg-black">
       <div role="menubar" className="flex items-center bg-background text-sm md:text-base">
         <div className="border-r">
-          <a href={content_page_url} aria-label="Back to content" className="flex cursor-pointer p-4 all-unset">
-            <X className="size-5" />
+          {/* Labelled, not a bare icon: this tab's only exit, and a buyer could read × as "quit the game". */}
+          <a href={content_page_url} className="flex cursor-pointer items-center gap-2 p-4 whitespace-nowrap all-unset">
+            <ArrowLeft className="size-5" />
+            Back to content
           </a>
         </div>
         <h1 className="flex-1 truncate p-4">{title}</h1>
