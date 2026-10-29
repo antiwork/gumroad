@@ -270,6 +270,43 @@ describe "MCP server product files" do
         expect(web_file_ids(unlisted_buyer)).to eq([existing.external_id, added.external_id])
         expect(app_file_ids(unlisted_buyer)).to match_array([existing.external_id, added.external_id])
       end
+
+      it "gives the file to buyers without a version through the product's own page when versions have their own content" do
+        no_version_buyer = buyer
+        create(:variant, variant_category: create(:variant_category, link: @product), name: "Deluxe")
+        @product.update!(has_same_rich_content_for_all_variants: false)
+        existing = uploaded_product_file("manual.pdf")
+        page = create(:rich_content, entity: @product, description: [text("Welcome")])
+        expect(app_file_ids(no_version_buyer)).to eq([existing.external_id])
+
+        added = add_blah_file
+
+        expect(page.reload.description.first).to eq(text("Welcome"))
+        expect(web_file_ids(no_version_buyer)).to eq([existing.external_id, added.external_id])
+        expect(app_file_ids(no_version_buyer)).to eq([existing.external_id, added.external_id])
+      end
+
+      it "leaves a blank product page alone so buyers without a version keep the cheapest version's content" do
+        no_version_buyer = buyer
+        category = create(:variant_category, link: @product)
+        basic = create(:variant, variant_category: category, name: "Basic", price_difference_cents: 0)
+        deluxe = create(:variant, variant_category: category, name: "Deluxe", price_difference_cents: 500)
+        @product.update!(has_same_rich_content_for_all_variants: false)
+        basic_file = uploaded_product_file("basic.pdf", position: 1)
+        deluxe_file = uploaded_product_file("deluxe.pdf", position: 2)
+        { basic => basic_file, deluxe => deluxe_file }.each do |variant, file|
+          variant.product_files << file
+          create(:rich_content, entity: variant, description: [file_embed(file)])
+        end
+        blank = [{ "type" => "paragraph" }]
+        placeholder = create(:rich_content, entity: @product, description: blank)
+
+        added = add_blah_file
+
+        expect(placeholder.reload.description).to eq(blank)
+        expect(web_file_ids(no_version_buyer)).to eq([basic_file.external_id, added.external_id])
+        expect(app_file_ids(no_version_buyer)).to eq([basic_file.external_id, added.external_id])
+      end
     end
 
     it "refuses a file larger than the limit and stores nothing" do
