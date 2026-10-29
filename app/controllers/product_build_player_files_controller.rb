@@ -52,6 +52,8 @@ class ProductBuildPlayerFilesController < ApplicationController
       set: changes.fetch("set", {}),
       remove: changes.fetch("remove", []),
       clear: changes.fetch("clear", false),
+      writer: changes["writer"],
+      sequence: changes["sequence"],
     )
     head :no_content
   rescue JSON::ParserError, ProductBuildSave::LimitError

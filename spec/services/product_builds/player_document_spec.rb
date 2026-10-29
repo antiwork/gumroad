@@ -31,6 +31,13 @@ describe ProductBuilds::PlayerDocument do
       expect(JSON.parse(JSON.parse(json.gsub("\\u003c", "<").gsub("\\u003e", ">")))).to eq("name" => "Zoë 🎮", "x" => "</script>")
     end
 
+    it "keeps a saved value that contains a template marker as data" do
+      rendered = described_class.render("<title>Game</title>", save_data: { "note" => "__SAVE_URL__ and __SAVE__" }, save_url: "/save")
+
+      expect(rendered).to include('var saveUrl = "/save";')
+      expect(rendered).to include("__SAVE_URL__ and __SAVE__")
+    end
+
     it "puts the scripts at the very start of a page with no doctype" do
       rendered = described_class.render(%(<script src="game.js"></script>), save_data: {}, save_url: "/save")
 

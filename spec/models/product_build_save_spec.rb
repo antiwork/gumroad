@@ -53,6 +53,27 @@ describe ProductBuildSave do
       expect(described_class.find_by(purchase:).data).to eq("level" => "3")
     end
 
+    it "skips a batch older than one already applied from the same page, and applies other pages' batches" do
+      described_class.apply_changes!(purchase, set: { "level" => "4" }, writer: "page1", sequence: 2)
+
+      described_class.apply_changes!(purchase, set: { "level" => "3" }, writer: "page1", sequence: 1)
+      expect(described_class.find_by(purchase:).data).to eq("level" => "4")
+
+      described_class.apply_changes!(purchase, set: { "level" => "2" }, writer: "page2", sequence: 1)
+      expect(described_class.find_by(purchase:).data).to eq("level" => "2")
+
+      described_class.apply_changes!(purchase, set: { "level" => "5" }, writer: "page2", sequence: 2)
+      expect(described_class.find_by(purchase:).data).to eq("level" => "5")
+    end
+
+    it "rejects a writer or sequence it cannot store" do
+      [["page-1", 1], ["page1", 0], ["page1", "2"], ["page1", described_class::MAX_SEQUENCE + 1], ["a" * 33, 1], ["page1", nil]].each do |writer, sequence|
+        expect do
+          described_class.apply_changes!(purchase, set: { "level" => "1" }, writer:, sequence:)
+        end.to raise_error(described_class::LimitError, /writer/)
+      end
+    end
+
     it "rejects values that are not strings" do
       expect do
         described_class.apply_changes!(purchase, set: { "level" => 3 })

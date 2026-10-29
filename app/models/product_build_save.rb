@@ -11,17 +11,29 @@ class ProductBuildSave < ApplicationRecord
   MAX_KEYS = 1_000
   # About the localStorage quota browsers give one origin, which is what the games were written for.
   MAX_BYTE_SIZE = 5.megabytes
+  MAX_WRITER_ID_LENGTH = 32
+  # The writer_sequence column is a 4-byte signed integer.
+  MAX_SEQUENCE = 2**31 - 1
+  WRITER_ID_FORMAT = /\A[A-Za-z0-9]{1,#{MAX_WRITER_ID_LENGTH}}\z/
 
   belongs_to :purchase
 
   attribute :data, :json, default: -> { {} }
 
   # Clears first, then removes, then sets, so one batch can replace the whole save.
-  def self.apply_changes!(purchase, set: {}, remove: [], clear: false)
+  #
+  # `writer` names one page load of the player and `sequence` numbers its batches. A batch can reach
+  # the server after a newer one from the same page (a retry, or a beacon sent as the page closes),
+  # so a batch at or below the last sequence applied for that writer is skipped. Batches from
+  # different page loads apply in arrival order: the last write wins.
+  def self.apply_changes!(purchase, set: {}, remove: [], clear: false, writer: nil, sequence: nil)
     validate_changes!(set, remove, clear)
+    validate_writer!(writer, sequence)
 
     save = create_or_find_by!(purchase:)
     save.with_lock do
+      next if writer && save.writer_id == writer && sequence <= save.writer_sequence.to_i
+
       data = clear ? {} : save.data.dup
       remove.each { data.delete(_1) }
       data.merge!(set)
@@ -30,7 +42,7 @@ class ProductBuildSave < ApplicationRecord
       raise LimitError, "A save can hold at most #{MAX_KEYS} keys." if data.size > MAX_KEYS
       raise LimitError, "A save can hold at most #{MAX_BYTE_SIZE / 1.megabyte} MB." if byte_size > MAX_BYTE_SIZE
 
-      save.update!(data:, byte_size:)
+      save.update!(data:, byte_size:, writer_id: writer, writer_sequence: sequence)
     end
     save
   end
@@ -46,5 +58,12 @@ class ProductBuildSave < ApplicationRecord
     raise LimitError, "Keys and values must be valid UTF-8." unless (keys + set.values).all?(&:valid_encoding?)
     raise LimitError, "A key can be at most #{MAX_KEY_BYTES} bytes." if keys.any? { _1.bytesize > MAX_KEY_BYTES }
   end
-  private_class_method :validate_changes!
+
+  def self.validate_writer!(writer, sequence)
+    return if writer.nil? && sequence.nil?
+    return if writer.is_a?(String) && writer.match?(WRITER_ID_FORMAT) && sequence.is_a?(Integer) && sequence.between?(1, MAX_SEQUENCE)
+
+    raise LimitError, "A batch needs `writer` as up to #{MAX_WRITER_ID_LENGTH} letters and digits, and `sequence` as a positive whole number."
+  end
+  private_class_method :validate_changes!, :validate_writer!
 end

@@ -77,6 +77,18 @@ describe "Download page web build player", type: :system, js: true do
     end
   end
 
+  it "keeps a change made right before leaving the player" do
+    within_window(open_player) do
+      within_frame(find("iframe[title='Clicker']")) do
+        click_button("Add click")
+        expect(page).to have_text("Clicks: 1")
+      end
+      click_link("Back to content")
+    end
+
+    wait_until_true { ProductBuildSave.find_by(purchase:)&.data == { "clicks" => "1" } }
+  end
+
   it "keeps the content page as it is, with Download next to Play" do
     visit("/d/#{url_redirect.token}")
 

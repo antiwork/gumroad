@@ -10,6 +10,8 @@ module ProductBuilds::PlayerDocument
   # out as an ordinary request, which the browser may cancel as the page closes.
   SAVE_BEACON_MAX_BYTES = 60_000
   SAVE_FAILED_MESSAGE_TYPE = "gumroad:build-save-failed"
+  # Network errors are retried quietly at first; the buyer hears about it only if they keep failing.
+  SAVE_FAILURES_BEFORE_ALERT = 3
 
   # On the opaque origin, localStorage throws. The shim puts the purchase's save back in its place:
   # reads come from the save served with the page, and writes go in batches (clear, then remove,
@@ -24,36 +26,82 @@ module ProductBuilds::PlayerDocument
       var saved = JSON.parse(__SAVE__);
       Object.keys(saved).forEach(function (k) { data[k] = String(saved[k]); });
       var saveUrl = __SAVE_URL__;
+      var writer = (Math.random().toString(36) + Date.now().toString(36)).replace(/[^a-z0-9]/g, "").slice(0, #{ProductBuildSave::MAX_WRITER_ID_LENGTH});
+      var sequence = 0;
       var pending = null;
+      var unconfirmed = null;
       var timer = null;
-      var inFlight = false;
+      var failures = 0;
       function batch() { return pending || (pending = { clear: false, remove: [], set: Object.create(null) }); }
+      // Applies newer on top of older, as the server would apply the two one after the other.
+      function merge(older, newer) {
+        if (!older || (newer && newer.clear)) { return newer; }
+        if (!newer) { return older; }
+        var result = { clear: older.clear, remove: older.remove.slice(), set: Object.create(null) };
+        Object.keys(older.set).forEach(function (k) { result.set[k] = older.set[k]; });
+        newer.remove.forEach(function (k) {
+          delete result.set[k];
+          if (result.remove.indexOf(k) < 0) { result.remove.push(k); }
+        });
+        Object.keys(newer.set).forEach(function (k) {
+          result.set[k] = newer.set[k];
+          var i = result.remove.indexOf(k);
+          if (i >= 0) { result.remove.splice(i, 1); }
+        });
+        return result;
+      }
+      // Each batch is numbered, so the server skips one that arrives after a newer one from this page.
+      function body(changes) {
+        sequence += 1;
+        return JSON.stringify({ clear: changes.clear, remove: changes.remove, set: changes.set, writer: writer, sequence: sequence });
+      }
       function failed() {
         try { window.parent.postMessage({ type: "#{SAVE_FAILED_MESSAGE_TYPE}" }, "*"); } catch (e) {}
       }
-      function send(changes, leaving) {
-        var body = JSON.stringify(changes);
-        var small = new Blob([body]).size <= #{SAVE_BEACON_MAX_BYTES};
-        if (leaving) {
-          if (small && navigator.sendBeacon(saveUrl, body)) { return; }
-          fetch(saveUrl, { method: "POST", body: body, keepalive: small }).catch(function () {});
-          return;
-        }
-        inFlight = true;
-        fetch(saveUrl, { method: "POST", body: body })
-          .then(function (response) { if (!response.ok) { failed(); } }, failed)
-          .then(function () { inFlight = false; if (pending) { changed(); } });
+      // A batch that did not get through goes back in front of newer changes and is sent again.
+      function retry(changes) {
+        pending = merge(changes, pending);
+        failures += 1;
+        if (failures === #{SAVE_FAILURES_BEFORE_ALERT}) { failed(); }
       }
-      function flush(leaving) {
+      function sendNext() {
+        var changes = pending;
+        pending = null;
+        unconfirmed = changes;
+        fetch(saveUrl, { method: "POST", body: body(changes) })
+          .then(function (response) {
+            if (unconfirmed !== changes) { return; }
+            unconfirmed = null;
+            if (response.ok) { failures = 0; } else if (response.status >= 500) { retry(changes); } else { failed(); }
+          }, function () {
+            if (unconfirmed !== changes) { return; }
+            unconfirmed = null;
+            retry(changes);
+          })
+          .then(function () { if (pending) { changed(); } });
+      }
+      function flush() {
         clearTimeout(timer);
         timer = null;
         if (!pending) { return; }
-        if (inFlight && !leaving) { changed(); return; }
-        var changes = pending;
-        pending = null;
-        send(changes, leaving);
+        if (unconfirmed) { changed(); return; }
+        sendNext();
       }
-      function changed() { if (!timer) { timer = setTimeout(function () { flush(false); }, #{SAVE_FLUSH_DELAY_MS}); } }
+      // Everything not yet confirmed, including a batch still in flight, goes in one beacon, which the
+      // browser still delivers as the page closes. A reply to the batch in flight is then ignored.
+      function leave() {
+        clearTimeout(timer);
+        timer = null;
+        var changes = merge(unconfirmed, pending);
+        unconfirmed = null;
+        pending = null;
+        if (!changes) { return; }
+        var payload = body(changes);
+        var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES};
+        if (small && navigator.sendBeacon(saveUrl, payload)) { return; }
+        fetch(saveUrl, { method: "POST", body: payload, keepalive: small }).catch(function () {});
+      }
+      function changed() { if (!timer) { timer = setTimeout(flush, #{SAVE_FLUSH_DELAY_MS}); } }
       var api = {
         getItem: function (k) { k = String(k); return k in data ? data[k] : null; },
         setItem: function (k, v) {
@@ -98,8 +146,8 @@ module ProductBuilds::PlayerDocument
       if (throws) {
         try { Object.defineProperty(window, "localStorage", { value: storage, configurable: true }); } catch (e) {}
       }
-      window.addEventListener("pagehide", function () { flush(true); });
-      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { flush(true); } });
+      window.addEventListener("pagehide", leave);
+      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { leave(); } });
     })();
   JS
 
@@ -113,9 +161,9 @@ module ProductBuilds::PlayerDocument
   def self.render(html, save_data:, save_url:)
     # ASCII only, so the save reads the same whatever encoding the seller's page is in.
     save = JSON.generate(JSON.generate(save_data, ascii_only: true), ascii_only: true)
-    script = SAVE_SHIM_SCRIPT
-      .sub("__SAVE__") { ERB::Util.json_escape(save) }
-      .sub("__SAVE_URL__") { ERB::Util.json_escape(JSON.generate(save_url, ascii_only: true)) }
+    url = JSON.generate(save_url, ascii_only: true)
+    # One pass over the template, so a marker inside the saved data is never replaced.
+    script = SAVE_SHIM_SCRIPT.gsub(/__SAVE_URL__|__SAVE__/) { ERB::Util.json_escape(_1 == "__SAVE_URL__" ? url : save) }
     # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
     injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
     html = html.b
