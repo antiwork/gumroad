@@ -108,18 +108,25 @@ module ProductBuilds::PlayerDocument
         unconfirmed = null;
         pending = null;
         if (!changes) { return; }
-        try { window.name = "#{CARRIED_CHANGES_PREFIX}" + JSON.stringify(changes); } catch (e) {}
         var payload = body(changes);
+        // The next page keeps this writer and numbers on from this beacon, so if the beacon lands after
+        // that page's first save, the server skips it as stale.
+        try { window.name = "#{CARRIED_CHANGES_PREFIX}" + JSON.stringify({ writer: writer, sequence: sequence, changes: changes }); } catch (e) {}
         var small = new Blob([payload]).size <= #{SAVE_BEACON_MAX_BYTES};
         if (small && navigator.sendBeacon(saveUrl, payload)) { return; }
         fetch(saveUrl, { method: "POST", body: payload, keepalive: small }).catch(function () {});
       }
       function changed() { if (!timer) { timer = setTimeout(flush, #{SAVE_FLUSH_DELAY_MS}); } }
-      if (carried && typeof carried === "object" && Array.isArray(carried.remove) && carried.set && typeof carried.set === "object") {
-        if (carried.clear) { data = Object.create(null); }
-        carried.remove.forEach(function (k) { delete data[k]; });
-        Object.keys(carried.set).forEach(function (k) { data[k] = String(carried.set[k]); });
-        pending = merge(carried, pending);
+      var handed = carried && carried.changes;
+      if (handed && typeof handed === "object" && Array.isArray(handed.remove) && handed.set && typeof handed.set === "object") {
+        if (typeof carried.writer === "string" && typeof carried.sequence === "number") {
+          writer = carried.writer;
+          sequence = carried.sequence;
+        }
+        if (handed.clear) { data = Object.create(null); }
+        handed.remove.forEach(function (k) { delete data[k]; });
+        Object.keys(handed.set).forEach(function (k) { data[k] = String(handed.set[k]); });
+        pending = merge(handed, pending);
         changed();
       }
       var api = {

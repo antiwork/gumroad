@@ -20,7 +20,8 @@ class ProductBuildSave < ApplicationRecord
   belongs_to :purchase
 
   attribute :data, :json, default: -> { {} }
-  attribute :writer_sequences, :json, default: -> { {} }
+  # [writer, sequence] pairs, oldest first. An array, because MySQL does not keep JSON object keys in order.
+  attribute :writer_sequences, :json, default: -> { [] }
 
   # Clears first, then removes, then sets, so one batch can replace the whole save.
   #
@@ -34,8 +35,9 @@ class ProductBuildSave < ApplicationRecord
 
     save = create_or_find_by!(purchase:)
     save.with_lock do
-      sequences = (save.writer_sequences || {}).dup
-      next if writer && sequence <= sequences.fetch(writer, 0)
+      sequences = Array(save.writer_sequences).reject { |name, _| name == writer }
+      last_sequence = Array(save.writer_sequences).find { |name, _| name == writer }&.last
+      next if writer && last_sequence && sequence <= last_sequence
 
       data = clear ? {} : save.data.dup
       remove.each { data.delete(_1) }
@@ -46,8 +48,7 @@ class ProductBuildSave < ApplicationRecord
       raise LimitError, "A save can hold at most #{MAX_BYTE_SIZE / 1.megabyte} MB." if byte_size > MAX_BYTE_SIZE
 
       if writer
-        sequences.delete(writer)
-        sequences[writer] = sequence
+        sequences << [writer, sequence]
         sequences.shift while sequences.size > MAX_TRACKED_WRITERS
       end
       save.update!(data:, byte_size:, writer_sequences: sequences)

@@ -75,11 +75,21 @@ describe ProductBuildSave do
       expect(described_class.find_by(purchase:).data).to eq("level" => "4", "coins" => "10")
     end
 
+    it "keeps a writer that saves again as the most recent, so it is not the next one dropped" do
+      stub_const("#{described_class}::MAX_TRACKED_WRITERS", 2)
+      described_class.apply_changes!(purchase, set: { "a" => "1" }, writer: "page1", sequence: 1)
+      described_class.apply_changes!(purchase, set: { "b" => "1" }, writer: "page2", sequence: 1)
+      described_class.apply_changes!(purchase, set: { "a" => "2" }, writer: "page1", sequence: 2)
+      described_class.apply_changes!(purchase, set: { "c" => "1" }, writer: "page3", sequence: 1)
+
+      expect(described_class.find_by(purchase:).writer_sequences).to eq([["page1", 2], ["page3", 1]])
+    end
+
     it "remembers only the most recent writers" do
       stub_const("#{described_class}::MAX_TRACKED_WRITERS", 2)
       %w[page1 page2 page3].each { described_class.apply_changes!(purchase, set: { _1 => "1" }, writer: _1, sequence: 1) }
 
-      expect(described_class.find_by(purchase:).writer_sequences).to eq("page2" => 1, "page3" => 1)
+      expect(described_class.find_by(purchase:).writer_sequences).to eq([["page2", 1], ["page3", 1]])
     end
 
     it "rejects a writer or sequence it cannot store" do

@@ -16,8 +16,9 @@ class ProductBuildPlayerFilesController < ApplicationController
   SERVED_EXTENSIONS = (DOCUMENT_EXTENSIONS + %w[js mjs cjs css]).freeze
   # Shorter than the signed link it points at, so a cached redirect never hands out an expired link.
   CACHE_MAX_AGE = 5.minutes
-  # Room for a full save as escaped JSON; ProductBuildSave enforces the real limits.
-  MAX_SAVE_REQUEST_BYTES = ProductBuildSave::MAX_BYTE_SIZE * 2
+  # Room for a full save as JSON, where escaping can turn one byte into six (\u0001), plus the batch's
+  # own fields; ProductBuildSave enforces the real limits.
+  MAX_SAVE_REQUEST_BYTES = ProductBuildSave::MAX_BYTE_SIZE * 6 + 64.kilobytes
 
   # Rails refuses a JavaScript response to a plain <script> GET, to keep it from leaking session
   # data cross-origin. These responses are the build's own files, read with no session.
