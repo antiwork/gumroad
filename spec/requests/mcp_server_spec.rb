@@ -511,17 +511,18 @@ describe "MCP server" do
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
         "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
-        "publish_product", "unpublish_product", "list_sales", "list_payouts"
+        "publish_product", "unpublish_product", "list_sales", "list_payouts",
+        "create_discount_code", "update_discount_code", "expire_discount_code"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
       expect(annotations.values).to all(include("openWorldHint" => true))
       %w[get_account list_products get_product list_sales list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
       end
-      %w[create_draft_product add_cover].each do |name|
+      %w[create_draft_product add_cover create_discount_code].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => false)
       end
-      %w[update_product publish_product unpublish_product].each do |name|
+      %w[update_product publish_product unpublish_product update_discount_code expire_discount_code].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => true)
       end
     end
@@ -1958,6 +1959,170 @@ describe "MCP server" do
 
       expect(response).to have_http_status(:unauthorized)
       expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current))).to be_empty
+    end
+  end
+
+  context "discount code tools" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "edit_products")
+    end
+
+    def call_tool(name, arguments)
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name:, arguments: } })
+    end
+
+    def tool_result = response.parsed_body["result"]
+
+    it "creates a universal percent code" do
+      expect { call_tool("create_discount_code", { code: "SPRING20", percent_off: 20 }) }.to change(OfferCode, :count).by(1)
+
+      offer_code = @seller.offer_codes.last
+      expect(offer_code).to have_attributes(code: "SPRING20", universal: true, link_id: nil, amount_percentage: 20, amount_cents: nil)
+      expect(offer_code.products).to be_empty
+      expect(tool_result["structuredContent"]["discount_code"]).to include(
+        "id" => offer_code.external_id, "code" => "SPRING20", "scope" => "universal", "product_ids" => [],
+        "percent_off" => 20, "amount_cents" => nil, "expires_at" => nil, "expired" => false
+      )
+    end
+
+    it "creates a code bound to one of the seller's products" do
+      other_product = create(:product, user: @seller, price_cents: 1900)
+
+      call_tool("create_discount_code", { code: "NOTES5", product_id: @product.unique_permalink, amount_cents: 500, max_purchase_count: 10, valid_at: "2026-01-01T00:00:00Z", expires_at: "2099-01-01T00:00:00Z" })
+
+      offer_code = @seller.offer_codes.find_by!(code: "NOTES5")
+      expect(offer_code.universal).to eq(false)
+      expect(offer_code.products).to eq([@product])
+      expect(offer_code.applicable?(other_product)).to eq(false)
+      expect(offer_code).to have_attributes(amount_cents: 500, currency_type: "usd", max_purchase_count: 10, valid_at: Time.utc(2026, 1, 1), expires_at: Time.utc(2099, 1, 1))
+      expect(tool_result["structuredContent"]["discount_code"]).to include("scope" => @product.external_id, "product_ids" => [@product.external_id], "amount_cents" => 500, "currency" => "usd")
+    end
+
+    it "rejects an amount that breaks the minimum-price rule with the editor's message" do
+      expect { call_tool("create_discount_code", { code: "TOODEEP", product_id: @product.external_id, amount_cents: 1850 }) }.not_to change(OfferCode, :count)
+
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to eq("The price after discount for all of your products must be either $0 or at least $0.99.")
+    end
+
+    it "refuses a code that already exists instead of creating a second one" do
+      call_tool("create_discount_code", { code: "ONCE", percent_off: 10 })
+
+      expect { call_tool("create_discount_code", { code: "ONCE", percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to eq("Discount code must be unique.")
+
+      expect { call_tool("create_discount_code", { code: "ONCE", product_id: @product.external_id, percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(tool_result.dig("content", 0, "text")).to eq("Discount code must be unique.")
+    end
+
+    it "requires exactly one of percent_off or amount_cents" do
+      expect { call_tool("create_discount_code", { code: "BOTH", percent_off: 10, amount_cents: 100 }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass only one of percent_off or amount_cents")
+
+      expect { call_tool("create_discount_code", { code: "NEITHER" }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass one of percent_off or amount_cents")
+
+      call_tool("create_discount_code", { code: "TOOMUCH", percent_off: 101 })
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+    end
+
+    it "refuses another seller's product and creates nothing" do
+      other_product = create(:product, price_cents: 1900)
+
+      expect { call_tool("create_discount_code", { code: "THEIRS", product_id: other_product.external_id, percent_off: 10 }) }.not_to change(OfferCode, :count)
+
+      expect(tool_result.dig("content", 0, "text")).to eq("The product was not found.")
+    end
+
+    it "refuses to address another seller's code" do
+      other_code = create(:universal_offer_code, code: "SHARED", amount_cents: nil, amount_percentage: 10)
+
+      expect { call_tool("update_discount_code", { code: "SHARED", percent_off: 50 }) }.not_to change { other_code.reload.attributes }
+      expect(tool_result["isError"]).to eq(true)
+    end
+
+    it "changes only the supplied field and keeps the minimum-price rule" do
+      offer_code = create(:offer_code, user: @seller, products: [@product], code: "EDITME", amount_cents: 500, max_purchase_count: 7)
+
+      call_tool("update_discount_code", { code: "EDITME", product_id: @product.external_id, amount_cents: 600 })
+
+      expect(tool_result["structuredContent"]["discount_code"]).to include("amount_cents" => 600)
+      expect(offer_code.reload).to have_attributes(amount_cents: 600, amount_percentage: nil, max_purchase_count: 7, code: "EDITME", expires_at: nil)
+      expect(offer_code.products).to eq([@product])
+
+      expect { call_tool("update_discount_code", { code: "EDITME", product_id: @product.external_id, amount_cents: 1850 }) }.not_to change { offer_code.reload.attributes }
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to include("must be either $0 or at least")
+    end
+
+    it "switches a code from a fixed amount to a percentage" do
+      offer_code = create(:offer_code, user: @seller, products: [@product], code: "SWITCH", amount_cents: 500)
+
+      call_tool("update_discount_code", { code: "SWITCH", product_id: @product.external_id, percent_off: 25 })
+
+      expect(offer_code.reload).to have_attributes(amount_percentage: 25, amount_cents: nil, currency_type: nil)
+    end
+
+    it "needs product_id to find a product-specific code" do
+      create(:offer_code, user: @seller, products: [@product], code: "SCOPED", amount_cents: 500)
+
+      call_tool("update_discount_code", { code: "SCOPED", amount_cents: 600 })
+
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to include("Pass product_id")
+    end
+
+    it "rejects an update with nothing to change" do
+      create(:universal_offer_code, user: @seller, code: "NOOP")
+
+      call_tool("update_discount_code", { code: "NOOP" })
+
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+    end
+
+    it "expires a code by ending its validity, and a second expire succeeds without changes" do
+      offer_code = create(:universal_offer_code, user: @seller, code: "ENDNOW", amount_cents: nil, amount_percentage: 10)
+
+      call_tool("expire_discount_code", { code: "ENDNOW" })
+
+      expect(tool_result["structuredContent"]["discount_code"]).to include("expired" => true)
+      offer_code.reload
+      expect(offer_code.deleted_at).to be_nil
+      expect(offer_code.expires_at).to be <= Time.current
+      expect(offer_code).to be_inactive
+
+      expect { call_tool("expire_discount_code", { code: "ENDNOW" }) }.not_to change { offer_code.reload.attributes }
+      expect(tool_result).not_to have_key("isError")
+      expect(tool_result["structuredContent"]).to include("message" => "Already expired.")
+      expect(tool_result["structuredContent"]["discount_code"]).to include("expired" => true)
+    end
+
+    it "expires a product-specific code" do
+      offer_code = create(:offer_code, user: @seller, products: [@product], code: "PRODEND", amount_cents: 500)
+
+      call_tool("expire_discount_code", { code: "PRODEND", product_id: @product.external_id })
+
+      expect(offer_code.reload).to be_inactive
+    end
+
+    it "refuses the discount tools with the same 403 challenge as the other write tools" do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public")
+      offer_code = create(:universal_offer_code, user: @seller, code: "LOCKED")
+
+      expect { call_tool("create_discount_code", { code: "NOPE", percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(response).to have_http_status(:forbidden)
+      expect(response.headers["WWW-Authenticate"]).to eq(
+        %(Bearer realm="Gumroad", error="insufficient_scope", scope="view_public edit_products", ) +
+        %(resource_metadata="#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp", ) +
+        %(error_description="This tool requires the edit_products or account scope.")
+      )
+
+      %w[update_discount_code expire_discount_code].each do |name|
+        expect { call_tool(name, { code: "LOCKED", **(name == "update_discount_code" ? { percent_off: 10 } : {}) }) }.not_to change { offer_code.reload.attributes }
+        expect(response).to have_http_status(:forbidden)
+        expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public edit_products"))
+      end
     end
   end
 end
