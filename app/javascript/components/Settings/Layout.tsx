@@ -35,10 +35,13 @@ const PAGE_PATHS: Record<Page, () => string> = {
 };
 
 // The connector page is the public setup page at /mcp, not a Settings page, so this is a plain link
-// out of Settings rather than a route.
+// out of Settings rather than a route. It opens in a new tab so the seller keeps this page.
 const ConnectorTab = () => (
   <Tab isSelected={false} asChild>
-    <a href={Routes.mcp_path()}>AI connectors</a>
+    <a href={Routes.mcp_path()} target="_blank" rel="noreferrer">
+      AI connectors
+      <span aria-hidden="true"> ↗</span>
+    </a>
   </Tab>
 );
 

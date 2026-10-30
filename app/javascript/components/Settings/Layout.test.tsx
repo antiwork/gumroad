@@ -39,14 +39,19 @@ afterEach(() => {
 });
 
 describe("Settings layout navigation", () => {
-  it("links to the connector page even when no applications are authorized", () => {
+  it("links to the connector page in a new tab even when no applications are authorized", () => {
     render(
       <Layout pages={["main", "password"]} currentPage="main">
         <div>content</div>
       </Layout>,
     );
 
-    expect(screen.getByRole("tab", { name: "AI connectors" }).getAttribute("href")).toBe("/mcp");
+    // The accessible name stays "AI connectors": the ↗ that marks the link as leaving the app is
+    // hidden from assistive tech, so screen readers do not read it out as part of the tab label.
+    const tab = screen.getByRole("tab", { name: "AI connectors" });
+    expect(tab.getAttribute("href")).toBe("/mcp");
+    expect(tab.getAttribute("target")).toBe("_blank");
+    expect(tab.getAttribute("rel")).toBe("noreferrer");
   });
 
   it("places the connector entry next to Applications when that page is shown", () => {
