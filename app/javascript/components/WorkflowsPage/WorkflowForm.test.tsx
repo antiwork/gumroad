@@ -2,7 +2,7 @@
 //
 // Pins how the form renders the page's `errors` prop. The real redirect is covered by
 // spec/requests/workflows_spec.rb.
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -117,4 +117,27 @@ describe("WorkflowForm exclusions", () => {
       expect(within(exclusions).queryByRole("button", { name: "Design guide" }) !== null).toBe(products.length > 0);
     },
   );
+
+  it("adds a second exclusion alongside one that is already selected", () => {
+    render(
+      <WorkflowForm
+        context={{ ...context, products_and_variant_options: options }}
+        workflow={{ ...workflow, not_bought_variants: [] }}
+      />,
+    );
+
+    const exclusions = screen.getByLabelText("Has not yet bought").closest("fieldset");
+    if (!exclusions) throw new Error("Exclusion fieldset missing");
+
+    // The menu mounts on focusin; its options live in a <datalist>, so they are queried by attribute.
+    fireEvent.focusIn(within(exclusions).getByLabelText("Has not yet bought"));
+    const second = [...exclusions.querySelectorAll('[role="option"]')].find(
+      (option) => option.textContent === "Studio edition",
+    );
+    if (!second) throw new Error("A second exclusion is not offered");
+    fireEvent.click(second);
+
+    expect(within(exclusions).getByRole("button", { name: "Design guide" })).not.toBeNull();
+    expect(within(exclusions).getByRole("button", { name: "Studio edition" })).not.toBeNull();
+  });
 });
