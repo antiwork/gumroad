@@ -111,6 +111,8 @@ class Purchase < ApplicationRecord
   # stays right; the direct affiliate's own part is `direct_affiliate_credit_cents`.
   attr_json_data_accessor :direct_affiliate_id
   attr_json_data_accessor :direct_affiliate_credit_cents
+  attr_json_data_accessor :direct_affiliate_basis_points
+  attr_json_data_accessor :collaborator_basis_points
 
   CAN_CONTACT_REASON_BUYER_UNSUBSCRIBE = "buyer_unsubscribe"
   CAN_CONTACT_REASON_SPAM_REPORT = "spam_report"
@@ -2032,6 +2034,7 @@ class Purchase < ApplicationRecord
       affiliate_amount_cents: amount_cents,
       affiliate_fee_cents: fee_cents.ceil,
       is_direct_affiliate_credit: direct,
+      basis_points: direct ? direct_affiliate_basis_points : collaborator_basis_points,
     )
     direct ? (self.direct_affiliate_credit = credit) : (self.affiliate_credit = credit)
 
@@ -2916,11 +2919,9 @@ class Purchase < ApplicationRecord
     share * (1 - direct_affiliate_price_share)
   end
 
-  # The direct affiliate's cut, as a fraction, that checkout scaled the collaborator's cut by. Read
-  # from its credit row when one was posted; when that cut rounded to zero there is no row, so fall
-  # back to the affiliate's own rate for this product — the same source checkout read.
+  # New purchases retain the rate even without a credit row. Older purchases use the existing fallback.
   def direct_affiliate_price_share
-    basis_points = direct_affiliate_credit&.basis_points || direct_affiliate&.basis_points(product_id: link_id)
+    basis_points = direct_affiliate_basis_points || direct_affiliate_credit&.basis_points || direct_affiliate&.basis_points(product_id: link_id)
     basis_points.to_i / 10_000.0
   end
 
@@ -5107,7 +5108,10 @@ class Purchase < ApplicationRecord
     end
 
     def affiliate_cut
-      affiliate.basis_points(product_id: link_id) / 10_000.0
+      return affiliate.basis_points(product_id: link_id) / 10_000.0 unless credits_direct_affiliate?
+
+      self.collaborator_basis_points ||= affiliate_credit&.basis_points || affiliate.basis_points(product_id: link_id)
+      collaborator_basis_points / 10_000.0
     end
 
     def determine_affiliate_fee_cents
@@ -5119,7 +5123,8 @@ class Purchase < ApplicationRecord
     end
 
     def direct_affiliate_cut
-      direct_affiliate.basis_points(product_id: link_id) / 10_000.0
+      self.direct_affiliate_basis_points ||= direct_affiliate_credit&.basis_points || direct_affiliate.basis_points(product_id: link_id)
+      direct_affiliate_basis_points / 10_000.0
     end
 
     # Same rule as a direct affiliate on a product without a collaborator.

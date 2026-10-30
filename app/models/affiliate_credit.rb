@@ -25,13 +25,13 @@ class AffiliateCredit < ApplicationRecord
   # `is_direct_affiliate_credit` marks the direct affiliate's credit on a collab purchase that credits
   # both a collaborator and a direct affiliate (:collab_and_affiliates); the collaborator's credit
   # stays the purchase's `affiliate_credit`.
-  def self.create!(purchase:, affiliate:, affiliate_amount_cents:, affiliate_fee_cents:, affiliate_balance:, is_direct_affiliate_credit: false)
+  def self.create!(purchase:, affiliate:, affiliate_amount_cents:, affiliate_fee_cents:, affiliate_balance:, is_direct_affiliate_credit: false, basis_points: nil)
     affiliate_credit = new
     affiliate_credit.is_direct_affiliate_credit = is_direct_affiliate_credit
     affiliate_credit.affiliate = affiliate
     affiliate_credit.amount_cents = affiliate_amount_cents
     affiliate_credit.fee_cents = affiliate_fee_cents
-    affiliate_credit.basis_points = affiliate.basis_points(product_id: purchase.link_id)
+    affiliate_credit.basis_points = basis_points || affiliate.basis_points(product_id: purchase.link_id)
     affiliate_credit.seller = purchase.seller
     affiliate_credit.affiliate_credit_success_balance = affiliate_balance
     affiliate_credit.affiliate_user = affiliate.affiliate_user

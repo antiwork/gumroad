@@ -36,7 +36,7 @@ module Purchase::PingNotification
     payload[:full_name] = full_name if full_name.present?
     payload[:purchaser_id] = purchaser.external_id if purchaser
     payload[:subscription_id] = subscription.external_id if subscription.present?
-    payload[:affiliate_credit_amount_cents] = affiliate_credit_cents if affiliate_credit.present?
+    payload[:affiliate_credit_amount_cents] = own_affiliate_credit_cents if affiliate_credit.present?
     payload[:url_params] = url_parameters if url_parameters.present?
     payload[:variants] = variant_names_hash if variant_names_hash.present?
     payload[:offer_code] = offer_code.code if offer_code.present?

@@ -3,10 +3,11 @@
 require "spec_helper"
 
 describe Purchase, "collab purchase that also credits a direct affiliate" do
+  let!(:gumroad_merchant_account) { create(:merchant_account, user: nil, currency: Currency::USD) }
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
   let(:collaborator) do
-    create(:collaborator, seller:, affiliate_user: create(:user), affiliate_basis_points: 5000, products: [product])
+    create(:collaborator, seller:, affiliate_user: create(:user), affiliate_basis_points: 5000)
   end
   let(:direct_affiliate) do
     create(:direct_affiliate, seller:, affiliate_user: create(:user), affiliate_basis_points: 5000, products: [product])
@@ -53,5 +54,46 @@ describe Purchase, "collab purchase that also credits a direct affiliate" do
 
     expect(fee_cents).to eq(250)
     expect(amount_cents).to eq(1_750)
+  end
+
+  it "keeps the purchase-time rate when the direct credit rounds to zero" do
+    direct_affiliate.update!(affiliate_basis_points: 100)
+    paid_purchase = create(:purchase, link: product, affiliate: collaborator, price_cents: 100,
+                                      direct_affiliate_id: direct_affiliate.id)
+    paid_purchase.increment_affiliates_balance!
+    expect(paid_purchase.direct_affiliate_credit).to be_nil
+    expect(paid_purchase.affiliate_credit).to have_attributes(amount_cents: 3, fee_cents: 47)
+
+    direct_affiliate.update!(affiliate_basis_points: 5000)
+    paid_purchase = Purchase.find(paid_purchase.id)
+
+    expect(paid_purchase.affiliate_reversal_amounts(paid_purchase.affiliate_credit, 50, 46)).to eq([2, 23])
+  end
+
+  it "posts the recorded rate when the affiliate changes before the credit is posted" do
+    direct_affiliate.update!(affiliate_basis_points: 1000)
+    paid_purchase = create(:purchase, link: product, affiliate: collaborator, price_cents: 225_00,
+                                      direct_affiliate_id: direct_affiliate.id)
+    direct_affiliate.update!(affiliate_basis_points: 5000)
+
+    paid_purchase = Purchase.find(paid_purchase.id)
+    paid_purchase.increment_affiliates_balance!
+
+    expect(paid_purchase.direct_affiliate_credit.basis_points).to eq(1000)
+  end
+
+  it "posts the recorded collaborator rate when its product rate changes before posting" do
+    Feature.activate_user(:collab_and_affiliates, seller)
+    assignment = create(:product_affiliate, affiliate: collaborator, product:, affiliate_basis_points: 5000)
+    direct_affiliate.update!(affiliate_basis_points: 1000)
+    paid_purchase = create(:purchase, link: product, affiliate: collaborator, price_cents: 225_00,
+                                      direct_affiliate_id: direct_affiliate.id)
+    assignment.update!(affiliate_basis_points: 2500)
+
+    paid_purchase = Purchase.find(paid_purchase.id)
+    paid_purchase.increment_affiliates_balance!
+
+    expect(paid_purchase.affiliate_credit).to have_attributes(basis_points: 5000, fee_cents: 1343)
+    expect(paid_purchase.affiliate_reversal_amounts(paid_purchase.affiliate_credit, 11_250, 1491)).to eq([4392, 671])
   end
 end

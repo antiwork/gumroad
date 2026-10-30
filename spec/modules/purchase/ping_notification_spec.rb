@@ -4,6 +4,22 @@ require "spec_helper"
 
 describe Purchase::PingNotification, :vcr do
   describe "#payload_for_ping_notification" do
+    it "reports the named collaborator's credit without the direct affiliate's credit" do
+      create(:merchant_account, user: nil, currency: Currency::USD)
+      seller = create(:user, bears_affiliate_fee: true)
+      product = create(:product, user: seller, price_cents: 225_00)
+      collaborator = create(:collaborator, seller:, products: [product], affiliate_basis_points: 5000)
+      direct_affiliate = create(:direct_affiliate, seller:, products: [product], affiliate_basis_points: 1000)
+      purchase = create(:purchase, link: product, affiliate: collaborator, direct_affiliate_id: direct_affiliate.id)
+      purchase.increment_affiliates_balance!
+
+      payload = purchase.reload.payload_for_ping_notification
+
+      expect(payload[:affiliate]).to eq(collaborator.affiliate_user.form_email)
+      expect(payload[:affiliate_credit_amount_cents]).to eq(8_633)
+      expect(purchase.affiliate_credit_cents).to eq(10_883)
+    end
+
     it "contains the correct resource_name" do
       purchase = create(:purchase, stripe_refunded: true)
 
