@@ -13855,6 +13855,47 @@ describe StripeMerchantAccountManager, :vcr do
         expect(user.user_compliance_info_requests.requested.count).to eq(0)
       end
 
+      describe "terminal Stripe rejection on a suspended seller" do
+        let(:suspended_user) { create(:user, user_risk_state: "suspended_for_tos_violation") }
+        let!(:merchant_account) { create(:merchant_account, user: suspended_user, charge_processor_merchant_id: "stripe-account-id") }
+
+        def rejection_event(past_due:)
+          requirements = Stripe::StripeObject.new("id")
+          requirements["currently_due"] = past_due
+          requirements["eventually_due"] = past_due
+          requirements["past_due"] = past_due
+          requirements["disabled_reason"] = "rejected.terms_of_service"
+          {
+            "api_version" => API_VERSION,
+            "type" => "account.updated",
+            "id" => "stripe-event-id",
+            "data" => { "object" => { "object" => "account", "id" => "stripe-account-id", "business_type" => "individual",
+                                      "requirements" => requirements, "individual" => {} } }
+          }
+        end
+
+        it "records the rejection and closes open requests without sending the rejection email" do
+          request = create(:user_compliance_info_request, user: suspended_user, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+          expect do
+            described_class.handle_stripe_event(rejection_event(past_due: []))
+          end.to_not have_enqueued_mail(MerchantRegistrationMailer, :stripe_account_rejected)
+
+          expect(merchant_account.reload.stripe_rejected?).to be true
+          expect(merchant_account.stripe_rejection_email_sent).to be_falsey
+          expect(request.reload.state).to eq("provided")
+        end
+
+        it "keeps open requests when Stripe is still asking for something" do
+          request = create(:user_compliance_info_request, user: suspended_user, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+          described_class.handle_stripe_event(rejection_event(past_due: ["individual.id_number"]))
+
+          expect(merchant_account.reload.stripe_rejected?).to be true
+          expect(request.reload.state).to eq("requested")
+        end
+      end
+
       it "handles stripe event data containing about more kyc but does not notify user if merchant account inactive" do
         create(:merchant_account, user:, charge_processor_merchant_id: "stripe-account-id", deleted_at: Time.current)
         requirements = Stripe::StripeObject.new("id")

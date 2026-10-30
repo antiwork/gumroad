@@ -3297,6 +3297,20 @@ module StripeMerchantAccountManager
     RefreshMerchantAccountPaymentMethodAvailabilityWorker.perform_async(merchant_account.id)
   end
 
+  # Suspended sellers skip the rest of handle_stripe_info_requirements (no emails, no new requests),
+  # but Stripe's terminal rejection must still reach the merchant account. No rejection email here.
+  def self.record_stripe_rejection_for_suspended_user(user, merchant_account, stripe_account)
+    requirements = stripe_account["requirements"] || {}
+    disabled_reason = requirements["disabled_reason"]
+    return unless disabled_reason.to_s.start_with?("rejected.")
+
+    merchant_account.update!(stripe_disabled_reason: disabled_reason) if merchant_account.stripe_disabled_reason != disabled_reason
+    return unless stripe_requirements_exhausted?(requirements, stripe_account["future_requirements"] || {})
+
+    user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
+  end
+  private_class_method :record_stripe_rejection_for_suspended_user
+
   def self.handle_stripe_info_requirements(stripe_event_id, stripe_account, stripe_previous_attributes)
     return if stripe_account["type"] == "standard"
 
@@ -3315,7 +3329,10 @@ module StripeMerchantAccountManager
 
     user = merchant_account.user
 
-    return unless user.account_active?
+    unless user.account_active?
+      record_stripe_rejection_for_suspended_user(user, merchant_account, stripe_account) if user.alive?
+      return
+    end
 
     requirements = stripe_account["requirements"] || {}
     future_requirements = stripe_account["future_requirements"] || {}
