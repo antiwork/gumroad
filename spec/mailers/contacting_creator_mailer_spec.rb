@@ -466,7 +466,7 @@ describe ContactingCreatorMailer do
           expect(mail.body.encoded).not_to include "re-credited"
         end
 
-        it "still points the seller to Stripe when the sale was also refunded in full before the dispute" do
+        it "still says nothing was deducted from the Gumroad balance when the sale was also refunded in full" do
           refund_before_dispute(purchase, purchase.total_transaction_cents)
           book_chargeback_debits(dispute)
           expect(purchase.reload.purchase_chargeback_balance).to be_nil
