@@ -1160,9 +1160,9 @@ describe Charge::Disputable, :vcr do
           end
         end
 
-        # A dispute with no evidence surface at all (PayPal, Stripe Connect) never gets a window, and
-        # the plain notice is the only one it will ever receive — the notice gate must not require a
-        # stamp the way the ask does.
+        # A dispute with no evidence surface at all (PayPal) never gets a window, and the plain
+        # notice is the only one it will ever receive — the notice gate must not require a stamp the
+        # way the ask does.
         context "when the dispute has no evidence record at all" do
           before do
             allow_any_instance_of(Purchase).to receive(:create_dispute_evidence_if_needed!).and_return(nil)
@@ -2431,11 +2431,11 @@ describe Charge::Disputable, :vcr do
 
     context "when the purchase is made via a Stripe Connect account" do
       before do
-        expect_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).twice.and_return(true)
+        expect_any_instance_of(MerchantAccount).to receive(:is_a_stripe_connect_account?).at_least(:once).and_return(true)
       end
 
-      it "returns false" do
-        expect(purchase.eligible_for_dispute_evidence?).to be(false)
+      it "returns true" do
+        expect(purchase.eligible_for_dispute_evidence?).to be(true)
       end
     end
 
@@ -2467,9 +2467,10 @@ describe Charge::Disputable, :vcr do
       allow(DisputeEvidence::GenerateReceiptImageService).to receive(:perform).with(disputed_purchase).and_return(sample_image)
       disputed_purchase.create_dispute_evidence_if_needed!
 
-      expect(ChargeProcessor).to receive(:fight_chargeback) do |charge_processor_id, stripe_transaction_id, dispute_evidence|
+      expect(ChargeProcessor).to receive(:fight_chargeback) do |charge_processor_id, stripe_transaction_id, dispute_evidence, merchant_account:|
         expect(charge_processor_id).to eq disputed_purchase.charge_processor_id
         expect(stripe_transaction_id).to eq disputed_purchase.stripe_transaction_id
+        expect(merchant_account).to eq disputed_purchase.merchant_account
         expect(dispute_evidence.customer_purchase_ip).to eq disputed_purchase.ip_address
         expect(dispute_evidence.customer_email).to eq disputed_purchase.email
         expect(dispute_evidence.uncategorized_text).to eq "Sample uncategorized text"

@@ -353,15 +353,14 @@ module Charge::Disputable
   end
 
   def eligible_for_dispute_evidence?
-    return false unless charge_processor == StripeChargeProcessor.charge_processor_id
-    return false if merchant_account&.is_a_stripe_connect_account?
-    true
+    charge_processor == StripeChargeProcessor.charge_processor_id
   end
 
   def fight_chargeback
     dispute_evidence = dispute.dispute_evidence
 
-    ChargeProcessor.fight_chargeback(charge_processor, charge_processor_transaction_id, dispute_evidence)
+    ChargeProcessor.fight_chargeback(charge_processor, charge_processor_transaction_id, dispute_evidence,
+                                     merchant_account:)
   end
 
   private
@@ -442,8 +441,8 @@ module Charge::Disputable
       # All three shapes are reachable on a re-delivery, because losing the claim above does not
       # stop this path: CreateMissingDisputeEvidenceJob may have opened this window hours earlier
       # and backdated it past its own end, or had the evidence answered and submitted before the
-      # re-delivery arrived. A dispute with no evidence surface at all (PayPal, Stripe Connect)
-      # still gets the plain notice, as it always has.
+      # re-delivery arrived. A dispute with no evidence surface at all (PayPal) still gets the
+      # plain notice, as it always has.
       #
       # Read the columns rather than #reload: claim_seller_contacted_window! writes through
       # update_all and leaves this object stale, and reloading it here would reset the attachment
