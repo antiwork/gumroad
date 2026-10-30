@@ -838,7 +838,7 @@ describe Charge::Disputable, :vcr do
 
             body = notice_body(purchase)
             expect(body).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
-            expect(body).to include "We fight every dispute. This sale was paid into your connected Stripe account, so we submit the evidence there, and if we win the amount is released back to that account."
+            expect(body).to include "We fight every dispute and submit the evidence through your connected Stripe account. If we win, the amount is released back to that account."
             expect(body).not_to include "already refunded"
             expect(body).not_to include "We have deducted"
             expect(body).not_to include "re-credited"

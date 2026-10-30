@@ -460,7 +460,7 @@ describe ContactingCreatorMailer do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
-          expect(mail.body.encoded).to include "We fight every dispute. This sale was paid into your connected Stripe account, so we submit the evidence there, and if we win the amount is released back to that account."
+          expect(mail.body.encoded).to include "We fight every dispute and submit the evidence through your connected Stripe account. If we win, the amount is released back to that account."
           expect(mail.body.encoded).not_to include "already refunded"
           expect(mail.body.encoded).not_to include "We have deducted"
           expect(mail.body.encoded).not_to include "re-credited"
