@@ -72,10 +72,11 @@ module EmailStylesheetLoader
       output = +""
       closes_layer = []
       until scanner.eos?
-        if scanner.scan(/@layer\b[^{};@]*;/)
-          # A layer order statement has no rules.
-        elsif scanner.scan(/@layer\b[^{};@]*\{/)
-          closes_layer.push(true)
+        # A header's comments may hold ";" or "{". Every attempt stops at the next "@", so a malformed
+        # header is scanned once and then copied as plain text.
+        if scanner.scan(%r{@layer\b(?:[^{};@/]|/\*[^@]*?\*/)*([;\{])})
+          # A layer order statement (";") has no rules.
+          closes_layer.push(true) if scanner[1] == "{"
         elsif scanner.scan("{")
           closes_layer.push(false)
           output << "{"

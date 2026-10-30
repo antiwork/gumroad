@@ -346,6 +346,13 @@ describe EmailStylesheetLoader, :skip_ssrf_stub do
       )
     end
 
+    it "skips comments in a layer header" do
+      stub_request(:get, "http://assets.example.org:3000/commented.css")
+        .to_return(status: 200, body: "@layer a /* ; */, b;\n@layer base /*! { ; */ { p { color: red; } }\n")
+
+      expect(described_class.load("/commented.css")).to eq("\n p { color: red; } \n")
+    end
+
     it "leaves a seller's layers alone, so its unlayered rules keep their priority" do
       stub_request(:get, "https://cdn.example.com/layered.css").to_return(status: 200, body: layered)
 
