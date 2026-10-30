@@ -712,12 +712,11 @@ describe "MCP server" do
         create(:free_purchase, seller: @seller, link: @product, email: "paid-first@example.com", created_at: Time.utc(2026, 10, 2, 12))
         create(:free_purchase, seller: @seller, link: @product, email: "free-only@example.com", created_at: Time.utc(2026, 10, 1, 12))
 
-        expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"]).to eq([
-          {
-            "email" => "converted@example.com", "free_at" => Time.utc(2026, 10, 1, 12).iso8601,
-            "converted_at" => Time.utc(2026, 10, 31, 12).iso8601, "days_to_convert" => 30.0
-          }
-        ])
+        expected = {
+          "email" => "converted@example.com", "free_at" => Time.utc(2026, 10, 1, 12).iso8601,
+          "converted_at" => Time.utc(2026, 10, 31, 12).iso8601, "days_to_convert" => 30.0
+        }
+        expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"]).to eq([expected])
       end
 
       it "bounds the conversion range on the paid purchase, not the free one" do
