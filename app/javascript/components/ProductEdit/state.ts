@@ -152,6 +152,8 @@ export type Product = {
   custom_view_content_button_text_max_length: number;
   custom_receipt_text: string | null;
   custom_receipt_text_max_length: number;
+  custom_failed_payment_text: string | null;
+  custom_failed_payment_text_max_length: number;
   custom_attributes: Attribute[];
   taxonomy_attribute_values: Record<string, TaxonomyAttributeValue>;
   inferred_taxonomy_attribute_values: Record<string, TaxonomyAttributeValue>;

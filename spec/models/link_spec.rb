@@ -89,6 +89,28 @@ describe Link do
     end
   end
 
+  describe "custom_failed_payment_text validation" do
+    let(:product) { build(:product) }
+
+    it "accepts plain text" do
+      product.custom_failed_payment_text = "Your card was declined. Reply to this email if you need help."
+      expect(product).to be_valid
+    end
+
+    ["see https://evil.example/pay", "go to www.evil.example", "pay at evil.com", "<b>hi</b>"].each do |text|
+      it "rejects #{text.inspect}" do
+        product.custom_failed_payment_text = text
+        expect(product).not_to be_valid
+        expect(product.errors.full_messages.join).to include "Failed payment message"
+      end
+    end
+
+    it "rejects text over the limit" do
+      product.custom_failed_payment_text = "a" * 501
+      expect(product).not_to be_valid
+    end
+  end
+
   describe "default offer code validation" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller, price_cents: 2000) }

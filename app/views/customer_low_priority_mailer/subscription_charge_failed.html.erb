@@ -7,4 +7,8 @@
     <p>We attempted to charge your card for your subscription to <%= @subscription.link.name %>, but were unable to.</p>
     <p>If a charge to your credit card is not successful within 5 days, your subscription to <%= @subscription.link.name %> will be canceled.</p>
   <% end %>
+  <% if @subscription.link.custom_failed_payment_text.present? %>
+    <p><%= simple_format(h(@subscription.link.custom_failed_payment_text), {}, wrapper_tag: "span") %></p>
+    <p>Please <%= link_to "update your payment method", manage_subscription_url(@subscription.external_id, token: @subscription.reusable_token) %>.</p>
+  <% end %>
 </div>

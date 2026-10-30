@@ -5,8 +5,16 @@ module Product::Validations
 
   MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 26
   MAX_CUSTOM_RECEIPT_TEXT_LENGTH = 500
+  MAX_CUSTOM_FAILED_PAYMENT_TEXT_LENGTH = 500
+  NON_PLAIN_TEXT_PATTERN = %r{[<>]|https?:|www\.|\b[a-z0-9-]+\.(com|net|org|io|co|app|me|ly)\b}i
 
   private
+    def custom_failed_payment_text_is_plain_text
+      return unless custom_failed_payment_text.to_s.match?(NON_PLAIN_TEXT_PATTERN)
+
+      errors.add(:base, "Failed payment message: links and HTML are not allowed. We add the payment update link for you.")
+    end
+
     def max_purchase_count_is_greater_than_or_equal_to_inventory_sold
       return unless max_purchase_count_changed?
       return if max_purchase_count.nil?

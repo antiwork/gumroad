@@ -397,6 +397,18 @@ describe CustomerLowPriorityMailer do
         mail = CustomerLowPriorityMailer.subscription_charge_failed(subscription.id)
         expect(mail.subject).to eq "Your recurring charge failed."
         expect(mail.body.encoded).to include subscription.link.name
+        expect(mail.body.encoded).not_to include "update your payment method"
+      end
+
+      it "shows the seller's message escaped, with a system-inserted payment update link" do
+        subscription = create(:subscription, link: create(:product))
+        build(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:).save!(validate: false)
+        subscription.link.update!(custom_failed_payment_text: "Please fix your card & reply to me.")
+        mail = CustomerLowPriorityMailer.subscription_charge_failed(subscription.id)
+        body = mail.body.encoded
+        expect(body).to include "Please fix your card &amp; reply to me."
+        expect(body).to include "update your payment method"
+        expect(body).to include "/subscriptions/#{subscription.external_id}/manage?token="
       end
     end
 
