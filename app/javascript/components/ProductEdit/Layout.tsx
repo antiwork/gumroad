@@ -14,14 +14,13 @@ import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
-import { SubtitleFile } from "$app/components/SubtitleList/Row";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-import { FileEntry, useProductEditContext } from "./state";
+import { filesAreUploading, useProductEditContext } from "./state";
 
 export const useProductUrl = (params = {}) => {
   const { product, uniquePermalink } = useProductEditContext();
@@ -205,18 +204,7 @@ export const Layout = ({
     }
   };
 
-  const isUploadingFile = (file: FileEntry | SubtitleFile) =>
-    file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
-  const isUploadingFiles =
-    product.public_files.some((f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading") ||
-    product.files.some(
-      (file) =>
-        isUploadingFile(file) ||
-        file.subtitle_files.some(isUploadingFile) ||
-        // A failed file is left out of the save, so its thumbnail does not hold Save.
-        (file.thumbnail?.status.type === "uploading" &&
-          !(file.status.type === "unsaved" && file.status.uploadStatus.type === "failed")),
-    );
+  const isUploadingFiles = filesAreUploading(product);
   const imageSettings = useImageUploadSettings();
   const isUploadingFilesOrImages = isLoading || isUploadingFiles || !!imageSettings?.isUploading;
   const isBusy = isUploadingFilesOrImages || saving || saveBlocked || isPublishing;

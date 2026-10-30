@@ -1052,6 +1052,9 @@ Rails.application.routes.draw do
         end
         resource :marketing_abandoned_cart, only: %i[show update], controller: "marketing_abandoned_carts"
         resource :waitlist_email, only: :create
+        resources :builds, only: :index do
+          member { post :promote }
+        end
       end
     end
 

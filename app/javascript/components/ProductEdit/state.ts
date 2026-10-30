@@ -370,6 +370,20 @@ export const ProductEditContext = React.createContext<{
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 
+const isUploadingFile = (file: FileEntry | SubtitleFile) =>
+  file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
+// Save sends a file that is still uploading before its object exists, so it waits while this is true.
+export const filesAreUploading = (product: Pick<Product, "files" | "public_files">) =>
+  product.public_files.some((f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading") ||
+  product.files.some(
+    (file) =>
+      isUploadingFile(file) ||
+      file.subtitle_files.some(isUploadingFile) ||
+      // A failed file is left out of the save, so its thumbnail does not hold Save.
+      (file.thumbnail?.status.type === "uploading" &&
+        !(file.status.type === "unsaved" && file.status.uploadStatus.type === "failed")),
+  );
+
 //TODO: clean up this legacy file state
 type UploadProgress = { percent: number; bitrate: number };
 
@@ -402,7 +416,13 @@ export type FileEntry = {
   can_disable_downloads?: boolean;
   // Set on the zip a promoted web build put in the content, so the row can be labelled as a build
   // rather than looking like a hand-uploaded file. See ProductFile#web_build_summary.
-  web_build?: { number: number; status: string; playable: boolean } | null;
+  web_build?: {
+    number: number;
+    status: string;
+    deployed_at: string;
+    playable: boolean;
+    version_history: boolean;
+  } | null;
   stream_only: boolean;
   is_transcoding_in_progress: boolean;
   // Pixel dimensions of the video, when we know them, so the editor's preview

@@ -55,8 +55,10 @@ class ProductBuild < ApplicationRecord
 
   def live? = status == "live"
 
+  def player_enabled? = product.build_player_enabled?
+
   # Whether buyers get a Play action for this build on the content page.
-  def playable? = live? && site_ready? && Feature.active?(:product_build_player, product.user)
+  def playable? = live? && site_ready? && player_enabled?
 
   # An encrypted path segment that lets the player's frame load this build's files for one purchase.
   # The frame is an opaque origin, so its file requests carry no session cookies: the access check
@@ -93,6 +95,11 @@ class ProductBuild < ApplicationRecord
       Rails.application.key_generator.generate_key("product_build_player_grant", ActiveSupport::MessageEncryptor.key_len),
       url_safe: true, serializer: JSON,
     )
+  end
+
+  # What the API and the editor's version history show of a build.
+  def as_json(*)
+    { id: public_id, number:, status:, byte_size:, created_at:, promoted_at: }
   end
 
   # Makes this build the one buyers get, superseding the current one. Promoting the live build again

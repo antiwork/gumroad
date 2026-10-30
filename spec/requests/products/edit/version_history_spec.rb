@@ -1,0 +1,51 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe "Product edit version history", type: :system, js: true do
+  let(:seller) { create(:named_seller) }
+  let(:product) { create(:product, user: seller, name: "Clicker") }
+  let!(:first_build) { create(:product_build, product:, number: 1, byte_size: 2.megabytes) }
+  let!(:second_build) { create(:product_build, product:, number: 2, byte_size: 3.megabytes) }
+
+  before do
+    create(:rich_content, entity: product, description: [])
+    first_build.promote!
+    second_build.promote!
+    Feature.activate_user(:product_build_player, seller)
+    login_as(seller)
+  end
+
+  it "lists the builds and makes an earlier one live, saving the seller's unsaved edits first" do
+    visit edit_link_path(product.unique_permalink)
+    fill_in "Name", with: "Clicker 2", fill_options: { clear: :backspace }
+    select_tab "Content"
+    expect(page).to have_text("Web build v2")
+
+    click_on "History"
+    within find("[role=dialog]", text: "Version history") do
+      within("section", text: "Buyers get this version") { expect(page).to have_text("Version 2") }
+      click_on "Actions for version 1"
+    end
+    click_on "Make live"
+    within_modal "Make version 1 live?" do
+      click_on "Make version 1 live"
+    end
+
+    expect(page).to have_text("Web build v1")
+    expect(page).not_to have_text("Web build v2")
+    expect(first_build.reload.status).to eq("live")
+    expect(second_build.reload.status).to eq("superseded")
+    expect(product.reload.name).to eq("Clicker 2")
+  end
+
+  it "has no version history while the player is off for the seller" do
+    Feature.deactivate_user(:product_build_player, seller)
+
+    visit edit_link_path(product.unique_permalink)
+    select_tab "Content"
+
+    expect(page).to have_text("Web build v2")
+    expect(page).not_to have_button("History")
+  end
+end

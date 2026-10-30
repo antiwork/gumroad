@@ -438,11 +438,11 @@ describe ProductFile do
     it "labels the zip a promoted web build put in the content" do
       product = create(:product)
       file = create(:readable_document, link: product)
-      create(:product_build, product:, product_file: file, number: 3, status: "live",
-                             source_url: "https://example.com/game.zip", storage_key: "builds/#{product.id}/3/build.zip",
-                             byte_size: 10)
+      build = create(:product_build, product:, product_file: file, number: 3, status: "live",
+                                     source_url: "https://example.com/game.zip", storage_key: "builds/#{product.id}/3/build.zip",
+                                     byte_size: 10)
 
-      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live", playable: false })
+      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live", deployed_at: build.created_at, playable: false, version_history: false })
     end
 
     it "marks the build playable once it is unpacked and the player is on for the seller" do
