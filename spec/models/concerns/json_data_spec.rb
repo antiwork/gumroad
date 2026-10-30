@@ -144,4 +144,42 @@ describe JsonData do
       expect(user.reload.payout_threshold_cents).to eq(1234)
     end
   end
+
+  describe "varchar column limit" do
+    let(:limit) { Purchase.columns_hash["json_data"].limit }
+
+    it "saves json_data that fills the column exactly" do
+      model.json_data = { "k" => "" }
+      model.json_data = { "k" => "x" * (limit - model.json_data.to_json.length) }
+
+      expect { model.save! }.not_to raise_error
+      expect(model.reload.read_attribute_before_type_cast(:json_data).length).to eq(limit)
+    end
+
+    it "raises on an update that outgrows the column and keeps the stored value" do
+      model.update!(locale: "pt-BR")
+      stored_json_data = model.reload.read_attribute_before_type_cast(:json_data)
+
+      expect { model.update!(last_content_page_id: "p" * limit) }.to raise_error(ActiveRecord::ValueTooLong, /over the #{limit}-character column/)
+      expect(model.reload.read_attribute_before_type_cast(:json_data)).to eq(stored_json_data)
+    end
+
+    it "raises on a create that outgrows the column and stores nothing" do
+      product = create(:product)
+
+      expect { create(:purchase, link: product, last_content_page_id: "p" * limit) }.to raise_error(ActiveRecord::ValueTooLong, /over the #{limit}-character column/)
+      expect(Purchase.where(link: product).count).to eq(0)
+    end
+
+    it "raises when a before_create callback pushes json_data past the column" do
+      product = create(:product)
+      allow_any_instance_of(Purchase).to receive(:assign_is_multiseat_license).and_wrap_original do |original|
+        original.receiver.last_content_page_id = "p" * limit
+        original.call
+      end
+
+      expect { create(:purchase, link: product) }.to raise_error(ActiveRecord::ValueTooLong, /over the #{limit}-character column/)
+      expect(Purchase.where(link: product).count).to eq(0)
+    end
+  end
 end

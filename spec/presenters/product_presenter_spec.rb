@@ -700,6 +700,7 @@ describe ProductPresenter do
           cancellation_discounts_enabled: false,
           receipt_email_from: "#{product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
           price_checker_enabled: false,
+          has_web_builds: false,
           custom_html_pages_enabled: false,
           auto_marketing_enabled: false,
           waitlist: nil,
@@ -797,6 +798,18 @@ describe ProductPresenter do
 
       it "exposes price_checker_enabled: true in edit_props" do
         expect(presenter.edit_props[:price_checker_enabled]).to eq(true)
+      end
+    end
+
+    context "when the product has web builds" do
+      before { create(:product_build, product:) }
+
+      it "exposes has_web_builds only while the player is on for the seller" do
+        expect(presenter.edit_props[:has_web_builds]).to eq(false)
+
+        Feature.activate_user(:product_build_player, product.user)
+
+        expect(presenter.edit_props[:has_web_builds]).to eq(true)
       end
     end
 
@@ -1154,6 +1167,7 @@ describe ProductPresenter do
             cancellation_discounts_enabled: true,
             receipt_email_from: "#{membership.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
+            has_web_builds: false,
             custom_html_pages_enabled: false,
             auto_marketing_enabled: false,
             waitlist: nil,
@@ -1419,6 +1433,7 @@ describe ProductPresenter do
             cancellation_discounts_enabled: false,
             receipt_email_from: "#{new_product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
+            has_web_builds: false,
             custom_html_pages_enabled: false,
             auto_marketing_enabled: false,
             waitlist: nil,

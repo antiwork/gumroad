@@ -3846,6 +3846,33 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to be_successful
     end
 
+    it "keeps every json_data key when the saved value grows past 255 characters" do
+      purchase.update!(locale: "pt-BR", perceived_price_cents: 129_900, recommender_model_name: RecommendedProductsService::MODEL_SALES,
+                       default_offer_code_id: 48_213_907, pre_discount_unit_price_cents: 149_900, custom_fee_per_thousand: 25,
+                       card_country_source: "stripe")
+      saved_json_data = purchase.reload.json_data
+
+      post :save_last_content_page, params: { id: url_redirect.token, page_id: "Xq3fT9LmP2vRk8NwZ5bHcA==" }
+
+      expect(response).to be_successful
+      purchase.reload
+      expect(purchase.read_attribute_before_type_cast(:json_data).length).to be > 255
+      expect(purchase.json_data).to eq(saved_json_data.merge("last_content_page_id" => "Xq3fT9LmP2vRk8NwZ5bHcA=="))
+    end
+
+    it "rejects a page id that is too long or not a string and leaves the purchase unchanged" do
+      purchase.update!(last_content_page_id: "Xq3fT9LmP2vRk8NwZ5bHcA==")
+      stored_json_data = purchase.reload.read_attribute_before_type_cast(:json_data)
+
+      [{ page_id: "p" * (UrlRedirectsController::MAX_CONTENT_PAGE_ID_LENGTH + 1) }, { page_id: { "nested" => "value" } }, { page_id: ["a", "b"] }].each do |page_params|
+        post :save_last_content_page, params: { id: url_redirect.token, **page_params }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Invalid page")
+        expect(purchase.reload.read_attribute_before_type_cast(:json_data)).to eq(stored_json_data)
+      end
+    end
+
     context "when there is no purchase" do
       let!(:url_redirect_without_purchase) { create(:url_redirect, link: product, purchase: nil) }
 
