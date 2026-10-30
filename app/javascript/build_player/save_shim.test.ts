@@ -5,8 +5,11 @@ import { describe, expect, it } from "vitest";
 
 import { cast } from "$app/utils/cast";
 
+import { SAVE_SLOT_GLOBAL as SLOT_GLOBAL, type SaveSlot } from "./indexeddb_shim";
+
 const SHIM = readFileSync(resolve(__dirname, "save_shim.js"), "utf8");
 const CARRIED_PREFIX = "gumroad-build-save:";
+const INDEXEDDB_KEY = "__gumroad_indexeddb__";
 
 type Batch = { clear: boolean; remove: string[]; set: Record<string, string>; writer: string; sequence: number };
 type Reply = { ok: boolean; status: number } | "network-error" | "never";
@@ -48,6 +51,8 @@ const runShim = ({
     failuresBeforeAlert: 3,
     carriedPrefix: CARRIED_PREFIX,
     maxWriterIdLength: 32,
+    indexedDBKey: INDEXEDDB_KEY,
+    indexedDBSlotGlobal: SLOT_GLOBAL,
   };
   const parse = (body: string): Batch => cast<Batch>(JSON.parse(body));
   runInNewContext(SHIM.replace("JSON.parse(__CONFIG__)", `JSON.parse(${JSON.stringify(JSON.stringify(config))})`), {
@@ -80,6 +85,7 @@ const runShim = ({
     Promise,
   });
   const storage = cast<Storage>(frameWindow.localStorage);
+  const slot = cast<SaveSlot>(frameWindow[SLOT_GLOBAL]);
   const tick = async () => {
     timers.shift()?.();
     for (let i = 0; i < 3; i += 1) await Promise.resolve();
@@ -88,7 +94,7 @@ const runShim = ({
     frameDocument.visibilityState = "hidden";
     listeners.visibilitychange?.();
   };
-  return { storage, sent, beacons, alerts, tick, hide, leave: () => listeners.pagehide?.(), frameWindow };
+  return { storage, slot, sent, beacons, alerts, tick, hide, leave: () => listeners.pagehide?.(), frameWindow };
 };
 
 describe("save shim", () => {
@@ -99,6 +105,40 @@ describe("save shim", () => {
 
     expect(storage.getItem("level")).toBe("3");
     expect(storage.getItem("__proto__")).toBe("kept");
+  });
+
+  it("keeps the IndexedDB snapshot out of localStorage, and through a clear", async () => {
+    const { storage, slot, sent, tick } = runShim({ save: { level: "3", [INDEXEDDB_KEY]: "old" } });
+
+    expect(slot.get()).toBe("old");
+    expect([storage.getItem(INDEXEDDB_KEY), storage.length, storage.key(1), Object.keys(storage)]).toEqual([
+      null,
+      1,
+      null,
+      ["level"],
+    ]);
+    storage.setItem(INDEXEDDB_KEY, "from the build");
+    storage.removeItem(INDEXEDDB_KEY);
+    expect(slot.get()).toBe("old");
+
+    slot.set("new");
+    storage.clear();
+    await tick();
+
+    expect(slot.get()).toBe("new");
+    expect(sent).toEqual([expect.objectContaining({ clear: true, remove: [], set: { [INDEXEDDB_KEY]: "new" } })]);
+
+    slot.set(null);
+    await tick();
+    expect(sent[1]).toEqual(expect.objectContaining({ clear: false, remove: [INDEXEDDB_KEY], set: {} }));
+  });
+
+  it("tells the page when the IndexedDB snapshot cannot be saved", () => {
+    const { slot, alerts } = runShim();
+
+    slot.fail();
+
+    expect(alerts).toEqual([{ type: "gumroad:build-save-failed" }]);
   });
 
   it("sends writes in one numbered batch per delay", async () => {

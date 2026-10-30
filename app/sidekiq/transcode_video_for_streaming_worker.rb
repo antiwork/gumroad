@@ -77,7 +77,7 @@ class TranscodeVideoForStreamingWorker
       return
     end
 
-    if TranscodedVideo.alive.processing.where(original_video_key:).where.not(id: transcoded_video.id).exists?
+    if TranscodedVideo.alive.in_flight.where(original_video_key:).where.not(id: transcoded_video.id).exists?
       # If the video currently being transcoded by another TranscodedVideo record, there is no need to do anything:
       # when its transcoding is done, all TranscodedVideo records referring to the same S3 key (including this `transcoded_video`)
       # will be marked as completed / error (see TranscodeEventHandler and HandleGrmcCallbackJob).

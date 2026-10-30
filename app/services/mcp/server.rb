@@ -22,9 +22,11 @@ module Mcp
     # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
+    DEFAULT_BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
     TIER_KEYS = %w[name price_cents recurrence].freeze
+    MICROSECONDS_PER_SECOND = 1_000_000
 
     class Error < StandardError
       attr_reader :code, :data
@@ -37,6 +39,18 @@ module Mcp
     end
 
     class ToolError < StandardError; end
+
+    DISCOUNT_PERCENT_RANGE = (1..100)
+    # DATETIME's range: MySQL, outside strict mode, stores a later year as a zero date that reads back as nil.
+    DISCOUNT_YEAR_RANGE = (1000..9999)
+    DISCOUNT_MIN_VALIDITY_WINDOW = 1.second
+    DISCOUNT_CODE_FIELDS = {
+      "percent_off" => { type: "integer", description: "Percent off, #{DISCOUNT_PERCENT_RANGE.min}-#{DISCOUNT_PERCENT_RANGE.max}. Not with amount_cents." },
+      "amount_cents" => { type: "integer", description: "Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off." },
+      "valid_at" => { type: "string", description: "ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one." },
+      "expires_at" => { type: "string", description: "ISO 8601 time the code stops working." },
+      "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
+    }.freeze
 
     # A tool's scope check failed. `scope` is what the client should re-authorize with: the
     # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
@@ -296,10 +310,11 @@ module Mcp
       def tools
         [
           tool("get_account", "The connected creator's public profile: name, username, storefront URL, currency.", {}, read_only: true),
-          tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
-                 "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
+          tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.", {
+                 "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description and covers. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
@@ -348,13 +363,43 @@ module Mcp
           tool("unpublish_product", "Take a product off sale without deleting it.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], destructive: true),
-          tool("list_sales", "Recent successful sales. Includes buyer email, product, amount, and time.", {
+          tool("list_sales", "Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.", {
                  "limit" => { type: "integer", description: "Max sales to return (1-50, default 25)." },
-                 "email" => { type: "string", description: "Filter by buyer email." }
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." },
+                 "email" => { type: "string", description: "Filter by buyer email." },
+                 "product_id" => { type: "string", description: "Only sales of this product (id from list_products)." },
+                 "after" => { type: "string", description: "Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01." },
+                 "before" => { type: "string", description: "Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01." },
+                 "payment" => { type: "string", enum: %w[paid free], description: "paid = price above zero, free = zero-price sales." },
+                 "kind" => { type: "string", enum: %w[subscription one_time], description: "subscription = membership charges, one_time = everything else." }
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
-                 "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." }
-               }, read_only: true)
+                 "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
+               }, read_only: true),
+          tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
+                 "name" => { type: "string", description: "Bundle name." },
+                 "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
+                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version." }
+               }, required: %w[name price_cents product_ids]),
+          tool("update_bundle", "Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.", {
+                 "id" => { type: "string", description: "Bundle id or permalink." },
+                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity." }
+               }, required: %w[id product_ids], destructive: true),
+          tool("create_discount_code", "Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.", {
+                 "code" => { type: "string", description: "The code buyers enter. Letters, numbers, dashes, and underscores." },
+                 "product_id" => { type: "string", description: "Product id or permalink. Omit for a code that covers all of the creator's products." },
+                 **DISCOUNT_CODE_FIELDS
+               }, required: %w[code]),
+          tool("update_discount_code", "Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.", {
+                 "code" => { type: "string", description: "The existing code." },
+                 "product_id" => { type: "string", description: "Product id or permalink, for a code made for specific products. Omit for a code that covers all products." },
+                 **DISCOUNT_CODE_FIELDS
+               }, required: %w[code], destructive: true),
+          tool("expire_discount_code", "End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.", {
+                 "code" => { type: "string", description: "The existing code." },
+                 "product_id" => { type: "string", description: "Product id or permalink, for a code made for specific products. Omit for a code that covers all products." }
+               }, required: %w[code], destructive: true)
         ]
       end
 
@@ -420,15 +465,17 @@ module Mcp
 
       def tool_list_products(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
-        products = user.products.visible.order(created_at: :desc, id: :desc).limit(limit_for(args, default: 25))
-          .includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
-        { products: products.map { |product| product_payload(product) } }
+        products = user.products.visible.includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
+        page, next_cursor = paginate(products, args, default: 25, table: "links")
+        { products: page.map { |product| product_payload(product) }, next_cursor: }.compact
       end
 
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
         details = { description: product.description, covers: covers_payload(product) }
+        # A caller editing a bundle needs the members it has now, before replacing them.
+        details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
         details.merge!(sales_count: product.successful_sales_count, sales_usd_cents: product.total_usd_cents) if (token.scopes.to_a & %w[view_sales account]).any?
         { product: product_payload(product).merge(details) }
@@ -609,6 +656,17 @@ module Mcp
         { product: product_payload(product), covers: covers_payload(product.reload) }
       end
 
+      def bundle_products_payload(product)
+        product.bundle_products.alive.in_order.includes(:product, :variant).map do |bundle_product|
+          {
+            id: bundle_product.product.external_id,
+            name: bundle_product.product.name,
+            variant_id: bundle_product.variant&.external_id,
+            quantity: bundle_product.quantity
+          }
+        end
+      end
+
       def files_payload(product)
         product.alive_product_files.map do |file|
           {
@@ -671,31 +729,53 @@ module Mcp
 
       def tool_list_sales(args)
         require_scopes!(:view_sales, :account)
-        sales = user.sales.successful_or_preorder_authorization_successful.order(created_at: :desc)
+        sales = user.sales.successful_or_preorder_authorization_successful
+          .includes(:link, :offer_code, :utm_link, :subscription)
         sales = sales.where(email: args["email"].to_s.strip) if args["email"].present?
-        sales = sales.limit(limit_for(args, default: 25))
+        sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
+        sales = sales.where(purchases: { created_at: parse_time!(args["after"], "after").. }) if args["after"].present?
+        sales = sales.where(purchases: { created_at: ...parse_time!(args["before"], "before") }) if args["before"].present?
+        sales = sales.where(args["payment"] == "paid" ? "purchases.price_cents > 0" : "purchases.price_cents = 0") if args["payment"]
+        if args["kind"]
+          membership = "purchases.subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM subscriptions WHERE subscriptions.id = purchases.subscription_id AND subscriptions.flags & #{Subscription.flag_mapping["flags"][:is_installment_plan]} != 0)"
+          sales = sales.where(args["kind"] == "subscription" ? membership : "NOT (#{membership})")
+        end
+        page, next_cursor = paginate(sales, args, default: 25, table: "purchases")
+        { sales: page.map { |sale| sale_payload(sale) }, next_cursor: }.compact
+      end
+
+      def sale_payload(sale)
+        utm = sale.utm_link
         {
-          sales: sales.map do |sale|
-            {
-              id: sale.external_id,
-              email: sale.email,
-              product_id: sale.link.external_id,
-              product_name: sale.link.name,
-              price_cents: sale.price_cents,
-              currency: Currency::USD,
-              created_at: sale.created_at.iso8601,
-              refunded: sale.refunded?,
-              chargedback: sale.chargedback?
-            }
-          end
+          id: sale.external_id,
+          email: sale.email,
+          product_id: sale.link.external_id,
+          product_name: sale.link.name,
+          price_cents: sale.price_cents,
+          fee_cents: sale.fee_cents.to_i,
+          affiliate_commission_cents: sale.affiliate_credit_cents.to_i,
+          net_cents: sale.price_cents - sale.fee_cents.to_i - sale.affiliate_credit_cents.to_i,
+          currency: Currency::USD,
+          created_at: sale.created_at.iso8601,
+          refunded: sale.refunded?,
+          chargedback: sale.chargedback?,
+          subscription: sale.subscription.present? && !sale.subscription.is_installment_plan?,
+          country: sale.country_or_ip_country,
+          discount_code: sale.offer_code&.code,
+          referrer: sale.referrer.presence,
+          utm_source: utm&.utm_source,
+          utm_medium: utm&.utm_medium,
+          utm_campaign: utm&.utm_campaign,
+          utm_term: utm&.utm_term,
+          utm_content: utm&.utm_content
         }
       end
 
       def tool_list_payouts(args)
         require_scopes!(:view_payouts, :account)
-        payouts = user.payments.order(created_at: :desc).limit(limit_for(args, default: 10))
+        page, next_cursor = paginate(user.payments, args, default: 10, table: "payments")
         {
-          payouts: payouts.map do |payout|
+          payouts: page.map do |payout|
             {
               id: payout.external_id,
               amount_cents: payout.amount_cents,
@@ -703,7 +783,218 @@ module Mcp
               state: payout.state,
               created_at: payout.created_at&.iso8601
             }
-          end
+          end,
+          next_cursor:
+        }.compact
+      end
+
+      # Runs inside the caller's transaction: the update service soft-deletes each member it is not
+      # handed, so one unresolvable id must roll back the whole edit, including a bundle just created.
+      def bundle_member_attributes(bundle, product_ids)
+        raise Error.new("product_ids must name at least one product", code: -32602) if product_ids.empty?
+
+        retained = bundle.bundle_products.alive.includes(:variant).index_by(&:product_id)
+
+        product_ids.map.with_index do |id, position|
+          raise Error.new("product_ids[#{position}] must be a non-blank string", code: -32602) unless id.is_a?(String) && id.strip.present?
+
+          product = find_product!(id)
+          # The service rewrites the version and quantity of every member it is handed, so a retained
+          # member carries over what it already sells. Only a new member takes the defaults, and its
+          # first version is what the editor's product picker selects.
+          kept = retained[product.id]
+          variant = kept&.variant || product.variants_or_skus.first
+          { product_id: product.external_id, variant_id: variant&.external_id, quantity: kept&.quantity || DEFAULT_BUNDLE_MEMBER_QUANTITY, position: }
+        end
+      end
+
+      def tool_create_bundle(args)
+        require_scopes!(:edit_products, :account)
+        name = args["name"].strip
+        raise Error.new("name is required", code: -32602) if name.blank?
+
+        price_cents = args["price_cents"]
+        raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
+
+        bundle = user.links.build(
+          name:,
+          native_type: Link::NATIVE_TYPE_BUNDLE,
+          is_bundle: true,
+          price_cents:,
+          price_currency_type: user.currency_type,
+          draft: true,
+          purchase_disabled_at: Time.current,
+          display_product_reviews: true
+        )
+        bundle.taxonomy = Taxonomy.find_by(slug: "other")
+        ActiveRecord::Base.transaction do
+          bundle.save!
+          members = bundle_member_attributes(bundle, args["product_ids"])
+          Bundle::UpdateProductsService.new(bundle:, products: members).perform
+        end
+        {
+          product: product_payload(bundle.reload),
+          bundle_products: bundle_products_payload(bundle),
+          message: "Draft bundle saved. It is not for sale until publish_product."
+        }
+      end
+
+      def tool_update_bundle(args)
+        require_scopes!(:edit_products, :account)
+        bundle = find_product!(args["id"])
+        raise ToolError, "This product is not a bundle. Make one with create_bundle first." if bundle.not_is_bundle?
+
+        ActiveRecord::Base.transaction do
+          # Reloads under the lock, then resolves the members here so a retained member keeps the
+          # version it already sells even if a concurrent edit just changed it.
+          bundle.lock!
+          members = bundle_member_attributes(bundle, args["product_ids"])
+          Bundle::UpdateProductsService.new(bundle:, products: members).perform
+        end
+        { product: product_payload(bundle.reload), bundle_products: bundle_products_payload(bundle) }
+      end
+
+      def tool_create_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        code = args["code"].strip
+        raise Error.new("code is required", code: -32602) if code.blank?
+        product = find_discount_product!(args) if args.key?("product_id")
+        attributes = discount_amount_attributes(args, required: true, currency_type: product&.price_currency_type || user.currency_type)
+        attributes.merge!(discount_window_attributes(args, default_valid_at: Time.current))
+        attributes[:max_purchase_count] = discount_max_purchase_count(args) if args.key?("max_purchase_count")
+
+        offer_code = user.offer_codes.build(code:, universal: product.nil?, products: Array(product), **attributes)
+        # offer_codes has no unique index on code, so two overlapping calls from this tool would both
+        # pass the uniqueness validation; the seller lock makes the second one see the first row.
+        ActiveRecord::Base.transaction do
+          User.where(id: user.id).lock.pick(:id)
+          save_discount_code!(offer_code)
+        end
+        { discount_code: discount_code_payload(offer_code) }
+      end
+
+      def tool_update_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        raise Error.new("Pass at least one of #{DISCOUNT_CODE_FIELDS.keys.to_sentence(last_word_connector: ', or ')}", code: -32602) if args.slice(*DISCOUNT_CODE_FIELDS.keys).empty?
+
+        offer_code = find_discount_code!(args)
+        # Checkout prices a tiered code from its tiers and ignores amount_percentage.
+        raise ToolError, "#{offer_code.code} gives a different discount by how long the buyer has owned the product. Change its amounts in the Gumroad dashboard." if offer_code.tiered? && args.slice("percent_off", "amount_cents").any?
+
+        currency_type = offer_code.currency_type || offer_code.products.first&.price_currency_type || user.currency_type
+        offer_code.assign_attributes(discount_amount_attributes(args, required: false, currency_type:))
+        offer_code.assign_attributes(discount_window_attributes(args, default_valid_at: offer_code.valid_at || offer_code.created_at))
+        offer_code.max_purchase_count = discount_max_purchase_count(args) if args.key?("max_purchase_count")
+        save_discount_code!(offer_code)
+        { discount_code: discount_code_payload(offer_code) }
+      end
+
+      def tool_expire_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        offer_code = find_discount_code!(args)
+        now = Time.current.change(usec: 0)
+        return { discount_code: discount_code_payload(offer_code), message: "Already expired." } if offer_code.expires_at.present? && offer_code.expires_at <= now
+
+        # The model requires a start date before the end date, as the editor's "Valid until" does.
+        offer_code.valid_at = [offer_code.valid_at || offer_code.created_at, now - DISCOUNT_MIN_VALIDITY_WINDOW].min
+        offer_code.expires_at = now
+        # Expiring narrows the code to nothing, so the price check, which the current prices can
+        # already fail, must not leave the creator unable to end it from here.
+        offer_code.save!(context: :expiring)
+        { discount_code: discount_code_payload(offer_code), message: "Expired. Buyers can no longer use this code." }
+      end
+
+      def find_discount_code!(args)
+        code = args["code"].strip
+        raise Error.new("code is required", code: -32602) if code.blank?
+
+        if args.key?("product_id")
+          product = find_discount_product!(args)
+          offer_code = product.offer_codes.alive.where(universal: false, user_id: user.id).find_by(code:)
+          raise ToolError, "No discount code #{code} is limited to this product. Omit product_id for a code that covers all products." if offer_code.nil?
+        else
+          offer_code = user.offer_codes.alive.universal.find_by(code:)
+          raise ToolError, "No discount code #{code} covers all products. Pass product_id for a code made for specific products." if offer_code.nil?
+        end
+        offer_code
+      end
+
+      def find_discount_product!(args)
+        raise Error.new("product_id must not be blank", code: -32602) if args["product_id"].blank?
+
+        find_product!(args["product_id"])
+      end
+
+      # The columns are 4-byte integers; the editor answers an overflow the same way.
+      def save_discount_code!(offer_code)
+        offer_code.save!
+      rescue ActiveModel::RangeError
+        raise ToolError, "The value entered is too large. Please enter a smaller number."
+      end
+
+      def discount_amount_attributes(args, required:, currency_type:)
+        percent, cents = args.values_at("percent_off", "amount_cents")
+        raise Error.new("Pass only one of percent_off or amount_cents", code: -32602) if percent && cents
+        raise Error.new("Pass one of percent_off or amount_cents", code: -32602) if required && percent.nil? && cents.nil?
+
+        if percent
+          raise Error.new("percent_off must be between #{DISCOUNT_PERCENT_RANGE.min} and #{DISCOUNT_PERCENT_RANGE.max}", code: -32602) unless DISCOUNT_PERCENT_RANGE.cover?(percent)
+
+          { amount_percentage: percent, amount_cents: nil, currency_type: nil, once_per_cart: false }
+        elsif cents
+          raise Error.new("amount_cents must be greater than zero", code: -32602) unless cents.positive?
+
+          { amount_cents: cents, amount_percentage: nil, currency_type: }
+        else
+          {}
+        end
+      end
+
+      def discount_window_attributes(args, default_valid_at:)
+        attributes = {}
+        attributes[:valid_at] = parse_discount_time(args, "valid_at") if args.key?("valid_at")
+        if args.key?("expires_at")
+          attributes[:expires_at] = parse_discount_time(args, "expires_at")
+          attributes[:valid_at] ||= default_valid_at
+        end
+        attributes
+      end
+
+      def parse_discount_time(args, key)
+        time = begin
+          Time.zone.iso8601(args[key])
+        rescue ArgumentError
+          raise Error.new("#{key} must be an ISO 8601 time", code: -32602)
+        end
+        raise Error.new("#{key} must have a year from #{DISCOUNT_YEAR_RANGE.min} to #{DISCOUNT_YEAR_RANGE.max}", code: -32602) unless DISCOUNT_YEAR_RANGE.cover?(time.year)
+
+        time
+      end
+
+      def discount_max_purchase_count(args)
+        count = args["max_purchase_count"]
+        raise Error.new("max_purchase_count must be zero or more", code: -32602) if count.negative?
+
+        count
+      end
+
+      def discount_code_payload(offer_code)
+        product_ids = offer_code.universal? ? [] : offer_code.products.map(&:external_id)
+        {
+          id: offer_code.external_id,
+          code: offer_code.code,
+          # A code made in the editor can cover several products; product_ids lists them all.
+          scope: offer_code.universal? ? "universal" : product_ids.first,
+          product_ids:,
+          # A tiered code's amount_percentage is a placeholder; checkout uses the tiers.
+          percent_off: offer_code.tiered? ? nil : offer_code.amount_percentage,
+          tiers: offer_code.normalized_ownership_duration_tiers,
+          amount_cents: offer_code.amount_cents,
+          currency: offer_code.is_cents? ? offer_code.currency_type : nil,
+          valid_at: offer_code.valid_at&.iso8601,
+          expires_at: offer_code.expires_at&.iso8601,
+          max_purchase_count: offer_code.max_purchase_count,
+          expired: offer_code.expires_at.present? && offer_code.expires_at <= Time.current
         }
       end
 
@@ -715,6 +1006,7 @@ module Mcp
           currency: product.price_currency_type,
           **pricing_payload(product),
           published: product.published?,
+          is_bundle: product.is_bundle?,
           url: product.long_url,
           permalink: product.unique_permalink
         }
@@ -748,6 +1040,30 @@ module Mcp
         raise ToolError, "The product was not found." if product.nil? || product.deleted_at.present?
 
         product
+      end
+
+      # Keyset pages over (created_at, id) descending; fetches one extra row to know whether another page exists.
+      # The cursor carries created_at in microseconds, not whole seconds, so a timestamp column that ever
+      # stores fractional seconds cannot drop rows that fall inside the last row's second.
+      def paginate(scope, args, default:, table:)
+        limit = limit_for(args, default:)
+        if args["cursor"].present?
+          at, id = args["cursor"].to_s.split("_", 2)
+          raise Error.new("cursor is not valid", code: -32602) unless at.match?(/\A\d+\z/) && id.to_s.match?(/\A\d+\z/)
+
+          time = Time.zone.at(Rational(at.to_i, MICROSECONDS_PER_SECOND))
+          scope = scope.where("#{table}.created_at < :t OR (#{table}.created_at = :t AND #{table}.id < :id)", t: time, id: id.to_i)
+        end
+        rows = scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
+        page = rows.first(limit)
+        next_cursor = "#{(page.last.created_at.to_r * MICROSECONDS_PER_SECOND).to_i}_#{page.last.id}" if rows.size > limit
+        [page, next_cursor]
+      end
+
+      def parse_time!(value, name)
+        Time.use_zone("UTC") { Time.zone.parse(value) } || raise(ArgumentError)
+      rescue ArgumentError
+        raise Error.new("#{name} must be a date or ISO 8601 time", code: -32602)
       end
 
       def limit_for(args, default:)
