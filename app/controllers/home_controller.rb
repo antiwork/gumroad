@@ -51,10 +51,10 @@ class HomeController < ApplicationController
 
   def features
     set_meta_tag(title: "Gumroad features: Sell digital products, memberships & courses")
-    set_meta_tag(name: "description", content: "Everything you need to sell online: instant digital delivery, memberships, courses, pay-what-you-want pricing, affiliates, email marketing, and worldwide tax handling. Start selling in minutes — no monthly fees.")
+    set_meta_tag(name: "description", content: "Instant digital delivery, memberships and courses, pay-what-you-want pricing, affiliates, email marketing, and worldwide tax handling. No monthly fees.")
     set_meta_tag(tag_name: "link", rel: "canonical", href: features_url, head_key: "canonical")
     set_meta_tag(property: "og:title", content: "Gumroad features: Sell digital products, memberships & courses")
-    set_meta_tag(property: "og:description", content: "Everything you need to sell online: instant digital delivery, memberships, courses, pay-what-you-want pricing, affiliates, email marketing, and worldwide tax handling. Start selling in minutes — no monthly fees.")
+    set_meta_tag(property: "og:description", content: "Instant digital delivery, memberships and courses, pay-what-you-want pricing, affiliates, email marketing, and worldwide tax handling. No monthly fees.")
     set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(property: "og:url", content: features_url)
   end
