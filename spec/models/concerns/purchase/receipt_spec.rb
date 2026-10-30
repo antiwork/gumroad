@@ -149,10 +149,10 @@ describe Purchase::Receipt do
       end
     end
 
-    context "when the recipient never claimed the gift" do
+    context "when the gift has no giftee purchase" do
       it "resends the buyer's own receipt" do
-        unclaimed_gift = create(:gift, link: product)
-        purchase = create(:purchase, link: product, is_gift_sender_purchase: true, gift_given: unclaimed_gift)
+        gift_without_giftee_purchase = create(:gift, link: product)
+        purchase = create(:purchase, link: product, is_gift_sender_purchase: true, gift_given: gift_without_giftee_purchase)
 
         expect { purchase.resend_receipt }.to_not raise_error
         expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id, true).on("critical")

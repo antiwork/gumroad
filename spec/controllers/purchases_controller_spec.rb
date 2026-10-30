@@ -184,7 +184,7 @@ describe PurchasesController, :vcr do
         expect(gift.giftee_purchase.email).to eq("new_giftee@example.com")
       end
 
-      it "allows to update giftee_email when the recipient never claimed the gift" do
+      it "allows to update giftee_email when the gift has no giftee purchase" do
         product = create(:product, user: seller)
         gift = create(:gift, gifter_email: "gifter@example.com", giftee_email: "giftee@example.com", link: product)
         gifter_purchase = create(:purchase, link: product,

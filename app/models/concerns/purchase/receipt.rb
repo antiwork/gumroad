@@ -57,7 +57,7 @@ module Purchase::Receipt
       CustomerMailer.preorder_receipt(preorder.id).deliver_later(queue: "critical", wait: 3.seconds)
     else
       SendPurchaseReceiptJob.perform_async(id, true)
-      # A gift the recipient never claimed has no giftee purchase to send to.
+      # A gift can lack a linked giftee purchase; then there is no recipient receipt to send.
       giftee_purchase = gift&.giftee_purchase
       SendPurchaseReceiptJob.perform_async(giftee_purchase.id, true) if is_gift_sender_purchase && giftee_purchase.present?
     end

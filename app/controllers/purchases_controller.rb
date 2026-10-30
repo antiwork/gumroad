@@ -256,7 +256,7 @@ class PurchasesController < ApplicationController
       gift.giftee_email = params[:giftee_email]
       gift.save!
 
-      # A gift the recipient never claimed has no giftee purchase to update or re-send to.
+      # A gift can lack a linked giftee purchase; then only gift.giftee_email changes and nothing is re-sent.
       if giftee_purchase.present?
         giftee_purchase.email = params[:giftee_email]
         giftee_purchase.save!
