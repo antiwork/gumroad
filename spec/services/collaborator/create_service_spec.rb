@@ -131,6 +131,27 @@ describe Collaborator::CreateService do
       expect(result[:collaborator].errors.to_hash).to eq({ base: ["Product not found"] })
     end
 
+    it "returns an error instead of raising when products are missing" do
+      params.delete(:products)
+
+      expect do
+        result = described_class.new(seller:, params:).process
+        expect(result[:success]).to eq false
+        expect(result[:collaborator].errors.to_hash).to eq({ base: ["At least one product must be selected"] })
+      end.to change { seller.collaborators.count }.by(0)
+    end
+
+    it "returns an error instead of matching an account with no email address when the email is missing" do
+      create(:user).update_column(:email, nil)
+      params.delete(:email)
+
+      expect do
+        result = described_class.new(seller:, params:).process
+        expect(result[:success]).to eq false
+        expect(result[:collaborator].errors.to_hash).to eq({ base: ["The email address isn't associated with a Gumroad account."] })
+      end.to change { seller.collaborators.count }.by(0)
+    end
+
     it "returns an error if the user requires approval of any collaborator requests" do
       collaborating_user.update!(require_collab_request_approval: true)
       result = described_class.new(seller:, params:).process

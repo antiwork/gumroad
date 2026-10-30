@@ -7,7 +7,7 @@ class Collaborator::CreateService
   end
 
   def process
-    collaborating_user = User.find_by(email: params[:email])
+    collaborating_user = params[:email].present? ? User.find_by(email: params[:email]) : nil
 
     collaborator = seller.collaborators.build(
       affiliate_user: collaborating_user,
@@ -30,6 +30,11 @@ class Collaborator::CreateService
     )
 
     collaborator.build_collaborator_invitation if require_approval?(seller:, collaborating_user:)
+
+    if params[:products].blank?
+      collaborator.errors.add(:base, "At least one product must be selected")
+      return { success: false, collaborator: }
+    end
 
     params[:products].each do |product_params|
       product = seller.products.find_by_external_id(product_params[:id])
