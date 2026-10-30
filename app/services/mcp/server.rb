@@ -50,6 +50,12 @@ module Mcp
     # Churn buckets by day in Elasticsearch, so the range carries the same cost ceiling as analytics.
     SUBSCRIPTION_CHURN_MAX_DAYS = 366
 
+    CUSTOMER_BREAKDOWNS = %w[spend conversion].freeze
+    CUSTOMERS_DEFAULT_ROWS = 25
+    # Rack::Timeout ends the request at 120s, so a query this slow needs its own deadline to report.
+    CUSTOMERS_QUERY_TIMEOUT = 30
+    CUSTOMER_REFUNDED = "COALESCE(purchases.stripe_refunded, 0) = 1"
+    CUSTOMER_FREE = "COALESCE(purchases.price_cents, 0) = 0"
     TOTALS_BREAKDOWNS = %w[product country day week month].freeze
     TOTALS_DEFAULT_DAYS = 30
     TOTALS_MAX_DAYS = 366
@@ -396,6 +402,13 @@ module Mcp
                  "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
                  "product_id" => { type: "string", description: "Only this product (id from list_products)." },
                  "breakdown" => { type: "string", enum: ANALYTICS_BREAKDOWNS, description: "product (default) or referrer." }
+               }, read_only: true),
+          tool("get_customers", "Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, refunded and charged-back amounts, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who later paid, with days to convert. Amounts are price before fees in minor units of USD, with refunds and chargebacks reported on their own lines; start_date and end_date are days in the creator's time zone that bound order dates, or the purchase that converted.", {
+                 "breakdown" => { type: "string", enum: CUSTOMER_BREAKDOWNS, description: "spend (default) or conversion." },
+                 "email" => { type: "string", description: "Only this buyer's email." },
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD, in the creator's time zone. Omit for all time." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Omit for all time." },
+                 "limit" => { type: "integer", description: "Max buyers to return (1-50, default #{CUSTOMERS_DEFAULT_ROWS})." }
                }, read_only: true),
           tool("get_sales_totals", "Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.", {
                  "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to 29 days before end_date." },
@@ -978,6 +991,110 @@ module Mcp
         Date.iso8601(value)
       rescue Date::Error
         raise Error.new("#{name} must be a date like 2026-10-31", code: -32602)
+      end
+
+      def tool_get_customers(args)
+        require_scopes!(:view_sales, :account)
+        by = args.fetch("breakdown", "spend")
+        limit = limit_for(args, default: CUSTOMERS_DEFAULT_ROWS)
+        start_date = parse_date!(args["start_date"], "start_date") if args["start_date"].present?
+        end_date = parse_date!(args["end_date"], "end_date") if args["end_date"].present?
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date && end_date && start_date > end_date
+
+        zone = ActiveSupport::TimeZone[user.timezone]
+        sales = user.sales.successful_or_preorder_authorization_successful
+        sales = sales.where(email: args["email"].to_s.strip) if args["email"].present?
+        rows = WithMaxExecutionTime.timeout_queries(seconds: CUSTOMERS_QUERY_TIMEOUT) do
+          if by == "conversion"
+            customers_by_conversion(sales, zone, start_date, end_date, limit)
+          else
+            customers_by_spend(sales, zone, start_date, end_date, limit)
+          end
+        end
+        { breakdown: by, currency: Currency::USD, time_zone: user.timezone, start_date: start_date&.iso8601, end_date: end_date&.iso8601, rows: }
+      rescue WithMaxExecutionTime::QueryTimeoutError, ActiveRecord::StatementTimeout
+        raise ToolError, "Counting customers took too long. Try a shorter date range."
+      end
+
+      def customers_by_spend(sales, zone, start_date, end_date, limit)
+        counted = customer_sales_range(sales, zone, start_date, end_date)
+        sales = counted.joins("LEFT JOIN (#{customer_refunds_sql(counted)}) refund_totals ON refund_totals.purchase_id = purchases.id")
+        refunds = "COALESCE(refund_totals.amount_cents, 0)"
+        # A partial refund never sets stripe_refunded, so spend follows the refund amounts: the order
+        # stays in the count, its money does not.
+        spend = "SUM(CASE WHEN #{CUSTOMER_REFUNDED} OR #{customer_chargedback} THEN 0 ELSE GREATEST(COALESCE(purchases.price_cents, 0) - #{refunds}, 0) END)"
+        refunded = "SUM(CASE WHEN #{CUSTOMER_REFUNDED} THEN COALESCE(purchases.price_cents, 0) ELSE #{refunds} END)"
+        chargedback = "SUM(CASE WHEN #{customer_chargedback} THEN COALESCE(purchases.price_cents, 0) ELSE 0 END)"
+        sales.group("purchases.email")
+          .order(Arel.sql("#{spend} DESC, purchases.email ASC"))
+          .limit(limit)
+          .pluck(Arel.sql("purchases.email"), Arel.sql("COUNT(*)"), Arel.sql(spend), Arel.sql(refunded), Arel.sql(chargedback),
+                 Arel.sql("MIN(purchases.created_at)"), Arel.sql("MAX(purchases.created_at)"))
+          .map do |email, orders, spend_cents, refunded_cents, chargedback_cents, first_at, last_at|
+            {
+              email:,
+              orders_count: orders,
+              total_spend_cents: spend_cents.to_i,
+              refunded_cents: refunded_cents.to_i,
+              chargedback_cents: chargedback_cents.to_i,
+              first_order_at: first_at&.iso8601,
+              last_order_at: last_at&.iso8601
+            }
+          end
+      end
+
+      def customers_by_conversion(sales, zone, start_date, end_date, limit)
+        free_at = "MIN(CASE WHEN #{CUSTOMER_FREE} THEN purchases.created_at END)"
+        converted_at = "MIN(CASE WHEN #{customer_paid} THEN purchases.created_at END)"
+        free_id = "MIN(CASE WHEN #{CUSTOMER_FREE} THEN purchases.id END)"
+        converted_id = "MIN(CASE WHEN #{customer_paid} THEN purchases.id END)"
+        # A buyer converted once a paid, kept purchase followed their first purchase of any kind,
+        # and that first one was free. created_at carries no fractional seconds, so two orders in
+        # the same second are settled by id.
+        first_at = "MIN(purchases.created_at)"
+        converted_after_free = "#{free_at} = #{first_at} AND (#{converted_at} > #{free_at} OR " \
+                              "(#{converted_at} IS NOT NULL AND #{converted_at} = #{free_at} AND #{converted_id} > #{free_id}))"
+        # The free purchase can be older than the range: the range bounds the purchase that converted.
+        rows = sales.group("purchases.email").having(converted_after_free)
+        rows = rows.having("#{converted_at} >= ?", customer_day_start(start_date, zone)) if start_date
+        rows = rows.having("#{converted_at} < ?", customer_day_start(end_date, zone) + 1.day) if end_date
+        # MySQL's `-` on two DATETIMEs is not a duration: it subtracts YYYYMMDDhhmmss numbers, so a
+        # conversion over a month or a year boundary counts as slower than a longer one inside a
+        # single month, and a capped list then drops the fastest converters. Order by the interval.
+        rows.order(Arel.sql("TIMESTAMPDIFF(SECOND, #{free_at}, #{converted_at}) ASC, purchases.email ASC"))
+          .limit(limit)
+          .pluck(Arel.sql("purchases.email"), Arel.sql(free_at), Arel.sql(converted_at))
+          .map do |email, first_free_at, paid_at|
+            { email:, free_at: first_free_at&.iso8601, converted_at: paid_at&.iso8601, days_to_convert: ((paid_at - first_free_at) / 1.day).round(1) }
+          end
+      end
+
+      def customer_sales_range(sales, zone, start_date, end_date)
+        sales = sales.where("purchases.created_at >= ?", customer_day_start(start_date, zone)) if start_date
+        sales = sales.where("purchases.created_at < ?", customer_day_start(end_date, zone) + 1.day) if end_date
+        sales
+      end
+
+      # Refunds per purchase, pre-aggregated: joined directly they would multiply the buyer's orders.
+      def customer_refunds_sql(sales)
+        Refund.effective.joins(:purchase).merge(sales)
+              .group("refunds.purchase_id").select("refunds.purchase_id, SUM(refunds.amount_cents) AS amount_cents").to_sql
+      end
+
+      # A won dispute keeps the money, so only an unreversed chargeback takes the order out of spend —
+      # the same reversal the model's not_chargedback_or_chargedback_reversed scope reads.
+      def customer_chargedback
+        "purchases.chargeback_date IS NOT NULL AND COALESCE(purchases.flags & #{Purchase.flag_mapping["flags"][:chargeback_reversed]}, 0) = 0"
+      end
+
+      # Paid and kept: a fully refunded or charged-back order is not money the buyer left behind.
+      def customer_paid
+        "COALESCE(purchases.price_cents, 0) > 0 AND NOT (#{CUSTOMER_REFUNDED}) AND NOT (#{customer_chargedback})"
+      end
+
+      # A YYYY-MM-DD bound is a day in the creator's zone, so a purchase late in their evening counts as that day.
+      def customer_day_start(date, zone)
+        zone.parse(date.iso8601).beginning_of_day
       end
 
       def tool_get_subscriptions(args)
