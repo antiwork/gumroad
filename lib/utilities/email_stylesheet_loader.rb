@@ -48,17 +48,49 @@ module EmailStylesheetLoader
 
   def load(url)
     css = public_file(url)
-    return css if css
+    return unwrap_layers(css) if css
 
     uri = Premailer::Rails::CSSLoaders::NetworkLoader.uri_for_url(url)
     return "" if uri.nil?
 
-    (development_asset_host?(uri) ? fetch_development_asset(uri) : fetch(uri)) || ""
+    return unwrap_layers(fetch_development_asset(uri) || "") if development_asset_host?(uri)
+
+    fetch(uri) || ""
   rescue URI::Error
     ""
   end
 
   private
+    # Premailer's css_parser has no @layer support and drops rules inside a layer block: the built
+    # CSS loses its :root custom properties (--font-family, --color, ...), and the unminified
+    # development CSS loses the whole base layer. Only our own stylesheets are unwrapped, because
+    # unwrapping a seller's layer would let it outrank the seller's unlayered rules.
+    def unwrap_layers(css)
+      return css unless css.include?("@layer")
+
+      scanner = StringScanner.new(css)
+      output = +""
+      closes_layer = []
+      until scanner.eos?
+        # A header's comments may hold ";" or "{". Every attempt stops at the next "@", so a malformed
+        # header is scanned once and then copied as plain text.
+        if scanner.scan(%r{@layer\b(?:[^{};@/]|/\*[^@]*?\*/)*([;\{])})
+          # A layer order statement (";") has no rules.
+          closes_layer.push(true) if scanner[1] == "{"
+        elsif scanner.scan("{")
+          closes_layer.push(false)
+          output << "{"
+        elsif scanner.scan("}")
+          output << "}" unless closes_layer.pop
+        else
+          # Strings and comments are copied whole, so braces inside them do not count. An unterminated
+          # one runs to the end, so no input is scanned twice.
+          output << scanner.scan(%r{"(?:\\.|[^"\\])*(?:"|\z)|'(?:\\.|[^'\\])*(?:'|\z)|/\*.*?(?:\*/|\z)|[^{}"'/@]+|.}m)
+        end
+      end
+      output
+    end
+
     # The gem's FileSystemLoader joins the href's path onto public/ without resolving "..", so a
     # seller href could otherwise read any file on the host.
     def public_file(url)
