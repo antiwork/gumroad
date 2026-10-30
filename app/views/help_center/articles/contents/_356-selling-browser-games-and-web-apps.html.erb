@@ -66,8 +66,10 @@
   <p>Your web app saves the way it does on any website, with <code>localStorage</code> or IndexedDB. You don't need to change your code. Gumroad keeps each buyer's saved data with their purchase, so it is there when they come back. Godot and Unity games save this way too.</p>
   <p>Some limits apply:</p>
   <ul>
-    <li>Each buyer can save up to 5 MB.</li>
-    <li>If a buyer has your web app open in two tabs at the same time, the save from the tab they used last is kept.</li>
+    <li>Each buyer can save up to 5 MB. IndexedDB data takes more space when Gumroad stores it: binary data, such as images or Godot files, uses about a third more.</li>
+    <li>With <code>localStorage</code>, each buyer can save up to 1,000 keys, and each key can be up to 1 KB long.</li>
+    <li>IndexedDB can't save files stored as <code>Blob</code> objects, or objects that refer to themselves or appear twice in the same record. If a save includes one, your buyer sees a message that their progress couldn't be saved, and Gumroad keeps their last save that worked.</li>
+    <li>If a buyer has your web app open in two tabs at the same time, the tabs can overwrite each other's progress. Use one tab at a time to avoid this.</li>
     <li>A large save made in the second before the buyer closes the tab can be lost. Save progress as your buyers go, not only when they leave.</li>
     <li>Unity's download cache is not saved, because the game can download those files again.</li>
   </ul>
@@ -84,7 +86,7 @@
   <h3 id="If-something-doesnt-work-Fx5tB">If something doesn't work</h3>
   <ul>
     <li><strong>Your web app shows a blank screen.</strong> Check that <code>index.html</code> is at the top level of your upload, and that a Godot or Unity game is exported without threads. Then open the browser's developer console on the Play tab to see the error.</li>
-    <li><strong>Progress isn't saved.</strong> Check that your web app saves with <code>localStorage</code> or IndexedDB, and that the save is under 5 MB.</li>
+    <li><strong>Progress isn't saved.</strong> Check that your web app saves with <code>localStorage</code> or IndexedDB, and that its saves fit the limits in <a href="#How-saved-progress-works-Sp6xF" target="_self">How saved progress works</a>.</li>
     <li><strong>There is no Play button.</strong> Check that a version is live. Open the product's Content tab, and click History.</li>
   </ul>
   <p>If you still need help, email <a href="mailto:support@gumroad.com">support@gumroad.com</a>.</p>
