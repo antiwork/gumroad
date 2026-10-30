@@ -1,0 +1,98 @@
+<div>
+  <p><strong>In this article:</strong></p>
+  <ul>
+    <li><a href="#What-your-buyers-get-Hb3wK" target="_self">What your buyers get</a></li>
+    <li><a href="#What-you-can-sell-Ty7pN" target="_self">What you can sell</a></li>
+    <li><a href="#Add-your-web-app-to-a-product-Gk2rS" target="_self">Add your web app to a product</a></li>
+    <li><a href="#Release-a-new-version-Vm9dQ" target="_self">Release a new version</a></li>
+    <li><a href="#Go-back-to-an-earlier-version-Rz4cL" target="_self">Go back to an earlier version</a></li>
+    <li><a href="#How-saved-progress-works-Sp6xF" target="_self">How saved progress works</a></li>
+    <li><a href="#What-your-web-app-cant-do-Nq8jW" target="_self">What your web app can't do</a></li>
+    <li><a href="#If-something-doesnt-work-Fx5tB" target="_self">If something doesn't work</a></li>
+  </ul>
+  <p>You can sell a web app: a game, an interactive course, or anything else that runs in a web browser from an <code>index.html</code> file. Your buyers open it on Gumroad. They don't download or install anything, and you don't need your own website to host it.</p>
+  <p>On Gumroad, each upload of your web app is a version. You upload versions with the Gumroad command line tool, or you ask your AI coding assistant to do it for you. You choose which version your buyers get.</p>
+
+  <h3 id="What-your-buyers-get-Hb3wK">What your buyers get</h3>
+  <p>After they buy, your buyers see a Play button next to your web app on their content page. Play opens your web app in a new tab, in the full window. They can also open it in full screen.</p>
+  <p>Your buyers' progress saves on its own. When they come back, on any computer, they continue where they left off.</p>
+  <p>Your buyers can also download your web app as a zip file.</p>
+
+  <h3 id="What-you-can-sell-Ty7pN">What you can sell</h3>
+  <p>You can sell anything that runs from an <code>index.html</code> file. For example, a course made with HTML and JavaScript, or a game made with three.js or Phaser.</p>
+  <p>You can also sell games made with Godot or Unity. Export them for the web <strong>without threads</strong>: in Godot, turn off Thread Support in the Web export settings. A game exported with threads doesn't start.</p>
+  <p>Your upload must follow these limits:</p>
+  <ul>
+    <li><code>index.html</code> must be at the top level of the folder or zip file.</li>
+    <li>The zip file can be up to 2 GB. Unpacked, it can hold up to 5,000 files and 4 GB.</li>
+    <li>Each product can have up to 50 versions.</li>
+  </ul>
+
+  <h3 id="Add-your-web-app-to-a-product-Gk2rS">Add your web app to a product</h3>
+  <p>Before you start, create the product in your dashboard, and find its ID. The ID is the part of the product's edit page address after <code>/products/</code>. For example, in <code>gumroad.com/products/demo/edit</code>, the ID is <code>demo</code>.</p>
+  <ol>
+    <li>Install the <a href="https://gumroad.com/api#api-cli" target="_blank">Gumroad command line tool</a>.</li>
+    <li>Sign in with <code>gumroad auth login</code>.</li>
+    <li>Upload the folder that holds your web app, and make it live:
+      <br><code>gumroad builds deploy ./my-web-app --product demo --promote</code>
+    </li>
+  </ol>
+  <p>Your web app appears in the product's content as a file, labeled "Web build". Your buyers get it the next time they open the product.</p>
+  <p>If you use an AI coding assistant, such as Claude Code, Codex, or Cursor, you can ask it to do these steps. For example: "Deploy this web app to my Gumroad product demo and make it live."</p>
+  <p>To try the whole process with a small example first, run <code>gumroad builds init</code>. It creates a working <code>index.html</code> and a script that uploads it.</p>
+
+  <h3 id="Release-a-new-version-Vm9dQ">Release a new version</h3>
+  <p>Run the same command again with your updated web app. Each upload becomes the next version.</p>
+  <p>If you leave out <code>--promote</code>, the new version is uploaded but your buyers keep the current one. This lets you check a version before your buyers get it. When you are ready:</p>
+  <ol>
+    <li>Open the product, and go to the Content tab.</li>
+    <li>On your web app's row, click History.</li>
+    <li>Under "Ready to go live", click Make live, and confirm.</li>
+  </ol>
+  <p>Before a version goes live, Gumroad saves any changes you made in the editor.</p>
+
+  <h3 id="Go-back-to-an-earlier-version-Rz4cL">Go back to an earlier version</h3>
+  <p>If a new version has a problem, you can give your buyers an earlier version again:</p>
+  <ol>
+    <li>Open the product, and go to the Content tab.</li>
+    <li>On your web app's row, click History.</li>
+    <li>Under "Earlier versions", click the ⋯ button next to the version you want.</li>
+    <li>Click Make live, and confirm.</li>
+  </ol>
+  <p>Your buyers get that version the next time they open the product. Their saved progress stays.</p>
+  <p>If you removed your web app's row from the content, the Content tab shows "Your web app is not in this product's content yet." Click History there, then click Add to content on the live version.</p>
+
+  <h3 id="How-saved-progress-works-Sp6xF">How saved progress works</h3>
+  <p>Your web app saves the way it does on any website, with <code>localStorage</code> or IndexedDB. You don't need to change your code. Gumroad keeps each buyer's saved data with their purchase, so it is there when they come back. Godot and Unity games save this way too.</p>
+  <p>Some limits apply:</p>
+  <ul>
+    <li>Each buyer can save up to 5 MB.</li>
+    <li>If a buyer has your web app open in two tabs at the same time, the save from the tab they used last is kept.</li>
+    <li>A large save made in the second before the buyer closes the tab can be lost. Save progress as your buyers go, not only when they leave.</li>
+    <li>Unity's download cache is not saved, because the game can download those files again.</li>
+  </ul>
+
+  <h3 id="What-your-web-app-cant-do-Nq8jW">What your web app can't do</h3>
+  <p>To protect your buyers, your web app runs in a sandbox. In the sandbox, your web app can't:</p>
+  <ul>
+    <li>Connect to the internet. For example, multiplayer, leaderboards, ads, and analytics don't work.</li>
+    <li>Load files from other websites. Put your fonts, images, sounds, videos, and scripts in your upload.</li>
+    <li>Use threads (<code>SharedArrayBuffer</code>) or service workers.</li>
+    <li>Read your buyers' Gumroad account or the page around it.</li>
+  </ul>
+
+  <h3 id="If-something-doesnt-work-Fx5tB">If something doesn't work</h3>
+  <ul>
+    <li><strong>Your web app shows a blank screen.</strong> Check that <code>index.html</code> is at the top level of your upload, and that a Godot or Unity game is exported without threads. Then open the browser's developer console on the Play tab to see the error.</li>
+    <li><strong>Progress isn't saved.</strong> Check that your web app saves with <code>localStorage</code> or IndexedDB, and that the save is under 5 MB.</li>
+    <li><strong>There is no Play button.</strong> Check that a version is live. Open the product's Content tab, and click History.</li>
+  </ul>
+  <p>If you still need help, email <a href="mailto:support@gumroad.com">support@gumroad.com</a>.</p>
+</div>
+<div>
+  <h3>Related Articles</h3>
+  <ul>
+    <li><a href="149-adding-a-product"><span>Adding a product</span></a></li>
+    <li><a href="355-connect-ai-assistants-to-gumroad"><span>Connecting AI assistants to your Gumroad store</span></a></li>
+  </ul>
+</div>

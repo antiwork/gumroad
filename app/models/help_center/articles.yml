@@ -650,3 +650,8 @@
   title: "Connecting AI assistants to your Gumroad store"
   description: "Gumroad runs an MCP server, so an AI assistant that supports MCP can read your products, sales, and payouts and create product drafts from your chat. This covers which assistants work today, how to connect Claude, the permissions you grant, and how to revoke access."
   category_id: <%= HelpCenter::Category::ADVANCED.id %>
+- id: 356
+  slug: "356-selling-browser-games-and-web-apps"
+  title: "Selling games and web apps that play in the browser"
+  description: "Sell a web app, such as a game or an interactive course, that your buyers open on Gumroad with their progress saved. This covers what you can sell, how to add your web app and release new versions, how to go back to an earlier version, how saving works, and what a web app can't do."
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
