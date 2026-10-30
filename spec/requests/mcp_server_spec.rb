@@ -566,7 +566,18 @@ describe "MCP server" do
         response.parsed_body["result"]
       end
 
-      before { allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates) }
+      before do
+        @seller.update_columns(created_at: 2.years.ago)
+        allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates)
+      end
+
+      it "returns no rows, without reading another day, for ranges before the account existed or in the future" do
+        expect_any_instance_of(CreatorAnalytics::CachingProxy).not_to receive(:data_for_dates)
+
+        [{ "start_date" => "2020-01-01", "end_date" => "2020-01-31" }, { "start_date" => 2.days.from_now.to_date.iso8601, "end_date" => 3.days.from_now.to_date.iso8601 }].each do |arguments|
+          expect(get_analytics(arguments)["structuredContent"]["rows"]).to eq([])
+        end
+      end
 
       it "returns views, sales, revenue and conversion per product" do
         allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_return(by_date: { views: { permalink => [10, 30] }, sales: { permalink => [1, 3] }, totals: { permalink => [1900, 5700] } })

@@ -794,12 +794,18 @@ module Mcp
 
         product = find_product!(args["product_id"]) if args["product_id"].present?
         by = args.fetch("breakdown", "product")
-        data = CreatorAnalytics::CachingProxy.new(user).data_for_dates(start_date, end_date, by: by == "referrer" ? :referral : :date)
-        permalinks = product ? [product.unique_permalink] : nil
-        rows = by == "referrer" ? analytics_by_referrer(data[:by_referral], permalinks) : analytics_by_product(data[:by_date], permalinks)
+        # CachingProxy clamps ranges to [account creation, today]; a range wholly outside would be answered with another day's data.
+        created_on = user.created_at.in_time_zone(timezone).to_date
+        if start_date > timezone.today || end_date < created_on
+          rows = []
+        else
+          data = CreatorAnalytics::CachingProxy.new(user).data_for_dates(start_date, end_date, by: by == "referrer" ? :referral : :date)
+          permalinks = product ? [product.unique_permalink] : nil
+          rows = by == "referrer" ? analytics_by_referrer(data[:by_referral], permalinks) : analytics_by_product(data[:by_date], permalinks)
+        end
         { start_date: start_date.iso8601, end_date: end_date.iso8601, time_zone: user.timezone, currency: Currency::USD, breakdown: by, rows: }
       rescue Faraday::TimeoutError
-        raise ToolError, "Analytics took too long for this range. Try a shorter range or one product."
+        raise ToolError, "Analytics took too long for this range. Try a shorter range."
       end
 
       def analytics_by_product(by_date, permalinks)
