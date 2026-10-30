@@ -10,8 +10,6 @@
 #     (PayPal captures, webhook-driven status syncs) mark the purchase successful
 #     on a freshly loaded Purchase, long after the checkout request ended, and
 #     an in-memory attribute would be lost by then;
-#   * `purchases.json_data` is a varchar(255), far too small for arbitrary
-#     buyer-supplied params;
 #   * the `purchases` table is too large to ALTER on the deploy path.
 class PurchaseUrlParameter < ApplicationRecord
   belongs_to :purchase

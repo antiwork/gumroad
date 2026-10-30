@@ -2345,7 +2345,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.integer "tax_cents", default: 0
     t.integer "affiliate_credit_cents", default: 0
     t.string "credit_card_zipcode"
-    t.string "json_data"
+    t.text "json_data", size: :long
     t.string "card_data_handling_mode"
     t.string "charge_processor_id"
     t.integer "total_transaction_cents"
