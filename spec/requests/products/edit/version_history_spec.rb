@@ -39,6 +39,27 @@ describe "Product edit version history", type: :system, js: true do
     expect(product.reload.name).to eq("Clicker 2")
   end
 
+  it "offers the history from the Content tab when no version has been made live yet" do
+    new_product = create(:product, user: seller, name: "Fresh game")
+    create(:rich_content, entity: new_product, description: [])
+    first = create(:product_build, product: new_product, number: 1)
+
+    visit edit_link_path(new_product.unique_permalink)
+    select_tab "Content"
+    expect(page).to have_text("Your web app has a version ready to go live.")
+    click_on "History"
+    within find("[role=dialog]", text: "Version history") do
+      within("section", text: "Ready to go live") { click_on "Make live" }
+    end
+    within_modal "Make version 1 live?" do
+      click_on "Make version 1 live"
+    end
+
+    expect(page).to have_text("Web build v1")
+    expect(page).not_to have_text("Your web app has a version ready to go live.")
+    expect(first.reload.status).to eq("live")
+  end
+
   it "has no version history while the player is off for the seller" do
     Feature.deactivate_user(:product_build_player, seller)
 

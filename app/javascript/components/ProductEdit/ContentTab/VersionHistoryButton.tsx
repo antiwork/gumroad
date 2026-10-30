@@ -56,7 +56,8 @@ export const VersionHistoryButton = () => {
   const { uniquePermalink, save, product } = useProductEditContext();
   // The save before promoting would send files whose upload has not finished, and the reload after it
   // would cut the upload off.
-  const uploading = filesAreUploading(product) || !!useImageUploadSettings()?.isUploading;
+  const imageSettings = useImageUploadSettings();
+  const uploading = filesAreUploading(product) || !!imageSettings?.isUploading;
   const [open, setOpen] = React.useState(false);
   const [builds, setBuilds] = React.useState<ProductBuild[] | null>(null);
   const [showAll, setShowAll] = React.useState(false);

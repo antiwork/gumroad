@@ -72,6 +72,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { EpubNudge } from "$app/components/ProductEdit/ContentTab/EpubNudge";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
+import { VersionHistoryButton } from "$app/components/ProductEdit/ContentTab/VersionHistoryButton";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
@@ -217,6 +218,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     richContentIdMappings,
     fileIdMappings,
     richContentRemovedFileEmbedIds,
+    hasWebBuildsWithoutLive,
   } = useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -877,6 +879,16 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                 >
                   <X className="size-4" />
                 </button>
+              </div>
+            </Alert>
+          </div>
+        ) : null}
+        {hasWebBuildsWithoutLive ? (
+          <div className="p-4 pb-0 md:p-8 md:pb-0">
+            <Alert role="status" variant="info">
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <span className="flex-1">Your web app has a version ready to go live.</span>
+                <VersionHistoryButton />
               </div>
             </Alert>
           </div>
