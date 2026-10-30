@@ -498,6 +498,8 @@ describe ProductPresenter do
             custom_view_content_button_text_max_length: 26,
             custom_receipt_text: "Thank you for purchasing! Feel free to contact us any time for support.",
             custom_receipt_text_max_length: 500,
+            custom_failed_payment_text: nil,
+            custom_failed_payment_text_max_length: 500,
             custom_attributes: { "Detail 1" => "Value 1" },
             file_attributes: [
               {
@@ -988,6 +990,8 @@ describe ProductPresenter do
               custom_view_content_button_text_max_length: 26,
               custom_receipt_text: nil,
               custom_receipt_text_max_length: 500,
+              custom_failed_payment_text: nil,
+              custom_failed_payment_text_max_length: 500,
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,
@@ -1307,6 +1311,8 @@ describe ProductPresenter do
               custom_view_content_button_text_max_length: 26,
               custom_receipt_text: nil,
               custom_receipt_text_max_length: 500,
+              custom_failed_payment_text: nil,
+              custom_failed_payment_text_max_length: 500,
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,

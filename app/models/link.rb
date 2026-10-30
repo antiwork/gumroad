@@ -272,6 +272,8 @@ class Link < ApplicationRecord
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
   validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
+  validates :custom_failed_payment_text, length: { maximum: Product::Validations::MAX_CUSTOM_FAILED_PAYMENT_TEXT_LENGTH }
+  validate :custom_failed_payment_text_is_plain_text
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
@@ -334,6 +336,7 @@ class Link < ApplicationRecord
   attr_json_data_accessor :main_section_index, default: -> { 0 }
   attr_json_data_accessor :custom_view_content_button_text
   attr_json_data_accessor :custom_receipt_text
+  attr_json_data_accessor :custom_failed_payment_text
   attr_json_data_accessor :content_moderation_disabled, default: -> { false }
   alias_method :content_moderation_disabled?, :content_moderation_disabled
 

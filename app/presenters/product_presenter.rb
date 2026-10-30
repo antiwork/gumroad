@@ -197,6 +197,8 @@ class ProductPresenter
         custom_view_content_button_text_max_length: Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH,
         custom_receipt_text: product.custom_receipt_text,
         custom_receipt_text_max_length: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH,
+        custom_failed_payment_text: product.custom_failed_payment_text,
+        custom_failed_payment_text_max_length: Product::Validations::MAX_CUSTOM_FAILED_PAYMENT_TEXT_LENGTH,
         custom_attributes: product.custom_attributes,
         taxonomy_attribute_values: product.seller_taxonomy_attribute_values,
         inferred_taxonomy_attribute_values: product.inferred_taxonomy_attribute_values,
