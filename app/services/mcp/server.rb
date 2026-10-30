@@ -858,12 +858,11 @@ module Mcp
 
         breakdown = args.fetch("breakdown", "product")
         # The revenue definition every other report uses: a successful or preorder-authorized sale
-        # that was not refunded or charged back. Bundle members and commission completions are extra
-        # rows for one order, so counting them would overstate units.
+        # that was not refunded or charged back. Bundle members are extra rows for one order. A
+        # commission completion is a second payment on the order: it adds revenue but not a unit.
         sales = user.sales
           .successful_or_preorder_authorization_successful_and_not_refunded_or_chargedback
           .not_is_bundle_product_purchase
-          .not_is_commission_completion_purchase
         sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
 
         buckets = sales_total_buckets(sales, timezone, start_date, end_date, breakdown)
@@ -884,16 +883,18 @@ module Mcp
         start_time = Time.at(timezone.parse(start_date.to_s).to_i).utc
         end_time = Time.at(timezone.parse((end_date + 1).to_s).to_i).utc
         buckets = Hash.new { |hash, key| hash[key] = [0, 0] }
+        completion_flag = Purchase.flag_mapping["flags"][:is_commission_completion_purchase]
+        units_sql = "SUM(CASE WHEN (purchases.flags & #{completion_flag}) = 0 THEN 1 ELSE 0 END)"
 
         local_offset_segments(timezone, start_time, end_time).each do |segment_start, segment_end, offset_seconds|
           expression = sales_group_expression(breakdown, offset_seconds)
           sales.where(created_at: segment_start...segment_end)
             .group(Arel.sql(expression))
-            .pluck(Arel.sql(expression), Arel.sql("SUM(purchases.price_cents)"), Arel.sql("COUNT(*)"))
+            .pluck(Arel.sql(expression), Arel.sql("SUM(purchases.price_cents)"), Arel.sql(units_sql))
             .each do |key, revenue_cents, units|
               bucket = buckets[sales_group_key(breakdown, key)]
               bucket[0] += revenue_cents.to_i
-              bucket[1] += units
+              bucket[1] += units.to_i
             end
         end
 
@@ -924,17 +925,24 @@ module Mcp
 
       def sales_group_key(breakdown, key)
         return key.to_i if breakdown == "product"
-        return key.presence if breakdown == "country"
+        return canonical_country_name(key.presence) if breakdown == "country"
 
         Date.parse(key.to_s)
+      end
+
+      # Purchases store the country as free text, so one country can arrive under several spellings.
+      def canonical_country_name(name)
+        return name if name.nil?
+
+        Compliance::Countries.find_by_name(name)&.common_name || name
       end
 
       def sales_total_rows(buckets, breakdown)
         case breakdown
         when "product"
-          products = Link.where(id: buckets.keys).select(:id, :name).index_by(&:id)
-          buckets.map { |link_id, (revenue_cents, units)| { product_id: products[link_id]&.external_id, product_name: products[link_id]&.name, **sales_metrics(revenue_cents, units) } }
-            .sort_by { |row| -row[:revenue_cents] }.first(TOTALS_MAX_ROWS)
+          top = buckets.sort_by { |_product_id, (revenue_cents, _units)| -revenue_cents }.first(TOTALS_MAX_ROWS)
+          products = Link.where(id: top.map(&:first)).select(:id, :name).index_by(&:id)
+          top.map { |product_id, (revenue_cents, units)| { product_id: products[product_id]&.external_id, product_name: products[product_id]&.name, **sales_metrics(revenue_cents, units) } }
         when "country"
           buckets.map { |country, (revenue_cents, units)| { country:, **sales_metrics(revenue_cents, units) } }
             .sort_by { |row| -row[:revenue_cents] }.first(TOTALS_MAX_ROWS)

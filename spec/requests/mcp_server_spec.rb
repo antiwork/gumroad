@@ -687,6 +687,25 @@ describe "MCP server" do
                            ])
       end
 
+      it "counts a commission completion's revenue but not as a second unit" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 4500, created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 4500, created_at: Time.utc(2026, 3, 6, 16, 0)).update!(is_commission_completion_purchase: true)
+
+        result = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31")
+
+        expect(result["totals"]).to eq("revenue_cents" => 9000, "units" => 1, "average_order_value_cents" => 9000)
+        expect(result["rows"].first).to include("revenue_cents" => 9000, "units" => 1)
+      end
+
+      it "merges spellings of one country into a single row" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 1000, country: "South Korea", created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 500, country: "Korea, Republic of", created_at: Time.utc(2026, 3, 6, 16, 0))
+
+        rows = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31", "breakdown" => "country")["rows"]
+
+        expect(rows).to eq([{ "country" => "South Korea", "revenue_cents" => 1500, "units" => 2, "average_order_value_cents" => 750 }])
+      end
+
       it "puts a sale in the local day its own zone offset gives, across a daylight-saving change" do
         # US daylight time starts 2026-03-08; each sale sits just after local midnight in the offset in force then.
         create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 2, 4, 30))
