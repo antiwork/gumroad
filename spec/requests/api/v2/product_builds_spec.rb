@@ -198,7 +198,7 @@ describe "Product builds API" do
 
       expect(response).to have_http_status(:ok)
       items = response.parsed_body.dig("props", "content", "content_items")
-      expect(items.sole).to include("web_build" => { "number" => 1, "status" => "live" })
+      expect(items.sole).to include("web_build" => { "number" => 1, "status" => "live", "playable" => false })
     end
 
     it "embeds the live zip in the product's content page and swaps it on the next promote" do

@@ -223,6 +223,7 @@ jobs:
             tmp/cache/vite
             public/js/gumroad-bundle.js
             public/js/gumroad-embed-bundle.js
+            public/js/build-player-indexeddb-bundle.js
           key: >-
             runner-test-assets-v2-${{ runner.os }}-${{ hashFiles(
               'app/javascript/**', 'app/views/**',
@@ -309,6 +310,7 @@ jobs:
             tmp/cache/vite
             public/js/gumroad-bundle.js
             public/js/gumroad-embed-bundle.js
+            public/js/build-player-indexeddb-bundle.js
           key: ${{ steps.test_assets.outputs.cache-primary-key }}
 
   lint_ruby:

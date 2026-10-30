@@ -4,8 +4,13 @@ module CreateConsumptionEvent
   private
     def create_consumption_event!(params)
       return false if params[:url_redirect_id].blank? || ConsumptionEvent::EVENT_TYPES.exclude?(params[:event_type])
+      # platform is client-supplied and only the model's inclusion validation guards it, so an
+      # unknown value would reach create! as a 500 instead of a { success: false }.
+      return false unless Platform.all.include?(params[:platform])
 
       url_redirect_id = ObfuscateIds.decrypt(params[:url_redirect_id])
+      # A malformed ciphertext decrypts to nil, which fails the model's presence validation the same way.
+      return false if url_redirect_id.blank?
       product_file_id = ObfuscateIds.decrypt(params[:product_file_id]) if params[:product_file_id].present?
       purchase_id = params[:purchase_id].present? ? ObfuscateIds.decrypt(params[:purchase_id]) : UrlRedirect.find(url_redirect_id)&.purchase_id
       product_id = Purchase.find_by(id: purchase_id)&.link_id

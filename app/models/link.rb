@@ -246,6 +246,7 @@ class Link < ApplicationRecord
             uniqueness: { scope: :user_id, case_sensitive: false, message: "is already used by another one of your products" },
             allow_nil: true, allow_blank: true
   validate :suggested_price_greater_than_price
+  validate :suggested_price_must_be_within_storage_range
   validate :duration_multiple_of_price_options
   validate :custom_and_unique_permalink_uniqueness
   validate :custom_permalink_of_licensed_product, if: :custom_permalink_or_is_licensed_changed?

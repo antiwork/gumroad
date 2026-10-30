@@ -44,7 +44,9 @@ class OfferCode < ApplicationRecord
   validates :code, presence: true, format: { with: /\A[A-Za-zÀ-ÖØ-öø-ÿ0-9\-_]*\z/, message: "can only contain numbers, letters, dashes, and underscores." }, unless: -> { is_cancellation_discount? || upsell.present? }
   validate :max_purchase_count_is_greater_than_or_equal_to_inventory_sold
   validate :expires_at_is_after_valid_at
-  validate :price_validation
+  # Ending a code only stops it applying, and the editor always lets a creator remove one, so an
+  # expiry save must not be refused by a price check the current product prices already fail.
+  validate :price_validation, unless: -> { validation_context == :expiring }
   validate :validate_cancellation_discount_uniqueness
   validate :validate_cancellation_discount_product_type
   validate :validate_not_used_as_default_discount

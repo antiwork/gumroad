@@ -8,8 +8,10 @@ module Streamable
   end
 
   def attempt_to_transcode?(allowed_when_processing: false)
-    # Don't transcode if another transcoding job is already pending for this particular video.
-    return false if !allowed_when_processing && transcoded_videos.alive.processing.exists?(original_video_key: s3_key)
+    # Don't transcode if another transcoding job is already pending for this particular video. A row that never
+    # got a job_id is not pending, so `in_flight` ignores ones older than the grace period instead of letting
+    # them block every later attempt.
+    return false if !allowed_when_processing && transcoded_videos.alive.in_flight.exists?(original_video_key: s3_key)
 
     # Don't transcode if the video is already transcoded.
     return false if transcoded_videos.alive.completed.exists?(original_video_key: s3_key)

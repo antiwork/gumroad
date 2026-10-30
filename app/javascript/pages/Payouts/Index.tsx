@@ -804,14 +804,32 @@ export default function PayoutsIndex() {
                 </Alert>
               ) : null}
               {next_payout_period_data.status === "not_payable" ? (
-                // Sellers with a positive balance below the payout minimum get the
-                // balance notice even before their first payout — otherwise a
-                // first-time seller whose payout was skipped would only see the
-                // generic empty state and have no way to see their balance or the
-                // reason the payout didn't go out.
-                next_payout_period_data.balance_cents != null &&
-                next_payout_period_data.balance_cents > 0 &&
-                next_payout_period_data.balance_cents < next_payout_period_data.minimum_payout_amount_cents ? (
+                // A seller can hold more than the minimum while only part of it has settled by the
+                // payout's cut-off. Telling them to "reach $100" then is wrong, so name the settled
+                // amount and say when the rest goes out.
+                next_payout_period_data.settled_balance_cents != null && !next_payout_period_data.payout_note ? (
+                  <Alert variant="info" role="status">
+                    <p>
+                      Your balance is{" "}
+                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.balance_cents ?? 0, {
+                        symbolFormat: "short",
+                        noCentsIfWhole: false,
+                      })}
+                      , but only{" "}
+                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.settled_balance_cents, {
+                        symbolFormat: "short",
+                        noCentsIfWhole: false,
+                      })}{" "}
+                      had settled by your next payout date — below the{" "}
+                      {formatPriceCentsWithCurrencySymbol("usd", next_payout_period_data.minimum_payout_amount_cents, {
+                        symbolFormat: "short",
+                      })}{" "}
+                      minimum. The rest will be paid out once it settles.
+                    </p>
+                  </Alert>
+                ) : next_payout_period_data.balance_cents != null &&
+                  next_payout_period_data.balance_cents > 0 &&
+                  next_payout_period_data.balance_cents < next_payout_period_data.minimum_payout_amount_cents ? (
                   <Alert variant="info" role="status">
                     <p>
                       Your balance is{" "}

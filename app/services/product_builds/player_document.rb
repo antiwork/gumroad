@@ -4,80 +4,27 @@
 # and the CSP that keeps it on an opaque origin even when the URL is opened outside the frame.
 module ProductBuilds::PlayerDocument
   SANDBOX = "allow-scripts allow-pointer-lock"
-  # How long the shim gathers storage writes before it hands them to the parent page in one batch.
+  # How long the shim gathers storage writes before it sends them in one batch.
   SAVE_FLUSH_DELAY_MS = 1_000
-  SAVE_MESSAGE_TYPE = "gumroad:build-save"
+  # Browsers cap a beacon (and all keepalive requests together) at 64 KB; a larger last batch goes
+  # out as an ordinary request, which the browser may cancel as the page closes.
+  SAVE_BEACON_MAX_BYTES = 60_000
+  SAVE_FAILED_MESSAGE_TYPE = "gumroad:build-save-failed"
+  # Network errors are retried quietly at first; the buyer hears about it only if they keep failing.
+  SAVE_FAILURES_BEFORE_ALERT = 3
+  # Prefix of the window.name that carries unconfirmed changes from one page of a build to the next.
+  CARRIED_CHANGES_PREFIX = "gumroad-build-save:"
 
-  # On the opaque origin, localStorage throws. The shim puts the purchase's save back in its place:
-  # reads come from the save served with the page, and writes go to the parent page in batches
-  # (clear, then remove, then set), which sends them to the save store. sessionStorage and cookies
-  # get the in-memory stand-ins the custom HTML pages use.
-  SAVE_SHIM_SCRIPT = <<~JS
-    (function () {
-      var data = Object.create(null);
-      // Parsed, not an object literal, so a "__proto__" key stays a key.
-      var saved = JSON.parse(__SAVE__);
-      Object.keys(saved).forEach(function (k) { data[k] = String(saved[k]); });
-      var pending = null;
-      var timer = null;
-      function batch() { return pending || (pending = { clear: false, remove: [], set: Object.create(null) }); }
-      function flush() {
-        clearTimeout(timer);
-        timer = null;
-        if (!pending) { return; }
-        var changes = pending;
-        pending = null;
-        try { window.parent.postMessage({ type: "#{SAVE_MESSAGE_TYPE}", changes: changes }, "*"); } catch (e) {}
-      }
-      function changed() { if (!timer) { timer = setTimeout(flush, #{SAVE_FLUSH_DELAY_MS}); } }
-      var api = {
-        getItem: function (k) { k = String(k); return k in data ? data[k] : null; },
-        setItem: function (k, v) {
-          k = String(k); v = String(v);
-          data[k] = v;
-          var b = batch();
-          b.set[k] = v;
-          var i = b.remove.indexOf(k);
-          if (i >= 0) { b.remove.splice(i, 1); }
-          changed();
-        },
-        removeItem: function (k) {
-          k = String(k);
-          if (!(k in data)) { return; }
-          delete data[k];
-          var b = batch();
-          delete b.set[k];
-          if (b.remove.indexOf(k) < 0) { b.remove.push(k); }
-          changed();
-        },
-        clear: function () {
-          data = Object.create(null);
-          pending = { clear: true, remove: [], set: Object.create(null) };
-          changed();
-        },
-        key: function (i) { return Object.keys(data)[i] || null; },
-        get length() { return Object.keys(data).length; }
-      };
-      // Games also read and write keys as properties: localStorage.best = 10.
-      var storage = new Proxy(api, {
-        get: function (t, p) { if (p in api) { return api[p]; } return typeof p === "string" && p in data ? data[p] : undefined; },
-        set: function (t, p, v) { if (!(p in api)) { api.setItem(p, v); } return true; },
-        deleteProperty: function (t, p) { api.removeItem(p); return true; },
-        has: function (t, p) { return p in api || p in data; },
-        ownKeys: function () { return Object.keys(data); },
-        getOwnPropertyDescriptor: function (t, p) {
-          if (typeof p === "string" && p in data) { return { value: data[p], writable: true, enumerable: true, configurable: true }; }
-        }
-      });
-      var throws = false;
-      try { void window.localStorage; } catch (e) { throws = true; }
-      if (throws) {
-        try { Object.defineProperty(window, "localStorage", { value: storage, configurable: true }); } catch (e) {}
-      }
-      window.addEventListener("pagehide", flush);
-      document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") { flush(); } });
-    })();
-  JS
+  # The save shim, which puts localStorage back on the opaque origin. It lives in its own file so a
+  # test can run it; see the file for how it saves.
+  SAVE_SHIM_SCRIPT = Rails.root.join("app/javascript/build_player/save_shim.js").read.freeze
+  SAVE_SHIM_CONFIG_MARKER = "JSON.parse(__CONFIG__)"
+  # The save key of the IndexedDB snapshot, and the window property through which the save shim hands
+  # it to the IndexedDB shim (app/javascript/build_player/indexeddb_shim.ts names the same property).
+  INDEXEDDB_SAVE_KEY = "__gumroad_indexeddb__"
+  INDEXEDDB_SLOT_GLOBAL = "__gumroadIndexedDBSaveSlot"
+  # Built by `rake vite:build_widget` with the widget bundles.
+  INDEXEDDB_SHIM_PATH = Rails.public_path.join("js/build-player-indexeddb-bundle.js")
 
   # A UTF-8 byte order mark, leading whitespace and comments, then the doctype if there is one.
   PROLOGUE = /\A(?:\xEF\xBB\xBF)?(?:\s|<!--.*?-->)*(?:<!doctype[^>]*>)?/imn
@@ -86,14 +33,38 @@ module ProductBuilds::PlayerDocument
   # bytes right after the doctype, before any tag of the page. There the parser opens <html> and <head>
   # for them, so no tag has to be found, and a <head> inside a comment or a script cannot mislead it.
   # Anything before the doctype would put the page in quirks mode.
-  def self.render(html, save_data:)
-    # ASCII only, so the save reads the same whatever encoding the seller's page is in.
-    save = JSON.generate(JSON.generate(save_data, ascii_only: true), ascii_only: true)
-    script = SAVE_SHIM_SCRIPT.sub("__SAVE__") { ERB::Util.json_escape(save) }
-    # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins.
-    injected = %(<script data-cfasync="false">#{script}</script>#{RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT}).b
+  def self.render(html, save_data:, save_url:)
+    config = {
+      save: save_data,
+      saveUrl: save_url,
+      flushDelayMs: SAVE_FLUSH_DELAY_MS,
+      beaconMaxBytes: SAVE_BEACON_MAX_BYTES,
+      failedMessageType: SAVE_FAILED_MESSAGE_TYPE,
+      failuresBeforeAlert: SAVE_FAILURES_BEFORE_ALERT,
+      carriedPrefix: CARRIED_CHANGES_PREFIX,
+      maxWriterIdLength: ProductBuildSave::MAX_WRITER_ID_LENGTH,
+      indexedDBKey: INDEXEDDB_SAVE_KEY,
+      indexedDBSlotGlobal: INDEXEDDB_SLOT_GLOBAL,
+    }
+    # A JSON string of the JSON, ASCII only: it reads the same whatever encoding the seller's page is
+    # in, and json_escape keeps a "</script>" in a saved value from ending the script.
+    literal = JSON.generate(JSON.generate(config, ascii_only: true), ascii_only: true)
+    script = SAVE_SHIM_SCRIPT.sub(SAVE_SHIM_CONFIG_MARKER) { "JSON.parse(#{ERB::Util.json_escape(literal)})" }
+    # data-cfasync: Rocket Loader must not run the save shim after the in-memory stand-ins. The
+    # IndexedDB shim is inline too: a script file would be one more blocking request before the game's.
+    injected = (%(<script data-cfasync="false">#{script}</script>) +
+      %(<script data-cfasync="false">#{indexeddb_shim_script}</script>) +
+      RendersCustomHtmlPages::SANDBOX_COMPAT_SCRIPT).b
     html = html.b
     html.insert(html.match(PROLOGUE).end(0), injected)
+  end
+
+  # Checked for the same two traps as the save: the page may be in any encoding, and must keep the tag.
+  def self.indexeddb_shim_script
+    @indexeddb_shim_script ||= INDEXEDDB_SHIM_PATH.read.tap do |script|
+      raise "#{INDEXEDDB_SHIM_PATH} is not ASCII" unless script.ascii_only?
+      raise "#{INDEXEDDB_SHIM_PATH} would end its script tag" if script.match?(%r{</script}i)
+    end.freeze
   end
 
   # `request_origin` is the app or custom-domain origin serving the frame, and `cdn_origin` the
