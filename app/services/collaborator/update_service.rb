@@ -8,6 +8,13 @@ class Collaborator::UpdateService
   end
 
   def process
+    # A missing product set must not read as "no products selected": the affiliate sync below would
+    # destroy every existing product affiliate for this collaborator.
+    if params[:products].blank?
+      collaborator.errors.add(:base, "At least one product must be selected")
+      return { success: false, collaborator: }
+    end
+
     # Resolve the whole requested product set before touching anything: a bad or unowned id used to
     # raise partway through, after the rows for de-selected products had already been destroyed, so
     # the collaborator was left on a revenue share nobody asked for.
