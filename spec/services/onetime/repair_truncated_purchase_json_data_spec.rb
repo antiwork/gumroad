@@ -113,11 +113,19 @@ describe Onetime::RepairTruncatedPurchaseJsonData, versioning: true do
     expect(status_for(target.merge(purchase_id: Purchase.maximum(:id) + 1))).to eq(:purchase_not_found)
   end
 
-  it "refuses to run until purchases.json_data is LONGTEXT" do
+  it "refuses an approved value longer than the column" do
     service = described_class.new(targets: [target], dry_run: false)
-    allow(service).to receive(:json_data_column_type).and_return("varchar(255)")
+    allow(service).to receive(:json_data_column_limit).and_return(full_json_data.length - 1)
 
-    expect { service.process }.to raise_error("purchases.json_data must be LONGTEXT before repairing")
+    expect(service.process.sole[:status]).to eq(:approved_value_too_long)
+    expect(stored_value).to eq(stored_json_data)
+  end
+
+  it "refuses to run until purchases.json_data is widened" do
+    service = described_class.new(targets: [target], dry_run: false)
+    allow(service).to receive(:json_data_column_limit).and_return(described_class::TRUNCATED_LENGTH)
+
+    expect { service.process }.to raise_error("purchases.json_data must be widened before repairing")
     expect(stored_value).to eq(stored_json_data)
   end
 end

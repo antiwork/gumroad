@@ -13,6 +13,7 @@ module JsonData
     serialize :json_data, coder: JSON
 
     before_save :merge_json_data_with_current_row, if: -> { persisted? && json_data_changed? }
+    after_save :ensure_json_data_fits_column, if: :saved_change_to_json_data?
   end
 
   class_methods do
@@ -106,5 +107,20 @@ module JsonData
       end
 
       self[:json_data] = merged
+    end
+
+    # The connections run non-strict, so MySQL cuts an over-length value to a varchar's limit and
+    # leaves JSON that no later read can parse. This runs after save, inside its transaction, so it
+    # sees the value every before_* callback left, and raising rolls the write back.
+    def ensure_json_data_fits_column
+      column = column_for_attribute(:json_data)
+      return unless column.type == :string
+
+      written = read_attribute_before_type_cast("json_data").to_s.length
+      return if written <= column.limit
+
+      # The cached limit can predate a widening migration, so only a row that really holds less raises.
+      stored = self.class.unscoped.where(id:).pick(Arel.sql("CHAR_LENGTH(json_data)"))
+      raise ActiveRecord::ValueTooLong, "json_data is #{written} characters, over the #{column.limit}-character column" if stored != written
     end
 end

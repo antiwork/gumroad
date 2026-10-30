@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Rewrites purchases.json_data rows that MySQL cut to 255 characters while the column was a varchar.
+# Rewrites purchases.json_data rows that MySQL cut to 255 characters while the column was a varchar(255).
 # Each target names the exact cut value still stored, the PaperTrail version whose write was cut, and the
 # full value a person read from that version's object_changes. The service only checks and writes those
 # values: anything that does not match exactly is skipped, never guessed or merged.
@@ -10,13 +10,13 @@ class Onetime::RepairTruncatedPurchaseJsonData
   Target = Data.define(:purchase_id, :version_id, :stored_json_data, :approved_json_data)
 
   def initialize(targets:, dry_run: true)
-    @targets = targets.map { Target.new(**_1) }
+    @targets = targets.map { Target.new(**_1.to_h.symbolize_keys) }
     @dry_run = dry_run
   end
 
   def process
     ApplicationRecord.connected_to(role: :writing) do
-      raise "purchases.json_data must be LONGTEXT before repairing" unless json_data_column_type == "longtext"
+      raise "purchases.json_data must be widened before repairing" unless column_limit > TRUNCATED_LENGTH
 
       @targets.map { repair(_1) }
     end
@@ -44,6 +44,7 @@ class Onetime::RepairTruncatedPurchaseJsonData
       return :row_changed unless stored == target.stored_json_data
       return :not_truncated unless stored.is_a?(String) && stored.length == TRUNCATED_LENGTH && !parses?(stored)
       return :approved_value_not_a_full_hash unless approved_hash?(target) && target.approved_json_data.length > TRUNCATED_LENGTH
+      return :approved_value_too_long if target.approved_json_data.length > column_limit
       return :approved_value_does_not_extend_stored unless target.approved_json_data.start_with?(stored)
 
       version = PaperTrail::Version.find_by(id: target.version_id, item_type: "Purchase", item_id: target.purchase_id)
@@ -52,8 +53,8 @@ class Onetime::RepairTruncatedPurchaseJsonData
       :later_version_may_change_json_data if later_versions_may_change_json_data?(version)
     end
 
-    # update_all skips PaperTrail (its callbacks would parse the cut value), so record the change
-    # here, in the same transaction, so a failed audit also undoes the write.
+    # update_all skips PaperTrail (its callbacks would parse the cut value) and JsonData's length guard.
+    # The audit is written in the same transaction, so its failure undoes the repair.
     def write(target)
       Purchase.unscoped.where(id: target.purchase_id).update_all(["json_data = ?", target.approved_json_data])
       PaperTrail::Version.create!(
@@ -65,19 +66,19 @@ class Onetime::RepairTruncatedPurchaseJsonData
 
     # A later version with missing or unreadable object_changes may have changed json_data too.
     def later_versions_may_change_json_data?(version)
-      PaperTrail::Version.where(item_type: "Purchase", item_id: version.item_id).where("id > ?", version.id).any? do |later|
-        changes = load_object_changes(later)
+      PaperTrail::Version.with_item_keys("Purchase", version.item_id).subsequent(version).pluck(:object_changes).any? do |object_changes|
+        changes = load_object_changes(object_changes)
         changes.nil? || changes.key?("json_data")
       end
     end
 
     def recorded_json_data(version)
-      change = load_object_changes(version)&.dig("json_data")
+      change = load_object_changes(version.object_changes)&.dig("json_data")
       change.last if change.is_a?(Array) && change.length == 2
     end
 
-    def load_object_changes(version)
-      changes = PaperTrail.serializer.load(version.object_changes) if version.object_changes
+    def load_object_changes(object_changes)
+      changes = PaperTrail.serializer.load(object_changes) if object_changes
       changes if changes.is_a?(Hash)
     rescue JSON::ParserError
       nil
@@ -96,7 +97,11 @@ class Onetime::RepairTruncatedPurchaseJsonData
       false
     end
 
-    def json_data_column_type
-      Purchase.connection.columns(:purchases).find { _1.name == "json_data" }.sql_type
+    def column_limit
+      @column_limit ||= json_data_column_limit
+    end
+
+    def json_data_column_limit
+      Purchase.connection.columns(:purchases).find { _1.name == "json_data" }.limit
     end
 end
