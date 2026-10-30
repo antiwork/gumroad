@@ -24,7 +24,7 @@ class Onetime::RepairTruncatedPurchaseJsonData
 
   private
     def repair(target)
-      Purchase.transaction do
+      Purchase.transaction(requires_new: true) do
         rows = Purchase.connection.select_rows(Purchase.unscoped.where(id: target.purchase_id).lock.select(:json_data).to_sql)
         stored = rows.dig(0, 0)
         status = if rows.empty?
@@ -42,7 +42,7 @@ class Onetime::RepairTruncatedPurchaseJsonData
 
     def skip_reason(target, stored)
       return :row_changed unless stored == target.stored_json_data
-      return :not_truncated unless stored.length == TRUNCATED_LENGTH && !parses?(stored)
+      return :not_truncated unless stored.is_a?(String) && stored.length == TRUNCATED_LENGTH && !parses?(stored)
       return :approved_value_not_a_full_hash unless approved_hash?(target) && target.approved_json_data.length > TRUNCATED_LENGTH
       return :approved_value_does_not_extend_stored unless target.approved_json_data.start_with?(stored)
 
@@ -52,8 +52,14 @@ class Onetime::RepairTruncatedPurchaseJsonData
       :later_version_may_change_json_data if later_versions_may_change_json_data?(version)
     end
 
+    # update_all skips PaperTrail (its callbacks would parse the cut value), so record the change
+    # here, in the same transaction, so a failed audit also undoes the write.
     def write(target)
       Purchase.unscoped.where(id: target.purchase_id).update_all(["json_data = ?", target.approved_json_data])
+      PaperTrail::Version.create!(
+        item_type: "Purchase", item_id: target.purchase_id, event: "update", whodunnit: self.class.name,
+        object_changes: PaperTrail.serializer.dump("json_data" => [target.stored_json_data, target.approved_json_data])
+      )
       :repaired
     end
 

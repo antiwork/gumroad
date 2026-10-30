@@ -28,12 +28,22 @@ describe Onetime::RepairTruncatedPurchaseJsonData, versioning: true do
     expect(stored_value).to eq(stored_json_data)
   end
 
-  it "restores every key the cut write recorded, once" do
-    expect(status_for(target)).to eq(:repaired)
+  it "restores every key the cut write recorded, once, and records the change" do
+    expect { expect(status_for(target)).to eq(:repaired) }.to change { purchase.versions.count }.by(1)
     expect(purchase.reload.json_data).to eq(JSON.parse(full_json_data))
     expect(purchase.last_content_page_id).to eq("p" * 300)
+    audit = purchase.versions.last
+    expect(audit).to have_attributes(event: "update", whodunnit: described_class.name)
+    expect(JSON.parse(audit.object_changes)).to eq("json_data" => [stored_json_data, full_json_data])
 
-    expect(status_for(target)).to eq(:already_repaired)
+    expect { expect(status_for(target)).to eq(:already_repaired) }.not_to change { purchase.versions.count }
+  end
+
+  it "keeps the cut value when the change cannot be recorded" do
+    allow(PaperTrail::Version).to receive(:create!).and_raise(ActiveRecord::RecordInvalid)
+
+    expect { status_for(target) }.to raise_error(ActiveRecord::RecordInvalid)
+    expect(stored_value).to eq(stored_json_data)
   end
 
   it "refuses a completion that the version did not record" do
@@ -50,6 +60,15 @@ describe Onetime::RepairTruncatedPurchaseJsonData, versioning: true do
     expect(stored_value).to eq(stored_json_data)
   end
 
+  it "refuses when the row holds a different cut value than the version wrote" do
+    unversioned_json_data = { "locale" => "fr", "last_content_page_id" => "q" * 300 }.to_json.first(described_class::TRUNCATED_LENGTH)
+    Purchase.where(id: purchase.id).update_all(["json_data = ?", unversioned_json_data])
+
+    expect(unversioned_json_data.length).to eq(described_class::TRUNCATED_LENGTH)
+    expect(status_for(target.merge(stored_json_data: unversioned_json_data))).to eq(:approved_value_does_not_extend_stored)
+    expect(stored_value).to eq(unversioned_json_data)
+  end
+
   it "skips a row that changed after the target was prepared" do
     changed_json_data = stored_json_data.sub("stripe", "geoip")
     Purchase.where(id: purchase.id).update_all(["json_data = ?", changed_json_data])
@@ -58,10 +77,21 @@ describe Onetime::RepairTruncatedPurchaseJsonData, versioning: true do
     expect(stored_value).to eq(changed_json_data)
   end
 
-  it "skips a row whose stored value still parses" do
-    Purchase.where(id: purchase.id).update_all(["json_data = ?", full_json_data])
+  it "skips a row that is exactly 255 characters of valid JSON" do
+    valid_json_data = { "locale" => "en", "last_content_page_id" => "" }.to_json
+    valid_json_data = { "locale" => "en", "last_content_page_id" => "v" * (described_class::TRUNCATED_LENGTH - valid_json_data.length) }.to_json
+    Purchase.where(id: purchase.id).update_all(["json_data = ?", valid_json_data])
 
-    expect(status_for(target.merge(stored_json_data: full_json_data, approved_json_data: "#{full_json_data[0...-1]},\"x\":1}"))).to eq(:not_truncated)
+    expect(valid_json_data.length).to eq(described_class::TRUNCATED_LENGTH)
+    expect(status_for(target.merge(stored_json_data: valid_json_data))).to eq(:not_truncated)
+    expect(stored_value).to eq(valid_json_data)
+  end
+
+  it "skips a row whose json_data is NULL" do
+    Purchase.where(id: purchase.id).update_all("json_data = NULL")
+
+    expect(stored_value).to be_nil
+    expect(status_for(target.merge(stored_json_data: nil))).to eq(:not_truncated)
   end
 
   it "refuses a missing version and a version of another purchase" do
