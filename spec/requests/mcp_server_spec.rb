@@ -774,6 +774,15 @@ describe "MCP server" do
         expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"].map { |row| row["email"] }).to eq(["tied@example.com"])
       end
 
+      it "does not count a buyer whose first purchase was paid, even when it was refunded" do
+        first_paid = create(:purchase, seller: @seller, link: @product, email: "paid-then-free@example.com", price_cents: 1900, created_at: Time.utc(2026, 9, 1, 12))
+        first_paid.update_columns(stripe_refunded: true)
+        create(:free_purchase, seller: @seller, link: @product, email: "paid-then-free@example.com", created_at: Time.utc(2026, 9, 5, 12))
+        create(:purchase, seller: @seller, link: @product, email: "paid-then-free@example.com", price_cents: 1900, created_at: Time.utc(2026, 9, 10, 12))
+
+        expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"]).to eq([])
+      end
+
       it "rejects bad dates, an inverted range, an unknown breakdown and a limit over 50" do
         post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: { "start_date" => "yesterday" } } })
         expect(response.parsed_body.dig("error", "message")).to eq("start_date must be a date like 2026-10-31")

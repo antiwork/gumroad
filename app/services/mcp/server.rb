@@ -925,10 +925,12 @@ module Mcp
         converted_at = "MIN(CASE WHEN #{customer_paid} THEN purchases.created_at END)"
         free_id = "MIN(CASE WHEN #{CUSTOMER_FREE} THEN purchases.id END)"
         converted_id = "MIN(CASE WHEN #{customer_paid} THEN purchases.id END)"
-        # A buyer converted once a paid, kept purchase followed their first free one. created_at
-        # carries no fractional seconds, so two orders in the same second are settled by id.
-        converted_after_free = "#{converted_at} > #{free_at} OR " \
-                              "(#{converted_at} IS NOT NULL AND #{converted_at} = #{free_at} AND #{converted_id} > #{free_id})"
+        # A buyer converted once a paid, kept purchase followed their first purchase of any kind,
+        # and that first one was free. created_at carries no fractional seconds, so two orders in
+        # the same second are settled by id.
+        first_at = "MIN(purchases.created_at)"
+        converted_after_free = "#{free_at} = #{first_at} AND (#{converted_at} > #{free_at} OR " \
+                              "(#{converted_at} IS NOT NULL AND #{converted_at} = #{free_at} AND #{converted_id} > #{free_id}))"
         # The free purchase can be older than the range: the range bounds the purchase that converted.
         rows = sales.group("purchases.email").having(converted_after_free)
         rows = rows.having("#{converted_at} >= ?", customer_day_start(start_date, zone)) if start_date
