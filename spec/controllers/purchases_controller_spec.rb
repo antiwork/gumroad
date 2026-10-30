@@ -184,6 +184,25 @@ describe PurchasesController, :vcr do
         expect(gift.giftee_purchase.email).to eq("new_giftee@example.com")
       end
 
+      it "allows to update giftee_email when the gift has no giftee purchase" do
+        product = create(:product, user: seller)
+        gift = create(:gift, gifter_email: "gifter@example.com", giftee_email: "giftee@example.com", link: product)
+        gifter_purchase = create(:purchase, link: product,
+                                            seller:,
+                                            email: "gifter@example.com",
+                                            purchase_state: "successful",
+                                            is_gift_sender_purchase: true,
+                                            stripe_transaction_id: "ch_zitkxbhds3zqlt",
+                                            can_contact: true)
+        gift.gifter_purchase = gifter_purchase
+        gift.save!
+
+        put :update, params: { id: ObfuscateIds.encrypt(gifter_purchase.id), giftee_email: "new_giftee@example.com" }
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(gift.reload.giftee_email).to eq "new_giftee@example.com"
+      end
+
       it "allows to update shipping information for the seller" do
         put :update, params: { id: obfuscated_id, street_address: "1640 3rd Street", city: "San Francisco", state: "CA", zip_code: "94107", country: "United States" }
         expect(response.parsed_body["success"]).to be(true)
