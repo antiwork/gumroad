@@ -833,17 +833,16 @@ describe Charge::Disputable, :vcr do
         context "when the sale was paid into a Stripe Connect account" do
           before { purchase.update!(merchant_account: create(:merchant_account_stripe_connect, user: seller)) }
 
-          it "claims no Gumroad debit and does not say we fight it, and neither event moves the balance" do
+          it "claims no Gumroad debit and says we fight it on the connected account, and neither event moves the balance" do
             expect { Purchase.handle_charge_event(event) }.not_to change { seller.reload.unpaid_balance_cents }
 
             body = notice_body(purchase)
             expect(body).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
-            expect(body).to include "you can respond and submit evidence through Stripe's dispute process."
+            expect(body).to include "We fight every dispute. This sale was paid into your connected Stripe account, so we submit the evidence there, and if we win the amount is released back to that account."
             expect(body).not_to include "already refunded"
             expect(body).not_to include "We have deducted"
             expect(body).not_to include "re-credited"
-            expect(body).not_to include "We fight every dispute"
-            expect(FightDisputeJob.jobs.size).to eq(0)
+            expect(FightDisputeJob).to have_enqueued_sidekiq_job(purchase.reload.dispute.id)
 
             expect { Purchase.handle_charge_event(won_event) }.not_to change { seller.reload.unpaid_balance_cents }
           end
