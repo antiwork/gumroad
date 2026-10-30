@@ -17,6 +17,20 @@ describe Api::Mobile::DevicesController do
       end
     end
 
+    context "when making a request with a brand account token" do
+      it "registers the device to the team member, not the brand" do
+        brand = create(:user)
+        membership = create(:team_membership, user: @user, seller: brand, role: TeamMembership::ROLE_ADMIN)
+        brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: brand, team_membership: membership)
+
+        post :create, params: { mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN, access_token: brand_token.token, device: { token: "abc", device_type: "ios", app_type: Device::APP_TYPES[:consumer], app_version: "1.0.0" } }
+
+        expect(response).to have_http_status(:created)
+        expect(@user.devices.pluck(:token)).to eq(["abc"])
+        expect(brand.devices).to be_empty
+      end
+    end
+
     context "when making a request with mobile_api scope" do
       let(:token) { create("doorkeeper/access_token", application: @app, resource_owner_id: @user.id, scopes: "mobile_api") }
 

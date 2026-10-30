@@ -56,6 +56,14 @@ Doorkeeper.configure do
     !client&.mcp_dynamic_client || grant_flow == Doorkeeper::OAuth::AUTHORIZATION_CODE
   end
 
+  # A refreshed brand token keeps the team membership of the token it replaces.
+  before_successful_strategy_response do |request|
+    next unless request.is_a?(Doorkeeper::OAuth::RefreshTokenRequest)
+
+    team_membership_id = MobileAccountToken.team_membership_id(request.refresh_token)
+    request.access_token.update_column(:team_membership_id, team_membership_id) if team_membership_id
+  end
+
   skip_authorization do |_resource_owner, client|
     client.uid == OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID
   end

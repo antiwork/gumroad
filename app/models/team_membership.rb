@@ -23,6 +23,8 @@ class TeamMembership < ApplicationRecord
 
   timestamp_state_fields :deleted
 
+  scope :switchable, -> { not_deleted.joins(:seller).merge(User.alive) }
+
   belongs_to :seller, class_name: "User", foreign_key: :seller_id, optional: true
   belongs_to :user, optional: true
 

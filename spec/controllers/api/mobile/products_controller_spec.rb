@@ -75,6 +75,22 @@ describe Api::Mobile::ProductsController do
       expect(body["pagination"]).to include("count" => 2, "page" => 1, "pages" => 2, "next" => 2)
     end
 
+    it "lists the brand's products for a team member's brand token while the staff brand owner impersonates" do
+      brand = create(:admin_user)
+      brand_product = create(:product, user: brand)
+      create(:product, user: @seller)
+      membership = create(:team_membership, user: @seller, seller: brand, role: TeamMembership::ROLE_ADMIN)
+      brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: brand, team_membership: membership)
+      impersonated = create(:user)
+      create(:product, user: impersonated)
+      $redis.set(RedisKey.impersonated_user(brand.id), impersonated.id)
+
+      get :index, params: @params.merge(access_token: brand_token.token)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["products"].map { _1["id"] }).to eq([brand_product.unique_permalink])
+    end
+
     it "returns 401 when the access token is invalid" do
       get :index, params: @params.merge(access_token: "invalid")
 

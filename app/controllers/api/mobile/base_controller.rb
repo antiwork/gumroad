@@ -16,6 +16,16 @@ class Api::Mobile::BaseController < ApplicationController
     impersonated_user || current_api_user
   end
 
+  def account_holder
+    brand_team_membership&.user || current_api_user
+  end
+
+  def brand_team_membership
+    return @_brand_team_membership if defined?(@_brand_team_membership)
+
+    @_brand_team_membership = MobileAccountToken.team_membership_for(doorkeeper_token)
+  end
+
   private
     def check_mobile_token
       fetch_error("Invalid request", status: :unauthorized) unless ActiveSupport::SecurityUtils.secure_compare(params[:mobile_token].to_s, MOBILE_TOKEN)

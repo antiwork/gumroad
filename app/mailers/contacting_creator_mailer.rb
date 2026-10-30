@@ -979,11 +979,11 @@ class ContactingCreatorMailer < ApplicationMailer
       return unless push_notification_enabled?
 
       if Feature.active?(:send_sales_notifications_to_creator_app)
-        PushNotificationWorker.perform_async(@seller.id, Device::APP_TYPES[:creator], @subject, nil, {}, Device::NOTIFICATION_SOUNDS[:sale])
+        PushNotificationWorker.perform_async(@seller.id, Device::APP_TYPES[:creator], @subject, nil, {}, Device::NOTIFICATION_SOUNDS[:sale], true)
       end
 
       if Feature.active?(:send_sales_notifications_to_consumer_app)
-        PushNotificationWorker.perform_async(@seller.id, Device::APP_TYPES[:consumer], @subject, nil, {}, Device::NOTIFICATION_SOUNDS[:sale])
+        PushNotificationWorker.perform_async(@seller.id, Device::APP_TYPES[:consumer], @subject, nil, {}, Device::NOTIFICATION_SOUNDS[:sale], true)
       end
     end
 end
