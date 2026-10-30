@@ -145,6 +145,20 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
     end
 
+    it "returns the same recipients for the preview count and the send filter with multiple not_bought_products" do
+      not_bought = [product1.unique_permalink, product2.unique_permalink]
+
+      get :show, params: { installment_type: "audience", not_bought_products: not_bought }
+      expect(response).to be_successful
+
+      installment = Installment.new(installment_type: "audience", not_bought_products: not_bought)
+      installment.seller = seller
+      send_emails = AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).pluck(:email)
+
+      expect(response.parsed_body["recipient_count"]).to eq(2)
+      expect(send_emails).to match_array([active_follower1.email, active_follower2.email])
+    end
+
     it "returns counts for seller installment type with bought_variants filter" do
       get :show, params: { installment_type: "seller", bought_variants: [product1_variant.external_id] }
       expect(response).to be_successful
