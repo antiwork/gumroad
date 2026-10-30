@@ -239,7 +239,15 @@ class CreateMissingDisputeEvidenceJob
       return if dispute.charge_processor_dispute_id.blank?
       return unless dispute.charge_processor_id == StripeChargeProcessor.charge_processor_id
 
-      stripe_dispute = Stripe::Dispute.retrieve(dispute.charge_processor_dispute_id)
+      # A dispute on a direct Connect charge lives on the seller's account, so the lookup has to
+      # name it or Stripe answers "no such dispute" and the row retries forever as deadline-unknown.
+      merchant_account = dispute.disputable&.merchant_account
+      options = if merchant_account&.is_a_stripe_connect_account? && merchant_account.charge_processor_merchant_id.present?
+        { stripe_account: merchant_account.charge_processor_merchant_id }
+      else
+        {}
+      end
+      stripe_dispute = options.empty? ? Stripe::Dispute.retrieve(dispute.charge_processor_dispute_id) : Stripe::Dispute.retrieve(dispute.charge_processor_dispute_id, options)
       due_by = stripe_dispute.evidence_details&.due_by
       due_by && Time.zone.at(due_by)
     rescue => e

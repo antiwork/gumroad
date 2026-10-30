@@ -544,7 +544,7 @@ describe DisputeEvidence do
     end
 
     # This is the arm that differs from accepting_evidence?: a dispute with no evidence surface at all
-    # (PayPal, Stripe Connect) never gets a window, and must still receive its plain notice.
+    # (PayPal) never gets a window, and must still receive its plain notice.
     it "sends for an unstamped row, where asking for evidence would not" do
       expect(worth_sending?(seller_contacted_at: nil)).to be(true)
       expect(described_class.accepting_evidence?(seller_contacted_at: nil, resolved_at: nil)).to be(false)

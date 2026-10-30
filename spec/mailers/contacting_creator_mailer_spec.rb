@@ -453,21 +453,20 @@ describe ContactingCreatorMailer do
                             merchant_account: create(:merchant_account_stripe_connect, user: seller))
         end
 
-        it "says nothing left the Gumroad balance and points the seller to Stripe" do
+        it "says nothing left the Gumroad balance and that we fight it on the connected account" do
           book_chargeback_debits(dispute)
           expect(purchase.reload.purchase_chargeback_balance).to be_nil
 
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
           expect(mail.body.encoded).to include "This sale was paid into your connected Stripe account, so nothing has been deducted from your Gumroad balance."
-          expect(mail.body.encoded).to include "We don't fight disputes on sales paid into your connected Stripe account, but you can respond and submit evidence through Stripe's dispute process."
+          expect(mail.body.encoded).to include "We fight every dispute and submit the evidence through your connected Stripe account. If we win, the amount is released back to that account."
           expect(mail.body.encoded).not_to include "already refunded"
           expect(mail.body.encoded).not_to include "We have deducted"
           expect(mail.body.encoded).not_to include "re-credited"
-          expect(mail.body.encoded).not_to include "We fight every dispute"
         end
 
-        it "still points the seller to Stripe when the sale was also refunded in full before the dispute" do
+        it "still says nothing was deducted from the Gumroad balance when the sale was also refunded in full" do
           refund_before_dispute(purchase, purchase.total_transaction_cents)
           book_chargeback_debits(dispute)
           expect(purchase.reload.purchase_chargeback_balance).to be_nil

@@ -205,8 +205,8 @@ class DisputeEvidence < ApplicationRecord
   end
 
   # Is the notice itself still worth sending, whether or not we may ask for evidence? A dispute with
-  # no evidence surface at all (PayPal, Stripe Connect) never gets a window and still needs its
-  # plain notice, so an unstamped row is accepted here and refused by accepting_evidence?.
+  # no evidence surface at all (PayPal) never gets a window and still needs its plain notice, so an
+  # unstamped row is accepted here and refused by accepting_evidence?.
   def self.notice_worth_sending?(seller_contacted_at:, resolved_at:)
     return false if evidence_submission_closed?(resolved_at:)
 
