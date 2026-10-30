@@ -88,6 +88,21 @@ describe AlertOnStuckPiracyReportsJob do
     expect(message).to include("1 seller received 2 or more counter-notices", "seller #{seller.id}: 2 counter-notices")
   end
 
+  it "lists reports the agent never answered, whether never started or started by a run that died" do
+    never_started = create(:piracy_report, url: "https://idle.example.org/course", updated_at: 7.hours.ago)
+    abandoned = create(:piracy_report, :screening, url: "https://dropped.example.org/course", updated_at: 3.days.ago)
+    create(:piracy_report, :screening, updated_at: 1.hour.ago)
+    review_report.update_columns(updated_at: 3.days.ago)
+
+    body = message
+
+    expect(body).to start_with("2 piracy reports filed more than 6 hours ago have no screening verdict.")
+    expect(body).to include("#{never_started.external_id} — idle.example.org", "never started")
+    expect(body).to include("#{abandoned.external_id} — dropped.example.org", "no verdict")
+    unscreened_part = body.split("\n\n1 piracy report could not be decided").first
+    expect(unscreened_part).not_to include("Gumclaw works this queue")
+  end
+
   it "stays silent when no report is blocked or waiting for review" do
     create(:piracy_report, :screening)
     create(:piracy_report, :awaiting_signature)
