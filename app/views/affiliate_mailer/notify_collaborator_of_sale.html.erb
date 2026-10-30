@@ -19,6 +19,14 @@
           </td>
           <td><%= @purchase.formatted_display_price %></td>
         </tr>
+        <% if @direct_affiliate_commission_formatted.present? %>
+          <tr>
+            <td>
+              <h4>Affiliate commission</h4>
+            </td>
+            <td>-<%= @direct_affiliate_commission_formatted %> (<%= @direct_affiliate_percentage_text %>)</td>
+          </tr>
+        <% end %>
         <tr>
           <td>
             <h4>Your cut</h4>

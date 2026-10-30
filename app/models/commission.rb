@@ -51,6 +51,7 @@ class Commission < ApplicationRecord
 
     completion_purchase = build_completion_purchase(completion_purchase_attributes)
     completion_purchase.inherit_offer_code_from(deposit_purchase)
+    completion_purchase.inherit_direct_affiliate_from(deposit_purchase, eligible: ->(direct_affiliate) { direct_affiliate.alive? })
 
     if completion_tip_value_cents.positive?
       # Presentment accounting reads value_usd_cents; schema default is 0 if omitted.

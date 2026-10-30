@@ -1340,6 +1340,17 @@ describe User::Stats, :vcr do
     end
   end
 
+  describe "#revenue_as_affiliate" do
+    it "counts the direct affiliate's credit and not the collaborator's beside it" do
+      purchase = create(:purchase, price_cents: 100)
+      create(:affiliate_credit, affiliate_user: create(:user), purchase:, amount_cents: 30)
+      create(:affiliate_credit, affiliate_user: @user, purchase:, amount_cents: 20, is_direct_affiliate_credit: true)
+      index_model_records(Purchase)
+
+      expect(@user.send(:revenue_as_affiliate)).to eq(20)
+    end
+  end
+
   describe "sales totals" do
     before do
       product = create(:product, user: @user)

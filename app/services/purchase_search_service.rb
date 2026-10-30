@@ -69,6 +69,40 @@ class PurchaseSearchService
 
   attr_accessor :body
 
+  # A purchase credits a collaborator (`affiliate_credit_*`) and, on a collab purchase that also
+  # credits a direct affiliate (:collab_and_affiliates), that affiliate (`direct_affiliate_credit_*`).
+  # A filter that matches either credit's user matches both on such a purchase, so money read out of
+  # the result has to be scoped to the credit whose affiliate user was asked for.
+  AFFILIATE_CREDIT_PREFIXES = %w[affiliate_credit direct_affiliate_credit].freeze
+
+  AFFILIATE_CREDIT_MEASURES = %w[
+    amount_cents
+    fee_cents
+    amount_partially_refunded_cents
+    fee_partially_refunded_cents
+  ].freeze
+
+  # One aggregation per credit and measure, counting only the credits whose affiliate user is
+  # `user_id`. Read them with `own_affiliate_credit_cents`.
+  def self.affiliate_credit_aggs_for_user(user_id)
+    AFFILIATE_CREDIT_PREFIXES.flat_map do |prefix|
+      AFFILIATE_CREDIT_MEASURES.map do |measure|
+        [:"#{prefix}_#{measure}_own", {
+          filter: { term: { "#{prefix}_affiliate_user_id" => user_id } },
+          aggs: { total: { sum: { field: "#{prefix}_#{measure}" } } },
+        }]
+      end
+    end.to_h
+  end
+
+  # One measure summed over the credits `affiliate_credit_aggs_for_user` scoped to a user: a purchase
+  # pays that user through one of them, never both.
+  def self.own_affiliate_credit_cents(aggregations, measure)
+    AFFILIATE_CREDIT_PREFIXES.sum do |prefix|
+      aggregations.public_send(:"#{prefix}_#{measure}_own").total.value.to_i
+    end
+  end
+
   def initialize(options = {})
     @options = DEFAULT_OPTIONS.merge(options)
     apply_for_library
@@ -264,7 +298,18 @@ class PurchaseSearchService
       ids = Array.wrap(@options[:affiliate_user]).map do |affiliate_user|
         affiliate_user.is_a?(User) ? affiliate_user.id : affiliate_user
       end
-      @body[:query][:bool][:filter] << { terms: { "affiliate_credit_affiliate_user_id" => ids } }
+      # Either credit can make this user an affiliate of the purchase: on a collab purchase
+      # (:collab_and_affiliates) a direct affiliate is credited beside the collaborator. Reading money
+      # out of the result needs `affiliate_credit_aggs_for_user`, which scopes each credit.
+      @body[:query][:bool][:filter] << {
+        bool: {
+          minimum_should_match: 1,
+          should: [
+            { terms: { "affiliate_credit_affiliate_user_id" => ids } },
+            { terms: { "direct_affiliate_credit_affiliate_user_id" => ids } },
+          ],
+        }
+      }
     end
 
     def build_body_revenue_sharing_user
@@ -274,6 +319,7 @@ class PurchaseSearchService
       end
       should = [
         { terms: { "affiliate_credit_affiliate_user_id" => ids } },
+        { terms: { "direct_affiliate_credit_affiliate_user_id" => ids } },
         { terms: { "seller_id" => ids } },
       ]
       @body[:query][:bool][:filter] << { bool: { minimum_should_match: 1, should: } }

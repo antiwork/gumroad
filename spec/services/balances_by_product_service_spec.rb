@@ -54,5 +54,18 @@ describe BalancesByProductService do
       expect(balances[4]).to include("name" => "product 1", "gross" => 16500, "fees" => 2332, "taxes" => 304, "refunds" => 1700, "chargebacks" => 1600, "net" => 10564)
       expect(balances[5]).to include("name" => "product 0", "gross" => 14500, "fees" => 2123, "taxes" => 264, "refunds" => 1500, "chargebacks" => 1400, "net" => 9213)
     end
+
+    it "keeps a seller's row when a product they only promote as a direct affiliate also matches" do
+      promoted_product = create(:product, :is_collab, user: create(:user), name: "promoted product")
+      promoted_purchase = create(:purchase, link: promoted_product, seller: promoted_product.user, price_cents: 1000)
+      create(:affiliate_credit, purchase: promoted_purchase, affiliate_user: user, amount_cents: 200,
+                                is_direct_affiliate_credit: true)
+      index_model_records(Purchase)
+
+      balances = described_class.new(user).process
+
+      expect(balances.size).to eq(6)
+      expect(balances.map { |balance| balance["link_id"] }).to include(user.links.first.id)
+    end
   end
 end

@@ -255,9 +255,11 @@ class Purchase::HandleFailedRefundService
     # affiliate's stats and payout eligibility stop treating the failed refund as
     # real.
     def restore_affiliate_refund_state!
-      affiliate_credit = purchase.affiliate_credit
-      return if affiliate_credit.nil?
+      # A collab purchase can also credit a direct affiliate; each credit row is restored on its own.
+      purchase.all_affiliate_credits.each { restore_affiliate_credit_refund_state!(_1) }
+    end
 
+    def restore_affiliate_credit_refund_state!(affiliate_credit)
       # Re-read the affiliate credit under a row lock. Like the purchase flag
       # recomputation, this method runs while holding the purchase lock, but plain
       # reads inside the transaction still come from a REPEATABLE READ snapshot
@@ -319,10 +321,8 @@ class Purchase::HandleFailedRefundService
     # Rebuild the fee with the same calculation used when Purchase creates the row
     # so refunds with equal debits can still be told apart.
     def failed_affiliate_partial_refund_fee_cents(affiliate_credit)
-      return 0 if affiliate_credit.fee_cents.to_i.zero?
-
-      affiliate_cut = affiliate_credit.basis_points / 10_000.0
-      (affiliate_cut * refund.fee_cents.to_i).floor
+      # Same formula as the refund that failed used, for every purchase shape.
+      purchase.affiliate_reversal_fee_cents(affiliate_credit, refund.fee_cents.to_i)
     end
 
     # Recompute the purchase's refunded flags as if the failed refund never counted.

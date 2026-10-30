@@ -354,6 +354,7 @@ class Subscription < ApplicationRecord
       end
     end
     purchase.affiliate = original_purchase.affiliate if original_purchase.affiliate&.eligible_for_credit_on_renewal?(product: link)
+    purchase.inherit_direct_affiliate_from(original_purchase, eligible: ->(direct_affiliate) { direct_affiliate.eligible_for_credit_on_renewal?(product: link) })
     purchase.is_upgrade_purchase = is_upgrade_purchase if is_upgrade_purchase
     set_vat_id_for_purchase(purchase)
     purchase

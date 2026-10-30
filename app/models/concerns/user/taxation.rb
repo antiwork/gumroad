@@ -74,13 +74,13 @@ module User::Taxation
   end
 
   def eligible_for_1099_misc_federal_filing?(year)
-    affiliate_sales_scope_for(year).sum(:affiliate_credit_cents) >= MIN_AFFILIATE_AMOUNT_FOR_1099_MISC_FEDERAL_FILING
+    affiliate_credit_cents_for_1099_misc(year) >= MIN_AFFILIATE_AMOUNT_FOR_1099_MISC_FEDERAL_FILING
   end
 
   def eligible_for_1099_misc_state_filing?(year)
     state = alive_user_compliance_info.legal_entity_state
     return false unless MIN_AFFILIATE_AMOUNTS_FOR_1099_MISC_STATE_FILINGS.key?(state)
-    return false unless affiliate_sales_scope_for(year).sum(:affiliate_credit_cents) >= MIN_AFFILIATE_AMOUNTS_FOR_1099_MISC_STATE_FILINGS[state]
+    return false unless affiliate_credit_cents_for_1099_misc(year) >= MIN_AFFILIATE_AMOUNTS_FOR_1099_MISC_STATE_FILINGS[state]
 
     true
   end
@@ -112,6 +112,19 @@ module User::Taxation
            .where(paypal_order_id: nil)
            .where.not(merchant_account_id: merchant_accounts.select { _1.is_a_stripe_connect_account? }.map(&:id))
            .where(created_at: range)
+    end
+
+    # affiliate_credit_cents on a collab purchase that also credits a direct affiliate
+    # (:collab_and_affiliates) is the sum of both credits, so the collaborator's total drops the
+    # direct affiliate's row, and the direct affiliate (not the purchase's `affiliate`) adds theirs.
+    def affiliate_credit_cents_for_1099_misc(year)
+      scope = affiliate_sales_scope_for(year)
+      direct_credits = AffiliateCredit.where(is_direct_affiliate_credit: true)
+      collaborator_cents = scope.sum(:affiliate_credit_cents) - direct_credits.where(purchase_id: scope.select(:id)).sum(:amount_cents)
+
+      range = Date.new(year).in_time_zone(timezone).all_year
+      direct_sales = Purchase.successful.not_fully_refunded.not_chargedback_or_chargedback_reversed.where(created_at: range)
+      collaborator_cents + direct_credits.where(affiliate_user_id: id, purchase_id: direct_sales.select(:id)).sum(:amount_cents)
     end
 
     def affiliate_sales_scope_for(year)
