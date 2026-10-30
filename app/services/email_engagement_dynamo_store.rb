@@ -124,6 +124,14 @@ class EmailEngagementDynamoStore
       end
     end
 
+    # Purchase ids of the recipients who clicked this installment's email at least
+    # once. Only purchase-keyed clicks can be mapped back to a buyer: the digest in
+    # the sort key is one-way, and a follower or affiliate click carries that record's
+    # id in its args, not a purchase id.
+    def clicked_recipient_purchase_ids(installment_id)
+      clicker_items(installment_id).filter_map { |item| purchase_id_from_clicker_item(item) }.uniq
+    end
+
     def create_table!
       client.create_table(
         table_name:,
@@ -170,6 +178,39 @@ class EmailEngagementDynamoStore
     end
 
     private
+      # Every CLICKER item in one installment's partition. The items are small and one
+      # exists per clicker, so a six-figure post pages through this a megabyte at a time.
+      def clicker_items(installment_id)
+        items = []
+        exclusive_start_key = nil
+        loop do
+          params = {
+            table_name:,
+            key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
+            expression_attribute_values: {
+              ":pk" => partition_key(installment_id),
+              ":prefix" => "CLICKER#",
+            },
+          }
+          params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
+          response = client.query(params)
+          items.concat(response.items)
+          exclusive_start_key = response.last_evaluated_key
+          break if exclusive_start_key.blank?
+        end
+        items
+      end
+
+      # The item keeps the mailer method and args its digest was built from. Purchase
+      # installment args are "[<purchase_id>, <post_id>]" (see PostSendgridApi and
+      # PostResendApi), so the first integer is the buyer.
+      def purchase_id_from_clicker_item(item)
+        mailer_method = item["mailer_method"].to_s
+        return nil unless mailer_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
+
+        item["mailer_args"].to_s[/\d+/]&.to_i
+      end
+
       def upsert_open_item(installment_id:, mailer_method:, mailer_args:)
         return if ensure_open_item(installment_id:, mailer_method:, mailer_args:)
 

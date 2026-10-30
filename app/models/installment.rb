@@ -1033,7 +1033,26 @@ class Installment < ApplicationRecord
       params[:waitlisted_product_ids] = seller.products.where(unique_permalink: waitlisted_products).ids.presence || [nil]
     end
 
+    if not_clicked_post_id.present?
+      clicked_emails = clicked_recipient_emails(not_clicked_post_id)
+      params[:exclude_emails] = clicked_emails if clicked_emails.any?
+    end
+
     params.compact_blank!
+  end
+
+  # Emails of the buyers who clicked the referenced post's email. Resolved here, where a saved
+  # filter turns into query params, so the count the seller sees and the recipients a blast
+  # picks up go through one path. A reference that no longer resolves excludes nobody: worst
+  # case the filter behaves as if it were not set, never as if everyone had clicked.
+  def clicked_recipient_emails(post_external_id)
+    post = seller.installments.find_by_external_id(post_external_id)
+    return [] if post.blank?
+
+    purchase_ids = EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)
+    return [] if purchase_ids.empty?
+
+    purchase_emails_for(purchase_ids).to_a
   end
 
   def audience_members_count(limit = nil)

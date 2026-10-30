@@ -16,12 +16,13 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
       :installment_type,
       :created_after,
       :created_before,
+      :not_clicked_post_id,
       bought_products: [],
       bought_variants: [],
       not_bought_products: [],
       not_bought_variants: [],
       affiliate_products: [],
-      waitlisted_products: []
+      waitlisted_products: [],
     )
     installment = Installment.new(permitted_params)
     installment.seller = current_seller

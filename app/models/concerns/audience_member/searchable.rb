@@ -145,6 +145,10 @@ module AudienceMember::Searchable
         must_not << { nested: { path: "purchases", query: { terms: { "purchases.variant_ids" => params[:not_bought_variant_ids] } } } }
       end
 
+      # `email` is a keyword holding the downcased address (AudienceMember normalizes it on
+      # save), so the exclusion list has to be downcased by whoever builds it.
+      must_not << { terms: { email: params[:exclude_emails] } } if params[:exclude_emails].present?
+
       filter << { range: { max_paid_cents: { gt: params[:paid_more_than_cents] } } } if params[:paid_more_than_cents]
       filter << { range: { min_paid_cents: { lt: params[:paid_less_than_cents] } } } if params[:paid_less_than_cents]
 
