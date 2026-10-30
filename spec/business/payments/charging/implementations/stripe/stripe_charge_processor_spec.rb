@@ -782,6 +782,11 @@ describe StripeChargeProcessor, :vcr do
     end
 
     it "reads the charge and submits the evidence on the connected account" do
+      expect(subject).to receive(:create_dispute_evidence_stripe_file)
+        .with(anything, request_options: { stripe_account: stripe_account_id })
+        .at_least(:once)
+        .and_return("file_connect")
+
       subject.fight_chargeback("ch_connect", dispute_evidence, merchant_account:)
 
       expect(Stripe::Charge).to have_received(:retrieve).with("ch_connect", { stripe_account: stripe_account_id })
