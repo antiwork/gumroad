@@ -6,7 +6,7 @@ module Product::Validations
   MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH = 26
   MAX_CUSTOM_RECEIPT_TEXT_LENGTH = 500
   MAX_CUSTOM_FAILED_PAYMENT_TEXT_LENGTH = 500
-  NON_PLAIN_TEXT_PATTERN = %r{[<>]|https?:|www\.|\b[a-z0-9-]+\.(com|net|org|io|co|app|me|ly)\b}i
+  NON_PLAIN_TEXT_PATTERN = %r{[<>]|https?:|www\.|\b[a-z0-9-]+\.[a-z]{2,}\b}i
 
   private
     def custom_failed_payment_text_is_plain_text

@@ -97,12 +97,17 @@ describe Link do
       expect(product).to be_valid
     end
 
-    ["see https://evil.example/pay", "go to www.evil.example", "pay at evil.com", "<b>hi</b>"].each do |text|
+    ["see https://evil.example/pay", "go to www.evil.example", "pay at evil.com", "pay at billing-check.xyz", "visit pay.example.dev", "<b>hi</b>"].each do |text|
       it "rejects #{text.inspect}" do
         product.custom_failed_payment_text = text
         expect(product).not_to be_valid
         expect(product.errors.full_messages.join).to include "Failed payment message"
       end
+    end
+
+    it "accepts sentences and decimals that are not domains" do
+      product.custom_failed_payment_text = "Card declined. Please retry, e.g. with another card. Fee is 3.50 USD."
+      expect(product).to be_valid
     end
 
     it "rejects text over the limit" do

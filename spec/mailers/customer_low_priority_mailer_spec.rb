@@ -410,6 +410,14 @@ describe CustomerLowPriorityMailer do
         expect(body).to include "update your payment method"
         expect(body).to include "/subscriptions/#{subscription.external_id}/manage?token="
       end
+
+      it "keeps blank lines between paragraphs of the seller's message" do
+        subscription = create(:subscription, link: create(:product))
+        build(:purchase, is_original_subscription_purchase: true, link: subscription.link, subscription:).save!(validate: false)
+        subscription.link.update!(custom_failed_payment_text: "First paragraph.\n\nSecond paragraph.")
+        body = CustomerLowPriorityMailer.subscription_charge_failed(subscription.id).body.encoded
+        expect(body).to match(%r{<p>First paragraph\.</p>\s*<p>Second paragraph\.</p>})
+      end
     end
 
     context "installment plans" do
