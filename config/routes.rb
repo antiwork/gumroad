@@ -366,6 +366,7 @@ Rails.application.routes.draw do
         end
         resources :licenses, only: [:update]
         resources :calls, only: [:update]
+        resources :accounts, only: [:index, :create]
         resources :commissions, only: [] do
           member do
             post :complete

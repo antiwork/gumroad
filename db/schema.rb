@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_23_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_23_000004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1505,9 +1505,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_23_000003) do
     t.datetime "created_at", precision: nil, null: false
     t.string "scopes"
     t.string "resource"
+    t.bigint "team_membership_id"
     t.index ["application_id", "revoked_at"], name: "index_oauth_access_tokens_on_application_id_and_revoked_at"
     t.index ["refresh_token"], name: "index_oauth_access_tokens_on_refresh_token", unique: true
     t.index ["resource_owner_id"], name: "index_oauth_access_tokens_on_resource_owner_id"
+    t.index ["team_membership_id"], name: "index_oauth_access_tokens_on_team_membership_id"
     t.index ["token"], name: "index_oauth_access_tokens_on_token", unique: true
   end
 

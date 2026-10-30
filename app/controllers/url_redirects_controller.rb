@@ -478,7 +478,7 @@ class UrlRedirectsController < ApplicationController
       # not open a session, and the caller must return before the redirect it makes next.
       return if performed?
 
-      sign_in current_api_user if current_api_user.present?
+      sign_in_current_api_user
     end
 
     def redirect_to_coffee_page_if_needed

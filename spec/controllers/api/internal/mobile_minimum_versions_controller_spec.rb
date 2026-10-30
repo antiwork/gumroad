@@ -57,8 +57,18 @@ describe Api::Internal::MobileMinimumVersionsController do
       end
     end
 
-    context "with wrong scope" do
+    context "with the mobile_api scope that a brand account token carries" do
       let(:access_token) { create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "mobile_api") }
+
+      it "returns the minimum version" do
+        get :show, params: { access_token: access_token.token }
+
+        expect(response).to be_successful
+      end
+    end
+
+    context "with wrong scope" do
+      let(:access_token) { create("doorkeeper/access_token", application: app, resource_owner_id: user.id, scopes: "creator_api") }
 
       it "returns forbidden" do
         get :show, params: { access_token: access_token.token }

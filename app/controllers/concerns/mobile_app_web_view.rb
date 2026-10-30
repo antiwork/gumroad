@@ -44,6 +44,6 @@ module MobileAppWebView
       # Without this, a doorkeeper-rejected (revoked/expired/wrong-scope) token still signs in.
       return if performed?
 
-      sign_in current_api_user if current_api_user.present?
+      sign_in_current_api_user
     end
 end

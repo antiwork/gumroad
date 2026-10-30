@@ -110,7 +110,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   def refund
-    process_refund(seller: current_resource_owner, user: current_resource_owner,
+    process_refund(seller: current_resource_owner, user: acting_user,
                    purchase_external_id: params[:id], amount: params[:amount])
   end
 
@@ -235,7 +235,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     return fetch_error("Could not find review") if review.nil?
 
     review_response = review.response || review.build_response
-    if review_response.update(message: params[:message], user: current_resource_owner)
+    if review_response.update(message: params[:message], user: acting_user)
       render json: { success: true }
     else
       render json: { success: false, message: review_response.errors.full_messages.to_sentence }, status: :unprocessable_entity
@@ -261,6 +261,11 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
   end
 
   private
+    # The brand stays the seller; the audit trail names whoever is signed in, as the website does.
+    def acting_user
+      impersonated_user || account_holder
+    end
+
     def fetch_purchase
       @purchase = current_resource_owner.sales.find_by_external_id(params[:id])
       fetch_error("Could not find purchase") if @purchase.nil?
