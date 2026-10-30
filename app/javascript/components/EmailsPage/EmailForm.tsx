@@ -264,9 +264,10 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
         ? [installment.unique_permalink]
         : [...(installment.bought_products ?? []), ...(installment.bought_variants ?? [])];
   });
-  const [notBought, setNotBought] = React.useState<string[]>(
-    installment?.not_bought_products ?? installment?.not_bought_variants ?? [],
-  );
+  const [notBought, setNotBought] = React.useState<string[]>([
+    ...(installment?.not_bought_products ?? []),
+    ...(installment?.not_bought_variants ?? []),
+  ]);
   const [paidMoreThanCents, setPaidMoreThanCents] = React.useState<number | null>(
     installment?.paid_more_than_cents ?? null,
   );
@@ -1168,8 +1169,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         tagList={selectableProductOptions(productOptions, notBought)}
                         onChangeTagIds={setNotBought}
                         isDisabled={isPublished}
-                        // Displayed as a multi-select for consistency, but supports only one option for now
-                        maxTags={1}
                       />
                     </Fieldset>
                   </CardContent>

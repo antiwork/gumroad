@@ -3,11 +3,11 @@
 // The email editor's Save button reads the shared image-upload guard; the guard has to stay up
 // until the CDN URL resolves, because the editor holds a blob: preview until then and the
 // sanitizer drops blob: srcs from a saved body.
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type InstallmentFormContext } from "$app/data/installments";
+import { type Installment, type InstallmentFormContext } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
@@ -111,7 +111,7 @@ const context: InstallmentFormContext = {
   from_tab: null,
 };
 
-const renderForm = () =>
+const renderForm = (installment: Installment | null = null, formContext: InstallmentFormContext = context) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -125,7 +125,7 @@ const renderForm = () =>
       }}
     >
       <CurrentSellerProvider value={seller}>
-        <EmailForm context={context} installment={null} />
+        <EmailForm context={formContext} installment={installment} />
       </CurrentSellerProvider>
     </DomainSettingsProvider>,
   );
@@ -186,5 +186,70 @@ describe("EmailForm", () => {
       expect(container.querySelector("img")?.getAttribute("src")).toBe("https://cdn.example/image.png"),
     );
     expect(saveDisabled()).toBe(false);
+  });
+});
+
+describe('EmailForm "Has not yet bought"', () => {
+  const products: InstallmentFormContext["products"] = [
+    {
+      permalink: "product-1",
+      name: "Design guide",
+      archived: false,
+      variants: [{ id: "variant-1", name: "Studio edition" }],
+    },
+    { permalink: "product-2", name: "Course", archived: false, variants: [] },
+  ];
+  const audienceContext: InstallmentFormContext = { ...context, products };
+
+  const draft: Installment = {
+    external_id: "email-1",
+    display_type: "draft",
+    name: "August update",
+    message: "Hello",
+    published_at: null,
+    updated_at: "2026-08-01T00:00:00Z",
+    stream_only: false,
+    streamable: false,
+    send_emails: true,
+    shown_on_profile: false,
+    installment_type: "audience",
+    paid_more_than_cents: null,
+    paid_less_than_cents: null,
+    allow_comments: true,
+    full_url: "https://seller.gumroad.com/p/august-update",
+    has_been_blasted: false,
+    files: [],
+  };
+
+  const exclusions = () => {
+    const fieldset = screen.getByLabelText("Has not yet bought").closest("fieldset");
+    if (!fieldset) throw new Error("Exclusion fieldset missing");
+    return fieldset;
+  };
+
+  const selectExclusion = (fieldset: HTMLElement, label: string) => {
+    // The menu mounts on focusin; its options live in a <datalist>, so they are queried by attribute.
+    fireEvent.focusIn(within(fieldset).getByLabelText("Has not yet bought"));
+    const option = [...fieldset.querySelectorAll('[role="option"]')].find((el) => el.textContent === label);
+    if (!option) throw new Error(`${label} is not offered as an exclusion`);
+    fireEvent.click(option);
+  };
+
+  it("restores both the saved products and the saved versions when editing", () => {
+    renderForm({ ...draft, not_bought_products: ["product-1"], not_bought_variants: ["variant-1"] }, audienceContext);
+
+    const fieldset = exclusions();
+    expect(within(fieldset).getByRole("button", { name: "Design guide" })).not.toBeNull();
+    expect(within(fieldset).getByRole("button", { name: "Design guide - Studio edition" })).not.toBeNull();
+  });
+
+  it("adds a second exclusion alongside one that is already selected", () => {
+    renderForm({ ...draft, not_bought_products: ["product-1"] }, audienceContext);
+
+    const fieldset = exclusions();
+    selectExclusion(fieldset, "Course");
+
+    expect(within(fieldset).getByRole("button", { name: "Design guide" })).not.toBeNull();
+    expect(within(fieldset).getByRole("button", { name: "Course" })).not.toBeNull();
   });
 });
