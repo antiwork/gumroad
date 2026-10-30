@@ -668,6 +668,17 @@ describe "MCP server" do
         expect(rows.find { |row| row["id"] == orphan.external_id }["email"]).to be_nil
       end
 
+      it "reads the current purchase's email after a plan change archived the first one" do
+        subscription = create(:subscription, link: product, user: nil)
+        first = create(:purchase, link: product, subscription:, is_original_subscription_purchase: true, email: "old@example.com")
+        first.update!(is_archived_original_subscription_purchase: true)
+        create(:purchase, link: product, subscription:, is_original_subscription_purchase: true, email: "new@example.com")
+
+        row = get_subscriptions["structuredContent"]["subscriptions"].find { |r| r["id"] == subscription.external_id }
+
+        expect(row["email"]).to eq("new@example.com")
+      end
+
       it "filters to alive or ended, to one product, and never to a test subscription" do
         ended = create(:subscription, link: product, user: subscriber, cancelled_at: 1.week.ago, deactivated_at: 1.week.ago)
         period_ended = create(:subscription, link: product, user: subscriber, ended_at: 1.week.ago)

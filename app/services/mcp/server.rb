@@ -898,7 +898,9 @@ module Mcp
         purchase = subscription.true_original_purchase
         return if purchase.nil?
 
-        purchase.is_gift_sender_purchase? ? purchase.giftee_email.presence : purchase.email
+        return purchase.giftee_email.presence if purchase.is_gift_sender_purchase?
+
+        (subscription.original_purchase || purchase).email
       end
 
       def churn_payload(args, product)
