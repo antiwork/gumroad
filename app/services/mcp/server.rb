@@ -44,6 +44,11 @@ module Mcp
     ANALYTICS_DEFAULT_DAYS = 30
     ANALYTICS_MAX_DAYS = 366
     ANALYTICS_MAX_REFERRERS = 50
+    SUBSCRIPTION_BREAKDOWNS = %w[subscriptions churn].freeze
+    SUBSCRIPTION_STATUSES = %w[alive ended].freeze
+    SUBSCRIPTION_CHURN_DEFAULT_MONTHS = 11
+    # Churn buckets by day in Elasticsearch, so the range carries the same cost ceiling as analytics.
+    SUBSCRIPTION_CHURN_MAX_DAYS = 366
 
     TOTALS_BREAKDOWNS = %w[product country day week month].freeze
     TOTALS_DEFAULT_DAYS = 30
@@ -397,6 +402,15 @@ module Mcp
                  "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
                  "product_id" => { type: "string", description: "Only this product (id from list_products)." },
                  "breakdown" => { type: "string", enum: TOTALS_BREAKDOWNS, description: "product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone." }
+               }, read_only: true),
+          tool("get_subscriptions", "The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.", {
+                 "breakdown" => { type: "string", enum: SUBSCRIPTION_BREAKDOWNS, description: "subscriptions (default) or churn." },
+                 "limit" => { type: "integer", description: "Max subscriptions to return (1-50, default 25). breakdown=subscriptions only." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page. breakdown=subscriptions only." },
+                 "status" => { type: "string", enum: SUBSCRIPTION_STATUSES, description: "alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only." },
+                 "product_id" => { type: "string", description: "Only this product (id from list_products)." },
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only." }
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
@@ -964,6 +978,94 @@ module Mcp
         Date.iso8601(value)
       rescue Date::Error
         raise Error.new("#{name} must be a date like 2026-10-31", code: -32602)
+      end
+
+      def tool_get_subscriptions(args)
+        require_scopes!(:view_sales, :account)
+        product = find_product!(args["product_id"]) if args["product_id"].present?
+
+        args.fetch("breakdown", "subscriptions") == "churn" ? churn_payload(args, product) : subscriptions_payload(args, product)
+      end
+
+      # A creator's subscriptions hang off their products, not off their buyer-side `subscriptions`
+      # association, and test subscriptions are excluded to match the subscriber counts they see.
+      def subscriptions_payload(args, product)
+        subscriptions = Subscription.joins(link: :user).where(users: { id: user.id }).not_is_test_subscription
+        subscriptions = subscriptions.where(link_id: product.id) if product
+        subscriptions = subscriptions.active if args["status"] == "alive"
+        # The complement of the scope the dashboard counts, so a stopped subscription is in exactly one list.
+        subscriptions = subscriptions.where.not(id: Subscription.active.select(:id)) if args["status"] == "ended"
+
+        page, next_cursor = paginate(subscriptions.includes(:link, :user, :purchases, :true_original_purchase), args, default: 25, table: "subscriptions")
+        { breakdown: "subscriptions", subscriptions: page.map { |subscription| subscription_payload(subscription) }, next_cursor: }.compact
+      end
+
+      def subscription_payload(subscription)
+        {
+          id: subscription.external_id,
+          product_id: subscription.link.external_id,
+          product_name: subscription.link.name,
+          email: subscription_email(subscription),
+          status: subscription.status,
+          started_at: subscription.created_at.iso8601,
+          cancelled_at: subscription.cancelled_at&.iso8601,
+          failed_at: subscription.failed_at&.iso8601,
+          ended_at: subscription.ended_at&.iso8601,
+          failed_payments: subscription.purchases.count { |purchase| purchase.purchase_state == "failed" }
+        }
+      end
+
+      # `Subscription#email` reads its sender purchase for a gift, which a purchase-less row lacks.
+      def subscription_email(subscription)
+        return subscription.user.form_email if subscription.user&.form_email.present?
+
+        purchase = subscription.true_original_purchase
+        return if purchase.nil?
+
+        return purchase.giftee_email.presence if purchase.is_gift_sender_purchase?
+
+        (subscription.original_purchase || purchase).email
+      end
+
+      def churn_payload(args, product)
+        timezone = ActiveSupport::TimeZone[user.timezone]
+        end_date = args["end_date"] ? parse_date!(args["end_date"], "end_date") : timezone.today
+        start_date = args["start_date"] ? parse_date!(args["start_date"], "start_date") : (end_date - SUBSCRIPTION_CHURN_DEFAULT_MONTHS.months).beginning_of_month
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date > end_date
+        raise Error.new("The date range cannot exceed #{SUBSCRIPTION_CHURN_MAX_DAYS} days", code: -32602) if (end_date - start_date).to_i >= SUBSCRIPTION_CHURN_MAX_DAYS
+
+        if start_date > timezone.today
+          return { breakdown: "churn", start_date: start_date.iso8601, end_date: end_date.iso8601, time_zone: user.timezone, currency: Currency::USD, rows: [] }
+        end
+
+        data = CreatorAnalytics::Churn.new(seller: user).generate_data(start_date:, end_date:)
+        monthly = data.dig(:data, :current_period, :monthly) || {}
+        permalink = product&.unique_permalink
+        rows = monthly.filter_map do |month, month_stats|
+          stats = permalink ? month_stats[:by_product][permalink] : month_stats[:total]
+          next if stats.nil?
+
+          {
+            month:,
+            subscriber_base: stats[:subscriber_base],
+            churned: stats[:churned_customers_count],
+            churn_rate_percent: stats[:churn_rate],
+            revenue_lost_cents: stats[:revenue_lost_cents]
+          }
+        end
+
+        # The churn source clamps the range to the seller's first sale and today, so return what it read.
+        period = data.dig(:metadata, :current_period) || {}
+        {
+          breakdown: "churn",
+          start_date: period[:start_date] || start_date.iso8601,
+          end_date: period[:end_date] || end_date.iso8601,
+          time_zone: user.timezone,
+          currency: Currency::USD,
+          rows:
+        }
+      rescue Faraday::TimeoutError
+        raise ToolError, "Churn took too long for this range. Try a shorter range."
       end
 
       def tool_list_payouts(args)

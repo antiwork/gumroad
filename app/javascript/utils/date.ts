@@ -1,4 +1,4 @@
-import { parseISO } from "date-fns";
+import { formatDistanceToNow, parseISO } from "date-fns";
 
 export const formatDate = (
   date: Date,
@@ -42,3 +42,5 @@ export const formatCallDate = (
 
   return date.toLocaleString("en-US", localeStringOptions);
 };
+
+export const deployedAgo = (date: string) => `${formatDistanceToNow(parseISO(date))} ago`;

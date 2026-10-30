@@ -348,6 +348,7 @@ export const ProductEditContext = React.createContext<{
   // shown in the Receipt tab's email-style preview chrome.
   receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
+  hasWebBuilds: boolean;
   customHtmlPagesEnabled: boolean;
   autoMarketingEnabled: boolean;
   // Null until someone confirms a signup.
@@ -369,6 +370,30 @@ export const ProductEditContext = React.createContext<{
   customAttributeNameSuggestions: string[];
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
+
+// The live build's zip is in the content as a file row, which carries the History button. Before the first
+// version is made live, or once the seller removes that row (even before saving), the Content tab offers the
+// history instead. Pages hold the editor's current content, so the row's removal shows here at once.
+export const hasLiveBuildFile = (product: Pick<Product, "files" | "rich_content" | "variants">) => {
+  const live = product.files.find((file) => file.web_build?.status === "live");
+  if (!live) return false;
+  const pages = [...product.rich_content, ...product.variants.flatMap((variant) => variant.rich_content)];
+  return JSON.stringify(pages.map((page) => page.description)).includes(JSON.stringify(live.id));
+};
+
+const isUploadingFile = (file: FileEntry | SubtitleFile) =>
+  file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
+// Save sends a file that is still uploading before its object exists, so it waits while this is true.
+export const filesAreUploading = (product: Pick<Product, "files" | "public_files">) =>
+  product.public_files.some((f) => f.status?.type === "unsaved" && f.status.uploadStatus.type === "uploading") ||
+  product.files.some(
+    (file) =>
+      isUploadingFile(file) ||
+      file.subtitle_files.some(isUploadingFile) ||
+      // A failed file is left out of the save, so its thumbnail does not hold Save.
+      (file.thumbnail?.status.type === "uploading" &&
+        !(file.status.type === "unsaved" && file.status.uploadStatus.type === "failed")),
+  );
 
 //TODO: clean up this legacy file state
 type UploadProgress = { percent: number; bitrate: number };
@@ -402,7 +427,13 @@ export type FileEntry = {
   can_disable_downloads?: boolean;
   // Set on the zip a promoted web build put in the content, so the row can be labelled as a build
   // rather than looking like a hand-uploaded file. See ProductFile#web_build_summary.
-  web_build?: { number: number; status: string; playable: boolean } | null;
+  web_build?: {
+    number: number;
+    status: string;
+    deployed_at: string;
+    playable: boolean;
+    version_history: boolean;
+  } | null;
   stream_only: boolean;
   is_transcoding_in_progress: boolean;
   // Pixel dimensions of the video, when we know them, so the editor's preview

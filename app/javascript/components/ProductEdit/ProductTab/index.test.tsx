@@ -213,6 +213,7 @@ const renderProductTab = (
             cancellationDiscountsEnabled: false,
             receiptEmailFrom: "seller@example.com",
             priceCheckerEnabled: false,
+            hasWebBuilds: false,
             customHtmlPagesEnabled: false,
             autoMarketingEnabled: false,
             waitlist: null,

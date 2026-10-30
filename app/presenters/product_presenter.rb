@@ -393,6 +393,7 @@ class ProductPresenter
       # chrome can show an honest From value.
       receipt_email_from: from_address_with_name(product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       price_checker_enabled: Feature.active?(:price_checker, product.user),
+      has_web_builds: product.build_player_enabled? && product.product_builds.exists?,
       custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
       auto_marketing_enabled: Marketing::Eligibility.enabled_for?(product.user),
       # A collaborator edits the product but cannot email the owner's audience.

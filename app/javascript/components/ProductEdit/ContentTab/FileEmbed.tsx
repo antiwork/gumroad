@@ -9,6 +9,7 @@ import * as React from "react";
 
 import { cancelDropboxFileUpload } from "$app/data/dropbox_upload";
 import { assertDefined } from "$app/utils/assert";
+import { deployedAgo } from "$app/utils/date";
 import FileUtils from "$app/utils/file";
 import { assertString } from "$app/utils/guards";
 import { createJWPlayer } from "$app/utils/jwPlayer";
@@ -30,6 +31,7 @@ import {
   titleWithFallback,
   useFilesInGroup,
 } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
+import { VersionHistoryButton } from "$app/components/ProductEdit/ContentTab/VersionHistoryButton";
 import { FileEntry, ThumbnailFile, useProductEditContext } from "$app/components/ProductEdit/state";
 import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { Separator } from "$app/components/Separator";
@@ -653,6 +655,9 @@ const FileEmbedNodeView = ({
                       <Pill size="small">Web build v{file.web_build.number}</Pill>
                     </li>
                   ) : null}
+                  {file.web_build?.status === "live" ? (
+                    <li>Deployed {deployedAgo(file.web_build.deployed_at)}</li>
+                  ) : null}
 
                   {file.extension ? <li>{file.extension}</li> : null}
 
@@ -684,6 +689,7 @@ const FileEmbedNodeView = ({
           </RowContent>
 
           <RowActions>
+            {file.web_build?.version_history ? <VersionHistoryButton /> : null}
             {downloadUrl && !file.stream_only && !isFailedUpload ? (
               <NavigationButton
                 href={downloadUrl}
