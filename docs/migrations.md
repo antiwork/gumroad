@@ -13,6 +13,8 @@ This includes:
 - Adding or removing indexes
 - Any `ALTER TABLE` operation
 
+The one exception is an `ALTER` that changes metadata only and copies no rows, for example a new column default or a wider `varchar` that keeps its length prefix. Run it inside `Alterity.disable` with `ALGORITHM=INPLACE, LOCK=NONE` (or `INSTANT`) and a short `lock_wait_timeout`, so MySQL refuses instead of copying the table. Prove it on the production MySQL version first, and get owner approval. See `db/migrate/20261223000005_widen_purchases_json_data.rb`.
+
 ## General rules
 
 1. Submit migrations in separate PRs, except for:

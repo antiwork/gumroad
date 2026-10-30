@@ -5,6 +5,10 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
+  # Page ids are rich content external ids (24 characters). The buyer sends this value and it is
+  # stored in purchases.json_data, so reject an oversized one here before JsonData's length guard raises.
+  MAX_CONTENT_PAGE_ID_LENGTH = 64
+
   layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page, :confirm_page, :read, :stream, :download_page, :play]
 
   before_action :fetch_url_redirect, except: %i[
@@ -398,7 +402,11 @@ class UrlRedirectsController < ApplicationController
   def save_last_content_page
     return render json: { success: false, error: "Purchase not found" }, status: :unprocessable_entity if @url_redirect.purchase.blank?
 
-    @url_redirect.purchase.update!(last_content_page_id: params[:page_id])
+    page_id = params[:page_id]
+    valid_page_id = page_id.nil? || (page_id.is_a?(String) && page_id.length <= MAX_CONTENT_PAGE_ID_LENGTH)
+    return render json: { success: false, error: "Invalid page" }, status: :unprocessable_entity unless valid_page_id
+
+    @url_redirect.purchase.update!(last_content_page_id: page_id)
     render json: { success: true }
   end
 

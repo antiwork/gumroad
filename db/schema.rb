@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_23_000004) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_23_000005) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2345,7 +2345,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.integer "tax_cents", default: 0
     t.integer "affiliate_credit_cents", default: 0
     t.string "credit_card_zipcode"
-    t.string "json_data"
+    t.string "json_data", limit: 4096
     t.string "card_data_handling_mode"
     t.string "charge_processor_id"
     t.integer "total_transaction_cents"
