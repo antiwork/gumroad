@@ -128,6 +128,9 @@ class Link < ApplicationRecord
   has_one :page, -> { roots }, as: :pageable, dependent: :destroy, autosave: true
   delegate :custom_html, to: :page, allow_nil: true
 
+  # The kill switch for everything after a build deploys: the player, and the editor's version history.
+  def build_player_enabled? = Feature.active?(:product_build_player, user)
+
   def custom_html=(value)
     if value.blank?
       page.custom_html = nil if page.present?

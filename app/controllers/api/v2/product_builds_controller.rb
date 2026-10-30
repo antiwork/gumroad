@@ -9,11 +9,11 @@ class Api::V2::ProductBuildsController < Api::V2::BaseController
   before_action :set_build, only: [:show, :promote]
 
   def index
-    render_response(true, builds: @product.product_builds.map { build_json(_1) })
+    render_response(true, builds: @product.product_builds.map(&:as_json))
   end
 
   def show
-    render_response(true, build: build_json(@build))
+    render_response(true, build: @build.as_json)
   end
 
   def deploy
@@ -26,7 +26,7 @@ class Api::V2::ProductBuildsController < Api::V2::BaseController
     end
 
     existing = @product.product_builds.find_by(source_url: url)
-    return render_response(true, build: build_json(existing)) if existing
+    return render_response(true, build: existing.as_json) if existing
 
     source_key = url.delete_prefix(S3_BASE_URL)
     head = Aws::S3::Client.new.head_object(bucket: S3_BUCKET, key: source_key)
@@ -46,7 +46,7 @@ class Api::V2::ProductBuildsController < Api::V2::BaseController
     end
     return render_response(false, message: "This product already has #{ProductBuild::MAX_BUILDS_PER_PRODUCT} builds.") unless build
 
-    render_response(true, build: build_json(build))
+    render_response(true, build: build.as_json)
   rescue Aws::S3::Errors::NotFound, Aws::S3::Errors::NoSuchKey
     render_response(false, message: "The uploaded zip was not found. Finish the upload with POST /v2/files/complete first.")
   rescue Aws::S3::Errors::ServiceError => e
@@ -55,22 +55,11 @@ class Api::V2::ProductBuildsController < Api::V2::BaseController
 
   def promote
     @build.promote!
-    render_response(true, build: build_json(@build.reload))
+    render_response(true, build: @build.reload.as_json)
   end
 
   private
     def set_build
       @build = @product.product_builds.find_by(public_id: params[:id].to_s) || error_with_object(:build, nil)
-    end
-
-    def build_json(build)
-      {
-        id: build.public_id,
-        number: build.number,
-        status: build.status,
-        byte_size: build.byte_size,
-        created_at: build.created_at,
-        promoted_at: build.promoted_at,
-      }
     end
 end
