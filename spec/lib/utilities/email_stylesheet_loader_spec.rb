@@ -38,7 +38,16 @@ describe EmailStylesheetLoader, :skip_ssrf_stub do
       href = path.delete_prefix(Rails.public_path.to_s)
 
       expect(SsrfFilter).not_to receive(:get)
-      expect(described_class.load(href)).to eq(File.read(path))
+      css = described_class.load(href)
+      expect(css).to include("--font-family:")
+      expect(css).not_to include("@layer")
+    end
+
+    it "keeps the built stylesheet's custom properties through premailer" do
+      path = Dir[Rails.root.join("public", ViteRuby.config.public_output_dir, "assets", "entrypoints", "email-*.css")].first
+      html = Premailer.new("<html><body><p>Hi</p></body></html>", with_html_string: true, css_string: described_class.load(path.delete_prefix(Rails.public_path.to_s))).to_inline_css
+
+      expect(Nokogiri::HTML(html).at("html")["style"]).to include("--font-family:", "--color:", "--body-bg:")
     end
 
     it "does not read files outside public/" do
@@ -86,7 +95,7 @@ describe EmailStylesheetLoader, :skip_ssrf_stub do
         stub_request(:get, "http://assets.example.org:3000/big.css").to_return(status: 200, body: "a" * (EmailStylesheetLoader::MAX_BYTES + 1))
         stub_request(:get, "http://assets.example.org:3000/declared.css").to_return(status: 200, body: "body { margin: 0; }", headers: { "Content-Length" => (EmailStylesheetLoader::MAX_BYTES + 1).to_s })
 
-        expect(described_class.load("/vite-dev/entrypoints/email.css")).to eq(built)
+        expect(described_class.load("/vite-dev/entrypoints/email.css")).to include("--font-family:")
         expect(described_class.load("/big.css")).to eq("")
         expect(described_class.load("/declared.css")).to eq("")
       end
@@ -301,6 +310,53 @@ describe EmailStylesheetLoader, :skip_ssrf_stub do
       it "drops #{href.inspect}" do
         expect(described_class.load(href)).to eq("")
       end
+    end
+  end
+
+  describe "cascade layers" do
+    let(:layered) do
+      <<~CSS
+        @layer base, theme;
+        @layer base {
+          :root { --font-family: Avenir; }
+          @media (min-width: 640px) { p { margin: 0; } }
+          a::after { content: "}"; }
+        }
+        /* @layer theme { */
+        p { color: red; }
+      CSS
+    end
+
+    before do
+      allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new("development"))
+      allow(Rails.configuration.action_controller).to receive(:asset_host).and_return("http://assets.example.org:3000")
+    end
+
+    it "unwraps our own layer blocks and drops layer statements, leaving strings and comments intact" do
+      stub_request(:get, "http://assets.example.org:3000/layered.css").to_return(status: 200, body: layered)
+
+      expect(described_class.load("/layered.css")).to eq(
+        "\n\n" \
+        "  :root { --font-family: Avenir; }\n" \
+        "  @media (min-width: 640px) { p { margin: 0; } }\n" \
+        "  a::after { content: \"}\"; }\n" \
+        "\n" \
+        "/* @layer theme { */\n" \
+        "p { color: red; }\n"
+      )
+    end
+
+    it "leaves a seller's layers alone, so its unlayered rules keep their priority" do
+      stub_request(:get, "https://cdn.example.com/layered.css").to_return(status: 200, body: layered)
+
+      expect(described_class.load("https://cdn.example.com/layered.css")).to eq(layered)
+    end
+
+    it "scans unterminated headers, strings, and comments once" do
+      broken = "@layer " * 50_000 + "/*" * 50_000
+      stub_request(:get, "http://assets.example.org:3000/broken.css").to_return(status: 200, body: broken)
+
+      expect(Timeout.timeout(5) { described_class.load("/broken.css") }).to eq(broken)
     end
   end
 
