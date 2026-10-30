@@ -7,6 +7,10 @@ class WidenPurchasesJsonData < ActiveRecord::Migration[8.1]
   # copy every row. ALGORITHM/LOCK make MySQL refuse rather than copy, and lock_wait_timeout=1 (as in
   # InstantDdlFirst) keeps the metadata-lock wait from queuing purchases queries.
   def up
+    # Databases that ran the superseded 20261222000004 already hold json_data as LONGTEXT, and
+    # TEXT -> VARCHAR is never in place.
+    return if column_exists?(:purchases, :json_data, :text)
+
     Alterity.disable do
       previous_lock_wait_timeout = connection.select_value("SELECT @@SESSION.lock_wait_timeout")
       execute("SET SESSION lock_wait_timeout = 1")
