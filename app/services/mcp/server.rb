@@ -933,7 +933,10 @@ module Mcp
         rows = sales.group("purchases.email").having(converted_after_free)
         rows = rows.having("#{converted_at} >= ?", customer_day_start(start_date, zone)) if start_date
         rows = rows.having("#{converted_at} < ?", customer_day_start(end_date, zone) + 1.day) if end_date
-        rows.order(Arel.sql("#{converted_at} - #{free_at} ASC, purchases.email ASC"))
+        # MySQL's `-` on two DATETIMEs is not a duration: it subtracts YYYYMMDDhhmmss numbers, so a
+        # conversion over a month or a year boundary counts as slower than a longer one inside a
+        # single month, and a capped list then drops the fastest converters. Order by the interval.
+        rows.order(Arel.sql("TIMESTAMPDIFF(SECOND, #{free_at}, #{converted_at}) ASC, purchases.email ASC"))
           .limit(limit)
           .pluck(Arel.sql("purchases.email"), Arel.sql(free_at), Arel.sql(converted_at))
           .map do |email, first_free_at, paid_at|

@@ -740,6 +740,27 @@ describe "MCP server" do
         expect(rows.first["days_to_convert"]).to eq(1.0)
       end
 
+      it "orders by elapsed time across a month and a year boundary, not by date arithmetic" do
+        # Subtracting two DATETIMEs on MySQL is not a duration: 1 day over a month boundary
+        # (20260201 - 20260131) is numerically larger than 19 days inside one month, and a year
+        # boundary is larger still, so a date-arithmetic sort inverts this and the cap drops the
+        # fastest converters.
+        create(:free_purchase, seller: @seller, link: @product, email: "crossing-year@example.com", created_at: Time.utc(2025, 12, 31, 12))
+        create(:purchase, seller: @seller, link: @product, email: "crossing-year@example.com", price_cents: 1900, created_at: Time.utc(2026, 1, 2, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "crossing-month@example.com", created_at: Time.utc(2026, 1, 31, 12))
+        create(:purchase, seller: @seller, link: @product, email: "crossing-month@example.com", price_cents: 1900, created_at: Time.utc(2026, 2, 1, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "inside-month@example.com", created_at: Time.utc(2026, 3, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "inside-month@example.com", price_cents: 1900, created_at: Time.utc(2026, 3, 20, 12))
+
+        rows = get_customers("breakdown" => "conversion")["structuredContent"]["rows"]
+        expect(rows.map { |row| row["email"] }).to eq(["crossing-month@example.com", "crossing-year@example.com", "inside-month@example.com"])
+        expect(rows.map { |row| row["days_to_convert"] }).to eq([1.0, 2.0, 19.0])
+
+        # The cap has to keep the fastest converters, not the ones with the smallest date difference.
+        capped = get_customers("breakdown" => "conversion", "limit" => 1)["structuredContent"]["rows"]
+        expect(capped.map { |row| row["email"] }).to eq(["crossing-month@example.com"])
+      end
+
       it "reads a same-second pair by id and skips a refunded paid order" do
         same_second = Time.utc(2026, 10, 1, 12)
         create(:free_purchase, seller: @seller, link: @product, email: "tied@example.com", created_at: same_second)
