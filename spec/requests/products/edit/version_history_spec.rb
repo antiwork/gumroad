@@ -80,6 +80,21 @@ describe "Product edit version history", type: :system, js: true do
     expect(page).not_to have_text("Your web app is not in this product's content yet.")
   end
 
+  it "offers the history as soon as the seller deletes the live build's row, before saving" do
+    visit edit_link_path(product.unique_permalink)
+    select_tab "Content"
+    expect(page).not_to have_text("Your web app is not in this product's content yet.")
+
+    within find_embed(name: "Clicker build 2.zip").hover do
+      select_disclosure "Actions" do
+        click_on "Delete"
+      end
+    end
+
+    expect(page).to have_text("Your web app is not in this product's content yet.")
+    expect(page).to have_button("History")
+  end
+
   it "has no version history while the player is off for the seller" do
     Feature.deactivate_user(:product_build_player, seller)
 

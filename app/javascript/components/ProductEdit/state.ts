@@ -372,9 +372,14 @@ export const ProductEditContext = React.createContext<{
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
 
 // The live build's zip is in the content as a file row, which carries the History button. Before the first
-// version is made live, or after the seller removes that row, the Content tab offers the history instead.
-export const hasLiveBuildFile = (product: Pick<Product, "files">) =>
-  product.files.some((file) => file.web_build?.status === "live");
+// version is made live, or once the seller removes that row (even before saving), the Content tab offers the
+// history instead. Pages hold the editor's current content, so the row's removal shows here at once.
+export const hasLiveBuildFile = (product: Pick<Product, "files" | "rich_content" | "variants">) => {
+  const live = product.files.find((file) => file.web_build?.status === "live");
+  if (!live) return false;
+  const pages = [...product.rich_content, ...product.variants.flatMap((variant) => variant.rich_content)];
+  return JSON.stringify(pages.map((page) => page.description)).includes(JSON.stringify(live.id));
+};
 
 const isUploadingFile = (file: FileEntry | SubtitleFile) =>
   file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
