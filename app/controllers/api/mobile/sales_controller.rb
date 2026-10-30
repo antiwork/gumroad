@@ -111,7 +111,7 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
 
   def refund
     process_refund(seller: current_resource_owner, user: acting_user,
-                   purchase_external_id: params[:id], amount: params[:amount])
+                   purchase_external_id: params[:id], amount: params[:amount], reason: refund_reason)
   end
 
   def resend_receipt
@@ -264,6 +264,18 @@ class Api::Mobile::SalesController < Api::Mobile::BaseController
     # The brand stays the seller; the audit trail names whoever is signed in, as the website does.
     def acting_user
       impersonated_user || account_holder
+    end
+
+    # A Gumroad staff member refunding a brand's sale has to give a reason — the creator gets it in
+    # the refund email — and `Purchase#refund_and_save!` refuses the refund without one. The app has
+    # no field for a reason, so name the staff member who issued it. A member who is not staff needs
+    # no reason, and a staff member refunding their own sale is a creator refunding themselves.
+    def refund_reason
+      return params[:reason] if params[:reason].present?
+      return unless acting_user&.is_team_member?
+      return if acting_user.id == current_resource_owner.id
+
+      "Refunded from the mobile app by #{acting_user.email}"
     end
 
     def fetch_purchase
