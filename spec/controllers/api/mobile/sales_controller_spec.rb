@@ -439,6 +439,22 @@ describe Api::Mobile::SalesController, :vcr do
       end
     end
 
+    context "when a Gumroad staff member who administers the brand refunds through a brand token" do
+      it "requires a reason, as the website does, because the refund is attributed to the member",
+         vcr: { cassette_name: "Api_Mobile_SalesController/PATCH_refund/when_the_purchase_is_refunded/responds_with_HTTP_success" } do
+        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
+        member = create(:admin_user)
+        membership = create(:team_membership, user: member, seller: @seller, role: TeamMembership::ROLE_ADMIN)
+        brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: @seller, team_membership: membership)
+
+        patch :refund, params: @params.merge(access_token: brand_token.token, id: @purchase.external_id)
+
+        expect(response.parsed_body).to eq "success" => false, "message" => "A reason is required when refunding on the creator's behalf."
+        expect(@purchase.reload.stripe_refunded?).to eq(false)
+        expect(@purchase.refunds).to be_empty
+      end
+    end
+
     context "when the purchase is refunded" do
       it "responds with HTTP success" do
         allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
@@ -466,21 +482,6 @@ describe Api::Mobile::SalesController, :vcr do
         expect(@purchase.reload.refunded?).to eq(true)
         expect(@purchase.seller).to eq(@seller)
         expect(@purchase.refunds.last.refunding_user_id).to eq(member.id)
-      end
-
-      it "refunds the brand's sale for a Gumroad staff member who administers it",
-         vcr: { cassette_name: "Api_Mobile_SalesController/PATCH_refund/when_the_purchase_is_refunded/responds_with_HTTP_success" } do
-        allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(10_00)
-        staff = create(:user, is_team_member: true)
-        membership = create(:team_membership, user: staff, seller: @seller, role: TeamMembership::ROLE_ADMIN)
-        brand_token = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: @seller, team_membership: membership)
-
-        patch :refund, params: @params.merge(access_token: brand_token.token, id: @purchase.external_id)
-
-        expect(response.parsed_body["success"]).to eq(true)
-        expect(@purchase.reload.refunded?).to eq(true)
-        expect(@purchase.refunds.last.refunding_user_id).to eq(staff.id)
-        expect(@purchase.refunds.last.note).to eq("Refunded from the mobile app by #{staff.email}")
       end
     end
 
