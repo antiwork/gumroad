@@ -7,7 +7,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type Installment, type InstallmentFormContext } from "$app/data/installments";
+import { getRecipientCount, type Installment, type InstallmentFormContext } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
@@ -37,6 +37,10 @@ const cdn = vi.hoisted(() => {
   });
   return state;
 });
+vi.mock("$app/data/installments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$app/data/installments")>();
+  return { ...actual, getRecipientCount: vi.fn(actual.getRecipientCount) };
+});
 vi.mock("$app/utils/prepareImageForUpload", () => ({
   isLikelyImageFile: () => true,
   prepareImageForUpload: async (file: File) => file,
@@ -54,7 +58,13 @@ vi.mock("@rails/activestorage", () => ({
 const post = vi.hoisted(() => vi.fn((_url: string, options?: { onFinish?: () => void }) => options?.onFinish?.()));
 // The transform callback builds the payload Inertia would send; keeping it lets a test assert
 // what the form would submit.
-type SentPayload = { installment: { not_clicked_post_id: string | null } };
+type SentPayload = {
+  installment: {
+    not_clicked_post_id: string | null;
+    not_bought_products: string[] | null;
+    not_bought_variants: string[] | null;
+  };
+};
 const sent = vi.hoisted((): { payload: SentPayload | null } => ({ payload: null }));
 vi.mock("@inertiajs/react", () => ({
   Link: ({ href, children }: { href: string; children?: React.ReactNode }) => <a href={href}>{children}</a>,
@@ -259,6 +269,21 @@ describe('EmailForm "Has not yet bought"', () => {
 
     expect(within(fieldset).getByRole("button", { name: "Design guide" })).not.toBeNull();
     expect(within(fieldset).getByRole("button", { name: "Course" })).not.toBeNull();
+  });
+
+  it("sends every selected product and version in the recipient count and the save payload", async () => {
+    renderForm(draft, audienceContext);
+
+    const fieldset = exclusions();
+    selectExclusion(fieldset, "Design guide");
+    selectExclusion(fieldset, "Course");
+    selectExclusion(fieldset, "Design guide - Studio edition");
+
+    const expected = { not_bought_products: ["product-1", "product-2"], not_bought_variants: ["variant-1"] };
+    await waitFor(() => expect(vi.mocked(getRecipientCount).mock.lastCall?.[0]).toMatchObject(expected));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent.payload?.installment).toMatchObject(expected));
   });
 });
 
