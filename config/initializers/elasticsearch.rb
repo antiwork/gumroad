@@ -10,5 +10,7 @@ EsClient = Elasticsearch::Model.client = Elasticsearch::Client.new(
   transport_options: { request: { timeout: 15 } },
   log: true
 )
+# Debug adds every request and response body after the one-line summary.
+EsClient.transport.logger.level = Logger::INFO if Rails.env.production? || Rails.env.staging?
 
 USE_ES_ALIASES = Rails.env.production? || (Rails.env.staging? && ENV["BRANCH_DEPLOYMENT"] != "true")
