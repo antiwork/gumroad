@@ -40,6 +40,11 @@ module Mcp
       end
     end
 
+    ANALYTICS_BREAKDOWNS = %w[product referrer].freeze
+    ANALYTICS_DEFAULT_DAYS = 30
+    ANALYTICS_MAX_DAYS = 366
+    ANALYTICS_MAX_REFERRERS = 50
+
     class ToolError < StandardError; end
 
     DISCOUNT_PERCENT_RANGE = (1..100)
@@ -374,6 +379,12 @@ module Mcp
                  "before" => { type: "string", description: "Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01." },
                  "payment" => { type: "string", enum: %w[paid free], description: "paid = price above zero, free = zero-price sales." },
                  "kind" => { type: "string", enum: %w[subscription one_time], description: "subscription = membership charges, one_time = everything else." }
+               }, read_only: true),
+          tool("get_analytics", "Product page views, sales and revenue for a date range, so conversion rate (sales / views) can be computed. breakdown=product (default) gives one row per product; breakdown=referrer gives views, sales and revenue per traffic source. Revenue is price minus refunds and chargebacks, before fees, in minor units of USD. Dates are in the creator's time zone and default to the last 30 days.", {
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to 29 days before end_date." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
+                 "product_id" => { type: "string", description: "Only this product (id from list_products)." },
+                 "breakdown" => { type: "string", enum: ANALYTICS_BREAKDOWNS, description: "product (default) or referrer." }
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
@@ -771,6 +782,58 @@ module Mcp
           utm_term: utm&.utm_term,
           utm_content: utm&.utm_content
         }
+      end
+
+      def tool_get_analytics(args)
+        require_scopes!(:view_sales, :account)
+        timezone = ActiveSupport::TimeZone[user.timezone]
+        end_date = args["end_date"] ? parse_date!(args["end_date"], "end_date") : timezone.today
+        start_date = args["start_date"] ? parse_date!(args["start_date"], "start_date") : end_date - (ANALYTICS_DEFAULT_DAYS - 1)
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date > end_date
+        raise Error.new("The date range cannot exceed #{ANALYTICS_MAX_DAYS} days", code: -32602) if (end_date - start_date).to_i >= ANALYTICS_MAX_DAYS
+
+        product = find_product!(args["product_id"]) if args["product_id"].present?
+        by = args.fetch("breakdown", "product")
+        data = CreatorAnalytics::CachingProxy.new(user).data_for_dates(start_date, end_date, by: by == "referrer" ? :referral : :date)
+        permalinks = product ? [product.unique_permalink] : nil
+        rows = by == "referrer" ? analytics_by_referrer(data[:by_referral], permalinks) : analytics_by_product(data[:by_date], permalinks)
+        { start_date: start_date.iso8601, end_date: end_date.iso8601, time_zone: user.timezone, currency: Currency::USD, breakdown: by, rows: }
+      rescue Faraday::TimeoutError
+        raise ToolError, "Analytics took too long for this range. Try a shorter range or one product."
+      end
+
+      def analytics_by_product(by_date, permalinks)
+        names = user.links.where(unique_permalink: by_date[:views].keys).index_by(&:unique_permalink)
+        by_date[:views].keys.filter_map do |permalink|
+          next if permalinks && !permalinks.include?(permalink)
+
+          views = by_date[:views][permalink].sum
+          sales = by_date[:sales][permalink].sum
+          { product_id: names[permalink]&.external_id, product_name: names[permalink]&.name, views:, sales:, revenue_cents: by_date[:totals][permalink].sum, conversion_rate: analytics_conversion(sales, views) }
+        end.sort_by { |row| -row[:views] }
+      end
+
+      def analytics_by_referrer(by_referral, permalinks)
+        totals = Hash.new { |hash, name| hash[name] = { views: 0, sales: 0, revenue_cents: 0 } }
+        { views: :views, sales: :sales, totals: :revenue_cents }.each do |type, field|
+          by_referral[type].each do |permalink, referrers|
+            next if permalinks && !permalinks.include?(permalink)
+
+            referrers.each { |name, series| totals[name][field] += series.sum }
+          end
+        end
+        totals.map { |name, row| { referrer: name, **row, conversion_rate: analytics_conversion(row[:sales], row[:views]) } }
+          .sort_by { |row| -row[:views] }.first(ANALYTICS_MAX_REFERRERS)
+      end
+
+      def analytics_conversion(sales, views)
+        views.positive? ? (sales.to_f / views).round(4) : nil
+      end
+
+      def parse_date!(value, name)
+        Date.iso8601(value)
+      rescue Date::Error
+        raise Error.new("#{name} must be a date like 2026-10-31", code: -32602)
       end
 
       def tool_list_payouts(args)
