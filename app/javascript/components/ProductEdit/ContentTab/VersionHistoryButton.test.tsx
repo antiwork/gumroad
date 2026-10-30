@@ -17,9 +17,11 @@ vi.mock("$app/data/product_builds", () => ({
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 const save = vi.fn<() => Promise<boolean>>();
 let uploading = false;
+let liveRowShown = true;
 vi.mock("$app/components/ProductEdit/state", () => ({
   useProductEditContext: () => ({ uniquePermalink: "demo", save, product: {} }),
   filesAreUploading: () => uploading,
+  hasLiveBuildFile: () => liveRowShown,
 }));
 
 const build = (number: number, status: ProductBuild["status"]): ProductBuild => ({
@@ -47,6 +49,7 @@ describe("VersionHistoryButton", () => {
     // js-routes injects Routes as a global in the app; only the CLI link's path is read here.
     vi.stubGlobal("Routes", { api_path: () => "/api" });
     uploading = false;
+    liveRowShown = true;
     getProductBuilds.mockResolvedValue([build(2, "live"), build(1, "superseded")]);
     save.mockResolvedValue(true);
     Object.defineProperty(window, "location", { configurable: true, value: { reload: vi.fn() } });
@@ -81,6 +84,20 @@ describe("VersionHistoryButton", () => {
     expect(await screen.findByRole("dialog", { name: "Make version 3 live?" })).toBeDefined();
   });
 
+  it("offers to add the live version back when its row is not in the content", async () => {
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    await screen.findByRole("region", { name: "Live version" });
+    expect(screen.queryByRole("button", { name: "Add to content" })).toBeNull();
+    cleanup();
+
+    liveRowShown = false;
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add to content" }));
+    expect(await screen.findByRole("dialog", { name: "Add version 2 back to the content?" })).toBeDefined();
+  });
+
   it("shows a deploy command for this product", async () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
@@ -108,7 +125,7 @@ describe("VersionHistoryButton", () => {
 
     await waitFor(() => expect(cast<{ reload: () => void }>(window.location).reload).toHaveBeenCalled());
     expect(save).toHaveBeenCalledBefore(promoteProductBuild);
-    expect(screen.getByRole("button", { name: "Making live..." })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Saving..." })).toHaveProperty("disabled", true);
   });
 
   it("does not make a build live when the save fails", async () => {
@@ -126,7 +143,7 @@ describe("VersionHistoryButton", () => {
     const makeLive = await openConfirm();
 
     expect(makeLive).toHaveProperty("disabled", true);
-    expect(screen.getByText("Wait for your files to finish uploading to make another version live.")).toBeDefined();
+    expect(screen.getByText("Wait for your files to finish uploading.")).toBeDefined();
   });
 
   it("stays open while a build is being made live", async () => {

@@ -74,7 +74,13 @@ import { EpubNudge } from "$app/components/ProductEdit/ContentTab/EpubNudge";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
 import { VersionHistoryButton } from "$app/components/ProductEdit/ContentTab/VersionHistoryButton";
 import { Layout } from "$app/components/ProductEdit/Layout";
-import { ExistingFileEntry, FileEntry, useProductEditContext, Variant } from "$app/components/ProductEdit/state";
+import {
+  ExistingFileEntry,
+  FileEntry,
+  hasLiveBuildFile,
+  useProductEditContext,
+  Variant,
+} from "$app/components/ProductEdit/state";
 import { ReviewForm } from "$app/components/ReviewForm";
 import {
   baseEditorOptions,
@@ -218,7 +224,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     richContentIdMappings,
     fileIdMappings,
     richContentRemovedFileEmbedIds,
-    hasWebBuildsWithoutLive,
+    hasWebBuilds,
   } = useProductEditContext();
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
@@ -883,11 +889,11 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
             </Alert>
           </div>
         ) : null}
-        {hasWebBuildsWithoutLive ? (
+        {hasWebBuilds && !hasLiveBuildFile(product) ? (
           <div className="p-4 pb-0 md:p-8 md:pb-0">
             <Alert role="status" variant="info">
               <div className="flex flex-1 flex-wrap items-center gap-2">
-                <span className="flex-1">Your web app has a version ready to go live.</span>
+                <span className="flex-1">Your web app is not in this product's content yet.</span>
                 <VersionHistoryButton />
               </div>
             </Alert>

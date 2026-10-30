@@ -10,7 +10,7 @@ import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
-import { filesAreUploading, useProductEditContext } from "$app/components/ProductEdit/state";
+import { filesAreUploading, hasLiveBuildFile, useProductEditContext } from "$app/components/ProductEdit/state";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
@@ -89,7 +89,7 @@ export const VersionHistoryButton = () => {
       window.location.reload();
     } catch {
       setPromoting(false);
-      showAlert(`Sorry, version ${build.number} could not be made live. Please try again.`, "error");
+      showAlert(`Sorry, version ${build.number} could not be saved. Please try again.`, "error");
     }
   };
 
@@ -110,7 +110,14 @@ export const VersionHistoryButton = () => {
             {live ? (
               <section aria-label="Live version">
                 <Rows role="list">
-                  <VersionRow build={live} />
+                  <VersionRow build={live}>
+                    {/* Making the live version live again puts its row back in the content. */}
+                    {hasLiveBuildFile(product) ? null : (
+                      <Button size="sm" color="primary" onClick={() => setConfirming(live)}>
+                        Add to content
+                      </Button>
+                    )}
+                  </VersionRow>
                 </Rows>
               </section>
             ) : null}
@@ -190,23 +197,33 @@ export const VersionHistoryButton = () => {
             if (!promoting) setConfirming(null);
           }}
           allowClose={!promoting}
-          title={`Make version ${confirming.number} live?`}
+          title={
+            confirming.status === "live"
+              ? `Add version ${confirming.number} back to the content?`
+              : `Make version ${confirming.number} live?`
+          }
           footer={
             <>
               <Button disabled={promoting} onClick={() => setConfirming(null)}>
                 Cancel
               </Button>
               <Button color="primary" disabled={promoting || uploading} onClick={() => void makeLive(confirming)}>
-                {promoting ? "Making live..." : `Make version ${confirming.number} live`}
+                {promoting
+                  ? "Saving..."
+                  : confirming.status === "live"
+                    ? "Add to content"
+                    : `Make version ${confirming.number} live`}
               </Button>
             </>
           }
         >
           <p>
-            Buyers get version {confirming.number} the next time they open it. You can switch back at any time. Your
-            unsaved edits are saved first.
+            {confirming.status === "live"
+              ? "Buyers get it again the next time they open this product."
+              : `Buyers get version ${confirming.number} the next time they open it. You can switch back at any time.`}{" "}
+            Your unsaved edits are saved first.
           </p>
-          {uploading ? <p>Wait for your files to finish uploading to make another version live.</p> : null}
+          {uploading ? <p>Wait for your files to finish uploading.</p> : null}
         </Modal>
       ) : null}
     </>

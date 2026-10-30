@@ -112,7 +112,7 @@ type Props = {
   cancellation_discounts_enabled: boolean;
   receipt_email_from: string;
   price_checker_enabled: boolean;
-  has_web_builds_without_live: boolean;
+  has_web_builds: boolean;
   custom_html_pages_enabled: boolean;
   auto_marketing_enabled: boolean;
   waitlist: Waitlist | null;
@@ -166,7 +166,7 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
   receiptEmailFrom: props.receipt_email_from,
   priceCheckerEnabled: props.price_checker_enabled,
-  hasWebBuildsWithoutLive: props.has_web_builds_without_live,
+  hasWebBuilds: props.has_web_builds,
   customHtmlPagesEnabled: props.custom_html_pages_enabled,
   autoMarketingEnabled: props.auto_marketing_enabled,
   waitlist: props.waitlist,

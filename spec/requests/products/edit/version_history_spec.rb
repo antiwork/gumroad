@@ -46,7 +46,7 @@ describe "Product edit version history", type: :system, js: true do
 
     visit edit_link_path(new_product.unique_permalink)
     select_tab "Content"
-    expect(page).to have_text("Your web app has a version ready to go live.")
+    expect(page).to have_text("Your web app is not in this product's content yet.")
     click_on "History"
     within find("[role=dialog]", text: "Version history") do
       within("section", text: "Ready to go live") { click_on "Make live" }
@@ -56,8 +56,28 @@ describe "Product edit version history", type: :system, js: true do
     end
 
     expect(page).to have_text("Web build v1")
-    expect(page).not_to have_text("Your web app has a version ready to go live.")
+    expect(page).not_to have_text("Your web app is not in this product's content yet.")
     expect(first.reload.status).to eq("live")
+  end
+
+  it "adds the live version back to the content after the seller removed its row" do
+    second_build.product_file.mark_deleted!
+    product.alive_rich_contents.each { _1.update!(description: []) }
+
+    visit edit_link_path(product.unique_permalink)
+    select_tab "Content"
+    expect(page).to have_text("Your web app is not in this product's content yet.")
+    expect(page).not_to have_text("Web build v2")
+    click_on "History"
+    within find("[role=dialog]", text: "Version history") do
+      within("section", text: "Buyers get this version") { click_on "Add to content" }
+    end
+    within_modal "Add version 2 back to the content?" do
+      click_on "Add to content"
+    end
+
+    expect(page).to have_text("Web build v2")
+    expect(page).not_to have_text("Your web app is not in this product's content yet.")
   end
 
   it "has no version history while the player is off for the seller" do

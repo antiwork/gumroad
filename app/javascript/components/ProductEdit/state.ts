@@ -348,7 +348,7 @@ export const ProductEditContext = React.createContext<{
   // shown in the Receipt tab's email-style preview chrome.
   receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
-  hasWebBuildsWithoutLive: boolean;
+  hasWebBuilds: boolean;
   customHtmlPagesEnabled: boolean;
   autoMarketingEnabled: boolean;
   // Null until someone confirms a signup.
@@ -370,6 +370,11 @@ export const ProductEditContext = React.createContext<{
   customAttributeNameSuggestions: string[];
 } | null>(null);
 export const useProductEditContext = () => assertDefined(React.useContext(ProductEditContext));
+
+// The live build's zip is in the content as a file row, which carries the History button. Before the first
+// version is made live, or after the seller removes that row, the Content tab offers the history instead.
+export const hasLiveBuildFile = (product: Pick<Product, "files">) =>
+  product.files.some((file) => file.web_build?.status === "live");
 
 const isUploadingFile = (file: FileEntry | SubtitleFile) =>
   file.status.type === "unsaved" && file.status.uploadStatus.type === "uploading";
