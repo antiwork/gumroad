@@ -46,7 +46,7 @@ module Mcp
     ANALYTICS_MAX_REFERRERS = 50
     SUBSCRIPTION_BREAKDOWNS = %w[subscriptions churn].freeze
     SUBSCRIPTION_STATUSES = %w[alive ended].freeze
-    SUBSCRIPTION_CHURN_DEFAULT_MONTHS = 12
+    SUBSCRIPTION_CHURN_DEFAULT_MONTHS = 11
     # Churn buckets by day in Elasticsearch, so the range carries the same cost ceiling as analytics.
     SUBSCRIPTION_CHURN_MAX_DAYS = 366
 
@@ -391,7 +391,7 @@ module Mcp
                  "product_id" => { type: "string", description: "Only this product (id from list_products)." },
                  "breakdown" => { type: "string", enum: ANALYTICS_BREAKDOWNS, description: "product (default) or referrer." }
                }, read_only: true),
-          tool("get_subscriptions", "The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Dates are in the creator's time zone.", {
+          tool("get_subscriptions", "The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.", {
                  "breakdown" => { type: "string", enum: SUBSCRIPTION_BREAKDOWNS, description: "subscriptions (default) or churn." },
                  "limit" => { type: "integer", description: "Max subscriptions to return (1-50, default 25). breakdown=subscriptions only." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page. breakdown=subscriptions only." },
