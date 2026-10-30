@@ -45,6 +45,13 @@ module Mcp
     ANALYTICS_MAX_DAYS = 366
     ANALYTICS_MAX_REFERRERS = 50
 
+    CUSTOMER_BREAKDOWNS = %w[spend conversion].freeze
+    CUSTOMERS_DEFAULT_ROWS = 25
+    # A refunded or charged-back order is not spend; it is reported on its own line.
+    CUSTOMER_REFUNDED = "purchases.stripe_refunded = 1 OR purchases.chargeback_date IS NOT NULL"
+    CUSTOMER_PAID = "COALESCE(purchases.price_cents, 0) > 0"
+    CUSTOMER_FREE = "COALESCE(purchases.price_cents, 0) = 0"
+
     class ToolError < StandardError; end
 
     DISCOUNT_PERCENT_RANGE = (1..100)
@@ -385,6 +392,13 @@ module Mcp
                  "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
                  "product_id" => { type: "string", description: "Only this product (id from list_products)." },
                  "breakdown" => { type: "string", enum: ANALYTICS_BREAKDOWNS, description: "product (default) or referrer." }
+               }, read_only: true),
+          tool("get_customers", "Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who paid later, with days to convert. Amounts are price before fees in minor units of USD, with refunded and charged-back orders reported separately; start_date and end_date are days in the creator's time zone that bound order dates, or the paid purchase for conversion.", {
+                 "breakdown" => { type: "string", enum: CUSTOMER_BREAKDOWNS, description: "spend (default) or conversion." },
+                 "email" => { type: "string", description: "Only this buyer's email." },
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD, in the creator's time zone. Omit for all time." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Omit for all time." },
+                 "limit" => { type: "integer", description: "Max buyers to return (1-50, default #{CUSTOMERS_DEFAULT_ROWS})." }
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
@@ -840,6 +854,75 @@ module Mcp
         Date.iso8601(value)
       rescue Date::Error
         raise Error.new("#{name} must be a date like 2026-10-31", code: -32602)
+      end
+
+      def tool_get_customers(args)
+        require_scopes!(:view_sales, :account)
+        by = args.fetch("breakdown", "spend")
+        limit = limit_for(args, default: CUSTOMERS_DEFAULT_ROWS)
+        start_date = parse_date!(args["start_date"], "start_date") if args["start_date"].present?
+        end_date = parse_date!(args["end_date"], "end_date") if args["end_date"].present?
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date && end_date && start_date > end_date
+
+        zone = ActiveSupport::TimeZone[user.timezone]
+        sales = user.sales.successful_or_preorder_authorization_successful
+        sales = sales.where(email: args["email"].to_s.strip) if args["email"].present?
+        rows = if by == "conversion"
+                 customers_by_conversion(sales, zone, start_date, end_date, limit)
+               else
+                 customers_by_spend(sales, zone, start_date, end_date, limit)
+               end
+        { breakdown: by, currency: Currency::USD, time_zone: user.timezone, start_date: start_date&.iso8601, end_date: end_date&.iso8601, rows: }
+      rescue ActiveRecord::StatementTimeout
+        raise ToolError, "Counting customers took too long. Try a shorter date range."
+      end
+
+      def customers_by_spend(sales, zone, start_date, end_date, limit)
+        sales = customer_sales_range(sales, zone, start_date, end_date)
+        spend = "SUM(CASE WHEN #{CUSTOMER_REFUNDED} THEN 0 ELSE COALESCE(purchases.price_cents, 0) END)"
+        refunded = "SUM(CASE WHEN #{CUSTOMER_REFUNDED} THEN COALESCE(purchases.price_cents, 0) ELSE 0 END)"
+        sales.group("purchases.email")
+          .order(Arel.sql("#{spend} DESC, purchases.email ASC"))
+          .limit(limit)
+          .pluck(Arel.sql("purchases.email"), Arel.sql("COUNT(*)"), Arel.sql(spend), Arel.sql(refunded),
+                 Arel.sql("MIN(purchases.created_at)"), Arel.sql("MAX(purchases.created_at)"))
+          .map do |email, orders, spend_cents, refunded_cents, first_at, last_at|
+            {
+              email:,
+              orders_count: orders,
+              total_spend_cents: spend_cents.to_i,
+              refunded_cents: refunded_cents.to_i,
+              first_order_at: first_at&.iso8601,
+              last_order_at: last_at&.iso8601
+            }
+          end
+      end
+
+      def customers_by_conversion(sales, zone, start_date, end_date, limit)
+        first_at = "MIN(purchases.created_at)"
+        first_free_at = "MIN(CASE WHEN #{CUSTOMER_FREE} THEN purchases.created_at END)"
+        converted_at = "MIN(CASE WHEN #{CUSTOMER_PAID} THEN purchases.created_at END)"
+        # The free purchase can be older than the range: the range bounds the purchase that converted.
+        rows = sales.group("purchases.email").having("#{first_at} = #{first_free_at}").having("#{converted_at} IS NOT NULL")
+        rows = rows.having("#{converted_at} >= ?", customer_day_start(start_date, zone)) if start_date
+        rows = rows.having("#{converted_at} < ?", customer_day_start(end_date, zone) + 1.day) if end_date
+        rows.order(Arel.sql("#{converted_at} ASC, purchases.email ASC"))
+          .limit(limit)
+          .pluck(Arel.sql("purchases.email"), Arel.sql(first_free_at), Arel.sql(converted_at))
+          .map do |email, free_at, paid_at|
+            { email:, free_at: free_at&.iso8601, converted_at: paid_at&.iso8601, days_to_convert: ((paid_at - free_at) / 1.day).round(1) }
+          end
+      end
+
+      def customer_sales_range(sales, zone, start_date, end_date)
+        sales = sales.where("purchases.created_at >= ?", customer_day_start(start_date, zone)) if start_date
+        sales = sales.where("purchases.created_at < ?", customer_day_start(end_date, zone) + 1.day) if end_date
+        sales
+      end
+
+      # A YYYY-MM-DD bound is a day in the creator's zone, so a purchase late in their evening counts as that day.
+      def customer_day_start(date, zone)
+        zone.parse(date.iso8601).beginning_of_day
       end
 
       def tool_list_payouts(args)

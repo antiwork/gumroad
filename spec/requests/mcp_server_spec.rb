@@ -455,6 +455,7 @@ describe "MCP server" do
         "unpublish_product" => "Unpublish product",
         "list_sales" => "List sales",
         "get_analytics" => "Get analytics",
+        "get_customers" => "Get customers",
         "list_payouts" => "List payouts",
         "create_bundle" => "Create bundle",
         "update_bundle" => "Update bundle",
@@ -519,12 +520,12 @@ describe "MCP server" do
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
         "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
-        "list_files", "add_file", "publish_product", "unpublish_product", "list_sales", "get_analytics", "list_payouts",
+        "list_files", "add_file", "publish_product", "unpublish_product", "list_sales", "get_analytics", "get_customers", "list_payouts",
         "create_bundle", "update_bundle", "create_discount_code", "update_discount_code", "expire_discount_code"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
       expect(annotations.values).to all(include("openWorldHint" => true))
-      %w[get_account list_products get_product list_files list_sales get_analytics list_payouts].each do |name|
+      %w[get_account list_products get_product list_files list_sales get_analytics get_customers list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
       end
       %w[create_draft_product add_cover add_file create_discount_code].each do |name|
@@ -622,6 +623,114 @@ describe "MCP server" do
         @token.update!(scopes: "view_profile")
 
         post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_analytics", arguments: {} } })
+
+        expect(response.parsed_body.to_s).to include("view_sales")
+      end
+    end
+
+    describe "get_customers" do
+      def get_customers(arguments = {})
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: } })
+        response.parsed_body["result"]
+      end
+
+      before { @seller.update_columns(timezone: "UTC") }
+
+      it "returns one row per buyer with order count, spend and order dates" do
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 2000, created_at: Time.utc(2026, 10, 20, 12))
+        create(:purchase, seller: @seller, link: @product, email: "second@example.com", price_cents: 500, created_at: Time.utc(2026, 10, 5, 12))
+        create(:failed_purchase, seller: @seller, link: @product, email: "third@example.com", price_cents: 9999)
+
+        expect(get_customers["structuredContent"]).to eq(
+          "breakdown" => "spend",
+          "currency" => "usd",
+          "time_zone" => "UTC",
+          "start_date" => nil,
+          "end_date" => nil,
+          "rows" => [
+            {
+              "email" => "buyer@example.com", "orders_count" => 2, "total_spend_cents" => 3900, "refunded_cents" => 0,
+              "first_order_at" => Time.utc(2026, 10, 1, 12).iso8601, "last_order_at" => Time.utc(2026, 10, 20, 12).iso8601
+            },
+            {
+              "email" => "second@example.com", "orders_count" => 1, "total_spend_cents" => 500, "refunded_cents" => 0,
+              "first_order_at" => Time.utc(2026, 10, 5, 12).iso8601, "last_order_at" => Time.utc(2026, 10, 5, 12).iso8601
+            }
+          ]
+        )
+      end
+
+      it "reports refunded and charged-back orders apart from spend" do
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900)
+        refunded = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 2500)
+        refunded.update_columns(stripe_refunded: true)
+        charged_back = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 3000)
+        charged_back.update_columns(chargeback_date: Time.current)
+
+        expect(get_customers["structuredContent"]["rows"].sole).to include(
+          "orders_count" => 3, "total_spend_cents" => 1900, "refunded_cents" => 5500
+        )
+      end
+
+      it "filters to one buyer and leaves other sellers' buyers out" do
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900)
+        create(:purchase, seller: @seller, link: @product, email: "second@example.com", price_cents: 2000)
+        create(:purchase, email: "buyer@example.com", price_cents: 5000)
+
+        rows = get_customers("email" => "buyer@example.com")["structuredContent"]["rows"]
+        expect(rows.sole).to include("email" => "buyer@example.com", "orders_count" => 1, "total_spend_cents" => 1900)
+        expect(get_customers["structuredContent"]["rows"].map { |row| row["email"] }).to eq(["second@example.com", "buyer@example.com"])
+      end
+
+      it "bounds the spend range on order dates and caps the rows" do
+        create(:purchase, seller: @seller, link: @product, email: "old@example.com", price_cents: 1900, created_at: Time.utc(2026, 9, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "recent@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 5, 12))
+
+        rows = get_customers("start_date" => "2026-10-01", "end_date" => "2026-10-31")["structuredContent"]["rows"]
+        expect(rows.map { |row| row["email"] }).to eq(["recent@example.com"])
+        expect(get_customers("limit" => 1)["structuredContent"]["rows"].size).to eq(1)
+      end
+
+      it "reports buyers whose first purchase was free and who paid later, with time to convert" do
+        create(:free_purchase, seller: @seller, link: @product, email: "converted@example.com", created_at: Time.utc(2026, 10, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "converted@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 31, 12))
+        create(:purchase, seller: @seller, link: @product, email: "paid-first@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 1, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "paid-first@example.com", created_at: Time.utc(2026, 10, 2, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "free-only@example.com", created_at: Time.utc(2026, 10, 1, 12))
+
+        expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"]).to eq([
+          {
+            "email" => "converted@example.com", "free_at" => Time.utc(2026, 10, 1, 12).iso8601,
+            "converted_at" => Time.utc(2026, 10, 31, 12).iso8601, "days_to_convert" => 30.0
+          }
+        ])
+      end
+
+      it "bounds the conversion range on the paid purchase, not the free one" do
+        create(:free_purchase, seller: @seller, link: @product, email: "converted@example.com", created_at: Time.utc(2025, 1, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "converted@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 10, 12))
+
+        october = get_customers("breakdown" => "conversion", "start_date" => "2026-10-01", "end_date" => "2026-10-31")["structuredContent"]
+        expect(october["start_date"]).to eq("2026-10-01")
+        expect(october["rows"].sole).to include("days_to_convert" => 282.0)
+        expect(get_customers("breakdown" => "conversion", "start_date" => "2026-11-01")["structuredContent"]["rows"]).to eq([])
+      end
+
+      it "rejects bad dates, an inverted range, an unknown breakdown and a limit over 50" do
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: { "start_date" => "yesterday" } } })
+        expect(response.parsed_body.dig("error", "message")).to eq("start_date must be a date like 2026-10-31")
+
+        [{ "start_date" => "2026-10-05", "end_date" => "2026-10-01" }, { "breakdown" => "buyers" }, { "limit" => 51 }].each do |arguments|
+          post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: } })
+          expect(response.parsed_body["error"]["code"]).to eq(-32602)
+        end
+      end
+
+      it "requires the view_sales scope" do
+        @token.update!(scopes: "view_profile")
+
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: {} } })
 
         expect(response.parsed_body.to_s).to include("view_sales")
       end
