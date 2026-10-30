@@ -64,4 +64,35 @@ describe PushNotificationWorker do
 
     PushNotificationWorker.new.perform(@user.id, Device::APP_TYPES[:consumer], "Title", "Body", {})
   end
+
+  it "sends a brand's notification to the phone of the team member who administers it" do
+    brand = create(:user)
+    member = create(:user)
+    create(:team_membership, user: member, seller: brand, role: TeamMembership::ROLE_ADMIN)
+    member_device = create(:device, user: member, app_type: Device::APP_TYPES[:creator])
+
+    ios = double("ios_member")
+    allow(PushNotificationService::Ios).to receive(:new).with(device_token: member_device.token,
+                                                              title: "Title",
+                                                              body: "Body",
+                                                              data: {},
+                                                              app_type: Device::APP_TYPES[:creator],
+                                                              sound: Device::NOTIFICATION_SOUNDS[:sale]).and_return(ios)
+    expect(ios).to receive(:process)
+
+    PushNotificationWorker.new.perform(brand.id, Device::APP_TYPES[:creator], "Title", "Body", {}, Device::NOTIFICATION_SOUNDS[:sale])
+  end
+
+  it "stops sending a brand's notification to a phone whose membership was removed" do
+    brand = create(:user)
+    member = create(:user)
+    membership = create(:team_membership, user: member, seller: brand, role: TeamMembership::ROLE_ADMIN)
+    create(:device, user: member, app_type: Device::APP_TYPES[:creator])
+    membership.update_as_deleted!
+
+    expect(PushNotificationService::Ios).to_not receive(:new)
+    expect(PushNotificationService::Android).to_not receive(:new)
+
+    PushNotificationWorker.new.perform(brand.id, Device::APP_TYPES[:creator], "Title", "Body", {}, Device::NOTIFICATION_SOUNDS[:sale])
+  end
 end
