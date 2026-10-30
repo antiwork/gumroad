@@ -45,6 +45,12 @@ module Mcp
     ANALYTICS_MAX_DAYS = 366
     ANALYTICS_MAX_REFERRERS = 50
 
+    TOTALS_BREAKDOWNS = %w[product country day week month].freeze
+    TOTALS_DEFAULT_DAYS = 30
+    TOTALS_MAX_DAYS = 366
+    # A store can have thousands of products, and there are ~250 countries; period rows are bounded by the range.
+    TOTALS_MAX_ROWS = 100
+
     class ToolError < StandardError; end
 
     DISCOUNT_PERCENT_RANGE = (1..100)
@@ -385,6 +391,12 @@ module Mcp
                  "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
                  "product_id" => { type: "string", description: "Only this product (id from list_products)." },
                  "breakdown" => { type: "string", enum: ANALYTICS_BREAKDOWNS, description: "product (default) or referrer." }
+               }, read_only: true),
+          tool("get_sales_totals", "Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.", {
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to 29 days before end_date." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
+                 "product_id" => { type: "string", description: "Only this product (id from list_products)." },
+                 "breakdown" => { type: "string", enum: TOTALS_BREAKDOWNS, description: "product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone." }
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
@@ -834,6 +846,110 @@ module Mcp
 
       def analytics_conversion(sales, views)
         views.positive? ? (sales.to_f / views).round(4) : nil
+      end
+
+      def tool_get_sales_totals(args)
+        require_scopes!(:view_sales, :account)
+        timezone = ActiveSupport::TimeZone[user.timezone]
+        end_date = args["end_date"] ? parse_date!(args["end_date"], "end_date") : timezone.today
+        start_date = args["start_date"] ? parse_date!(args["start_date"], "start_date") : end_date - (TOTALS_DEFAULT_DAYS - 1)
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date > end_date
+        raise Error.new("The date range cannot exceed #{TOTALS_MAX_DAYS} days", code: -32602) if (end_date - start_date).to_i >= TOTALS_MAX_DAYS
+
+        breakdown = args.fetch("breakdown", "product")
+        # The revenue definition every other report uses: a successful or preorder-authorized sale
+        # that was not refunded or charged back. Bundle members and commission completions are extra
+        # rows for one order, so counting them would overstate units.
+        sales = user.sales
+          .successful_or_preorder_authorization_successful_and_not_refunded_or_chargedback
+          .not_is_bundle_product_purchase
+          .not_is_commission_completion_purchase
+        sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
+
+        buckets = sales_total_buckets(sales, timezone, start_date, end_date, breakdown)
+        {
+          start_date: start_date.iso8601,
+          end_date: end_date.iso8601,
+          time_zone: user.timezone,
+          currency: Currency::USD,
+          breakdown:,
+          totals: sales_totals_from(buckets.values),
+          rows: sales_total_rows(buckets, breakdown)
+        }
+      end
+
+      # Each bucket is [revenue_cents, units]. The range is walked in constant-offset segments
+      # because the local bucket of a sale depends on the zone offset in force at that sale.
+      def sales_total_buckets(sales, timezone, start_date, end_date, breakdown)
+        start_time = Time.at(timezone.parse(start_date.to_s).to_i).utc
+        end_time = Time.at(timezone.parse((end_date + 1).to_s).to_i).utc
+        buckets = Hash.new { |hash, key| hash[key] = [0, 0] }
+
+        local_offset_segments(timezone, start_time, end_time).each do |segment_start, segment_end, offset_seconds|
+          expression = sales_group_expression(breakdown, offset_seconds)
+          sales.where(created_at: segment_start...segment_end)
+            .group(Arel.sql(expression))
+            .pluck(Arel.sql(expression), Arel.sql("SUM(purchases.price_cents)"), Arel.sql("COUNT(*)"))
+            .each do |key, revenue_cents, units|
+              bucket = buckets[sales_group_key(breakdown, key)]
+              bucket[0] += revenue_cents.to_i
+              bucket[1] += units
+            end
+        end
+
+        buckets
+      end
+
+      # MySQL can't convert to a named zone (the time zone tables aren't loaded), so local buckets
+      # are the UTC time shifted by the zone's offset. A range can contain a daylight-saving change,
+      # so each constant-offset segment is shifted on its own rather than the whole range at once.
+      def local_offset_segments(timezone, start_time, end_time)
+        transitions = timezone.tzinfo.transitions_up_to(end_time, start_time).map { |transition| Time.at(transition.at.to_i).utc }
+        ([start_time] + transitions + [end_time]).uniq.each_cons(2).map do |segment_start, segment_end|
+          [segment_start, segment_end, timezone.at(segment_start.to_i).utc_offset]
+        end
+      end
+
+      def sales_group_expression(breakdown, offset_seconds)
+        return "purchases.link_id" if breakdown == "product"
+        return "COALESCE(NULLIF(TRIM(purchases.country), ''), purchases.ip_country)" if breakdown == "country"
+
+        local_date = "DATE(DATE_ADD(purchases.created_at, INTERVAL #{offset_seconds} SECOND))"
+        case breakdown
+        when "day" then local_date
+        when "week" then "DATE_SUB(#{local_date}, INTERVAL WEEKDAY(#{local_date}) DAY)"
+        else "DATE_FORMAT(#{local_date}, '%Y-%m-01')"
+        end
+      end
+
+      def sales_group_key(breakdown, key)
+        return key.to_i if breakdown == "product"
+        return key.presence if breakdown == "country"
+
+        Date.parse(key.to_s)
+      end
+
+      def sales_total_rows(buckets, breakdown)
+        case breakdown
+        when "product"
+          products = Link.where(id: buckets.keys).select(:id, :name).index_by(&:id)
+          buckets.map { |link_id, (revenue_cents, units)| { product_id: products[link_id]&.external_id, product_name: products[link_id]&.name, **sales_metrics(revenue_cents, units) } }
+            .sort_by { |row| -row[:revenue_cents] }.first(TOTALS_MAX_ROWS)
+        when "country"
+          buckets.map { |country, (revenue_cents, units)| { country:, **sales_metrics(revenue_cents, units) } }
+            .sort_by { |row| -row[:revenue_cents] }.first(TOTALS_MAX_ROWS)
+        else
+          buckets.map { |date, (revenue_cents, units)| { date: date.iso8601, **sales_metrics(revenue_cents, units) } }
+            .sort_by { |row| row[:date] }
+        end
+      end
+
+      def sales_totals_from(buckets)
+        sales_metrics(buckets.sum { |revenue_cents, _units| revenue_cents }, buckets.sum { |_revenue_cents, units| units })
+      end
+
+      def sales_metrics(revenue_cents, units)
+        { revenue_cents:, units:, average_order_value_cents: units.positive? ? (revenue_cents.to_f / units).round : nil }
       end
 
       def parse_date!(value, name)
