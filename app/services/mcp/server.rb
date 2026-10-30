@@ -395,7 +395,7 @@ module Mcp
                  "breakdown" => { type: "string", enum: SUBSCRIPTION_BREAKDOWNS, description: "subscriptions (default) or churn." },
                  "limit" => { type: "integer", description: "Max subscriptions to return (1-50, default 25). breakdown=subscriptions only." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page. breakdown=subscriptions only." },
-                 "status" => { type: "string", enum: SUBSCRIPTION_STATUSES, description: "alive = still subscribed, including ones set to cancel at the end of the period; ended = access has ended. Omit for both. breakdown=subscriptions only." },
+                 "status" => { type: "string", enum: SUBSCRIPTION_STATUSES, description: "alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only." },
                  "product_id" => { type: "string", description: "Only this product (id from list_products)." },
                  "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only." },
                  "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only." }
@@ -869,9 +869,10 @@ module Mcp
         subscriptions = Subscription.joins(link: :user).where(users: { id: user.id }).not_is_test_subscription
         subscriptions = subscriptions.where(link_id: product.id) if product
         subscriptions = subscriptions.active if args["status"] == "alive"
-        subscriptions = subscriptions.where.not(deactivated_at: nil) if args["status"] == "ended"
+        # The complement of the scope the dashboard counts, so a stopped subscription is in exactly one list.
+        subscriptions = subscriptions.where.not(id: Subscription.active.select(:id)) if args["status"] == "ended"
 
-        page, next_cursor = paginate(subscriptions.includes(:link, :user, :purchases), args, default: 25, table: "subscriptions")
+        page, next_cursor = paginate(subscriptions.includes(:link, :user, :purchases, :true_original_purchase), args, default: 25, table: "subscriptions")
         { breakdown: "subscriptions", subscriptions: page.map { |subscription| subscription_payload(subscription) }, next_cursor: }.compact
       end
 
@@ -880,7 +881,7 @@ module Mcp
           id: subscription.external_id,
           product_id: subscription.link.external_id,
           product_name: subscription.link.name,
-          email: subscription.email,
+          email: subscription_email(subscription),
           status: subscription.status,
           started_at: subscription.created_at.iso8601,
           cancelled_at: subscription.cancelled_at&.iso8601,
@@ -888,6 +889,16 @@ module Mcp
           ended_at: subscription.ended_at&.iso8601,
           failed_payments: subscription.purchases.count { |purchase| purchase.purchase_state == "failed" }
         }
+      end
+
+      # `Subscription#email` reads its sender purchase for a gift, which a purchase-less row lacks.
+      def subscription_email(subscription)
+        return subscription.user.form_email if subscription.user&.form_email.present?
+
+        purchase = subscription.true_original_purchase
+        return if purchase.nil?
+
+        purchase.is_gift_sender_purchase? ? purchase.giftee_email.presence : purchase.email
       end
 
       def churn_payload(args, product)
