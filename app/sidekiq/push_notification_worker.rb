@@ -4,10 +4,12 @@ class PushNotificationWorker
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :critical
 
-  def perform(receiver_id, app_type, title, body = nil, data = {}, sound = nil)
+  # `to_team_admins` is opt-in per notification, not implied by the app type: post notifications for
+  # buyers also use the consumer app, and those carry the buyer's purchase and subscription.
+  def perform(receiver_id, app_type, title, body = nil, data = {}, sound = nil, to_team_admins = false)
     receiver = User.find receiver_id
 
-    devices_for(receiver, app_type).each do |device|
+    devices_for(receiver, app_type, to_team_admins).each do |device|
       case device.device_type
       when "ios"
         PushNotificationService::Ios.new(device_token: device.token,
@@ -34,7 +36,9 @@ class PushNotificationWorker
     # `Api::Mobile::DevicesController`), and only the members the app would let switch in count.
     # The memberships are read here, at send time, so a member whose access was removed — or whose
     # account is gone — stops receiving without the phone having to do anything.
-    def devices_for(receiver, app_type)
+    def devices_for(receiver, app_type, to_team_admins)
+      return receiver.devices.where(app_type:) unless to_team_admins
+
       member_ids = TeamMembership.role_admin.not_deleted.joins(:user).merge(User.alive)
                                   .where(seller_id: receiver.id).pluck(:user_id)
       return receiver.devices.where(app_type:) if member_ids.empty?

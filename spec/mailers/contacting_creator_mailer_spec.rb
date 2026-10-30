@@ -1008,7 +1008,7 @@ describe ContactingCreatorMailer do
     def expect_push_alert(seller_id, text)
       expect(PushNotificationWorker).to have_enqueued_sidekiq_job(seller_id,
                                                                   Device::APP_TYPES[:creator],
-                                                                  text, nil, {}, "chaching.wav")
+                                                                  text, nil, {}, "chaching.wav", true)
     end
 
     it "uses SUPPORT_EMAIL as from address" do
@@ -1428,7 +1428,7 @@ describe ContactingCreatorMailer do
         expect_push_alert(seller.id, mail.subject)
         expect(PushNotificationWorker).to have_enqueued_sidekiq_job(seller.id,
                                                                     Device::APP_TYPES[:consumer],
-                                                                    mail.subject, nil, {}, "chaching.wav")
+                                                                    mail.subject, nil, {}, "chaching.wav", true)
       end
     end
 

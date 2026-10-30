@@ -80,7 +80,7 @@ describe PushNotificationWorker do
                                                               sound: Device::NOTIFICATION_SOUNDS[:sale]).and_return(ios)
     expect(ios).to receive(:process)
 
-    PushNotificationWorker.new.perform(brand.id, Device::APP_TYPES[:creator], "Title", "Body", {}, Device::NOTIFICATION_SOUNDS[:sale])
+    PushNotificationWorker.new.perform(brand.id, Device::APP_TYPES[:creator], "Title", "Body", {}, Device::NOTIFICATION_SOUNDS[:sale], true)
   end
 
   it "stops sending a brand's notification to a phone whose membership was removed" do
@@ -93,6 +93,26 @@ describe PushNotificationWorker do
     expect(PushNotificationService::Ios).to_not receive(:new)
     expect(PushNotificationService::Android).to_not receive(:new)
 
-    PushNotificationWorker.new.perform(brand.id, Device::APP_TYPES[:creator], "Title", "Body", {}, Device::NOTIFICATION_SOUNDS[:sale])
+    PushNotificationWorker.new.perform(brand.id, Device::APP_TYPES[:creator], "Title", "Body", {}, Device::NOTIFICATION_SOUNDS[:sale], true)
+  end
+
+  it "keeps a seller's purchase notification off the phones of their team admins" do
+    seller = create(:user)
+    admin = create(:user)
+    create(:team_membership, user: admin, seller: seller, role: TeamMembership::ROLE_ADMIN)
+    admin_device = create(:device, user: admin, app_type: Device::APP_TYPES[:consumer])
+    seller_device = create(:device, user: seller, app_type: Device::APP_TYPES[:consumer])
+
+    ios = double("ios_seller")
+    allow(PushNotificationService::Ios).to receive(:new).with(device_token: seller_device.token,
+                                                              title: "Post",
+                                                              body: "By seller",
+                                                              data: { "purchase_id" => "purchase_1" },
+                                                              app_type: Device::APP_TYPES[:consumer],
+                                                              sound: nil).and_return(ios)
+    expect(ios).to receive(:process)
+    expect(PushNotificationService::Ios).to_not receive(:new).with(hash_including(device_token: admin_device.token))
+
+    PushNotificationWorker.new.perform(seller.id, Device::APP_TYPES[:consumer], "Post", "By seller", { "purchase_id" => "purchase_1" })
   end
 end
