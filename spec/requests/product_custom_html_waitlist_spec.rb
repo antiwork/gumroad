@@ -57,4 +57,17 @@ describe "product custom HTML waitlist bridge", type: :request do
     expect(response.body).to include("data-gumroad-launched")
     expect(response.body).not_to include("data-gumroad-waitlist-bridge")
   end
+
+  it "accepts the waitlist signup POST on a product-owned domain" do
+    seller.update!(user_risk_state: "compliant")
+    create(:custom_domain, user: nil, product:, domain: "waitlist-product.example.com")
+
+    expect do
+      post "http://waitlist-product.example.com/follow_from_embed_form",
+           params: { seller_id: seller.external_id, product_id: product.external_id, email: "fan@example.com" },
+           headers: { "Accept" => "application/json" }
+    end.to change { WaitlistEntry.count }.by(1)
+
+    expect(response.parsed_body["success"]).to be(true)
+  end
 end

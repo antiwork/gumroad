@@ -683,6 +683,16 @@ describe FollowersController, inertia: true do
           expect(response.parsed_body["message"]).to include("#{product.long_url}?native=true")
         end
 
+        it "sends a coffee waitlist visitor to the subscribe page, whose native page has no waitlist form" do
+          product = create(:product, user: unreviewed_seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
+          product.update_column(:native_type, Link::NATIVE_TYPE_COFFEE)
+
+          post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id, product_id: product.external_id }, format: :json
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["message"]).not_to include("native=true")
+        end
+
         # The refusal copy is built from name_or_username, which is never blank:
         # User#username falls back to the account's external id, so a seller with
         # no name and no claimed profile URL still names themselves by id.
