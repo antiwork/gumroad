@@ -17,7 +17,6 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
       :created_after,
       :created_before,
       :not_clicked_post_id,
-      :opened_post_id,
       bought_products: [],
       bought_variants: [],
       not_bought_products: [],
@@ -30,7 +29,7 @@ class Api::Internal::Installments::RecipientCountsController < Api::Internal::Ba
 
     render json: {
       audience_count: AudienceMember.count_for_seller(current_seller),
-      recipient_count: installment.displayed_audience_members_count
+      recipient_count: installment.audience_members_count
     }
   end
 end

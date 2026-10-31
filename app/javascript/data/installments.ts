@@ -25,7 +25,6 @@ export type Installment = {
   affiliate_products?: string[];
   waitlisted_products?: string[];
   not_clicked_post_id?: string | null;
-  opened_post_id?: string | null;
   paid_more_than_cents: number | null;
   paid_less_than_cents: number | null;
   created_after?: string;
@@ -127,7 +126,7 @@ export async function getAudienceCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  return cast<{ count: number | null }>(await response.json());
+  return cast<{ count: number }>(await response.json());
 }
 
 type RecipientCountRequestPayload = {
@@ -146,7 +145,6 @@ type RecipientCountRequestPayload = {
   affiliate_products: string[] | null;
   waitlisted_products: string[] | null;
   not_clicked_post_id: string | null;
-  opened_post_id: string | null;
 };
 export function getRecipientCount(requestPayload: RecipientCountRequestPayload) {
   const abort = new AbortController();
@@ -160,7 +158,7 @@ export function getRecipientCount(requestPayload: RecipientCountRequestPayload) 
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<{ recipient_count: number | null; audience_count: number }>(json));
+    .then((json) => cast<{ recipient_count: number; audience_count: number }>(json));
 
   return {
     response,

@@ -218,9 +218,6 @@ const TAB_TO_PATH: Record<EmailTab, string> = {
   subscribers: Routes.followers_path(),
 };
 
-// Mirrors Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE: the server withholds smaller counts.
-const MINIMUM_SEGMENT_SIZE = 5;
-
 export const EmailForm = ({ context, installment, singleCustomerRecipient = null }: EmailFormProps) => {
   const uid = React.useId();
   const currentSeller = assertDefined(useCurrentSeller());
@@ -238,7 +235,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   const [affiliatedProducts, setAffiliatedProducts] = React.useState<string[]>(installment?.affiliate_products ?? []);
   const [waitlisted, setWaitlisted] = React.useState<string[]>(installment?.waitlisted_products ?? []);
   const [recipientCount, setRecipientCount] = React.useState<{
-    count: number | null;
+    count: number;
     total: number;
     loading: boolean;
   }>({ count: 0, total: 0, loading: false });
@@ -272,7 +269,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     ...(installment?.not_bought_variants ?? []),
   ]);
   const [notClickedPostId, setNotClickedPostId] = React.useState(installment?.not_clicked_post_id ?? "");
-  const [openedPostId, setOpenedPostId] = React.useState(installment?.opened_post_id ?? "");
   const selectedEmailedPost = context.emailed_posts.find((post) => post.external_id === notClickedPostId);
   const [paidMoreThanCents, setPaidMoreThanCents] = React.useState<number | null>(
     installment?.paid_more_than_cents ?? null,
@@ -586,7 +582,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     affiliate_products: audienceType === "affiliates" ? affiliatedProducts : null,
     waitlisted_products: audienceType === "followers" ? waitlisted : null,
     not_clicked_post_id: audienceType === "customers" ? notClickedPostId || null : null,
-    opened_post_id: audienceType === "customers" ? openedPostId || null : null,
     send_emails: channel.email,
     shown_on_profile: channel.profile,
     allow_comments: allowComments,
@@ -980,7 +975,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                             <LoadingSpinner className="size-5" />
                           </div>
                         ) : (
-                          <div aria-label="Recipient count">{`${recipientCount.count === null ? `Fewer than ${MINIMUM_SEGMENT_SIZE}` : recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>
+                          <div aria-label="Recipient count">{`${recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>
                         )
                       ) : null}
                     </FieldsetTitle>
@@ -1212,29 +1207,6 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                           {selectedEmailedPost.name}
                         </p>
                       ) : null}
-                    </Fieldset>
-                  </CardContent>
-                ) : null}
-                {audienceType === "customers" && context.emailed_posts.length > 0 ? (
-                  <CardContent>
-                    <Fieldset className="grow basis-0">
-                      <FieldsetTitle>
-                        <Label htmlFor={`${uid}-opened`}>Has opened (approximate)</Label>
-                      </FieldsetTitle>
-                      <Select
-                        id={`${uid}-opened`}
-                        value={openedPostId}
-                        disabled={isPublished}
-                        onChange={(event) => setOpenedPostId(event.target.value)}
-                        style={openedPostId ? undefined : { color: "var(--color-muted)" }}
-                      >
-                        <option value="">Select…</option>
-                        {context.emailed_posts.map((post) => (
-                          <option key={post.external_id} value={post.external_id}>
-                            {post.name}
-                          </option>
-                        ))}
-                      </Select>
                     </Fieldset>
                   </CardContent>
                 ) : null}

@@ -81,7 +81,7 @@ class InstallmentPresenter
     installment_props = self.class.new(seller:, installment: reference_installment).props.except(:external_id) if reference_installment.present?
 
     {
-      context: installment_form_context_props(saved_post_ids: [reference_installment&.not_clicked_post_id, reference_installment&.opened_post_id]),
+      context: installment_form_context_props(not_clicked_post_id: reference_installment&.not_clicked_post_id),
       installment: installment_props,
       single_customer_recipient: single_customer_recipient_props(single_customer_purchase_id),
     }
@@ -226,18 +226,19 @@ class InstallmentPresenter
     # Only a post emailed through the purchase mailer keys its clicks to a buyer; a follower or
     # affiliate send keys them to that follower or affiliate, so offering one would exclude
     # nobody. A saved choice outside the recent window stays in the list.
-    def emailed_post_options(saved_ids, limit: EMAILED_POST_OPTIONS_LIMIT)
+    def emailed_post_options(saved_id, limit: EMAILED_POST_OPTIONS_LIMIT)
       posts = seller.installments.alive.not_workflow_installment.published.send_emails.not_single_recipient_email
         .seller_or_product_or_variant_type
         .order(published_at: :desc).limit(limit)
         .map { { external_id: _1.external_id, name: _1.displayed_name } }
 
-      missing = Array.wrap(saved_ids).compact_blank.uniq - posts.map { _1[:external_id] }
-      saved = missing.filter_map { seller.installments.alive.find_by_external_id(_1) }
-      saved.map { { external_id: _1.external_id, name: _1.displayed_name } } + posts
+      return posts if saved_id.blank? || posts.any? { _1[:external_id] == saved_id }
+
+      saved = seller.installments.alive.find_by_external_id(saved_id)
+      saved ? [{ external_id: saved.external_id, name: saved.displayed_name }, *posts] : posts
     end
 
-    def installment_form_context_props(saved_post_ids: [installment&.not_clicked_post_id, installment&.opened_post_id])
+    def installment_form_context_props(not_clicked_post_id: installment&.not_clicked_post_id)
       user_presenter = UserPresenter.new(user: seller)
       allow_comments_by_default = seller.installments.not_workflow_installment.order(:created_at).last&.allow_comments?
 
@@ -265,7 +266,7 @@ class InstallmentPresenter
         countries: ([Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.map(&:last)).uniq,
         profile_sections: seller.seller_profile_posts_sections.map { { id: _1.external_id, name: _1.header } },
         has_scheduled_emails: Installment.alive.not_workflow_installment.scheduled.where(seller:).exists?,
-        emailed_posts: emailed_post_options(saved_post_ids),
+        emailed_posts: emailed_post_options(not_clicked_post_id),
         aws_access_key_id: AWS_ACCESS_KEY,
         s3_url: s3_bucket_url,
         user_id: seller.external_id,
