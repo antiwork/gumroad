@@ -18,7 +18,7 @@ describe Api::Internal::Installments::NonOpenerResendsController do
 
   before do
     # Original blast: both recipients emailed, only one opened.
-    [opened_sale, unopened_sale].each { |sale| SentPostEmail.create!(post: installment, email: sale.email) }
+    [opened_sale, unopened_sale].each { |sale| create(:sent_post_email, post: installment, email: sale.email) }
     create(:creator_contacting_customers_email_info_opened, installment: installment, purchase: opened_sale)
     create(:creator_contacting_customers_email_info_sent, installment: installment, purchase: unopened_sale)
   end
@@ -59,14 +59,26 @@ describe Api::Internal::Installments::NonOpenerResendsController do
     it "counts an Everyone post's non-openers from its own sent set, which includes followers" do
       audience_post = create(:audience_post, :published, seller:)
       follower = create(:active_follower, user: seller, email: "follower@example.com")
-      [opened_sale, unopened_sale, follower].each { SentPostEmail.create!(post: audience_post, email: _1.email) }
-      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(audience_post.id)
-        .and_return({ purchase_ids: [opened_sale.id], follower_ids: [], affiliate_user_ids: [] })
+      [opened_sale, unopened_sale, follower].each { create(:sent_post_email, post: audience_post, email: _1.email) }
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(audience_post.id, deadline: anything)
+        .and_return({ purchase_ids: [opened_sale.id], follower_ids: [], affiliate_ids: [] })
 
       get :show, params: { id: audience_post.external_id }
 
       expect(response).to be_successful
       expect(response.parsed_body["count"]).to eq(2)
+    end
+
+    it "returns a null count when the open scan cannot finish inside the preview budget" do
+      audience_post = create(:audience_post, :published, seller:)
+      create(:sent_post_email, post: audience_post, email: "someone@example.com")
+      allow_any_instance_of(Installment).to receive(:unopened_recipient_emails)
+        .and_raise(EmailEngagementDynamoStore::ScanBudgetExceeded)
+
+      get :show, params: { id: audience_post.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["count"]).to be_nil
     end
 
     it "flags audience_filtered_out when unopened recipients exist but are no longer in the audience" do

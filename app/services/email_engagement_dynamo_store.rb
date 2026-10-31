@@ -30,6 +30,10 @@ class EmailEngagementDynamoStore
   # validation error, an item collection limit) won't clear on retry, so it raises.
   RETRYABLE_CANCELLATION_CODES = (["TransactionConflict", "None"] + THROTTLE_CANCELLATION_CODES).freeze
 
+  # Raised when a partitioned walk was given a deadline and could not reach the end of the
+  # partition inside it, so a caller on a web request's budget can degrade instead of blocking.
+  class ScanBudgetExceeded < StandardError; end
+
   class << self
     attr_writer :client
 
@@ -137,9 +141,9 @@ class EmailEngagementDynamoStore
     # follower and affiliate recipients a purchase-keyed lookup cannot see, so a caller that needs
     # recipient emails (rather than buyers) has to resolve all three. A click also writes the OPEN
     # item, so a clicker counts as an opener.
-    def opened_recipient_ids(installment_id)
-      ids = { purchase_ids: [], follower_ids: [], affiliate_user_ids: [] }
-      partition_items(installment_id, "OPEN#").each do |item|
+    def opened_recipient_ids(installment_id, deadline: nil)
+      ids = { purchase_ids: [], follower_ids: [], affiliate_ids: [] }
+      partition_items(installment_id, "OPEN#", deadline:).each do |item|
         id = recipient_id_from_item(item)
         next if id.nil?
 
@@ -149,7 +153,7 @@ class EmailEngagementDynamoStore
         elsif mailer_method.end_with?(EmailEventInfo::FOLLOWER_INSTALLMENT_MAILER_METHOD)
           ids[:follower_ids] << id
         elsif mailer_method.end_with?(EmailEventInfo::DIRECT_AFFILIATE_INSTALLMENT_MAILER_METHOD)
-          ids[:affiliate_user_ids] << id
+          ids[:affiliate_ids] << id
         end
       end
       ids.transform_values(&:uniq)
@@ -204,10 +208,12 @@ class EmailEngagementDynamoStore
       # Every item under one sort-key prefix in an installment's partition. The items are small
       # and one exists per recipient (or per recipient + url), so a six-figure post pages through
       # this a megabyte at a time.
-      def partition_items(installment_id, prefix)
+      def partition_items(installment_id, prefix, deadline: nil)
         items = []
         exclusive_start_key = nil
         loop do
+          raise ScanBudgetExceeded if deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
           params = {
             table_name:,
             key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
@@ -226,7 +232,7 @@ class EmailEngagementDynamoStore
       end
 
       # The item keeps the mailer method and args its digest was built from. Args are
-      # "[<purchase_id|follower_id|affiliate_user_id>, <post_id>]" (see PostSendgridApi and
+      # "[<purchase_id|follower_id|affiliate_id>, <post_id>]" (see PostSendgridApi and
       # PostResendApi) and the method says which of the three the first integer is.
       def recipient_id_from_item(item)
         item["mailer_args"].to_s[/\d+/]&.to_i

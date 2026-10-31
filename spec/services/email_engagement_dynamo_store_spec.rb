@@ -612,7 +612,7 @@ describe EmailEngagementDynamoStore do
         }
       )
 
-      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [12], affiliate_user_ids: [34])
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [12], affiliate_ids: [34])
     end
 
     it "reads the open items of that installment only" do
@@ -630,13 +630,21 @@ describe EmailEngagementDynamoStore do
     it "returns a recipient once, however many times they opened" do
       client.stub_responses(:query, { items: [opened_purchase, opened_purchase.merge("sk" => "OPEN#zzz")] })
 
-      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [], affiliate_user_ids: [])
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [], affiliate_ids: [])
     end
 
     it "ignores an item whose args carry no id" do
       client.stub_responses(:query, { items: [{ "sk" => "OPEN#aaa", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment" }] })
 
-      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [], follower_ids: [], affiliate_user_ids: [])
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [], follower_ids: [], affiliate_ids: [])
+    end
+
+    it "stops the walk when the caller's deadline has already passed" do
+      client.stub_responses(:query, { items: [opened_purchase] })
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) - 1)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
     end
   end
 end

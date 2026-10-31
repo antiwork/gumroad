@@ -75,9 +75,9 @@ describe "Installment non-opener recipient lookups" do
 
     before do
       # Everyone posts create no email_infos rows, so the sent set is the post's own.
-      [opened_buyer, unopened_buyer, follower].each { SentPostEmail.create!(post:, email: _1.email) }
-      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id)
-        .and_return({ purchase_ids: [opened_buyer.id], follower_ids: [], affiliate_user_ids: [] })
+      [opened_buyer, unopened_buyer, follower].each { create(:sent_post_email, post:, email: _1.email) }
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id, deadline: nil)
+        .and_return({ purchase_ids: [opened_buyer.id], follower_ids: [], affiliate_ids: [] })
     end
 
     it "returns everyone the original send reached who has not opened, not only buyers" do
@@ -91,10 +91,21 @@ describe "Installment non-opener recipient lookups" do
     end
 
     it "excludes an opener the Dynamo item names as a follower" do
-      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id)
-        .and_return({ purchase_ids: [], follower_ids: [follower.id], affiliate_user_ids: [] })
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id, deadline: nil)
+        .and_return({ purchase_ids: [], follower_ids: [follower.id], affiliate_ids: [] })
 
       expect(post.unopened_recipient_emails).to contain_exactly("opened@example.com", "unopened@example.com")
+    end
+
+    it "excludes an opener the Dynamo item names as an affiliate" do
+      affiliate = create(:direct_affiliate, seller:)
+      create(:sent_post_email, post:, email: affiliate.affiliate_user.email)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id, deadline: nil)
+        .and_return({ purchase_ids: [], follower_ids: [], affiliate_ids: [affiliate.id] })
+
+      expect(post.unopened_recipient_emails).to contain_exactly(
+        "opened@example.com", "unopened@example.com", "follower@example.com"
+      )
     end
 
     it "drops a follower who unsubscribed after the send from the resendable set" do

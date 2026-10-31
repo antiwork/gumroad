@@ -809,8 +809,8 @@ class Installment < ApplicationRecord
   # An Everyone post is the exception: it addresses followers and affiliates as well as buyers, and
   # only its buyer recipients get purchase-keyed email_infos rows, so it is computed from the post's
   # own sent_post_emails minus Dynamo's per-recipient opens (recorded for every post type).
-  def unopened_recipient_emails
-    return emailed_recipient_emails - opened_recipient_emails if audience_type?
+  def unopened_recipient_emails(deadline: nil)
+    return emailed_recipient_emails - opened_recipient_emails(deadline:) if audience_type?
     return [] unless seller_or_product_or_variant_type?
 
     emailed_ids = emailed_recipient_purchase_ids
@@ -830,11 +830,11 @@ class Installment < ApplicationRecord
   # Emails of the people who have opened this post's email. The Dynamo item names the purchase,
   # follower or affiliate the send addressed, so all three have to be resolved to reach the
   # follower and affiliate recipients an Everyone post has.
-  def opened_recipient_emails
-    ids = EmailEngagementDynamoStore.opened_recipient_ids(id)
+  def opened_recipient_emails(deadline: nil)
+    ids = EmailEngagementDynamoStore.opened_recipient_ids(id, deadline:)
     emails_for(Purchase, ids[:purchase_ids])
       .merge(emails_for(Follower, ids[:follower_ids]))
-      .merge(emails_for(User, ids[:affiliate_user_ids]))
+      .merge(affiliate_emails_for(ids[:affiliate_ids]))
   end
 
   # Accepts a precomputed `candidates` list so callers that already have the unopened
@@ -1343,6 +1343,19 @@ class Installment < ApplicationRecord
 
     # Same chunked lookup for any record whose email a Dynamo engagement item can name
     # (a purchase, a follower, or the user behind an affiliate).
+    # An affiliate recipient is addressed by its Affiliate row id (post_blast_sending builds
+    # `Affiliate.new(id: member.affiliate_id)`), and that row's address is its affiliate user's.
+    def affiliate_emails_for(ids)
+      emails = Set.new
+      ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
+        Affiliate.where(id: ids_slice).includes(:affiliate_user).each do |affiliate|
+          email = affiliate.affiliate_user&.email
+          emails << email.downcase if email.present?
+        end
+      end
+      emails
+    end
+
     def emails_for(relation, ids)
       emails = Set.new
       ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
