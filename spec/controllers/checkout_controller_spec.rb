@@ -450,6 +450,7 @@ describe CheckoutController, type: :controller, inertia: true do
           recommender_model_name:,
           limit: 5,
           recommendation_type: nil,
+          prefer_paid_products: true,
         ).and_call_original
         expect(RecommendedProductsService).to receive(:fetch).with(
           {
@@ -485,6 +486,7 @@ describe CheckoutController, type: :controller, inertia: true do
           recommender_model_name:,
           limit: 5,
           recommendation_type: nil,
+          prefer_paid_products: true,
         ).and_return([])
 
         get :show, params: { cart_product_ids: { "0" => "somevalue", "1" => "anothervalue" }, on_discover_page: "false", limit: "5" }, session: { recommender_model_name: }

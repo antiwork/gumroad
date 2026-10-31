@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
 class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
-  def self.fetch_for_cart(purchaser:, cart_product_ids:, recommender_model_name:, limit:, recommendation_type: nil)
+  def self.fetch_for_cart(purchaser:, cart_product_ids:, recommender_model_name:, limit:, recommendation_type: nil, prefer_paid_products: false)
     new(
       purchaser:,
       cart_product_ids:,
       recommender_model_name:,
       recommended_by: RecommendationType::GUMROAD_MORE_LIKE_THIS_RECOMMENDATION,
       target: Product::Layout::PROFILE,
-      limit:,
+      limit: [limit, Link::MAX_RESULT_WINDOW].min,
       recommendation_type:,
-    ).result(prefer_paid_products: true)
+    ).result(prefer_paid_products:)
   end
 
   def self.fetch_for_receipt(purchaser:, receipt_product_ids:, recommender_model_name:, limit:)
@@ -35,8 +35,9 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
   MAX_PAID_SEARCH_PASSES = 3
 
   # Only the checkout row asks for paid-first ordering: it sits directly under the cart, so a free
-  # product there advertises a $0 alternative at the moment of payment. Receipt emails keep the raw
-  # co-purchase ranking, where a free lead magnet is a legitimate next step.
+  # product there advertises a $0 alternative at the moment of payment. Receipt emails and the
+  # post-purchase "More like this" block keep the raw co-purchase ranking, where a free lead magnet
+  # is a legitimate next step.
   def result(prefer_paid_products: false)
     recommended_products = fetch_recommended_products(for_seller_ids: affiliated_users.present? ? nil : cart_seller_ids)
     recommended_products = recommended_products.includes(:direct_affiliates) if affiliated_users.present?
@@ -77,17 +78,20 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       MAX_PAID_SEARCH_PASSES.times do
         break if selected.length >= limit || cart_seller_ids.blank?
 
+        # search_options raises on a window past MAX_RESULT_WINDOW.
+        size = [(limit - selected.length) * FREE_RESULTS_HEADROOM, Link::MAX_RESULT_WINDOW].min
         found = search_creator_featured(
-          size: (limit - selected.length) * FREE_RESULTS_HEADROOM,
+          size:,
           exclude_ids: considered_ids,
           min_price: PAID_MIN_PRICE
         )
-        break if found.empty?
 
         found_paid, found_free = found.partition { !free_product?(_1.product) }
         selected += found_paid.take(limit - selected.length)
         free += found_free
         considered_ids += found.map { _1.product.id }
+        # A short window means nothing priced is left further down.
+        break if found.length < size
       end
 
       selected += free.take(limit - selected.length)
