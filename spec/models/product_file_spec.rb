@@ -438,11 +438,28 @@ describe ProductFile do
     it "labels the zip a promoted web build put in the content" do
       product = create(:product)
       file = create(:readable_document, link: product)
-      create(:product_build, product:, product_file: file, number: 3, status: "live",
-                             source_url: "https://example.com/game.zip", storage_key: "builds/#{product.id}/3/build.zip",
-                             byte_size: 10)
+      build = create(:product_build, product:, product_file: file, number: 3, status: "live",
+                                     source_url: "https://example.com/game.zip", storage_key: "builds/#{product.id}/3/build.zip",
+                                     byte_size: 10)
 
-      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live" })
+      expect(file.reload.as_json).to include(web_build: { number: 3, status: "live", deployed_at: build.created_at, playable: false, version_history: false })
+    end
+
+    it "marks the build playable once it is unpacked and the player is on for the seller" do
+      product = create(:product)
+      file = create(:readable_document, link: product)
+      build = create(:product_build, :live, product:, product_file: file, number: 3)
+
+      expect(file.reload.as_json[:web_build]).to include(playable: false)
+
+      build.update!(site_unpacked_at: Time.current)
+      expect(file.reload.as_json[:web_build]).to include(playable: false)
+
+      Feature.activate_user(:product_build_player, product.user)
+      expect(file.reload.as_json[:web_build]).to include(playable: true)
+
+      build.update!(status: "superseded")
+      expect(file.reload.as_json[:web_build]).to include(playable: false)
     end
   end
 
@@ -984,6 +1001,26 @@ describe ProductFile do
 
     it "returns `true` if the there are no 'processing' or 'completed' transcoding jobs" do
       expect(product_file.attempt_to_transcode?).to be(true)
+    end
+
+    it "returns `true` when the only 'processing' row never got a job_id and is older than the grace period" do
+      create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key, state: "processing",
+                                job_id: nil, created_at: TranscodedVideo::UNSUBMITTED_GRACE_PERIOD.ago - 1.minute)
+
+      expect(product_file.attempt_to_transcode?).to be(true)
+    end
+
+    it "returns `false` while a row that never got a job_id is still within the grace period" do
+      create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key, state: "processing", job_id: nil)
+
+      expect(product_file.attempt_to_transcode?).to be(false)
+    end
+
+    it "returns `false` for a job that was submitted, however old the row is" do
+      create(:transcoded_video, streamable: product_file, original_video_key: product_file.s3_key, state: "processing",
+                                job_id: "job-1", created_at: 6.months.ago)
+
+      expect(product_file.attempt_to_transcode?).to be(false)
     end
   end
 

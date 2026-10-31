@@ -95,7 +95,7 @@ class CustomerPresenter
       affiliate: purchase.affiliate.present? ?
         {
           email: purchase.affiliate.affiliate_user.form_email,
-          amount: Money.new(purchase.affiliate_credit_cents).format(no_cents_if_whole: true, symbol: true),
+          amount: Money.new(purchase.own_affiliate_credit_cents).format(no_cents_if_whole: true, symbol: true),
           type: purchase.affiliate.type,
         } : nil,
       license: purchase.linked_license.present? ?

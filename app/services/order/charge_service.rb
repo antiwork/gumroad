@@ -648,7 +648,6 @@ class Order::ChargeService
 
       if charge_intent&.succeeded?
         charge_waiting_for_flow_of_funds = charge_intent_waiting_for_flow_of_funds?(charge)
-        FinalizeBuyerPresentmentChargeJob.perform_in(FinalizeBuyerPresentmentChargeJob::INITIAL_DELAY, charge.id) if charge_waiting_for_flow_of_funds
 
         purchases.each do |purchase|
           if purchases_to_charge.include?(purchase)
@@ -666,6 +665,11 @@ class Order::ChargeService
           Purchase::MarkSuccessfulService.new(purchase).perform
           handle_recommended_purchase(purchase)
         end
+
+        # Enqueue only after every purchase holds its payment link: the unique-job lock needs Redis,
+        # and a raise before the link is saved fails a captured purchase with nothing tying it to
+        # the Stripe charge. A raise here leaves it in_progress for SyncStuckPurchasesJob.
+        FinalizeBuyerPresentmentChargeJob.perform_in(FinalizeBuyerPresentmentChargeJob::INITIAL_DELAY, charge.id) if charge_waiting_for_flow_of_funds
       elsif charge_intent&.requires_action?
         purchases_to_charge.each do |purchase|
           save_processor_payment_intent!(purchase, charge_intent.id)

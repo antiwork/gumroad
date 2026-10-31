@@ -865,6 +865,11 @@ export const Checkout = ({
             <Button asChild color="accent">
               <a href={discoverUrl}>Discover products</a>
             </Button>
+            {cart.returnUrl ? (
+              <NavigationButton className="@[64rem]:hidden" href={cart.returnUrl}>
+                Continue shopping
+              </NavigationButton>
+            ) : null}
           </Placeholder>
         </div>
       )}

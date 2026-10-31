@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_22_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_23_000008) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -115,6 +115,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_22_000003) do
     t.integer "affiliate_credit_refund_balance_id"
     t.integer "affiliate_id"
     t.bigint "fee_cents", default: 0, null: false
+    t.boolean "is_direct_affiliate_credit", default: false, null: false
     t.index ["affiliate_credit_chargeback_balance_id"], name: "idx_affiliate_credits_on_affiliate_credit_chargeback_balance_id"
     t.index ["affiliate_credit_refund_balance_id"], name: "index_affiliate_credits_on_affiliate_credit_refund_balance_id"
     t.index ["affiliate_credit_success_balance_id"], name: "index_affiliate_credits_on_affiliate_credit_success_balance_id"
@@ -1504,9 +1505,11 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_22_000003) do
     t.datetime "created_at", precision: nil, null: false
     t.string "scopes"
     t.string "resource"
+    t.bigint "team_membership_id"
     t.index ["application_id", "revoked_at"], name: "index_oauth_access_tokens_on_application_id_and_revoked_at"
     t.index ["refresh_token"], name: "index_oauth_access_tokens_on_refresh_token", unique: true
     t.index ["resource_owner_id"], name: "index_oauth_access_tokens_on_resource_owner_id"
+    t.index ["team_membership_id"], name: "index_oauth_access_tokens_on_team_membership_id"
     t.index ["token"], name: "index_oauth_access_tokens_on_token", unique: true
   end
 
@@ -1913,6 +1916,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.integer "byte_size", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.json "key_versions"
     t.index ["purchase_id"], name: "index_product_build_saves_on_purchase_id", unique: true
   end
 
@@ -2390,7 +2394,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.integer "tax_cents", default: 0
     t.integer "affiliate_credit_cents", default: 0
     t.string "credit_card_zipcode"
-    t.string "json_data"
+    t.string "json_data", limit: 4096
     t.string "card_data_handling_mode"
     t.string "charge_processor_id"
     t.integer "total_transaction_cents"
@@ -2594,6 +2598,24 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.datetime "updated_at", null: false
     t.index ["product_id"], name: "index_self_service_affiliate_products_on_product_id", unique: true
     t.index ["seller_id"], name: "index_self_service_affiliate_products_on_seller_id"
+  end
+
+  create_table "seller_plan_offers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "product_id"
+    t.string "arm", null: false
+    t.integer "price_cents", null: false
+    t.string "status", default: "offered", null: false
+    t.string "stripe_checkout_session_id"
+    t.string "stripe_customer_id"
+    t.string "stripe_subscription_id"
+    t.datetime "offered_at", null: false
+    t.datetime "activated_at"
+    t.datetime "canceled_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["stripe_subscription_id"], name: "index_seller_plan_offers_on_stripe_subscription_id", unique: true
+    t.index ["user_id"], name: "index_seller_plan_offers_on_user_id", unique: true
   end
 
   create_table "seller_profile_sections", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

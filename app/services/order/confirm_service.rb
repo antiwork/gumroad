@@ -4,6 +4,15 @@
 class Order::ConfirmService
   include Order::ResponseHelpers
 
+  # Another confirm or retry holds the row; a write that needs it is left to the next pass.
+  LOCK_CONTENTION_ERRORS = [ActiveRecord::LockWaitTimeout, ActiveRecord::Deadlocked].freeze
+  # Errors a held group can wait out; anything else fails the group as before.
+  MANDATE_WAIT_TRANSIENT_ERRORS = [
+    ChargeProcessorUnavailableError, ChargeProcessorErrorRateLimit,
+    Stripe::APIConnectionError, Stripe::APIError, Stripe::RateLimitError,
+    *LOCK_CONTENTION_ERRORS
+  ].freeze
+
   attr_reader :order, :params
 
   def initialize(order:, params:)
@@ -18,6 +27,7 @@ class Order::ConfirmService
 
   # Used by RetryPendingMandateChargeJob to charge the held groups once the mandate is active.
   def charge_pending_setup_groups!
+    @retrying_held_groups = true
     charge_seller_groups_awaiting_setup_confirmation!
     setup_charge_results
   end
@@ -29,6 +39,10 @@ class Order::ConfirmService
     failed_purchases = []
 
     charge_seller_groups_awaiting_setup_confirmation!
+    # Before the loop below: a sibling's confirm raising there must not strand the held groups.
+    if mandate_pending_purchases.any?
+      RetryPendingMandateChargeJob.perform_in(RetryPendingMandateChargeJob::RETRY_INTERVAL, order.id, params[:buyer_currency_quote].presence)
+    end
 
     order.purchases.each do |purchase|
       error =
@@ -72,10 +86,6 @@ class Order::ConfirmService
       end
     end
 
-    if mandate_pending_purchases.any?
-      RetryPendingMandateChargeJob.perform_in(RetryPendingMandateChargeJob::RETRY_INTERVAL, order.id, params[:buyer_currency_quote].presence)
-    end
-
     offer_codes = offer_codes.filter_map do |offer_code, products|
       response = { code: offer_code, result: OfferCodeDiscountComputingService.new(offer_code, products, buyer: order.purchaser).process }
       next if response[:result][:error_code].present?
@@ -113,6 +123,8 @@ class Order::ConfirmService
           end
           finalize_setup_charged_purchases!(charged) if charged.any?
           uncertain.each { |purchase| setup_charge_results[purchase.id] = :pending }
+          # Already reported as processing; only the retry job's deadline may fail a held group.
+          hold_for_pending_mandate(seller_purchases.select { |purchase| RetryPendingMandateChargeJob.held?(purchase) })
           next
         end
         pending = seller_purchases.select { |purchase| awaiting_charge_after_setup?(purchase) }
@@ -136,6 +148,20 @@ class Order::ConfirmService
               # (client_confirmed without a stored PI). Failing the purchase could lose a
               # payment that is still going to capture. Report processing and let webhooks finish it.
               setup_charge_results[purchase.id] = :pending unless setup_charge_results.key?(purchase.id)
+            elsif MANDATE_WAIT_TRANSIENT_ERRORS.any? { e.is_a?(_1) } &&
+                  (RetryPendingMandateChargeJob.held?(purchase) || @retrying_held_groups)
+              lock_contended = LOCK_CONTENTION_ERRORS.any? { e.is_a?(_1) }
+              begin
+                if RetryPendingMandateChargeJob.wait_over?([purchase]) && !lock_contended
+                  fail_expired_hold!([purchase])
+                else
+                  # Nothing was submitted; a transient error must not end the wait early.
+                  mark_confirmed_setup_held!(purchase) if @retrying_held_groups && !lock_contended
+                  hold_for_pending_mandate([purchase])
+                end
+              rescue *LOCK_CONTENTION_ERRORS
+                hold_for_pending_mandate([purchase])
+              end
             elsif purchase.errors.empty?
               purchase.errors.add(:base, "There is a temporary problem, please try again (your card was not charged).")
             end
@@ -233,15 +259,57 @@ class Order::ConfirmService
       Chargeable.new([stripe_chargeable])
     end
 
-    def setup_intent_mandate_pending?(merchant_account, setup_intent)
+    def setup_intent_mandate_pending?(merchant_account, setup_intent, held:)
       mandate_id = setup_intent.try(:mandate)
       return false if mandate_id.blank?
 
       ChargeProcessor.get_mandate(merchant_account, mandate_id)&.status == "pending"
     rescue ChargeProcessorError => e
-      # The charge still fails closed in StripeChargeProcessor if the mandate is pending.
+      # A held group waits out a transient error (the deadline still bounds it). Otherwise the
+      # charge still fails closed in StripeChargeProcessor if the mandate is pending.
       ErrorNotifier.notify(e, order_id: order.id, mandate_id:)
-      false
+      held && MANDATE_WAIT_TRANSIENT_ERRORS.any? { e.is_a?(_1) }
+    end
+
+    # The retry job only runs for held groups, so there the deadline covers every unpaid group.
+    # A submitted charge keeps its reconciliation path.
+    def mandate_wait_over?(purchases, waiting:)
+      return false if purchases.first.charge&.client_confirmed?
+
+      (waiting || @retrying_held_groups) && RetryPendingMandateChargeJob.wait_over?(purchases)
+    end
+
+    def fail_expired_hold!(purchases)
+      purchases.each do |purchase|
+        RetryPendingMandateChargeJob.fail_unpaid!(purchase)
+        setup_charge_results[purchase.id] = RetryPendingMandateChargeJob::PENDING_MESSAGE if purchase.failed?
+      end
+    end
+
+    # Past the authentication window the abandoned-purchase check has failed every setup that did not
+    # succeed, so this unpaid group awaits its charge and payment_settling must cover it. Runs after the
+    # group transaction rolled back, hence its own lock.
+    def mark_confirmed_setup_held!(purchase)
+      return if purchase.created_at > ChargeProcessor::TIME_TO_COMPLETE_SCA.ago
+
+      purchase.with_lock { mark_held!(purchase) if purchase.in_progress? }
+    end
+
+    # payment_settling needs a stripe_status, or another cart could buy the product again meanwhile.
+    # A row marked after its abandoned-purchase check already ran needs that worker's backstop again,
+    # or a lost retry chain would leave the marker blocking repeat buys forever.
+    def mark_held!(purchase)
+      return if purchase.stripe_status.present?
+
+      purchase.update!(stripe_status: StripeIntentStatus::PROCESSING)
+      return if purchase.created_at > ChargeProcessor::TIME_TO_COMPLETE_SCA.ago
+
+      FailAbandonedPurchaseWorker.perform_at(RetryPendingMandateChargeJob.backstop_at(purchase), purchase.id)
+    end
+
+    def hold_for_pending_mandate(purchases)
+      mandate_pending_purchases.concat(purchases)
+      purchases.each { |purchase| setup_charge_results[purchase.id] = :mandate_pending }
     end
 
     def finalize_setup_charged_purchases!(purchases)
@@ -267,6 +335,13 @@ class Order::ConfirmService
     end
 
     def charge_setup_confirmed_purchases_locked!(purchases)
+      held = purchases.any? { |purchase| RetryPendingMandateChargeJob.held?(purchase) }
+      if mandate_wait_over?(purchases, waiting: held)
+        # Checked before any Stripe call: no new charge after the wait, even once the mandate is active.
+        fail_expired_hold!(purchases)
+        return
+      end
+
       reference_purchase = purchases.first
       merchant_account = reference_purchase.merchant_account
       credit_card = reference_purchase.credit_card
@@ -323,11 +398,19 @@ class Order::ConfirmService
         return
       end
 
-      if setup_intent_mandate_pending?(merchant_account, setup_intent)
+      # A hold saved before held purchases were marked has no marker, but its SetupIntent still
+      # carries the mandate it waits for, and the abandoned-purchase check never fails a succeeded one.
+      waiting = held || setup_intent.try(:mandate).present?
+      if mandate_wait_over?(purchases, waiting:)
+        fail_expired_hold!(purchases)
+        return
+      end
+
+      if setup_intent_mandate_pending?(merchant_account, setup_intent, held: held || @retrying_held_groups)
         # Stripe rejects an off-session charge on a mandate that is still `pending` (it turns
         # `active` minutes after 3DS). Keep the groups in progress and charge them once active.
-        mandate_pending_purchases.concat(purchases)
-        purchases.each { |purchase| setup_charge_results[purchase.id] = :mandate_pending }
+        purchases.each { |purchase| mark_held!(purchase) }
+        hold_for_pending_mandate(purchases)
         return
       end
 
@@ -339,6 +422,12 @@ class Order::ConfirmService
         chargeable.prepare_with_trusted_setup_intent!
       else
         chargeable.prepare!
+      end
+
+      # Rechecked here because the Stripe calls above can outlast the deadline.
+      if mandate_wait_over?(purchases, waiting:)
+        fail_expired_hold!(purchases)
+        return
       end
 
       create_service = Charge::CreateService.new(

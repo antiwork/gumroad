@@ -2,11 +2,12 @@
 //
 // Pins how the form renders the page's `errors` prop. The real redirect is covered by
 // spec/requests/workflows_spec.rb.
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type Workflow, type WorkflowFormContext } from "$app/types/workflow";
+import { assertDefined } from "$app/utils/assert";
 
 import WorkflowForm from "$app/components/WorkflowsPage/WorkflowForm";
 
@@ -25,6 +26,7 @@ vi.mock(
 );
 
 let flashedErrors: { base?: string | string[] } | undefined;
+const form = vi.hoisted(() => ({ transform: vi.fn<(callback: () => unknown) => void>(), patch: vi.fn() }));
 
 vi.mock("@inertiajs/react", async () => {
   const actual = await vi.importActual<typeof import("@inertiajs/react")>("@inertiajs/react");
@@ -36,6 +38,7 @@ vi.mock("@inertiajs/react", async () => {
       component: "Workflows/New",
       version: null,
     }),
+    useForm: () => ({ ...actual.useForm({}), transform: form.transform, patch: form.patch }),
   };
 });
 
@@ -57,6 +60,8 @@ const MESSAGE = "Name can't be blank";
 
 beforeEach(() => {
   flashedErrors = undefined;
+  form.transform.mockClear();
+  form.patch.mockClear();
 });
 afterEach(cleanup);
 
@@ -99,7 +104,22 @@ describe("WorkflowForm exclusions", () => {
   const options: WorkflowFormContext["products_and_variant_options"] = [
     { id: "product-1", label: "Design guide", archived: false, product_permalink: "product-1", type: "product" },
     { id: "variant-1", label: "Studio edition", archived: false, product_permalink: "product-2", type: "variant" },
+    { id: "product-2", label: "Course", archived: false, product_permalink: "product-2", type: "product" },
   ];
+
+  const exclusions = () => {
+    const fieldset = screen.getByLabelText("Has not yet bought").closest("fieldset");
+    if (!fieldset) throw new Error("Exclusion fieldset missing");
+    return fieldset;
+  };
+
+  const selectExclusion = (fieldset: HTMLElement, label: string) => {
+    // The menu mounts on focusin; its options live in a <datalist>, so they are queried by attribute.
+    fireEvent.focusIn(within(fieldset).getByLabelText("Has not yet bought"));
+    const option = [...fieldset.querySelectorAll('[role="option"]')].find((el) => el.textContent === label);
+    if (!option) throw new Error(`${label} is not offered as an exclusion`);
+    fireEvent.click(option);
+  };
 
   it.each([{ products: ["product-1"] }, { products: [] }])(
     "retains version exclusions alongside $products",
@@ -111,10 +131,43 @@ describe("WorkflowForm exclusions", () => {
         />,
       );
 
-      const exclusions = screen.getByLabelText("Has not yet bought").closest("fieldset");
-      if (!exclusions) throw new Error("Exclusion fieldset missing");
-      expect(within(exclusions).queryByRole("button", { name: "Studio edition" })).not.toBeNull();
-      expect(within(exclusions).queryByRole("button", { name: "Design guide" }) !== null).toBe(products.length > 0);
+      expect(within(exclusions()).queryByRole("button", { name: "Studio edition" })).not.toBeNull();
+      expect(within(exclusions()).queryByRole("button", { name: "Design guide" }) !== null).toBe(products.length > 0);
     },
   );
+
+  it("adds a second exclusion alongside one that is already selected", () => {
+    render(
+      <WorkflowForm
+        context={{ ...context, products_and_variant_options: options }}
+        workflow={{ ...workflow, not_bought_variants: [] }}
+      />,
+    );
+
+    const fieldset = exclusions();
+    selectExclusion(fieldset, "Studio edition");
+
+    expect(within(fieldset).getByRole("button", { name: "Design guide" })).not.toBeNull();
+    expect(within(fieldset).getByRole("button", { name: "Studio edition" })).not.toBeNull();
+  });
+
+  it("saves every selected product and version", async () => {
+    render(
+      <WorkflowForm
+        context={{ ...context, products_and_variant_options: options }}
+        workflow={{ ...workflow, not_bought_products: [], not_bought_variants: [] }}
+      />,
+    );
+
+    const fieldset = exclusions();
+    selectExclusion(fieldset, "Design guide");
+    selectExclusion(fieldset, "Course");
+    selectExclusion(fieldset, "Studio edition");
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(form.patch).toHaveBeenCalled());
+    expect(assertDefined(form.transform.mock.lastCall)[0]()).toMatchObject({
+      workflow: { not_bought_products: ["product-1", "product-2"], not_bought_variants: ["variant-1"] },
+    });
+  });
 });

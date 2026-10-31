@@ -208,14 +208,14 @@ describe UpdatePayoutMethod do
       let(:user) { create(:named_user) }
       let!(:existing_bank_account) { create(:egypt_bank_account, user:, bank_code: "QNBAEGCX", stripe_bank_account_id: "ba_123") }
 
-      def egypt_params(bank_code:)
+      def egypt_params(bank_code:, account_number: "EG800002000156789012345180002")
         ActionController::Parameters.new(
           bank_account: {
             type: EgyptBankAccount.name,
             account_holder_full_name: "Named User",
             bank_code:,
-            account_number: "EG800002000156789012345180002",
-            account_number_confirmation: "EG800002000156789012345180002",
+            account_number:,
+            account_number_confirmation: account_number,
           }
         )
       end
@@ -242,6 +242,34 @@ describe UpdatePayoutMethod do
         expect(result[:data]).to include("QNBAEGCX rather than QNBAEGCX027")
         expect(user.reload.active_bank_account).to eq(existing_bank_account)
         expect(user.bank_accounts.count).to eq(1)
+      end
+
+      it "rejects an account number whose branch Stripe cannot resolve and flags the account number" do
+        allow(Stripe::Token).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("We couldn't find the bank for this account number", "bank_account[account_number]", code: "bank_account_unusable")
+        )
+
+        result = described_class.new(user_params: egypt_params(bank_code: "NBEGEGCX"), seller: user).process
+
+        expect(result[:error]).to eq(:bank_account_error)
+        expect(result[:data]).to include("couldn't find the branch this account number belongs to")
+        expect(result[:field]).to eq(:account_number)
+        expect(user.reload.active_bank_account).to eq(existing_bank_account)
+        expect(user.bank_accounts.count).to eq(1)
+      end
+
+      it "probes a new account number even under the code the current account already attached" do
+        expect(Stripe::Token).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("We couldn't find the bank for this account number", "bank_account[account_number]", code: "bank_account_unusable")
+        )
+
+        result = described_class.new(
+          user_params: egypt_params(bank_code: "QNBAEGCX", account_number: "EG380019000500000000263180002"),
+          seller: user
+        ).process
+
+        expect(result[:error]).to eq(:bank_account_error)
+        expect(user.reload.active_bank_account).to eq(existing_bank_account)
       end
 
       it "saves when Stripe cannot be reached" do

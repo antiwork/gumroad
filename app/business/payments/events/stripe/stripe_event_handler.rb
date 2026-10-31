@@ -3,7 +3,7 @@
 class StripeEventHandler
   attr_accessor :params
   # See full list of events at https://stripe.com/docs/api/events/types
-  ALL_HANDLED_EVENTS = (%w{account.application.deauthorized account.updated capability.updated payout. charge. capital. radar. payment_intent.payment_failed payment_intent.processing payment_intent.succeeded} + StripeChargeProcessor::HANDLED_REFUND_EVENTS).freeze
+  ALL_HANDLED_EVENTS = (%w{account.application.deauthorized account.updated capability.updated payout. charge. capital. radar. payment_intent.payment_failed payment_intent.processing payment_intent.succeeded checkout.session.completed customer.subscription.} + StripeChargeProcessor::HANDLED_REFUND_EVENTS).freeze
 
   # Handle's a Stripe event. Calls out to the necessary modules
   # that handle different types of Stripe events.
@@ -48,13 +48,18 @@ class StripeEventHandler
     end
 
     def handle_event_for_gumroad
-      StripeChargeProcessor.handle_stripe_event(stripe_event) if stripe_event["type"].start_with?("charge.",
-                                                                                                  "capital.",
-                                                                                                  "radar.",
-                                                                                                  *StripeChargeProcessor::HANDLED_REFUND_EVENTS,
-                                                                                                  "payment_intent.payment_failed",
-                                                                                                  "payment_intent.processing",
-                                                                                                  "payment_intent.succeeded")
+      type = stripe_event["type"]
+      if type.start_with?("charge.",
+                          "capital.",
+                          "radar.",
+                          *StripeChargeProcessor::HANDLED_REFUND_EVENTS,
+                          "payment_intent.payment_failed",
+                          "payment_intent.processing",
+                          "payment_intent.succeeded")
+        StripeChargeProcessor.handle_stripe_event(stripe_event)
+      elsif SellerPlan::StripeEventHandler.handles?(type)
+        SellerPlan::StripeEventHandler.handle_stripe_event(stripe_event)
+      end
     end
 
     def handle_event_for_connected_account(stripe_connect_account_id:)

@@ -491,6 +491,53 @@ RSpec.describe AudienceMember, :freeze_time do
     end
   end
 
+  describe ".filter by waitlisted products" do
+    let(:seller) { create(:user) }
+    let(:seller_id) { seller.id }
+    let(:product) { create(:product, user: seller) }
+    let(:other_product) { create(:product, user: seller) }
+
+    def join_waitlist(follower, waitlist_product = product)
+      create(:waitlist_entry, follower:, product: waitlist_product)
+      follower.user.audience_members.find_by!(email: follower.email)
+    end
+
+    it "matches confirmed followers on the waitlist of any listed product" do
+      on_list = join_waitlist(create(:active_follower, user: seller))
+      on_other_list = join_waitlist(create(:active_follower, user: seller), other_product)
+      create(:active_follower, user: seller)
+      join_waitlist(create(:active_follower, user: create(:user)), create(:product))
+
+      expect(filtered(type: "follower", waitlisted_product_ids: [product.id])).to eq([on_list])
+      expect(filtered(type: "follower", waitlisted_product_ids: [product.id, other_product.id])).to eq([on_list, on_other_list])
+      expect(filtered_with_ids(type: "follower", waitlisted_product_ids: [product.id]).map(&:follower_id)).to eq([on_list.details["follower"]["id"]])
+      expect(described_class.filter_count(seller_id:, params: { type: "follower", waitlisted_product_ids: [product.id] })).to eq(1)
+    end
+
+    it "skips a follower who unsubscribed but is still a buyer" do
+      follower = create(:active_follower, user: seller)
+      create(:purchase, :from_seller, seller:, link: create(:product, user: seller), email: follower.email)
+      join_waitlist(follower)
+      follower.mark_deleted!
+
+      expect(seller.audience_members.find_by(email: follower.email)).to be_present
+      expect(filtered(waitlisted_product_ids: [product.id])).to eq([])
+    end
+
+    it "keeps only signups that existed as of the given time" do
+      early = join_waitlist(create(:active_follower, user: seller))
+      late = join_waitlist(create(:active_follower, user: seller))
+      [early, late].each do |member|
+        member.update_column(:created_at, 2.days.ago)
+        Follower.find_by!(email: member.email).update_column(:confirmed_at, 2.days.ago)
+      end
+      WaitlistEntry.joins(:follower).find_by!(followers: { email: early.email }).update_column(:created_at, 2.days.ago)
+
+      as_of_yesterday = described_class.filter(seller_id:, params: { type: "follower", waitlisted_product_ids: [product.id] }, with_ids: true, as_of: 1.day.ago).to_a
+      expect(as_of_yesterday).to eq([early])
+    end
+  end
+
   describe ".refresh_all! and #refresh!" do
     let(:seller) { create(:user) }
 

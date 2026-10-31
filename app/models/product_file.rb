@@ -324,7 +324,7 @@ class ProductFile < ApplicationRecord
   def web_build_summary
     build = product_build
     return if build.nil?
-    { number: build.number, status: build.status }
+    { number: build.number, status: build.status, deployed_at: build.created_at, playable: build.playable?, version_history: build.live? && build.player_enabled? }
   end
 
   def consumable?

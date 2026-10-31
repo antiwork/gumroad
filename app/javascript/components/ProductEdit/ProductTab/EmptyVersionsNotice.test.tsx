@@ -60,6 +60,8 @@ const context = vi.hoisted(() => {
     custom_view_content_button_text_max_length: 20,
     custom_receipt_text: null,
     custom_receipt_text_max_length: 1_000,
+    custom_failed_payment_text: null,
+    custom_failed_payment_text_max_length: 500,
     custom_attributes: [],
     taxonomy_attribute_values: {},
     inferred_taxonomy_attribute_values: {},

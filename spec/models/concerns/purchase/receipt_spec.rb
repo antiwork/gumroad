@@ -148,6 +148,16 @@ describe Purchase::Receipt do
         expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(giftee_purchase.id, true).on("critical")
       end
     end
+
+    context "when the gift has no giftee purchase" do
+      it "resends the buyer's own receipt" do
+        gift_without_giftee_purchase = create(:gift, link: product)
+        purchase = create(:purchase, link: product, is_gift_sender_purchase: true, gift_given: gift_without_giftee_purchase)
+
+        expect { purchase.resend_receipt }.to_not raise_error
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(purchase.id, true).on("critical")
+      end
+    end
   end
 
   describe "#invoiceable_charges" do

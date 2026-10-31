@@ -66,6 +66,16 @@ describe TranscodeVideoForStreamingWorker do
         expect(transcoded_video.transcoded_video_key).to eq(completed_transcode.transcoded_video_key)
       end
 
+      it "marks the product file as transcoded for HLS when it completes from an existing HLS rendition" do
+        expect(product_file.is_transcoded_for_hls).to be(false)
+        create(:transcoded_video, original_video_key: product_file.s3_key, is_hls: true, state: "completed")
+        expect_any_instance_of(Aws::MediaConvert::Client).not_to receive(:create_job)
+
+        described_class.new.perform(product_file.id)
+
+        expect(product_file.reload.is_transcoded_for_hls).to be(true)
+      end
+
       it "creates a transcoded_video but doesn't process it if there's already another duplicate processing one" do
         processing_transcode = create(:transcoded_video, original_video_key: product_file.s3_key, transcoded_video_key: product_file.s3_key + ".transcoded", state: "processing")
         expect_any_instance_of(Aws::MediaConvert::Client).not_to receive(:create_job)
@@ -77,6 +87,15 @@ describe TranscodeVideoForStreamingWorker do
         transcoded_video = TranscodedVideo.last!
         expect(transcoded_video.original_video_key).to eq(processing_transcode.original_video_key)
         expect(transcoded_video.streamable).to eq(product_file)
+      end
+
+      it "submits a job when the only duplicate processing row never got a job_id and is older than the grace period" do
+        create(:transcoded_video, original_video_key: product_file.s3_key, transcoded_video_key: product_file.s3_key + ".transcoded",
+                                  state: "processing", job_id: nil, created_at: TranscodedVideo::UNSUBMITTED_GRACE_PERIOD.ago - 1.minute)
+
+        described_class.new.perform(product_file.id, ProductFile.name, described_class::MEDIACONVERT)
+
+        expect(TranscodedVideo.last.job_id).to eq("abc-123")
       end
 
       it "transcodes the video and does not send the transcoding error email", :vcr do
@@ -202,6 +221,44 @@ describe TranscodeVideoForStreamingWorker do
           expect(TranscodedVideo.last.transcoded_video_key).to eq "specs/ScreenRecording/hls/"
         end
 
+        context "when the transcoder rejects the submission" do
+          before do
+            allow_any_instance_of(Aws::MediaConvert::Client).to receive(:create_job)
+              .and_raise(Aws::MediaConvert::Errors::BadRequestException.new(nil, "Invalid input"))
+          end
+
+          it "marks the created record as error instead of leaving it processing without a job" do
+            expect do
+              described_class.new.perform(product_file.id)
+            end.to raise_error(Aws::MediaConvert::Errors::BadRequestException).and change { TranscodedVideo.count }.by(1)
+
+            expect(TranscodedVideo.last.state).to eq "error"
+            expect(TranscodedVideo.last.job_id).to be_nil
+            expect(product_file.reload.transcoding_in_progress?).to be(false)
+          end
+
+          it "leaves the next attempt free to submit the job again" do
+            expect { described_class.new.perform(product_file.id) }.to raise_error(Aws::MediaConvert::Errors::BadRequestException)
+
+            allow_any_instance_of(Aws::MediaConvert::Client).to receive(:create_job)
+              .and_return(OpenStruct.new({ job: OpenStruct.new({ id: "abc-123" }) }))
+
+            expect do
+              described_class.new.perform(product_file.id)
+            end.to change { TranscodedVideo.count }.by(1)
+
+            expect(TranscodedVideo.last.job_id).to eq "abc-123"
+          end
+
+          it "raises the transcoder's error even when the record cannot be marked as error" do
+            allow_any_instance_of(TranscodedVideo).to receive(:mark_error).and_raise(ActiveRecord::ConnectionNotEstablished)
+
+            expect do
+              described_class.new.perform(product_file.id)
+            end.to raise_error(Aws::MediaConvert::Errors::BadRequestException)
+          end
+        end
+
         context "with GRMC", :freeze_time do
           before do
             allow(GlobalConfig).to receive(:get).with("GRMC_API_KEY").and_return("test_api_key")
@@ -281,6 +338,54 @@ describe TranscodeVideoForStreamingWorker do
               expect(transcoded_video.transcoded_video_key).to eq "specs/ScreenRecording/hls/"
               expect(transcoded_video.via_grmc).to be(false)
               expect(transcoded_video.streamable).to eq(product_file)
+            end
+          end
+
+          context "when a Sidekiq shutdown interrupts the job" do
+            it "marks its transcoded video as failed while the GRMC request is in flight, so the requeued job can submit it again" do
+              stub_request(:post, described_class::GRMC_ENDPOINT).to_raise(Sidekiq::Shutdown)
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to raise_error(Sidekiq::Shutdown)
+
+              expect(TranscodedVideo.last!.state).to eq("error")
+
+              stub_request(:post, described_class::GRMC_ENDPOINT)
+                .to_return(status: 200, body: { job_id: "grmc-123" }.to_json, headers: { "Content-Type" => "application/json" })
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to change { TranscodedVideo.count }.by(1)
+
+              expect(TranscodedVideo.last!.job_id).to eq("grmc-123")
+            end
+
+            it "keeps its transcoded video processing once GRMC has accepted the job" do
+              stub_request(:post, described_class::GRMC_ENDPOINT)
+                .to_return(status: 200, body: { job_id: "grmc-123" }.to_json, headers: { "Content-Type" => "application/json" })
+              allow(described_class).to receive(:perform_in).and_raise(Sidekiq::Shutdown)
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to raise_error(Sidekiq::Shutdown)
+
+              transcoded_video = TranscodedVideo.last!
+              expect(transcoded_video.state).to eq("processing")
+              expect(transcoded_video.job_id).to eq("grmc-123")
+            end
+
+            it "leaves its transcoded video completed when another job's callback settled it during the GRMC request" do
+              stub_request(:post, described_class::GRMC_ENDPOINT).to_return do
+                TranscodedVideo.last!.mark_completed
+                raise Sidekiq::Shutdown
+              end
+
+              expect do
+                described_class.new.perform(product_file.id)
+              end.to raise_error(Sidekiq::Shutdown)
+
+              expect(TranscodedVideo.last!.state).to eq("completed")
             end
           end
         end

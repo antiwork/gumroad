@@ -25,6 +25,16 @@ describe Collaborator::UpdateService do
       }
     end
 
+    it "returns an error without touching the product set when products are missing" do
+      params.delete(:products)
+
+      result = described_class.new(seller:, collaborator_id: collaborator.external_id, params:).process
+
+      expect(result[:success]).to eq false
+      expect(result[:collaborator].errors.to_hash).to eq({ base: ["At least one product must be selected"] })
+      expect(collaborator.reload.products).to match_array [product1, product2]
+    end
+
     context "with apply_to_all_products true" do
       it "updates the collaborator and its products, setting the existing percent commission on newly enabled products" do
         expect do

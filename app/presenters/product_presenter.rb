@@ -197,6 +197,8 @@ class ProductPresenter
         custom_view_content_button_text_max_length: Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH,
         custom_receipt_text: product.custom_receipt_text,
         custom_receipt_text_max_length: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH,
+        custom_failed_payment_text: product.custom_failed_payment_text,
+        custom_failed_payment_text_max_length: Product::Validations::MAX_CUSTOM_FAILED_PAYMENT_TEXT_LENGTH,
         custom_attributes: product.custom_attributes,
         taxonomy_attribute_values: product.seller_taxonomy_attribute_values,
         inferred_taxonomy_attribute_values: product.inferred_taxonomy_attribute_values,
@@ -393,8 +395,11 @@ class ProductPresenter
       # chrome can show an honest From value.
       receipt_email_from: from_address_with_name(product.user.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       price_checker_enabled: Feature.active?(:price_checker, product.user),
+      has_web_builds: product.build_player_enabled? && product.product_builds.exists?,
       custom_html_pages_enabled: Feature.active?(:custom_html_pages, product.user),
       auto_marketing_enabled: Marketing::Eligibility.enabled_for?(product.user),
+      # A collaborator edits the product but cannot email the owner's audience.
+      waitlist: pundit_user&.seller == product.user ? WaitlistLaunchEmail.new(product:).props : nil,
       # Hostnames the landing-page preview will follow a "navigate here" request
       # to. Same list the public wrapper enforces (User#custom_html_store_hostnames),
       # so seller HTML previewed in the editor can't open an arbitrary site.

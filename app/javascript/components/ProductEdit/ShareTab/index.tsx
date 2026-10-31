@@ -14,6 +14,7 @@ import { ShareYourLaunchCard } from "$app/components/ProductEdit/ShareTab/ShareY
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyAttributesEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyAttributesEditor";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
+import { WaitlistCard } from "$app/components/ProductEdit/ShareTab/WaitlistCard";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { ShareButtons } from "$app/components/ShareButtons";
 import { Alert } from "$app/components/ui/Alert";
@@ -37,6 +38,7 @@ export const ShareTab = () => {
     taxonomyAttributes,
     isListedOnDiscover,
     autoMarketingEnabled,
+    waitlist,
   } = useProductEditContext();
 
   const url = useProductUrl();
@@ -66,6 +68,9 @@ export const ShareTab = () => {
                 </Button>
               </CopyToClipboard>
             </ShareButtons>
+            {waitlist && product.is_published ? (
+              <WaitlistCard waitlist={waitlist} productName={product.name} productPermalink={uniquePermalink} />
+            ) : null}
             {autoMarketingEnabled && product.is_published ? (
               <>
                 <ShareYourLaunchCard productPermalink={uniquePermalink} />

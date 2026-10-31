@@ -2,6 +2,7 @@ import * as React from "react";
 
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ReceiptPreview, useReceiptPreview } from "$app/components/ProductEdit/ReceiptPreview";
+import { CustomFailedPaymentTextInput } from "$app/components/ProductEdit/ReceiptTab/CustomFailedPaymentTextInput";
 import { CustomReceiptTextInput } from "$app/components/ProductEdit/ReceiptTab/CustomReceiptTextInput";
 import { CustomViewContentButtonTextInput } from "$app/components/ProductEdit/ReceiptTab/CustomViewContentButtonTextInput";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
@@ -30,6 +31,11 @@ export const ReceiptTab = () => {
               value={product.custom_receipt_text}
               onChange={(value) => updateProduct({ custom_receipt_text: value })}
               maxLength={product.custom_receipt_text_max_length}
+            />
+            <CustomFailedPaymentTextInput
+              value={product.custom_failed_payment_text}
+              onChange={(value) => updateProduct({ custom_failed_payment_text: value })}
+              maxLength={product.custom_failed_payment_text_max_length}
             />
           </section>
         </form>

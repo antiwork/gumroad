@@ -1251,12 +1251,15 @@ class StripeChargeProcessor
 
   # Returns the evidence fields left out of the submission (see customer_communication_stripe_file).
   def fight_chargeback(stripe_charge_id, dispute_evidence, merchant_account: nil)
-    return [] if merchant_migrated? merchant_account
+    # Connect charges are direct charges on the seller's account: the dispute, its evidence and
+    # every evidence file live there, so each call has to carry that account's context or Stripe
+    # answers "no such charge".
+    request_options = merchant_migrated?(merchant_account) ? { stripe_account: merchant_account.charge_processor_merchant_id } : {}
 
     omitted_fields = []
     with_stripe_error_handler do
-      charge = Stripe::Charge.retrieve(stripe_charge_id)
-      customer_communication = customer_communication_stripe_file(dispute_evidence, omitted_fields)
+      charge = request_options.empty? ? Stripe::Charge.retrieve(stripe_charge_id) : Stripe::Charge.retrieve(stripe_charge_id, request_options)
+      customer_communication = customer_communication_stripe_file(dispute_evidence, omitted_fields, request_options:)
 
       evidence = {
         billing_address: dispute_evidence.billing_address,
@@ -1264,7 +1267,7 @@ class StripeChargeProcessor
         customer_name: dispute_evidence.customer_name,
         customer_purchase_ip: dispute_evidence.customer_purchase_ip,
         product_description: dispute_evidence.product_description,
-        receipt: create_dispute_evidence_stripe_file(dispute_evidence.receipt_image),
+        receipt: create_dispute_evidence_stripe_file(dispute_evidence.receipt_image, request_options:),
         service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
         shipping_address: dispute_evidence.shipping_address,
         shipping_carrier: dispute_evidence.shipping_carrier,
@@ -1275,9 +1278,9 @@ class StripeChargeProcessor
           dispute_evidence.uncategorized_text
         ].compact.join("\n\n"),
         access_activity_log: dispute_evidence.access_activity_log,
-        cancellation_policy: create_dispute_evidence_stripe_file(dispute_evidence.cancellation_policy_image),
+        cancellation_policy: create_dispute_evidence_stripe_file(dispute_evidence.cancellation_policy_image, request_options:),
         cancellation_policy_disclosure: dispute_evidence.cancellation_policy_disclosure,
-        refund_policy: create_dispute_evidence_stripe_file(dispute_evidence.refund_policy_image),
+        refund_policy: create_dispute_evidence_stripe_file(dispute_evidence.refund_policy_image, request_options:),
         refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
         cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
         refund_refusal_explanation: dispute_evidence.refund_refusal_explanation,
@@ -1292,7 +1295,7 @@ class StripeChargeProcessor
       idempotency_key = "dispute_evidence_#{dispute_evidence.external_id}"
       idempotency_key += "_#{Digest::SHA256.hexdigest(file_ids.join(","))[0, 32]}" if file_ids.any?
 
-      Stripe::Dispute.update(charge.dispute, { evidence: }, { idempotency_key: })
+      Stripe::Dispute.update(charge.dispute, { evidence: }, request_options.merge(idempotency_key:))
       omitted_fields
     end
   rescue ChargeProcessorInvalidRequestError => e
@@ -1911,14 +1914,14 @@ class StripeChargeProcessor
     # https://stripe.com/docs/api/files/object#file_object-purpose
     STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE = "dispute_evidence"
 
-    def create_dispute_evidence_stripe_file(blob)
+    def create_dispute_evidence_stripe_file(blob, request_options: {})
       return unless blob.attached?
 
       file = Tempfile.new(["#file", File.extname(blob.filename.to_s)], binmode: true)
       begin
         file.write(blob.download)
         file.rewind
-        Stripe::File.create(file:, purpose: STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE).id
+        Stripe::File.create({ file:, purpose: STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE }, request_options).id
       rescue ActiveStorage::FileNotFoundError => e
         ErrorNotifier.notify("Dispute evidence file missing from storage (blob_id=#{blob.id}): #{e.message}")
         nil
@@ -1931,8 +1934,8 @@ class StripeChargeProcessor
 
     # A seller file over Stripe's page limit fails its upload with a 400 that no retry can fix, and
     # one failed field must not throw away the receipt and access log we generated ourselves.
-    def customer_communication_stripe_file(dispute_evidence, omitted_fields)
-      create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file)
+    def customer_communication_stripe_file(dispute_evidence, omitted_fields, request_options: {})
+      create_dispute_evidence_stripe_file(dispute_evidence.customer_communication_file, request_options:)
     rescue Stripe::InvalidRequestError => e
       raise unless e.param == "file" && e.message.match?(STRIPE_FILE_PAGE_LIMIT_ERROR)
 

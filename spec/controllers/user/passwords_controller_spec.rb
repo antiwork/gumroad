@@ -101,6 +101,19 @@ describe User::PasswordsController, type: :controller, inertia: true do
       post :update, params: { user: { password: "password_new", password_confirmation: "password_new", reset_password_token: @user.send_reset_password_instructions } }
     end
 
+    it "revokes the user's current and legacy mobile application tokens after a successful password reset" do
+      mobile_access_token = create("doorkeeper/access_token", application: create(:oauth_application, uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID), resource_owner_id: @user.id, scopes: "mobile_api")
+      legacy_access_token = create("doorkeeper/access_token", application: create(:oauth_application, uid: OauthApplication::LEGACY_MOBILE_API_OAUTH_APPLICATION_UID), resource_owner_id: @user.id, scopes: "mobile_api creator_api")
+      third_party_access_token = create("doorkeeper/access_token", application: create(:oauth_application, scopes: "mobile_api"), resource_owner_id: @user.id, scopes: "mobile_api")
+
+      post :update, params: { user: { password: "password_new", password_confirmation: "password_new", reset_password_token: @user.send_reset_password_instructions } }
+
+      expect(@user.reload.valid_password?("password_new")).to be(true)
+      expect(mobile_access_token.reload.revoked_at).to be_present
+      expect(legacy_access_token.reload.revoked_at).to be_present
+      expect(third_party_access_token.reload.revoked_at).to be_nil
+    end
+
     context "when the user has email two-factor authentication enabled" do
       before do
         @user = create(:user, skip_enabling_two_factor_authentication: false)

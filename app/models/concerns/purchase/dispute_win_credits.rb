@@ -3,16 +3,17 @@
 module Purchase::DisputeWinCredits
   extend ActiveSupport::Concern
 
-  def create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents: 0)
+  def create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents: 0, credit: nil)
+    credit ||= affiliate_credit
     return if affiliate_credit_cents == 0 || amount_cents == 0
 
-    issued_currency, holding_currency = affiliate_reversal_currencies(dispute_won: true)
+    issued_currency, holding_currency = affiliate_reversal_currencies(dispute_won: true, credit:)
     affiliate_issued_amount = BalanceTransaction::Amount.create_issued_amount_for_affiliate(issued_affiliate_cents: amount_cents, currency: issued_currency)
     affiliate_holding_amount = BalanceTransaction::Amount.create_holding_amount_for_affiliate(issued_affiliate_cents: amount_cents, currency: holding_currency)
 
     Credit.create_for_dispute_won!(
         merchant_account: affiliate_merchant_account,
-        user: affiliate_credit.affiliate_user,
+        user: credit.affiliate_user,
         dispute: charge.present? ? charge.dispute : dispute,
         chargedback_purchase: self,
         balance_transaction_issued_amount: affiliate_issued_amount,
@@ -49,6 +50,8 @@ module Purchase::DisputeWinCredits
   end
 
   def create_credit_for_dispute_won!(flow_of_funds)
+    return create_credit_for_dispute_won_for_collab_and_direct_affiliate!(flow_of_funds) if credits_direct_affiliate?
+
     unless stripe_partially_refunded?
       # Short circuit for full refund, or dispute
       seller_disputed_cents = payment_cents - affiliate_credit_cents
@@ -64,6 +67,23 @@ module Purchase::DisputeWinCredits
       end
     end
     create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents: affiliate_disputed_cents)
+    create_credit_for_dispute_won_for_seller!(flow_of_funds, amount_cents: seller_disputed_cents)
+  end
+
+  # A won dispute on a collab purchase that also credits a direct affiliate gives each credit back
+  # what its chargeback took (see Purchase#decrement_balance_for_collab_and_direct_affiliate!).
+  def create_credit_for_dispute_won_for_collab_and_direct_affiliate!(flow_of_funds)
+    if stripe_partially_refunded?
+      disputed_fee_cents = ((fee_cents.to_f / price_cents.to_f) * amount_refundable_cents).floor
+      seller_disputed_cents, reversals = partial_affiliate_reversals(amount_refundable_cents, disputed_fee_cents)
+    else
+      seller_disputed_cents = payment_cents - affiliate_credit_cents
+      reversals = all_affiliate_credits.map { |credit| [credit, credit.amount_cents.to_i] }
+    end
+
+    reversals.each do |credit, amount_cents, _fee_cents|
+      create_credit_for_dispute_won_for_affiliate!(flow_of_funds, amount_cents:, credit:)
+    end
     create_credit_for_dispute_won_for_seller!(flow_of_funds, amount_cents: seller_disputed_cents)
   end
 end

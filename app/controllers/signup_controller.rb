@@ -77,6 +77,10 @@ class SignupController < Devise::RegistrationsController
   end
 
   def save_to_library
+    unless user_params?
+      return render json: { success: false, error_message: "Please provide a valid email address." }
+    end
+
     @user = build_user_with_params(permitted_params) if params[:user]
 
     if @user&.save
@@ -119,8 +123,14 @@ class SignupController < Devise::RegistrationsController
       )
     end
 
+    # A scalar `user` param (malformed or bot request) has no user fields to read, and `require`/`[]`
+    # raise on it: read it as no user params.
+    def user_params?
+      params[:user].is_a?(ActionController::Parameters)
+    end
+
     def handle_existing_users
-      if params[:user].present? && !params[:user].is_a?(ActionController::Parameters)
+      unless user_params?
         respond_to do |format|
           format.html { redirect_with_signup_error("Please provide a valid email address.") }
           format.json { render json: { success: false, error_message: "Please provide a valid email address." } }

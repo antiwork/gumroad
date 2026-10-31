@@ -4,9 +4,10 @@ class CreatePartnerMigrations < ActiveRecord::Migration[8.1]
   # Partner user IDs and Nano IDs are compared byte for byte; the table's collation ignores case,
   # accents and trailing spaces.
   EXACT_COLLATION = "utf8mb4_0900_bin"
-  # Renumbered after main took 20261221000001. A preview database that ran the old number already has
-  # the table, so up skips it, and down keeps it while the old number is recorded.
-  SUPERSEDED_VERSION = "20261221000003"
+  # Renumbered after main took 20261221000001, and then 20261222000001-20261222000003. A preview database
+  # that ran an earlier number already has the table, so up skips it, and down keeps it while one of the
+  # old numbers is recorded.
+  SUPERSEDED_VERSIONS = %w[20261221000003 20261222000003].freeze
 
   def up
     create_table :partner_migrations, if_not_exists: true do |t|
@@ -48,7 +49,7 @@ class CreatePartnerMigrations < ActiveRecord::Migration[8.1]
   end
 
   def down
-    return if select_value("SELECT 1 FROM schema_migrations WHERE version = #{connection.quote(SUPERSEDED_VERSION)}").present?
+    return if select_value("SELECT 1 FROM schema_migrations WHERE version IN (#{SUPERSEDED_VERSIONS.map { connection.quote(_1) }.join(", ")})").present?
 
     drop_table :partner_migrations
   end

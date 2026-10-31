@@ -1233,6 +1233,20 @@ describe UrlRedirectsController, inertia: true do
 
             expect(response).to be_successful
           end
+
+          it "grants access through the staff member's brand token without selecting the brand" do
+            brand = create(:user)
+            membership = create(:team_membership, user: admin_user, seller: brand, role: TeamMembership::ROLE_ADMIN)
+            brand_token = MobileAccountToken.issue!(application: oauth_app, scopes: "mobile_api", expires_in: nil, resource_owner: brand, team_membership: membership)
+
+            get :download_page, params: { id: @token, access_token: brand_token.token, mobile_token: Api::Mobile::BaseController::MOBILE_TOKEN }
+
+            expect(response).to be_successful
+            expect(controller.current_user).to eq(admin_user)
+            expect(controller.send(:logged_in_user)).to eq(purchaser)
+            expect(controller.current_seller).to eq(purchaser)
+            expect(cookies.encrypted[:current_seller_id]).to be_nil
+          end
         end
 
         it "requires mobile_token to match the expected value" do
@@ -2315,6 +2329,7 @@ describe UrlRedirectsController, inertia: true do
 
         it "sets the smil url and the original video url in sources if the video is not HLS-transcoded yet" do
           @video_file_1.update(is_transcoded_for_hls: false)
+          @transcoded_video.mark_deleted!
           get :stream, params: { id: @multifile_url_redirect.token }
           video_urls = inertia.props[:playlist]
 
@@ -2324,6 +2339,17 @@ describe UrlRedirectsController, inertia: true do
           expect(video_urls[0][:sources][0]).to include "stream.smil"
           expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
           expect(inertia.props[:index_to_play]).to eq 0
+        end
+
+        it "sets the m3u8 playlist url and the original video url in sources when the flag is stale but the video has an HLS rendition" do
+          @video_file_1.update(is_transcoded_for_hls: false)
+
+          get :stream, params: { id: @multifile_url_redirect.token, product_file_id: @video_file_1.external_id }
+          video_urls = inertia.props[:playlist]
+
+          expect(response).to be_successful
+          expect(video_urls[0][:sources][0]).to include "index.m3u8"
+          expect(video_urls[0][:sources][1]).to include @video_file_1.s3_filename
         end
 
         context "when the product has rich content" do
@@ -3796,115 +3822,6 @@ describe UrlRedirectsController, inertia: true do
     end
   end
 
-  describe "build saves" do
-    let(:seller) { create(:user) }
-    let(:product) { create(:product, user: seller) }
-    let(:purchase) { create(:purchase, link: product) }
-    let!(:url_redirect) { create(:url_redirect, link: product, purchase:) }
-
-    before do
-      create(:product_build, :live, product:)
-      Feature.activate_user(:product_build_player, seller)
-    end
-
-    describe "GET 'build_save'" do
-      it "returns an empty save before the first write" do
-        get :build_save, params: { id: url_redirect.token }, format: :json
-
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq("success" => true, "data" => {})
-      end
-
-      it "returns the purchase's save" do
-        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
-
-        get :build_save, params: { id: url_redirect.token }, format: :json
-
-        expect(response.parsed_body).to eq("success" => true, "data" => { "level" => "3" })
-      end
-
-      it "returns 404 when the flag is off for the seller" do
-        Feature.deactivate_user(:product_build_player, seller)
-
-        get :build_save, params: { id: url_redirect.token }, format: :json
-
-        expect(response).to have_http_status(:not_found)
-      end
-
-      it "returns 404 when the product has no live build" do
-        product.product_builds.update_all(status: "superseded")
-
-        get :build_save, params: { id: url_redirect.token }, format: :json
-
-        expect(response).to have_http_status(:not_found)
-      end
-
-      it "returns 404 when the link has no purchase" do
-        url_redirect_without_purchase = create(:url_redirect, link: product, purchase: nil)
-
-        get :build_save, params: { id: url_redirect_without_purchase.token }, format: :json
-
-        expect(response).to have_http_status(:not_found)
-      end
-
-      it "does not return the save of a refunded purchase" do
-        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
-        purchase.update!(stripe_refunded: true)
-
-        expect do
-          get :build_save, params: { id: url_redirect.token }, format: :json
-        end.to raise_error(ActionController::RoutingError)
-      end
-    end
-
-    describe "PATCH 'update_build_save'" do
-      it "applies a batch of changes to the purchase's save" do
-        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3", "name" => "Ana" })
-
-        patch :update_build_save, params: { id: url_redirect.token, set: { "level" => "4" }, remove: ["name"] }, as: :json
-
-        expect(response).to be_successful
-        expect(response.parsed_body).to eq("success" => true, "byte_size" => "level4".bytesize)
-        expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "4")
-      end
-
-      it "clears the save" do
-        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
-
-        patch :update_build_save, params: { id: url_redirect.token, clear: true }, as: :json
-
-        expect(response).to be_successful
-        expect(ProductBuildSave.find_by(purchase:).data).to eq({})
-      end
-
-      it "returns 422 with the reason when a limit is passed" do
-        patch :update_build_save, params: { id: url_redirect.token, set: { "level" => 4 } }, as: :json
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(response.parsed_body).to eq("success" => false, "error" => "Keys and values must be strings.")
-        expect(ProductBuildSave.count).to eq(0)
-      end
-
-      it "rejects a malformed batch whole, so its clear does not erase the save" do
-        ProductBuildSave.apply_changes!(purchase, set: { "level" => "3" })
-
-        patch :update_build_save, params: { id: url_redirect.token, clear: true, set: ["level", "4"] }, as: :json
-
-        expect(response).to have_http_status(:unprocessable_entity)
-        expect(ProductBuildSave.find_by(purchase:).data).to eq("level" => "3")
-      end
-
-      it "returns 404 and saves nothing when the flag is off for the seller" do
-        Feature.deactivate_user(:product_build_player, seller)
-
-        patch :update_build_save, params: { id: url_redirect.token, set: { "level" => "4" } }, as: :json
-
-        expect(response).to have_http_status(:not_found)
-        expect(ProductBuildSave.count).to eq(0)
-      end
-    end
-  end
-
   describe "POST 'save_last_content_page'" do
     let(:product) { create(:product_with_pdf_file) }
     let(:purchase) { create(:purchase, link: product) }
@@ -3927,6 +3844,33 @@ describe UrlRedirectsController, inertia: true do
       end.to change { purchase.reload.last_content_page_id }.from("old_page").to("new_page")
 
       expect(response).to be_successful
+    end
+
+    it "keeps every json_data key when the saved value grows past 255 characters" do
+      purchase.update!(locale: "pt-BR", perceived_price_cents: 129_900, recommender_model_name: RecommendedProductsService::MODEL_SALES,
+                       default_offer_code_id: 48_213_907, pre_discount_unit_price_cents: 149_900, custom_fee_per_thousand: 25,
+                       card_country_source: "stripe")
+      saved_json_data = purchase.reload.json_data
+
+      post :save_last_content_page, params: { id: url_redirect.token, page_id: "Xq3fT9LmP2vRk8NwZ5bHcA==" }
+
+      expect(response).to be_successful
+      purchase.reload
+      expect(purchase.read_attribute_before_type_cast(:json_data).length).to be > 255
+      expect(purchase.json_data).to eq(saved_json_data.merge("last_content_page_id" => "Xq3fT9LmP2vRk8NwZ5bHcA=="))
+    end
+
+    it "rejects a page id that is too long or not a string and leaves the purchase unchanged" do
+      purchase.update!(last_content_page_id: "Xq3fT9LmP2vRk8NwZ5bHcA==")
+      stored_json_data = purchase.reload.read_attribute_before_type_cast(:json_data)
+
+      [{ page_id: "p" * (UrlRedirectsController::MAX_CONTENT_PAGE_ID_LENGTH + 1) }, { page_id: { "nested" => "value" } }, { page_id: ["a", "b"] }].each do |page_params|
+        post :save_last_content_page, params: { id: url_redirect.token, **page_params }
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error" => "Invalid page")
+        expect(purchase.reload.read_attribute_before_type_cast(:json_data)).to eq(stored_json_data)
+      end
     end
 
     context "when there is no purchase" do

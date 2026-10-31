@@ -78,6 +78,27 @@ describe StripeEventHandler do
       end
     end
 
+    describe "a seller plan subscription event" do
+      let(:stripe_event) do
+        {
+          "id" => event_id,
+          "created" => "1406748559",
+          "type" => "checkout.session.completed",
+          "data" => {
+            "object" => {
+              "object" => "checkout.session",
+              "metadata" => { "seller_plan_offer_id" => "1" }
+            }
+          }
+        }
+      end
+
+      it "sends the event to the seller plan handler" do
+        expect(SellerPlan::StripeEventHandler).to receive(:handle_stripe_event).with(parsed(stripe_event))
+        described_class.new(stripe_event).handle_stripe_event
+      end
+    end
+
     describe "a payment intent failed event" do
       let(:stripe_event) do
         {

@@ -405,6 +405,20 @@ describe ProductPresenter do
     end
   end
 
+  describe "#edit_props waitlist" do
+    let(:seller) { create(:named_seller) }
+    let(:product) { create(:product, user: seller) }
+
+    before { create(:waitlist_entry, product:, follower: create(:active_follower, user: seller)) }
+
+    it "shows the waitlist to the product's seller only" do
+      collaborator = create(:user)
+
+      expect(described_class.new(product:, pundit_user: SellerContext.new(user: seller, seller:)).edit_props[:waitlist]).to include(count: 1)
+      expect(described_class.new(product:, pundit_user: SellerContext.new(user: collaborator, seller: collaborator)).edit_props[:waitlist]).to be_nil
+    end
+  end
+
   describe "#edit_props" do
     let(:request) { instance_double(ActionDispatch::Request, host: "test.gumroad.com", host_with_port: "test.gumroad.com:1234", protocol: "http", remote_ip: "0.0.0.0", params: {}, cookie_jar: {}) }
     let(:circle_integration) { create(:circle_integration) }
@@ -484,6 +498,8 @@ describe ProductPresenter do
             custom_view_content_button_text_max_length: 26,
             custom_receipt_text: "Thank you for purchasing! Feel free to contact us any time for support.",
             custom_receipt_text_max_length: 500,
+            custom_failed_payment_text: nil,
+            custom_failed_payment_text_max_length: 500,
             custom_attributes: { "Detail 1" => "Value 1" },
             file_attributes: [
               {
@@ -686,8 +702,10 @@ describe ProductPresenter do
           cancellation_discounts_enabled: false,
           receipt_email_from: "#{product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
           price_checker_enabled: false,
+          has_web_builds: false,
           custom_html_pages_enabled: false,
           auto_marketing_enabled: false,
+          waitlist: nil,
           custom_html_store_hostnames: product.user.custom_html_store_hostnames,
           custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
           custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
@@ -782,6 +800,18 @@ describe ProductPresenter do
 
       it "exposes price_checker_enabled: true in edit_props" do
         expect(presenter.edit_props[:price_checker_enabled]).to eq(true)
+      end
+    end
+
+    context "when the product has web builds" do
+      before { create(:product_build, product:) }
+
+      it "exposes has_web_builds only while the player is on for the seller" do
+        expect(presenter.edit_props[:has_web_builds]).to eq(false)
+
+        Feature.activate_user(:product_build_player, product.user)
+
+        expect(presenter.edit_props[:has_web_builds]).to eq(true)
       end
     end
 
@@ -960,6 +990,8 @@ describe ProductPresenter do
               custom_view_content_button_text_max_length: 26,
               custom_receipt_text: nil,
               custom_receipt_text_max_length: 500,
+              custom_failed_payment_text: nil,
+              custom_failed_payment_text_max_length: 500,
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,
@@ -1139,8 +1171,10 @@ describe ProductPresenter do
             cancellation_discounts_enabled: true,
             receipt_email_from: "#{membership.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
+            has_web_builds: false,
             custom_html_pages_enabled: false,
             auto_marketing_enabled: false,
+            waitlist: nil,
             custom_html_store_hostnames: membership.user.custom_html_store_hostnames,
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,
@@ -1277,6 +1311,8 @@ describe ProductPresenter do
               custom_view_content_button_text_max_length: 26,
               custom_receipt_text: nil,
               custom_receipt_text_max_length: 500,
+              custom_failed_payment_text: nil,
+              custom_failed_payment_text_max_length: 500,
               custom_attributes: [],
               file_attributes: [],
               max_purchase_count: nil,
@@ -1403,8 +1439,10 @@ describe ProductPresenter do
             cancellation_discounts_enabled: false,
             receipt_email_from: "#{new_product.user.name.presence || "Gumroad"} <noreply@#{CUSTOMERS_MAIL_DOMAIN}>",
             price_checker_enabled: false,
+            has_web_builds: false,
             custom_html_pages_enabled: false,
             auto_marketing_enabled: false,
+            waitlist: nil,
             custom_html_store_hostnames: new_product.user.custom_html_store_hostnames,
             custom_html_global_nav_hosts: VALID_REQUEST_HOSTS,
             custom_html_global_nav_paths: RendersCustomHtmlPages::GLOBAL_NAV_PATHS,

@@ -31,6 +31,7 @@ class SelfServiceAffiliateProduct < ApplicationRecord
   private
     def product_is_not_a_collab
       return unless product.present? && product.is_collab?
+      return if Feature.active?(:collab_and_affiliates, product.user)
       errors.add :base, "Collab products cannot have affiliates"
     end
 

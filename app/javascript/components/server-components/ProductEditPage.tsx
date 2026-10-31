@@ -52,6 +52,7 @@ import {
   reconcileCustomizablePrice,
   ShippingCountry,
   TaxonomyAttribute,
+  Waitlist,
 } from "$app/components/ProductEdit/state";
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -111,8 +112,10 @@ type Props = {
   cancellation_discounts_enabled: boolean;
   receipt_email_from: string;
   price_checker_enabled: boolean;
+  has_web_builds: boolean;
   custom_html_pages_enabled: boolean;
   auto_marketing_enabled: boolean;
+  waitlist: Waitlist | null;
   custom_html_store_hostnames: string[];
   custom_html_global_nav_hosts: string[];
   custom_html_global_nav_paths: string[];
@@ -163,8 +166,10 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
   receiptEmailFrom: props.receipt_email_from,
   priceCheckerEnabled: props.price_checker_enabled,
+  hasWebBuilds: props.has_web_builds,
   customHtmlPagesEnabled: props.custom_html_pages_enabled,
   autoMarketingEnabled: props.auto_marketing_enabled,
+  waitlist: props.waitlist,
   customHtmlStoreHostnames: props.custom_html_store_hostnames,
   customHtmlGlobalNavHosts: props.custom_html_global_nav_hosts,
   customHtmlGlobalNavPaths: props.custom_html_global_nav_paths,

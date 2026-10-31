@@ -114,7 +114,14 @@ class FollowersController < ApplicationController
       # be handed markup. Put the destination in the sentence for them, or the
       # visitor is told to go somewhere without being told where.
       if request.format.json?
-        message = "#{message} #{subscribe_url}" if subscribe_url.present?
+        waitlist_product = waitlist_product_from_params(followed_user)
+        if waitlist_product && waitlist_product.native_type != Link::NATIVE_TYPE_COFFEE
+          # The native waitlist page runs the challenge; the custom page cannot. Coffee's native page has no waitlist form.
+          native_url = waitlist_product.long_url
+          message = "Please join the waitlist from the product page so we can confirm you're not a bot: #{native_url}#{native_url.include?("?") ? "&" : "?"}native=true"
+        elsif subscribe_url.present?
+          message = "#{message} #{subscribe_url}"
+        end
         return render json: { success: false, message: }, status: :unprocessable_entity
       end
 

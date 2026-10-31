@@ -5,7 +5,11 @@ class UrlRedirectsController < ApplicationController
   include ProductsHelper
   include PageMeta::Favicon
 
-  layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page, :confirm_page, :read, :stream, :download_page]
+  # Page ids are rich content external ids (24 characters). The buyer sends this value and it is
+  # stored in purchases.json_data, so reject an oversized one here before JsonData's length guard raises.
+  MAX_CONTENT_PAGE_ID_LENGTH = 64
+
+  layout "inertia", only: [:expired, :rental_expired_page, :membership_inactive_page, :confirm_page, :read, :stream, :download_page, :play]
 
   before_action :fetch_url_redirect, except: %i[
     show stream download_subtitle_file subtitle_file_vtt read download_archive download_product_files
@@ -15,8 +19,8 @@ class UrlRedirectsController < ApplicationController
   before_action :check_permissions, only: %i[show stream download_page
                                              hls_playlist download_subtitle_file subtitle_file_vtt read
                                              download_archive download_product_files
-                                             save_last_content_page build_save update_build_save play]
-  before_action :require_product_build_player, only: %i[build_save update_build_save play]
+                                             save_last_content_page play]
+  before_action :require_product_build_player, only: :play
   before_action :hide_layouts, only: %i[
     show download_product_files smil hls_playlist download_subtitle_file subtitle_file_vtt
   ]
@@ -398,42 +402,33 @@ class UrlRedirectsController < ApplicationController
   def save_last_content_page
     return render json: { success: false, error: "Purchase not found" }, status: :unprocessable_entity if @url_redirect.purchase.blank?
 
-    @url_redirect.purchase.update!(last_content_page_id: params[:page_id])
+    page_id = params[:page_id]
+    valid_page_id = page_id.nil? || (page_id.is_a?(String) && page_id.length <= MAX_CONTENT_PAGE_ID_LENGTH)
+    return render json: { success: false, error: "Invalid page" }, status: :unprocessable_entity unless valid_page_id
+
+    @url_redirect.purchase.update!(last_content_page_id: page_id)
     render json: { success: true }
   end
 
-  # Opens the live build in the player's frame. Access is checked here, with the buyer's cookies,
-  # and the frame then loads the build under a grant (see ProductBuild#player_grant).
+  # The player page: the live build full-window, in a sandboxed frame, with the save bridge around it.
+  # Access is checked here, with the buyer's cookies, and the frame then loads the build under a grant
+  # (see ProductBuild#player_grant).
   def play
-    build = @url_redirect.referenced_link.product_builds.live.where.not(site_unpacked_at: nil).first
+    product = @url_redirect.referenced_link
+    build = product.product_builds.live.where.not(site_unpacked_at: nil).first
     return e404 if build.nil?
 
     # Playing starts a rental's viewing window, the same as streaming a video.
     @url_redirect.mark_rental_as_viewed!
     grant = build.player_grant(url_redirect_token: @url_redirect.token, purchase_id: @url_redirect.purchase_id)
-    # The trailing slash makes the build's relative file paths resolve under the grant.
-    redirect_to "#{request.path.chomp("/")}/#{grant}/"
-  end
+    set_meta_tag(title: product.name)
 
-  def build_save
-    save = ProductBuildSave.find_by(purchase: @url_redirect.purchase)
-    render json: { success: true, data: save&.data || {} }
-  end
-
-  # One batch of changes from the player's storage shims: `clear`, then `remove`, then `set`.
-  # The batch goes to the model unfiltered: `permit` would drop a malformed `set` and let its
-  # `clear` erase the save, so the model rejects the whole batch instead.
-  def update_build_save
-    set = params.fetch(:set, {})
-    save = ProductBuildSave.apply_changes!(
-      @url_redirect.purchase,
-      set: set.is_a?(ActionController::Parameters) ? set.to_unsafe_h : set,
-      remove: params.fetch(:remove, []),
-      clear: params.fetch(:clear, false),
-    )
-    render json: { success: true, byte_size: save.byte_size }
-  rescue ProductBuildSave::LimitError => e
-    render json: { success: false, error: e.message }, status: :unprocessable_entity
+    render inertia: "UrlRedirects/Play", props: {
+      title: product.name,
+      # The trailing slash makes the build's relative file paths resolve under the grant.
+      frame_url: "#{request.path.chomp("/")}/#{grant}/",
+      content_page_url: @url_redirect.download_page_url,
+    }
   end
 
   private
@@ -491,7 +486,7 @@ class UrlRedirectsController < ApplicationController
       # not open a session, and the caller must return before the redirect it makes next.
       return if performed?
 
-      sign_in current_api_user if current_api_user.present?
+      sign_in_current_api_user
     end
 
     def redirect_to_coffee_page_if_needed
@@ -654,15 +649,13 @@ class UrlRedirectsController < ApplicationController
       request.format.json? ? e404_json : e404
     end
 
-    # Saves are only for a purchase of a product that has a live build, so the store cannot be used
-    # as general storage. The flag is the player's kill switch.
+    # The player is only for a purchase of a product with a live build. The flag is its kill switch.
     def require_product_build_player
       product = @url_redirect.referenced_link
-      not_found = -> { request.format.json? ? e404_json : e404 }
-      return not_found.call if @url_redirect.purchase.nil? || product.nil?
-      return not_found.call unless Feature.active?(:product_build_player, product.user)
+      return e404 if @url_redirect.purchase.nil? || product.nil?
+      return e404 unless Feature.active?(:product_build_player, product.user)
 
-      not_found.call unless product.product_builds.live.exists?
+      e404 unless product.product_builds.live.exists?
     end
 
     def redirect_to_app_login(next_path)

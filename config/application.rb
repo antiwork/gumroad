@@ -123,6 +123,8 @@ module Gumroad
     else
       logger = Logger.new(STDOUT)
       config.lograge.enabled = true
+      # Skips the backtrace for rescued 4xx errors; controller 404s still get a lograge line with status and error.
+      config.action_dispatch.log_rescued_responses = false
     end
 
     config.logger = ActiveSupport::TaggedLogging.new(logger)

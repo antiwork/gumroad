@@ -449,10 +449,21 @@ describe "MCP server" do
         "create_draft_product" => "Create draft product",
         "update_product" => "Update product",
         "add_cover" => "Add cover",
+        "list_files" => "List files",
+        "add_file" => "Add file",
         "publish_product" => "Publish product",
         "unpublish_product" => "Unpublish product",
         "list_sales" => "List sales",
-        "list_payouts" => "List payouts"
+        "get_analytics" => "Get analytics",
+        "get_customers" => "Get customers",
+        "get_sales_totals" => "Get sales totals",
+        "get_subscriptions" => "Get subscriptions",
+        "list_payouts" => "List payouts",
+        "create_bundle" => "Create bundle",
+        "update_bundle" => "Update bundle",
+        "create_discount_code" => "Create discount code",
+        "update_discount_code" => "Update discount code",
+        "expire_discount_code" => "Expire discount code"
       )
     end
   end
@@ -511,17 +522,18 @@ describe "MCP server" do
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
         "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
-        "publish_product", "unpublish_product", "list_sales", "list_payouts"
+        "list_files", "add_file", "publish_product", "unpublish_product", "list_sales", "get_analytics", "get_customers", "get_sales_totals", "get_subscriptions", "list_payouts",
+        "create_bundle", "update_bundle", "create_discount_code", "update_discount_code", "expire_discount_code"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
       expect(annotations.values).to all(include("openWorldHint" => true))
-      %w[get_account list_products get_product list_sales list_payouts].each do |name|
+      %w[get_account list_products get_product list_files list_sales get_analytics get_customers get_sales_totals get_subscriptions list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
       end
-      %w[create_draft_product add_cover].each do |name|
+      %w[create_draft_product add_cover add_file create_discount_code].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => false)
       end
-      %w[update_product publish_product unpublish_product].each do |name|
+      %w[update_product publish_product unpublish_product update_bundle update_discount_code expire_discount_code].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => true)
       end
     end
@@ -547,6 +559,679 @@ describe "MCP server" do
       listed = sales.find { |sale| sale["id"] == purchase.external_id }
       expect(listed["email"]).to eq("buyer@example.com")
       expect(listed["refunded"]).to eq(false)
+    end
+
+    describe "get_analytics" do
+      let(:permalink) { @product.unique_permalink }
+
+      def get_analytics(arguments = {})
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_analytics", arguments: } })
+        response.parsed_body["result"]
+      end
+
+      before do
+        @seller.update_columns(created_at: 2.years.ago)
+        allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates)
+      end
+
+      it "returns no rows, without reading another day, for ranges before the account existed or in the future" do
+        expect_any_instance_of(CreatorAnalytics::CachingProxy).not_to receive(:data_for_dates)
+
+        [{ "start_date" => "2020-01-01", "end_date" => "2020-01-31" }, { "start_date" => 2.days.from_now.to_date.iso8601, "end_date" => 3.days.from_now.to_date.iso8601 }].each do |arguments|
+          expect(get_analytics(arguments)["structuredContent"]["rows"]).to eq([])
+        end
+      end
+
+      it "returns views, sales, revenue and conversion per product" do
+        allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_return(by_date: { views: { permalink => [10, 30] }, sales: { permalink => [1, 3] }, totals: { permalink => [1900, 5700] } })
+
+        result = get_analytics("start_date" => "2026-10-01", "end_date" => "2026-10-02")["structuredContent"]
+        expect(result["rows"]).to eq([{ "product_id" => @product.external_id, "product_name" => "Field notes", "views" => 40, "sales" => 4, "revenue_cents" => 7600, "conversion_rate" => 0.1 }])
+      end
+
+      it "sums referrers across products and filters to one product" do
+        other = create(:product, user: @seller)
+        by_referral = {
+          views: { permalink => { "direct" => [5, 5], "Twitter" => [2, 0] }, other.unique_permalink => { "direct" => [90, 0] } },
+          sales: { permalink => { "direct" => [1, 0] } },
+          totals: { permalink => { "direct" => [1900, 0] } }
+        }
+        allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_return(by_referral:)
+
+        rows = get_analytics("breakdown" => "referrer", "product_id" => @product.external_id)["structuredContent"]["rows"]
+        expect(rows).to eq([
+                             { "referrer" => "direct", "views" => 10, "sales" => 1, "revenue_cents" => 1900, "conversion_rate" => 0.1 },
+                             { "referrer" => "Twitter", "views" => 2, "sales" => 0, "revenue_cents" => 0, "conversion_rate" => 0.0 }
+                           ])
+      end
+
+      it "returns a null conversion rate when there were no views" do
+        allow_any_instance_of(CreatorAnalytics::CachingProxy).to receive(:data_for_dates).and_return(by_date: { views: { permalink => [0] }, sales: { permalink => [0] }, totals: { permalink => [0] } })
+
+        expect(get_analytics["structuredContent"]["rows"].first["conversion_rate"]).to be_nil
+      end
+
+      it "rejects bad dates, inverted ranges and ranges over a year" do
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_analytics", arguments: { "start_date" => "yesterday" } } })
+        expect(response.parsed_body.dig("error", "message")).to eq("start_date must be a date like 2026-10-31")
+
+        [{ "start_date" => "2026-10-05", "end_date" => "2026-10-01" }, { "start_date" => "2024-01-01", "end_date" => "2026-01-01" }].each do |arguments|
+          post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_analytics", arguments: } })
+          expect(response.parsed_body["error"]["code"]).to eq(-32602)
+        end
+      end
+
+      it "requires the view_sales scope" do
+        @token.update!(scopes: "view_profile")
+
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_analytics", arguments: {} } })
+
+        expect(response.parsed_body.to_s).to include("view_sales")
+      end
+    end
+
+    describe "get_customers" do
+      def get_customers(arguments = {})
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: } })
+        response.parsed_body["result"]
+      end
+
+      before { @seller.update_columns(timezone: "UTC") }
+
+      it "returns one row per buyer with order count, spend and order dates" do
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 2000, created_at: Time.utc(2026, 10, 20, 12))
+        create(:purchase, seller: @seller, link: @product, email: "second@example.com", price_cents: 500, created_at: Time.utc(2026, 10, 5, 12))
+        create(:failed_purchase, seller: @seller, link: @product, email: "third@example.com", price_cents: 9999)
+
+        expect(get_customers["structuredContent"]).to eq(
+          "breakdown" => "spend",
+          "currency" => "usd",
+          "time_zone" => "UTC",
+          "start_date" => nil,
+          "end_date" => nil,
+          "rows" => [
+            {
+              "email" => "buyer@example.com", "orders_count" => 2, "total_spend_cents" => 3900, "refunded_cents" => 0, "chargedback_cents" => 0,
+              "first_order_at" => Time.utc(2026, 10, 1, 12).iso8601, "last_order_at" => Time.utc(2026, 10, 20, 12).iso8601
+            },
+            {
+              "email" => "second@example.com", "orders_count" => 1, "total_spend_cents" => 500, "refunded_cents" => 0, "chargedback_cents" => 0,
+              "first_order_at" => Time.utc(2026, 10, 5, 12).iso8601, "last_order_at" => Time.utc(2026, 10, 5, 12).iso8601
+            }
+          ]
+        )
+      end
+
+      it "takes refunds and chargebacks out of spend and reports them apart from it" do
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900)
+        refunded = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 2500)
+        refunded.update_columns(stripe_refunded: true)
+        partially_refunded = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 2000)
+        partially_refunded.update_columns(stripe_partially_refunded: true)
+        create(:refund, purchase: partially_refunded, amount_cents: 500)
+        charged_back = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 3000)
+        charged_back.update_columns(chargeback_date: Time.current)
+
+        expect(get_customers["structuredContent"]["rows"].sole).to include(
+          "orders_count" => 4, "total_spend_cents" => 3400, "refunded_cents" => 3000, "chargedback_cents" => 3000
+        )
+      end
+
+      it "keeps a won dispute in spend" do
+        purchase = create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900)
+        purchase.update_columns(chargeback_date: Time.current, flags: Purchase.flag_mapping["flags"][:chargeback_reversed])
+
+        expect(get_customers["structuredContent"]["rows"].sole).to include(
+          "total_spend_cents" => 1900, "refunded_cents" => 0, "chargedback_cents" => 0
+        )
+      end
+
+      it "filters to one buyer and leaves other sellers' buyers out" do
+        create(:purchase, seller: @seller, link: @product, email: "buyer@example.com", price_cents: 1900)
+        create(:purchase, seller: @seller, link: @product, email: "second@example.com", price_cents: 2000)
+        create(:purchase, email: "buyer@example.com", price_cents: 5000)
+
+        rows = get_customers("email" => "buyer@example.com")["structuredContent"]["rows"]
+        expect(rows.sole).to include("email" => "buyer@example.com", "orders_count" => 1, "total_spend_cents" => 1900)
+        expect(get_customers["structuredContent"]["rows"].map { |row| row["email"] }).to eq(["second@example.com", "buyer@example.com"])
+      end
+
+      it "bounds the spend range on order dates and caps the rows" do
+        create(:purchase, seller: @seller, link: @product, email: "old@example.com", price_cents: 1900, created_at: Time.utc(2026, 9, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "recent@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 5, 12))
+
+        rows = get_customers("start_date" => "2026-10-01", "end_date" => "2026-10-31")["structuredContent"]["rows"]
+        expect(rows.map { |row| row["email"] }).to eq(["recent@example.com"])
+        expect(get_customers("limit" => 1)["structuredContent"]["rows"].size).to eq(1)
+      end
+
+      it "reports buyers whose first purchase was free and who paid later, with time to convert" do
+        create(:free_purchase, seller: @seller, link: @product, email: "converted@example.com", created_at: Time.utc(2026, 10, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "converted@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 31, 12))
+        create(:purchase, seller: @seller, link: @product, email: "paid-first@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 1, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "paid-first@example.com", created_at: Time.utc(2026, 10, 2, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "free-only@example.com", created_at: Time.utc(2026, 10, 1, 12))
+
+        expected = {
+          "email" => "converted@example.com", "free_at" => Time.utc(2026, 10, 1, 12).iso8601,
+          "converted_at" => Time.utc(2026, 10, 31, 12).iso8601, "days_to_convert" => 30.0
+        }
+        expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"]).to eq([expected])
+      end
+
+      it "bounds the conversion range on the paid purchase, not the free one" do
+        create(:free_purchase, seller: @seller, link: @product, email: "converted@example.com", created_at: Time.utc(2025, 1, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "converted@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 10, 12))
+
+        october = get_customers("breakdown" => "conversion", "start_date" => "2026-10-01", "end_date" => "2026-10-31")["structuredContent"]
+        expect(october["start_date"]).to eq("2026-10-01")
+        expect(october["rows"].sole).to include("days_to_convert" => 647.0)
+        expect(get_customers("breakdown" => "conversion", "start_date" => "2026-11-01")["structuredContent"]["rows"]).to eq([])
+      end
+
+      it "orders conversions by how long they took" do
+        create(:free_purchase, seller: @seller, link: @product, email: "slow@example.com", created_at: Time.utc(2026, 1, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "slow@example.com", price_cents: 1900, created_at: Time.utc(2026, 4, 11, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "quick@example.com", created_at: Time.utc(2026, 6, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "quick@example.com", price_cents: 1900, created_at: Time.utc(2026, 6, 2, 12))
+
+        rows = get_customers("breakdown" => "conversion")["structuredContent"]["rows"]
+        expect(rows.map { |row| row["email"] }).to eq(["quick@example.com", "slow@example.com"])
+        expect(rows.first["days_to_convert"]).to eq(1.0)
+      end
+
+      it "orders by elapsed time across a month and a year boundary, not by date arithmetic" do
+        # Subtracting two DATETIMEs on MySQL is not a duration: 1 day over a month boundary
+        # (20260201 - 20260131) is numerically larger than 19 days inside one month, and a year
+        # boundary is larger still, so a date-arithmetic sort inverts this and the cap drops the
+        # fastest converters.
+        create(:free_purchase, seller: @seller, link: @product, email: "crossing-year@example.com", created_at: Time.utc(2025, 12, 31, 12))
+        create(:purchase, seller: @seller, link: @product, email: "crossing-year@example.com", price_cents: 1900, created_at: Time.utc(2026, 1, 2, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "crossing-month@example.com", created_at: Time.utc(2026, 1, 31, 12))
+        create(:purchase, seller: @seller, link: @product, email: "crossing-month@example.com", price_cents: 1900, created_at: Time.utc(2026, 2, 1, 12))
+        create(:free_purchase, seller: @seller, link: @product, email: "inside-month@example.com", created_at: Time.utc(2026, 3, 1, 12))
+        create(:purchase, seller: @seller, link: @product, email: "inside-month@example.com", price_cents: 1900, created_at: Time.utc(2026, 3, 20, 12))
+
+        rows = get_customers("breakdown" => "conversion")["structuredContent"]["rows"]
+        expect(rows.map { |row| row["email"] }).to eq(["crossing-month@example.com", "crossing-year@example.com", "inside-month@example.com"])
+        expect(rows.map { |row| row["days_to_convert"] }).to eq([1.0, 2.0, 19.0])
+
+        # The cap has to keep the fastest converters, not the ones with the smallest date difference.
+        capped = get_customers("breakdown" => "conversion", "limit" => 1)["structuredContent"]["rows"]
+        expect(capped.map { |row| row["email"] }).to eq(["crossing-month@example.com"])
+      end
+
+      it "reads a same-second pair by id and skips a refunded paid order" do
+        same_second = Time.utc(2026, 10, 1, 12)
+        create(:free_purchase, seller: @seller, link: @product, email: "tied@example.com", created_at: same_second)
+        create(:purchase, seller: @seller, link: @product, email: "tied@example.com", price_cents: 1900, created_at: same_second)
+        create(:purchase, seller: @seller, link: @product, email: "paid-first@example.com", price_cents: 1900, created_at: same_second)
+        create(:free_purchase, seller: @seller, link: @product, email: "paid-first@example.com", created_at: same_second)
+        refunded_paid = create(:purchase, seller: @seller, link: @product, email: "refunded-paid@example.com", price_cents: 1900, created_at: Time.utc(2026, 10, 2, 12))
+        refunded_paid.update_columns(stripe_refunded: true)
+        create(:free_purchase, seller: @seller, link: @product, email: "refunded-paid@example.com", created_at: Time.utc(2026, 10, 1, 12))
+
+        expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"].map { |row| row["email"] }).to eq(["tied@example.com"])
+      end
+
+      it "does not count a buyer whose first purchase was paid, even when it was refunded" do
+        first_paid = create(:purchase, seller: @seller, link: @product, email: "paid-then-free@example.com", price_cents: 1900, created_at: Time.utc(2026, 9, 1, 12))
+        first_paid.update_columns(stripe_refunded: true)
+        create(:free_purchase, seller: @seller, link: @product, email: "paid-then-free@example.com", created_at: Time.utc(2026, 9, 5, 12))
+        create(:purchase, seller: @seller, link: @product, email: "paid-then-free@example.com", price_cents: 1900, created_at: Time.utc(2026, 9, 10, 12))
+
+        expect(get_customers("breakdown" => "conversion")["structuredContent"]["rows"]).to eq([])
+      end
+
+      it "rejects bad dates, an inverted range, an unknown breakdown and a limit over 50" do
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: { "start_date" => "yesterday" } } })
+        expect(response.parsed_body.dig("error", "message")).to eq("start_date must be a date like 2026-10-31")
+
+        [{ "start_date" => "2026-10-05", "end_date" => "2026-10-01" }, { "breakdown" => "buyers" }, { "limit" => 51 }].each do |arguments|
+          post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: } })
+          expect(response.parsed_body["error"]["code"]).to eq(-32602)
+        end
+      end
+      it "requires the view_sales scope" do
+        @token.update!(scopes: "view_profile")
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_customers", arguments: {} } })
+
+        expect(response.parsed_body.to_s).to include("view_sales")
+      end
+    end
+
+    describe "get_sales_totals" do
+      def get_sales_totals(arguments = {})
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_sales_totals", arguments: } })
+        response.parsed_body["result"]["structuredContent"]
+      end
+
+      before { @seller.update!(timezone: "Eastern Time (US & Canada)") }
+
+      it "returns revenue, units and average order value per product, counting only sales that still stand" do
+        other = create(:product, user: @seller, name: "Stickers", price_cents: 500)
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 6, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 2, 28, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 7, 16, 0), stripe_refunded: true)
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 8, 16, 0), chargeback_date: Time.utc(2026, 3, 9, 12, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 0, created_at: Time.utc(2026, 3, 9, 16, 0)).update!(is_bundle_product_purchase: true)
+        create(:purchase, seller: @seller, link: other, price_cents: 500, created_at: Time.utc(2026, 3, 10, 16, 0))
+
+        result = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31")
+
+        expect(result["rows"]).to eq([
+                                       { "product_id" => @product.external_id, "product_name" => "Field notes", "revenue_cents" => 3800, "units" => 2, "average_order_value_cents" => 1900 },
+                                       { "product_id" => other.external_id, "product_name" => "Stickers", "revenue_cents" => 500, "units" => 1, "average_order_value_cents" => 500 }
+                                     ])
+        expect(result["totals"]).to eq("revenue_cents" => 4300, "units" => 3, "average_order_value_cents" => 1433)
+        expect(result).to include("start_date" => "2026-03-01", "end_date" => "2026-03-31", "time_zone" => "Eastern Time (US & Canada)",
+                                  "currency" => "usd", "breakdown" => "product")
+      end
+
+      it "counts a free download as a unit with no revenue" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 0, created_at: Time.utc(2026, 3, 6, 16, 0))
+
+        row = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31")["rows"].first
+
+        expect(row).to include("revenue_cents" => 1900, "units" => 2, "average_order_value_cents" => 950)
+      end
+
+      it "returns totals of zero and no rows when the range has no sales" do
+        result = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31")
+
+        expect(result["rows"]).to eq([])
+        expect(result["totals"]).to eq("revenue_cents" => 0, "units" => 0, "average_order_value_cents" => nil)
+      end
+
+      it "groups by the sale's country, falling back to the IP country" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, country: "US", ip_country: "GB", created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 700, country: nil, ip_country: "DE", created_at: Time.utc(2026, 3, 6, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 500, country: nil, ip_country: nil, created_at: Time.utc(2026, 3, 7, 16, 0))
+
+        rows = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31", "breakdown" => "country")["rows"]
+
+        expect(rows).to eq([
+                             { "country" => "US", "revenue_cents" => 1900, "units" => 1, "average_order_value_cents" => 1900 },
+                             { "country" => "DE", "revenue_cents" => 700, "units" => 1, "average_order_value_cents" => 700 },
+                             { "country" => nil, "revenue_cents" => 500, "units" => 1, "average_order_value_cents" => 500 }
+                           ])
+      end
+
+      it "counts a commission completion's revenue but not as a second unit" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 4500, created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 4500, created_at: Time.utc(2026, 3, 6, 16, 0)).update!(is_commission_completion_purchase: true)
+
+        result = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31")
+
+        expect(result["totals"]).to eq("revenue_cents" => 9000, "units" => 1, "average_order_value_cents" => 9000)
+        expect(result["rows"].first).to include("revenue_cents" => 9000, "units" => 1)
+      end
+
+      it "merges spellings of one country into a single row" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 1000, country: "South Korea", created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: @product, price_cents: 500, country: "Korea, Republic of", created_at: Time.utc(2026, 3, 6, 16, 0))
+
+        rows = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31", "breakdown" => "country")["rows"]
+
+        expect(rows).to eq([{ "country" => "South Korea", "revenue_cents" => 1500, "units" => 2, "average_order_value_cents" => 750 }])
+      end
+
+      it "puts a sale in the local day its own zone offset gives, across a daylight-saving change" do
+        # US daylight time starts 2026-03-08; each sale sits just after local midnight in the offset in force then.
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 2, 4, 30))
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 10, 4, 30))
+
+        rows = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31", "breakdown" => "day")["rows"]
+
+        expect(rows.pluck("date")).to eq(["2026-03-01", "2026-03-10"])
+        expect(rows).to all(include("revenue_cents" => 1900, "units" => 1, "average_order_value_cents" => 1900))
+      end
+
+      it "dates week rows on their Monday and month rows on the first of the month" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 10, 4, 0))
+
+        expect(get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31", "breakdown" => "week")["rows"].first).to include("date" => "2026-03-09", "units" => 1)
+        expect(get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31", "breakdown" => "month")["rows"].first).to include("date" => "2026-03-01", "units" => 1)
+      end
+
+      it "filters to one product" do
+        other = create(:product, user: @seller, name: "Stickers", price_cents: 500)
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: Time.utc(2026, 3, 5, 16, 0))
+        create(:purchase, seller: @seller, link: other, price_cents: 500, created_at: Time.utc(2026, 3, 6, 16, 0))
+
+        result = get_sales_totals("start_date" => "2026-03-01", "end_date" => "2026-03-31", "product_id" => @product.external_id)
+
+        expect(result["rows"].pluck("product_id")).to eq([@product.external_id])
+        expect(result["totals"]).to eq("revenue_cents" => 1900, "units" => 1, "average_order_value_cents" => 1900)
+      end
+
+      it "defaults to the last 30 days" do
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: 10.days.ago)
+        create(:purchase, seller: @seller, link: @product, price_cents: 1900, created_at: 40.days.ago)
+
+        expect(get_sales_totals["rows"].first).to include("revenue_cents" => 1900, "units" => 1)
+      end
+
+      it "rejects bad dates, inverted ranges and ranges over a year" do
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_sales_totals", arguments: { "start_date" => "yesterday" } } })
+        expect(response.parsed_body.dig("error", "message")).to eq("start_date must be a date like 2026-10-31")
+
+        [{ "start_date" => "2026-10-05", "end_date" => "2026-10-01" }, { "start_date" => "2024-01-01", "end_date" => "2026-01-01" }].each do |arguments|
+          post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_sales_totals", arguments: } })
+          expect(response.parsed_body["error"]["code"]).to eq(-32602)
+        end
+      end
+
+      it "requires the view_sales scope" do
+        @token.update!(scopes: "view_profile")
+
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_sales_totals", arguments: {} } })
+
+        expect(response.parsed_body.to_s).to include("view_sales")
+      end
+    end
+
+
+    describe "get_subscriptions" do
+      def get_subscriptions(arguments = {})
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_subscriptions", arguments: } })
+        response.parsed_body["result"]
+      end
+
+      let(:product) { create(:product, :is_subscription, user: @seller, name: "Field notes") }
+      let(:subscriber) { create(:user, email: "subscriber@example.com") }
+
+      it "gives each subscription's status, start date, cancel date and buyer" do
+        cancelled = create(:subscription, link: product, user: subscriber, created_at: 2.days.ago, cancelled_at: 1.week.from_now)
+        alive = create(:subscription, link: product, user: create(:user), created_at: 1.day.ago)
+
+        subscriptions = get_subscriptions["structuredContent"]["subscriptions"]
+
+        expect(subscriptions.map { |row| row["id"] }).to eq([alive.external_id, cancelled.external_id])
+        expect(subscriptions.last).to eq(
+          "id" => cancelled.external_id,
+          "product_id" => product.external_id,
+          "product_name" => "Field notes",
+          "email" => "subscriber@example.com",
+          "status" => "pending_cancellation",
+          "started_at" => cancelled.created_at.iso8601,
+          "cancelled_at" => cancelled.cancelled_at.iso8601,
+          "failed_at" => nil,
+          "ended_at" => nil,
+          "failed_payments" => 0
+        )
+        expect(subscriptions.first).to include("status" => "alive", "cancelled_at" => nil)
+      end
+
+      it "leaves the email empty when a subscription has no subscriber and no purchase" do
+        orphan = create(:subscription, link: product, user: nil)
+        create(:subscription, link: product, user: subscriber)
+
+        rows = get_subscriptions["structuredContent"]["subscriptions"]
+
+        expect(rows.find { |row| row["id"] == orphan.external_id }["email"]).to be_nil
+      end
+
+      it "reads the current purchase's email after a plan change archived the first one" do
+        subscription = create(:subscription, link: product, user: nil)
+        first = create(:purchase, link: product, subscription:, is_original_subscription_purchase: true, email: "old@example.com")
+        first.update!(is_archived_original_subscription_purchase: true)
+        create(:purchase, link: product, subscription:, is_original_subscription_purchase: true, email: "new@example.com")
+
+        row = get_subscriptions["structuredContent"]["subscriptions"].find { |r| r["id"] == subscription.external_id }
+
+        expect(row["email"]).to eq("new@example.com")
+      end
+
+      it "filters to alive or ended, to one product, and never to a test subscription" do
+        ended = create(:subscription, link: product, user: subscriber, cancelled_at: 1.week.ago, deactivated_at: 1.week.ago)
+        period_ended = create(:subscription, link: product, user: subscriber, ended_at: 1.week.ago)
+        alive = create(:subscription, link: product, user: subscriber)
+        other_product = create(:product, :is_subscription, user: @seller)
+        elsewhere = create(:subscription, link: other_product, user: subscriber)
+        create(:subscription, link: product, user: subscriber, is_test_subscription: true)
+
+        expect(get_subscriptions("status" => "ended")["structuredContent"]["subscriptions"].map { |row| row["id"] }).to eq([period_ended.external_id, ended.external_id])
+        expect(get_subscriptions("status" => "alive")["structuredContent"]["subscriptions"].map { |row| row["id"] }).to eq([elsewhere.external_id, alive.external_id])
+        expect(get_subscriptions["structuredContent"]["subscriptions"].map { |row| row["id"] }).to eq([elsewhere.external_id, alive.external_id, period_ended.external_id, ended.external_id])
+        expect(get_subscriptions("product_id" => other_product.external_id)["structuredContent"]["subscriptions"].map { |row| row["id"] }).to eq([elsewhere.external_id])
+      end
+
+      it "pages with a cursor without repeating or skipping subscriptions" do
+        subscriptions = Array.new(3) { |i| create(:subscription, link: product, user: subscriber, created_at: (i + 1).hours.ago) }
+
+        first = get_subscriptions("limit" => 2)["structuredContent"]
+        expect(first["subscriptions"].map { |row| row["id"] }).to eq(subscriptions.first(2).map(&:external_id))
+
+        second = get_subscriptions("limit" => 2, "cursor" => first["next_cursor"])["structuredContent"]
+        expect(second["subscriptions"].map { |row| row["id"] }).to eq([subscriptions.last.external_id])
+        expect(second).not_to have_key("next_cursor")
+      end
+
+      it "counts the failed charges on a subscription" do
+        subscription = create(:membership_purchase, seller: @seller, link: product).subscription
+        create(:failed_purchase, link: product, subscription:, is_original_subscription_purchase: false)
+        create(:failed_purchase, link: product, subscription:, is_original_subscription_purchase: false)
+        create(:purchase, link: product, subscription:, is_original_subscription_purchase: false)
+
+        expect(get_subscriptions["structuredContent"]["subscriptions"].first["failed_payments"]).to eq(2)
+      end
+
+      def stub_churn(churn_events:, new_subscriptions:, initial_active_counts:)
+        fetcher = instance_double(
+          CreatorAnalytics::Churn::ElasticsearchFetcher,
+          churn_events:,
+          new_subscriptions:,
+          initial_active_counts:
+        )
+        allow(CreatorAnalytics::Churn::ElasticsearchFetcher).to receive(:new).and_return(fetcher)
+      end
+
+      it "reports churn by month from the source the dashboard reads" do
+        @seller.update_columns(created_at: 2.years.ago)
+        stub_churn(
+          churn_events: { [product.id, Date.new(2026, 1, 10)] => { churned_count: 2, revenue_lost_cents: 5000 } },
+          new_subscriptions: { [product.id, Date.new(2026, 1, 3)] => 3 },
+          initial_active_counts: { product.id => 10 }
+        )
+
+        result = get_subscriptions("breakdown" => "churn", "start_date" => "2026-01-01", "end_date" => "2026-01-31")["structuredContent"]
+
+        expect(result).to include("start_date" => "2026-01-01", "end_date" => "2026-01-31", "breakdown" => "churn")
+        expect(result["rows"]).to eq([{
+                                       "month" => "2026-01-01",
+                                       "subscriber_base" => 13,
+                                       "churned" => 2,
+                                       "churn_rate_percent" => 15.38,
+                                       "revenue_lost_cents" => 5000
+                                     }])
+      end
+
+      it "reports churn for one product only" do
+        @seller.update_columns(created_at: 2.years.ago)
+        other_product = create(:product, :is_subscription, user: @seller)
+        stub_churn(
+          churn_events: { [product.id, Date.new(2026, 1, 10)] => { churned_count: 2, revenue_lost_cents: 5000 } },
+          new_subscriptions: {},
+          initial_active_counts: { product.id => 10, other_product.id => 200 }
+        )
+
+        rows = get_subscriptions("breakdown" => "churn", "product_id" => product.external_id, "start_date" => "2026-01-01", "end_date" => "2026-01-31")["structuredContent"]["rows"]
+
+        expect(rows).to eq([{
+                             "month" => "2026-01-01",
+                             "subscriber_base" => 10,
+                             "churned" => 2,
+                             "churn_rate_percent" => 20.0,
+                             "revenue_lost_cents" => 5000
+                           }])
+      end
+
+      it "returns no rows, without reading the source, for a range that has not started" do
+        expect_any_instance_of(CreatorAnalytics::Churn).not_to receive(:generate_data)
+
+        result = get_subscriptions("breakdown" => "churn", "start_date" => 2.days.from_now.to_date.iso8601, "end_date" => 3.days.from_now.to_date.iso8601)["structuredContent"]
+
+        expect(result["rows"]).to eq([])
+      end
+
+      it "defaults to the twelve months ending today without tripping its own range limit" do
+        @seller.update_columns(created_at: 2.years.ago)
+        expected_start = (Time.find_zone(@seller.timezone).today - Mcp::Server::SUBSCRIPTION_CHURN_DEFAULT_MONTHS.months).beginning_of_month
+        stub_churn(
+          churn_events: { [product.id, expected_start + 5.days] => { churned_count: 1, revenue_lost_cents: 100 } },
+          new_subscriptions: {},
+          initial_active_counts: { product.id => 9 }
+        )
+
+        result = get_subscriptions("breakdown" => "churn")["structuredContent"]
+
+        expect(result["start_date"]).to eq(expected_start.iso8601)
+        expect(result["rows"].first).to include("month" => expected_start.iso8601, "churned" => 1, "churn_rate_percent" => 11.11)
+      end
+
+      it "rejects bad dates, inverted ranges and ranges over a year" do
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_subscriptions", arguments: { "breakdown" => "churn", "start_date" => "yesterday" } } })
+        expect(response.parsed_body.dig("error", "message")).to eq("start_date must be a date like 2026-10-31")
+
+        [{ "start_date" => "2026-10-05", "end_date" => "2026-10-01" }, { "start_date" => "2024-01-01", "end_date" => "2026-01-01" }].each do |arguments|
+          post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_subscriptions", arguments: arguments.merge("breakdown" => "churn") } })
+          expect(response.parsed_body["error"]["code"]).to eq(-32602)
+        end
+      end
+
+      it "requires the view_sales scope" do
+        @token.update!(scopes: "view_profile")
+
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "get_subscriptions", arguments: {} } })
+
+        expect(response.parsed_body.to_s).to include("view_sales")
+      end
+    end
+
+    describe "list_sales pagination, filters and fields" do
+      def list_sales(arguments)
+        post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "list_sales", arguments: } })
+        response.parsed_body.dig("result", "structuredContent")
+      end
+
+      it "pages with a cursor without repeating or skipping sales" do
+        purchases = Array.new(3) { |i| create(:purchase, seller: @seller, link: @product, created_at: (i + 1).hours.ago) }
+
+        first = list_sales({ "limit" => 2 })
+        expect(first["sales"].map { |s| s["id"] }).to eq(purchases.first(2).map(&:external_id))
+        expect(first["next_cursor"]).to be_present
+
+        second = list_sales({ "limit" => 2, "cursor" => first["next_cursor"] })
+        expect(second["sales"].map { |s| s["id"] }).to eq([purchases.last.external_id])
+        expect(second).not_to have_key("next_cursor")
+      end
+
+      it "breaks created_at ties by id across page boundaries" do
+        at = 1.hour.ago.change(usec: 0)
+        purchases = Array.new(3) { create(:purchase, seller: @seller, link: @product, created_at: at) }
+
+        first = list_sales({ "limit" => 2 })
+        second = list_sales({ "limit" => 2, "cursor" => first["next_cursor"] })
+
+        expect((first["sales"] + second["sales"]).map { |s| s["id"] }).to match_array(purchases.map(&:external_id))
+        expect(second).not_to have_key("next_cursor")
+      end
+
+      it "breaks created_at ties by id for products and payouts" do
+        @token.update!(scopes: "account")
+        at = 1.hour.ago.change(usec: 0)
+        products = Array.new(3) { create(:product, user: @seller, created_at: at) }
+        payments = Array.new(3) { create(:payment, user: @seller, created_at: at) }
+
+        { "list_products" => ["products", Link.where(id: products.map(&:id)).map(&:external_id)],
+          "list_payouts" => ["payouts", payments.map(&:external_id)] }.each do |tool, (key, expected)|
+          page = ->(args) do
+            post_mcp({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: tool, arguments: args } })
+            response.parsed_body.dig("result", "structuredContent")
+          end
+          seen = []
+          cursor = nil
+          loop do
+            result = page.call({ "limit" => 2, "cursor" => cursor }.compact)
+            seen += result[key].map { |row| row["id"] }
+            cursor = result["next_cursor"]
+            break unless cursor
+          end
+          expect(seen & expected).to match_array(expected)
+          expect(seen).to eq(seen.uniq)
+        end
+      end
+
+      it "treats installment plan payments as one-time, not subscription" do
+        membership = create(:membership_purchase, seller: @seller, link: create(:membership_product, user: @seller))
+        installment = create(:purchase, seller: @seller, link: @product)
+        plan = create(:subscription, link: @product, user: nil)
+        plan.update!(is_installment_plan: true)
+        installment.update_columns(subscription_id: plan.id)
+
+        subs = list_sales({ "kind" => "subscription" })["sales"].map { |s| s["id"] }
+        one_time = list_sales({ "kind" => "one_time" })["sales"].map { |s| s["id"] }
+        expect(subs).to include(membership.external_id)
+        expect(subs).not_to include(installment.external_id)
+        expect(one_time).to include(installment.external_id)
+        expect(one_time).not_to include(membership.external_id)
+        expect(list_sales({})["sales"].find { |s| s["id"] == installment.external_id }["subscription"]).to eq(false)
+      end
+
+      it "rejects a malformed cursor" do
+        list_sales({ "cursor" => "nope" })
+        expect(response.parsed_body.dig("error", "message")).to eq("cursor is not valid")
+      end
+
+      it "rejects a cursor or date outside the years a datetime column holds" do
+        list_sales({ "cursor" => "#{Time.utc(10_000).to_i * Mcp::Server::MICROSECONDS_PER_SECOND}_1" })
+        expect(response.parsed_body.dig("error", "message")).to eq("cursor is not valid")
+
+        list_sales({ "after" => "10000-01-01" })
+        expect(response.parsed_body.dig("error", "message")).to eq("after must be a date or ISO 8601 time")
+
+        list_sales({ "before" => "9999-12-31T23:00:00-05:00" })
+        expect(response.parsed_body.dig("error", "message")).to eq("before must be a date or ISO 8601 time")
+
+        list_sales({ "after" => "-0001-01-01" })
+        expect(response.parsed_body.dig("error", "message")).to eq("after must be a date or ISO 8601 time")
+      end
+
+      it "accepts dates inside the years a datetime column holds", :aggregate_failures do
+        sale = create(:purchase, seller: @seller, link: @product)
+        ids = ->(filter) { list_sales(filter)&.fetch("sales")&.map { |s| s["id"] } }
+
+        expect(ids.call({ "after" => "0000-01-01" })).to eq([sale.external_id])
+        expect(ids.call({ "after" => "0999-01-01" })).to eq([sale.external_id])
+        expect(ids.call({ "before" => "9999-12-31" })).to eq([sale.external_id])
+      end
+
+      it "filters by product, date range, paid vs free" do
+        other = create(:product, user: @seller)
+        old = create(:purchase, seller: @seller, link: @product, created_at: Time.utc(2026, 9, 1, 12))
+        recent = create(:purchase, seller: @seller, link: @product, created_at: Time.utc(2026, 10, 10, 12))
+        free = create(:free_purchase, seller: @seller, link: other, created_at: Time.utc(2026, 10, 11, 12))
+
+        ids = ->(args) { list_sales(args)["sales"].map { |s| s["id"] } }
+        expect(ids.call({ "product_id" => other.external_id })).to eq([free.external_id])
+        expect(ids.call({ "after" => "2026-10-01", "before" => "2026-10-11" })).to eq([recent.external_id])
+        expect(ids.call({ "payment" => "free" })).to eq([free.external_id])
+        expect(ids.call({ "payment" => "paid" })).to match_array([old.external_id, recent.external_id])
+      end
+
+      it "returns net amount, country, discount code and UTM fields" do
+        purchase = create(:purchase, seller: @seller, link: @product, price_cents: 1900, country: "Jamaica", referrer: "https://example.com/post")
+        purchase.update_columns(fee_cents: 250, affiliate_credit_cents: 100)
+
+        sale = list_sales({})["sales"].find { |s| s["id"] == purchase.external_id }
+        expect(sale).to include("fee_cents" => 250, "affiliate_commission_cents" => 100, "net_cents" => 1550,
+                                "country" => "Jamaica", "referrer" => "https://example.com/post",
+                                "subscription" => false, "discount_code" => nil, "utm_source" => nil)
+      end
     end
 
     it "refuses a write tool" do
@@ -584,6 +1269,128 @@ describe "MCP server" do
       product = @seller.links.find_by_external_id(payload["id"])
       expect(product).to be_draft
       expect(product.purchase_disabled_at).to be_present
+    end
+
+    describe "creating a membership" do
+      let(:tiers) do
+        [
+          { name: "Reader", price_cents: 500, recurrence: "monthly" },
+          { name: "Supporter", price_cents: 1500, recurrence: "monthly" }
+        ]
+      end
+
+      it "creates a draft membership with its tiers and their recurring prices" do
+        expect do
+          call_tool("create_draft_product", { name: "Field club", product_type: "membership", tiers:, description: "Monthly notes." })
+        end.to change(@seller.links, :count).by(1)
+
+        payload = response.parsed_body.dig("result", "structuredContent", "product")
+        product = @seller.links.find_by_external_id(payload["id"])
+        expect(product.native_type).to eq(Link::NATIVE_TYPE_MEMBERSHIP)
+        expect(product).to be_is_tiered_membership
+        expect(product).to be_is_recurring_billing
+        expect(product.subscription_duration).to eq("monthly")
+        expect(product).to be_draft
+        expect(product.purchase_disabled_at).to be_present
+        expect(product.taxonomy.slug).to eq("other")
+        expect(product.description).to eq("Monthly notes.")
+        expect(product.should_show_all_posts).to eq(true)
+        expect(product.should_include_last_post).to eq(true)
+
+        created_tiers = product.tiers.alive.order(:position_in_category)
+        expect(created_tiers.map(&:name)).to eq(%w[Reader Supporter])
+        expect(created_tiers.map { _1.alive_prices.is_buy.pluck(:recurrence, :price_cents) }).to eq([[["monthly", 500]], [["monthly", 1500]]])
+        expect(product.alive_prices.is_buy.pluck(:recurrence, :price_cents)).to eq([["monthly", 0]])
+
+        expect(payload).to include("published" => false, "price_cents" => nil, "pay_what_you_want" => false)
+        expect(payload["tiers"]).to eq([
+                                         { "id" => created_tiers.first.external_id, "name" => "Reader", "pay_what_you_want" => false,
+                                           "prices" => { "monthly" => { "price_cents" => 500, "suggested_price_cents" => nil } } },
+                                         { "id" => created_tiers.second.external_id, "name" => "Supporter", "pay_what_you_want" => false,
+                                           "prices" => { "monthly" => { "price_cents" => 1500, "suggested_price_cents" => nil } } }
+                                       ])
+      end
+
+      it "uses the tiers' recurrence as the billing period" do
+        call_tool("create_draft_product", { name: "Annual club", product_type: "membership", tiers: [{ name: "Member", price_cents: 5000, recurrence: "yearly" }] })
+
+        product = @seller.links.find_by_external_id(response.parsed_body.dig("result", "structuredContent", "product", "id"))
+        expect(product.subscription_duration).to eq("yearly")
+        expect(product.tiers.alive.sole.alive_prices.is_buy.pluck(:recurrence, :price_cents)).to eq([["yearly", 5000]])
+      end
+
+      it "makes a $0 tier pay what you want, as the editor does" do
+        call_tool("create_draft_product", { name: "Open club", product_type: "membership", tiers: [{ name: "Paid", price_cents: 500, recurrence: "monthly" }, { name: "Free", price_cents: 0, recurrence: "monthly" }] })
+
+        tiers = response.parsed_body.dig("result", "structuredContent", "product", "tiers")
+        expect(tiers.map { _1.slice("name", "pay_what_you_want") }).to eq([{ "name" => "Paid", "pay_what_you_want" => false }, { "name" => "Free", "pay_what_you_want" => true }])
+      end
+
+      it "reports a tier price below the currency minimum as a tool error and creates nothing" do
+        expect do
+          call_tool("create_draft_product", { name: "Cheap club", product_type: "membership", tiers: [{ name: "Member", price_cents: 10, recurrence: "monthly" }] })
+        end.not_to change { [Link.count, BaseVariant.count, BasePrice.count] }
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("must be at least")
+      end
+
+      it "rolls back the whole membership when a later tier is priced below the currency minimum" do
+        expect do
+          call_tool("create_draft_product", { name: "Half club", product_type: "membership", tiers: [{ name: "Reader", price_cents: 500, recurrence: "monthly" }, { name: "Cheap", price_cents: 10, recurrence: "monthly" }] })
+        end.not_to change { [Link.count, VariantCategory.count, BaseVariant.count, BasePrice.count] }
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("must be at least")
+      end
+
+      {
+        "no tiers" => [{ product_type: "membership" }, "tiers are required for a membership"],
+        "an empty tier list" => [{ product_type: "membership", tiers: [] }, "tiers are required for a membership"],
+        "tiers on a digital product" => [{ product_type: "digital", price_cents: 500, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] }, "tiers are only accepted with product_type membership"],
+        "tiers with no product_type" => [{ price_cents: 500, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] }, "tiers are only accepted with product_type membership"],
+        "a bad recurrence" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "weekly" }] }, "tiers[0].recurrence must be one of: monthly, quarterly, biannually, yearly, every_two_years"],
+        "mixed recurrences" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }, { name: "B", price_cents: 5000, recurrence: "yearly" }] }, "every tier must use the same recurrence"],
+        "a negative tier price" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: -1, recurrence: "monthly" }] }, "tiers[0].price_cents must be an integer of zero or more"],
+        "a later tier priced over the maximum" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }, { name: "B", price_cents: BasePrice::Shared::MAX_PRICE_CENTS + 1, recurrence: "monthly" }] }, "tiers[1].price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}"],
+        "a fractional tier price" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 4.5, recurrence: "monthly" }] }, "tiers[0].price_cents must be an integer of zero or more"],
+        "a blank tier name" => [{ product_type: "membership", tiers: [{ name: " ", price_cents: 500, recurrence: "monthly" }] }, "tiers[0].name must be a non-blank string"],
+        "a tier missing its recurrence" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500 }] }, "tiers[0].recurrence is required"],
+        "an unknown tier argument" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly", pay_what_you_want: true }] }, "tiers[0] has unknown argument: pay_what_you_want"],
+        "a tier that is not an object" => [{ product_type: "membership", tiers: ["Reader"] }, "tiers[0] must be an object"],
+        "tiers that are not a list" => [{ product_type: "membership", tiers: { name: "A" } }, "tiers must be an array"],
+        "a top-level price on a membership" => [{ product_type: "membership", price_cents: 500, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] }, "price_cents is not accepted for a membership; set each tier's price_cents"],
+        "a digital product with no price" => [{ product_type: "digital" }, "price_cents is required"],
+      }.each do |label, (arguments, message)|
+        it "rejects #{label} without creating a product" do
+          expect { call_tool("create_draft_product", { name: "Club", **arguments }) }.not_to change(Link, :count)
+
+          expect(response.parsed_body["error"]).to eq("code" => -32602, "message" => message)
+        end
+      end
+
+      %w[physical call bundle commission podcast coffee Membership].each do |product_type|
+        it "rejects product_type #{product_type}" do
+          expect do
+            call_tool("create_draft_product", { name: "Other", price_cents: 500, product_type:, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] })
+          end.not_to change(Link, :count)
+
+          expect(response.parsed_body["error"]).to eq("code" => -32602, "message" => "product_type must be one of: digital, membership")
+        end
+      end
+
+      it "creates a digital product exactly as before when product_type is digital" do
+        call_tool("create_draft_product", { name: "Field guide", price_cents: 1900, product_type: "digital" })
+
+        payload = response.parsed_body.dig("result", "structuredContent", "product")
+        product = @seller.links.find_by_external_id(payload["id"])
+        expect(product.native_type).to eq(Link::NATIVE_TYPE_DIGITAL)
+        expect(product.price_cents).to eq(1900)
+        expect(product).not_to be_is_tiered_membership
+        expect(product.variant_categories).to be_empty
+        expect(payload).to include("price_cents" => 1900)
+        expect(payload).not_to have_key("tiers")
+      end
     end
 
     it "answers a batch with per-message errors and no challenge, so a retry cannot repeat the write" do
@@ -649,10 +1456,115 @@ describe "MCP server" do
       expect(@product.price_cents).to eq(1900)
     end
 
+    it "changes the URL and keeps the old one pointing at the product" do
+      @product.update!(custom_permalink: "field-notes-original")
+
+      call_tool("update_product", { id: @product.external_id, permalink: "field-notes-renamed" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.custom_permalink).to eq("field-notes-renamed")
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "url")).to eq(@product.long_url)
+      expect(Link.fetch_leniently("field-notes-original", user: @seller)).to eq(@product)
+    end
+
+    it "gives a product its first custom URL" do
+      call_tool("update_product", { id: @product.external_id, permalink: "field-notes-first" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.custom_permalink).to eq("field-notes-first")
+      expect(@product.long_url).to end_with("/l/field-notes-first")
+    end
+
+    it "clears the custom URL back to the default one" do
+      @product.update!(custom_permalink: "field-notes-temporary")
+
+      call_tool("update_product", { id: @product.external_id, permalink: "" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.custom_permalink).to be_nil
+      expect(@product.long_url).to end_with("/l/#{@product.unique_permalink}")
+      expect(Link.fetch_leniently("field-notes-temporary", user: @seller)).to eq(@product)
+    end
+
+    it "rejects a URL with characters the editor does not allow" do
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "field notes!" }) }
+        .not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text"))
+        .to eq("Custom permalink can only contain letters, numbers, dashes, and underscores")
+    end
+
+    it "rejects a URL another of the seller's products already uses" do
+      create(:product, user: @seller, name: "Other notes", custom_permalink: "field-notes-taken")
+
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "field-notes-taken" }) }
+        .not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "content", 0, "text"))
+        .to eq("Custom permalink is already used by another one of your products")
+    end
+
+    it "refuses a whitespace-only permalink instead of clearing the URL" do
+      @product.update!(custom_permalink: "field-notes-kept")
+
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "   " }) }
+        .not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include(
+        "code" => -32602, "message" => "permalink must not be blank. Send an empty string to go back to the default URL."
+      )
+    end
+
+    it "leaves the URL and the redirect rows alone when the permalink is unchanged" do
+      @product.update!(custom_permalink: "field-notes-same")
+
+      expect { call_tool("update_product", { id: @product.external_id, permalink: "field-notes-same" }) }
+        .not_to change { [ProductPermalinkRedirect.count, LegacyPermalink.count, @product.reload.custom_permalink] }
+
+      expect(response.parsed_body["error"]).to be_nil
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "url")).to end_with("/l/field-notes-same")
+    end
+
+    it "takes the seller row before the product row when it changes the URL" do
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") { |*, payload| statements << payload[:sql].to_s }
+      begin
+        call_tool("update_product", { id: @product.external_id, permalink: "field-notes-locked" })
+      ensure
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      expect(response.parsed_body.dig("result", "isError")).to be_nil
+      seller_lock = statements.index { _1.include?("FROM `users`") && _1.include?("FOR UPDATE") }
+      product_lock = statements.index { _1.include?("FROM `links`") && _1.include?("FOR UPDATE") }
+      expect(seller_lock).to be_present
+      expect(seller_lock).to be < product_lock
+    end
+
+    it "saves nothing and asks for a retry when another save moves the URL while it waits for the lock" do
+      @product.update!(custom_permalink: "field-notes-before")
+      allow_any_instance_of(Link).to receive(:lock!).and_wrap_original do |original, *args|
+        Link.where(id: @product.id).update_all(custom_permalink: "field-notes-concurrent")
+        original.call(*args)
+      end
+
+      expect { call_tool("update_product", { id: @product.external_id, name: "Field notes, vol. 3", permalink: "field-notes-before" }) }
+        .not_to change { [@product.reload.attributes, ProductPermalinkRedirect.count, LegacyPermalink.count] }
+
+      expect(response.parsed_body["result"]).to include(
+        "isError" => true,
+        "content" => [{ "type" => "text", "text" => "This product's URL changed while the update was waiting. Nothing was saved; try the update again." }]
+      )
+    end
+
     it "rejects an update with no fields to change" do
       expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
 
-      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, or price_cents")
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, price_cents, or permalink")
     end
 
     it "rejects a blank name without changing the product" do
@@ -759,6 +1671,221 @@ describe "MCP server" do
       expect(SsrfFilter).not_to have_received(:get)
       expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
     end
+
+    describe "bundles" do
+      let!(:member) { create(:product, user: @seller, name: "Second notes") }
+
+      it "creates a draft bundle that sells the products it is given, in order" do
+        expect do
+          call_tool("create_bundle", { name: "Field kit", price_cents: 4500, product_ids: [@product.external_id, member.unique_permalink] })
+        end.to change { @seller.links.count }.by(1)
+
+        expect(response).to be_successful
+        content = response.parsed_body.dig("result", "structuredContent")
+        bundle = @seller.links.find_by_external_id!(content.dig("product", "id"))
+        expect(bundle).to be_is_bundle
+        expect(bundle.native_type).to eq(Link::NATIVE_TYPE_BUNDLE)
+        expect(bundle).to be_draft
+        expect(content["product"]).to include("name" => "Field kit", "price_cents" => 4500, "published" => false, "is_bundle" => true)
+        expect(content["bundle_products"]).to eq([
+                                                   { "id" => @product.external_id, "name" => "Field notes", "variant_id" => nil, "quantity" => 1 },
+                                                   { "id" => member.external_id, "name" => "Second notes", "variant_id" => nil, "quantity" => 1 }
+                                                 ])
+        expect(content["message"]).to include("not for sale until publish_product")
+        expect(bundle.bundle_products.alive.in_order.map { _1.product.external_id }).to eq([@product.external_id, member.external_id])
+      end
+
+      it "adds a product sold in versions at its first version" do
+        versioned = create(:product_with_digital_versions, user: @seller, name: "Print")
+
+        call_tool("create_bundle", { name: "Field kit", price_cents: 4500, product_ids: [versioned.external_id] })
+
+        expect(response).to be_successful
+        bundle = @seller.links.find_by_name("Field kit")
+        expect(bundle.bundle_products.alive.sole.variant).to eq(versioned.variants_or_skus.first)
+      end
+
+      it "keeps the version a retained member already sells" do
+        versioned = create(:product_with_digital_versions, user: @seller, name: "Print")
+        chosen = versioned.alive_variants.last
+        expect(chosen).not_to eq(versioned.variants_or_skus.first)
+        bundle = create(:product, :bundle, user: @seller)
+        bundle.bundle_products.create!(product: versioned, variant: chosen, quantity: 1, position: 0)
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [versioned.external_id, member.external_id] })
+
+        expect(response).to be_successful
+        content = response.parsed_body.dig("result", "structuredContent")
+        expect(content["bundle_products"].first).to include("id" => versioned.external_id, "variant_id" => chosen.external_id)
+        expect(bundle.reload.bundle_products.alive.find_by(product_id: versioned.id).variant).to eq(chosen)
+      end
+
+      it "keeps the quantity a retained member already sells, and adds a new member once" do
+        bundle = create(:product, :bundle, user: @seller)
+        kept = bundle.bundle_products.alive.in_order.first
+        kept.update!(quantity: 3)
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [kept.product.external_id, member.external_id] })
+
+        expect(response).to be_successful
+        expect(kept.reload.quantity).to eq(3)
+        expect(bundle.reload.bundle_products.alive.find_by!(product: member).quantity).to eq(1)
+        expect(response.parsed_body.dig("result", "structuredContent", "bundle_products").map { _1["quantity"] }).to eq([3, 1])
+      end
+
+      it "leaves a bundle's members alone when one of the new ids is unknown" do
+        bundle = create(:product, :bundle, user: @seller)
+        kept = bundle.bundle_products.alive.in_order.first
+
+        expect do
+          call_tool("update_bundle", { id: bundle.external_id, product_ids: [kept.product.external_id, "no-such-product"] })
+        end.not_to change { bundle.reload.bundle_products.alive.map(&:product_id) }
+
+        expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+      end
+
+      it "creates nothing when a later id belongs to another seller" do
+        theirs = create(:product, name: "Theirs")
+
+        expect do
+          call_tool("create_bundle", { name: "Half mine", price_cents: 100, product_ids: [@product.external_id, theirs.external_id] })
+        end.not_to change { [Link.count, BundleProduct.count] }
+
+        expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+      end
+
+      it "refuses a product id that is not a string" do
+        expect { call_tool("create_bundle", { name: "Numbers", price_cents: 100, product_ids: [@product.external_id, 123] }) }.not_to change { Link.count }
+
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids[1] must be a non-blank string")
+      end
+
+      it "refuses a blank product id" do
+        expect { call_tool("create_bundle", { name: "Blank", price_cents: 100, product_ids: ["  "] }) }.not_to change { Link.count }
+
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids[0] must be a non-blank string")
+      end
+
+      it "gives a retained member its product's first version once that product is sold in versions" do
+        bundle = create(:product, :bundle, user: @seller)
+        kept = bundle.bundle_products.alive.in_order.first
+        category = create(:variant_category, title: "Format", link: kept.product)
+        create(:variant, variant_category: category, name: "PDF")
+        create(:variant, variant_category: category, name: "EPUB")
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [kept.product.external_id] })
+
+        expect(response).to be_successful
+        expect(kept.reload).to have_attributes(variant: kept.product.reload.variants_or_skus.first, deleted_at: nil)
+        expect(kept.variant).to be_present
+      end
+
+      it "re-adds a removed member with the defaults rather than its old version" do
+        versioned = create(:product_with_digital_versions, user: @seller, name: "Print")
+        bundle = create(:product, :bundle, user: @seller)
+        removed = bundle.bundle_products.create!(product: versioned, variant: versioned.alive_variants.last, quantity: 2, position: 2)
+        removed.mark_deleted!
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [versioned.external_id] })
+
+        expect(response).to be_successful
+        expect(removed.reload).to have_attributes(deleted_at: nil, variant: versioned.variants_or_skus.first, quantity: 1)
+      end
+
+      it "refuses an empty product list without creating anything" do
+        expect { call_tool("create_bundle", { name: "Empty", price_cents: 100, product_ids: [] }) }.not_to change { Link.count }
+
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids must name at least one product")
+      end
+
+      it "refuses a product_ids value that is not a list" do
+        expect { call_tool("create_bundle", { name: "Empty", price_cents: 100, product_ids: "field-notes" }) }.not_to change { Link.count }
+
+        expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "product_ids must be an array")
+      end
+
+      it "refuses another seller's product and creates nothing" do
+        theirs = create(:product, name: "Theirs")
+
+        expect { call_tool("create_bundle", { name: "Mine now", price_cents: 100, product_ids: [theirs.external_id] }) }.not_to change { [Link.count, BundleProduct.count] }
+
+        expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+      end
+
+      it "creates nothing when one of the products cannot go in a bundle" do
+        membership = create(:membership_product, user: @seller)
+
+        expect do
+          call_tool("create_bundle", { name: "Half made", price_cents: 100, product_ids: [@product.external_id, membership.external_id] })
+        end.not_to change { [Link.count, BundleProduct.count] }
+
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("A subscription product cannot be added to a bundle")
+      end
+
+      it "replaces the products a bundle sells, keeping its name, price, and published state" do
+        bundle = create(:product, :bundle, user: @seller, name: "Field kit", price_cents: 4500)
+
+        call_tool("update_bundle", { id: bundle.unique_permalink, product_ids: [member.external_id] })
+
+        expect(response).to be_successful
+        content = response.parsed_body.dig("result", "structuredContent")
+        expect(content["bundle_products"]).to eq([{ "id" => member.external_id, "name" => "Second notes", "variant_id" => nil, "quantity" => 1 }])
+        expect(bundle.reload.bundle_products.alive.map { _1.product.external_id }).to eq([member.external_id])
+        expect(bundle.name).to eq("Field kit")
+        expect(bundle.price_cents).to eq(4500)
+        expect(bundle).to be_published
+      end
+
+      it "soft deletes the members it was not handed, and keeps the order it was given" do
+        bundle = create(:product, :bundle, user: @seller)
+        dropped, kept = bundle.bundle_products.alive.in_order.to_a
+
+        call_tool("update_bundle", { id: bundle.external_id, product_ids: [kept.product.external_id, member.external_id] })
+
+        expect(response).to be_successful
+        expect(dropped.reload).to be_deleted
+        expect(bundle.reload.bundle_products.alive.in_order.map { _1.product.external_id }).to eq([kept.product.external_id, member.external_id])
+      end
+
+      it "changes nothing when one of the products cannot go in a bundle" do
+        bundle = create(:product, :bundle, user: @seller)
+        membership = create(:membership_product, user: @seller)
+
+        expect do
+          call_tool("update_bundle", { id: bundle.external_id, product_ids: [member.external_id, membership.external_id] })
+        end.not_to change { bundle.reload.bundle_products.alive.map(&:product_id) }
+
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("A subscription product cannot be added to a bundle")
+      end
+
+      it "refuses a product that is not a bundle, without turning it into one" do
+        call_tool("update_bundle", { id: @product.external_id, product_ids: [member.external_id] })
+
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("This product is not a bundle. Make one with create_bundle first.")
+        expect(@product.reload).not_to be_is_bundle
+        expect(@product.bundle_products).to be_empty
+      end
+
+      it "refuses another seller's bundle" do
+        theirs = create(:product, :bundle, name: "Theirs")
+
+        expect { call_tool("update_bundle", { id: theirs.external_id, product_ids: [member.external_id] }) }.not_to change { theirs.reload.bundle_products.alive.map(&:product_id) }
+
+        expect(response.parsed_body.dig("result", "content")).to include(include("text" => "The product was not found."))
+      end
+
+      it "reads a bundle's products back, and leaves a single product's details alone" do
+        bundle = create(:product, :bundle, user: @seller)
+
+        call_tool("get_product", { id: bundle.external_id })
+        content = response.parsed_body.dig("result", "structuredContent", "product")
+        expect(content["is_bundle"]).to eq(true)
+        expect(content["bundle_products"].map { _1["id"] }).to eq(bundle.bundle_products.alive.in_order.map { _1.product.external_id })
+
+        call_tool("get_product", { id: @product.external_id })
+        expect(response.parsed_body.dig("result", "structuredContent", "product")).not_to have_key("bundle_products")
+      end
+    end
   end
 
   context "with a default-scope (view_public) token" do
@@ -787,6 +1914,14 @@ describe "MCP server" do
         %(error_description="This tool requires the edit_products or account scope.")
       )
       expect(response.parsed_body["error"]).to eq("code" => -32000, "message" => "This tool requires the edit_products or account scope.")
+    end
+
+    it "rejects bad membership arguments before asking for edit_products" do
+      expect { post_mcp({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Club", product_type: "membership" } } }) }.not_to change(Link, :count)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body["error"]).to eq("code" => -32602, "message" => "tiers are required for a membership")
     end
 
     it "names a required scope the client registered when the first one is unregistered" do
@@ -1491,7 +2626,7 @@ describe "MCP server" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product."},"description":{"type":"string","description":"HTML or plain-text description."}},"additionalProperties":false,"required":["name","price_cents"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Recent successful sales. Includes buyer email, product, amount, and time.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"email":{"type":"string","description":"Filter by buyer email."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers."},"description":{"type":"string","description":"HTML or plain-text description."},"product_type":{"type":"string","enum":["digital","membership"],"description":"digital (default) or membership."},"tiers":{"type":"array","minItems":1,"description":"Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.","items":{"type":"object","properties":{"name":{"type":"string","description":"Tier name."},"price_cents":{"type":"integer","description":"Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want."},"recurrence":{"type":"string","enum":["monthly","quarterly","biannually","yearly","every_two_years"],"description":"Billing period."}},"required":["name","price_cents","recurrence"],"additionalProperties":false}}},"additionalProperties":false,"required":["name"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."},"permalink":{"type":"string","description":"New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."},"email":{"type":"string","description":"Filter by buyer email."},"product_id":{"type":"string","description":"Only sales of this product (id from list_products)."},"after":{"type":"string","description":"Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01."},"before":{"type":"string","description":"Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01."},"payment":{"type":"string","enum":["paid","free"],"description":"paid = price above zero, free = zero-price sales."},"kind":{"type":"string","enum":["subscription","one_time"],"description":"subscription = membership charges, one_time = everything else."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_analytics","title":"Get analytics","description":"Product page views, sales and revenue for a date range, so conversion rate (sales / views) can be computed. breakdown=product (default) gives one row per product; breakdown=referrer gives views, sales and revenue per traffic source. Revenue is price minus refunds and chargebacks, before fees, in minor units of USD. Dates are in the creator's time zone and default to the last 30 days.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","referrer"],"description":"product (default) or referrer."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_customers","title":"Get customers","description":"Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, refunded and charged-back amounts, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who later paid, with days to convert. Amounts are price before fees in minor units of USD, with refunds and chargebacks reported on their own lines; start_date and end_date are days in the creator's time zone that bound order dates, or the purchase that converted.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["spend","conversion"],"description":"spend (default) or conversion."},"email":{"type":"string","description":"Only this buyer's email."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD, in the creator's time zone. Omit for all time."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD, inclusive. Omit for all time."},"limit":{"type":"integer","description":"Max buyers to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_sales_totals","title":"Get sales totals","description":"Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","country","day","week","month"],"description":"product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_subscriptions","title":"Get subscriptions","description":"The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["subscriptions","churn"],"description":"subscriptions (default) or churn."},"limit":{"type":"integer","description":"Max subscriptions to return (1-50, default 25). breakdown=subscriptions only."},"cursor":{"type":"string","description":"next_cursor from the previous page. breakdown=subscriptions only."},"status":{"type":"string","enum":["alive","ended"],"description":"alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"create_discount_code","title":"Create discount code","description":"Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The code buyers enter. Letters, numbers, dashes, and underscores."},"product_id":{"type":"string","description":"Product id or permalink. Omit for a code that covers all of the creator's products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_discount_code","title":"Update discount code","description":"Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"expire_discount_code","title":"Expire discount code","description":"End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
       JSON
     end
 
@@ -1958,6 +3093,266 @@ describe "MCP server" do
 
       expect(response).to have_http_status(:unauthorized)
       expect($redis.hgetall(RedisKey.mcp_protocol_requests(Date.current))).to be_empty
+    end
+  end
+
+  context "discount code tools" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "edit_products")
+    end
+
+    def call_tool(name, arguments)
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name:, arguments: } })
+    end
+
+    def tool_result = response.parsed_body["result"]
+
+    it "creates a universal percent code" do
+      expect { call_tool("create_discount_code", { code: "SPRING20", percent_off: 20 }) }.to change(OfferCode, :count).by(1)
+
+      offer_code = @seller.offer_codes.last
+      expect(offer_code).to have_attributes(code: "SPRING20", universal: true, link_id: nil, amount_percentage: 20, amount_cents: nil)
+      expect(offer_code.products).to be_empty
+      expect(tool_result["structuredContent"]["discount_code"]).to include(
+        "id" => offer_code.external_id, "code" => "SPRING20", "scope" => "universal", "product_ids" => [],
+        "percent_off" => 20, "amount_cents" => nil, "expires_at" => nil, "expired" => false
+      )
+    end
+
+    it "creates a code bound to one of the seller's products" do
+      other_product = create(:product, user: @seller, price_cents: 1900)
+
+      call_tool("create_discount_code", { code: "NOTES5", product_id: @product.unique_permalink, amount_cents: 500, max_purchase_count: 10, valid_at: "2026-01-01T00:00:00Z", expires_at: "2099-01-01T00:00:00Z" })
+
+      offer_code = @seller.offer_codes.find_by!(code: "NOTES5")
+      expect(offer_code.universal).to eq(false)
+      expect(offer_code.products).to eq([@product])
+      expect(offer_code.applicable?(other_product)).to eq(false)
+      expect(offer_code).to have_attributes(amount_cents: 500, currency_type: "usd", max_purchase_count: 10, valid_at: Time.utc(2026, 1, 1), expires_at: Time.utc(2099, 1, 1))
+      expect(tool_result["structuredContent"]["discount_code"]).to include("scope" => @product.external_id, "product_ids" => [@product.external_id], "amount_cents" => 500, "currency" => "usd")
+    end
+
+    it "rejects an amount that breaks the minimum-price rule with the editor's message" do
+      expect { call_tool("create_discount_code", { code: "TOODEEP", product_id: @product.external_id, amount_cents: 1850 }) }.not_to change(OfferCode, :count)
+
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to eq("The price after discount for all of your products must be either $0 or at least $0.99.")
+    end
+
+    it "refuses a code that already exists instead of creating a second one" do
+      call_tool("create_discount_code", { code: "ONCE", percent_off: 10 })
+
+      expect { call_tool("create_discount_code", { code: "ONCE", percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to eq("Discount code must be unique.")
+
+      expect { call_tool("create_discount_code", { code: "ONCE", product_id: @product.external_id, percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(tool_result.dig("content", 0, "text")).to eq("Discount code must be unique.")
+    end
+
+    it "requires exactly one of percent_off or amount_cents" do
+      expect { call_tool("create_discount_code", { code: "BOTH", percent_off: 10, amount_cents: 100 }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass only one of percent_off or amount_cents")
+
+      expect { call_tool("create_discount_code", { code: "NEITHER" }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass one of percent_off or amount_cents")
+
+      call_tool("create_discount_code", { code: "TOOMUCH", percent_off: 101 })
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+    end
+
+    it "refuses another seller's product and creates nothing" do
+      other_product = create(:product, price_cents: 1900)
+
+      expect { call_tool("create_discount_code", { code: "THEIRS", product_id: other_product.external_id, percent_off: 10 }) }.not_to change(OfferCode, :count)
+
+      expect(tool_result.dig("content", 0, "text")).to eq("The product was not found.")
+    end
+
+    it "refuses an amount too large to store with the editor's message" do
+      expect { call_tool("create_discount_code", { code: "HUGE", amount_cents: 3_000_000_000 }) }.not_to change(OfferCode, :count)
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to eq("The value entered is too large. Please enter a smaller number.")
+
+      offer_code = create(:universal_offer_code, user: @seller, code: "BIG")
+      expect { call_tool("update_discount_code", { code: "BIG", amount_cents: 3_000_000_000 }) }.not_to change { offer_code.reload.attributes }
+      expect(tool_result.dig("content", 0, "text")).to eq("The value entered is too large. Please enter a smaller number.")
+    end
+
+    it "rejects a malformed time" do
+      expect { call_tool("create_discount_code", { code: "WHEN", percent_off: 10, expires_at: "next tuesday" }) }.not_to change(OfferCode, :count)
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "expires_at must be an ISO 8601 time")
+    end
+
+    it "rejects a year the database would store as an empty date" do
+      expect { call_tool("create_discount_code", { code: "FAR", percent_off: 10, valid_at: "20271-01-01T00:00:00Z" }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "valid_at must have a year from 1000 to 9999")
+
+      offer_code = create(:universal_offer_code, user: @seller, code: "PAUSED", valid_at: 1.week.from_now)
+      expect { call_tool("update_discount_code", { code: "PAUSED", expires_at: "+10000-01-01T00:00:00Z" }) }.not_to change { offer_code.reload.attributes }
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "expires_at must have a year from 1000 to 9999")
+    end
+
+    it "rejects a blank code and a negative usage limit" do
+      expect { call_tool("create_discount_code", { code: "  ", percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "code is required")
+
+      expect { call_tool("create_discount_code", { code: "NEG", percent_off: 10, max_purchase_count: -1 }) }.not_to change(OfferCode, :count)
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "max_purchase_count must be zero or more")
+    end
+
+    it "ignores another seller's code attached to the caller's product" do
+      foreign_code = create(:offer_code, code: "STRAY", amount_cents: 100, products: [@product])
+      foreign_code.update_column(:user_id, create(:user).id)
+
+      call_tool("expire_discount_code", { code: "STRAY", product_id: @product.external_id })
+
+      expect(tool_result.dig("content", 0, "text")).to include("No discount code STRAY is limited to this product")
+      expect(foreign_code.reload.expires_at).to be_nil
+    end
+
+    it "refuses to update or expire a code through another seller's product" do
+      other_code = create(:offer_code, code: "THEIRS", amount_cents: 100)
+      other_product = other_code.products.first
+
+      call_tool("update_discount_code", { code: "THEIRS", product_id: other_product.external_id, amount_cents: 50 })
+      expect(tool_result.dig("content", 0, "text")).to eq("The product was not found.")
+      call_tool("expire_discount_code", { code: "THEIRS", product_id: other_product.external_id })
+      expect(tool_result.dig("content", 0, "text")).to eq("The product was not found.")
+      expect(other_code.reload).to have_attributes(amount_cents: 100, expires_at: nil)
+    end
+
+    it "keeps the start date when an update only sets expires_at" do
+      offer_code = create(:universal_offer_code, user: @seller, code: "LATER")
+
+      call_tool("update_discount_code", { code: "LATER", expires_at: "2099-01-01T00:00:00Z" })
+
+      expect(offer_code.reload).to have_attributes(valid_at: offer_code.created_at, expires_at: Time.utc(2099, 1, 1))
+    end
+
+    it "expires a code scheduled to start in the future" do
+      offer_code = create(:universal_offer_code, user: @seller, code: "SOON", valid_at: 1.week.from_now, expires_at: 2.weeks.from_now)
+
+      call_tool("expire_discount_code", { code: "SOON" })
+
+      expect(offer_code.reload.expires_at).to be <= Time.current
+      expect(offer_code.valid_at).to be < offer_code.expires_at
+    end
+
+    it "expires a code the current prices would refuse to save" do
+      offer_code = create(:universal_offer_code, user: @seller, code: "HALF", amount_cents: nil, amount_percentage: 50)
+      create(:product, user: @seller, price_cents: 100)
+      expect(offer_code.reload).not_to be_valid
+
+      call_tool("expire_discount_code", { code: "HALF" })
+
+      expect(offer_code.reload.expires_at).to be <= Time.current
+      expect(offer_code).to be_inactive
+      expect(tool_result["structuredContent"]["discount_code"]).to include("expired" => true)
+    end
+
+    it "refuses to address another seller's code" do
+      other_code = create(:universal_offer_code, code: "SHARED", amount_cents: nil, amount_percentage: 10)
+
+      expect { call_tool("update_discount_code", { code: "SHARED", percent_off: 50 }) }.not_to change { other_code.reload.attributes }
+      expect(tool_result["isError"]).to eq(true)
+    end
+
+    it "changes only the supplied field and keeps the minimum-price rule" do
+      offer_code = create(:offer_code, user: @seller, products: [@product], code: "EDITME", amount_cents: 500, max_purchase_count: 7)
+
+      call_tool("update_discount_code", { code: "EDITME", product_id: @product.external_id, amount_cents: 600 })
+
+      expect(tool_result["structuredContent"]["discount_code"]).to include("amount_cents" => 600)
+      expect(offer_code.reload).to have_attributes(amount_cents: 600, amount_percentage: nil, max_purchase_count: 7, code: "EDITME", expires_at: nil)
+      expect(offer_code.products).to eq([@product])
+
+      expect { call_tool("update_discount_code", { code: "EDITME", product_id: @product.external_id, amount_cents: 1850 }) }.not_to change { offer_code.reload.attributes }
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to include("must be either $0 or at least")
+    end
+
+    it "switches a code from a fixed amount to a percentage" do
+      offer_code = create(:offer_code, user: @seller, products: [@product], code: "SWITCH", amount_cents: 500)
+
+      call_tool("update_discount_code", { code: "SWITCH", product_id: @product.external_id, percent_off: 25 })
+
+      expect(offer_code.reload).to have_attributes(amount_percentage: 25, amount_cents: nil, currency_type: nil)
+    end
+
+    it "refuses an amount change on a tiered code but still edits its other fields" do
+      offer_code = create(:tiered_offer_code, user: @seller, products: [@product], code: "LOYAL",
+                                              ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
+
+      expect { call_tool("update_discount_code", { code: "LOYAL", product_id: @product.external_id, percent_off: 30 }) }.not_to change { offer_code.reload.attributes }
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to include("Change its amounts in the Gumroad dashboard")
+
+      call_tool("update_discount_code", { code: "LOYAL", product_id: @product.external_id, max_purchase_count: 5 })
+      expect(tool_result["structuredContent"]["discount_code"]).to include("percent_off" => nil, "tiers" => [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
+      expect(offer_code.reload).to have_attributes(max_purchase_count: 5, ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 10 }, { "months" => 12, "amount_percentage" => 50 }])
+    end
+
+    it "needs product_id to find a product-specific code" do
+      create(:offer_code, user: @seller, products: [@product], code: "SCOPED", amount_cents: 500)
+
+      call_tool("update_discount_code", { code: "SCOPED", amount_cents: 600 })
+
+      expect(tool_result["isError"]).to eq(true)
+      expect(tool_result.dig("content", 0, "text")).to include("Pass product_id")
+    end
+
+    it "rejects an update with nothing to change" do
+      create(:universal_offer_code, user: @seller, code: "NOOP")
+
+      call_tool("update_discount_code", { code: "NOOP" })
+
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+    end
+
+    it "expires a code by ending its validity, and a second expire succeeds without changes" do
+      offer_code = create(:universal_offer_code, user: @seller, code: "ENDNOW", amount_cents: nil, amount_percentage: 10)
+
+      call_tool("expire_discount_code", { code: "ENDNOW" })
+
+      expect(tool_result["structuredContent"]["discount_code"]).to include("expired" => true)
+      offer_code.reload
+      expect(offer_code.deleted_at).to be_nil
+      expect(offer_code.expires_at).to be <= Time.current
+      expect(offer_code).to be_inactive
+
+      expect { call_tool("expire_discount_code", { code: "ENDNOW" }) }.not_to change { offer_code.reload.attributes }
+      expect(tool_result).not_to have_key("isError")
+      expect(tool_result["structuredContent"]).to include("message" => "Already expired.")
+      expect(tool_result["structuredContent"]["discount_code"]).to include("expired" => true)
+    end
+
+    it "expires a product-specific code" do
+      offer_code = create(:offer_code, user: @seller, products: [@product], code: "PRODEND", amount_cents: 500)
+
+      call_tool("expire_discount_code", { code: "PRODEND", product_id: @product.external_id })
+
+      expect(offer_code.reload).to be_inactive
+    end
+
+    it "refuses the discount tools with the same 403 challenge as the other write tools" do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public")
+      offer_code = create(:universal_offer_code, user: @seller, code: "LOCKED")
+
+      expect { call_tool("create_discount_code", { code: "NOPE", percent_off: 10 }) }.not_to change(OfferCode, :count)
+      expect(response).to have_http_status(:forbidden)
+      expect(response.headers["WWW-Authenticate"]).to eq(
+        %(Bearer realm="Gumroad", error="insufficient_scope", scope="view_public edit_products", ) +
+        %(resource_metadata="#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp", ) +
+        %(error_description="This tool requires the edit_products or account scope.")
+      )
+
+      %w[update_discount_code expire_discount_code].each do |name|
+        expect { call_tool(name, { code: "LOCKED", **(name == "update_discount_code" ? { percent_off: 10 } : {}) }) }.not_to change { offer_code.reload.attributes }
+        expect(response).to have_http_status(:forbidden)
+        expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public edit_products"))
+      end
     end
   end
 end

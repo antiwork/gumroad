@@ -4,6 +4,9 @@ module RecordMediaLocation
   private
     def record_media_location(params)
       return false if params[:url_redirect_id].blank? || params[:product_file_id].blank? || params[:location].blank?
+      # platform is client-supplied and only the model's inclusion validation guards it, so an
+      # unknown value would reach update! as a 500 instead of a { success: false }.
+      return false unless Platform.all.include?(params[:platform])
 
       url_redirect_id = ObfuscateIds.decrypt(params[:url_redirect_id])
       purchase_id = params[:purchase_id].present? ? ObfuscateIds.decrypt(params[:purchase_id]) : UrlRedirect.find(url_redirect_id).try(:purchase).try(:id)

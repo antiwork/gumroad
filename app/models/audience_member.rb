@@ -13,6 +13,8 @@ class AudienceMember < ApplicationRecord
     bought_from
     active_customers_only minimum_license_uses
     affiliate_product_ids
+    waitlisted_product_ids
+    exclude_emails
   ].freeze
 
   belongs_to :seller, class_name: "User"
@@ -54,6 +56,9 @@ class AudienceMember < ApplicationRecord
     base_scope = where(seller_id:)
     base_scope = base_scope.where(id: ids) if ids
     base_scope = base_scope.where(created_at: ..as_of) if as_of
+    # Removing members never adds one, so an exclusion can live on the base scope: every
+    # subquery built below inherits it and the engines cannot disagree about who is out.
+    base_scope = base_scope.where.not(email: params[:exclude_emails]) if params[:exclude_emails].present?
 
     if params[:type]
       types_sql = base_scope.where(params[:type] => true).to_sql
@@ -125,6 +130,15 @@ class AudienceMember < ApplicationRecord
       affiliates_where_sql = ([json_contains] * params[:affiliate_product_ids].size).join(" OR ")
       affiliates_relation = affiliates_relation.where(affiliates_where_sql, *params[:affiliate_product_ids])
       affiliates_sql = affiliates_relation.to_sql
+    end
+
+    # Reads live `waitlist_entries` rows, which the details JSON does not carry.
+    if params[:waitlisted_product_ids]
+      waitlisted = Follower.active.joins(:waitlist_entries)
+        .where("followers.followed_id = audience_members.seller_id AND followers.email = audience_members.email")
+        .where(waitlist_entries: { product_id: params[:waitlisted_product_ids] })
+      waitlisted = waitlisted.where(confirmed_at: ..as_of, waitlist_entries: { created_at: ..as_of }) if as_of
+      waitlisted_sql = base_scope.where(waitlisted.arel.exists).to_sql
     end
 
     purchase_detail_filter_present = params.values_at(
@@ -307,6 +321,7 @@ class AudienceMember < ApplicationRecord
       created_at_sql,
       country_sql,
       affiliates_sql,
+      waitlisted_sql,
       json_filter_sql,
     ].compact
     return base_scope if subqueries.empty?

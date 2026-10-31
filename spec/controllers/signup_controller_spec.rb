@@ -330,6 +330,13 @@ describe SignupController, type: :controller, inertia: true do
       expect(response.parsed_body["error_message"]).to eq "Please provide a valid email address."
     end
 
+    it "rejects an empty user param sent as a string" do
+      post "create", params: { user: "" }
+      expect(response).to redirect_to(signup_path)
+      expect(flash[:warning]).to eq "Please provide a valid email address."
+      expect(User.count).to eq 0
+    end
+
     it "turns notifications off the user if the user is from Canada" do
       @request.env["REMOTE_ADDR"] = "76.66.210.142"
       user = build(:user, password: "password")
@@ -517,6 +524,14 @@ describe SignupController, type: :controller, inertia: true do
   end
 
   describe "POST 'save_to_library'" do
+    it "returns an error instead of raising when the user param is a string" do
+      post :save_to_library, params: { user: "purchase_id" }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["error_message"]).to eq "Please provide a valid email address."
+    end
+
     describe "email already taken" do
       before do
         @user = create(:user)

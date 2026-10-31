@@ -1028,8 +1028,31 @@ class Installment < ApplicationRecord
     end
     params[:bought_from] = bought_from if bought_from.present?
     params[:affiliate_product_ids] = seller.products.where(unique_permalink: affiliate_products).ids if affiliate_products.present?
+    if waitlisted_products.present?
+      # An unresolved selection must match nobody: compact_blank! below would drop an empty list and send to every follower.
+      params[:waitlisted_product_ids] = seller.products.where(unique_permalink: waitlisted_products).ids.presence || [nil]
+    end
+
+    if not_clicked_post_id.present?
+      clicked_emails = clicked_recipient_emails(not_clicked_post_id)
+      params[:exclude_emails] = clicked_emails if clicked_emails.any?
+    end
 
     params.compact_blank!
+  end
+
+  # Emails of the buyers who clicked the referenced post's email. Resolved here, where a saved
+  # filter turns into query params, so the count the seller sees and the recipients a blast
+  # picks up go through one path. A reference that no longer resolves excludes nobody: worst
+  # case the filter behaves as if it were not set, never as if everyone had clicked.
+  def clicked_recipient_emails(post_external_id)
+    post = seller.installments.find_by_external_id(post_external_id)
+    return [] if post.blank?
+
+    purchase_ids = EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)
+    return [] if purchase_ids.empty?
+
+    purchase_emails_for(purchase_ids).to_a
   end
 
   def audience_members_count(limit = nil)
@@ -1076,6 +1099,20 @@ class Installment < ApplicationRecord
 
   # The send whose state the seller sees; resends to non-openers have their own rows.
   def latest_regular_blast = blasts.reject(&:to_non_openers?).max_by(&:requested_at)
+
+  # "draft", "scheduled", "published" (live without an email), or the latest blast's delivery status.
+  def delivery_state
+    if published_at.present?
+      blast = latest_regular_blast
+      return blast.delivery_status if blast&.requested_at.present?
+
+      return "published"
+    end
+    return "scheduled" if ready_to_publish?
+
+    "draft"
+  end
+
   def can_be_blasted? = send_emails? && !has_been_blasted?
 
   def featured_image_url
