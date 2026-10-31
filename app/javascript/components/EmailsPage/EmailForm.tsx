@@ -1202,7 +1202,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         // Only where the composer's sidebar is narrow enough to clip the select: at that
                         // width the value cannot be read in full, and the caption is the only place the
                         // seller can confirm which email they are excluding clickers of.
-                        <p className="mt-2 hidden text-sm break-words text-muted md:block">
+                        <p className="mt-2 hidden text-sm break-words text-muted lg:block">
                           {selectedEmailedPost.name}
                         </p>
                       ) : null}
