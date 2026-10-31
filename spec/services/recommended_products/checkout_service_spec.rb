@@ -82,13 +82,15 @@ describe RecommendedProducts::CheckoutService do
       expect(product_infos.map(&:target).uniq).to eq([Product::Layout::PROFILE])
     end
 
-    it "calls search_products with the correct arguments" do
+    it "searches for paid creator products first" do
+      allow_any_instance_of(RecommendedProducts::CheckoutService).to receive(:search_products).and_call_original
       expect_any_instance_of(RecommendedProducts::CheckoutService).to receive(:search_products).with(
-        size: 5,
         sort: ProductSortKey::FEATURED,
         user_id: [seller1.id],
         is_alive_on_profile: true,
-        exclude_ids: [product1.id, product3.id, product2.id]
+        exclude_ids: [product1.id, product3.id, product2.id],
+        size: 5 * RecommendedProducts::CheckoutService::FREE_RESULTS_HEADROOM,
+        min_price: RecommendedProducts::CheckoutService::PAID_MIN_PRICE
       ).and_call_original
       described_class.fetch_for_cart(
         purchaser:,
@@ -96,6 +98,127 @@ describe RecommendedProducts::CheckoutService do
         recommender_model_name:,
         limit: 5
       )
+    end
+
+    context "when the recommendations mix free and paid products" do
+      let(:seller) { create(:user) }
+      let(:cart_product) { create(:product, user: seller, price_cents: 100) }
+      let!(:free_product) { create(:product, user: seller, price_cents: 0) }
+      let!(:paid_product) { create(:product, user: seller, price_cents: 500) }
+
+      before do
+        index_model_records(Link)
+      end
+
+      it "gives the slot to the paid product instead of the free one" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([paid_product])
+      end
+
+      it "uses the free product to fill a slot no paid product can take" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 2
+        )
+
+        expect(product_infos.map(&:product)).to eq([paid_product, free_product])
+      end
+
+      it "still recommends free products when the creator has nothing paid to show" do
+        paid_product.update!(price_cents: 0)
+        index_model_records(Link)
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: free_product.id))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([free_product])
+      end
+
+      it "searches for a paid product when co-purchases already fill the row with free ones" do
+        free_products = create_list(:product, 2, user: seller, price_cents: 0)
+        index_model_records(Link)
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: free_products.map(&:id)))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 2
+        )
+
+        expect(product_infos.map(&:product).first).to eq(paid_product)
+        expect(product_infos.length).to eq(2)
+      end
+
+      it "treats a fully discounted product as free" do
+        discounted = create(:product, user: seller, price_cents: 500)
+        offer_code = create(:offer_code, products: [discounted], user: seller, amount_percentage: 100, amount_cents: nil)
+        discounted.update!(default_offer_code: offer_code)
+        later_paid = create(:product, user: seller, price_cents: 700)
+        index_model_records(Link)
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [discounted.id, later_paid.id]))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([later_paid])
+      end
+
+      it "searches past fully discounted products for a paid one" do
+        # A fully discounted product keeps its list price, so the paid-only search returns it. These
+        # are newer than the paid product, which is where the featured order looks first, so one
+        # search window can hold only free results. The row must still find the paid product.
+        3.times do |index|
+          discounted = create(:product, user: seller, price_cents: 500)
+          offer_code = create(:offer_code, products: [discounted], user: seller, amount_percentage: 100, amount_cents: nil)
+          discounted.update!(default_offer_code: offer_code, created_at: Time.current + (index + 1).minutes)
+        end
+        index_model_records(Link)
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id]))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([paid_product])
+      end
+
+      it "leaves the receipt recommendations in their co-purchase order" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
+
+        product_infos = described_class.fetch_for_receipt(
+          purchaser:,
+          receipt_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([free_product])
+      end
     end
 
     describe "affiliate recommendations" do
