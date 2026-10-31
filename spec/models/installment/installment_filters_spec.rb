@@ -39,6 +39,42 @@ describe "InstallmentFilters"  do
       let(:filterable_object) { create(:affiliate_installment, seller: user, link: product) }
     end
   end
+
+  describe "#audience_members_filter_params with a 'has not clicked' filter" do
+    let(:product) { create(:product, user: @creator) }
+    let(:clicked_post) { create(:audience_installment, seller: @creator, link: product) }
+    let(:post_being_sent) { create(:audience_installment, seller: @creator, link: product) }
+    let(:clicker_purchase) { create(:free_purchase, link: product, seller: @creator, email: "Clicker@Example.com") }
+
+    it "excludes the buyers who clicked the chosen post, downcased" do
+      post_being_sent.update!(not_clicked_post_id: clicked_post.external_id)
+      allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids)
+        .with(clicked_post.id).and_return([clicker_purchase.id])
+
+      expect(post_being_sent.audience_members_filter_params[:exclude_emails]).to eq(["clicker@example.com"])
+    end
+
+    it "reads no click data when the filter is not set" do
+      expect(EmailEngagementDynamoStore).not_to receive(:clicked_recipient_purchase_ids)
+
+      expect(post_being_sent.audience_members_filter_params[:exclude_emails]).to be_nil
+    end
+
+    it "excludes nobody when the chosen post belongs to another seller" do
+      other_sellers_post = create(:audience_installment)
+      post_being_sent.update!(not_clicked_post_id: other_sellers_post.external_id)
+      expect(EmailEngagementDynamoStore).not_to receive(:clicked_recipient_purchase_ids)
+
+      expect(post_being_sent.audience_members_filter_params[:exclude_emails]).to be_nil
+    end
+
+    it "excludes nobody when the chosen post has no clicks yet" do
+      post_being_sent.update!(not_clicked_post_id: clicked_post.external_id)
+      allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).and_return([])
+
+      expect(post_being_sent.audience_members_filter_params[:exclude_emails]).to be_nil
+    end
+  end
 end
 
 describe "#member_cancellation_trigger?" do

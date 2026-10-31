@@ -530,4 +530,70 @@ describe EmailEngagementDynamoStore do
       )
     end
   end
+
+  describe ".clicked_recipient_purchase_ids" do
+    let(:purchase_click) { { "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" } }
+
+    it "returns the buyer behind each purchase installment click" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            purchase_click.merge("sk" => "CLICKER#aaa"),
+            { "sk" => "CLICKER#bbb", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[789, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.clicked_recipient_purchase_ids(123)).to eq([456, 789])
+    end
+
+    it "reads the clicker items of that installment only" do
+      client.stub_responses(:query, { items: [] })
+
+      described_class.clicked_recipient_purchase_ids(123)
+
+      expect(requests.last[:params]).to include(
+        table_name: described_class.table_name,
+        key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
+        expression_attribute_values: { ":pk" => { s: "123" }, ":prefix" => { s: "CLICKER#" } }
+      )
+    end
+
+    it "skips follower and affiliate clicks, whose args carry that record's id" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            { "sk" => "CLICKER#aaa", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[12, 123]" },
+            { "sk" => "CLICKER#bbb", "mailer_method" => "CreatorContactingCustomersMailer.direct_affiliate_installment", "mailer_args" => "[34, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.clicked_recipient_purchase_ids(123)).to eq([])
+    end
+
+    it "returns a buyer once, however many links they clicked" do
+      client.stub_responses(:query, { items: [purchase_click.merge("sk" => "CLICK#aaa"), purchase_click.merge("sk" => "CLICK#bbb")] })
+
+      expect(described_class.clicked_recipient_purchase_ids(123)).to eq([456])
+    end
+
+    it "pages through the partition" do
+      pages = [
+        { items: [purchase_click.merge("sk" => "CLICKER#aaa")], last_evaluated_key: { "pk" => "123", "sk" => "CLICKER#aaa" } },
+        { items: [{ "sk" => "CLICKER#bbb", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[789, 123]" }] },
+      ]
+      page_index = 0
+      client.stub_responses(:query, lambda do |_context|
+        page = pages[page_index] || pages.last
+        page_index += 1
+        page
+      end)
+
+      expect(described_class.clicked_recipient_purchase_ids(123)).to eq([456, 789])
+      expect(requests.map { _1[:params][:exclusive_start_key] }).to eq([nil, { "pk" => { s: "123" }, "sk" => { s: "CLICKER#aaa" } }])
+    end
+  end
 end
