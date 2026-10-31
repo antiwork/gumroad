@@ -2320,7 +2320,7 @@ class LinksController < ApplicationController
       waitlist_open = @product.accepts_waitlist_signups?
       <<~HTML
         <!doctype html>
-        <html#{waitlist_open ? "" : " data-gumroad-launched"}>
+        <html#{@product.published? ? " data-gumroad-launched" : ""}>
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">

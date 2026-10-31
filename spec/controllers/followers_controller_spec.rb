@@ -692,6 +692,7 @@ describe FollowersController, inertia: true do
           post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id, product_id: product.external_id }, format: :json
 
           expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["message"]).to include(custom_domain_subscribe_url(host: unreviewed_seller.subdomain_with_protocol))
           expect(response.parsed_body["message"]).not_to include("native=true")
         end
 

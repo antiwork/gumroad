@@ -24,6 +24,19 @@ describe "product custom HTML waitlist bridge", type: :request do
     expect(response.body).to include(seller.external_id)
   end
 
+  it "keeps the native waitlist page when the custom page has no waitlist form" do
+    product.update!(custom_html: %(<h1>Coming soon</h1>))
+
+    get base, headers: { "X-Inertia" => "true" }
+
+    expect(response).to be_successful
+    expect(response.body).not_to include("data-gumroad-waitlist-wrapper")
+    expect(JSON.parse(response.body).dig("props", "product", "waitlist")).to be_present
+
+    get "#{base}/landing/embed"
+    expect(response).to have_http_status(:not_found)
+  end
+
   it "injects the bridge into the embed and leaves data-gumroad-launched off" do
     get "#{base}/landing/embed"
 
@@ -48,14 +61,29 @@ describe "product custom HTML waitlist bridge", type: :request do
     expect(response).to have_http_status(:not_found)
   end
 
-  it "marks a launched product and carries no waitlist bridge" do
+  it "marks a launched product and leaves out the waitlist listener and bridge" do
     product.update!(purchase_disabled_at: nil, draft: false, waitlist_enabled: true)
+
+    get base
+
+    expect(response.body).to include(%(src="/l/#{product.unique_permalink}/landing/embed"))
+    expect(response.body).not_to include("data-gumroad-waitlist-wrapper")
 
     get "#{base}/landing/embed"
 
     expect(response).to be_successful
     expect(response.body).to include("data-gumroad-launched")
     expect(response.body).not_to include("data-gumroad-waitlist-bridge")
+  end
+
+  it "does not mark an unpublished product without a waitlist as launched in the seller's preview" do
+    product.update!(waitlist_enabled: false)
+    sign_in seller
+
+    get "#{base}/landing/embed"
+
+    expect(response).to be_successful
+    expect(response.body).not_to include("data-gumroad-launched")
   end
 
   it "accepts the waitlist signup POST on a product-owned domain" do
@@ -69,5 +97,8 @@ describe "product custom HTML waitlist bridge", type: :request do
     end.to change { WaitlistEntry.count }.by(1)
 
     expect(response.parsed_body["success"]).to be(true)
+    entry = WaitlistEntry.last
+    expect(entry.product).to eq(product)
+    expect(entry.follower.source).to eq(Follower::From::EMBED_FORM)
   end
 end
