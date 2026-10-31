@@ -101,10 +101,10 @@ describe RecommendedProducts::CheckoutService do
     end
 
     context "when the recommendations mix free and paid products" do
-      let(:creator) { create(:user) }
-      let(:cart_product) { create(:product, user: creator, price_cents: 100) }
-      let!(:free_product) { create(:product, user: creator, price_cents: 0) }
-      let!(:paid_product) { create(:product, user: creator, price_cents: 500) }
+      let(:seller) { create(:user) }
+      let(:cart_product) { create(:product, user: seller, price_cents: 100) }
+      let!(:free_product) { create(:product, user: seller, price_cents: 0) }
+      let!(:paid_product) { create(:product, user: seller, price_cents: 500) }
 
       before do
         index_model_records(Link)
@@ -152,7 +152,7 @@ describe RecommendedProducts::CheckoutService do
       end
 
       it "searches for a paid product when co-purchases already fill the row with free ones" do
-        free_products = create_list(:product, 2, user: creator, price_cents: 0)
+        free_products = create_list(:product, 2, user: seller, price_cents: 0)
         index_model_records(Link)
         allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: free_products.map(&:id)))
 
@@ -168,10 +168,10 @@ describe RecommendedProducts::CheckoutService do
       end
 
       it "treats a fully discounted product as free" do
-        discounted = create(:product, user: creator, price_cents: 500)
-        offer_code = create(:offer_code, products: [discounted], user: creator, amount_percentage: 100, amount_cents: nil)
+        discounted = create(:product, user: seller, price_cents: 500)
+        offer_code = create(:offer_code, products: [discounted], user: seller, amount_percentage: 100, amount_cents: nil)
         discounted.update!(default_offer_code: offer_code)
-        later_paid = create(:product, user: creator, price_cents: 700)
+        later_paid = create(:product, user: seller, price_cents: 700)
         index_model_records(Link)
         allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [discounted.id, later_paid.id]))
 
