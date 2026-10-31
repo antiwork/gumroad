@@ -779,6 +779,33 @@ describe GdprDataErasureService do
       expect(purchase.browser_guid).to be_nil
     end
 
+    it "clears the card, session and IP columns on retained purchases and the account's events" do
+      purchase = create(
+        :free_purchase,
+        purchaser: user,
+        email: user.email,
+      )
+      purchase.update_columns(
+        ip_country: "US",
+        ip_state: "CA",
+        card_visual: "**** **** **** 3290",
+        stripe_fingerprint: "fp_123",
+        session_id: "session-1",
+        referrer: "https://example.com",
+      )
+      event = Event.create!(purchase_id: purchase.id, email: user.email, ip_address: "127.0.0.1", browser_guid: "guid")
+      account_event = Event.create!(user_id: user.id, ip_address: "127.0.0.2", browser_guid: "guid-2")
+      other_event = Event.create!(user_id: user.id + 1, ip_address: "127.0.0.3")
+
+      described_class.new(user, performed_by: admin).perform!
+
+      purchase.reload
+      expect(purchase.attributes.slice("ip_country", "ip_state", "card_visual", "stripe_fingerprint", "session_id", "referrer").values.compact).to be_empty
+      expect(event.reload.attributes.slice("email", "ip_address", "browser_guid").values.compact).to be_empty
+      expect(account_event.reload.attributes.slice("ip_address", "browser_guid").values.compact).to be_empty
+      expect(other_event.reload.ip_address).to eq("127.0.0.3")
+    end
+
     it "anonymizes guest purchases using the original email address" do
       purchase = create(
         :free_purchase,
