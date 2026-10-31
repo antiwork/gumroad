@@ -606,6 +606,16 @@ describe FollowersController, inertia: true do
           expect(response.parsed_body["message"]).to include("Email invalid")
         end
 
+        it "records the waitlist entry and returns the waitlist message" do
+          product = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
+
+          expect do
+            post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: product.external_id }, format: :json
+          end.to change { WaitlistEntry.count }.by(1)
+
+          expect(response.parsed_body).to eq("success" => true, "message" => "You're on the list. Check your inbox to confirm.")
+        end
+
         it "404s an unknown seller id" do
           post :from_embed_form, params: { email: "follower@example.com", seller_id: "does-not-exist" }, format: :json
 
@@ -660,6 +670,17 @@ describe FollowersController, inertia: true do
           # The bridge relays this as plain text into a sandboxed page, so the URL
           # has to be in the sentence — there is no link element to render.
           expect(response.parsed_body["message"]).to include(custom_domain_subscribe_url(host: unreviewed_seller.subdomain_with_protocol))
+        end
+
+        it "sends a waitlist visitor to the native product page, which can run the challenge" do
+          product = create(:product, user: unreviewed_seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
+
+          expect do
+            post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id, product_id: product.external_id }, format: :json
+          end.to_not change { Follower.count }
+
+          expect(response).to have_http_status(:unprocessable_entity)
+          expect(response.parsed_body["message"]).to include("#{product.long_url}?native=true")
         end
 
         # The refusal copy is built from name_or_username, which is never blank:
