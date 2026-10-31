@@ -754,7 +754,7 @@ describe("Email Creation Flow", :js, type: :system) do
     choose "Customers only"
     select "October update", from: "Has opened (approximate)"
     wait_for_ajax
-    expect(page).to have_text("Audience Fewer than 5 / 6", normalize_ws: true)
+    expect(page).to have_text("Audience Hidden for privacy / 6", normalize_ws: true)
 
     select_disclosure "Publish" do
       click_on "Publish now"

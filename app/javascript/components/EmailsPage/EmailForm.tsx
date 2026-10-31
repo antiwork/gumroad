@@ -10,7 +10,7 @@ import {
   getRecipientCount,
   InstallmentFormContext,
   Installment,
-  MINIMUM_BEHAVIOR_SEGMENT_SIZE,
+  WITHHELD_COUNT_TEXT,
 } from "$app/data/installments";
 import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
@@ -984,7 +984,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                             <LoadingSpinner className="size-5" />
                           </div>
                         ) : (
-                          <div aria-label="Recipient count">{`${recipientCount.count === null ? `Fewer than ${MINIMUM_BEHAVIOR_SEGMENT_SIZE}` : recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>
+                          <div aria-label="Recipient count">{`${recipientCount.count === null ? WITHHELD_COUNT_TEXT : recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>
                         )
                       ) : null}
                     </FieldsetTitle>

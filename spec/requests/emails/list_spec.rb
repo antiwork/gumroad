@@ -214,6 +214,23 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
       end
 
+      it "hides the sent count of a behavior-filtered email whose size would single out buyers" do
+        installment1.update!(not_clicked_post_id: installment3.external_id, customer_count: 49)
+        allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).and_return([])
+        allow(AudienceMember).to receive(:filter_count).and_return(50)
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "Hidden for privacy" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("Emailed Hidden for privacy", normalize_ws: true)
+        end
+      end
+
       it "says a behavior-filtered email did not go out because too few customers matched by send time" do
         create(:blast, post: installment1, requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.day.ago, expiry_reason: "too_few_recipients")
 

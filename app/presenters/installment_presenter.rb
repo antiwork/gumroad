@@ -27,7 +27,7 @@ class InstallmentPresenter
       call_to_action_text: installment.call_to_action_text,
       call_to_action_url: installment.call_to_action_url,
       streamable: installment.streamable?,
-      sent_count: installment.customer_count,
+      sent_count: delivery_counts_withheld? ? nil : installment.customer_count,
       click_count: installment.unique_click_count,
       open_count: installment.unique_open_count,
       click_rate: installment.click_rate_percent&.round(1),
@@ -65,6 +65,7 @@ class InstallmentPresenter
         non_opener_resends: non_opener_resend_props,
         delivery: delivery_props,
         never_reached_anyone: installment.never_reached_anyone?,
+        delivery_counts_withheld: delivery_counts_withheld?,
       )
 
       unless installment.published?
@@ -102,6 +103,16 @@ class InstallmentPresenter
   end
 
   private
+    # One decision for every delivery count on the post: mid-send, delivered plus still-owed is
+    # the send's size, and a resend's count plus the opens gives the sent count away.
+    def delivery_counts_withheld?
+      return @delivery_counts_withheld if defined?(@delivery_counts_withheld)
+
+      blast = installment.latest_regular_blast
+      remaining = blast && blast.delivery_status != "sent" ? blast.remaining_recipient_count.to_i : 0
+      @delivery_counts_withheld = installment.published? && installment.delivery_counts_withheld?(installment.customer_count.to_i + remaining)
+    end
+
     # State of the latest regular send. Without it an incomplete blast reads as a finished one:
     # the Emailed column only ever showed the delivered count. Resends have their own rows.
     def delivery_props
@@ -111,8 +122,8 @@ class InstallmentPresenter
       status = blast.delivery_status
       {
         status:,
-        delivered_count: blast.delivery_count,
-        remaining_count: status == "sent" ? nil : blast.remaining_recipient_count,
+        delivered_count: delivery_counts_withheld? ? nil : blast.delivery_count,
+        remaining_count: status == "sent" || delivery_counts_withheld? ? nil : blast.remaining_recipient_count,
         scheduled_for: status == "waiting" ? blast.quota_deferred_until : nil,
         retrying: status == "incomplete" && AlertOnStalledPostEmailBlastsJob.auto_resume_eligible?(blast),
       }
@@ -143,7 +154,7 @@ class InstallmentPresenter
 
         {
           requested_at: blast.requested_at,
-          delivery_count: blast.delivery_count,
+          delivery_count: delivery_counts_withheld? ? nil : blast.delivery_count,
           completed:,
           expired: blast.expired_at.present?,
           open_count:,

@@ -111,6 +111,40 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(blast.reload.delivery_status).to eq("too_few_recipients")
     end
 
+    it "finishes a has-opened email below the floor that may already have reached someone" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+      # A prior attempt handed this one to the provider and died before stamping the blast.
+      SentPostEmail.create!(post:, email: openers.first.email)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count openers.size - 1
+      expect(blast.reload.expired_at).to be_nil
+    end
+
+    it "does not send a has-opened email below the floor that another copy of the job already expired" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+      # The other copy expires the blast after this one passed the guard at the top of perform.
+      allow(PostEmailBlast).to receive(:expire).and_wrap_original do |original, *args, **kwargs|
+        PostEmailBlast.where(id: blast.id).update_all(expired_at: Time.current, expiry_reason: PostEmailBlast::EXPIRY_TOO_FEW_RECIPIENTS)
+        original.call(*args, **kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+    end
+
     describe "after the seller's newsletter moved to Feature announcements" do
       # The audience subscribed before the newsletter retired.
       before do

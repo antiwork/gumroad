@@ -682,7 +682,7 @@ class Installment < ApplicationRecord
       send_emails: send_emails?,
       shown_on_profile: shown_on_profile?,
       audience_count: include_audience_count ? api_audience_members_count : nil,
-      recipients_count: published? ? customer_count : nil,
+      recipients_count: published? ? api_recipients_count : nil,
       url: published? ? public_page_location : nil,
       created_at:,
       updated_at:,
@@ -1035,28 +1035,29 @@ class Installment < ApplicationRecord
       params[:waitlisted_product_ids] = seller.products.where(unique_permalink: waitlisted_products).ids.presence || [nil]
     end
 
+    # A post that does not resolve, or an empty opener list, must match nobody: compact_blank!
+    # below would drop an empty list and send to everyone, while "" matches nobody.
+    params[:include_emails] = opened_recipient_emails(opened_post_id).presence || [""] if opened_post_id.present?
+
     if not_clicked_post_id.present?
       clicked_emails = clicked_recipient_emails(not_clicked_post_id)
-      params[:exclude_emails] = clicked_emails if clicked_emails.any?
-    end
-
-    if opened_post_id.present?
-      # Unlike the exclusion above, an unresolved inclusion must match nobody: compact_blank!
-      # below would drop an empty list and send to everyone, while "" matches nobody.
-      params[:include_emails] = opened_recipient_emails(opened_post_id).presence || [""]
+      if clicked_emails.nil?
+        params[:include_emails] = [""]
+      elsif clicked_emails.any?
+        params[:exclude_emails] = clicked_emails
+      end
     end
 
     params.compact_blank!
   end
 
-  # Emails of the buyers who clicked the referenced post's email. Resolved here, where a saved
-  # filter turns into query params, so the count the seller sees and the recipients a blast
-  # picks up go through one path. A reference that no longer resolves excludes nobody: worst
-  # case the filter behaves as if it were not set, never as if everyone had clicked.
+  # Emails of the buyers who clicked the referenced post's email, or nil when it is not one of
+  # the seller's posts. Resolved here, where a saved filter turns into query params, so the
+  # count the seller sees and the recipients a blast picks up go through one path.
   def clicked_recipient_emails(post_external_id)
     (@clicked_recipient_emails ||= {})[post_external_id] ||= begin
       post = seller.installments.find_by_external_id(post_external_id)
-      post ? purchase_emails_for(EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)).to_a : []
+      post && purchase_emails_for(EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)).to_a
     end
   end
 
@@ -1075,16 +1076,27 @@ class Installment < ApplicationRecord
 
   def behavior_filtered? = opened_post_id.present? || not_clicked_post_id.present?
 
-  # The count a seller may see, for the saved filters or a per-type split of them. A behavior
-  # segment is withheld (nil) when it, or the part of the unfiltered audience it leaves out, is
-  # below the floor: the seller reads the unfiltered count by turning the filter off, so either
-  # side can single out a buyer.
+  # The count a seller may see, for the saved filters or a per-type split of them; nil when withheld.
   def displayed_audience_members_count(params = audience_members_filter_params)
     count = AudienceMember.filter_count(seller_id:, params:)
-    return count unless behavior_filtered?
+    behavior_filtered? && behavior_count_withheld?(count, params) ? nil : count
+  end
 
-    left_out = AudienceMember.filter_count(seller_id:, params: params.except(:include_emails, :exclude_emails)) - count
-    count < MINIMUM_BEHAVIOR_SEGMENT_SIZE || left_out.in?(1...MINIMUM_BEHAVIOR_SEGMENT_SIZE) ? nil : count
+  # A sent count is the segment as it stood at send time, which is not recorded, so it is held
+  # against today's audience.
+  def delivery_counts_withheld?(sent_count = customer_count.to_i)
+    behavior_filtered? && behavior_count_withheld?(sent_count, audience_members_filter_params)
+  end
+
+  # A behavior segment is withheld when it, or the part of a wider audience it leaves out, is
+  # below the floor: the seller reads the wider count by turning a behavior filter off, so
+  # either side can single out a buyer.
+  def behavior_count_withheld?(count, params)
+    return true if count < MINIMUM_BEHAVIOR_SEGMENT_SIZE
+
+    wider = [params.except(:include_emails, :exclude_emails)]
+    wider += [params.except(:include_emails), params.except(:exclude_emails)] if params.key?(:include_emails) && params.key?(:exclude_emails)
+    wider.any? { (AudienceMember.filter_count(seller_id:, params: _1) - count).in?(1...MINIMUM_BEHAVIOR_SEGMENT_SIZE) }
   end
 
   # Sending to fewer would single those buyers out, and the sent count would give away the size
@@ -1096,6 +1108,12 @@ class Installment < ApplicationRecord
 
   def api_audience_members_count
     displayed_audience_members_count
+  rescue StandardError
+    nil
+  end
+
+  def api_recipients_count
+    delivery_counts_withheld? ? nil : customer_count
   rescue StandardError
     nil
   end

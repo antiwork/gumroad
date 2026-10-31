@@ -309,7 +309,7 @@ describe("ShareYourLaunchCard", () => {
     await renderCard([emailChannel({ counts: { customers: null, followers: null, affiliates: null, total: null } })]);
 
     expect(
-      screen.getByText("Launch email drafted for fewer than 5 people in the draft's saved audience."),
+      screen.getByText("Launch email drafted for the draft's saved audience. The count is hidden for privacy."),
     ).toBeDefined();
   });
 

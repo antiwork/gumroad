@@ -918,7 +918,7 @@ describe WithFiltering do
       expect(post.json_filters[:not_clicked_post_id]).to eq("abc123")
     end
 
-    it "excludes a clicker of the seller's own post, and nobody for another seller's post" do
+    it "excludes a clicker of the seller's own post, and matches nobody for another seller's post" do
       clicker = create(:free_purchase, link: product, seller:, email: "Clicker@Example.com")
       own_post = create(:seller_post, seller:, published_at: 1.day.ago)
       other_post = create(:seller_post, seller: create(:user), published_at: 1.day.ago)
@@ -932,6 +932,15 @@ describe WithFiltering do
       other = build(:seller_installment, seller:)
       other.add_and_validate_filters({ not_clicked_post_id: other_post.external_id }, seller)
       expect(other.audience_members_filter_params).not_to have_key(:exclude_emails)
+      expect(other.audience_members_filter_params[:include_emails]).to eq([""])
+    end
+
+    it "excludes nobody when nobody clicked the seller's own post" do
+      own_post = create(:seller_post, seller:, published_at: 1.day.ago)
+      allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).with(own_post.id).and_return([])
+
+      installment = build(:seller_installment, seller:, not_clicked_post_id: own_post.external_id)
+      expect(installment.audience_members_filter_params.keys).not_to include(:include_emails, :exclude_emails)
     end
   end
 
@@ -1010,10 +1019,45 @@ describe WithFiltering do
       expect(installment.displayed_audience_members_count).to eq(48)
     end
 
+    it "withholds a count with both filters while either one alone leaves out fewer than the floor" do
+      installment.opened_post_id = "abc"
+      installment.not_clicked_post_id = "def"
+      allow(installment).to receive(:opened_recipient_emails).with("abc").and_return(["opener@example.com"])
+      allow(installment).to receive(:clicked_recipient_emails).with("def").and_return(["clicker@example.com"])
+      # 40 match both, 41 with only "Has opened" applied, 60 with only "Has not clicked", 80 with neither.
+      allow(AudienceMember).to receive(:filter_count) do |params:, **|
+        { [true, true] => 40, [true, false] => 41, [false, true] => 60, [false, false] => 80 }
+          .fetch([params.key?(:include_emails), params.key?(:exclude_emails)])
+      end
+
+      expect(installment.displayed_audience_members_count).to be_nil
+    end
+
     it "shows small counts without a behavior filter" do
       stub_counts(1)
 
       expect(installment.displayed_audience_members_count).to eq(1)
+    end
+  end
+
+  describe "#delivery_counts_withheld?" do
+    let(:seller) { create(:user) }
+    let(:installment) { build(:seller_installment, seller:, not_clicked_post_id: "abc", customer_count: 49) }
+
+    before { allow(installment).to receive(:clicked_recipient_emails).with("abc").and_return(["clicker@example.com"]) }
+
+    it "withholds a sent count that leaves out fewer than the floor of today's audience" do
+      allow(AudienceMember).to receive(:filter_count) { |params:, **| params.key?(:exclude_emails) ? 49 : 50 }
+      expect(installment.delivery_counts_withheld?).to be(true)
+
+      allow(AudienceMember).to receive(:filter_count) { |params:, **| params.key?(:exclude_emails) ? 49 : 54 }
+      expect(installment.delivery_counts_withheld?).to be(false)
+    end
+
+    it "shows the sent count of an email without a behavior filter" do
+      installment.not_clicked_post_id = nil
+
+      expect(installment.delivery_counts_withheld?(1)).to be(false)
     end
   end
 end

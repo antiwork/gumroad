@@ -71,8 +71,7 @@ const pluralize = (count: number, singular: string, plural: string) => (count ==
 // One line, naming the product once: the card already sits on the product's own page.
 const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) => {
   const { customers, followers, affiliates, total } = counts;
-  if (total === null)
-    return `Launch email drafted for fewer than ${MINIMUM_BEHAVIOR_SEGMENT_SIZE} people in the draft's saved audience.`;
+  if (total === null) return "Launch email drafted for the draft's saved audience. The count is hidden for privacy.";
 
   const people = `${total} ${pluralize(total, "person", "people")}`;
   // A withheld segment would print as "null", and showing the other segments next to the total

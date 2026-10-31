@@ -377,4 +377,19 @@ describe('EmailForm "Has not clicked"', () => {
 
     await waitFor(() => expect(sent.payload?.installment.opened_post_id).toBe("post-2"));
   });
+
+  it("says a withheld recipient count is hidden for privacy, which is true whichever side is small", async () => {
+    const actual = vi.mocked(getRecipientCount).getMockImplementation();
+    vi.mocked(getRecipientCount).mockImplementation(() => ({
+      response: Promise.resolve({ recipient_count: null, audience_count: 50 }),
+      cancel: () => undefined,
+    }));
+    try {
+      renderForm({ ...customersDraft, not_clicked_post_id: "post-1" }, emailedContext);
+
+      expect((await screen.findByLabelText("Recipient count")).textContent).toBe("Hidden for privacy / 50");
+    } finally {
+      if (actual) vi.mocked(getRecipientCount).mockImplementation(actual);
+    }
+  });
 });

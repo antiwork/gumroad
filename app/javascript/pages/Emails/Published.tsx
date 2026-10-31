@@ -8,6 +8,7 @@ import {
   MINIMUM_BEHAVIOR_SEGMENT_SIZE,
   Pagination,
   PublishedInstallment,
+  WITHHELD_COUNT_TEXT,
 } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 import { cast } from "$app/utils/cast";
@@ -103,6 +104,12 @@ export default function EmailsPublished() {
     }
   };
 
+  const sentCountText = (installment: PublishedInstallment) =>
+    installment.delivery_counts_withheld ? WITHHELD_COUNT_TEXT : formatStatNumber({ value: installment.sent_count });
+
+  const resendEmailedText = (count: number | null) =>
+    count === null ? WITHHELD_COUNT_TEXT : `${formatStatNumber({ value: count })} emailed`;
+
   const deliveryNote = (delivery: PublishedInstallment["delivery"], sentCount: number | null) => {
     if (!delivery || delivery.status === "sent") return null;
     const people = (count: number) => `${formatStatNumber({ value: count })} ${count === 1 ? "person" : "people"}`;
@@ -126,12 +133,14 @@ export default function EmailsPublished() {
       case "too_few_recipients":
         return `Fewer than ${MINIMUM_BEHAVIOR_SEGMENT_SIZE} customers matched this email's filters when it was time to send, so it didn't go out.`;
       case "stopped":
-        return `This newsletter was retired, so we stopped sending this email. ${people(delivery.delivered_count)} got it.`;
+        return `This newsletter was retired, so we stopped sending this email.${delivery.delivered_count === null ? "" : ` ${people(delivery.delivered_count)} got it.`}`;
       case "incomplete": {
         // Emailed shows the post's total, which can differ from this send's own count after a
         // resend; repeat the count only when it adds something.
         const got =
-          delivery.delivered_count === sentCount ? "" : `${people(delivery.delivered_count)} got this email. `;
+          delivery.delivered_count === null || delivery.delivered_count === sentCount
+            ? ""
+            : `${people(delivery.delivered_count)} got this email. `;
         const missing =
           delivery.remaining_count !== null ? `${people(delivery.remaining_count)} have` : "Some people have";
         return `${got}${missing} not received it yet.${delivery.retrying ? " We are retrying automatically." : ""}`;
@@ -182,7 +191,7 @@ export default function EmailsPublished() {
                         })}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
-                        {installment.send_emails ? formatStatNumber({ value: installment.sent_count }) : "n/a"}
+                        {installment.send_emails ? sentCountText(installment) : "n/a"}
                       </TableCell>
                       <TableCell
                         className={isUnfinished(installment) ? "whitespace-nowrap" : "whitespace-nowrap max-lg:hidden"}
@@ -238,7 +247,7 @@ export default function EmailsPublished() {
                                     timeZone: currentSeller.timeZone.name,
                                   })}
                                   {" · "}
-                                  {formatStatNumber({ value: resend.delivery_count })} emailed
+                                  {resendEmailedText(resend.delivery_count)}
                                   {" · "}
                                   {formatStatNumber({ value: resend.open_rate, suffix: "%", placeholder: "n/a" })}{" "}
                                   opened
@@ -267,7 +276,7 @@ export default function EmailsPublished() {
                             })}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-muted">
-                            {formatStatNumber({ value: resend.delivery_count })}
+                            {formatStatNumber({ value: resend.delivery_count, placeholder: WITHHELD_COUNT_TEXT })}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-muted">n/a</TableCell>
                           <TableCell className="whitespace-nowrap text-muted">
@@ -294,9 +303,7 @@ export default function EmailsPublished() {
                   </CardContent>
                   <CardContent>
                     <h5 className="grow font-bold">Emailed</h5>
-                    {selectedInstallment.send_emails
-                      ? formatStatNumber({ value: selectedInstallment.sent_count })
-                      : "n/a"}
+                    {selectedInstallment.send_emails ? sentCountText(selectedInstallment) : "n/a"}
                   </CardContent>
                   <CardContent>
                     <h5 className="grow font-bold">Status</h5>
@@ -343,7 +350,7 @@ export default function EmailsPublished() {
                               timeZone: currentSeller.timeZone.name,
                             })}
                             {resend.completed
-                              ? ` — ${formatStatNumber({ value: resend.delivery_count })} emailed${
+                              ? ` — ${resendEmailedText(resend.delivery_count)}${
                                   resend.open_rate !== null
                                     ? `, ${formatStatNumber({ value: resend.open_rate, suffix: "%" })} opened`
                                     : ""

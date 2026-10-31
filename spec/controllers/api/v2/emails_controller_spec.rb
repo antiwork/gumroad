@@ -216,6 +216,22 @@ describe Api::V2::EmailsController do
           slug: @installment.slug
         ))
       end
+
+      it "withholds the recipients count of a published behavior-filtered email whose size would single out buyers" do
+        @installment.update!(published_at: Time.current, customer_count: 49, not_clicked_post_id: create(:seller_post, seller: @user).external_id)
+        allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).and_return([])
+        allow(AudienceMember).to receive(:filter_count).and_return(50)
+
+        get @action, params: @params
+
+        expect(response.parsed_body["email"]).to include("recipients_count" => nil)
+
+        allow(AudienceMember).to receive(:filter_count).and_return(60)
+
+        get @action, params: @params
+
+        expect(response.parsed_body["email"]).to include("recipients_count" => 49)
+      end
     end
   end
 

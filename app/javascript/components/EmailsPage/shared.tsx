@@ -3,12 +3,12 @@ import { router, useForm } from "@inertiajs/react";
 import React from "react";
 
 import {
-  MINIMUM_BEHAVIOR_SEGMENT_SIZE,
   SavedInstallment,
   getAudienceCount,
   getNonOpenerCount,
   resendToNonOpeners,
   sendToRemaining,
+  WITHHELD_COUNT_TEXT,
 } from "$app/data/installments";
 import { formatStatNumber } from "$app/utils/formatStatNumber";
 import { asyncVoid } from "$app/utils/promise";
@@ -108,7 +108,7 @@ export const formatAudienceCount = (audienceCounts: AudienceCounts, installmentI
     : count === "failed"
       ? "--"
       : count === null
-        ? `Fewer than ${MINIMUM_BEHAVIOR_SEGMENT_SIZE}`
+        ? WITHHELD_COUNT_TEXT
         : formatStatNumber({ value: count });
 };
 

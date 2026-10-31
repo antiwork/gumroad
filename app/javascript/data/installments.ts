@@ -56,7 +56,7 @@ export type PublishedInstallment = SavedInstallment & {
   published_at: string;
   non_opener_resends: {
     requested_at: string;
-    delivery_count: number;
+    delivery_count: number | null;
     completed: boolean;
     expired: boolean;
     open_count: number | null;
@@ -64,13 +64,15 @@ export type PublishedInstallment = SavedInstallment & {
   }[];
   delivery: {
     status: "sent" | "sending" | "waiting" | "incomplete" | "expired" | "abandoned" | "stopped" | "too_few_recipients";
-    delivered_count: number;
+    delivered_count: number | null;
     remaining_count: number | null;
     scheduled_for: string | null;
     retrying: boolean;
   } | null;
   // Every send expired, so there are no recipients to resend to.
   never_reached_anyone: boolean;
+  // A "Has opened" or "Has not clicked" send whose size would single out buyers: every delivery count is null.
+  delivery_counts_withheld: boolean;
 };
 
 export type ScheduledInstallment = SavedInstallment & {
@@ -121,6 +123,9 @@ export type InstallmentFormContext = {
 
 // Mirrors Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE: the server withholds smaller behavior-segment counts.
 export const MINIMUM_BEHAVIOR_SEGMENT_SIZE = 5;
+
+// Shown for a count the server withheld (null): the segment, or the part it leaves out, is too small to show.
+export const WITHHELD_COUNT_TEXT = "Hidden for privacy";
 
 export async function getAudienceCount(externalId: string) {
   const response = await request({

@@ -72,7 +72,7 @@ class SendPostBlastEmailsJob
       end
     end
 
-    return expire_below_behavior_floor if below_behavior_floor?
+    return if below_behavior_floor? && expire_below_behavior_floor
 
     # A parent retry reloads the same stale rows a prior attempt already charged
     # and recorded as skipped. Drop them before publishing pending, or the new
@@ -125,17 +125,24 @@ class SendPostBlastEmailsJob
     # future split attempts without a deploy.
     CHILD_SLICE_SIZE = 2_000
 
-    # The audience can shrink between publishing or scheduling and the send. Once someone got the
-    # email, finishing the send reveals nothing the started one has not.
+    # The audience can shrink between publishing or scheduling and the send. Once someone may have
+    # got the email, finishing the send reveals nothing the started one has not.
     def below_behavior_floor?
       !@blast.to_non_openers? && @blast.first_email_delivered_at.nil? && @post.behavior_filtered? &&
-        @audience_size < Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE
+        @audience_size < Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE &&
+        !$redis.exists?(RedisKey.blast_pending_recipients(@blast.id))
     end
 
+    # True when the send should stop. A blast that may have sent already, and that no other copy
+    # has expired or completed, is finished instead.
     def expire_below_behavior_floor
-      PostEmailBlast.expire(@blast.id, reason: PostEmailBlast::EXPIRY_TOO_FEW_RECIPIENTS)
+      if PostEmailBlast.expire(@blast.id, reason: PostEmailBlast::EXPIRY_TOO_FEW_RECIPIENTS, never_sent: true).zero?
+        return !PostEmailBlast.where(id: @blast.id, completed_at: nil, expired_at: nil).exists?
+      end
+
       clear_blast_state
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the behavior-filtered audience fell below the floor")
+      true
     end
 
     def send_inline
