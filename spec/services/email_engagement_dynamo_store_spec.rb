@@ -596,4 +596,25 @@ describe EmailEngagementDynamoStore do
       expect(requests.map { _1[:params][:exclusive_start_key] }).to eq([nil, { "pk" => { s: "123" }, "sk" => { s: "CLICKER#aaa" } }])
     end
   end
+
+  describe ".opened_recipient_purchase_ids" do
+    it "returns the buyer behind each purchase installment open, once, from the OPEN items only" do
+      open_item = { "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" }
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            open_item.merge("sk" => "OPEN#aaa"),
+            open_item.merge("sk" => "OPEN#bbb"),
+            { "sk" => "OPEN#ccc", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[12, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.opened_recipient_purchase_ids(123)).to eq([456])
+      expect(requests.last[:params]).to include(
+        expression_attribute_values: { ":pk" => { s: "123" }, ":prefix" => { s: "OPEN#" } }
+      )
+    end
+  end
 end

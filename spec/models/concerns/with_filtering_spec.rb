@@ -934,4 +934,60 @@ describe WithFiltering do
       expect(other.audience_members_filter_params).not_to have_key(:exclude_emails)
     end
   end
+
+  describe "opened filter" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+
+    it "limits the audience to openers of the seller's own post, and to nobody when none resolve" do
+      opener = create(:free_purchase, link: product, seller:, email: "Opener@Example.com")
+      own_post = create(:seller_post, seller:, published_at: 1.day.ago)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(own_post.id).and_return([opener.id])
+
+      own = build(:seller_installment, seller:)
+      own.add_and_validate_filters({ opened_post_id: own_post.external_id }, seller)
+      expect(own.json_filters[:opened_post_id]).to eq(own_post.external_id)
+      expect(own.audience_members_filter_params[:include_emails]).to eq(["opener@example.com"])
+
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(own_post.id).and_return([])
+      expect(own.audience_members_filter_params[:include_emails]).to eq([""])
+    end
+
+    it "ignores another seller's post" do
+      other_post = create(:seller_post, seller: create(:user), published_at: 1.day.ago)
+      installment = build(:seller_installment, seller:)
+      installment.add_and_validate_filters({ opened_post_id: other_post.external_id }, seller)
+
+      expect(installment.audience_members_filter_params).not_to have_key(:include_emails)
+    end
+  end
+
+  describe "#displayed_audience_members_count" do
+    let(:seller) { create(:user) }
+    let(:installment) { build(:seller_installment, seller:) }
+
+    before { allow(installment).to receive(:audience_members_count).and_return(count) }
+
+    context "with a behavior filter" do
+      before { installment.opened_post_id = "abc" }
+
+      context "below the floor" do
+        let(:count) { Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1 }
+
+        it("withholds the count") { expect(installment.displayed_audience_members_count).to be_nil }
+      end
+
+      context "at the floor" do
+        let(:count) { Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE }
+
+        it("shows the count") { expect(installment.displayed_audience_members_count).to eq(count) }
+      end
+    end
+
+    context "without a behavior filter" do
+      let(:count) { 1 }
+
+      it("shows small counts") { expect(installment.displayed_audience_members_count).to eq(1) }
+    end
+  end
 end

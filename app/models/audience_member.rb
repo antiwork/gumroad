@@ -14,7 +14,7 @@ class AudienceMember < ApplicationRecord
     active_customers_only minimum_license_uses
     affiliate_product_ids
     waitlisted_product_ids
-    exclude_emails
+    exclude_emails include_emails
   ].freeze
 
   belongs_to :seller, class_name: "User"
@@ -59,6 +59,7 @@ class AudienceMember < ApplicationRecord
     # Removing members never adds one, so an exclusion can live on the base scope: every
     # subquery built below inherits it and the engines cannot disagree about who is out.
     base_scope = base_scope.where.not(email: params[:exclude_emails]) if params[:exclude_emails].present?
+    base_scope = base_scope.where(email: params[:include_emails]) if params[:include_emails].present?
 
     if params[:type]
       types_sql = base_scope.where(params[:type] => true).to_sql

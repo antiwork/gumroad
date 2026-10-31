@@ -61,6 +61,7 @@ const post = vi.hoisted(() => vi.fn((_url: string, options?: { onFinish?: () => 
 type SentPayload = {
   installment: {
     not_clicked_post_id: string | null;
+    opened_post_id: string | null;
     not_bought_products: string[] | null;
     not_bought_variants: string[] | null;
   };
@@ -363,5 +364,16 @@ describe('EmailForm "Has not clicked"', () => {
     renderForm(customersDraft, { ...emailedContext, emailed_posts: [] });
 
     expect(screen.queryByLabelText("Has not clicked")).toBeNull();
+  });
+
+  it("submits the chosen post as an opened filter, and labels it approximate", async () => {
+    renderForm({ ...customersDraft, opened_post_id: "post-1" }, emailedContext);
+    const opened = screen.getByLabelText<HTMLSelectElement>("Has opened (approximate)");
+    expect(opened.value).toBe("post-1");
+
+    fireEvent.change(opened, { target: { value: "post-2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(sent.payload?.installment.opened_post_id).toBe("post-2"));
   });
 });
