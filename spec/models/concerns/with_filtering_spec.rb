@@ -950,15 +950,25 @@ describe WithFiltering do
       expect(own.audience_members_filter_params[:include_emails]).to eq(["opener@example.com"])
 
       allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(own_post.id).and_return([])
-      expect(own.audience_members_filter_params[:include_emails]).to eq([""])
+      none_opened = build(:seller_installment, seller:)
+      none_opened.add_and_validate_filters({ opened_post_id: own_post.external_id }, seller)
+      expect(none_opened.audience_members_filter_params[:include_emails]).to eq([""])
     end
 
-    it "ignores another seller's post" do
+    it "matches nobody for another seller's post" do
       other_post = create(:seller_post, seller: create(:user), published_at: 1.day.ago)
       installment = build(:seller_installment, seller:)
       installment.add_and_validate_filters({ opened_post_id: other_post.external_id }, seller)
 
-      expect(installment.audience_members_filter_params).not_to have_key(:include_emails)
+      expect(installment.audience_members_filter_params[:include_emails]).to eq([""])
+    end
+
+    it "reads the post's opens once per installment" do
+      own_post = create(:seller_post, seller:, published_at: 1.day.ago)
+      installment = build(:seller_installment, seller:, opened_post_id: own_post.external_id)
+      expect(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(own_post.id).once.and_return([])
+
+      2.times { installment.audience_members_filter_params }
     end
   end
 
@@ -966,28 +976,44 @@ describe WithFiltering do
     let(:seller) { create(:user) }
     let(:installment) { build(:seller_installment, seller:) }
 
-    before { allow(installment).to receive(:audience_members_count).and_return(count) }
-
-    context "with a behavior filter" do
-      before { installment.opened_post_id = "abc" }
-
-      context "below the floor" do
-        let(:count) { Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1 }
-
-        it("withholds the count") { expect(installment.displayed_audience_members_count).to be_nil }
-      end
-
-      context "at the floor" do
-        let(:count) { Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE }
-
-        it("shows the count") { expect(installment.displayed_audience_members_count).to eq(count) }
+    # `count` members with the behavior filter applied, `left_out` more without it.
+    def stub_counts(count, left_out: 0)
+      allow(AudienceMember).to receive(:filter_count) do |params:, **|
+        params.key?(:include_emails) || params.key?(:exclude_emails) ? count : count + left_out
       end
     end
 
-    context "without a behavior filter" do
-      let(:count) { 1 }
+    context "with a has-opened filter" do
+      before { installment.opened_post_id = "abc" }
 
-      it("shows small counts") { expect(installment.displayed_audience_members_count).to eq(1) }
+      it "withholds a count below the floor" do
+        stub_counts(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1)
+
+        expect(installment.displayed_audience_members_count).to be_nil
+      end
+
+      it "shows a count at the floor" do
+        stub_counts(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)
+
+        expect(installment.displayed_audience_members_count).to eq(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)
+      end
+    end
+
+    it "withholds a has-not-clicked count while the part it leaves out is below the floor" do
+      installment.not_clicked_post_id = "abc"
+      allow(installment).to receive(:clicked_recipient_emails).with("abc").and_return(["clicker@example.com"])
+
+      stub_counts(48, left_out: Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1)
+      expect(installment.displayed_audience_members_count).to be_nil
+
+      stub_counts(48, left_out: Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)
+      expect(installment.displayed_audience_members_count).to eq(48)
+    end
+
+    it "shows small counts without a behavior filter" do
+      stub_counts(1)
+
+      expect(installment.displayed_audience_members_count).to eq(1)
     end
   end
 end

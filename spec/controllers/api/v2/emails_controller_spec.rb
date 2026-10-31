@@ -633,6 +633,28 @@ describe Api::V2::EmailsController do
         expect(@installment.waitlisted_products).to eq([product.unique_permalink])
       end
 
+      it "keeps the opened and not-clicked filters when publishing a draft" do
+        @installment.update!(installment_type: Installment::SELLER_TYPE, link: nil, opened_post_id: "post-1", not_clicked_post_id: "post-2")
+        allow(AudienceMember).to receive(:filter_count).and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@installment.reload.published?).to be(true)
+        expect(@installment.opened_post_id).to eq("post-1")
+        expect(@installment.not_clicked_post_id).to eq("post-2")
+      end
+
+      it "refuses to send a draft whose has-opened filter matches fewer customers than the floor" do
+        @installment.update!(installment_type: Installment::SELLER_TYPE, link: nil, opened_post_id: "post-1")
+
+        post @action, params: @params
+
+        expect(response.parsed_body).to eq("success" => false, "message" => "Fewer than 5 customers match these filters. Remove a filter to send this email.")
+        expect(@installment.reload.published?).to be(false)
+        expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      end
+
       it "keeps attached files when publishing a draft" do
         file = create(:product_file, link: nil, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
         @installment.product_files << file
@@ -716,6 +738,18 @@ describe Api::V2::EmailsController do
           expect(@installment.published?).to be(false)
           expect(PublishScheduledPostJob).to have_enqueued_sidekiq_job(@installment.id, 1).at(Time.zone.parse(@params[:to_be_published_at]))
         end
+      end
+
+      it "keeps the opened and not-clicked filters when scheduling a draft" do
+        @installment.update!(installment_type: Installment::SELLER_TYPE, link: nil, opened_post_id: "post-1", not_clicked_post_id: "post-2")
+        allow(AudienceMember).to receive(:filter_count).and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to eq(true)
+        expect(@installment.reload.ready_to_publish?).to be(true)
+        expect(@installment.opened_post_id).to eq("post-1")
+        expect(@installment.not_clicked_post_id).to eq("post-2")
       end
 
       it "schedules an email owned through one of the seller's products" do

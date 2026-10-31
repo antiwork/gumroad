@@ -257,10 +257,11 @@ describe Marketing::LaunchEmail do
       end
     end
 
-    it "takes the total from the draft itself once it exists" do
-      launch_email.installment
+    it "takes the total from the draft's own filters once it exists" do
+      launch_email.installment.update!(not_bought_products: [], bought_products: [product.unique_permalink])
       allow(AudienceMember).to receive(:filter_count).and_return(1)
-      allow_any_instance_of(Installment).to receive(:audience_members_count).and_return(9)
+      allow(AudienceMember).to receive(:filter_count)
+        .with(seller_id: seller.id, params: { bought_product_ids: [product.id] }).and_return(9)
 
       expect(launch_email.recipient_counts).to eq(customers: 1, followers: 1, affiliates: 1, total: 9)
     end
@@ -268,16 +269,33 @@ describe Marketing::LaunchEmail do
     it "withholds the counts of a behavior-filtered draft below the floor" do
       launch_email.installment.update!(opened_post_id: "a-post")
       allow(AudienceMember).to receive(:filter_count).and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1)
-      allow_any_instance_of(Installment).to receive(:audience_members_count)
-        .and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1)
 
       expect(launch_email.recipient_counts).to eq(customers: nil, followers: nil, affiliates: nil, total: nil)
+    end
+
+    it "withholds the counts of a behavior-filtered draft that leaves out fewer than the floor" do
+      launch_email.installment.update!(opened_post_id: "a-post")
+      allow(AudienceMember).to receive(:filter_count) do |params:, **|
+        params.key?(:include_emails) ? 9 : 9 + Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1
+      end
+
+      expect(launch_email.recipient_counts).to eq(customers: nil, followers: nil, affiliates: nil, total: nil)
+    end
+
+    it "reads a behavior filter's engagement once for saving the draft and all its counts" do
+      opened_post = create(:audience_post, :published, seller:)
+      draft = launch_email.installment
+      allow(AudienceMember).to receive(:filter_count).and_return(0)
+      expect(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).once.and_return([])
+
+      draft.update!(opened_post_id: opened_post.external_id)
+      launch_email.recipient_counts
     end
 
     it "shows the counts of a behavior-filtered draft at the floor" do
       launch_email.installment.update!(opened_post_id: "a-post")
       allow(AudienceMember).to receive(:filter_count).and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)
-      allow_any_instance_of(Installment).to receive(:audience_members_count).and_return(9)
+      allow(AudienceMember).to receive(:filter_count).with(seller_id: seller.id, params: hash_excluding(:type)).and_return(9)
 
       expect(launch_email.recipient_counts)
         .to eq(customers: Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE,

@@ -267,6 +267,7 @@ class Installment < ApplicationRecord
 
   SENDING_LIMIT = 100
   MINIMUM_BEHAVIOR_SEGMENT_SIZE = 5
+  BEHAVIOR_SEGMENT_TOO_SMALL_MESSAGE = "Fewer than #{MINIMUM_BEHAVIOR_SEGMENT_SIZE} customers match these filters. Remove a filter to send this email."
   MINIMUM_SALES_CENTS_VALUE = 100_00 # $100
 
   MEMBER_CANCELLATION_WORKFLOW_TRIGGER = "member_cancellation"
@@ -1039,9 +1040,10 @@ class Installment < ApplicationRecord
       params[:exclude_emails] = clicked_emails if clicked_emails.any?
     end
 
-    if opened_post_id.present? && (post = seller.installments.find_by_external_id(opened_post_id))
-      # An empty list would be dropped by compact_blank! below and match everyone; "" matches nobody.
-      params[:include_emails] = opened_recipient_emails(post).presence || [""]
+    if opened_post_id.present?
+      # Unlike the exclusion above, an unresolved inclusion must match nobody: compact_blank!
+      # below would drop an empty list and send to everyone, while "" matches nobody.
+      params[:include_emails] = opened_recipient_emails(opened_post_id).presence || [""]
     end
 
     params.compact_blank!
@@ -1051,36 +1053,49 @@ class Installment < ApplicationRecord
   # filter turns into query params, so the count the seller sees and the recipients a blast
   # picks up go through one path. A reference that no longer resolves excludes nobody: worst
   # case the filter behaves as if it were not set, never as if everyone had clicked.
-  def opened_recipient_emails(post)
-    purchase_ids = EmailEngagementDynamoStore.opened_recipient_purchase_ids(post.id)
-    purchase_ids.empty? ? [] : purchase_emails_for(purchase_ids).to_a
+  def clicked_recipient_emails(post_external_id)
+    (@clicked_recipient_emails ||= {})[post_external_id] ||= begin
+      post = seller.installments.find_by_external_id(post_external_id)
+      post ? purchase_emails_for(EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)).to_a : []
+    end
   end
 
-  def clicked_recipient_emails(post_external_id)
-    post = seller.installments.find_by_external_id(post_external_id)
-    return [] if post.blank?
-
-    purchase_ids = EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)
-    return [] if purchase_ids.empty?
-
-    purchase_emails_for(purchase_ids).to_a
+  # Both lists are memoized per instance: each read scans a whole Dynamo partition, and one
+  # request, blast or launch card resolves the filters several times.
+  def opened_recipient_emails(post_external_id)
+    (@opened_recipient_emails ||= {})[post_external_id] ||= begin
+      post = seller.installments.find_by_external_id(post_external_id)
+      post ? purchase_emails_for(EmailEngagementDynamoStore.opened_recipient_purchase_ids(post.id)).to_a : []
+    end
   end
 
   def audience_members_count(limit = nil)
     AudienceMember.filter_count(seller_id:, params: audience_members_filter_params, limit:)
   end
 
-  # The count a seller may see. An exact count of a behavior segment can identify one buyer
-  # ("opened X" and "bought P"), so below the floor it is withheld (nil).
-  def displayed_audience_members_count
-    count = audience_members_count
-    return count unless opened_post_id.present? || not_clicked_post_id.present?
+  def behavior_filtered? = opened_post_id.present? || not_clicked_post_id.present?
 
-    count < MINIMUM_BEHAVIOR_SEGMENT_SIZE ? nil : count
+  # The count a seller may see, for the saved filters or a per-type split of them. A behavior
+  # segment is withheld (nil) when it, or the part of the unfiltered audience it leaves out, is
+  # below the floor: the seller reads the unfiltered count by turning the filter off, so either
+  # side can single out a buyer.
+  def displayed_audience_members_count(params = audience_members_filter_params)
+    count = AudienceMember.filter_count(seller_id:, params:)
+    return count unless behavior_filtered?
+
+    left_out = AudienceMember.filter_count(seller_id:, params: params.except(:include_emails, :exclude_emails)) - count
+    count < MINIMUM_BEHAVIOR_SEGMENT_SIZE || left_out.in?(1...MINIMUM_BEHAVIOR_SEGMENT_SIZE) ? nil : count
+  end
+
+  # Sending to fewer would single those buyers out, and the sent count would give away the size
+  # the composer withholds.
+  def behavior_segment_below_floor?
+    send_emails? && behavior_filtered? &&
+      audience_members_count(MINIMUM_BEHAVIOR_SEGMENT_SIZE) < MINIMUM_BEHAVIOR_SEGMENT_SIZE
   end
 
   def api_audience_members_count
-    audience_members_count
+    displayed_audience_members_count
   rescue StandardError
     nil
   end

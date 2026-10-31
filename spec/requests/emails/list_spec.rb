@@ -214,6 +214,22 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
       end
 
+      it "says a behavior-filtered email did not go out because too few customers matched by send time" do
+        create(:blast, post: installment1, requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.day.ago, expiry_reason: "too_few_recipients")
+
+        visit "#{emails_path}/published"
+
+        within_table "Published" do
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Status" => "Not sent" })
+          find(:table_row, { "Subject" => "Email 1 (sent)" }).click
+        end
+
+        within_modal "Email 1 (sent)" do
+          expect(page).to have_text("Fewer than 5 customers matched this email's filters when it was time to send, so it didn't go out.")
+          expect(page).not_to have_button("Send now")
+        end
+      end
+
       it "lets the seller send an email that was never sent with one click" do
         expired = create(:blast, post: installment1, requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: nil, first_email_delivered_at: nil, delivery_count: 0, expired_at: 1.hour.ago, expiry_reason: PostEmailBlast::EXPIRY_QUOTA)
 

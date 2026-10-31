@@ -27,6 +27,7 @@ class SaveInstallmentService
       ActiveRecord::Base.transaction do
         installment.message = SaveContentUpsellsService.new(seller:, content: installment.message, old_content: installment.message_was).from_html
         save_installment
+        ensure_behavior_segment_reaches_floor if params[:to_be_published_at].present? || params[:publish].present?
 
         if params[:to_be_published_at].present?
           schedule_installment
@@ -84,6 +85,12 @@ class SaveInstallmentService
           section.update!(shown_posts: shown_posts.to_a)
         end
       end
+    end
+
+    def ensure_behavior_segment_reaches_floor
+      return if error.present?
+
+      @error = Installment::BEHAVIOR_SEGMENT_TOO_SMALL_MESSAGE if installment.behavior_segment_below_floor?
     end
 
     def schedule_installment

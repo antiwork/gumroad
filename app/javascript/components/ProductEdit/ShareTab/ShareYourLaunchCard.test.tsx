@@ -389,6 +389,11 @@ describe("ShareYourLaunchCard", () => {
       "A problem on our side stopped your launch email about Gumstein Letters before it reached anyone.",
     ],
     ["stopped", "Stopped", "Your launch email about Gumstein Letters was stopped because this newsletter was retired."],
+    [
+      "too_few_recipients",
+      "Not sent",
+      "Your launch email about Gumstein Letters wasn't sent because fewer than 5 customers matched its filters.",
+    ],
   ] as const)("shows truthful %s email state", async (state, label, summary) => {
     await renderCard([
       emailChannel({ draft: { id: "draft1", subject: "Gumstein Letters", state, edit_url: "/emails/draft1/edit" } }),

@@ -63,7 +63,7 @@ export type PublishedInstallment = SavedInstallment & {
     open_rate: number | null;
   }[];
   delivery: {
-    status: "sent" | "sending" | "waiting" | "incomplete" | "expired" | "abandoned" | "stopped";
+    status: "sent" | "sending" | "waiting" | "incomplete" | "expired" | "abandoned" | "stopped" | "too_few_recipients";
     delivered_count: number;
     remaining_count: number | null;
     scheduled_for: string | null;
@@ -118,6 +118,9 @@ export type InstallmentFormContext = {
   allow_comments_by_default: boolean;
   from_tab: EmailTab | null;
 };
+
+// Mirrors Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE: the server withholds smaller behavior-segment counts.
+export const MINIMUM_BEHAVIOR_SEGMENT_SIZE = 5;
 
 export async function getAudienceCount(externalId: string) {
   const response = await request({

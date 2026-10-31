@@ -57,6 +57,8 @@ class SendPostBlastEmailsJob
     with_replica_database do
       @members = load_audience_members
       remove_members_without_email
+      # Before anyone already emailed is dropped: the floor applies to the audience, not to the rest.
+      @audience_size = @members.size
 
       if @blast.to_non_openers?
         keep_emails = load_non_opener_emails
@@ -69,6 +71,8 @@ class SendPostBlastEmailsJob
         remove_already_emailed_members
       end
     end
+
+    return expire_below_behavior_floor if below_behavior_floor?
 
     # A parent retry reloads the same stale rows a prior attempt already charged
     # and recorded as skipped. Drop them before publishing pending, or the new
@@ -120,6 +124,19 @@ class SendPostBlastEmailsJob
     # Recipients handed to each slice job. Tunable via Redis so an operator can resize
     # future split attempts without a deploy.
     CHILD_SLICE_SIZE = 2_000
+
+    # The audience can shrink between publishing or scheduling and the send. Once someone got the
+    # email, finishing the send reveals nothing the started one has not.
+    def below_behavior_floor?
+      !@blast.to_non_openers? && @blast.first_email_delivered_at.nil? && @post.behavior_filtered? &&
+        @audience_size < Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE
+    end
+
+    def expire_below_behavior_floor
+      PostEmailBlast.expire(@blast.id, reason: PostEmailBlast::EXPIRY_TOO_FEW_RECIPIENTS)
+      clear_blast_state
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the behavior-filtered audience fell below the floor")
+    end
 
     def send_inline
       start_pending_recipients

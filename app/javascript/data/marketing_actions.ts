@@ -56,6 +56,7 @@ export type MarketingEmailDraft = {
     | "expired"
     | "abandoned"
     | "stopped"
+    | "too_few_recipients"
     | "sent";
   edit_url: string;
 };

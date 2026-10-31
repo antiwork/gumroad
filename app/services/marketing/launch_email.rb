@@ -26,6 +26,7 @@ class Marketing::LaunchEmail
       # Re-read under the lock: the counts may have been asked for before it was taken.
       @drafts = nil
       @existing = nil
+      @filters = nil
       next nil if declined?
 
       @existing = existing ? refresh(existing) : create_draft
@@ -124,25 +125,21 @@ class Marketing::LaunchEmail
       { not_bought_product_ids: [product.id] }
     end
 
+    def filters
+      @filters ||= existing ? existing.audience_members_filter_params : not_bought_filter
+    end
+
     def count_for(type)
-      filters = existing ? existing.audience_members_filter_params : not_bought_filter
       return 0 if filters[:type].present? && filters[:type] != type
 
-      floor_behavior_count(AudienceMember.filter_count(seller_id: seller.id, params: filters.merge(type:)))
+      count(filters.merge(type:))
     end
 
-    def total_count
-      return existing.displayed_audience_members_count if existing
+    def total_count = count(filters)
 
-      AudienceMember.filter_count(seller_id: seller.id, params: not_bought_filter)
-    end
-
-    # The card reports the segment the composer reports, so it withholds the counts below the
-    # composer's floor: an exact behavior-segment count can identify one buyer, and a per-type
-    # count is that same segment split up.
-    def floor_behavior_count(count)
-      return count unless existing&.opened_post_id.present? || existing&.not_clicked_post_id.present?
-
-      count < Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE ? nil : count
+    # The draft's own floor, so the card withholds what the composer withholds: a per-type count
+    # is the same behavior segment split up.
+    def count(params)
+      existing ? existing.displayed_audience_members_count(params) : AudienceMember.filter_count(seller_id: seller.id, params:)
     end
 end

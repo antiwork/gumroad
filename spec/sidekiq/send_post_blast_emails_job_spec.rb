@@ -96,6 +96,21 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
+    it "does not send a has-opened email whose openers fell below the floor by send time" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1, link: product)
+      create(:purchase, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.delivery_status).to eq("too_few_recipients")
+    end
+
     describe "after the seller's newsletter moved to Feature announcements" do
       # The audience subscribed before the newsletter retired.
       before do

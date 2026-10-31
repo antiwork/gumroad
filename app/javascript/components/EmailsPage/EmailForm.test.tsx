@@ -372,6 +372,7 @@ describe('EmailForm "Has not clicked"', () => {
     expect(opened.value).toBe("post-1");
 
     fireEvent.change(opened, { target: { value: "post-2" } });
+    expect(screen.getByText("October update", { selector: "p" })).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(sent.payload?.installment.opened_post_id).toBe("post-2"));

@@ -1,6 +1,7 @@
 import { Envelope, Instagram, Tiktok, TwitterX, Youtube } from "@boxicons/react";
 import * as React from "react";
 
+import { MINIMUM_BEHAVIOR_SEGMENT_SIZE } from "$app/data/installments";
 import {
   approveMarketingAction,
   cancelMarketingAction,
@@ -40,6 +41,7 @@ const EMAIL_DRAFT_STATE_LABELS: Record<NonNullable<MarketingChannel["draft"]>["s
   expired: "Not sent",
   abandoned: "Not sent",
   stopped: "Stopped",
+  too_few_recipients: "Not sent",
   sent: "Send complete",
 };
 
@@ -59,22 +61,22 @@ const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"
     `A problem on our side stopped your launch email about ${subject} before it reached anyone. You can send it now from Emails.`,
   stopped: (subject) =>
     `Your launch email about ${subject} was stopped because this newsletter was retired. Check delivery details in Emails.`,
+  too_few_recipients: (subject) =>
+    `Your launch email about ${subject} wasn't sent because fewer than ${MINIMUM_BEHAVIOR_SEGMENT_SIZE} customers matched its filters. Check delivery details in Emails.`,
   sent: (subject) => `Email processing is complete for ${subject}. Check delivery details in Emails.`,
 };
 
 const pluralize = (count: number, singular: string, plural: string) => (count === 1 ? singular : plural);
 
-// Mirrors Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE: the server withholds smaller counts.
-const MINIMUM_SEGMENT_SIZE = 5;
-
 // One line, naming the product once: the card already sits on the product's own page.
 const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) => {
   const { customers, followers, affiliates, total } = counts;
   if (total === null)
-    return `Launch email drafted for fewer than ${MINIMUM_SEGMENT_SIZE} people in the draft's saved audience.`;
+    return `Launch email drafted for fewer than ${MINIMUM_BEHAVIOR_SEGMENT_SIZE} people in the draft's saved audience.`;
 
   const people = `${total} ${pluralize(total, "person", "people")}`;
-  // A withheld segment would print as "null", and the segment sizes add up to the total.
+  // A withheld segment would print as "null", and showing the other segments next to the total
+  // would narrow down the withheld one.
   if (customers === null || followers === null || affiliates === null)
     return `Launch email drafted for ${people} in the draft's saved audience.`;
 
