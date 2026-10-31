@@ -908,6 +908,7 @@ describe WithFiltering do
 
   describe "not clicked filter" do
     let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
 
     it "persists the referenced post so the composer can restore it" do
       post = build(:seller_installment, seller:)
@@ -917,12 +918,20 @@ describe WithFiltering do
       expect(post.json_filters[:not_clicked_post_id]).to eq("abc123")
     end
 
-    it "does not resolve a post that belongs to another seller" do
+    it "excludes a clicker of the seller's own post, and nobody for another seller's post" do
+      clicker = create(:free_purchase, link: product, seller:, email: "Clicker@Example.com")
+      own_post = create(:seller_post, seller:, published_at: 1.day.ago)
       other_post = create(:seller_post, seller: create(:user), published_at: 1.day.ago)
-      post = build(:seller_installment, seller:)
-      post.add_and_validate_filters({ not_clicked_post_id: other_post.external_id }, seller)
+      allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids)
+        .with(own_post.id).and_return([clicker.id])
 
-      expect(post.audience_members_filter_params).not_to have_key(:exclude_emails)
+      own = build(:seller_installment, seller:)
+      own.add_and_validate_filters({ not_clicked_post_id: own_post.external_id }, seller)
+      expect(own.audience_members_filter_params[:exclude_emails]).to eq(["clicker@example.com"])
+
+      other = build(:seller_installment, seller:)
+      other.add_and_validate_filters({ not_clicked_post_id: other_post.external_id }, seller)
+      expect(other.audience_members_filter_params).not_to have_key(:exclude_emails)
     end
   end
 end

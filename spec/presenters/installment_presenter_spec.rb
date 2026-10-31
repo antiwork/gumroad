@@ -31,6 +31,7 @@ describe InstallmentPresenter do
       newer = create(:installment, seller:, name: "Newer post", published_at: 1.day.ago)
       create(:installment, seller:, name: "Profile only", published_at: 1.day.ago, send_emails: false, shown_on_profile: true)
       create(:installment, seller:, name: "Still a draft")
+      create(:follower_post, seller:, name: "Followers only", published_at: 1.day.ago)
 
       expect(described_class.new(seller:).new_page_props[:context][:emailed_posts]).to eq(
         [{ external_id: newer.external_id, name: "Newer post" }, { external_id: older.external_id, name: "Older post" }]
@@ -47,6 +48,16 @@ describe InstallmentPresenter do
       ).edit_page_props[:context]
 
       expect(context_props[:emailed_posts].size).to eq(51)
+      expect(context_props[:emailed_posts].first).to eq({ external_id: saved.external_id, name: "Old post" })
+    end
+
+    it "keeps the copied email's has-not-clicked post in the list even outside the recent window" do
+      saved = create(:seller_post, seller:, name: "Old post", published_at: 2.years.ago)
+      51.times { |i| create(:seller_post, seller:, name: "Post #{i}", published_at: i.days.ago) }
+      source = create(:seller_post, seller:, json_data: { not_clicked_post_id: saved.external_id })
+
+      context_props = described_class.new(seller:).new_page_props(copy_from: source.external_id)[:context]
+
       expect(context_props[:emailed_posts].first).to eq({ external_id: saved.external_id, name: "Old post" })
     end
 
