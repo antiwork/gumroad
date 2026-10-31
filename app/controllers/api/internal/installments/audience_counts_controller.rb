@@ -9,6 +9,6 @@ class Api::Internal::Installments::AudienceCountsController < Api::Internal::Bas
     return (skip_authorization and e404_json) unless installment
     authorize installment, :updated_audience_count?
 
-    render json: { count: installment.audience_members_count }
+    render json: { count: installment.displayed_audience_members_count }
   end
 end
