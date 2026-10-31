@@ -27,11 +27,11 @@ class InstallmentPresenter
       call_to_action_text: installment.call_to_action_text,
       call_to_action_url: installment.call_to_action_url,
       streamable: installment.streamable?,
-      sent_count: installment.customer_count,
+      sent_count: delivery_counts_withheld? ? nil : installment.customer_count,
       click_count: installment.unique_click_count,
       open_count: installment.unique_open_count,
-      click_rate: installment.click_rate_percent&.round(1),
-      open_rate: installment.open_rate_percent&.round(1),
+      click_rate: delivery_counts_withheld? ? nil : installment.click_rate_percent&.round(1),
+      open_rate: delivery_counts_withheld? ? nil : installment.open_rate_percent&.round(1),
       send_emails: installment.send_emails?,
       shown_on_profile: installment.shown_on_profile?,
       installment_type: installment.installment_type,
@@ -65,6 +65,7 @@ class InstallmentPresenter
         non_opener_resends: non_opener_resend_props,
         delivery: delivery_props,
         never_reached_anyone: installment.never_reached_anyone?,
+        delivery_counts_withheld: delivery_counts_withheld?,
       )
 
       unless installment.published?
@@ -81,7 +82,7 @@ class InstallmentPresenter
     installment_props = self.class.new(seller:, installment: reference_installment).props.except(:external_id) if reference_installment.present?
 
     {
-      context: installment_form_context_props(not_clicked_post_id: reference_installment&.not_clicked_post_id),
+      context: installment_form_context_props(saved_post_ids: [reference_installment&.not_clicked_post_id, reference_installment&.opened_post_id]),
       installment: installment_props,
       single_customer_recipient: single_customer_recipient_props(single_customer_purchase_id),
     }
@@ -102,6 +103,18 @@ class InstallmentPresenter
   end
 
   private
+    # One decision for every delivery count and rate on the post, since a resend's count plus the
+    # opens, or a rate with its count, gives the sent count away. The size is only read for a post sent before the decision was
+    # stored; mid-send, delivered plus still-owed is the send's size.
+    def delivery_counts_withheld?
+      return @delivery_counts_withheld if defined?(@delivery_counts_withheld)
+      return @delivery_counts_withheld = false unless installment.published? && installment.send_emails? && installment.behavior_filtered?
+
+      blast = installment.latest_regular_blast
+      remaining = blast && blast.delivery_status != "sent" ? blast.remaining_recipient_count.to_i : 0
+      @delivery_counts_withheld = installment.delivery_counts_withheld?(installment.customer_count.to_i + remaining)
+    end
+
     # State of the latest regular send. Without it an incomplete blast reads as a finished one:
     # the Emailed column only ever showed the delivered count. Resends have their own rows.
     def delivery_props
@@ -111,8 +124,8 @@ class InstallmentPresenter
       status = blast.delivery_status
       {
         status:,
-        delivered_count: blast.delivery_count,
-        remaining_count: status == "sent" ? nil : blast.remaining_recipient_count,
+        delivered_count: delivery_counts_withheld? ? nil : blast.delivery_count,
+        remaining_count: status == "sent" || delivery_counts_withheld? ? nil : blast.remaining_recipient_count,
         scheduled_for: status == "waiting" ? blast.quota_deferred_until : nil,
         retrying: status == "incomplete" && AlertOnStalledPostEmailBlastsJob.auto_resume_eligible?(blast),
       }
@@ -137,13 +150,13 @@ class InstallmentPresenter
         completed = blast.completed_at.present?
         open_count = completed ? open_counts.fetch(index, 0) : nil
         open_rate =
-          if open_count.present? && blast.delivery_count > 0
+          if !delivery_counts_withheld? && open_count.present? && blast.delivery_count > 0
             [open_count / blast.delivery_count.to_f * 100, 100].min.round(1)
           end
 
         {
           requested_at: blast.requested_at,
-          delivery_count: blast.delivery_count,
+          delivery_count: delivery_counts_withheld? ? nil : blast.delivery_count,
           completed:,
           expired: blast.expired_at.present?,
           open_count:,
@@ -226,19 +239,18 @@ class InstallmentPresenter
     # Only a post emailed through the purchase mailer keys its clicks to a buyer; a follower or
     # affiliate send keys them to that follower or affiliate, so offering one would exclude
     # nobody. A saved choice outside the recent window stays in the list.
-    def emailed_post_options(saved_id, limit: EMAILED_POST_OPTIONS_LIMIT)
+    def emailed_post_options(saved_ids, limit: EMAILED_POST_OPTIONS_LIMIT)
       posts = seller.installments.alive.not_workflow_installment.published.send_emails.not_single_recipient_email
         .seller_or_product_or_variant_type
         .order(published_at: :desc).limit(limit)
         .map { { external_id: _1.external_id, name: _1.displayed_name } }
 
-      return posts if saved_id.blank? || posts.any? { _1[:external_id] == saved_id }
-
-      saved = seller.installments.alive.find_by_external_id(saved_id)
-      saved ? [{ external_id: saved.external_id, name: saved.displayed_name }, *posts] : posts
+      missing = Array.wrap(saved_ids).compact_blank.uniq - posts.map { _1[:external_id] }
+      saved = missing.filter_map { seller.installments.alive.find_by_external_id(_1) }
+      saved.map { { external_id: _1.external_id, name: _1.displayed_name } } + posts
     end
 
-    def installment_form_context_props(not_clicked_post_id: installment&.not_clicked_post_id)
+    def installment_form_context_props(saved_post_ids: [installment&.not_clicked_post_id, installment&.opened_post_id])
       user_presenter = UserPresenter.new(user: seller)
       allow_comments_by_default = seller.installments.not_workflow_installment.order(:created_at).last&.allow_comments?
 
@@ -266,7 +278,7 @@ class InstallmentPresenter
         countries: ([Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.map(&:last)).uniq,
         profile_sections: seller.seller_profile_posts_sections.map { { id: _1.external_id, name: _1.header } },
         has_scheduled_emails: Installment.alive.not_workflow_installment.scheduled.where(seller:).exists?,
-        emailed_posts: emailed_post_options(not_clicked_post_id),
+        emailed_posts: emailed_post_options(saved_post_ids),
         aws_access_key_id: AWS_ACCESS_KEY,
         s3_url: s3_bucket_url,
         user_id: seller.external_id,

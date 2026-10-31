@@ -27,6 +27,7 @@ class SaveInstallmentService
       ActiveRecord::Base.transaction do
         installment.message = SaveContentUpsellsService.new(seller:, content: installment.message, old_content: installment.message_was).from_html
         save_installment
+        ensure_behavior_segment_reaches_floor if params[:to_be_published_at].present? || params[:publish].present?
 
         if params[:to_be_published_at].present?
           schedule_installment
@@ -84,6 +85,12 @@ class SaveInstallmentService
           section.update!(shown_posts: shown_posts.to_a)
         end
       end
+    end
+
+    def ensure_behavior_segment_reaches_floor
+      return if error.present?
+
+      @error = Installment::BEHAVIOR_SEGMENT_TOO_SMALL_MESSAGE if installment.behavior_segment_below_floor?
     end
 
     def schedule_installment
@@ -158,7 +165,7 @@ class SaveInstallmentService
       params.require(:installment).permit(:name, :message, :installment_type, :link_id,
                                           :paid_more_than_cents, :paid_less_than_cents, :created_after, :created_before,
                                           :bought_from, :active_customers_only, :minimum_license_uses,
-                                          :shown_on_profile, :send_emails, :allow_comments, :not_clicked_post_id,
+                                          :shown_on_profile, :send_emails, :allow_comments, :not_clicked_post_id, :opened_post_id,
                                           bought_products: [], bought_variants: [], affiliate_products: [],
                                           not_bought_products: [], not_bought_variants: [], waitlisted_products: [],
                                           shown_in_profile_sections: [])

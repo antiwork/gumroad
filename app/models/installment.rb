@@ -59,6 +59,8 @@ class Installment < ApplicationRecord
 
   attr_json_data_accessor :workflow_trigger
   attr_json_data_accessor :single_recipient_purchase_id
+  # Read through `delivery_counts_withheld?`: the json_data reader would turn a stored false into nil.
+  attr_json_data_writer :delivery_counts_withheld
 
   belongs_to :link, optional: true
   belongs_to :base_variant, optional: true
@@ -266,6 +268,8 @@ class Installment < ApplicationRecord
   }
 
   SENDING_LIMIT = 100
+  MINIMUM_BEHAVIOR_SEGMENT_SIZE = 5
+  BEHAVIOR_SEGMENT_TOO_SMALL_MESSAGE = "Fewer than #{MINIMUM_BEHAVIOR_SEGMENT_SIZE} customers match these filters. Remove a filter to send this email."
   MINIMUM_SALES_CENTS_VALUE = 100_00 # $100
 
   MEMBER_CANCELLATION_WORKFLOW_TRIGGER = "member_cancellation"
@@ -680,7 +684,7 @@ class Installment < ApplicationRecord
       send_emails: send_emails?,
       shown_on_profile: shown_on_profile?,
       audience_count: include_audience_count ? api_audience_members_count : nil,
-      recipients_count: published? ? customer_count : nil,
+      recipients_count: published? ? api_recipients_count : nil,
       url: published? ? public_page_location : nil,
       created_at:,
       updated_at:,
@@ -1033,34 +1037,89 @@ class Installment < ApplicationRecord
       params[:waitlisted_product_ids] = seller.products.where(unique_permalink: waitlisted_products).ids.presence || [nil]
     end
 
+    # A post that does not resolve, or an empty opener list, must match nobody: compact_blank!
+    # below would drop an empty list and send to everyone, while "" matches nobody.
+    params[:include_emails] = opened_recipient_emails(opened_post_id).presence || [""] if opened_post_id.present?
+
     if not_clicked_post_id.present?
       clicked_emails = clicked_recipient_emails(not_clicked_post_id)
-      params[:exclude_emails] = clicked_emails if clicked_emails.any?
+      if clicked_emails.nil?
+        params[:include_emails] = [""]
+      elsif clicked_emails.any?
+        params[:exclude_emails] = clicked_emails
+      end
     end
 
     params.compact_blank!
   end
 
-  # Emails of the buyers who clicked the referenced post's email. Resolved here, where a saved
-  # filter turns into query params, so the count the seller sees and the recipients a blast
-  # picks up go through one path. A reference that no longer resolves excludes nobody: worst
-  # case the filter behaves as if it were not set, never as if everyone had clicked.
+  # Emails of the buyers who clicked the referenced post's email, or nil when it is not one of
+  # the seller's posts. Resolved here, where a saved filter turns into query params, so the
+  # count the seller sees and the recipients a blast picks up go through one path.
   def clicked_recipient_emails(post_external_id)
-    post = seller.installments.find_by_external_id(post_external_id)
-    return [] if post.blank?
+    (@clicked_recipient_emails ||= {})[post_external_id] ||= begin
+      post = seller.installments.find_by_external_id(post_external_id)
+      post && purchase_emails_for(EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)).to_a
+    end
+  end
 
-    purchase_ids = EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)
-    return [] if purchase_ids.empty?
-
-    purchase_emails_for(purchase_ids).to_a
+  # Both lists are memoized per instance: each read scans a whole Dynamo partition, and one
+  # request, blast or launch card resolves the filters several times.
+  def opened_recipient_emails(post_external_id)
+    (@opened_recipient_emails ||= {})[post_external_id] ||= begin
+      post = seller.installments.find_by_external_id(post_external_id)
+      post ? purchase_emails_for(EmailEngagementDynamoStore.opened_recipient_purchase_ids(post.id)).to_a : []
+    end
   end
 
   def audience_members_count(limit = nil)
     AudienceMember.filter_count(seller_id:, params: audience_members_filter_params, limit:)
   end
 
+  def behavior_filtered? = opened_post_id.present? || not_clicked_post_id.present?
+
+  # The count a seller may see, for the saved filters or a per-type split of them; nil when withheld.
+  def displayed_audience_members_count(params = audience_members_filter_params)
+    count = AudienceMember.filter_count(seller_id:, params:)
+    behavior_filtered? && behavior_count_withheld?(count, params) ? nil : count
+  end
+
+  # Stored by SendPostBlastEmailsJob against the audience the send went to. A post sent before
+  # that was stored is held against today's audience.
+  def delivery_counts_withheld?(sent_count = customer_count.to_i)
+    return false unless send_emails? && behavior_filtered?
+    return json_data["delivery_counts_withheld"] if json_data.key?("delivery_counts_withheld")
+
+    behavior_count_withheld?(sent_count, audience_members_filter_params)
+  end
+
+  # A behavior segment is withheld when it, or the part of a wider audience it leaves out, is
+  # below the floor: the seller reads the wider count by turning a behavior filter off, so
+  # either side can single out a buyer. The block, when given, counts a wider audience's params.
+  def behavior_count_withheld?(count, params, &wider_count)
+    return true if count < MINIMUM_BEHAVIOR_SEGMENT_SIZE
+
+    wider_count ||= ->(wider_params) { AudienceMember.filter_count(seller_id:, params: wider_params) }
+    wider = [params.except(:include_emails, :exclude_emails)]
+    wider += [params.except(:include_emails), params.except(:exclude_emails)] if params.key?(:include_emails) && params.key?(:exclude_emails)
+    wider.any? { (wider_count.call(_1) - count).in?(1...MINIMUM_BEHAVIOR_SEGMENT_SIZE) }
+  end
+
+  # Sending to fewer would single those buyers out, and the sent count would give away the size
+  # the composer withholds.
+  def behavior_segment_below_floor?
+    send_emails? && behavior_filtered? &&
+      audience_members_count(MINIMUM_BEHAVIOR_SEGMENT_SIZE) < MINIMUM_BEHAVIOR_SEGMENT_SIZE
+  end
+
   def api_audience_members_count
-    audience_members_count
+    displayed_audience_members_count
+  rescue StandardError
+    nil
+  end
+
+  def api_recipients_count
+    delivery_counts_withheld? ? nil : customer_count
   rescue StandardError
     nil
   end
