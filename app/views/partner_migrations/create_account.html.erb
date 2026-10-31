@@ -1,0 +1,11 @@
+<% content_for :partner_migration_footer do %>
+  <%= button_to "Create my account", create_partner_migration_account_path, method: :post, params: { partner_migration_id: @migration.public_id, partner_migration_code_digest: @migration.code_digest }, form: { style: "display: contents" }, class: partner_migration_button_class %>
+  <%= link_to "I already have a Gumroad account", login_path(next: partner_migration_path), class: "underline" %>
+<% end %>
+<%= render layout: "card", locals: { application: @migration.oauth_application, title: partner_migration_title(@migration) } do %>
+  <% if @error_message.present? %>
+    <p role="alert"><%= @error_message %></p>
+  <% end %>
+  <%= render "product_names", migration: @migration %>
+  <p>We'll create a Gumroad account for <strong><%= @migration.masked_email %></strong> and email you a link to set your password. Your products arrive as drafts. You decide when to publish them.</p>
+<% end %>

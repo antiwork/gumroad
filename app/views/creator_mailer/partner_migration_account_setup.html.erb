@@ -1,0 +1,6 @@
+<%= header_section(@subject) %>
+<div>
+  <p>Your products from <%= @migration.oauth_application.name %> are moving to Gumroad as drafts. Set a password to see them.</p>
+  <p><%= link_to "Set your password", @setup_url, class: "button primary" %></p>
+  <p>This link works for <%= distance_of_time_in_words(PartnerMigration::ACCOUNT_SETUP_EXPIRES_IN) %>. Didn't ask for this? You can ignore this email. No one can use the account without access to this email address.</p>
+</div>
