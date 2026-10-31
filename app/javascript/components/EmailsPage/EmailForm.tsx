@@ -5,7 +5,13 @@ import { addHours, format, startOfDay, startOfHour } from "date-fns";
 import React from "react";
 
 import { sendSingleCustomerEmail } from "$app/data/customers";
-import { AudienceType, getRecipientCount, InstallmentFormContext, Installment } from "$app/data/installments";
+import {
+  AudienceType,
+  getRecipientCount,
+  InstallmentFormContext,
+  Installment,
+  WITHHELD_COUNT_TEXT,
+} from "$app/data/installments";
 import { type EmailTab, TYPE_TO_TAB } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 import Countdown from "$app/utils/countdown";
@@ -235,7 +241,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   const [affiliatedProducts, setAffiliatedProducts] = React.useState<string[]>(installment?.affiliate_products ?? []);
   const [waitlisted, setWaitlisted] = React.useState<string[]>(installment?.waitlisted_products ?? []);
   const [recipientCount, setRecipientCount] = React.useState<{
-    count: number;
+    count: number | null;
     total: number;
     loading: boolean;
   }>({ count: 0, total: 0, loading: false });
@@ -269,7 +275,9 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     ...(installment?.not_bought_variants ?? []),
   ]);
   const [notClickedPostId, setNotClickedPostId] = React.useState(installment?.not_clicked_post_id ?? "");
+  const [openedPostId, setOpenedPostId] = React.useState(installment?.opened_post_id ?? "");
   const selectedEmailedPost = context.emailed_posts.find((post) => post.external_id === notClickedPostId);
+  const selectedOpenedPost = context.emailed_posts.find((post) => post.external_id === openedPostId);
   const [paidMoreThanCents, setPaidMoreThanCents] = React.useState<number | null>(
     installment?.paid_more_than_cents ?? null,
   );
@@ -582,6 +590,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     affiliate_products: audienceType === "affiliates" ? affiliatedProducts : null,
     waitlisted_products: audienceType === "followers" ? waitlisted : null,
     not_clicked_post_id: audienceType === "customers" ? notClickedPostId || null : null,
+    opened_post_id: audienceType === "customers" ? openedPostId || null : null,
     send_emails: channel.email,
     shown_on_profile: channel.profile,
     allow_comments: allowComments,
@@ -975,7 +984,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                             <LoadingSpinner className="size-5" />
                           </div>
                         ) : (
-                          <div aria-label="Recipient count">{`${recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>
+                          <div aria-label="Recipient count">{`${recipientCount.count === null ? WITHHELD_COUNT_TEXT : recipientCount.count.toLocaleString()} / ${recipientCount.total.toLocaleString()}`}</div>
                         )
                       ) : null}
                     </FieldsetTitle>
@@ -1181,6 +1190,33 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                   <CardContent>
                     <Fieldset className="grow basis-0">
                       <FieldsetTitle>
+                        <Label htmlFor={`${uid}-opened`}>Has opened (approximate)</Label>
+                      </FieldsetTitle>
+                      <Select
+                        id={`${uid}-opened`}
+                        value={openedPostId}
+                        disabled={isPublished}
+                        onChange={(event) => setOpenedPostId(event.target.value)}
+                        style={openedPostId ? undefined : { color: "var(--color-muted)" }}
+                      >
+                        <option value="">Select…</option>
+                        {context.emailed_posts.map((post) => (
+                          <option key={post.external_id} value={post.external_id}>
+                            {post.name}
+                          </option>
+                        ))}
+                      </Select>
+                      {selectedOpenedPost ? (
+                        // Same lg-only caption as "Has not clicked" below, where the sidebar clips the select.
+                        <p className="mt-2 hidden text-sm break-words text-muted lg:block">{selectedOpenedPost.name}</p>
+                      ) : null}
+                    </Fieldset>
+                  </CardContent>
+                ) : null}
+                {audienceType === "customers" && context.emailed_posts.length > 0 ? (
+                  <CardContent>
+                    <Fieldset className="grow basis-0">
+                      <FieldsetTitle>
                         <Label htmlFor={`${uid}-not_clicked`}>Has not clicked</Label>
                       </FieldsetTitle>
                       <Select
@@ -1189,7 +1225,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         disabled={isPublished}
                         onChange={(event) => setNotClickedPostId(event.target.value)}
                         // A native select has no placeholder, so the unset option is coloured like the
-                        // one the two filters above show rather than like a chosen value.
+                        // one the filters above show rather than like a chosen value.
                         style={notClickedPostId ? undefined : { color: "var(--color-muted)" }}
                       >
                         <option value="">Select…</option>

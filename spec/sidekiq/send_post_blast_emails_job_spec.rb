@@ -96,6 +96,131 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
+    it "does not send a has-opened email whose openers fell below the floor by send time" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1, link: product)
+      create(:purchase, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+      expect(blast.reload.delivery_status).to eq("too_few_recipients")
+    end
+
+    it "finishes a has-opened email below the floor that may already have reached someone" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+      # A prior attempt handed this one to the provider and died before stamping the blast.
+      SentPostEmail.create!(post:, email: openers.first.email)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count openers.size - 1
+      expect(blast.reload.expired_at).to be_nil
+    end
+
+    it "does not send a has-opened email below the floor that another copy of the job already expired" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+      # The other copy expires the blast after this one passed the guard at the top of perform.
+      allow(PostEmailBlast).to receive(:expire).and_wrap_original do |original, *args, **kwargs|
+        PostEmailBlast.where(id: blast.id).update_all(expired_at: Time.current, expiry_reason: PostEmailBlast::EXPIRY_TOO_FEW_RECIPIENTS)
+        original.call(*args, **kwargs)
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count 0
+    end
+
+    it "stores whether a has-opened email's delivery counts are withheld against the audience it goes to, counted in SQL" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      create_list(:purchase, 2, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:, started_at: Time.current)
+      travel 1.minute
+      # Bought after the send started, so outside the audience it went to.
+      create_list(:purchase, 3, link: product)
+      # Elasticsearch has not indexed the two buyers who did not open yet.
+      allow(AudienceMember).to receive(:filter_count).and_return(openers.size)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count openers.size
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => true)
+    end
+
+    it "shows a has-opened email's delivery counts when SQL counts enough buyers left out, whatever Elasticsearch says" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      # Elasticsearch has indexed only one of the buyers who did not open.
+      allow(AudienceMember).to receive(:filter_count) { |params:, **| params.key?(:include_emails) ? openers.size : openers.size + 1 }
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+      expect_sent_count openers.size
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => false)
+    end
+
+    it "withholds a has-opened email's delivery counts without an error report when the decision runs out of time" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      $redis.set(RedisKey.behavior_decision_max_execution_time_seconds, 7)
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_call_original
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        raise WithMaxExecutionTime::QueryTimeoutError, "Query took more than 7 seconds" unless kwargs[:with_ids]
+
+        original.call(**kwargs)
+      end
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+      expect_sent_count openers.size
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => true)
+      expect(WithMaxExecutionTime).to have_received(:timeout_queries).with(seconds: 7)
+    end
+
+    it "decides a has-not-clicked email nobody clicked from the audience it loaded" do
+      product = create(:product, user: @seller)
+      create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      clicked_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).with(clicked_post.id).and_return([])
+      post = create(:seller_post, :published, seller: @seller, not_clicked_post_id: clicked_post.external_id)
+      allow(AudienceMember).to receive(:filter).and_call_original
+
+      described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+      # Only the recipient load and the send-time recheck, which both pass `with_ids:`, query the audience.
+      expect(AudienceMember).not_to have_received(:filter).with(hash_excluding(:with_ids))
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => false)
+    end
+
     describe "after the seller's newsletter moved to Feature announcements" do
       # The audience subscribed before the newsletter retired.
       before do
@@ -911,6 +1036,19 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect(blast.reload.completed_at).to be_nil
       end
 
+      expect_sent_count 0
+    end
+
+    it "refuses a late rebuild of a has-opened email, whose openers are read as they are today" do
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return([create(:purchase, link: create(:product, user: @seller)).id])
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: Time.current, first_email_delivered_at: Time.current)
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /filter's eligibility cannot be rebuilt/)
       expect_sent_count 0
     end
 

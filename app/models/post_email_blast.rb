@@ -13,8 +13,9 @@ class PostEmailBlast < ApplicationRecord
   # delivery_count:
   #   Number of emails that were delivered. Not final until the blast is complete.
   # expired_at:
-  #   Time we gave up on a blast that never sent anything (slot never freed, or send job lost), or
-  #   stopped one whose newsletter retired, which may already have delivered.
+  #   Time we gave up on a blast that never sent anything (slot never freed, send job lost, or a
+  #   behavior-filtered audience below the floor), or stopped one whose newsletter retired, which may
+  #   already have delivered.
   # expiry_reason:
   #   Why it expired. Nil reads as quota, for rows from before reasons were recorded.
 
@@ -33,6 +34,7 @@ class PostEmailBlast < ApplicationRecord
   EXPIRY_QUOTA = "quota"
   EXPIRY_ABANDONED = "abandoned"
   EXPIRY_NEWSLETTER_RETIRED = "newsletter_retired"
+  EXPIRY_TOO_FEW_RECIPIENTS = "too_few_recipients"
 
   scope :to_non_openers, -> { where(recipient_filter: RECIPIENT_FILTER_UNOPENED) }
 
@@ -88,6 +90,7 @@ class PostEmailBlast < ApplicationRecord
     # Ahead of the pending count: a chunk mid-call when the newsletter retired can still settle into it.
     return "stopped" if expired_at.present? && expiry_reason == EXPIRY_NEWSLETTER_RETIRED
     return "sent" if remaining_recipient_count&.<=(0)
+    return "too_few_recipients" if expired_at.present? && expiry_reason == EXPIRY_TOO_FEW_RECIPIENTS
     return (expiry_reason == EXPIRY_ABANDONED ? "abandoned" : "expired") if expired_at.present?
     return "waiting" if quota_deferred_until&.future?
     return "sending" if [requested_at, last_email_delivered_at].compact.max > AlertOnStalledPostEmailBlastsJob::EMAIL_ACTIVITY_THRESHOLD.ago

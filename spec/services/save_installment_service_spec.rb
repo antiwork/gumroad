@@ -167,6 +167,20 @@ describe SaveInstallmentService do
       expect(service.installment.json_filters[:not_clicked_post_id]).to eq("post-1")
     end
 
+    it "refuses to publish or schedule a has-opened email that matches fewer customers than the floor" do
+      opened_params = params.deep_merge(installment: { installment_type: "seller", link_id: nil, bought_products: nil, opened_post_id: "post-1" })
+
+      [{ publish: true }, { to_be_published_at: 1.day.from_now.to_s }].each do |action|
+        service = described_class.new(seller:, installment:, params: opened_params.merge(action), preview_email_recipient:)
+        service.process
+
+        expect(service.error).to eq("Fewer than 5 customers match these filters. Remove a filter to send this email.")
+        expect(service.installment.published?).to be(false)
+      end
+      expect(SendPostBlastEmailsJob.jobs.size).to eq(0)
+      expect(PublishScheduledPostJob.jobs.size).to eq(0)
+    end
+
     it "creates and publishes the installment" do
       service = described_class.new(seller:, installment:, params: params.merge(publish: true), preview_email_recipient:)
       service.process

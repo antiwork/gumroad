@@ -108,6 +108,23 @@ describe Pages::BuyButtonParams do
         expect(described_class.from(node, product:)).to eq({})
       end
 
+      it "passes through a zero price when zero is the product's minimum" do
+        product.update!(price_cents: 0)
+        node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="0">Buy</a>))
+        expect(described_class.from(node, product:)).to eq(price: "0")
+      end
+
+      it "drops a zero price when the product has a higher minimum" do
+        node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="0">Buy</a>))
+        expect(described_class.from(node, product:)).to eq({})
+      end
+
+      it "drops a negative price" do
+        product.update!(price_cents: 0)
+        node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="-1">Buy</a>))
+        expect(described_class.from(node, product:)).to eq({})
+      end
+
       it "drops a price below the product's minimum" do
         node = node_for(%(<a data-gumroad-action="buy" data-gumroad-price="2.50">Buy</a>))
         expect(described_class.from(node, product:)).to eq({})

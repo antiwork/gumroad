@@ -27,6 +27,10 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
 
   def show
     authorize @installment, :resend_to_non_openers?
+    if @installment.delivery_counts_withheld?
+      # Non-openers plus the opens is the sent count.
+      return render json: { count: nil, count_withheld: true, recently_resent: recently_resent?, audience_filtered_out: false }
+    end
 
     count = nil
     audience_filtered_out = false

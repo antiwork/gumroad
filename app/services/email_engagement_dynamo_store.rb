@@ -171,6 +171,13 @@ class EmailEngagementDynamoStore
       ids.transform_values(&:uniq)
     end
 
+    # The buyer half of the same walk, for the purchase-keyed callers (the "Has opened" filter and
+    # the purchase-backed non-opener set). A click also creates the open item, so a clicker counts
+    # as an opener.
+    def opened_recipient_purchase_ids(installment_id)
+      partition_items(installment_id, "OPEN#").filter_map { |item| purchase_id_from_item(item) }.uniq
+    end
+
     def create_table!
       client.create_table(
         table_name:,
@@ -223,7 +230,8 @@ class EmailEngagementDynamoStore
 
       # Every item under one sort-key prefix in an installment's partition. The items are small
       # and one exists per recipient (or per recipient + url), so a six-figure post pages through
-      # this a megabyte at a time.
+      # this a megabyte at a time. Callers with a budget pass `deadline:` and get a bounded client
+      # that gives up (ScanBudgetExceeded) instead of blocking the request.
       def partition_items(installment_id, prefix, deadline: nil)
         items = []
         exclusive_start_key = nil

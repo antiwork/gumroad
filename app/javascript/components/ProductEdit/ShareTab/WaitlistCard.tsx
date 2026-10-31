@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { MINIMUM_BEHAVIOR_SEGMENT_SIZE } from "$app/data/installments";
 import { startWaitlistEmail } from "$app/data/waitlist_email";
 import { assertResponseError } from "$app/utils/request";
 
@@ -19,6 +20,7 @@ const EMAIL_SUMMARY: Record<Exclude<EmailDeliveryState, "draft">, string> = {
   expired: "Your email to your waitlist wasn't sent. You can send it now from Emails.",
   abandoned: "Your email to your waitlist wasn't sent. You can send it now from Emails.",
   stopped: "Your email to your waitlist was stopped. Check delivery details in Emails.",
+  too_few_recipients: `Your email to your waitlist wasn't sent because fewer than ${MINIMUM_BEHAVIOR_SEGMENT_SIZE} customers matched its filters. Check delivery details in Emails.`,
 };
 
 export const WaitlistCard = ({
