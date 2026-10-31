@@ -152,13 +152,50 @@ describe SendPostBlastEmailsJob, :freeze_time do
       opened_post = create(:seller_post, :published, seller: @seller)
       allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
       post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:, started_at: Time.current)
+      travel 1.minute
+      # Bought after the send started, so outside the audience it went to.
+      create_list(:purchase, 3, link: product)
       # Elasticsearch has not indexed the two buyers who did not open yet.
       allow(AudienceMember).to receive(:filter_count).and_return(openers.size)
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      described_class.new.perform(blast.id)
+
+      expect_sent_count openers.size
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => true)
+    end
+
+    it "shows a has-opened email's delivery counts when SQL counts enough buyers left out, whatever Elasticsearch says" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      # Elasticsearch has indexed only one of the buyers who did not open.
+      allow(AudienceMember).to receive(:filter_count) { |params:, **| params.key?(:include_emails) ? openers.size : openers.size + 1 }
+      expect(ErrorNotifier).not_to receive(:notify)
 
       described_class.new.perform(create(:blast, :just_requested, post:).id)
 
       expect_sent_count openers.size
-      expect(post.reload.json_data).to include("delivery_counts_withheld" => true)
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => false)
+    end
+
+    it "decides a has-not-clicked email nobody clicked from the audience it loaded" do
+      product = create(:product, user: @seller)
+      create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      clicked_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).with(clicked_post.id).and_return([])
+      post = create(:seller_post, :published, seller: @seller, not_clicked_post_id: clicked_post.external_id)
+      allow(AudienceMember).to receive(:filter).and_call_original
+
+      described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+      # Only the recipient load and the send-time recheck, which both pass `with_ids:`, query the audience.
+      expect(AudienceMember).not_to have_received(:filter).with(hash_excluding(:with_ids))
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => false)
     end
 
     describe "after the seller's newsletter moved to Feature announcements" do

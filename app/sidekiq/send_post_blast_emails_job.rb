@@ -133,6 +133,10 @@ class SendPostBlastEmailsJob
     # future split attempts without a deploy.
     CHILD_SLICE_SIZE = 2_000
 
+    # Per statement, for up to three wider-audience counts that run before the first email. Kept well
+    # under the recipient load's cap: a timeout withholds, which is the safe side.
+    BEHAVIOR_DECISION_TIMEOUT = 1.minute
+
     # Decided before anyone gets the email, against the audience it goes to, so the Published page
     # and the API read a stored flag instead of resolving the behavior filter per row. The wider
     # audiences are counted by the query that loaded the recipients: a lagging Elasticsearch count
@@ -140,8 +144,11 @@ class SendPostBlastEmailsJob
     def delivery_counts_withheld_at_send
       return if @blast.to_non_openers? || @blast.first_email_delivered_at.present? || !@post.behavior_filtered?
 
-      @post.behavior_count_withheld?(@audience_size, @filters) do |wider_params|
-        WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+      WithMaxExecutionTime.timeout_queries(seconds: BEHAVIOR_DECISION_TIMEOUT) do
+        @post.behavior_count_withheld?(@audience_size, @filters) do |wider_params|
+          # Nothing narrowed the recipients (a not-clicked post nobody clicked), so they are the wider audience.
+          next @audience_size if wider_params == @filters
+
           AudienceMember.filter(seller_id: @post.seller_id, params: wider_params, as_of: @blast.started_at).count
         end
       end
