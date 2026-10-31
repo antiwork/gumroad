@@ -266,6 +266,7 @@ class Installment < ApplicationRecord
   }
 
   SENDING_LIMIT = 100
+  MINIMUM_BEHAVIOR_SEGMENT_SIZE = 5
   MINIMUM_SALES_CENTS_VALUE = 100_00 # $100
 
   MEMBER_CANCELLATION_WORKFLOW_TRIGGER = "member_cancellation"
@@ -1038,6 +1039,11 @@ class Installment < ApplicationRecord
       params[:exclude_emails] = clicked_emails if clicked_emails.any?
     end
 
+    if opened_post_id.present? && (post = seller.installments.find_by_external_id(opened_post_id))
+      # An empty list would be dropped by compact_blank! below and match everyone; "" matches nobody.
+      params[:include_emails] = opened_recipient_emails(post).presence || [""]
+    end
+
     params.compact_blank!
   end
 
@@ -1045,6 +1051,11 @@ class Installment < ApplicationRecord
   # filter turns into query params, so the count the seller sees and the recipients a blast
   # picks up go through one path. A reference that no longer resolves excludes nobody: worst
   # case the filter behaves as if it were not set, never as if everyone had clicked.
+  def opened_recipient_emails(post)
+    purchase_ids = EmailEngagementDynamoStore.opened_recipient_purchase_ids(post.id)
+    purchase_ids.empty? ? [] : purchase_emails_for(purchase_ids).to_a
+  end
+
   def clicked_recipient_emails(post_external_id)
     post = seller.installments.find_by_external_id(post_external_id)
     return [] if post.blank?
@@ -1057,6 +1068,15 @@ class Installment < ApplicationRecord
 
   def audience_members_count(limit = nil)
     AudienceMember.filter_count(seller_id:, params: audience_members_filter_params, limit:)
+  end
+
+  # The count a seller may see. An exact count of a behavior segment can identify one buyer
+  # ("opened X" and "bought P"), so below the floor it is withheld (nil).
+  def displayed_audience_members_count
+    count = audience_members_count
+    return count unless opened_post_id.present? || not_clicked_post_id.present?
+
+    count < MINIMUM_BEHAVIOR_SEGMENT_SIZE ? nil : count
   end
 
   def api_audience_members_count
