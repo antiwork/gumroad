@@ -79,7 +79,7 @@ class Pages::BuyButtonParams
       return nil if raw.length > PRICE_INPUT_MAX_LENGTH || !raw.match?(PRICE_INPUT_PATTERN)
 
       value = BigDecimal(raw)
-      return nil unless value.positive?
+      return nil if value.negative?
 
       val_cents = (value * (product.single_unit_currency? ? 1 : 100)).round
       return nil if val_cents < product.price_cents.to_i
