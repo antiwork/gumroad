@@ -1464,6 +1464,10 @@ Rails.application.routes.draw do
       resource :upload_context, only: [:show]
     end
 
+    # The waitlist bridge on a product's custom HTML page posts here on the product's own host.
+    # format: false keeps the path from picking up a suffix that would slip past the Rack::Attack throttles.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", format: false
+
     get "/", to: "links#show", defaults: { format: "html" }
     get "/l/:id", to: "links#show", defaults: { format: "html" }
     get "/l/:id/landing/embed", to: "links#landing_iframe_content"

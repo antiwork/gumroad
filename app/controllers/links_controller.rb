@@ -2317,9 +2317,10 @@ class LinksController < ApplicationController
     end
 
     def custom_html_document(custom_html)
+      waitlist_open = @product.accepts_waitlist_signups?
       <<~HTML
         <!doctype html>
-        <html>
+        <html#{waitlist_open ? "" : " data-gumroad-launched"}>
           <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -2346,6 +2347,7 @@ class LinksController < ApplicationController
             </script>
             #{custom_html_navigation_bridge_script(allowed_hostnames: product_custom_html_store_hostnames(@product))}
             #{BACKGROUND_BRIDGE_SCRIPT}
+            #{waitlist_open ? WAITLIST_BRIDGE_SCRIPT : ""}
           </body>
         </html>
       HTML

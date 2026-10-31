@@ -217,6 +217,10 @@ module RendersCustomHtmlPages
     </script>
   HTML
 
+  # Same bridge for form[data-gumroad-waitlist] on a product's custom HTML, answered by the
+  # wrapper's gumroad:waitlist listener. Derived so the two cannot drift apart.
+  WAITLIST_BRIDGE_SCRIPT = FOLLOW_BRIDGE_SCRIPT.gsub("gumroad-follow", "gumroad-waitlist").gsub("gumroad:follow", "gumroad:waitlist").freeze
+
   # Shared by both halves so they cannot disagree about modern color syntax.
   # Alpha follows the slash in modern functions or is the fourth legacy
   # comma-separated channel; a positional match mistakes black's last channel
@@ -711,6 +715,53 @@ module RendersCustomHtmlPages
       HTML
     end
 
+    # Trusted-wrapper half of the waitlist bridge. Like the follow wrapper, the seller and product
+    # ids come only from this render context, never from the message.
+    def custom_html_waitlist_wrapper_script(seller_external_id:, product_external_id:, nonce:)
+      seller_id_json = ERB::Util.json_escape(seller_external_id.to_json)
+      product_id_json = ERB::Util.json_escape(product_external_id.to_json)
+      endpoint_json = ERB::Util.json_escape(follow_user_from_embed_form_path.to_json)
+      <<~HTML
+        <script nonce="#{ERB::Util.h(nonce)}" data-cfasync="false" data-gumroad-waitlist-wrapper>
+          (function () {
+            var frame = document.getElementById("gumroad-landing-frame");
+            var SELLER_ID = #{seller_id_json};
+            var PRODUCT_ID = #{product_id_json};
+            var ENDPOINT = #{endpoint_json};
+            var GENERIC_ERROR = "Something went wrong. Please try again.";
+            window.addEventListener("message", function (e) {
+              if (!frame || e.source !== frame.contentWindow) return;
+              var d = e.data;
+              if (!d || typeof d !== "object" || d.type !== "gumroad:waitlist") return;
+              var requestId = typeof d.requestId === "string" ? d.requestId : null;
+              function reply(success, message) {
+                frame.contentWindow.postMessage({ type: "gumroad:waitlist:result", success: success, message: message, requestId: requestId }, "*");
+              }
+              var email = typeof d.email === "string" ? d.email.trim() : "";
+              if (!email) {
+                reply(false, "Please enter a valid email address.");
+                return;
+              }
+              var token = document.querySelector('meta[name="csrf-token"]');
+              var body = new URLSearchParams();
+              body.set("seller_id", SELLER_ID);
+              body.set("product_id", PRODUCT_ID);
+              body.set("email", email);
+              fetch(ENDPOINT, {
+                method: "POST",
+                headers: { "Accept": "application/json", "X-CSRF-Token": token ? token.content : "" },
+                credentials: "same-origin",
+                body: body
+              })
+                .then(function (r) { return r.json(); })
+                .then(function (data) { reply(data && data.success === true, data && typeof data.message === "string" ? data.message : GENERIC_ERROR); })
+                .catch(function () { reply(false, GENERIC_ERROR); });
+            });
+          })();
+        </script>
+      HTML
+    end
+
     # Trusted-wrapper half of the products bridge (gumroad-private#1691).
     # Untrusted iframe: only e.source === landing frame; endpoint URL is baked
     # here so the page cannot pick another seller; offset is a non-negative
@@ -970,7 +1021,7 @@ module RendersCustomHtmlPages
     # /l/:permalink and UsersController at /coffee (a coffee product's canonical URL), so the
     # two agree; both controllers include PageMeta::Product for custom_domain_host_for_meta.
     def product_custom_html_visible?(product)
-      product.present? && Feature.active?(:custom_html_pages, product.user) && product.custom_html.present? && (product.alive? || can_preview_product_custom_html?(product))
+      product.present? && Feature.active?(:custom_html_pages, product.user) && product.custom_html.present? && (product.alive? || product.accepts_waitlist_signups? || can_preview_product_custom_html?(product))
     end
 
     def can_preview_product_custom_html?(product)
@@ -1138,6 +1189,7 @@ module RendersCustomHtmlPages
               });
             </script>
             #{custom_html_background_wrapper_script(nonce:)}
+            #{product.accepts_waitlist_signups? ? custom_html_waitlist_wrapper_script(seller_external_id: product.user.external_id, product_external_id: product.external_id, nonce:) : ""}
             #{can_preview_product_custom_html?(product) ? custom_html_live_reload_script(version_src: "/l/#{product.unique_permalink}/landing/version", nonce:) : ""}
           </body>
         </html>

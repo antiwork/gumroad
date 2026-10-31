@@ -145,18 +145,39 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 3, "audience_count" => 5)
     end
 
-    it "returns the same recipients for the preview count and the send filter with multiple not_bought_products" do
-      not_bought = [product1.unique_permalink, product2.unique_permalink]
+    context "with several not-bought exclusions" do
+      # Every product2 buyer above also bought product1, so give each excluded item its own buyer.
+      let!(:product2_only_purchase) { create(:purchase, seller:, link: product2, email: "bob@example.com", country: "United States", created_at: Time.current) }
 
-      get :show, params: { installment_type: "audience", not_bought_products: not_bought }
-      expect(response).to be_successful
+      before { sync_elasticsearch_audience_index }
 
-      installment = Installment.new(installment_type: "audience", not_bought_products: not_bought)
-      installment.seller = seller
-      send_emails = AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).pluck(:email)
+      def recipient_count(**filters)
+        get :show, params: { installment_type: "audience", **filters }
+        expect(response).to be_successful
+        response.parsed_body["recipient_count"]
+      end
 
-      expect(response.parsed_body["recipient_count"]).to eq(2)
-      expect(send_emails).to match_array([active_follower1.email, active_follower2.email])
+      def blast_recipient_emails(**filters)
+        installment = Installment.new(installment_type: "audience", **filters)
+        installment.seller = seller
+        AudienceMember.filter(seller_id: seller.id, params: installment.audience_members_filter_params).pluck(:email)
+      end
+
+      it "excludes buyers of any listed product, matching the blast recipients" do
+        filters = { not_bought_products: [product1.unique_permalink, product2.unique_permalink] }
+
+        recipients = blast_recipient_emails(**filters)
+        expect(recipients).to match_array([active_follower1.email, active_follower2.email])
+        expect(recipient_count(**filters)).to eq(recipients.size)
+      end
+
+      it "excludes buyers of either a listed product or a listed version, matching the blast recipients" do
+        filters = { not_bought_products: [product2.unique_permalink], not_bought_variants: [product1_variant.external_id] }
+
+        recipients = blast_recipient_emails(**filters)
+        expect(recipients).to match_array([active_follower1.email, active_follower2.email])
+        expect(recipient_count(**filters)).to eq(recipients.size)
+      end
     end
 
     it "returns counts for seller installment type with bought_variants filter" do
