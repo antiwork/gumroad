@@ -27,6 +27,7 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
   include SearchProducts
 
   FREE_RESULTS_HEADROOM = 2
+  PAID_MIN_PRICE = "0.01"
 
   # Only the checkout row asks for paid-first ordering: it sits directly under the cart, so a free
   # product there advertises a $0 alternative at the moment of payment. Receipt emails keep the raw
@@ -49,42 +50,62 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
         )
       end
     end
-    product_infos = order_by_price_preference(product_infos) if prefer_paid_products
-    product_infos = product_infos.take(limit)
-
-    if product_infos.length < limit && cart_seller_ids.present?
-      missing_results_count = limit - product_infos.length
-      search_result = search_products(
-        {
-          # Free products are dropped from the checkout row whenever a paid one can take the slot,
-          # so ask for headroom and let the preference pick the paid ones out of a longer list.
-          size: prefer_paid_products ? missing_results_count * FREE_RESULTS_HEADROOM : missing_results_count,
-          sort: ProductSortKey::FEATURED,
-          user_id: cart_seller_ids,
-          is_alive_on_profile: true,
-          exclude_ids: (exclude_product_ids + product_infos.map { _1.product.id }).uniq
-        }
-      )
-      products = search_result[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
-
-      product_infos += products.map { RecommendedProducts::ProductInfo.new(_1, source: RecommendedProducts::ProductInfo::CREATOR_FEATURED) }
-      product_infos = order_by_price_preference(product_infos) if prefer_paid_products
-      product_infos = product_infos.take(limit)
-    end
+    product_infos = prefer_paid_products ? fill_paid_first(product_infos) : fill_in_order(product_infos)
 
     build_result(product_infos:)
   end
 
   private
-    def order_by_price_preference(product_infos)
-      paid, free = product_infos.partition { !free_product?(_1.product) }
-      paid + free
+    def fill_in_order(product_infos)
+      product_infos = product_infos.take(limit)
+      return product_infos if product_infos.length >= limit || cart_seller_ids.blank?
+
+      product_infos + search_creator_featured(size: limit - product_infos.length, exclude_ids: product_infos.map { _1.product.id })
     end
 
-    # Free means the price the buyer sees on the card: zero. A catalogue with nothing paid left over
-    # still gets its free products rather than an empty row.
+    # Paid products take every slot they can, searching paid-only before free ones fill the rest.
+    def fill_paid_first(product_infos)
+      paid, free = product_infos.partition { !free_product?(_1.product) }
+      selected = paid.take(limit)
+
+      if selected.length < limit && cart_seller_ids.present?
+        found = search_creator_featured(
+          size: (limit - selected.length) * FREE_RESULTS_HEADROOM,
+          exclude_ids: product_infos.map { _1.product.id },
+          min_price: PAID_MIN_PRICE
+        )
+        found_paid, found_free = found.partition { !free_product?(_1.product) }
+        selected += found_paid.take(limit - selected.length)
+        free += found_free
+      end
+
+      selected += free.take(limit - selected.length)
+
+      if selected.length < limit && cart_seller_ids.present?
+        taken_ids = (product_infos + selected).map { _1.product.id }
+        selected += search_creator_featured(size: limit - selected.length, exclude_ids: taken_ids)
+      end
+
+      selected
+    end
+
+    def search_creator_featured(size:, exclude_ids:, min_price: nil)
+      options = {
+        size:,
+        sort: ProductSortKey::FEATURED,
+        user_id: cart_seller_ids,
+        is_alive_on_profile: true,
+        exclude_ids: (exclude_product_ids + exclude_ids).uniq
+      }
+      options[:min_price] = min_price if min_price
+      products = search_products(options)[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
+      products.map { RecommendedProducts::ProductInfo.new(_1, source: RecommendedProducts::ProductInfo::CREATOR_FEATURED) }
+    end
+
+    # Free means the price the buyer sees on the card, discount included.
     def free_product?(product)
-      product.display_price_cents(for_default_duration: true).to_i.zero?
+      base_price_cents = product.display_price_cents(for_default_duration: true)
+      product.discounted_price_cents(base_price_cents).to_i.zero?
     end
 
     def cart_seller_ids
