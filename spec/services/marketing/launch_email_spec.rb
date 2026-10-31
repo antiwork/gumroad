@@ -264,5 +264,26 @@ describe Marketing::LaunchEmail do
 
       expect(launch_email.recipient_counts).to eq(customers: 1, followers: 1, affiliates: 1, total: 9)
     end
+
+    it "withholds the counts of a behavior-filtered draft below the floor" do
+      launch_email.installment.update!(opened_post_id: "a-post")
+      allow(AudienceMember).to receive(:filter_count).and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1)
+      allow_any_instance_of(Installment).to receive(:audience_members_count)
+        .and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE - 1)
+
+      expect(launch_email.recipient_counts).to eq(customers: nil, followers: nil, affiliates: nil, total: nil)
+    end
+
+    it "shows the counts of a behavior-filtered draft at the floor" do
+      launch_email.installment.update!(opened_post_id: "a-post")
+      allow(AudienceMember).to receive(:filter_count).and_return(Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE)
+      allow_any_instance_of(Installment).to receive(:audience_members_count).and_return(9)
+
+      expect(launch_email.recipient_counts)
+        .to eq(customers: Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE,
+               followers: Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE,
+               affiliates: Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE,
+               total: 9)
+    end
   end
 end

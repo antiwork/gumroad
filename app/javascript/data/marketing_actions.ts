@@ -31,7 +31,13 @@ export type MarketingChannel = {
   eligible?: boolean;
   blocked_reason?: string | null;
   requirements?: { sales_cents_total: number; min_sales_cents_required: number };
-  counts?: { customers: number; followers: number; affiliates: number; total: number };
+  // A count is null when the server withheld it: a behavior-filtered segment below the floor.
+  counts?: {
+    customers: number | null;
+    followers: number | null;
+    affiliates: number | null;
+    total: number | null;
+  };
   // The seller deleted the draft we made, which is the only way to decline this channel.
   declined?: boolean;
   draft?: MarketingEmailDraft | null;
