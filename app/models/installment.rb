@@ -806,10 +806,9 @@ class Installment < ApplicationRecord
   # purchases into one row keyed by (seller_id, email), so the email_info purchase
   # may not match the audience row's max(purchase_id).
   #
-  # An Everyone post is the exception: it addresses followers and affiliates too, so it
-  # creates no purchase-keyed email_infos rows at all. Its recipient set is the post's own
-  # sent_post_emails (one row per recipient at handoff, whatever record they were reached as)
-  # and its openers come from Dynamo, which records an open per recipient for every post type.
+  # An Everyone post is the exception: it addresses followers and affiliates as well as buyers, and
+  # only its buyer recipients get purchase-keyed email_infos rows, so it is computed from the post's
+  # own sent_post_emails minus Dynamo's per-recipient opens (recorded for every post type).
   def unopened_recipient_emails
     return emailed_recipient_emails - opened_recipient_emails if audience_type?
     return [] unless seller_or_product_or_variant_type?

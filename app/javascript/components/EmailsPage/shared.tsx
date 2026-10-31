@@ -19,9 +19,9 @@ import { ViewEmailButton } from "$app/components/EmailsPage/ViewEmailButton";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 
-// Opens are recorded per recipient for every post type, so a resend to non-openers is offered
-// for follower and affiliate audiences too — their recipients are resolved from the post's own
-// sent set rather than from purchase-keyed rows.
+// Opens are recorded per recipient for every post type, and an Everyone post addresses followers and
+// affiliates as well as buyers, so its recipients come from the post's own sent set. Follower- and
+// affiliate-only posts stay out: their recipient resolution is not scoped the same way yet.
 const NON_OPENER_RESEND_TYPES = ["seller", "product", "variant", "audience"];
 
 export const canResendToNonOpeners = (installment: SavedInstallment) =>
