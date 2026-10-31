@@ -299,7 +299,7 @@ describe('EmailForm "Has not clicked"', () => {
 
     expect(picker().value).toBe("post-2");
     expect([...picker().options].map((option) => option.textContent)).toEqual([
-      "No filter",
+      "Select…",
       "September update",
       "October update",
     ]);
