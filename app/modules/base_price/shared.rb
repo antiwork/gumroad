@@ -53,7 +53,8 @@ module BasePrice::Shared
     save!
   end
 
-  # Maximum price_cents storable in a 32-bit signed integer column.
+  # Bounds of a 32-bit signed integer column; outside them the write raises ActiveModel::RangeError.
+  MIN_PRICE_CENTS = -2_147_483_648
   MAX_PRICE_CENTS = 2_147_483_647
 
   def price_must_be_within_range

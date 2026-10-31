@@ -233,6 +233,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     installment?.shown_in_profile_sections ?? [],
   );
   const [affiliatedProducts, setAffiliatedProducts] = React.useState<string[]>(installment?.affiliate_products ?? []);
+  const [waitlisted, setWaitlisted] = React.useState<string[]>(installment?.waitlisted_products ?? []);
   const [recipientCount, setRecipientCount] = React.useState<{
     count: number;
     total: number;
@@ -263,9 +264,12 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
         ? [installment.unique_permalink]
         : [...(installment.bought_products ?? []), ...(installment.bought_variants ?? [])];
   });
-  const [notBought, setNotBought] = React.useState<string[]>(
-    installment?.not_bought_products ?? installment?.not_bought_variants ?? [],
-  );
+  const [notBought, setNotBought] = React.useState<string[]>([
+    ...(installment?.not_bought_products ?? []),
+    ...(installment?.not_bought_variants ?? []),
+  ]);
+  const [notClickedPostId, setNotClickedPostId] = React.useState(installment?.not_clicked_post_id ?? "");
+  const selectedEmailedPost = context.emailed_posts.find((post) => post.external_id === notClickedPostId);
   const [paidMoreThanCents, setPaidMoreThanCents] = React.useState<number | null>(
     installment?.paid_more_than_cents ?? null,
   );
@@ -542,6 +546,10 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
       })),
     [context.affiliate_products],
   );
+  const waitlistProductOptions = React.useMemo(
+    () => context.waitlist_products.map((product) => ({ id: product.permalink, label: product.name })),
+    [context.waitlist_products],
+  );
 
   const filterByType = (type: ProductOrVariantOption["type"], ids: string[]) =>
     productOptions.filter((option) => option.type === type && ids.includes(option.id));
@@ -572,6 +580,8 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     not_bought_products: audienceType === "affiliates" ? null : notBoughtProducts.map(({ id }) => id),
     not_bought_variants: audienceType === "affiliates" ? null : notBoughtVariants.map(({ id }) => id),
     affiliate_products: audienceType === "affiliates" ? affiliatedProducts : null,
+    waitlisted_products: audienceType === "followers" ? waitlisted : null,
+    not_clicked_post_id: audienceType === "customers" ? notClickedPostId || null : null,
     send_emails: channel.email,
     shown_on_profile: channel.profile,
     allow_comments: allowComments,
@@ -1134,6 +1144,22 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                     </Fieldset>
                   </CardContent>
                 ) : null}
+                {audienceType === "followers" && (waitlistProductOptions.length > 0 || waitlisted.length > 0) ? (
+                  <CardContent>
+                    <Fieldset className="grow basis-0">
+                      <FieldsetTitle>
+                        <Label htmlFor={`${uid}-waitlisted`}>Joined the waitlist for</Label>
+                      </FieldsetTitle>
+                      <TagInput
+                        inputId={`${uid}-waitlisted`}
+                        tagIds={waitlisted}
+                        tagList={waitlistProductOptions}
+                        onChangeTagIds={setWaitlisted}
+                        isDisabled={isPublished}
+                      />
+                    </Fieldset>
+                  </CardContent>
+                ) : null}
                 {hasAudience && audienceType !== "affiliates" ? (
                   <CardContent>
                     <Fieldset className="grow basis-0">
@@ -1146,9 +1172,41 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         tagList={selectableProductOptions(productOptions, notBought)}
                         onChangeTagIds={setNotBought}
                         isDisabled={isPublished}
-                        // Displayed as a multi-select for consistency, but supports only one option for now
-                        maxTags={1}
                       />
+                      <FieldsetDescription>Customers who bought any of these won't get this email</FieldsetDescription>
+                    </Fieldset>
+                  </CardContent>
+                ) : null}
+                {audienceType === "customers" && context.emailed_posts.length > 0 ? (
+                  <CardContent>
+                    <Fieldset className="grow basis-0">
+                      <FieldsetTitle>
+                        <Label htmlFor={`${uid}-not_clicked`}>Has not clicked</Label>
+                      </FieldsetTitle>
+                      <Select
+                        id={`${uid}-not_clicked`}
+                        value={notClickedPostId}
+                        disabled={isPublished}
+                        onChange={(event) => setNotClickedPostId(event.target.value)}
+                        // A native select has no placeholder, so the unset option is coloured like the
+                        // one the two filters above show rather than like a chosen value.
+                        style={notClickedPostId ? undefined : { color: "var(--color-muted)" }}
+                      >
+                        <option value="">Select…</option>
+                        {context.emailed_posts.map((post) => (
+                          <option key={post.external_id} value={post.external_id}>
+                            {post.name}
+                          </option>
+                        ))}
+                      </Select>
+                      {selectedEmailedPost ? (
+                        // Only where the composer's sidebar is narrow enough to clip the select: at that
+                        // width the value cannot be read in full, and the caption is the only place the
+                        // seller can confirm which email they are excluding clickers of.
+                        <p className="mt-2 hidden text-sm break-words text-muted lg:block">
+                          {selectedEmailedPost.name}
+                        </p>
+                      ) : null}
                     </Fieldset>
                   </CardContent>
                 ) : null}

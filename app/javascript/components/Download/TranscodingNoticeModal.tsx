@@ -14,8 +14,8 @@ export const TranscodingNoticeModal = ({ transcodeOnFirstSale }: Props) => {
     >
       <h4>
         {transcodeOnFirstSale
-          ? "Until then, you may experience some viewing issues. You'll get an email once it's done."
-          : "Until then, you and your future customers may experience some viewing issues. You'll get an email once it's done."}
+          ? "Until then, you may experience some viewing issues."
+          : "Until then, you and your future customers may experience some viewing issues."}
       </h4>
     </Modal>
   );

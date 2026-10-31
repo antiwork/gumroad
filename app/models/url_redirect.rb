@@ -409,12 +409,20 @@ class UrlRedirect < ApplicationRecord
   end
 
   def hls_playlist_or_smil_xml_path(product_file)
-    path_method = if product_file.is_transcoded_for_hls
+    path_method = if hls_rendition_available?(product_file)
       :hls_playlist_for_product_file_path
     else
       :url_redirect_smil_for_product_file_path
     end
     Rails.application.routes.url_helpers.public_send(path_method, token, product_file.external_id)
+  end
+
+  # is_transcoded_for_hls is a cache of "an alive, completed HLS rendition exists" and can be stale: a
+  # rendition completed without the completion callbacks (see create_hls_transcode_job) leaves it false,
+  # and the legacy SMIL fallback it selects never plays. Ask the rendition itself, as the mobile API does.
+  def hls_rendition_available?(product_file)
+    product_file.is_transcoded_for_hls ||
+      product_file.transcoded_videos.alive.is_hls.completed.exists?(original_video_key: product_file.s3_key)
   end
 
   def signed_video_url(s3_retrievable)

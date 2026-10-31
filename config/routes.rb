@@ -371,6 +371,7 @@ Rails.application.routes.draw do
         end
         resources :licenses, only: [:update]
         resources :calls, only: [:update]
+        resources :accounts, only: [:index, :create]
         resources :commissions, only: [] do
           member do
             post :complete
@@ -1055,11 +1056,16 @@ Rails.application.routes.draw do
           end
         end
         resource :marketing_abandoned_cart, only: %i[show update], controller: "marketing_abandoned_carts"
+        resource :waitlist_email, only: :create
+        resources :builds, only: :index do
+          member { post :promote }
+        end
       end
     end
 
     get "/products/:id/edit", to: "links#edit", as: :edit_link
     get "/products/:id/edit/*other", to: "links#edit"
+    get "/seller_plan/checkout", to: "seller_plan#checkout", as: :seller_plan_checkout
     get "/products/:id/card", to: "links#card", as: :product_card
     post "/products/:id/price_check", to: "links#price_check", as: :price_check_product, defaults: { format: :json }
     get "/products/search", to: "links#search"
@@ -1288,10 +1294,9 @@ Rails.application.routes.draw do
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :url_redirect_change_purchaser
     post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :url_redirect_save_last_content_page
-    get "/r/:id/build_save", to: "url_redirects#build_save", as: :url_redirect_build_save
     get "/d/:id/play", to: "url_redirects#play", as: :url_redirect_play
+    post "/d/:id/play/:grant/save", to: "product_build_player_files#save", as: :product_build_player_save
     get "/d/:id/play/:grant(/*path)", to: "product_build_player_files#show", as: :product_build_player_file, format: false
-    patch "/r/:id/build_save", to: "url_redirects#update_build_save"
 
     get "crossdomain", to: "public#crossdomain"
 
@@ -1464,6 +1469,10 @@ Rails.application.routes.draw do
       resource :upload_context, only: [:show]
     end
 
+    # The waitlist bridge on a product's custom HTML page posts here on the product's own host.
+    # format: false keeps the path from picking up a suffix that would slip past the Rack::Attack throttles.
+    post "/follow_from_embed_form", to: "followers#from_embed_form", format: false
+
     get "/", to: "links#show", defaults: { format: "html" }
     get "/l/:id", to: "links#show", defaults: { format: "html" }
     get "/l/:id/landing/embed", to: "links#landing_iframe_content"
@@ -1523,10 +1532,9 @@ Rails.application.routes.draw do
     post "/r/:id/send_to_kindle", to: "url_redirects#send_to_kindle", as: :custom_domain_send_to_kindle
     post "/r/:id/change_purchaser", to: "url_redirects#change_purchaser", as: :custom_domain_url_redirect_change_purchaser
     post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :custom_domain_url_redirect_save_last_content_page
-    get "/r/:id/build_save", to: "url_redirects#build_save", as: :custom_domain_url_redirect_build_save
     get "/d/:id/play", to: "url_redirects#play", as: :custom_domain_url_redirect_play
+    post "/d/:id/play/:grant/save", to: "product_build_player_files#save", as: :custom_domain_product_build_player_save
     get "/d/:id/play/:grant(/*path)", to: "product_build_player_files#show", as: :custom_domain_product_build_player_file, format: false
-    patch "/r/:id/build_save", to: "url_redirects#update_build_save"
 
     get "/library", to: "library#index"
     patch "/library/purchase/:id/archive", to: "library#archive"

@@ -569,6 +569,10 @@ class Purchase::CreateService < Purchase::BaseService
 
       purchase = product.sales.build(params_for_purchase)
       purchase.authenticated_offer_code_buyer = buyer
+      # A collab product credits its collaborator through `affiliate`. With :collab_and_affiliates the
+      # direct affiliate who referred the sale (vetted by OrdersController#fetch_affiliates) is kept
+      # as a second credit instead of being dropped.
+      referring_affiliate = purchase.affiliate
       purchase.affiliate = product.collaborator if product.collaborator.present?
       should_ship = product.is_physical || product.require_shipping
       purchase.country = nil unless should_ship
@@ -578,6 +582,7 @@ class Purchase::CreateService < Purchase::BaseService
       purchase.installment_plan = product.installment_plan if purchase.is_installment_payment
       purchase.save_card = !!params_for_purchase[:save_card] || (product.is_recurring_billing && !is_gift?) || purchase.is_preorder_authorization || purchase.is_installment_payment
       purchase.seller = product.user
+      purchase.assign_direct_affiliate_for_collab(referring_affiliate) if referring_affiliate.present? && referring_affiliate != purchase.affiliate
       purchase.is_gift_sender_purchase = is_gift? unless params_for_purchase.has_key?(:is_gift_receiver_purchase)
       purchase.offer_code = product.find_offer_code(code: purchase.discount_code.downcase.strip) if purchase.discount_code.present?
       if purchase.offer_code.present? && product.default_offer_code.present? && purchase.offer_code.id == product.default_offer_code.id

@@ -565,13 +565,31 @@ describe CreateMissingDisputeEvidenceJob do
       end
     end
 
+    context "when the purchase was paid into a Stripe Connect account" do
+      let(:merchant_account) { create(:merchant_account_stripe_connect) }
+      let!(:purchase) { create(:purchase, merchant_account:) }
+      let!(:dispute) { stripe_dispute_for(purchase) }
+
+      before { purchase.update_column(:chargeback_date, Time.current) }
+
+      it "reads the processor deadline on the connected account" do
+        expect(Stripe::Dispute).to receive(:retrieve)
+          .with(dispute.charge_processor_dispute_id, { stripe_account: merchant_account.charge_processor_merchant_id })
+          .and_return(double(evidence_details: double(due_by: 30.days.from_now.to_i)))
+
+        described_class.new.perform
+
+        expect(dispute.reload.dispute_evidence).to be_present
+      end
+    end
+
     context "when the disputable is not eligible for dispute evidence" do
       let!(:purchase) { charged_back_purchase }
       let!(:dispute) { create(:dispute_formalized, purchase:) }
 
       before do
-        # PayPal and Stripe Connect disputes have no evidence surface at all, so having no
-        # record is the correct state for them rather than a gap to fill.
+        # PayPal disputes have no evidence surface at all, so having no record is the correct
+        # state for them rather than a gap to fill.
         purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
       end
 

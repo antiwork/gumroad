@@ -302,6 +302,75 @@ describe("AccountDetailsSection Pakistan CNIC field", () => {
   });
 });
 
+describe("AccountDetailsSection UAE Emirates ID field", () => {
+  const uaeSeller = (overrides: Partial<User> = {}) =>
+    makeUser({
+      country_code: "AE",
+      individual_tax_id_needed_countries: ["AE"],
+      individual_tax_id_entered: false,
+      ...overrides,
+    });
+  const uaeBusiness: Partial<ComplianceInfo> = { is_business: true, business_country: "AE", country: "AE" };
+
+  it("does not cap the field, so an Emirates ID typed with its printed dashes is not cut to 13 digits", () => {
+    renderSection(uaeSeller(), { country: "AE" });
+
+    const input = screen.getByLabelText<HTMLInputElement>("Emirates ID");
+    expect(input.hasAttribute("maxlength")).toBe(false);
+    expect(input.minLength).toBe(15);
+    expect(input.placeholder).toBe("784-1234-1234567-1");
+    const help = screen.getByText("15 digits, dashes optional");
+    expect(help.classList.contains("text-foreground")).toBe(true);
+    for (const value of ["784-1990-1234567-1", "784 1990 1234567 1", "784199012345671", " 784-1990-1234567-1\u00a0"]) {
+      fireEvent.change(input, { target: { value } });
+      expect(input.value).toBe(value);
+      expect(screen.queryByRole("alert")).toBeNull();
+    }
+  });
+
+  it("flags the 15-character value the old cap cut a dashed Emirates ID to", () => {
+    renderSection(uaeSeller(), { country: "AE" });
+
+    const input = screen.getByLabelText("Emirates ID");
+    for (const value of ["784-1990-123456", "78419901234567", "7841990123456712", "784199012345A71"]) {
+      fireEvent.change(input, { target: { value } });
+      expect(screen.getByRole("alert").textContent).toMatch(/Your Emirates ID must be 15 digits/u);
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+    }
+  });
+
+  it("holds a UAE company's UAE-resident representative to the same shape", () => {
+    renderSection(uaeSeller(), uaeBusiness);
+
+    const input = screen.getByLabelText<HTMLInputElement>("Emirates ID");
+    expect(input.hasAttribute("maxlength")).toBe(false);
+    fireEvent.change(input, { target: { value: "784-1990-123456" } });
+    expect(screen.getByRole("alert").textContent).toMatch(/Your Emirates ID must be 15 digits/u);
+    fireEvent.change(input, { target: { value: "784-1990-1234567-1" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not hold a UAE company's representative who lives abroad to an Emirates ID", () => {
+    renderSection(uaeSeller(), { ...uaeBusiness, country: "GB" });
+
+    expect(screen.queryByLabelText("Emirates ID")).toBeNull();
+    const input = screen.getByLabelText("Personal tax ID");
+    fireEvent.change(input, { target: { value: "GB1234567" } });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reveals only the saved last four in the Emirates ID's 3-4-7-1 grouping", () => {
+    renderSection(uaeSeller({ individual_tax_id_entered: true, individual_tax_id_last_four: "5671" }), {
+      country: "AE",
+    });
+
+    const saved = screen.getByLabelText<HTMLInputElement>("Emirates ID");
+    expect(saved.value).toBe("•••-••••-•••••••-•");
+    fireEvent.click(screen.getByRole("button", { name: "Show last 4 digits" }));
+    expect(saved.value).toBe("•••-••••-••••567-1");
+  });
+});
+
 describe("AccountDetailsSection SSN field", () => {
   it("reveals a saved SSN's last four in the same place as before", () => {
     renderSection(makeUser());

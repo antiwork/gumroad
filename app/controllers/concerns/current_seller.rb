@@ -23,6 +23,26 @@ module CurrentSeller
     }
   end
 
+  # A brand token signs in its team member so the website applies the member's role.
+  def sign_in_current_api_user
+    return if current_api_user.blank?
+
+    team_membership = MobileAccountToken.team_membership_for(doorkeeper_token)
+    # A member who is impersonating stays signed in as themselves, so the impersonation carries on.
+    if team_membership.nil? || impersonating?
+      sign_in team_membership&.user || current_api_user
+      # A brand session earlier in this browser left that brand selected.
+      cookies.delete(:current_seller_id, domain: :all)
+      # While impersonating, the website's seller is the impersonated user, not the token owner.
+      @_current_seller = logged_in_user
+      return
+    end
+
+    sign_in team_membership.user
+    switch_seller_account(team_membership)
+    @_current_seller = team_membership.seller
+  end
+
   private
     def find_seller_from_cookie(seller_id)
       return if seller_id.nil?

@@ -23,6 +23,8 @@ class Oauth::TokensController < Doorkeeper::TokensController
         Mcp::DynamicClientOauth.code_exchange_error(grant, resource: params[:resource], code_verifier: params[:code_verifier]) if grant
       when Doorkeeper::OAuth::REFRESH_TOKEN
         token = Doorkeeper.config.access_token_model.by_refresh_token(params[:refresh_token])
+        return [:invalid_grant, "The team membership behind this token is no longer active"] if token && !MobileAccountToken.valid?(token)
+
         Mcp::DynamicClientOauth.refresh_error(token, resource: params[:resource]) if token
       end
     end

@@ -108,6 +108,13 @@ module Purchase::Searchable
       indexes :affiliate_credit_fee_cents, type: :long
       indexes :affiliate_credit_amount_partially_refunded_cents, type: :long
       indexes :affiliate_credit_fee_partially_refunded_cents, type: :long
+      # The direct affiliate's credit on a collab purchase that credits both (:collab_and_affiliates).
+      # The affiliate_credit_* fields above keep describing the collaborator's credit.
+      indexes :direct_affiliate_credit_affiliate_user_id, type: :long
+      indexes :direct_affiliate_credit_amount_cents, type: :long
+      indexes :direct_affiliate_credit_fee_cents, type: :long
+      indexes :direct_affiliate_credit_amount_partially_refunded_cents, type: :long
+      indexes :direct_affiliate_credit_fee_partially_refunded_cents, type: :long
       indexes :product_id, type: :long
       indexes :product_unique_permalink, type: :keyword
       indexes :product_name, type: :text, analyzer: :product_name, search_analyzer: :search_product_name do
@@ -200,6 +207,8 @@ module Purchase::Searchable
         was_product_recommended? ? REFERRER_DOMAIN_FOR_GUMROAD_RECOMMENDED_PRODUCTS : Referrer.extract_domain(referrer)
       when /\Aaffiliate_credit_(id|affiliate_user_id|amount_cents|fee_cents|amount_partially_refunded_cents|fee_partially_refunded_cents)\z/
         affiliate_credit.public_send($LAST_MATCH_INFO[1]) if affiliate_credit.present?
+      when /\Adirect_affiliate_credit_(affiliate_user_id|amount_cents|fee_cents|amount_partially_refunded_cents|fee_partially_refunded_cents)\z/
+        direct_affiliate_credit.public_send($LAST_MATCH_INFO[1]) if direct_affiliate_credit.present?
       when /\Aproduct_(id|unique_permalink|name)\z/
         link.attributes[$LAST_MATCH_INFO[1]]
       when "product_description"
@@ -407,10 +416,17 @@ module Purchase::Searchable
       changed_tracked_columns = previous_changes.keys & tracked_columns
       return if changed_tracked_columns.blank?
 
+      fields = if is_direct_affiliate_credit?
+        (changed_tracked_columns & %w[affiliate_user_id amount_cents fee_cents]).map { |name| "direct_affiliate_credit_#{name}" }
+      else
+        changed_tracked_columns.map { |name| "affiliate_credit_#{name}" }
+      end
+      return if fields.empty?
+
       options = {
         "record_id" => purchase.id,
         "class_name" => "Purchase",
-        "fields" => changed_tracked_columns.map { |name| ["affiliate_credit_#{name}"] }.flatten
+        "fields" => fields
       }
       ElasticsearchIndexerWorker.perform_in(2.seconds, "update", options)
     end
@@ -425,10 +441,15 @@ module Purchase::Searchable
 
     def update_purchase_index
       return unless previous_changes.key?("amount_cents")
+      fields = if affiliate_credit&.is_direct_affiliate_credit?
+        ["direct_affiliate_credit_amount_partially_refunded_cents", "direct_affiliate_credit_fee_partially_refunded_cents"]
+      else
+        ["affiliate_credit_amount_partially_refunded_cents", "affiliate_credit_amount_fee_partially_refunded_cents"]
+      end
       options = {
         "record_id" => purchase.id,
         "class_name" => "Purchase",
-        "fields" => ["affiliate_credit_amount_partially_refunded_cents", "affiliate_credit_amount_fee_partially_refunded_cents"]
+        "fields" => fields
       }
       ElasticsearchIndexerWorker.perform_in(2.seconds, "update", options)
     end

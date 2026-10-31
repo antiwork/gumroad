@@ -271,6 +271,7 @@ class Api::V2::EmailsController < Api::V2::BaseController
         affiliate_products: installment.affiliate_products,
         not_bought_products: installment.not_bought_products,
         not_bought_variants: installment.not_bought_variants,
+        waitlisted_products: installment.waitlisted_products,
         shown_in_profile_sections: shown_in_profile_sections_for(installment),
         files: existing_files_for(installment),
       }

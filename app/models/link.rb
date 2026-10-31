@@ -128,6 +128,9 @@ class Link < ApplicationRecord
   has_one :page, -> { roots }, as: :pageable, dependent: :destroy, autosave: true
   delegate :custom_html, to: :page, allow_nil: true
 
+  # The kill switch for everything after a build deploys: the player, and the editor's version history.
+  def build_player_enabled? = Feature.active?(:product_build_player, user)
+
   def custom_html=(value)
     if value.blank?
       page.custom_html = nil if page.present?
@@ -246,6 +249,7 @@ class Link < ApplicationRecord
             uniqueness: { scope: :user_id, case_sensitive: false, message: "is already used by another one of your products" },
             allow_nil: true, allow_blank: true
   validate :suggested_price_greater_than_price
+  validate :suggested_price_must_be_within_storage_range
   validate :duration_multiple_of_price_options
   validate :custom_and_unique_permalink_uniqueness
   validate :custom_permalink_of_licensed_product, if: :custom_permalink_or_is_licensed_changed?
@@ -268,6 +272,8 @@ class Link < ApplicationRecord
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
   validate :custom_view_content_button_text_length
   validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
+  validates :custom_failed_payment_text, length: { maximum: Product::Validations::MAX_CUSTOM_FAILED_PAYMENT_TEXT_LENGTH }
+  validate :custom_failed_payment_text_is_plain_text
   validates_presence_of :filetype
   validates_presence_of :filegroup
   validate :bundle_is_not_in_bundle, if: :is_bundle_changed?
@@ -330,6 +336,7 @@ class Link < ApplicationRecord
   attr_json_data_accessor :main_section_index, default: -> { 0 }
   attr_json_data_accessor :custom_view_content_button_text
   attr_json_data_accessor :custom_receipt_text
+  attr_json_data_accessor :custom_failed_payment_text
   attr_json_data_accessor :content_moderation_disabled, default: -> { false }
   alias_method :content_moderation_disabled?, :content_moderation_disabled
 
@@ -408,6 +415,11 @@ class Link < ApplicationRecord
     distinct.joins(user: [:categories]).where(categories: category_ids)
   }
 
+  # Products of `seller` that can have direct affiliates: all of them with the :collab_and_affiliates
+  # flag, otherwise only those without a collaborator.
+  scope :affiliate_eligible_for, ->(seller) do
+    Feature.active?(:collab_and_affiliates, seller) ? all : not_is_collab
+  end
   scope :collabs_as_collaborator, ->(user) do
     joins(product_affiliates: :affiliate)
       .is_collab
@@ -559,11 +571,12 @@ class Link < ApplicationRecord
     DeleteWishlistProductsJob.perform_in(10.minutes, id)
   end
 
-  def publish!
+  def publish!(skip_seller_plan_gate: false)
     enforce_not_unpublished_by_admin!
     enforce_no_active_sales_hold!
     enforce_shipping_destinations_presence!
     enforce_user_email_confirmation!
+    enforce_seller_plan! unless skip_seller_plan_gate
     enforce_merchant_account_exits_for_new_users!
     transcode_after_publish = auto_transcode_videos?
     caller_flags_change = changes["flags"]&.map(&:to_i)
@@ -622,7 +635,7 @@ class Link < ApplicationRecord
           end
         end
 
-        unless is_collab?
+        if !is_collab? || Feature.active?(:collab_and_affiliates, user)
           user.direct_affiliates.alive.apply_to_all_products.order(:id).each do |affiliate|
             next unless ProductAffiliate.create_if_missing!(affiliate:, product: self)
 
@@ -659,7 +672,7 @@ class Link < ApplicationRecord
   # guards leaves the takedown intact.
   def publish_by_admin!
     self.is_unpublished_by_admin = false
-    publish!
+    publish!(skip_seller_plan_gate: true)
   end
 
   # Memberships are unpublished rather than deleted so existing members keep their access
@@ -2033,6 +2046,24 @@ class Link < ApplicationRecord
 
       errors.add(:base, "You have to confirm your email address before you can do that.")
       raise LinkInvalid, "You have to confirm your email address before you can do that."
+    end
+
+    # Paid-publish experiment. Only a listing's first publish is held (`draft?` is the only
+    # never-been-live signal), and the experiment module returns nil for the control arm, an
+    # unconfigured Stripe price, or a seller outside the rollout — every one of those keeps the
+    # free flow instead of blocking a publish we could not charge for.
+    def enforce_seller_plan!
+      return unless draft?
+
+      offer = SellerPlan::Experiment.offer_for(self)
+      return if offer.nil? || offer.active?
+
+      checkout_path = Rails.application.routes.url_helpers.seller_plan_checkout_path
+      message = "<span>Publishing a product now requires the Gumroad seller plan " \
+                "($#{offer.price_cents / 100}/month). " \
+                "<a href=\"#{checkout_path}\">Start your plan</a> to continue.</span>"
+      errors.add(:base, message)
+      raise LinkInvalid, message
     end
 
     def enforce_shipping_destinations_presence!

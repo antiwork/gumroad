@@ -86,29 +86,39 @@ module Product::Stats
 
   def total_usd_cents_earned_by_user(for_user, extra_search_options = {})
     for_seller = for_user.id == user.id
+    aggs = if for_seller
+      {
+        price_cents_total: { sum: { field: "price_cents" } },
+        amount_refunded_cents_total: { sum: { field: "amount_refunded_cents" } },
+        affiliate_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
+        affiliate_fees_total: { sum: { field: "affiliate_credit_fee_cents" } },
+        direct_affiliate_cents_total: { sum: { field: "direct_affiliate_credit_amount_cents" } },
+        direct_affiliate_fees_total: { sum: { field: "direct_affiliate_credit_fee_cents" } },
+      }
+    else
+      # The affiliate is paid through one of the purchase's credits, so each is scoped to them: the
+      # query also finds a collab purchase (:collab_and_affiliates) through the other credit.
+      PurchaseSearchService.affiliate_credit_aggs_for_user(for_user.id)
+    end
     search_options = Purchase::CHARGED_SALES_SEARCH_OPTIONS.merge(
       product: self,
       size: 0,
-      aggs: {
-        price_cents_total: { sum: { field: "price_cents" } },
-        affiliate_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
-        affiliate_fees_total: { sum: { field: "affiliate_credit_fee_cents" } },
-        amount_refunded_cents_total: { sum: { field: for_seller ? "amount_refunded_cents" : "affiliate_credit_amount_partially_refunded_cents" } },
-      }
+      aggs:,
     ).merge(extra_search_options)
-    if for_seller
-      search_options[:seller] = for_user
-    else
-      search_options[:affiliate_user] = for_user
-    end
-    search_result = PurchaseSearchService.search(search_options)
+    search_options[for_seller ? :seller : :affiliate_user] = for_user
+    aggregations = PurchaseSearchService.search(search_options).aggregations
 
-    affiliate_total = search_result.aggregations.affiliate_cents_total.value + search_result.aggregations.affiliate_fees_total.value - search_result.aggregations.amount_refunded_cents_total.value
     if for_seller
-      search_result.aggregations.price_cents_total.value - affiliate_total
-    else
-      affiliate_total
+      affiliate_total = aggregations.affiliate_cents_total.value + aggregations.affiliate_fees_total.value - aggregations.amount_refunded_cents_total.value
+      # A direct affiliate's commission on a collab purchase (:collab_and_affiliates) also comes out
+      # of the seller's share.
+      direct_affiliate_total = aggregations.direct_affiliate_cents_total.value + aggregations.direct_affiliate_fees_total.value
+      return aggregations.price_cents_total.value - affiliate_total - direct_affiliate_total
     end
+
+    earned = PurchaseSearchService.own_affiliate_credit_cents(aggregations, "amount_cents") +
+      PurchaseSearchService.own_affiliate_credit_cents(aggregations, "fee_cents")
+    earned - PurchaseSearchService.own_affiliate_credit_cents(aggregations, "amount_partially_refunded_cents")
   end
 
   def total_fee_cents(extra_search_options = {})

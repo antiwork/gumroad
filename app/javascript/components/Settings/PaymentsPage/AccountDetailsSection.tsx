@@ -4,7 +4,6 @@ import * as React from "react";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 import { cast } from "$app/utils/cast";
-import { PAKISTAN_CNIC_HELP_TEXT } from "$app/utils/pakistanCnic";
 import {
   getIndividualTaxIdConfig,
   PERSONAL_ID_NUMBER_CONFIG,
@@ -1328,12 +1327,12 @@ const AccountDetailsSection = ({
                   <FieldsetDescription id={`${uid}-tax-id-error`} role="alert">
                     {individualTaxIdValidationError}
                   </FieldsetDescription>
-                ) : individualTaxIdConfig.idSuffix === "snic" ? (
+                ) : individualTaxIdConfig.helpText ? (
                   // The muted default measures under 4.5:1 here; a server-flagged field keeps its danger color.
                   <FieldsetDescription
                     className={errorFieldNames.has("individual_tax_id") ? undefined : "text-foreground"}
                   >
-                    {PAKISTAN_CNIC_HELP_TEXT}
+                    {individualTaxIdConfig.helpText}
                   </FieldsetDescription>
                 ) : null}
                 {mustReenterFullSsn ? (

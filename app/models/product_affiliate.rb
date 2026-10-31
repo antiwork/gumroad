@@ -157,6 +157,10 @@ class ProductAffiliate < ApplicationRecord
 
     def enable_product_collaborator_flag_and_disable_affiliates
       product.update!(is_collab: true)
+      # With :collab_and_affiliates a sale credits the collaborator and a direct affiliate, so the
+      # product keeps its affiliates.
+      return if collab_and_affiliates_enabled?
+
       product.self_service_affiliate_products.map { _1.update!(enabled: false) }
       product.product_affiliates
         .where.not(id:)
@@ -186,6 +190,11 @@ class ProductAffiliate < ApplicationRecord
 
     def product_is_not_a_collab
       return unless product.is_collab?
+      return if collab_and_affiliates_enabled?
       errors.add :base, "Collab products cannot have affiliates"
+    end
+
+    def collab_and_affiliates_enabled?
+      Feature.active?(:collab_and_affiliates, product.user)
     end
 end

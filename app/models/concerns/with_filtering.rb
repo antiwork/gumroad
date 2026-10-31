@@ -26,6 +26,8 @@ module WithFiltering
     attr_json_data_accessor :bought_variants
     attr_json_data_accessor :not_bought_variants
     attr_json_data_accessor :affiliate_products
+    attr_json_data_accessor :waitlisted_products
+    attr_json_data_accessor :not_clicked_post_id
 
     # Name of the column containing the recipient type.
     # i.e. "installment_type" (Installment) and "workflow_type" (Workflow)
@@ -91,6 +93,9 @@ module WithFiltering
     self.bought_variants = (!audience_type? && params[:bought_variants].present?) ? Array.wrap(params[:bought_variants]) : []
     self.not_bought_variants = params[:not_bought_variants].present? ? Array.wrap(params[:not_bought_variants]) : []
     self.affiliate_products = (!audience_type? && params[:affiliate_products].present?) ? Array.wrap(params[:affiliate_products]) : []
+    self.waitlisted_products = (follower_type? && params[:waitlisted_products].present?) ? Array.wrap(params[:waitlisted_products]) : []
+    # A post the seller picked by its external id, like the product permalinks above.
+    self.not_clicked_post_id = params[:not_clicked_post_id].presence
     self.workflow_trigger = seller_or_product_or_variant_type? ? params[:workflow_trigger].presence : nil
 
     if paid_more_than_cents.present? && paid_less_than_cents.present? && paid_more_than_cents > paid_less_than_cents
@@ -130,6 +135,7 @@ module WithFiltering
   def follower_passes_filters(follower)
     return false if created_after.present? && follower.created_at < created_after
     return false if created_before.present? && follower.created_at > created_before
+    return false if waitlisted_products.present? && (waitlisted_products & follower.waitlisted_product_permalinks).empty?
     true
   end
 
@@ -250,6 +256,8 @@ module WithFiltering
       json[:minimum_license_uses] = license_uses if license_uses.positive?
     end
     json[:affiliate_products] = affiliate_products if affiliate_products.present?
+    json[:waitlisted_products] = waitlisted_products if waitlisted_products.present?
+    json[:not_clicked_post_id] = not_clicked_post_id if not_clicked_post_id.present?
     json[:workflow_trigger] = workflow_trigger if workflow_trigger.present?
     json
   end

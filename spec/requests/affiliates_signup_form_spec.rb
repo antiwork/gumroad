@@ -29,6 +29,18 @@ describe "Affiliate Signup Form", type: :system, js: true do
       expect(page).to_not have_text("You need a published product to add affiliates.")
       expect(page).to_not have_button("New product")
     end
+
+    it "lists collab products when the seller's flag is enabled" do
+      Feature.activate_user(:collab_and_affiliates, seller)
+
+      visit "/affiliates/onboarding"
+
+      within_table "Enable specific products" do
+        expect(page).to have_text("Product 1")
+        expect(page).to have_text("Product 2")
+      end
+      expect(page).to_not have_text("No products available for affiliates")
+    end
   end
 
   context "when using the old form page" do

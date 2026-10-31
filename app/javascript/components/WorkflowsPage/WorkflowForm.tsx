@@ -546,9 +546,12 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
                 tagIds={formState.notBought}
                 tagList={selectableProductAndVariantOptions(context.products_and_variant_options, formState.notBought)}
                 onChangeTagIds={(notBought) => updateFormState({ notBought })}
-                // Displayed as a multi-select for consistency, but supports only one option for now
-                maxTags={1}
               />
+              {formState.trigger === "abandoned_cart" ? null : (
+                <FieldsetDescription>
+                  Customers who bought any of these won't get emails from this workflow
+                </FieldsetDescription>
+              )}
             </Fieldset>
           ) : null}
           {triggerSupportsPaidFilters ? (

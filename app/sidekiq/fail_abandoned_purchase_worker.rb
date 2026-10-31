@@ -30,6 +30,8 @@ class FailAbandonedPurchaseWorker
         return if reschedule_for_outstanding_payment(payment_intent)
 
         cancel_charge_intent unless payment_intent.status == StripeIntentStatus::PROCESSING
+      elsif RetryPendingMandateChargeJob.held?(purchase)
+        fail_lost_mandate_hold
       elsif purchase.processor_setup_intent_id.present?
         setup_intent = if merchant_account&.is_a_stripe_connect_account?
           Stripe::SetupIntent.retrieve(purchase.processor_setup_intent_id, { stripe_account: merchant_account.charge_processor_merchant_id })
@@ -48,6 +50,17 @@ class FailAbandonedPurchaseWorker
   end
 
   private
+    # RetryPendingMandateChargeJob fails a held group at MAX_WAIT. This later pass only catches a hold
+    # whose retry chain was lost, so the payment_settling marker cannot block repeat buys forever.
+    def fail_lost_mandate_hold
+      backstop_at = RetryPendingMandateChargeJob.backstop_at(purchase)
+      if backstop_at > Time.current
+        FailAbandonedPurchaseWorker.perform_at(backstop_at, purchase.id)
+      else
+        RetryPendingMandateChargeJob.fail_unpaid!(purchase)
+      end
+    end
+
     # A payable QR code can outlive the card authentication window.
     def reschedule_for_outstanding_payment(payment_intent)
       return false unless payment_intent.status == StripeIntentStatus::REQUIRES_ACTION

@@ -3644,6 +3644,8 @@ describe User, :vcr do
     let!(:active_access_token_of_another_user) { create("doorkeeper/access_token", application: oauth_application, scopes: "mobile_api") }
 
     it "invalidates all active sessions of the user and revokes active access tokens that are used to authorize the user in the mobile application" do
+      expect(OauthApplication.where(uid: OauthApplication::LEGACY_MOBILE_API_OAUTH_APPLICATION_UID)).not_to exist
+
       travel_to(DateTime.current) do
         expect do
           user.invalidate_active_sessions!
@@ -3651,6 +3653,40 @@ describe User, :vcr do
          .and change { active_access_token_one.reload.revoked_at }.from(nil).to(DateTime.current)
          .and change { active_access_token_two.reload.revoked_at }.from(nil).to(DateTime.current)
 
+        expect(active_access_token_of_another_user.reload.revoked_at).to be_nil
+      end
+    end
+
+    context "when the user also signed in through the legacy mobile application" do
+      let(:legacy_oauth_application) { create(:oauth_application, uid: OauthApplication::LEGACY_MOBILE_API_OAUTH_APPLICATION_UID) }
+      let!(:legacy_access_token) { create("doorkeeper/access_token", application: legacy_oauth_application, resource_owner_id: user.id, scopes: "mobile_api creator_api") }
+      let!(:legacy_access_token_of_another_user) { create("doorkeeper/access_token", application: legacy_oauth_application, scopes: "mobile_api creator_api") }
+      let!(:third_party_access_token) { create("doorkeeper/access_token", application: create(:oauth_application, scopes: "mobile_api"), resource_owner_id: user.id, scopes: "mobile_api") }
+
+      it "revokes the user's tokens for both mobile applications and leaves other applications and users alone" do
+        travel_to(DateTime.current) do
+          expect do
+            user.invalidate_active_sessions!
+          end.to change { legacy_access_token.reload.revoked_at }.from(nil).to(DateTime.current)
+           .and change { active_access_token_one.reload.revoked_at }.from(nil).to(DateTime.current)
+
+          expect(legacy_access_token_of_another_user.reload.revoked_at).to be_nil
+          expect(active_access_token_of_another_user.reload.revoked_at).to be_nil
+          expect(third_party_access_token.reload.revoked_at).to be_nil
+        end
+      end
+    end
+
+    context "when only the legacy mobile application has a record" do
+      let(:oauth_application) { create(:oauth_application, uid: OauthApplication::LEGACY_MOBILE_API_OAUTH_APPLICATION_UID) }
+
+      it "revokes the user's legacy mobile application tokens" do
+        expect(OauthApplication.where(uid: OauthApplication::MOBILE_API_OAUTH_APPLICATION_UID)).not_to exist
+
+        user.invalidate_active_sessions!
+
+        expect(active_access_token_one.reload.revoked_at).to be_present
+        expect(active_access_token_two.reload.revoked_at).to be_present
         expect(active_access_token_of_another_user.reload.revoked_at).to be_nil
       end
     end

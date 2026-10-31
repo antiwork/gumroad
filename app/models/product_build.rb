@@ -24,6 +24,10 @@ class ProductBuild < ApplicationRecord
   # Long enough for one play session. A refund or revoked access stops new sessions at once, and
   # running ones when the grant expires.
   PLAYER_GRANT_VALID_FOR = 12.hours
+  PLAYER_SAVE_GRANT_PURPOSE = "product_build_player_save"
+  # The save endpoint writes only into the buyer's own save, so its grant can outlive a play session:
+  # a tab left open overnight can still save.
+  PLAYER_SAVE_GRANT_VALID_FOR = 30.days
 
   belongs_to :product, class_name: "Link"
   belongs_to :product_file, optional: true
@@ -51,6 +55,11 @@ class ProductBuild < ApplicationRecord
 
   def live? = status == "live"
 
+  def player_enabled? = product.build_player_enabled?
+
+  # Whether buyers get a Play action for this build on the content page.
+  def playable? = live? && site_ready? && player_enabled?
+
   # An encrypted path segment that lets the player's frame load this build's files for one purchase.
   # The frame is an opaque origin, so its file requests carry no session cookies: the access check
   # runs once, on the content-page token, and the grant carries the result until it expires.
@@ -63,11 +72,20 @@ class ProductBuild < ApplicationRecord
   end
 
   # The grant's payload when it is valid and was issued for this content-page token, or nil.
-  def self.verified_player_grant(grant, url_redirect_token:)
-    payload = player_grant_encryptor.decrypt_and_verify(grant.to_s, purpose: PLAYER_GRANT_PURPOSE)
+  def self.verified_player_grant(grant, url_redirect_token:, purpose: PLAYER_GRANT_PURPOSE)
+    payload = player_grant_encryptor.decrypt_and_verify(grant.to_s, purpose:)
     payload if payload.is_a?(Hash) && payload["token"] == url_redirect_token
   rescue ActiveSupport::MessageEncryptor::InvalidMessage
     nil
+  end
+
+  # A grant for the save endpoint only: the content-page token and the purchase.
+  def self.player_save_grant(url_redirect_token:, purchase_id:)
+    player_grant_encryptor.encrypt_and_sign(
+      { "token" => url_redirect_token, "purchase_id" => purchase_id },
+      purpose: PLAYER_SAVE_GRANT_PURPOSE,
+      expires_in: PLAYER_SAVE_GRANT_VALID_FOR,
+    )
   end
 
   # Encrypted, not only signed: the grant is in the frame's URL, and it holds internal ids.
@@ -77,6 +95,11 @@ class ProductBuild < ApplicationRecord
       Rails.application.key_generator.generate_key("product_build_player_grant", ActiveSupport::MessageEncryptor.key_len),
       url_safe: true, serializer: JSON,
     )
+  end
+
+  # What the API and the editor's version history show of a build.
+  def as_json(*)
+    { id: public_id, number:, status:, byte_size:, created_at:, promoted_at: }
   end
 
   # Makes this build the one buyers get, superseding the current one. Promoting the live build again

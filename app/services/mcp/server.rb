@@ -22,7 +22,13 @@ module Mcp
     # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
+    DEFAULT_BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
+    PRODUCT_TYPES = %w[digital membership].freeze
+    TIER_KEYS = %w[name price_cents recurrence].freeze
+    MICROSECONDS_PER_SECOND = 1_000_000
+    # The last year MySQL DATETIME holds; a bound outside 0..this year fails in SQL instead of as a bad argument.
+    MAX_DATETIME_YEAR = 9999
 
     class Error < StandardError
       attr_reader :code, :data
@@ -34,7 +40,41 @@ module Mcp
       end
     end
 
+    ANALYTICS_BREAKDOWNS = %w[product referrer].freeze
+    ANALYTICS_DEFAULT_DAYS = 30
+    ANALYTICS_MAX_DAYS = 366
+    ANALYTICS_MAX_REFERRERS = 50
+    SUBSCRIPTION_BREAKDOWNS = %w[subscriptions churn].freeze
+    SUBSCRIPTION_STATUSES = %w[alive ended].freeze
+    SUBSCRIPTION_CHURN_DEFAULT_MONTHS = 11
+    # Churn buckets by day in Elasticsearch, so the range carries the same cost ceiling as analytics.
+    SUBSCRIPTION_CHURN_MAX_DAYS = 366
+
+    CUSTOMER_BREAKDOWNS = %w[spend conversion].freeze
+    CUSTOMERS_DEFAULT_ROWS = 25
+    # Rack::Timeout ends the request at 120s, so a query this slow needs its own deadline to report.
+    CUSTOMERS_QUERY_TIMEOUT = 30
+    CUSTOMER_REFUNDED = "COALESCE(purchases.stripe_refunded, 0) = 1"
+    CUSTOMER_FREE = "COALESCE(purchases.price_cents, 0) = 0"
+    TOTALS_BREAKDOWNS = %w[product country day week month].freeze
+    TOTALS_DEFAULT_DAYS = 30
+    TOTALS_MAX_DAYS = 366
+    # A store can have thousands of products, and there are ~250 countries; period rows are bounded by the range.
+    TOTALS_MAX_ROWS = 100
+
     class ToolError < StandardError; end
+
+    DISCOUNT_PERCENT_RANGE = (1..100)
+    # DATETIME's range: MySQL, outside strict mode, stores a later year as a zero date that reads back as nil.
+    DISCOUNT_YEAR_RANGE = (1000..9999)
+    DISCOUNT_MIN_VALIDITY_WINDOW = 1.second
+    DISCOUNT_CODE_FIELDS = {
+      "percent_off" => { type: "integer", description: "Percent off, #{DISCOUNT_PERCENT_RANGE.min}-#{DISCOUNT_PERCENT_RANGE.max}. Not with amount_cents." },
+      "amount_cents" => { type: "integer", description: "Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off." },
+      "valid_at" => { type: "string", description: "ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one." },
+      "expires_at" => { type: "string", description: "ISO 8601 time the code stops working." },
+      "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
+    }.freeze
 
     # A tool's scope check failed. `scope` is what the client should re-authorize with: the
     # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
@@ -83,7 +123,7 @@ module Mcp
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
@@ -294,26 +334,52 @@ module Mcp
       def tools
         [
           tool("get_account", "The connected creator's public profile: name, username, storefront URL, currency.", {}, read_only: true),
-          tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, and URL.", {
-                 "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." }
+          tool("list_products", "List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.", {
+                 "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description and covers. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
-          tool("create_draft_product", "Create a draft digital product. It is not for sale until publish_product runs. Confirm the name and price with the creator first.", {
+          tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
                  "name" => { type: "string", description: "Product name." },
-                 "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product." },
-                 "description" => { type: "string", description: "HTML or plain-text description." }
-               }, required: %w[name price_cents]),
-          tool("update_product", "Change the name, description, or price of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+                 "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers." },
+                 "description" => { type: "string", description: "HTML or plain-text description." },
+                 "product_type" => { type: "string", enum: PRODUCT_TYPES, description: "digital (default) or membership." },
+                 "tiers" => {
+                   type: "array",
+                   minItems: 1,
+                   description: "Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.",
+                   items: {
+                     type: "object",
+                     properties: {
+                       "name" => { type: "string", description: "Tier name." },
+                       "price_cents" => { type: "integer", description: "Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want." },
+                       "recurrence" => { type: "string", enum: BasePrice::Recurrence::ALLOWED_RECURRENCES, description: "Billing period." }
+                     },
+                     required: TIER_KEYS,
+                     additionalProperties: false
+                   }
+                 }
+               }, required: %w[name]),
+          tool("update_product", "Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
-                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." }
+                 "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
+                 "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
                }, required: %w[id], destructive: true),
           tool("add_cover", "Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "url" => { type: "string", description: "Public https URL of an image, or a YouTube or Vimeo link." }
+               }, required: %w[id url]),
+          tool("list_files", "The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.", {
+                 "id" => { type: "string", description: "Product id or permalink." }
+               }, required: %w[id], read_only: true),
+          tool("add_file", "Add a file that buyers receive with the product, from a public https URL. Files up to #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "url" => { type: "string", description: "Public https URL of the file." },
+                 "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL." }
                }, required: %w[id url]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." }
@@ -321,13 +387,71 @@ module Mcp
           tool("unpublish_product", "Take a product off sale without deleting it.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], destructive: true),
-          tool("list_sales", "Recent successful sales. Includes buyer email, product, amount, and time.", {
+          tool("list_sales", "Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.", {
                  "limit" => { type: "integer", description: "Max sales to return (1-50, default 25)." },
-                 "email" => { type: "string", description: "Filter by buyer email." }
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." },
+                 "email" => { type: "string", description: "Filter by buyer email." },
+                 "product_id" => { type: "string", description: "Only sales of this product (id from list_products)." },
+                 "after" => { type: "string", description: "Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01." },
+                 "before" => { type: "string", description: "Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01." },
+                 "payment" => { type: "string", enum: %w[paid free], description: "paid = price above zero, free = zero-price sales." },
+                 "kind" => { type: "string", enum: %w[subscription one_time], description: "subscription = membership charges, one_time = everything else." }
+               }, read_only: true),
+          tool("get_analytics", "Product page views, sales and revenue for a date range, so conversion rate (sales / views) can be computed. breakdown=product (default) gives one row per product; breakdown=referrer gives views, sales and revenue per traffic source. Revenue is price minus refunds and chargebacks, before fees, in minor units of USD. Dates are in the creator's time zone and default to the last 30 days.", {
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to 29 days before end_date." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
+                 "product_id" => { type: "string", description: "Only this product (id from list_products)." },
+                 "breakdown" => { type: "string", enum: ANALYTICS_BREAKDOWNS, description: "product (default) or referrer." }
+               }, read_only: true),
+          tool("get_customers", "Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, refunded and charged-back amounts, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who later paid, with days to convert. Amounts are price before fees in minor units of USD, with refunds and chargebacks reported on their own lines; start_date and end_date are days in the creator's time zone that bound order dates, or the purchase that converted.", {
+                 "breakdown" => { type: "string", enum: CUSTOMER_BREAKDOWNS, description: "spend (default) or conversion." },
+                 "email" => { type: "string", description: "Only this buyer's email." },
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD, in the creator's time zone. Omit for all time." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD, inclusive. Omit for all time." },
+                 "limit" => { type: "integer", description: "Max buyers to return (1-50, default #{CUSTOMERS_DEFAULT_ROWS})." }
+               }, read_only: true),
+          tool("get_sales_totals", "Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.", {
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to 29 days before end_date." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today." },
+                 "product_id" => { type: "string", description: "Only this product (id from list_products)." },
+                 "breakdown" => { type: "string", enum: TOTALS_BREAKDOWNS, description: "product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone." }
+               }, read_only: true),
+          tool("get_subscriptions", "The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.", {
+                 "breakdown" => { type: "string", enum: SUBSCRIPTION_BREAKDOWNS, description: "subscriptions (default) or churn." },
+                 "limit" => { type: "integer", description: "Max subscriptions to return (1-50, default 25). breakdown=subscriptions only." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page. breakdown=subscriptions only." },
+                 "status" => { type: "string", enum: SUBSCRIPTION_STATUSES, description: "alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only." },
+                 "product_id" => { type: "string", description: "Only this product (id from list_products)." },
+                 "start_date" => { type: "string", description: "First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only." },
+                 "end_date" => { type: "string", description: "Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only." }
                }, read_only: true),
           tool("list_payouts", "Recent payouts to the creator's bank or PayPal.", {
-                 "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." }
-               }, read_only: true)
+                 "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
+               }, read_only: true),
+          tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
+                 "name" => { type: "string", description: "Bundle name." },
+                 "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
+                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version." }
+               }, required: %w[name price_cents product_ids]),
+          tool("update_bundle", "Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.", {
+                 "id" => { type: "string", description: "Bundle id or permalink." },
+                 "product_ids" => { type: "array", items: { type: "string" }, minItems: 1, description: "Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity." }
+               }, required: %w[id product_ids], destructive: true),
+          tool("create_discount_code", "Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.", {
+                 "code" => { type: "string", description: "The code buyers enter. Letters, numbers, dashes, and underscores." },
+                 "product_id" => { type: "string", description: "Product id or permalink. Omit for a code that covers all of the creator's products." },
+                 **DISCOUNT_CODE_FIELDS
+               }, required: %w[code]),
+          tool("update_discount_code", "Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.", {
+                 "code" => { type: "string", description: "The existing code." },
+                 "product_id" => { type: "string", description: "Product id or permalink, for a code made for specific products. Omit for a code that covers all products." },
+                 **DISCOUNT_CODE_FIELDS
+               }, required: %w[code], destructive: true),
+          tool("expire_discount_code", "End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.", {
+                 "code" => { type: "string", description: "The existing code." },
+                 "product_id" => { type: "string", description: "Product id or permalink, for a code made for specific products. Omit for a code that covers all products." }
+               }, required: %w[code], destructive: true)
         ]
       end
 
@@ -374,8 +498,9 @@ module Mcp
           property = schema[:properties][key]
           raise Error.new("Unknown argument: #{key}", code: -32602) unless property
 
-          type = property[:type] == "integer" ? Integer : String
-          raise Error.new("#{key} must be a #{property[:type]}", code: -32602) unless value.is_a?(type)
+          type = { "integer" => Integer, "array" => Array }.fetch(property[:type], String)
+          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless value.is_a?(type)
+          raise Error.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
         end
       end
 
@@ -392,24 +517,37 @@ module Mcp
 
       def tool_list_products(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
-        products = user.products.visible.order(created_at: :desc, id: :desc).limit(limit_for(args, default: 25))
-          .includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
-        { products: products.map { |product| product_payload(product) } }
+        products = user.products.visible.includes(:alive_prices, tier_categories: { alive_variants: :alive_prices })
+        page, next_cursor = paginate(products, args, default: 25, table: "links")
+        { products: page.map { |product| product_payload(product) }, next_cursor: }.compact
       end
 
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
         details = { description: product.description, covers: covers_payload(product) }
+        # A caller editing a bundle needs the members it has now, before replacing them.
+        details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
         details.merge!(sales_count: product.successful_sales_count, sales_usd_cents: product.total_usd_cents) if (token.scopes.to_a & %w[view_sales account]).any?
         { product: product_payload(product).merge(details) }
       end
 
       def tool_create_draft_product(args)
+        membership = args["product_type"] == "membership"
+        # Argument errors come before the scope check, so a bad call does not ask the creator for write access.
+        if membership
+          raise Error.new("price_cents is not accepted for a membership; set each tier's price_cents", code: -32602) if args.key?("price_cents")
+          tiers = validated_tiers!(args["tiers"])
+        else
+          raise Error.new("price_cents is required", code: -32602) unless args.key?("price_cents")
+          raise Error.new("tiers are only accepted with product_type membership", code: -32602) if args.key?("tiers")
+        end
+
         require_scopes!(:edit_products, :account)
         name = args["name"].strip
         raise Error.new("name is required", code: -32602) if name.blank?
+        return create_draft_membership(args, name, tiers) if membership
 
         price_cents = args["price_cents"]
         raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
@@ -429,17 +567,97 @@ module Mcp
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
       end
 
+      def create_draft_membership(args, name, tiers)
+        recurrence = tiers.first["recurrence"]
+        product = user.links.build(
+          name:,
+          description: args["description"].to_s,
+          native_type: Link::NATIVE_TYPE_MEMBERSHIP,
+          is_recurring_billing: true,
+          is_tiered_membership: true,
+          should_show_all_posts: true,
+          subscription_duration: recurrence,
+          # Seeds the default tier's price, as the web create form does.
+          price_cents: tiers.first["price_cents"],
+          price_currency_type: user.currency_type,
+          draft: true,
+          purchase_disabled_at: Time.current,
+          display_product_reviews: true
+        )
+        product.set_template_properties_if_needed
+        product.taxonomy = Taxonomy.find_by(slug: "other")
+        begin
+          ActiveRecord::Base.transaction do
+            # Saving a tiered membership adds an "Untitled" default tier; the first tier replaces it.
+            product.save!
+            options = tiers.each_with_index.map do |tier, index|
+              {
+                id: index.zero? ? product.default_tier.external_id : nil,
+                name: tier["name"].strip,
+                recurrence_price_values: { recurrence => { enabled: true, price_cents: tier["price_cents"] } }
+              }
+            end
+            Product::VariantsUpdaterService.new(product:, variants_params: [{ id: product.tier_category.external_id, name: product.tier_category.title, options: }]).perform
+          end
+        rescue Link::LinkInvalid => e
+          # The tier services report through product.errors and raise with no message.
+          raise ToolError, product.errors.full_messages.to_sentence.presence || e.message
+        end
+        { product: product_payload(product.reload), message: "Draft membership saved. It is not for sale until publish_product." }
+      end
+
+      def validated_tiers!(tiers)
+        raise Error.new("tiers are required for a membership", code: -32602) if tiers.blank?
+
+        tiers.each_with_index do |tier, index|
+          raise Error.new("tiers[#{index}] must be an object", code: -32602) unless tier.is_a?(Hash)
+          unknown = tier.keys - TIER_KEYS
+          raise Error.new("tiers[#{index}] has unknown argument: #{unknown.first}", code: -32602) if unknown.any?
+          missing = TIER_KEYS - tier.keys
+          raise Error.new("tiers[#{index}].#{missing.first} is required", code: -32602) if missing.any?
+          raise Error.new("tiers[#{index}].name must be a non-blank string", code: -32602) unless tier["name"].is_a?(String) && tier["name"].strip.present?
+          raise Error.new("tiers[#{index}].price_cents must be an integer of zero or more", code: -32602) unless tier["price_cents"].is_a?(Integer) && tier["price_cents"] >= 0
+          raise Error.new("tiers[#{index}].price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}", code: -32602) if tier["price_cents"] > BasePrice::Shared::MAX_PRICE_CENTS
+          unless BasePrice::Recurrence::ALLOWED_RECURRENCES.include?(tier["recurrence"])
+            raise Error.new("tiers[#{index}].recurrence must be one of: #{BasePrice::Recurrence::ALLOWED_RECURRENCES.join(', ')}", code: -32602)
+          end
+        end
+        # The product editor holds every tier to the same set of billing periods.
+        raise Error.new("every tier must use the same recurrence", code: -32602) if tiers.map { _1["recurrence"] }.uniq.size > 1
+
+        tiers
+      end
+
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "price_cents")
-        raise Error.new("Pass at least one of name, description, or price_cents", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "price_cents", "permalink")
+        raise Error.new("Pass at least one of name, description, price_cents, or permalink", code: -32602) if changes.empty?
+
+        # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
+        # Whitespace-only is neither: allowing it through would store a value the model treats as blank
+        # (allow_blank skips the format rule), so refuse it and say how to clear instead.
+        if changes.key?("permalink")
+          permalink = changes["permalink"]
+          if permalink.empty?
+            permalink = nil
+          elsif permalink.blank?
+            raise Error.new("permalink must not be blank. Send an empty string to go back to the default URL.", code: -32602)
+          end
+        end
 
         # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
         ActiveRecord::Base.transaction do
-          # Reloads under the lock: the upsell diff below must compare against the committed
-          # description, or an overlapping edit's new upsell card is dropped with its offer left active.
-          product.lock!
+          if changes.key?("permalink")
+            # Seller row before product row, the order the editor and the v2 API lock in. Called even when
+            # the slug looks unchanged: the pre-lock read can be stale, and the helper raises rather than
+            # lock the seller after the product.
+            product.lock_for_permalink_claim!(permalink)
+          else
+            # Reloads under the lock: the upsell diff below must compare against the committed
+            # description, or an overlapping edit's new upsell card is dropped with its offer left active.
+            product.lock!
+          end
           if changes.key?("name")
             name = changes["name"].strip
             raise Error.new("name must not be blank", code: -32602) if name.blank?
@@ -456,6 +674,8 @@ module Mcp
           if changes.key?("description")
             product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
           end
+          # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
+          product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
         end
         result = { product: product_payload(product.reload).merge(description: product.description) }
@@ -465,6 +685,8 @@ module Mcp
           result[:warning] = "These discount codes would discount this product below #{product.min_price_formatted}: #{invalid_codes.join(', ')}. Edit or delete them in Gumroad." if invalid_codes.any?
         end
         result
+      rescue Link::PermalinkChangedDuringLock
+        raise ToolError, "This product's URL changed while the update was waiting. Nothing was saved; try the update again."
       end
 
       def tool_add_cover(args)
@@ -486,8 +708,61 @@ module Mcp
         { product: product_payload(product), covers: covers_payload(product.reload) }
       end
 
+      def bundle_products_payload(product)
+        product.bundle_products.alive.in_order.includes(:product, :variant).map do |bundle_product|
+          {
+            id: bundle_product.product.external_id,
+            name: bundle_product.product.name,
+            variant_id: bundle_product.variant&.external_id,
+            quantity: bundle_product.quantity
+          }
+        end
+      end
+
+      def files_payload(product)
+        product.alive_product_files.map do |file|
+          {
+            id: file.external_id,
+            name: file.name_displayable,
+            type: file.display_extension,
+            size_bytes: file.size.to_i,
+            position: file.position
+          }
+        end
+      end
+
       def covers_payload(product)
         product.display_asset_previews.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } }
+      end
+
+      def tool_list_files(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        { product: product_payload(product), files: files_payload(product) }
+      end
+
+      def tool_add_file(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        url = args["url"].to_s.strip
+        raise Error.new("url is required", code: -32602) if url.blank?
+
+        begin
+          file = Mcp::ProductFileIngest.new(seller: user, product:, url:, display_name: args["display_name"]).perform
+        rescue Mcp::ProductFileIngest::TooLarge
+          raise ToolError, "That file is larger than #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB, which is the most this tool can fetch. Upload it in the product editor instead: #{product.long_url}/edit"
+        rescue Mcp::ProductFileIngest::InvalidUrl, *INTERNET_EXCEPTIONS
+          raise ToolError, "Could not download a file from that URL. Use a public https link to the file itself."
+        rescue Mcp::ProductFileIngest::DownloadFailed
+          raise ToolError, "That link did not return a file. Use a public https link to the file itself."
+        rescue Aws::S3::Errors::ServiceError
+          raise ToolError, "The file could not be stored. Try again, or upload it in the product editor."
+        rescue *ProductFile::EXPECTED_ENQUEUE_ERRORS
+          raise ToolError, "The file was attached, but the processing that follows it could not be started. Add it again to retry."
+        end
+
+        product.reload
+        { product: product_payload(product), files: files_payload(product), message: "#{file&.name_displayable || 'File'} is now attached to #{product.name}." }
       end
 
       def tool_publish_product(args)
@@ -506,31 +781,415 @@ module Mcp
 
       def tool_list_sales(args)
         require_scopes!(:view_sales, :account)
-        sales = user.sales.successful_or_preorder_authorization_successful.order(created_at: :desc)
+        sales = user.sales.successful_or_preorder_authorization_successful
+          .includes(:link, :offer_code, :utm_link, :subscription)
         sales = sales.where(email: args["email"].to_s.strip) if args["email"].present?
-        sales = sales.limit(limit_for(args, default: 25))
+        sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
+        sales = sales.where(purchases: { created_at: parse_time!(args["after"], "after").. }) if args["after"].present?
+        sales = sales.where(purchases: { created_at: ...parse_time!(args["before"], "before") }) if args["before"].present?
+        sales = sales.where(args["payment"] == "paid" ? "purchases.price_cents > 0" : "purchases.price_cents = 0") if args["payment"]
+        if args["kind"]
+          membership = "purchases.subscription_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM subscriptions WHERE subscriptions.id = purchases.subscription_id AND subscriptions.flags & #{Subscription.flag_mapping["flags"][:is_installment_plan]} != 0)"
+          sales = sales.where(args["kind"] == "subscription" ? membership : "NOT (#{membership})")
+        end
+        page, next_cursor = paginate(sales, args, default: 25, table: "purchases")
+        { sales: page.map { |sale| sale_payload(sale) }, next_cursor: }.compact
+      end
+
+      def sale_payload(sale)
+        utm = sale.utm_link
         {
-          sales: sales.map do |sale|
+          id: sale.external_id,
+          email: sale.email,
+          product_id: sale.link.external_id,
+          product_name: sale.link.name,
+          price_cents: sale.price_cents,
+          fee_cents: sale.fee_cents.to_i,
+          affiliate_commission_cents: sale.affiliate_credit_cents.to_i,
+          net_cents: sale.price_cents - sale.fee_cents.to_i - sale.affiliate_credit_cents.to_i,
+          currency: Currency::USD,
+          created_at: sale.created_at.iso8601,
+          refunded: sale.refunded?,
+          chargedback: sale.chargedback?,
+          subscription: sale.subscription.present? && !sale.subscription.is_installment_plan?,
+          country: sale.country_or_ip_country,
+          discount_code: sale.offer_code&.code,
+          referrer: sale.referrer.presence,
+          utm_source: utm&.utm_source,
+          utm_medium: utm&.utm_medium,
+          utm_campaign: utm&.utm_campaign,
+          utm_term: utm&.utm_term,
+          utm_content: utm&.utm_content
+        }
+      end
+
+      def tool_get_analytics(args)
+        require_scopes!(:view_sales, :account)
+        timezone = ActiveSupport::TimeZone[user.timezone]
+        end_date = args["end_date"] ? parse_date!(args["end_date"], "end_date") : timezone.today
+        start_date = args["start_date"] ? parse_date!(args["start_date"], "start_date") : end_date - (ANALYTICS_DEFAULT_DAYS - 1)
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date > end_date
+        raise Error.new("The date range cannot exceed #{ANALYTICS_MAX_DAYS} days", code: -32602) if (end_date - start_date).to_i >= ANALYTICS_MAX_DAYS
+
+        product = find_product!(args["product_id"]) if args["product_id"].present?
+        by = args.fetch("breakdown", "product")
+        # CachingProxy clamps ranges to [account creation, today]; a range wholly outside would be answered with another day's data.
+        created_on = user.created_at.in_time_zone(timezone).to_date
+        if start_date > timezone.today || end_date < created_on
+          rows = []
+        else
+          data = CreatorAnalytics::CachingProxy.new(user).data_for_dates(start_date, end_date, by: by == "referrer" ? :referral : :date)
+          permalinks = product ? [product.unique_permalink] : nil
+          rows = by == "referrer" ? analytics_by_referrer(data[:by_referral], permalinks) : analytics_by_product(data[:by_date], permalinks)
+        end
+        { start_date: start_date.iso8601, end_date: end_date.iso8601, time_zone: user.timezone, currency: Currency::USD, breakdown: by, rows: }
+      rescue Faraday::TimeoutError
+        raise ToolError, "Analytics took too long for this range. Try a shorter range."
+      end
+
+      def analytics_by_product(by_date, permalinks)
+        names = user.links.where(unique_permalink: by_date[:views].keys).index_by(&:unique_permalink)
+        by_date[:views].keys.filter_map do |permalink|
+          next if permalinks && !permalinks.include?(permalink)
+
+          views = by_date[:views][permalink].sum
+          sales = by_date[:sales][permalink].sum
+          { product_id: names[permalink]&.external_id, product_name: names[permalink]&.name, views:, sales:, revenue_cents: by_date[:totals][permalink].sum, conversion_rate: analytics_conversion(sales, views) }
+        end.sort_by { |row| -row[:views] }
+      end
+
+      def analytics_by_referrer(by_referral, permalinks)
+        totals = Hash.new { |hash, name| hash[name] = { views: 0, sales: 0, revenue_cents: 0 } }
+        { views: :views, sales: :sales, totals: :revenue_cents }.each do |type, field|
+          by_referral[type].each do |permalink, referrers|
+            next if permalinks && !permalinks.include?(permalink)
+
+            referrers.each { |name, series| totals[name][field] += series.sum }
+          end
+        end
+        totals.map { |name, row| { referrer: name, **row, conversion_rate: analytics_conversion(row[:sales], row[:views]) } }
+          .sort_by { |row| -row[:views] }.first(ANALYTICS_MAX_REFERRERS)
+      end
+
+      def analytics_conversion(sales, views)
+        views.positive? ? (sales.to_f / views).round(4) : nil
+      end
+
+      def tool_get_sales_totals(args)
+        require_scopes!(:view_sales, :account)
+        timezone = ActiveSupport::TimeZone[user.timezone]
+        end_date = args["end_date"] ? parse_date!(args["end_date"], "end_date") : timezone.today
+        start_date = args["start_date"] ? parse_date!(args["start_date"], "start_date") : end_date - (TOTALS_DEFAULT_DAYS - 1)
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date > end_date
+        raise Error.new("The date range cannot exceed #{TOTALS_MAX_DAYS} days", code: -32602) if (end_date - start_date).to_i >= TOTALS_MAX_DAYS
+
+        breakdown = args.fetch("breakdown", "product")
+        # The revenue definition every other report uses: a successful or preorder-authorized sale
+        # that was not refunded or charged back. Bundle members are extra rows for one order. A
+        # commission completion is a second payment on the order: it adds revenue but not a unit.
+        sales = user.sales
+          .successful_or_preorder_authorization_successful_and_not_refunded_or_chargedback
+          .not_is_bundle_product_purchase
+        sales = sales.where(link_id: find_product!(args["product_id"]).id) if args["product_id"].present?
+
+        buckets = sales_total_buckets(sales, timezone, start_date, end_date, breakdown)
+        {
+          start_date: start_date.iso8601,
+          end_date: end_date.iso8601,
+          time_zone: user.timezone,
+          currency: Currency::USD,
+          breakdown:,
+          totals: sales_totals_from(buckets.values),
+          rows: sales_total_rows(buckets, breakdown)
+        }
+      end
+
+      # Each bucket is [revenue_cents, units]. The range is walked in constant-offset segments
+      # because the local bucket of a sale depends on the zone offset in force at that sale.
+      def sales_total_buckets(sales, timezone, start_date, end_date, breakdown)
+        start_time = Time.at(timezone.parse(start_date.to_s).to_i).utc
+        end_time = Time.at(timezone.parse((end_date + 1).to_s).to_i).utc
+        buckets = Hash.new { |hash, key| hash[key] = [0, 0] }
+        completion_flag = Purchase.flag_mapping["flags"][:is_commission_completion_purchase]
+        units_sql = "SUM(CASE WHEN (purchases.flags & #{completion_flag}) = 0 THEN 1 ELSE 0 END)"
+
+        local_offset_segments(timezone, start_time, end_time).each do |segment_start, segment_end, offset_seconds|
+          expression = sales_group_expression(breakdown, offset_seconds)
+          sales.where(created_at: segment_start...segment_end)
+            .group(Arel.sql(expression))
+            .pluck(Arel.sql(expression), Arel.sql("SUM(purchases.price_cents)"), Arel.sql(units_sql))
+            .each do |key, revenue_cents, units|
+              bucket = buckets[sales_group_key(breakdown, key)]
+              bucket[0] += revenue_cents.to_i
+              bucket[1] += units.to_i
+            end
+        end
+
+        buckets
+      end
+
+      # MySQL can't convert to a named zone (the time zone tables aren't loaded), so local buckets
+      # are the UTC time shifted by the zone's offset. A range can contain a daylight-saving change,
+      # so each constant-offset segment is shifted on its own rather than the whole range at once.
+      def local_offset_segments(timezone, start_time, end_time)
+        transitions = timezone.tzinfo.transitions_up_to(end_time, start_time).map { |transition| Time.at(transition.at.to_i).utc }
+        ([start_time] + transitions + [end_time]).uniq.each_cons(2).map do |segment_start, segment_end|
+          [segment_start, segment_end, timezone.at(segment_start.to_i).utc_offset]
+        end
+      end
+
+      def sales_group_expression(breakdown, offset_seconds)
+        return "purchases.link_id" if breakdown == "product"
+        return "COALESCE(NULLIF(TRIM(purchases.country), ''), purchases.ip_country)" if breakdown == "country"
+
+        local_date = "DATE(DATE_ADD(purchases.created_at, INTERVAL #{offset_seconds} SECOND))"
+        case breakdown
+        when "day" then local_date
+        when "week" then "DATE_SUB(#{local_date}, INTERVAL WEEKDAY(#{local_date}) DAY)"
+        else "DATE_FORMAT(#{local_date}, '%Y-%m-01')"
+        end
+      end
+
+      def sales_group_key(breakdown, key)
+        return key.to_i if breakdown == "product"
+        return canonical_country_name(key.presence) if breakdown == "country"
+
+        Date.parse(key.to_s)
+      end
+
+      # Purchases store the country as free text, so one country can arrive under several spellings.
+      def canonical_country_name(name)
+        return name if name.nil?
+
+        Compliance::Countries.find_by_name(name)&.common_name || name
+      end
+
+      def sales_total_rows(buckets, breakdown)
+        case breakdown
+        when "product"
+          top = buckets.sort_by { |_product_id, (revenue_cents, _units)| -revenue_cents }.first(TOTALS_MAX_ROWS)
+          products = Link.where(id: top.map(&:first)).select(:id, :name).index_by(&:id)
+          top.map { |product_id, (revenue_cents, units)| { product_id: products[product_id]&.external_id, product_name: products[product_id]&.name, **sales_metrics(revenue_cents, units) } }
+        when "country"
+          buckets.map { |country, (revenue_cents, units)| { country:, **sales_metrics(revenue_cents, units) } }
+            .sort_by { |row| -row[:revenue_cents] }.first(TOTALS_MAX_ROWS)
+        else
+          buckets.map { |date, (revenue_cents, units)| { date: date.iso8601, **sales_metrics(revenue_cents, units) } }
+            .sort_by { |row| row[:date] }
+        end
+      end
+
+      def sales_totals_from(buckets)
+        sales_metrics(buckets.sum { |revenue_cents, _units| revenue_cents }, buckets.sum { |_revenue_cents, units| units })
+      end
+
+      def sales_metrics(revenue_cents, units)
+        { revenue_cents:, units:, average_order_value_cents: units.positive? ? (revenue_cents.to_f / units).round : nil }
+      end
+
+      def parse_date!(value, name)
+        Date.iso8601(value)
+      rescue Date::Error
+        raise Error.new("#{name} must be a date like 2026-10-31", code: -32602)
+      end
+
+      def tool_get_customers(args)
+        require_scopes!(:view_sales, :account)
+        by = args.fetch("breakdown", "spend")
+        limit = limit_for(args, default: CUSTOMERS_DEFAULT_ROWS)
+        start_date = parse_date!(args["start_date"], "start_date") if args["start_date"].present?
+        end_date = parse_date!(args["end_date"], "end_date") if args["end_date"].present?
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date && end_date && start_date > end_date
+
+        zone = ActiveSupport::TimeZone[user.timezone]
+        sales = user.sales.successful_or_preorder_authorization_successful
+        sales = sales.where(email: args["email"].to_s.strip) if args["email"].present?
+        rows = WithMaxExecutionTime.timeout_queries(seconds: CUSTOMERS_QUERY_TIMEOUT) do
+          if by == "conversion"
+            customers_by_conversion(sales, zone, start_date, end_date, limit)
+          else
+            customers_by_spend(sales, zone, start_date, end_date, limit)
+          end
+        end
+        { breakdown: by, currency: Currency::USD, time_zone: user.timezone, start_date: start_date&.iso8601, end_date: end_date&.iso8601, rows: }
+      rescue WithMaxExecutionTime::QueryTimeoutError, ActiveRecord::StatementTimeout
+        raise ToolError, "Counting customers took too long. Try a shorter date range."
+      end
+
+      def customers_by_spend(sales, zone, start_date, end_date, limit)
+        counted = customer_sales_range(sales, zone, start_date, end_date)
+        sales = counted.joins("LEFT JOIN (#{customer_refunds_sql(counted)}) refund_totals ON refund_totals.purchase_id = purchases.id")
+        refunds = "COALESCE(refund_totals.amount_cents, 0)"
+        # A partial refund never sets stripe_refunded, so spend follows the refund amounts: the order
+        # stays in the count, its money does not.
+        spend = "SUM(CASE WHEN #{CUSTOMER_REFUNDED} OR #{customer_chargedback} THEN 0 ELSE GREATEST(COALESCE(purchases.price_cents, 0) - #{refunds}, 0) END)"
+        refunded = "SUM(CASE WHEN #{CUSTOMER_REFUNDED} THEN COALESCE(purchases.price_cents, 0) ELSE #{refunds} END)"
+        chargedback = "SUM(CASE WHEN #{customer_chargedback} THEN COALESCE(purchases.price_cents, 0) ELSE 0 END)"
+        sales.group("purchases.email")
+          .order(Arel.sql("#{spend} DESC, purchases.email ASC"))
+          .limit(limit)
+          .pluck(Arel.sql("purchases.email"), Arel.sql("COUNT(*)"), Arel.sql(spend), Arel.sql(refunded), Arel.sql(chargedback),
+                 Arel.sql("MIN(purchases.created_at)"), Arel.sql("MAX(purchases.created_at)"))
+          .map do |email, orders, spend_cents, refunded_cents, chargedback_cents, first_at, last_at|
             {
-              id: sale.external_id,
-              email: sale.email,
-              product_id: sale.link.external_id,
-              product_name: sale.link.name,
-              price_cents: sale.price_cents,
-              currency: Currency::USD,
-              created_at: sale.created_at.iso8601,
-              refunded: sale.refunded?,
-              chargedback: sale.chargedback?
+              email:,
+              orders_count: orders,
+              total_spend_cents: spend_cents.to_i,
+              refunded_cents: refunded_cents.to_i,
+              chargedback_cents: chargedback_cents.to_i,
+              first_order_at: first_at&.iso8601,
+              last_order_at: last_at&.iso8601
             }
           end
+      end
+
+      def customers_by_conversion(sales, zone, start_date, end_date, limit)
+        free_at = "MIN(CASE WHEN #{CUSTOMER_FREE} THEN purchases.created_at END)"
+        converted_at = "MIN(CASE WHEN #{customer_paid} THEN purchases.created_at END)"
+        free_id = "MIN(CASE WHEN #{CUSTOMER_FREE} THEN purchases.id END)"
+        converted_id = "MIN(CASE WHEN #{customer_paid} THEN purchases.id END)"
+        # A buyer converted once a paid, kept purchase followed their first purchase of any kind,
+        # and that first one was free. created_at carries no fractional seconds, so two orders in
+        # the same second are settled by id.
+        first_at = "MIN(purchases.created_at)"
+        converted_after_free = "#{free_at} = #{first_at} AND (#{converted_at} > #{free_at} OR " \
+                              "(#{converted_at} IS NOT NULL AND #{converted_at} = #{free_at} AND #{converted_id} > #{free_id}))"
+        # The free purchase can be older than the range: the range bounds the purchase that converted.
+        rows = sales.group("purchases.email").having(converted_after_free)
+        rows = rows.having("#{converted_at} >= ?", customer_day_start(start_date, zone)) if start_date
+        rows = rows.having("#{converted_at} < ?", customer_day_start(end_date, zone) + 1.day) if end_date
+        # MySQL's `-` on two DATETIMEs is not a duration: it subtracts YYYYMMDDhhmmss numbers, so a
+        # conversion over a month or a year boundary counts as slower than a longer one inside a
+        # single month, and a capped list then drops the fastest converters. Order by the interval.
+        rows.order(Arel.sql("TIMESTAMPDIFF(SECOND, #{free_at}, #{converted_at}) ASC, purchases.email ASC"))
+          .limit(limit)
+          .pluck(Arel.sql("purchases.email"), Arel.sql(free_at), Arel.sql(converted_at))
+          .map do |email, first_free_at, paid_at|
+            { email:, free_at: first_free_at&.iso8601, converted_at: paid_at&.iso8601, days_to_convert: ((paid_at - first_free_at) / 1.day).round(1) }
+          end
+      end
+
+      def customer_sales_range(sales, zone, start_date, end_date)
+        sales = sales.where("purchases.created_at >= ?", customer_day_start(start_date, zone)) if start_date
+        sales = sales.where("purchases.created_at < ?", customer_day_start(end_date, zone) + 1.day) if end_date
+        sales
+      end
+
+      # Refunds per purchase, pre-aggregated: joined directly they would multiply the buyer's orders.
+      def customer_refunds_sql(sales)
+        Refund.effective.joins(:purchase).merge(sales)
+              .group("refunds.purchase_id").select("refunds.purchase_id, SUM(refunds.amount_cents) AS amount_cents").to_sql
+      end
+
+      # A won dispute keeps the money, so only an unreversed chargeback takes the order out of spend —
+      # the same reversal the model's not_chargedback_or_chargedback_reversed scope reads.
+      def customer_chargedback
+        "purchases.chargeback_date IS NOT NULL AND COALESCE(purchases.flags & #{Purchase.flag_mapping["flags"][:chargeback_reversed]}, 0) = 0"
+      end
+
+      # Paid and kept: a fully refunded or charged-back order is not money the buyer left behind.
+      def customer_paid
+        "COALESCE(purchases.price_cents, 0) > 0 AND NOT (#{CUSTOMER_REFUNDED}) AND NOT (#{customer_chargedback})"
+      end
+
+      # A YYYY-MM-DD bound is a day in the creator's zone, so a purchase late in their evening counts as that day.
+      def customer_day_start(date, zone)
+        zone.parse(date.iso8601).beginning_of_day
+      end
+
+      def tool_get_subscriptions(args)
+        require_scopes!(:view_sales, :account)
+        product = find_product!(args["product_id"]) if args["product_id"].present?
+
+        args.fetch("breakdown", "subscriptions") == "churn" ? churn_payload(args, product) : subscriptions_payload(args, product)
+      end
+
+      # A creator's subscriptions hang off their products, not off their buyer-side `subscriptions`
+      # association, and test subscriptions are excluded to match the subscriber counts they see.
+      def subscriptions_payload(args, product)
+        subscriptions = Subscription.joins(link: :user).where(users: { id: user.id }).not_is_test_subscription
+        subscriptions = subscriptions.where(link_id: product.id) if product
+        subscriptions = subscriptions.active if args["status"] == "alive"
+        # The complement of the scope the dashboard counts, so a stopped subscription is in exactly one list.
+        subscriptions = subscriptions.where.not(id: Subscription.active.select(:id)) if args["status"] == "ended"
+
+        page, next_cursor = paginate(subscriptions.includes(:link, :user, :purchases, :true_original_purchase), args, default: 25, table: "subscriptions")
+        { breakdown: "subscriptions", subscriptions: page.map { |subscription| subscription_payload(subscription) }, next_cursor: }.compact
+      end
+
+      def subscription_payload(subscription)
+        {
+          id: subscription.external_id,
+          product_id: subscription.link.external_id,
+          product_name: subscription.link.name,
+          email: subscription_email(subscription),
+          status: subscription.status,
+          started_at: subscription.created_at.iso8601,
+          cancelled_at: subscription.cancelled_at&.iso8601,
+          failed_at: subscription.failed_at&.iso8601,
+          ended_at: subscription.ended_at&.iso8601,
+          failed_payments: subscription.purchases.count { |purchase| purchase.purchase_state == "failed" }
         }
+      end
+
+      # `Subscription#email` reads its sender purchase for a gift, which a purchase-less row lacks.
+      def subscription_email(subscription)
+        return subscription.user.form_email if subscription.user&.form_email.present?
+
+        purchase = subscription.true_original_purchase
+        return if purchase.nil?
+
+        return purchase.giftee_email.presence if purchase.is_gift_sender_purchase?
+
+        (subscription.original_purchase || purchase).email
+      end
+
+      def churn_payload(args, product)
+        timezone = ActiveSupport::TimeZone[user.timezone]
+        end_date = args["end_date"] ? parse_date!(args["end_date"], "end_date") : timezone.today
+        start_date = args["start_date"] ? parse_date!(args["start_date"], "start_date") : (end_date - SUBSCRIPTION_CHURN_DEFAULT_MONTHS.months).beginning_of_month
+        raise Error.new("start_date must not be after end_date", code: -32602) if start_date > end_date
+        raise Error.new("The date range cannot exceed #{SUBSCRIPTION_CHURN_MAX_DAYS} days", code: -32602) if (end_date - start_date).to_i >= SUBSCRIPTION_CHURN_MAX_DAYS
+
+        if start_date > timezone.today
+          return { breakdown: "churn", start_date: start_date.iso8601, end_date: end_date.iso8601, time_zone: user.timezone, currency: Currency::USD, rows: [] }
+        end
+
+        data = CreatorAnalytics::Churn.new(seller: user).generate_data(start_date:, end_date:)
+        monthly = data.dig(:data, :current_period, :monthly) || {}
+        permalink = product&.unique_permalink
+        rows = monthly.filter_map do |month, month_stats|
+          stats = permalink ? month_stats[:by_product][permalink] : month_stats[:total]
+          next if stats.nil?
+
+          {
+            month:,
+            subscriber_base: stats[:subscriber_base],
+            churned: stats[:churned_customers_count],
+            churn_rate_percent: stats[:churn_rate],
+            revenue_lost_cents: stats[:revenue_lost_cents]
+          }
+        end
+
+        # The churn source clamps the range to the seller's first sale and today, so return what it read.
+        period = data.dig(:metadata, :current_period) || {}
+        {
+          breakdown: "churn",
+          start_date: period[:start_date] || start_date.iso8601,
+          end_date: period[:end_date] || end_date.iso8601,
+          time_zone: user.timezone,
+          currency: Currency::USD,
+          rows:
+        }
+      rescue Faraday::TimeoutError
+        raise ToolError, "Churn took too long for this range. Try a shorter range."
       end
 
       def tool_list_payouts(args)
         require_scopes!(:view_payouts, :account)
-        payouts = user.payments.order(created_at: :desc).limit(limit_for(args, default: 10))
+        page, next_cursor = paginate(user.payments, args, default: 10, table: "payments")
         {
-          payouts: payouts.map do |payout|
+          payouts: page.map do |payout|
             {
               id: payout.external_id,
               amount_cents: payout.amount_cents,
@@ -538,7 +1197,218 @@ module Mcp
               state: payout.state,
               created_at: payout.created_at&.iso8601
             }
-          end
+          end,
+          next_cursor:
+        }.compact
+      end
+
+      # Runs inside the caller's transaction: the update service soft-deletes each member it is not
+      # handed, so one unresolvable id must roll back the whole edit, including a bundle just created.
+      def bundle_member_attributes(bundle, product_ids)
+        raise Error.new("product_ids must name at least one product", code: -32602) if product_ids.empty?
+
+        retained = bundle.bundle_products.alive.includes(:variant).index_by(&:product_id)
+
+        product_ids.map.with_index do |id, position|
+          raise Error.new("product_ids[#{position}] must be a non-blank string", code: -32602) unless id.is_a?(String) && id.strip.present?
+
+          product = find_product!(id)
+          # The service rewrites the version and quantity of every member it is handed, so a retained
+          # member carries over what it already sells. Only a new member takes the defaults, and its
+          # first version is what the editor's product picker selects.
+          kept = retained[product.id]
+          variant = kept&.variant || product.variants_or_skus.first
+          { product_id: product.external_id, variant_id: variant&.external_id, quantity: kept&.quantity || DEFAULT_BUNDLE_MEMBER_QUANTITY, position: }
+        end
+      end
+
+      def tool_create_bundle(args)
+        require_scopes!(:edit_products, :account)
+        name = args["name"].strip
+        raise Error.new("name is required", code: -32602) if name.blank?
+
+        price_cents = args["price_cents"]
+        raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
+
+        bundle = user.links.build(
+          name:,
+          native_type: Link::NATIVE_TYPE_BUNDLE,
+          is_bundle: true,
+          price_cents:,
+          price_currency_type: user.currency_type,
+          draft: true,
+          purchase_disabled_at: Time.current,
+          display_product_reviews: true
+        )
+        bundle.taxonomy = Taxonomy.find_by(slug: "other")
+        ActiveRecord::Base.transaction do
+          bundle.save!
+          members = bundle_member_attributes(bundle, args["product_ids"])
+          Bundle::UpdateProductsService.new(bundle:, products: members).perform
+        end
+        {
+          product: product_payload(bundle.reload),
+          bundle_products: bundle_products_payload(bundle),
+          message: "Draft bundle saved. It is not for sale until publish_product."
+        }
+      end
+
+      def tool_update_bundle(args)
+        require_scopes!(:edit_products, :account)
+        bundle = find_product!(args["id"])
+        raise ToolError, "This product is not a bundle. Make one with create_bundle first." if bundle.not_is_bundle?
+
+        ActiveRecord::Base.transaction do
+          # Reloads under the lock, then resolves the members here so a retained member keeps the
+          # version it already sells even if a concurrent edit just changed it.
+          bundle.lock!
+          members = bundle_member_attributes(bundle, args["product_ids"])
+          Bundle::UpdateProductsService.new(bundle:, products: members).perform
+        end
+        { product: product_payload(bundle.reload), bundle_products: bundle_products_payload(bundle) }
+      end
+
+      def tool_create_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        code = args["code"].strip
+        raise Error.new("code is required", code: -32602) if code.blank?
+        product = find_discount_product!(args) if args.key?("product_id")
+        attributes = discount_amount_attributes(args, required: true, currency_type: product&.price_currency_type || user.currency_type)
+        attributes.merge!(discount_window_attributes(args, default_valid_at: Time.current))
+        attributes[:max_purchase_count] = discount_max_purchase_count(args) if args.key?("max_purchase_count")
+
+        offer_code = user.offer_codes.build(code:, universal: product.nil?, products: Array(product), **attributes)
+        # offer_codes has no unique index on code, so two overlapping calls from this tool would both
+        # pass the uniqueness validation; the seller lock makes the second one see the first row.
+        ActiveRecord::Base.transaction do
+          User.where(id: user.id).lock.pick(:id)
+          save_discount_code!(offer_code)
+        end
+        { discount_code: discount_code_payload(offer_code) }
+      end
+
+      def tool_update_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        raise Error.new("Pass at least one of #{DISCOUNT_CODE_FIELDS.keys.to_sentence(last_word_connector: ', or ')}", code: -32602) if args.slice(*DISCOUNT_CODE_FIELDS.keys).empty?
+
+        offer_code = find_discount_code!(args)
+        # Checkout prices a tiered code from its tiers and ignores amount_percentage.
+        raise ToolError, "#{offer_code.code} gives a different discount by how long the buyer has owned the product. Change its amounts in the Gumroad dashboard." if offer_code.tiered? && args.slice("percent_off", "amount_cents").any?
+
+        currency_type = offer_code.currency_type || offer_code.products.first&.price_currency_type || user.currency_type
+        offer_code.assign_attributes(discount_amount_attributes(args, required: false, currency_type:))
+        offer_code.assign_attributes(discount_window_attributes(args, default_valid_at: offer_code.valid_at || offer_code.created_at))
+        offer_code.max_purchase_count = discount_max_purchase_count(args) if args.key?("max_purchase_count")
+        save_discount_code!(offer_code)
+        { discount_code: discount_code_payload(offer_code) }
+      end
+
+      def tool_expire_discount_code(args)
+        require_scopes!(:edit_products, :account)
+        offer_code = find_discount_code!(args)
+        now = Time.current.change(usec: 0)
+        return { discount_code: discount_code_payload(offer_code), message: "Already expired." } if offer_code.expires_at.present? && offer_code.expires_at <= now
+
+        # The model requires a start date before the end date, as the editor's "Valid until" does.
+        offer_code.valid_at = [offer_code.valid_at || offer_code.created_at, now - DISCOUNT_MIN_VALIDITY_WINDOW].min
+        offer_code.expires_at = now
+        # Expiring narrows the code to nothing, so the price check, which the current prices can
+        # already fail, must not leave the creator unable to end it from here.
+        offer_code.save!(context: :expiring)
+        { discount_code: discount_code_payload(offer_code), message: "Expired. Buyers can no longer use this code." }
+      end
+
+      def find_discount_code!(args)
+        code = args["code"].strip
+        raise Error.new("code is required", code: -32602) if code.blank?
+
+        if args.key?("product_id")
+          product = find_discount_product!(args)
+          offer_code = product.offer_codes.alive.where(universal: false, user_id: user.id).find_by(code:)
+          raise ToolError, "No discount code #{code} is limited to this product. Omit product_id for a code that covers all products." if offer_code.nil?
+        else
+          offer_code = user.offer_codes.alive.universal.find_by(code:)
+          raise ToolError, "No discount code #{code} covers all products. Pass product_id for a code made for specific products." if offer_code.nil?
+        end
+        offer_code
+      end
+
+      def find_discount_product!(args)
+        raise Error.new("product_id must not be blank", code: -32602) if args["product_id"].blank?
+
+        find_product!(args["product_id"])
+      end
+
+      # The columns are 4-byte integers; the editor answers an overflow the same way.
+      def save_discount_code!(offer_code)
+        offer_code.save!
+      rescue ActiveModel::RangeError
+        raise ToolError, "The value entered is too large. Please enter a smaller number."
+      end
+
+      def discount_amount_attributes(args, required:, currency_type:)
+        percent, cents = args.values_at("percent_off", "amount_cents")
+        raise Error.new("Pass only one of percent_off or amount_cents", code: -32602) if percent && cents
+        raise Error.new("Pass one of percent_off or amount_cents", code: -32602) if required && percent.nil? && cents.nil?
+
+        if percent
+          raise Error.new("percent_off must be between #{DISCOUNT_PERCENT_RANGE.min} and #{DISCOUNT_PERCENT_RANGE.max}", code: -32602) unless DISCOUNT_PERCENT_RANGE.cover?(percent)
+
+          { amount_percentage: percent, amount_cents: nil, currency_type: nil, once_per_cart: false }
+        elsif cents
+          raise Error.new("amount_cents must be greater than zero", code: -32602) unless cents.positive?
+
+          { amount_cents: cents, amount_percentage: nil, currency_type: }
+        else
+          {}
+        end
+      end
+
+      def discount_window_attributes(args, default_valid_at:)
+        attributes = {}
+        attributes[:valid_at] = parse_discount_time(args, "valid_at") if args.key?("valid_at")
+        if args.key?("expires_at")
+          attributes[:expires_at] = parse_discount_time(args, "expires_at")
+          attributes[:valid_at] ||= default_valid_at
+        end
+        attributes
+      end
+
+      def parse_discount_time(args, key)
+        time = begin
+          Time.zone.iso8601(args[key])
+        rescue ArgumentError
+          raise Error.new("#{key} must be an ISO 8601 time", code: -32602)
+        end
+        raise Error.new("#{key} must have a year from #{DISCOUNT_YEAR_RANGE.min} to #{DISCOUNT_YEAR_RANGE.max}", code: -32602) unless DISCOUNT_YEAR_RANGE.cover?(time.year)
+
+        time
+      end
+
+      def discount_max_purchase_count(args)
+        count = args["max_purchase_count"]
+        raise Error.new("max_purchase_count must be zero or more", code: -32602) if count.negative?
+
+        count
+      end
+
+      def discount_code_payload(offer_code)
+        product_ids = offer_code.universal? ? [] : offer_code.products.map(&:external_id)
+        {
+          id: offer_code.external_id,
+          code: offer_code.code,
+          # A code made in the editor can cover several products; product_ids lists them all.
+          scope: offer_code.universal? ? "universal" : product_ids.first,
+          product_ids:,
+          # A tiered code's amount_percentage is a placeholder; checkout uses the tiers.
+          percent_off: offer_code.tiered? ? nil : offer_code.amount_percentage,
+          tiers: offer_code.normalized_ownership_duration_tiers,
+          amount_cents: offer_code.amount_cents,
+          currency: offer_code.is_cents? ? offer_code.currency_type : nil,
+          valid_at: offer_code.valid_at&.iso8601,
+          expires_at: offer_code.expires_at&.iso8601,
+          max_purchase_count: offer_code.max_purchase_count,
+          expired: offer_code.expires_at.present? && offer_code.expires_at <= Time.current
         }
       end
 
@@ -550,6 +1420,7 @@ module Mcp
           currency: product.price_currency_type,
           **pricing_payload(product),
           published: product.published?,
+          is_bundle: product.is_bundle?,
           url: product.long_url,
           permalink: product.unique_permalink
         }
@@ -568,7 +1439,7 @@ module Mcp
         tiers = tier_records.map do |tier|
           prices = tier.alive_prices.select { _1.is_buy? && recurrences.include?(_1.recurrence) }
             .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: tier.customizable_price? ? _1.suggested_price_cents : nil }] }
-          { name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: }
+          { id: tier.external_id, name: tier.name, pay_what_you_want: !!tier.customizable_price, prices: }
         end
         # As on the storefront (Link#has_customizable_price_option?), a closed tier counts only when all are closed.
         offered = tier_records.reject(&:closed_to_new_buyers?).presence || tier_records
@@ -583,6 +1454,34 @@ module Mcp
         raise ToolError, "The product was not found." if product.nil? || product.deleted_at.present?
 
         product
+      end
+
+      # Keyset pages over (created_at, id) descending; fetches one extra row to know whether another page exists.
+      # The cursor carries created_at in microseconds, not whole seconds, so a timestamp column that ever
+      # stores fractional seconds cannot drop rows that fall inside the last row's second.
+      def paginate(scope, args, default:, table:)
+        limit = limit_for(args, default:)
+        if args["cursor"].present?
+          at, id = args["cursor"].to_s.split("_", 2)
+          raise Error.new("cursor is not valid", code: -32602) unless at.match?(/\A\d+\z/) && id.to_s.match?(/\A\d+\z/)
+
+          time = Time.zone.at(Rational(at.to_i, MICROSECONDS_PER_SECOND))
+          raise Error.new("cursor is not valid", code: -32602) if time.year > MAX_DATETIME_YEAR
+          scope = scope.where("#{table}.created_at < :t OR (#{table}.created_at = :t AND #{table}.id < :id)", t: time, id: id.to_i)
+        end
+        rows = scope.order("#{table}.created_at DESC, #{table}.id DESC").limit(limit + 1).to_a
+        page = rows.first(limit)
+        next_cursor = "#{(page.last.created_at.to_r * MICROSECONDS_PER_SECOND).to_i}_#{page.last.id}" if rows.size > limit
+        [page, next_cursor]
+      end
+
+      def parse_time!(value, name)
+        time = Time.use_zone("UTC") { Time.zone.parse(value) }
+        raise ArgumentError if time.nil? || !time.year.between?(0, MAX_DATETIME_YEAR)
+
+        time
+      rescue ArgumentError
+        raise Error.new("#{name} must be a date or ISO 8601 time", code: -32602)
       end
 
       def limit_for(args, default:)

@@ -31,8 +31,14 @@ class TranscodedVideo < ApplicationRecord
     end
   end
 
+  # A row only lacks a job_id for the seconds between submitting and the transcoder's response. One that is
+  # still without a job_id long after that never submitted — the request raised, or the process died mid-call —
+  # but it stays in "processing" because nothing settles it, and the same-key guards read it as a job in flight.
+  UNSUBMITTED_GRACE_PERIOD = 15.minutes
+
   scope :completed,     -> { where(state: "completed") }
   scope :processing,    -> { where(state: "processing") }
+  scope :in_flight,     -> { processing.where("job_id IS NOT NULL OR created_at >= ?", UNSUBMITTED_GRACE_PERIOD.ago) }
   scope :s3, -> { } # assume they're all on S3 (needed for CdnDeletable)
 
   def mark(state)

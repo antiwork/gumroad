@@ -622,6 +622,17 @@ describe Api::V2::EmailsController do
         expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last.id)
       end
 
+      it "keeps the waitlist filter when publishing a follower draft" do
+        product = create(:product, user: @user)
+        @installment.update!(installment_type: Installment::FOLLOWER_TYPE, link: nil, waitlisted_products: [product.unique_permalink])
+
+        post @action, params: @params
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(@installment.reload.published?).to be(true)
+        expect(@installment.waitlisted_products).to eq([product.unique_permalink])
+      end
+
       it "keeps attached files when publishing a draft" do
         file = create(:product_file, link: nil, installment: @installment, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/specs/magic.mp3")
         @installment.product_files << file

@@ -111,6 +111,21 @@
             <td><%= @purchase.variant_attributes.first.name %></td>
           </tr>
         <% end %>
+        <% direct_affiliate_credit = @purchase.credits_direct_affiliate? ? @purchase.direct_affiliate_credit : nil %>
+        <% if direct_affiliate_credit.present? %>
+          <tr>
+            <td>
+              <h4>Affiliate email</h4>
+            </td>
+            <td><%= direct_affiliate_credit.affiliate_user.form_email %></td>
+          </tr>
+          <tr>
+            <td>
+              <h4>Affiliate commission</h4>
+            </td>
+            <td style="white-space: nowrap;"><%= "#{Money.new(direct_affiliate_credit.amount_cents + direct_affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{direct_affiliate_credit.basis_points / 100}%)" %></td>
+          </tr>
+        <% end %>
         <% if affiliate.present? && !@purchase.affiliate_credit_cents.zero? && @purchase.affiliate_credit.present? %>
           <tr>
             <td>
@@ -122,7 +137,7 @@
             <td>
               <h4><%= affiliate.collaborator? ? "Collaborator commission" : "Affiliate commission" %></h4>
             </td>
-            <td style="white-space: nowrap;"><%= "#{Money.new(@purchase.affiliate_credit_cents + @purchase.affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{@purchase.affiliate_credit.basis_points / 100}%)" %></td>
+            <td style="white-space: nowrap;"><%= "#{Money.new(@purchase.own_affiliate_credit_cents + @purchase.affiliate_credit.fee_cents).format(no_cents_if_whole: true, symbol: true)} (#{@purchase.affiliate_credit.basis_points / 100}%#{" of the rest" if direct_affiliate_credit.present?})" %></td>
           </tr>
         <% end %>
         <% if @purchase.utm_link.present? %>

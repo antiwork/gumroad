@@ -539,7 +539,13 @@ it("labels the zip a promoted web build put in the content", async () => {
     extension: "ZIP",
     is_streamable: false,
     status: { type: "saved" },
-    web_build: { number: 3, status: "live" },
+    web_build: {
+      number: 3,
+      status: "live",
+      deployed_at: "2026-10-29T12:00:00Z",
+      playable: false,
+      version_history: false,
+    },
   };
   context.filesById = new Map<string, FileEntry>([[FILE_ID, file]]);
 

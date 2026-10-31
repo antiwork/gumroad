@@ -5,7 +5,11 @@ class Api::Mobile::SessionsController < Api::Mobile::BaseController
   skip_before_action :verify_authenticity_token, only: :create
 
   def create
-    sign_in current_resource_owner
+    if impersonating?
+      sign_in current_resource_owner
+    else
+      sign_in_current_api_user
+    end
 
     render json: { success: true, user: { email: current_resource_owner.form_email } }
   end

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { hasPaidVariantPricing, reconcileCustomizablePrice } from "$app/components/ProductEdit/state";
+import { cast } from "$app/utils/cast";
+
+import { hasLiveBuildFile, hasPaidVariantPricing, reconcileCustomizablePrice } from "$app/components/ProductEdit/state";
 
 const product = ({
   priceCents,
@@ -64,5 +66,27 @@ describe("reconcileCustomizablePrice", () => {
         ),
       ).toBe(true);
     }
+  });
+});
+
+describe("hasLiveBuildFile", () => {
+  const liveFile = { id: "live-file", web_build: { number: 2, status: "live" } };
+  const withContent = (ids: string[], variantIds: string[] = []) =>
+    cast<Parameters<typeof hasLiveBuildFile>[0]>({
+      files: [{ id: "other-file", web_build: null }, liveFile],
+      rich_content: [{ description: { content: ids.map((id) => ({ type: "fileEmbed", attrs: { id } })) } }],
+      variants: [{ rich_content: [{ description: { content: variantIds.map((id) => ({ attrs: { id } })) } }] }],
+    });
+
+  it("is true while the live build's file is embedded in any page", () => {
+    expect(hasLiveBuildFile(withContent(["live-file"]))).toBe(true);
+    expect(hasLiveBuildFile(withContent([], ["live-file"]))).toBe(true);
+  });
+
+  it("is false once the row is removed, or when no build is live", () => {
+    expect(hasLiveBuildFile(withContent(["other-file"]))).toBe(false);
+    expect(hasLiveBuildFile(cast({ files: [{ id: "x", web_build: null }], rich_content: [], variants: [] }))).toBe(
+      false,
+    );
   });
 });

@@ -850,7 +850,9 @@ module User::Stats
           amount_refunded_cents_total: { sum: { field: "amount_refunded_cents" } },
           fee_refunded_cents_total: { sum: { field: "fee_refunded_cents" } },
           affiliate_credit_amount_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
-          affiliate_credit_amount_partially_refunded_cents_total: { sum: { field: "affiliate_credit_amount_partially_refunded_cents" } }
+          affiliate_credit_amount_partially_refunded_cents_total: { sum: { field: "affiliate_credit_amount_partially_refunded_cents" } },
+          direct_affiliate_credit_amount_cents_total: { sum: { field: "direct_affiliate_credit_amount_cents" } },
+          direct_affiliate_credit_amount_partially_refunded_cents_total: { sum: { field: "direct_affiliate_credit_amount_partially_refunded_cents" } }
         }
       }
 
@@ -862,6 +864,9 @@ module User::Stats
       total += result.aggregations.fee_refunded_cents_total.value
       total -= result.aggregations.affiliate_credit_amount_cents_total.value
       total += result.aggregations.affiliate_credit_amount_partially_refunded_cents_total.value
+      # A collab purchase can also credit a direct affiliate (:collab_and_affiliates).
+      total -= result.aggregations.direct_affiliate_credit_amount_cents_total.value
+      total += result.aggregations.direct_affiliate_credit_amount_partially_refunded_cents_total.value
       total.to_i
     end
 
@@ -875,17 +880,13 @@ module User::Stats
         exclude_bundle_product_purchases: true,
         created_after: after,
         size: 0,
-        aggs: {
-          affiliate_credit_amount_cents_total: { sum: { field: "affiliate_credit_amount_cents" } },
-          affiliate_credit_amount_partially_refunded_cents_total: { sum: { field: "affiliate_credit_amount_partially_refunded_cents" } }
-        }
+        aggs: PurchaseSearchService.affiliate_credit_aggs_for_user(id)
       }
 
-      result = PurchaseSearchService.search(search_params)
-      total = 0
-      total += result.aggregations.affiliate_credit_amount_cents_total.value
-      total -= result.aggregations.affiliate_credit_amount_partially_refunded_cents_total.value
-      total.to_i
+      aggregations = PurchaseSearchService.search(search_params).aggregations
+      earned = PurchaseSearchService.own_affiliate_credit_cents(aggregations, "amount_cents")
+      refunded = PurchaseSearchService.own_affiliate_credit_cents(aggregations, "amount_partially_refunded_cents")
+      (earned - refunded).to_i
     end
 
     def page_basis_points_floor(page_number:, total_page_count:)

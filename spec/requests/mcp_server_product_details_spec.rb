@@ -42,7 +42,7 @@ describe "MCP server product details" do
 
     expect(product).to include("pay_what_you_want" => true, "suggested_price_cents" => nil)
     expect(product["tiers"]).to eq([{
-                                     "name" => "Supporter", "pay_what_you_want" => true,
+                                     "id" => tier.external_id, "name" => "Supporter", "pay_what_you_want" => true,
                                      "prices" => { "monthly" => { "price_cents" => 300, "suggested_price_cents" => 500 },
                                                    "yearly" => { "price_cents" => 3000, "suggested_price_cents" => nil } }
                                    }])
@@ -81,10 +81,10 @@ describe "MCP server product details" do
 
       expect(products[@membership.external_id]).to include("price_cents" => nil, "pay_what_you_want" => true, "suggested_price_cents" => nil)
       expected_tiers = [
-        { "name" => "Reader", "pay_what_you_want" => false,
+        { "id" => @reader.external_id, "name" => "Reader", "pay_what_you_want" => false,
           "prices" => { "monthly" => { "price_cents" => 500, "suggested_price_cents" => nil },
                         "yearly" => { "price_cents" => 5000, "suggested_price_cents" => nil } } },
-        { "name" => "Supporter", "pay_what_you_want" => true,
+        { "id" => @supporter.external_id, "name" => "Supporter", "pay_what_you_want" => true,
           "prices" => { "monthly" => { "price_cents" => 1000, "suggested_price_cents" => 1500 },
                         "yearly" => { "price_cents" => 10000, "suggested_price_cents" => 15000 } } },
       ]

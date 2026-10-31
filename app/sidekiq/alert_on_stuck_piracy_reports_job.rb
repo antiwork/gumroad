@@ -12,20 +12,24 @@ class AlertOnStuckPiracyReportsJob
   # Repeated counter-notices can mean a seller files against licensed or fair uses.
   REPEAT_COUNTER_NOTICES = 2
   REPEAT_COUNTER_NOTICE_WINDOW = 90.days
+  # The screening agent runs every few minutes. A report it has not answered after this long means the
+  # agent is down or died after `start_screening`, and no other path retries it.
+  UNSCREENED_GRACE = 6.hours
 
   def perform
     blocked = PiracyReport.blocked_on_recipient.order(:id).limit(MAX_REPORTED + 1).to_a
     review = PiracyReport.needs_review.order(:id).limit(MAX_REPORTED + 1).to_a
     undelivered = PiracyReport.delivery_failed.or(PiracyReport.delivery_unconfirmed).order(:id).limit(MAX_REPORTED + 1).to_a
     unsent = unsent_signed_reports
+    unscreened = unscreened_reports
     repeat_sellers = repeat_counter_noticed_sellers
-    return if blocked.empty? && review.empty? && undelivered.empty? && unsent.empty? && repeat_sellers.empty?
+    return if blocked.empty? && review.empty? && undelivered.empty? && unsent.empty? && unscreened.empty? && repeat_sellers.empty?
 
     InternalNotificationWorker.perform_async(
       "risk", "Piracy reports waiting for a person",
       [
-        blocked_section(blocked), review_section(review), delivery_section(undelivered), unsent_section(unsent),
-        repeat_counter_notice_section(repeat_sellers),
+        unscreened_section(unscreened), blocked_section(blocked), review_section(review), delivery_section(undelivered),
+        unsent_section(unsent), repeat_counter_notice_section(repeat_sellers),
       ].compact.join("\n\n")
     )
   end
@@ -93,6 +97,32 @@ class AlertOnStuckPiracyReportsJob
       lines << "Only the first #{MAX_REPORTED} are listed." if reports.size > MAX_REPORTED
 
       ["#{count_phrase(reports)} signed but not sent.", "", *lines].join("\n")
+    end
+
+    # No verdict yet: never started, or started by a run that died before answering. Nothing else moves
+    # these rows, so updated_at is when the agent last touched them.
+    def unscreened_reports
+      PiracyReport.where(state: "requested").or(PiracyReport.where(state: "screening", screening_verdict: nil))
+        .where(updated_at: ...UNSCREENED_GRACE.ago).order(:id).limit(MAX_REPORTED + 1).to_a
+    end
+
+    def unscreened_section(reports)
+      return if reports.empty?
+
+      lines = reports.first(MAX_REPORTED).map do |report|
+        status = report.requested? ? "never started" : "started #{report.updated_at.to_date}, no verdict"
+        "• #{report.external_id} — #{report.url_host} (seller #{report.seller_id}), filed #{report.created_at.to_date}, #{status}"
+      end
+      lines << "Only the first #{MAX_REPORTED} are listed." if reports.size > MAX_REPORTED
+
+      [
+        "#{count_phrase(reports)} filed more than #{UNSCREENED_GRACE.inspect} ago have no screening verdict.",
+        "",
+        *lines,
+        "",
+        "The screening agent is down or its runs are dying before they answer. Check its runs; once fixed, it " \
+          "picks these up again, including the ones already started.",
+      ].join("\n")
     end
 
     def repeat_counter_noticed_sellers

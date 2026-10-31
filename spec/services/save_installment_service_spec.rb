@@ -150,6 +150,23 @@ describe SaveInstallmentService do
       expect(installment.affiliate_products).to eq([product.unique_permalink])
     end
 
+    it "saves the waitlist filter on a follower-type installment" do
+      service = described_class.new(seller:, installment:, params: params.deep_merge(installment: { installment_type: "follower", link_id: nil, bought_products: nil, waitlisted_products: [product.unique_permalink] }), preview_email_recipient:)
+      service.process
+
+      expect(service.error).to be_nil
+      expect(service.installment.waitlisted_products).to eq([product.unique_permalink])
+    end
+
+    it "saves the has-not-clicked post on a seller-type installment" do
+      service = described_class.new(seller:, installment:, params: params.deep_merge(installment: { installment_type: "seller", link_id: nil, bought_products: nil, not_clicked_post_id: "post-1" }), preview_email_recipient:)
+      service.process
+
+      expect(service.error).to be_nil
+      expect(service.installment.not_clicked_post_id).to eq("post-1")
+      expect(service.installment.json_filters[:not_clicked_post_id]).to eq("post-1")
+    end
+
     it "creates and publishes the installment" do
       service = described_class.new(seller:, installment:, params: params.merge(publish: true), preview_email_recipient:)
       service.process

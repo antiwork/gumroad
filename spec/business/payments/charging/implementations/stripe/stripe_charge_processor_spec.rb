@@ -742,6 +742,83 @@ describe StripeChargeProcessor, :vcr do
     end
   end
 
+  describe "#fight_chargeback with a Stripe Connect merchant account" do
+    subject { described_class.new }
+
+    let(:stripe_account_id) { "acct_1ConnectDispute" }
+    let(:merchant_account) { double("MerchantAccount", is_a_stripe_connect_account?: true, charge_processor_merchant_id: stripe_account_id) }
+    let(:dispute_evidence) do
+      instance_double(
+        DisputeEvidence,
+        external_id: "de_connect",
+        billing_address: nil,
+        customer_email: "buyer@example.com",
+        customer_name: "Buyer",
+        customer_purchase_ip: "203.0.113.7",
+        product_description: "Product description",
+        receipt_image: nil,
+        purchased_at: Time.current,
+        shipping_address: nil,
+        shipping_carrier: nil,
+        shipped_at: nil,
+        shipping_tracking_number: nil,
+        reason_for_winning: "Access log shows the buyer downloaded the file",
+        uncategorized_text: "Uncategorized",
+        access_activity_log: "Downloaded 3 times",
+        cancellation_policy_image: nil,
+        cancellation_policy_disclosure: nil,
+        refund_policy_image: nil,
+        refund_policy_disclosure: nil,
+        cancellation_rebuttal: nil,
+        refund_refusal_explanation: nil,
+        customer_communication_file: nil
+      )
+    end
+
+    before do
+      allow(Stripe::Charge).to receive(:retrieve).and_return(double(dispute: "dp_connect"))
+      allow(Stripe::Dispute).to receive(:update).and_return(double(id: "dp_connect"))
+      allow(subject).to receive(:create_dispute_evidence_stripe_file).and_return("file_connect")
+    end
+
+    it "reads the charge and submits the evidence on the connected account" do
+      expect(subject).to receive(:create_dispute_evidence_stripe_file)
+        .with(anything, request_options: { stripe_account: stripe_account_id })
+        .at_least(:once)
+        .and_return("file_connect")
+
+      subject.fight_chargeback("ch_connect", dispute_evidence, merchant_account:)
+
+      expect(Stripe::Charge).to have_received(:retrieve).with("ch_connect", { stripe_account: stripe_account_id })
+      expect(Stripe::Dispute).to have_received(:update).with(
+        "dp_connect",
+        { evidence: hash_including(receipt: "file_connect") },
+        hash_including(stripe_account: stripe_account_id, idempotency_key: kind_of(String))
+      )
+    end
+
+    it "uploads the evidence file on the connected account" do
+      allow(subject).to receive(:create_dispute_evidence_stripe_file).and_call_original
+      blob = double(attached?: true, filename: double(to_s: "receipt.png"), download: "bytes", id: 1)
+      expect(Stripe::File).to receive(:create)
+        .with({ file: kind_of(Tempfile), purpose: described_class::STRIPE_FILE_PURPOSE_DISPUTE_EVIDENCE }, { stripe_account: stripe_account_id })
+        .and_return(double(id: "file_connect"))
+
+      expect(subject.send(:create_dispute_evidence_stripe_file, blob, request_options: { stripe_account: stripe_account_id })).to eq("file_connect")
+    end
+
+    it "keeps the platform-account submission unchanged" do
+      subject.fight_chargeback("ch_platform", dispute_evidence)
+
+      expect(Stripe::Charge).to have_received(:retrieve).with("ch_platform")
+      expect(Stripe::Dispute).to have_received(:update).with(
+        "dp_connect",
+        { evidence: kind_of(Hash) },
+        { idempotency_key: kind_of(String) }
+      )
+    end
+  end
+
   describe "#create_dispute_evidence_stripe_file" do
     let(:dispute_evidence) { create(:dispute_evidence) }
     let(:attached) { dispute_evidence.receipt_image }

@@ -130,6 +130,16 @@ describe PurchaseSearchService do
       expect(get_records(revenue_sharing_user: [user_1, user_2])).to match_array(user_1_purchases + user_2_purchases)
     end
 
+    it "finds a purchase through the direct affiliate's credit" do
+      purchase = create(:purchase)
+      direct_affiliate_user = create(:user)
+      create(:affiliate_credit, purchase:, affiliate_user: direct_affiliate_user, is_direct_affiliate_credit: true)
+      index_model_records(Purchase)
+
+      expect(get_records(affiliate_user: direct_affiliate_user)).to match_array([purchase])
+      expect(get_records(revenue_sharing_user: direct_affiliate_user)).to match_array([purchase])
+    end
+
     it "can exclude purchases" do
       purchase_1, purchase_2 = create_list(:purchase, 2)
       index_model_records(Purchase)

@@ -3,11 +3,11 @@
 // The email editor's Save button reads the shared image-upload guard; the guard has to stay up
 // until the CDN URL resolves, because the editor holds a blob: preview until then and the
 // sanitizer drops blob: srcs from a saved body.
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type InstallmentFormContext } from "$app/data/installments";
+import { getRecipientCount, type Installment, type InstallmentFormContext } from "$app/data/installments";
 import { assertDefined } from "$app/utils/assert";
 
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
@@ -37,6 +37,10 @@ const cdn = vi.hoisted(() => {
   });
   return state;
 });
+vi.mock("$app/data/installments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$app/data/installments")>();
+  return { ...actual, getRecipientCount: vi.fn(actual.getRecipientCount) };
+});
 vi.mock("$app/utils/prepareImageForUpload", () => ({
   isLikelyImageFile: () => true,
   prepareImageForUpload: async (file: File) => file,
@@ -52,6 +56,16 @@ vi.mock("@rails/activestorage", () => ({
   },
 }));
 const post = vi.hoisted(() => vi.fn((_url: string, options?: { onFinish?: () => void }) => options?.onFinish?.()));
+// The transform callback builds the payload Inertia would send; keeping it lets a test assert
+// what the form would submit.
+type SentPayload = {
+  installment: {
+    not_clicked_post_id: string | null;
+    not_bought_products: string[] | null;
+    not_bought_variants: string[] | null;
+  };
+};
+const sent = vi.hoisted((): { payload: SentPayload | null } => ({ payload: null }));
 vi.mock("@inertiajs/react", () => ({
   Link: ({ href, children }: { href: string; children?: React.ReactNode }) => <a href={href}>{children}</a>,
   usePage: () => ({ url: "/emails/new", props: {} }),
@@ -64,7 +78,9 @@ vi.mock("@inertiajs/react", () => ({
       setData: (key: string, value: string) =>
         setDataState((prev) => ({ installment: { ...prev.installment, [key.replace("installment.", "")]: value } })),
       processing: false,
-      transform: () => {},
+      transform: (build: () => SentPayload) => {
+        sent.payload = build();
+      },
       post,
       put: () => {},
     };
@@ -98,11 +114,13 @@ const context: InstallmentFormContext = {
   audience_types: ["everyone"],
   products: [],
   affiliate_products: [],
+  waitlist_products: [],
   timezone: "UTC",
   currency_type: "usd",
   countries: [],
   profile_sections: [],
   has_scheduled_emails: false,
+  emailed_posts: [],
   aws_access_key_id: "key",
   s3_url: "https://s3.example/bucket",
   user_id: "1",
@@ -110,7 +128,7 @@ const context: InstallmentFormContext = {
   from_tab: null,
 };
 
-const renderForm = () =>
+const renderForm = (installment: Installment | null = null, formContext: InstallmentFormContext = context) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -124,7 +142,7 @@ const renderForm = () =>
       }}
     >
       <CurrentSellerProvider value={seller}>
-        <EmailForm context={context} installment={null} />
+        <EmailForm context={formContext} installment={installment} />
       </CurrentSellerProvider>
     </DomainSettingsProvider>,
   );
@@ -141,6 +159,7 @@ beforeEach(() => {
   cdn.hold = false;
   cdn.release.length = 0;
   post.mockClear();
+  sent.payload = null;
 });
 
 afterEach(cleanup);
@@ -185,5 +204,164 @@ describe("EmailForm", () => {
       expect(container.querySelector("img")?.getAttribute("src")).toBe("https://cdn.example/image.png"),
     );
     expect(saveDisabled()).toBe(false);
+  });
+});
+
+describe('EmailForm "Has not yet bought"', () => {
+  const products: InstallmentFormContext["products"] = [
+    {
+      permalink: "product-1",
+      name: "Design guide",
+      archived: false,
+      variants: [{ id: "variant-1", name: "Studio edition" }],
+    },
+    { permalink: "product-2", name: "Course", archived: false, variants: [] },
+  ];
+  const audienceContext: InstallmentFormContext = { ...context, products };
+
+  const draft: Installment = {
+    external_id: "email-1",
+    display_type: "draft",
+    name: "August update",
+    message: "Hello",
+    published_at: null,
+    updated_at: "2026-08-01T00:00:00Z",
+    stream_only: false,
+    streamable: false,
+    send_emails: true,
+    shown_on_profile: false,
+    installment_type: "audience",
+    paid_more_than_cents: null,
+    paid_less_than_cents: null,
+    allow_comments: true,
+    full_url: "https://seller.gumroad.com/p/august-update",
+    has_been_blasted: false,
+    files: [],
+  };
+
+  const exclusions = () => {
+    const fieldset = screen.getByLabelText("Has not yet bought").closest("fieldset");
+    if (!fieldset) throw new Error("Exclusion fieldset missing");
+    return fieldset;
+  };
+
+  const selectExclusion = (fieldset: HTMLElement, label: string) => {
+    // The menu mounts on focusin; its options live in a <datalist>, so they are queried by attribute.
+    fireEvent.focusIn(within(fieldset).getByLabelText("Has not yet bought"));
+    const option = [...fieldset.querySelectorAll('[role="option"]')].find((el) => el.textContent === label);
+    if (!option) throw new Error(`${label} is not offered as an exclusion`);
+    fireEvent.click(option);
+  };
+
+  it("restores both the saved products and the saved versions when editing", () => {
+    renderForm({ ...draft, not_bought_products: ["product-1"], not_bought_variants: ["variant-1"] }, audienceContext);
+
+    const fieldset = exclusions();
+    expect(within(fieldset).getByRole("button", { name: "Design guide" })).not.toBeNull();
+    expect(within(fieldset).getByRole("button", { name: "Design guide - Studio edition" })).not.toBeNull();
+  });
+
+  it("adds a second exclusion alongside one that is already selected", () => {
+    renderForm({ ...draft, not_bought_products: ["product-1"] }, audienceContext);
+
+    const fieldset = exclusions();
+    selectExclusion(fieldset, "Course");
+
+    expect(within(fieldset).getByRole("button", { name: "Design guide" })).not.toBeNull();
+    expect(within(fieldset).getByRole("button", { name: "Course" })).not.toBeNull();
+  });
+
+  it("sends every selected product and version in the recipient count and the save payload", async () => {
+    renderForm(draft, audienceContext);
+
+    const fieldset = exclusions();
+    selectExclusion(fieldset, "Design guide");
+    selectExclusion(fieldset, "Course");
+    selectExclusion(fieldset, "Design guide - Studio edition");
+
+    const expected = { not_bought_products: ["product-1", "product-2"], not_bought_variants: ["variant-1"] };
+    await waitFor(() => expect(vi.mocked(getRecipientCount).mock.lastCall?.[0]).toMatchObject(expected));
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(sent.payload?.installment).toMatchObject(expected));
+  });
+});
+
+describe('EmailForm "Has not clicked"', () => {
+  const emailedContext: InstallmentFormContext = {
+    ...context,
+    audience_types: ["customers"],
+    emailed_posts: [
+      { external_id: "post-1", name: "September update" },
+      { external_id: "post-2", name: "October update" },
+    ],
+  };
+
+  const customersDraft: Installment = {
+    external_id: "email-2",
+    display_type: "draft",
+    name: "Win-back",
+    message: "Hello",
+    published_at: null,
+    updated_at: "2026-08-01T00:00:00Z",
+    stream_only: false,
+    streamable: false,
+    send_emails: true,
+    shown_on_profile: false,
+    installment_type: "seller",
+    paid_more_than_cents: null,
+    paid_less_than_cents: null,
+    allow_comments: true,
+    full_url: "https://seller.gumroad.com/p/win-back",
+    has_been_blasted: false,
+    files: [],
+  };
+
+  const picker = () => screen.getByLabelText<HTMLSelectElement>("Has not clicked");
+
+  it("offers the seller's emailed posts and restores the saved one", () => {
+    renderForm({ ...customersDraft, not_clicked_post_id: "post-2" }, emailedContext);
+
+    expect(picker().value).toBe("post-2");
+    expect([...picker().options].map((option) => option.textContent)).toEqual([
+      "Select…",
+      "September update",
+      "October update",
+    ]);
+  });
+
+  it("submits the chosen post with the form", async () => {
+    renderForm(customersDraft, emailedContext);
+
+    fireEvent.change(picker(), { target: { value: "post-2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(sent.payload?.installment.not_clicked_post_id).toBe("post-2"));
+  });
+
+  it("spells out the chosen post's full title under the picker", () => {
+    renderForm(customersDraft, emailedContext);
+
+    expect(screen.queryByText("October update", { selector: "p" })).toBeNull();
+
+    fireEvent.change(picker(), { target: { value: "post-2" } });
+
+    expect(screen.getByText("October update", { selector: "p" })).not.toBeNull();
+  });
+
+  it("colours the unset option like the placeholder it is", () => {
+    renderForm(customersDraft, emailedContext);
+
+    expect(picker().style.color).toBe("var(--color-muted)");
+
+    fireEvent.change(picker(), { target: { value: "post-2" } });
+
+    expect(picker().style.color).toBe("");
+  });
+
+  it("is not offered when the seller has no emailed posts", () => {
+    renderForm(customersDraft, { ...emailedContext, emailed_posts: [] });
+
+    expect(screen.queryByLabelText("Has not clicked")).toBeNull();
   });
 });

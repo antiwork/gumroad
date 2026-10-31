@@ -53,6 +53,96 @@ describe ProductBuildSave do
       expect(described_class.find_by(purchase:).data).to eq("level" => "3")
     end
 
+    def data = described_class.find_by(purchase:).data
+
+    it "applies a late batch from the same page only to keys no later batch changed" do
+      described_class.apply_changes!(purchase, set: { "b" => "new" }, writer: "page1", sequence: 2)
+
+      described_class.apply_changes!(purchase, set: { "a" => "1", "b" => "old" }, writer: "page1", sequence: 1)
+
+      expect(data).to eq("a" => "1", "b" => "new")
+    end
+
+    it "does not bring back a key that a later batch from the same page removed" do
+      described_class.apply_changes!(purchase, set: { "a" => "1" }, writer: "page1", sequence: 1)
+      described_class.apply_changes!(purchase, remove: ["a"], writer: "page1", sequence: 3)
+
+      described_class.apply_changes!(purchase, set: { "a" => "2" }, writer: "page1", sequence: 2)
+
+      expect(data).to eq({})
+    end
+
+    it "skips a late batch older than a clear from the same page, even for keys the clear never saw" do
+      described_class.apply_changes!(purchase, clear: true, set: { "b" => "2" }, writer: "page1", sequence: 2)
+
+      described_class.apply_changes!(purchase, set: { "a" => "1" }, writer: "page1", sequence: 1)
+
+      expect(data).to eq("b" => "2")
+    end
+
+    it "keeps keys a later batch set when a late clear from the same page arrives" do
+      described_class.apply_changes!(purchase, set: { "old" => "1" })
+      described_class.apply_changes!(purchase, set: { "b" => "2" }, writer: "page1", sequence: 2)
+
+      described_class.apply_changes!(purchase, clear: true, writer: "page1", sequence: 1)
+
+      expect(data).to eq("b" => "2")
+    end
+
+    it "orders a page's batches per key even after another page saved in between" do
+      described_class.apply_changes!(purchase, set: { "level" => "4" }, writer: "page1", sequence: 2)
+      described_class.apply_changes!(purchase, set: { "coins" => "10" }, writer: "page2", sequence: 1)
+
+      described_class.apply_changes!(purchase, set: { "level" => "3" }, writer: "page1", sequence: 1)
+
+      expect(data).to eq("level" => "4", "coins" => "10")
+    end
+
+    it "keeps a clear and the batch after it, at the key limit, in either arrival order" do
+      stub_const("#{described_class}::MAX_KEYS", 2)
+      hide = { clear: true, set: { "a" => "1" }, writer: "page1", sequence: 1 }
+      # The leave beacon after a hide beacon that cleared carries the clear and all its changes.
+      leave = { clear: true, set: { "a" => "1", "b" => "2" }, writer: "page1", sequence: 2 }
+
+      [[hide, leave], [leave, hide]].each do |batches|
+        described_class.where(purchase:).delete_all
+        described_class.apply_changes!(purchase, set: { "x" => "1", "y" => "1" })
+        batches.each { described_class.apply_changes!(purchase, **_1) }
+
+        expect(data).to eq("a" => "1", "b" => "2")
+      end
+    end
+
+    it "keeps removals and the keys added after them, at the key limit, in either arrival order" do
+      stub_const("#{described_class}::MAX_KEYS", 2)
+      hide = { remove: ["x"], set: { "a" => "1" }, writer: "page1", sequence: 1 }
+      # The leave beacon repeats the hide beacon's removals with the new key.
+      leave = { remove: ["x"], set: { "b" => "2" }, writer: "page1", sequence: 2 }
+
+      [[hide, leave], [leave, hide]].each do |batches|
+        described_class.where(purchase:).delete_all
+        described_class.apply_changes!(purchase, set: { "x" => "1" })
+        batches.each { described_class.apply_changes!(purchase, **_1) }
+
+        expect(data).to eq("a" => "1", "b" => "2")
+      end
+    end
+
+    it "applies batches from different pages in arrival order" do
+      described_class.apply_changes!(purchase, set: { "level" => "4" }, writer: "page1", sequence: 5)
+      described_class.apply_changes!(purchase, set: { "level" => "2" }, writer: "page2", sequence: 1)
+
+      expect(data).to eq("level" => "2")
+    end
+
+    it "rejects a writer or sequence it cannot store" do
+      [["page-1", 1], ["page1", 0], ["page1", "2"], ["page1", described_class::MAX_SEQUENCE + 1], ["a" * 33, 1], ["page1", nil]].each do |writer, sequence|
+        expect do
+          described_class.apply_changes!(purchase, set: { "level" => "1" }, writer:, sequence:)
+        end.to raise_error(described_class::LimitError, /writer/)
+      end
+    end
+
     it "rejects values that are not strings" do
       expect do
         described_class.apply_changes!(purchase, set: { "level" => 3 })

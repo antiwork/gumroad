@@ -74,6 +74,33 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "when an unchanged save is made by an India sole proprietorship" do
+      let!(:compliance_info) do
+        create(:user_compliance_info_business,
+               user:,
+               business_country: "India",
+               business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP)
+      end
+      let(:params) { ActionController::Parameters.new(first_name: compliance_info.first_name, last_name: compliance_info.last_name) }
+
+      it "retires the old business-tax-ID rejection note" do
+        user.add_payout_note(
+          content: "Our payment partner couldn't accept the business tax ID you entered.",
+          seller_visible: true,
+          json_data: {
+            StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+            StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "tax_id",
+          }
+        )
+
+        expect do
+          described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(user.latest_payout_setup_rejection_note).to be_nil
+      end
+    end
+
     context "when an unchanged save is made by a company seller" do
       let!(:individual_info) { create(:user_compliance_info, user:) }
       let!(:compliance_info) do
@@ -1229,6 +1256,174 @@ describe UpdateUserComplianceInfo do
 
         expect(result[:success]).to be true
         expect(user.reload.alive_user_compliance_info.individual_tax_id.decrypt("1234")).to eq("B123456789")
+      end
+    end
+
+    context "with a UAE seller" do
+      let(:passphrase) { GlobalConfig.get("STRONGBOX_GENERAL_PASSWORD") }
+
+      def create_uae_individual_user(individual_tax_id:)
+        create(:user).tap { |u| create(:user_compliance_info_uae, user: u, individual_tax_id:) }
+      end
+
+      def create_uae_business_user(country:, individual_tax_id: "784199012345671")
+        create(:user).tap { |u| create(:user_compliance_info_uae_business, user: u, country:, individual_tax_id:) }
+      end
+
+      def process_with(user, **params)
+        described_class.new(compliance_params: ActionController::Parameters.new(is_business: false, **params), user:).process
+      end
+
+      def stored_individual_tax_id(user)
+        user.reload.alive_user_compliance_info.individual_tax_id.decrypt(passphrase)
+      end
+
+      def expect_stripe_to_receive_id_number(id_number)
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do |info|
+          expect(StripeMerchantAccountManager.send(:person_hash, info, passphrase)).to include(id_number:)
+        end
+      end
+
+      def expect_rejected_before_save(user, **params)
+        original = user.alive_user_compliance_info
+        expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+        result = nil
+        expect { result = process_with(user, **params) }.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be false
+        expect(result[:error_message]).to eq(Compliance::UaeEmiratesId::ERROR_MESSAGE)
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+      end
+
+      ["784-1990-1234567-1", "784 1990 1234567 1", "784199012345671", " 784-1990-1234567-1\u00a0", "\uFEFF784-1990-1234567-1\u0085"].each do |value|
+        it "stores #{value.inspect} as its 15 digits and sends Stripe all 15" do
+          user = create_uae_individual_user(individual_tax_id: nil)
+
+          expect_stripe_to_receive_id_number("784199012345671")
+
+          expect(process_with(user, individual_tax_id: value)[:success]).to be true
+          expect(stored_individual_tax_id(user)).to eq("784199012345671")
+        end
+      end
+
+      it "rejects the 15-character value a dashed Emirates ID used to be truncated to" do
+        user = create_uae_individual_user(individual_tax_id: "784199012345671")
+
+        # "784-1990-123456" fits the old 15-character cap, so it used to save and reach Stripe two
+        # digits short, failing the document match with nothing the seller could act on.
+        expect_rejected_before_save(user, individual_tax_id: "784-1990-123456")
+      end
+
+      %w[78419901234567 7841990123456712 784-1990-123456-1 784199012345A71 A784199012345671 784-1990-1234567-A
+         784_1990_1234567_1 784.1990.1234567.1 7841-990-1234567-1 784--1990-1234567-1 784-1990-12345671 n/a]
+        .push("７８４１９９０１２３４５６７１", "784\u200B-1990-1234567-1").each do |value|
+        it "rejects #{value.inspect} rather than keeping only its digits" do
+          user = create_uae_individual_user(individual_tax_id: nil)
+
+          expect_rejected_before_save(user, individual_tax_id: value)
+        end
+      end
+
+      it "checks an Emirates ID submitted as ssn_last_four, which is stored in the same field" do
+        user = create_uae_individual_user(individual_tax_id: "784199012345671")
+
+        expect_rejected_before_save(user, ssn_last_four: "784-1990-123456")
+        expect(stored_individual_tax_id(user)).to eq("784199012345671")
+      end
+
+      it "treats the dashed form of the stored Emirates ID as unchanged" do
+        user = create_uae_individual_user(individual_tax_id: "784199012345671")
+        original = user.alive_user_compliance_info
+
+        expect(process_with(user, individual_tax_id: "784-1990-1234567-1")[:success]).to be true
+        expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+      end
+
+      it "leaves a stored ID alone when the save omits it or sends it blank" do
+        user = create_uae_individual_user(individual_tax_id: "784199012345671")
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info).twice
+
+        expect(process_with(user, phone: "+971501234567")[:success]).to be true
+        expect(process_with(user, phone: "+971501234568", individual_tax_id: "")[:success]).to be true
+        expect(stored_individual_tax_id(user)).to eq("784199012345671")
+      end
+
+      it "still saves other fields for a seller whose stored ID was truncated, and replaces it once re-entered" do
+        user = create_uae_individual_user(individual_tax_id: "784-1990-123456")
+
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        expect(process_with(user, phone: "+971501234567")[:success]).to be true
+        expect(stored_individual_tax_id(user)).to eq("784-1990-123456")
+
+        expect_stripe_to_receive_id_number("784199012345671")
+        expect(process_with(user, individual_tax_id: "784-1990-1234567-1")[:success]).to be true
+        expect(stored_individual_tax_id(user)).to eq("784199012345671")
+      end
+
+      it "keeps the browser's bounds and message identical to this guard's" do
+        helper = Rails.root.join("app/javascript/utils/uaeEmiratesId.ts").read
+
+        expect(helper).to include("UAE_EMIRATES_ID_DIGITS = #{Compliance::UaeEmiratesId::DIGIT_COUNT}")
+        browser_pattern = helper[%r{UAE_EMIRATES_ID_PATTERN = /(.+)/u;}, 1]
+        expect(browser_pattern).to eq(Compliance::UaeEmiratesId::PATTERN.source.sub('\A', "^").sub('\z', "$"))
+        expect(helper).to include('UAE_EMIRATES_ID_WHITESPACE = /[\s\u0085]/gu;')
+        expect(Compliance::UaeEmiratesId::WHITESPACE.source).to eq('[[:space:]\uFEFF]')
+        expect(helper).to include("must be ${UAE_EMIRATES_ID_DIGITS} digits (for example, 784-1234-1234567-1)")
+        expect(Compliance::UaeEmiratesId::ERROR_MESSAGE).to include("must be 15 digits (for example, 784-1234-1234567-1)")
+        expect(helper).to include("Enter it exactly as it appears on your card")
+      end
+
+      context "as a UAE company" do
+        def process_business_with(user, individual_tax_id)
+          params = ActionController::Parameters.new(is_business: true, individual_tax_id:)
+          described_class.new(compliance_params: params, user:).process
+        end
+
+        it "stores a UAE-resident representative's dashed Emirates ID as its 15 digits and sends Stripe all 15" do
+          user = create_uae_business_user(country: "United Arab Emirates", individual_tax_id: nil)
+
+          expect_stripe_to_receive_id_number("784199012345671")
+
+          expect(process_business_with(user, "784-1990-1234567-1")[:success]).to be true
+          expect(stored_individual_tax_id(user)).to eq("784199012345671")
+        end
+
+        it "rejects a UAE-resident representative's truncated Emirates ID" do
+          user = create_uae_business_user(country: "United Arab Emirates")
+          original = user.alive_user_compliance_info
+
+          expect(StripeMerchantAccountManager).not_to receive(:handle_new_user_compliance_info)
+
+          result = nil
+          expect { result = process_business_with(user, "784-1990-123456") }.not_to change { UserComplianceInfo.count }
+
+          expect(result[:error_message]).to eq(Compliance::UaeEmiratesId::ERROR_MESSAGE)
+          expect(user.reload.alive_user_compliance_info.id).to eq(original.id)
+        end
+
+        it "accepts the own document of a representative who lives outside the UAE, separators and all" do
+          user = create_uae_business_user(country: "United Kingdom")
+
+          expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+          expect(process_business_with(user, "AB-123456")[:success]).to be true
+          expect(stored_individual_tax_id(user)).to eq("AB-123456")
+        end
+      end
+
+      it "does not apply to a non-UAE company whose representative lives in the UAE" do
+        user = create(:user).tap do |u|
+          create(:user_compliance_info_business, user: u, country: "United Arab Emirates", business_country: "United Kingdom")
+        end
+
+        expect(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info)
+
+        params = ActionController::Parameters.new(is_business: true, individual_tax_id: "AB-123456")
+        expect(described_class.new(compliance_params: params, user:).process[:success]).to be true
+        expect(stored_individual_tax_id(user)).to eq("AB-123456")
       end
     end
 

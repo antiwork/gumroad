@@ -49,8 +49,12 @@ module Impersonate
   end
 
   private
+    # A brand token acts as its team member, as the website does, so it never picks up the brand
+    # owner's impersonation.
     def current_user_from_api_or_web
-      current_api_user || current_user
+      return current_user if current_api_user.nil?
+
+      @_impersonation_actor ||= MobileAccountToken.team_membership_for(doorkeeper_token)&.user || current_api_user
     end
 
     def can_impersonate? = current_user_from_api_or_web&.is_team_member?

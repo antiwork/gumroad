@@ -70,10 +70,14 @@ class TranscodeVideoForStreamingWorker
         transcoded_video_key: completed_transcode.transcoded_video_key,
         state: "completed"
       )
+      # The completion callbacks only run for a job we submit, so nothing else sets the flag on this
+      # path, and a file whose rendition was retired earlier keeps sending the web player to the legacy
+      # SMIL source while its HLS playlist is back.
+      streamable.update!(is_transcoded_for_hls: true) if completed_transcode.is_hls?
       return
     end
 
-    if TranscodedVideo.alive.processing.where(original_video_key:).where.not(id: transcoded_video.id).exists?
+    if TranscodedVideo.alive.in_flight.where(original_video_key:).where.not(id: transcoded_video.id).exists?
       # If the video currently being transcoded by another TranscodedVideo record, there is no need to do anything:
       # when its transcoding is done, all TranscodedVideo records referring to the same S3 key (including this `transcoded_video`)
       # will be marked as completed / error (see TranscodeEventHandler and HandleGrmcCallbackJob).
@@ -124,9 +128,22 @@ class TranscodeVideoForStreamingWorker
     response = client.create_job(build_mediaconvert_job(original_video_key, output_key_prefix, outputs))
     job = response.job
     transcoded_video.update!(job_id: job.id)
+  rescue StandardError, Sidekiq::Shutdown => e
+    # A row left processing with no job_id reads as an in-flight job to `attempt_to_transcode?`, so the rerun
+    # Sidekiq makes with the same arguments (a retry, or a requeue at shutdown, which can land during the GRMC
+    # request too) would return early and the file would never get a job. Erroring the row frees it.
+    fail_unsubmitted_transcode(transcoded_video) if transcoded_video
+    raise e
   end
 
   private
+    def fail_unsubmitted_transcode(transcoded_video)
+      transcoded_video.reload
+      transcoded_video.mark_error if transcoded_video.job_id.nil?
+    rescue StandardError => e
+      Rails.logger.warn("Failed to mark unsubmitted TranscodedVideo #{transcoded_video.id} as error: #{e.class} => #{e.message}")
+    end
+
     # GRMC runs outside AWS, so reading S3 directly is billed as internet egress; S3 to CloudFront is free.
     # This distribution skips Cloudflare, so source videos stay out of its cache.
     def grmc_source_video_link(original_video_key)

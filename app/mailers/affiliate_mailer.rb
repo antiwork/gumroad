@@ -42,20 +42,30 @@ class AffiliateMailer < ApplicationMailer
     mail params
   end
 
-  def notify_affiliate_of_sale(purchase_id)
+  # `direct_affiliate` is true for the email to the direct affiliate of a collab purchase that credits
+  # both a collaborator and a direct affiliate (:collab_and_affiliates); `affiliate` is then the
+  # collaborator, who gets the default email.
+  def notify_affiliate_of_sale(purchase_id, direct_affiliate = false)
     # A worker's replica read can see the purchase but not the credit created with it, and the render
     # dereferences nil, so the credit has to come back with the purchase from the primary.
     @purchase = ApplicationRecord.connected_to(role: :writing) do
-      Purchase.includes(:affiliate_credit).find(purchase_id)
+      Purchase.includes(:affiliate_credit, :direct_affiliate_credit).find(purchase_id)
     end
-    @affiliate = @purchase.affiliate
+    if direct_affiliate
+      return unless @purchase.credits_direct_affiliate?
+      @affiliate = @purchase.direct_affiliate
+      affiliate_amount_cents = @purchase.direct_affiliate_credit_cents.to_i
+    else
+      @affiliate = @purchase.affiliate
+      affiliate_amount_cents = @purchase.own_affiliate_credit_cents
+    end
 
     if @affiliate.collaborator?
       notify_collaborator_of_sale
     else
       @affiliate_percentage_text = "#{@affiliate.basis_points(product_id: @purchase.link_id) / 100}%"
       @purchase_price_formatted = MoneyFormatter.format(@purchase.price_cents, :usd, no_cents_if_whole: true, symbol: true)
-      @affiliate_amount_formatted = MoneyFormatter.format(@purchase.affiliate_credit_cents, :usd, no_cents_if_whole: true, symbol: true)
+      @affiliate_amount_formatted = MoneyFormatter.format(affiliate_amount_cents, :usd, no_cents_if_whole: true, symbol: true)
       # Not every membership purchase has its subscription attached yet when this job runs, so both
       # the trial date and the recurrence have to come off the association.
       subscription = @purchase.subscription
@@ -246,9 +256,17 @@ class AffiliateMailer < ApplicationMailer
       # The balance credits the cut MINUS the collaborator's share of the Gumroad fee, so show that
       # deduction; a bare "Your cut" overstates what actually lands in the balance.
       @fee_share_cents = @purchase.affiliate_credit.fee_cents
-      @cut = MoneyFormatter.format(@purchase.affiliate_credit_cents + @fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
+      credited_cents = @purchase.own_affiliate_credit_cents
+      @cut = MoneyFormatter.format(credited_cents + @fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
       @fee_share_formatted = MoneyFormatter.format(@fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
-      @credited_formatted = MoneyFormatter.format(@purchase.affiliate_credit_cents, :usd, no_cents_if_whole: true, symbol: true)
+      @credited_formatted = MoneyFormatter.format(credited_cents, :usd, no_cents_if_whole: true, symbol: true)
+      # A direct affiliate's commission came off the top before the collaborator's cut was taken, so
+      # show it; otherwise "Your cut" reads as a share of the full price.
+      if @purchase.credits_direct_affiliate? && @purchase.direct_affiliate_credit.present?
+        direct_credit = @purchase.direct_affiliate_credit
+        @direct_affiliate_commission_formatted = MoneyFormatter.format(direct_credit.amount_cents + direct_credit.fee_cents, :usd, no_cents_if_whole: true, symbol: true)
+        @direct_affiliate_percentage_text = "#{direct_credit.basis_points / 100}%"
+      end
 
       @subject = "You made a sale!"
       set_notify_of_sale_headers(is_preorder: @is_preorder)

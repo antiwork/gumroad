@@ -3,7 +3,7 @@
 class GenerateFinancialReportsForPreviousQuarterJob
   include Sidekiq::Job
   include FinanceReportFailureAlert
-  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :replace
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed, on_conflict: :log
 
   # Quarterly, enqueued with no args, so the digest is constant. The attempt only enqueues the
   # per-report jobs.

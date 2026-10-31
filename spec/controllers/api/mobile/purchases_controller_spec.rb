@@ -61,6 +61,48 @@ describe Api::Mobile::PurchasesController do
     end
   end
 
+  describe "with a team member's brand token" do
+    before do
+      brand = create(:user)
+      membership = create(:team_membership, user: @purchaser, seller: brand, role: TeamMembership::ROLE_ADMIN)
+      @member_purchase = create(:purchase, purchaser: @purchaser)
+      @brand_purchase = create(:purchase, purchaser: brand)
+      @params[:access_token] = MobileAccountToken.issue!(application: @app, scopes: "mobile_api", expires_in: nil, resource_owner: brand, team_membership: membership).token
+    end
+
+    it "lists, searches and shows the member's own library" do
+      get :index, params: @params
+      expect(response.parsed_body).to include(success: true, user_id: @purchaser.external_id)
+      expect(response.parsed_body[:products].map { |p| p[:purchase_id] }).to eq([@member_purchase.external_id])
+
+      get :search, params: @params
+      expect(response.parsed_body).to include(success: true, user_id: @purchaser.external_id)
+      expect(response.parsed_body[:purchases].map { |p| p[:purchase_id] }).to eq([@member_purchase.external_id])
+
+      get :purchase_attributes, params: @params.merge(id: @member_purchase.external_id)
+      expect(response.parsed_body).to eq({ success: true, product: @member_purchase.json_data_for_mobile }.as_json)
+    end
+
+    it "refuses the brand's own purchases" do
+      get :purchase_attributes, params: @params.merge(id: @brand_purchase.external_id)
+      expect(response).to have_http_status(:not_found)
+
+      post :archive, params: @params.merge(id: @brand_purchase.external_id)
+      expect(response).to have_http_status(:not_found)
+
+      expect(@brand_purchase.reload.is_archived).to eq(false)
+    end
+
+    it "refuses an unconfirmed member even though the brand is confirmed" do
+      @purchaser.update_column(:confirmed_at, nil)
+
+      get :index, params: @params
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.parsed_body).not_to have_key(:products)
+    end
+  end
+
   describe "GET index" do
     before do
       @mobile_friendly_pdf_product = create(:product, user: @user)

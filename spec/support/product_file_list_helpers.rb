@@ -64,6 +64,8 @@ module ProductFileListHelpers
   end
 
   def expect_focused(active_el)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + Capybara.default_max_wait_time
+    sleep 0.1 until page.driver.browser.switch_to.active_element.eql?(active_el.native) || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
     expect(page.driver.browser.switch_to.active_element).to eql(active_el.native)
   end
 
