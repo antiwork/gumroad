@@ -442,7 +442,7 @@ describe Pages::Interpolator do
       )
 
       expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true&amp;price=0"))
-      expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true"))
+      expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true">Plain</a>))
     end
 
     it "silently drops selection attributes the product can't honor (lenient fallback)" do
