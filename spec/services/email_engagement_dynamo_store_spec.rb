@@ -596,4 +596,47 @@ describe EmailEngagementDynamoStore do
       expect(requests.map { _1[:params][:exclusive_start_key] }).to eq([nil, { "pk" => { s: "123" }, "sk" => { s: "CLICKER#aaa" } }])
     end
   end
+
+  describe ".opened_recipient_ids" do
+    let(:opened_purchase) { { "sk" => "OPEN#aaa", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" } }
+
+    it "groups the openers by the record the send addressed them as" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            opened_purchase,
+            { "sk" => "OPEN#bbb", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[12, 123]" },
+            { "sk" => "OPEN#ccc", "mailer_method" => "CreatorContactingCustomersMailer.direct_affiliate_installment", "mailer_args" => "[34, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [12], affiliate_user_ids: [34])
+    end
+
+    it "reads the open items of that installment only" do
+      client.stub_responses(:query, { items: [] })
+
+      described_class.opened_recipient_ids(123)
+
+      expect(requests.last[:params]).to include(
+        table_name: described_class.table_name,
+        key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
+        expression_attribute_values: { ":pk" => { s: "123" }, ":prefix" => { s: "OPEN#" } }
+      )
+    end
+
+    it "returns a recipient once, however many times they opened" do
+      client.stub_responses(:query, { items: [opened_purchase, opened_purchase.merge("sk" => "OPEN#zzz")] })
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [], affiliate_user_ids: [])
+    end
+
+    it "ignores an item whose args carry no id" do
+      client.stub_responses(:query, { items: [{ "sk" => "OPEN#aaa", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment" }] })
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [], follower_ids: [], affiliate_user_ids: [])
+    end
+  end
 end

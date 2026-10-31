@@ -805,7 +805,13 @@ class Installment < ApplicationRecord
   # purchase_id) is the right key because AudienceMember collapses a buyer's multiple
   # purchases into one row keyed by (seller_id, email), so the email_info purchase
   # may not match the audience row's max(purchase_id).
+  #
+  # An Everyone post is the exception: it addresses followers and affiliates too, so it
+  # creates no purchase-keyed email_infos rows at all. Its recipient set is the post's own
+  # sent_post_emails (one row per recipient at handoff, whatever record they were reached as)
+  # and its openers come from Dynamo, which records an open per recipient for every post type.
   def unopened_recipient_emails
+    return emailed_recipient_emails - opened_recipient_emails if audience_type?
     return [] unless seller_or_product_or_variant_type?
 
     emailed_ids = emailed_recipient_purchase_ids
@@ -814,6 +820,22 @@ class Installment < ApplicationRecord
     emailed_emails = purchase_emails_for(emailed_ids)
     opened_emails = purchase_emails_for(opened_recipient_purchase_ids)
     (emailed_emails - opened_emails).to_a
+  end
+
+  # Emails this post has been sent to, written at the original send's handoff. A non-opener resend
+  # only targets a subset of them, so this stays the original recipient set however often it is resent.
+  def emailed_recipient_emails
+    sent_post_emails.distinct.pluck(:email).compact.map(&:downcase).to_set
+  end
+
+  # Emails of the people who have opened this post's email. The Dynamo item names the purchase,
+  # follower or affiliate the send addressed, so all three have to be resolved to reach the
+  # follower and affiliate recipients an Everyone post has.
+  def opened_recipient_emails
+    ids = EmailEngagementDynamoStore.opened_recipient_ids(id)
+    emails_for(Purchase, ids[:purchase_ids])
+      .merge(emails_for(Follower, ids[:follower_ids]))
+      .merge(emails_for(User, ids[:affiliate_user_ids]))
   end
 
   # Accepts a precomputed `candidates` list so callers that already have the unopened
@@ -838,7 +860,7 @@ class Installment < ApplicationRecord
   # Whether a "resend to non-openers" blast is applicable to this post. A post whose send
   # expired and never reached anyone has no non-openers.
   def resendable_to_non_openers?
-    published? && send_emails? && seller_or_product_or_variant_type? && !never_reached_anyone?
+    published? && send_emails? && (seller_or_product_or_variant_type? || audience_type?) && !never_reached_anyone?
   end
 
   def unique_click_count
@@ -1317,9 +1339,15 @@ class Installment < ApplicationRecord
     # quietly abandon the primary key and scan the entire purchases table. Returns a Set
     # because every caller only needs membership/difference.
     def purchase_emails_for(purchase_ids)
+      emails_for(Purchase, purchase_ids)
+    end
+
+    # Same chunked lookup for any record whose email a Dynamo engagement item can name
+    # (a purchase, a follower, or the user behind an affiliate).
+    def emails_for(relation, ids)
       emails = Set.new
-      purchase_ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
-        emails.merge(Purchase.where(id: ids_slice).pluck(:email).compact.map(&:downcase))
+      ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
+        emails.merge(relation.where(id: ids_slice).pluck(:email).compact.map(&:downcase))
       end
       emails
     end

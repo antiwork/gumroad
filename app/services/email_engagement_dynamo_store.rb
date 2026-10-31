@@ -129,7 +129,30 @@ class EmailEngagementDynamoStore
     # the sort key is one-way, and a follower or affiliate click carries that record's
     # id in its args, not a purchase id.
     def clicked_recipient_purchase_ids(installment_id)
-      clicker_items(installment_id).filter_map { |item| purchase_id_from_clicker_item(item) }.uniq
+      partition_items(installment_id, "CLICKER#").filter_map { |item| purchase_id_from_item(item) }.uniq
+    end
+
+    # Recipient record ids of the people who opened this installment's email, split by the kind
+    # of record the send addressed them as. Opens are recorded for every post type, including the
+    # follower and affiliate recipients a purchase-keyed lookup cannot see, so a caller that needs
+    # recipient emails (rather than buyers) has to resolve all three. A click also writes the OPEN
+    # item, so a clicker counts as an opener.
+    def opened_recipient_ids(installment_id)
+      ids = { purchase_ids: [], follower_ids: [], affiliate_user_ids: [] }
+      partition_items(installment_id, "OPEN#").each do |item|
+        id = recipient_id_from_item(item)
+        next if id.nil?
+
+        mailer_method = item["mailer_method"].to_s
+        if mailer_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
+          ids[:purchase_ids] << id
+        elsif mailer_method.end_with?(EmailEventInfo::FOLLOWER_INSTALLMENT_MAILER_METHOD)
+          ids[:follower_ids] << id
+        elsif mailer_method.end_with?(EmailEventInfo::DIRECT_AFFILIATE_INSTALLMENT_MAILER_METHOD)
+          ids[:affiliate_user_ids] << id
+        end
+      end
+      ids.transform_values(&:uniq)
     end
 
     def create_table!
@@ -178,9 +201,10 @@ class EmailEngagementDynamoStore
     end
 
     private
-      # Every CLICKER item in one installment's partition. The items are small and one
-      # exists per clicker, so a six-figure post pages through this a megabyte at a time.
-      def clicker_items(installment_id)
+      # Every item under one sort-key prefix in an installment's partition. The items are small
+      # and one exists per recipient (or per recipient + url), so a six-figure post pages through
+      # this a megabyte at a time.
+      def partition_items(installment_id, prefix)
         items = []
         exclusive_start_key = nil
         loop do
@@ -189,7 +213,7 @@ class EmailEngagementDynamoStore
             key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
             expression_attribute_values: {
               ":pk" => partition_key(installment_id),
-              ":prefix" => "CLICKER#",
+              ":prefix" => prefix,
             },
           }
           params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
@@ -201,14 +225,18 @@ class EmailEngagementDynamoStore
         items
       end
 
-      # The item keeps the mailer method and args its digest was built from. Purchase
-      # installment args are "[<purchase_id>, <post_id>]" (see PostSendgridApi and
-      # PostResendApi), so the first integer is the buyer.
-      def purchase_id_from_clicker_item(item)
+      # The item keeps the mailer method and args its digest was built from. Args are
+      # "[<purchase_id|follower_id|affiliate_user_id>, <post_id>]" (see PostSendgridApi and
+      # PostResendApi) and the method says which of the three the first integer is.
+      def recipient_id_from_item(item)
+        item["mailer_args"].to_s[/\d+/]&.to_i
+      end
+
+      def purchase_id_from_item(item)
         mailer_method = item["mailer_method"].to_s
         return nil unless mailer_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
 
-        item["mailer_args"].to_s[/\d+/]&.to_i
+        recipient_id_from_item(item)
       end
 
       def upsert_open_item(installment_id:, mailer_method:, mailer_args:)

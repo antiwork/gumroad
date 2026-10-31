@@ -66,4 +66,60 @@ describe "Installment non-opener recipient lookups" do
       expect(create(:installment, seller:, link: product).unopened_recipient_emails).to eq([])
     end
   end
+
+  describe "#unopened_recipient_emails for an Everyone post" do
+    let(:post) { create(:audience_post, :published, seller:) }
+    let!(:opened_buyer) { create(:purchase, link: product, email: "opened@example.com") }
+    let!(:unopened_buyer) { create(:purchase, link: product, email: "unopened@example.com") }
+    let!(:follower) { create(:active_follower, user: seller, email: "follower@example.com") }
+
+    before do
+      # Everyone posts create no email_infos rows, so the sent set is the post's own.
+      [opened_buyer, unopened_buyer, follower].each { SentPostEmail.create!(post:, email: _1.email) }
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id)
+        .and_return({ purchase_ids: [opened_buyer.id], follower_ids: [], affiliate_user_ids: [] })
+    end
+
+    it "returns everyone the original send reached who has not opened, not only buyers" do
+      expect(post.unopened_recipient_emails).to contain_exactly("unopened@example.com", "follower@example.com")
+    end
+
+    it "leaves out an audience member the original send never reached" do
+      create(:purchase, link: product, email: "joined-later@example.com")
+
+      expect(post.unopened_recipient_emails).not_to include("joined-later@example.com")
+    end
+
+    it "excludes an opener the Dynamo item names as a follower" do
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id)
+        .and_return({ purchase_ids: [], follower_ids: [follower.id], affiliate_user_ids: [] })
+
+      expect(post.unopened_recipient_emails).to contain_exactly("opened@example.com", "unopened@example.com")
+    end
+
+    it "drops a follower who unsubscribed after the send from the resendable set" do
+      follower.mark_deleted!
+
+      expect(post.unopened_recipient_emails).to include("follower@example.com")
+      expect(post.resendable_to_non_openers_emails).not_to include("follower@example.com")
+    end
+
+    it "still reaches a follower who unsubscribed but is also a buyer, as the original send did" do
+      create(:purchase, link: product, seller:, email: follower.email)
+      RefreshAudienceMemberJob.new.perform(follower.email, seller.id)
+      follower.mark_deleted!
+
+      expect(post.resendable_to_non_openers_emails).to include("follower@example.com")
+    end
+  end
+
+  describe "#resendable_to_non_openers?" do
+    it "is true for a published Everyone post" do
+      expect(create(:audience_post, :published, seller:)).to be_resendable_to_non_openers
+    end
+
+    it "stays false for a follower post, whose recipients the resend cannot resolve" do
+      expect(create(:follower_post, :published, seller:)).not_to be_resendable_to_non_openers
+    end
+  end
 end

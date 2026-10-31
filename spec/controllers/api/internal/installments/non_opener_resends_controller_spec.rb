@@ -56,6 +56,19 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       expect(response.parsed_body).to eq({ "count" => 1, "recently_resent" => false, "audience_filtered_out" => false })
     end
 
+    it "counts an Everyone post's non-openers from its own sent set, which includes followers" do
+      audience_post = create(:audience_post, :published, seller:)
+      follower = create(:active_follower, user: seller, email: "follower@example.com")
+      [opened_sale, unopened_sale, follower].each { SentPostEmail.create!(post: audience_post, email: _1.email) }
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(audience_post.id)
+        .and_return({ purchase_ids: [opened_sale.id], follower_ids: [], affiliate_user_ids: [] })
+
+      get :show, params: { id: audience_post.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body["count"]).to eq(2)
+    end
+
     it "flags audience_filtered_out when unopened recipients exist but are no longer in the audience" do
       not_bought_product = create(:product, user: seller)
       installment.update!(not_bought_products: [product.unique_permalink], bought_products: [not_bought_product.unique_permalink])
