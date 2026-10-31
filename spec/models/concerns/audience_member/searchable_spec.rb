@@ -163,6 +163,15 @@ describe AudienceMember::Searchable, :freeze_time do
       expect_filter_count(2, exclude_emails: ["clicker@example.com"])
     end
 
+    it "limits to the given emails in both engines, alone and with another filter" do
+      create(:audience_member, seller:, email: "opener@example.com", purchases: [{ product_id: 5 }])
+      create(:audience_member, seller:, email: "opener2@example.com", purchases: [{ product_id: 6 }])
+      create(:audience_member, seller:, email: "other@example.com", purchases: [{ product_id: 5 }])
+
+      expect_filter_count(2, include_emails: ["opener@example.com", "opener2@example.com"])
+      expect_filter_count(1, bought_product_ids: [5], include_emails: ["opener@example.com", "opener2@example.com"])
+    end
+
     it "counts by purchased and not-purchased products and variants" do
       create_member(purchases: [{ "product_id" => 1 }])
       create_member(purchases: [{ "product_id" => 2 }])

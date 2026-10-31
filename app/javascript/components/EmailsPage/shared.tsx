@@ -76,7 +76,7 @@ export const DeleteEmailModal = ({ installment, onClose, warningMessage }: Delet
   );
 };
 
-export type AudienceCounts = Map<string, number | "loading" | "failed">;
+export type AudienceCounts = Map<string, number | null | "loading" | "failed">;
 
 export const useAudienceCounts = (installments: { external_id: string }[]) => {
   const [audienceCounts, setAudienceCounts] = React.useState<AudienceCounts>(new Map());
@@ -106,7 +106,9 @@ export const formatAudienceCount = (audienceCounts: AudienceCounts, installmentI
     ? null
     : count === "failed"
       ? "--"
-      : formatStatNumber({ value: count });
+      : count === null
+        ? "Fewer than 5"
+        : formatStatNumber({ value: count });
 };
 
 export const ResendToNonOpenersButton = ({ installment }: { installment: SavedInstallment }) => {
