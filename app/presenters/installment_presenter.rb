@@ -103,8 +103,9 @@ class InstallmentPresenter
   end
 
   private
-    # One decision for every delivery count on the post: mid-send, delivered plus still-owed is
-    # the send's size, and a resend's count plus the opens gives the sent count away.
+    # One decision for every delivery count on the post, since a resend's count plus the opens
+    # gives the sent count away. The size is only read for a post sent before the decision was
+    # stored; mid-send, delivered plus still-owed is the send's size.
     def delivery_counts_withheld?
       return @delivery_counts_withheld if defined?(@delivery_counts_withheld)
 

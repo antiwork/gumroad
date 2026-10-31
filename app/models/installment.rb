@@ -59,6 +59,8 @@ class Installment < ApplicationRecord
 
   attr_json_data_accessor :workflow_trigger
   attr_json_data_accessor :single_recipient_purchase_id
+  # Read through `delivery_counts_withheld?`: the json_data reader would turn a stored false into nil.
+  attr_json_data_writer :delivery_counts_withheld
 
   belongs_to :link, optional: true
   belongs_to :base_variant, optional: true
@@ -1082,10 +1084,13 @@ class Installment < ApplicationRecord
     behavior_filtered? && behavior_count_withheld?(count, params) ? nil : count
   end
 
-  # A sent count is the segment as it stood at send time, which is not recorded, so it is held
-  # against today's audience.
+  # Stored by SendPostBlastEmailsJob against the audience the send went to. A post sent before
+  # that was stored is held against today's audience.
   def delivery_counts_withheld?(sent_count = customer_count.to_i)
-    behavior_filtered? && behavior_count_withheld?(sent_count, audience_members_filter_params)
+    return false unless behavior_filtered?
+    return json_data["delivery_counts_withheld"] if json_data.key?("delivery_counts_withheld")
+
+    behavior_count_withheld?(sent_count, audience_members_filter_params)
   end
 
   # A behavior segment is withheld when it, or the part of a wider audience it leaves out, is

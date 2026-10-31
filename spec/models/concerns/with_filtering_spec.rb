@@ -1046,7 +1046,17 @@ describe WithFiltering do
 
     before { allow(installment).to receive(:clicked_recipient_emails).with("abc").and_return(["clicker@example.com"]) }
 
-    it "withholds a sent count that leaves out fewer than the floor of today's audience" do
+    it "reads the decision stored at send time without resolving the filter" do
+      expect(AudienceMember).not_to receive(:filter_count)
+
+      installment.delivery_counts_withheld = false
+      expect(installment.delivery_counts_withheld?).to be(false)
+
+      installment.delivery_counts_withheld = true
+      expect(installment.delivery_counts_withheld?).to be(true)
+    end
+
+    it "withholds a sent count of a post sent before the decision was stored that leaves out fewer than the floor of today's audience" do
       allow(AudienceMember).to receive(:filter_count) { |params:, **| params.key?(:exclude_emails) ? 49 : 50 }
       expect(installment.delivery_counts_withheld?).to be(true)
 

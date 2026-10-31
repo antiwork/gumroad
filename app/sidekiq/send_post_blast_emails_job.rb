@@ -59,6 +59,7 @@ class SendPostBlastEmailsJob
       remove_members_without_email
       # Before anyone already emailed is dropped: the floor applies to the audience, not to the rest.
       @audience_size = @members.size
+      @delivery_counts_withheld = delivery_counts_withheld_at_send
 
       if @blast.to_non_openers?
         keep_emails = load_non_opener_emails
@@ -70,6 +71,12 @@ class SendPostBlastEmailsJob
         # This check is only useful if the post has been published twice, or if this job is being retried.
         remove_already_emailed_members
       end
+    end
+
+    unless @delivery_counts_withheld.nil?
+      @post.delivery_counts_withheld = @delivery_counts_withheld
+      # Validation re-counts the audience, and a send already under way must not fail on it.
+      @post.save!(validate: false)
     end
 
     return if below_behavior_floor? && expire_below_behavior_floor
@@ -112,9 +119,10 @@ class SendPostBlastEmailsJob
 
     # Filter params `AudienceMember.filter(as_of:)` cannot rewind: each reads state outside the
     # dated purchase, follow or affiliation (a live counter, a variant swap, a refund, an added
-    # product affiliation), or the absence of one.
+    # product affiliation, today's openers), or the absence of one.
     UNREBUILDABLE_FILTER_KEYS = %i[
       minimum_license_uses active_customers_only bought_variant_ids not_bought_product_ids not_bought_variant_ids affiliate_product_ids
+      include_emails
     ].freeze
 
     # Blasts above this many recipients are split into slice jobs. Small blasts send
@@ -124,6 +132,18 @@ class SendPostBlastEmailsJob
     # Recipients handed to each slice job. Tunable via Redis so an operator can resize
     # future split attempts without a deploy.
     CHILD_SLICE_SIZE = 2_000
+
+    # Decided before anyone gets the email, against the audience it goes to, so the Published page
+    # and the API read a stored flag instead of resolving the behavior filter per row. A failed
+    # count withholds.
+    def delivery_counts_withheld_at_send
+      return if @blast.to_non_openers? || @blast.first_email_delivered_at.present? || !@post.behavior_filtered?
+
+      @post.behavior_count_withheld?(@audience_size, @filters)
+    rescue StandardError => e
+      ErrorNotifier.notify(e)
+      true
+    end
 
     # The audience can shrink between publishing or scheduling and the send. Once someone may have
     # got the email, finishing the send reveals nothing the started one has not.

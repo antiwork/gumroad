@@ -119,6 +119,7 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   // Distinguishes "count is null because the audience was too large to count in time"
   // from "count hasn't loaded yet" — the resend still works without a count.
   const [countUnavailable, setCountUnavailable] = React.useState(false);
+  const [countWithheld, setCountWithheld] = React.useState(false);
   const [recentlyResent, setRecentlyResent] = React.useState(false);
   const [audienceFilteredOut, setAudienceFilteredOut] = React.useState(false);
   const [resending, setResending] = React.useState(false);
@@ -129,10 +130,12 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
     try {
       const {
         count: nonOpenerCount,
+        count_withheld,
         recently_resent,
         audience_filtered_out,
       } = await getNonOpenerCount(installment.external_id);
       setCount(nonOpenerCount);
+      setCountWithheld(!!count_withheld);
       setCountUnavailable(nonOpenerCount === null);
       setRecentlyResent(recently_resent);
       setAudienceFilteredOut(audience_filtered_out);
@@ -188,13 +191,15 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
           <h4>
             {recentlyResent
               ? "You've already resent this to non-openers recently. Try again in 24 hours."
-              : countUnavailable
-                ? `This will resend "${installment.name}" to everyone who was emailed but hasn't opened it yet. Your audience is too large to preview an exact count.`
-                : count === 0
-                  ? audienceFilteredOut
-                    ? "The remaining unopened recipients are no longer eligible for this email's audience."
-                    : "Everyone who was emailed has already opened this."
-                  : `This will resend "${installment.name}" to ${formatStatNumber({ value: count ?? 0 })} people who were emailed but haven't opened it yet.`}
+              : countWithheld
+                ? `This will resend "${installment.name}" to everyone who was emailed but hasn't opened it yet. Recipient count: ${WITHHELD_COUNT_TEXT}.`
+                : countUnavailable
+                  ? `This will resend "${installment.name}" to everyone who was emailed but hasn't opened it yet. Your audience is too large to preview an exact count.`
+                  : count === 0
+                    ? audienceFilteredOut
+                      ? "The remaining unopened recipients are no longer eligible for this email's audience."
+                      : "Everyone who was emailed has already opened this."
+                    : `This will resend "${installment.name}" to ${formatStatNumber({ value: count ?? 0 })} people who were emailed but haven't opened it yet.`}
           </h4>
         </Modal>
       ) : null}

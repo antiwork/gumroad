@@ -145,6 +145,20 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
+    it "stores whether a has-opened email's delivery counts are withheld against the audience it goes to" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      allow(AudienceMember).to receive(:filter_count).and_return(openers.size + 2)
+
+      described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+      expect_sent_count openers.size
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => true)
+    end
+
     describe "after the seller's newsletter moved to Feature announcements" do
       # The audience subscribed before the newsletter retired.
       before do
@@ -929,6 +943,19 @@ describe SendPostBlastEmailsJob, :freeze_time do
         expect(blast.reload.completed_at).to be_nil
       end
 
+      expect_sent_count 0
+    end
+
+    it "refuses a late rebuild of a has-opened email, whose openers are read as they are today" do
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return([create(:purchase, link: create(:product, user: @seller)).id])
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      blast = create(:blast, :just_requested, post:)
+      blast.update!(started_at: Time.current, first_email_delivered_at: Time.current)
+
+      expect do
+        described_class.new.perform(blast.id)
+      end.to raise_error(RuntimeError, /filter's eligibility cannot be rebuilt/)
       expect_sent_count 0
     end
 

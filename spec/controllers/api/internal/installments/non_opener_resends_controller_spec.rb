@@ -103,6 +103,14 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       expect(response).to have_http_status(:not_found)
     end
 
+    it "withholds the count when the email's delivery counts are withheld, since it plus the opens is the sent count" do
+      installment.update!(opened_post_id: "post-1", delivery_counts_withheld: true)
+
+      get :show, params: { id: installment.external_id }
+
+      expect(response.parsed_body).to eq({ "count" => nil, "count_withheld" => true, "recently_resent" => false, "audience_filtered_out" => false })
+    end
+
     it "returns a null count instead of erroring when the count queries time out" do
       expect(WithMaxExecutionTime).to receive(:timeout_queries).and_raise(WithMaxExecutionTime::QueryTimeoutError.new("maximum statement execution time exceeded"))
 

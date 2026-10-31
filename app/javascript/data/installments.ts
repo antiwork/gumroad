@@ -198,11 +198,14 @@ export async function getNonOpenerCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  // `count` is null when the audience is too large to count within the request; the
-  // resend itself still works (recipients are resolved in a background job).
-  return cast<{ count: number | null; recently_resent: boolean; audience_filtered_out: boolean }>(
-    await response.json(),
-  );
+  // `count` is null when the audience is too large to count within the request, or when it is
+  // withheld; the resend itself still works (recipients are resolved in a background job).
+  return cast<{
+    count: number | null;
+    count_withheld?: boolean;
+    recently_resent: boolean;
+    audience_filtered_out: boolean;
+  }>(await response.json());
 }
 
 export async function resendToNonOpeners(externalId: string) {
