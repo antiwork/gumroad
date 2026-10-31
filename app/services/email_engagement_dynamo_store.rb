@@ -30,8 +30,16 @@ class EmailEngagementDynamoStore
   # validation error, an item collection limit) won't clear on retry, so it raises.
   RETRYABLE_CANCELLATION_CODES = (["TransactionConflict", "None"] + THROTTLE_CANCELLATION_CODES).freeze
 
+  # A deadline-bound read gives up on a slow connect or socket read after this long, rather
+  # than the SDK's default 60s read timeout and retries, so one stuck page cannot hold the caller.
+  DEADLINE_READ_TIMEOUT_SECONDS = 0.3
+
+  # Raised when a partitioned walk was given a deadline and could not reach the end of the
+  # partition inside it, so a caller on a web request's budget can degrade instead of blocking.
+  class ScanBudgetExceeded < StandardError; end
+
   class << self
-    attr_writer :client
+    attr_writer :client, :deadline_client
 
     def record_open(installment_id:, mailer_method:, mailer_args:)
       upsert_open_item(installment_id: installment_id.to_i, mailer_method:, mailer_args:)
@@ -53,8 +61,16 @@ class EmailEngagementDynamoStore
       # An explicit endpoint is always passed: the global Aws.config endpoint
       # points at MinIO in development and test, and the SDK raises at
       # construction when the option is present but nil.
-      @client ||= Aws::DynamoDB::Client.new(
-        endpoint: GlobalConfig.get("DYNAMODB_ENDPOINT", "https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+      @client ||= Aws::DynamoDB::Client.new(endpoint:)
+    end
+
+    def deadline_client
+      @deadline_client ||= Aws::DynamoDB::Client.new(
+        endpoint:,
+        http_open_timeout: DEADLINE_READ_TIMEOUT_SECONDS,
+        http_read_timeout: DEADLINE_READ_TIMEOUT_SECONDS,
+        retry_limit: 0,
+        max_attempts: 1,
       )
     end
 
@@ -129,7 +145,30 @@ class EmailEngagementDynamoStore
     # the sort key is one-way, and a follower or affiliate click carries that record's
     # id in its args, not a purchase id.
     def clicked_recipient_purchase_ids(installment_id)
-      clicker_items(installment_id).filter_map { |item| purchase_id_from_clicker_item(item) }.uniq
+      partition_items(installment_id, "CLICKER#").filter_map { |item| purchase_id_from_item(item) }.uniq
+    end
+
+    # Recipient record ids of the people who opened this installment's email, split by the kind
+    # of record the send addressed them as. Opens are recorded for every post type, including the
+    # follower and affiliate recipients a purchase-keyed lookup cannot see, so a caller that needs
+    # recipient emails (rather than buyers) has to resolve all three. A click also writes the OPEN
+    # item, so a clicker counts as an opener.
+    def opened_recipient_ids(installment_id, deadline: nil)
+      ids = { purchase_ids: [], follower_ids: [], affiliate_ids: [] }
+      partition_items(installment_id, "OPEN#", deadline:).each do |item|
+        id = recipient_id_from_item(item)
+        next if id.nil?
+
+        mailer_method = item["mailer_method"].to_s
+        if mailer_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
+          ids[:purchase_ids] << id
+        elsif mailer_method.end_with?(EmailEventInfo::FOLLOWER_INSTALLMENT_MAILER_METHOD)
+          ids[:follower_ids] << id
+        elsif mailer_method.end_with?(EmailEventInfo::DIRECT_AFFILIATE_INSTALLMENT_MAILER_METHOD)
+          ids[:affiliate_ids] << id
+        end
+      end
+      ids.transform_values(&:uniq)
     end
 
     def create_table!
@@ -178,22 +217,29 @@ class EmailEngagementDynamoStore
     end
 
     private
-      # Every CLICKER item in one installment's partition. The items are small and one
-      # exists per clicker, so a six-figure post pages through this a megabyte at a time.
-      def clicker_items(installment_id)
+      def endpoint
+        GlobalConfig.get("DYNAMODB_ENDPOINT", "https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+      end
+
+      # Every item under one sort-key prefix in an installment's partition. The items are small
+      # and one exists per recipient (or per recipient + url), so a six-figure post pages through
+      # this a megabyte at a time.
+      def partition_items(installment_id, prefix, deadline: nil)
         items = []
         exclusive_start_key = nil
         loop do
+          raise ScanBudgetExceeded if deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
           params = {
             table_name:,
             key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
             expression_attribute_values: {
               ":pk" => partition_key(installment_id),
-              ":prefix" => "CLICKER#",
+              ":prefix" => prefix,
             },
           }
           params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
-          response = client.query(params)
+          response = deadline ? deadline_query(params) : client.query(params)
           items.concat(response.items)
           exclusive_start_key = response.last_evaluated_key
           break if exclusive_start_key.blank?
@@ -201,14 +247,26 @@ class EmailEngagementDynamoStore
         items
       end
 
-      # The item keeps the mailer method and args its digest was built from. Purchase
-      # installment args are "[<purchase_id>, <post_id>]" (see PostSendgridApi and
-      # PostResendApi), so the first integer is the buyer.
-      def purchase_id_from_clicker_item(item)
+      # This client does not retry, so a timed-out, throttled or failed page means the walk cannot
+      # finish inside the caller's budget. A caller without a deadline still sees the raw error.
+      def deadline_query(params)
+        deadline_client.query(params)
+      rescue Seahorse::Client::NetworkingError, Aws::DynamoDB::Errors::ServiceError
+        raise ScanBudgetExceeded
+      end
+
+      # The item keeps the mailer method and args its digest was built from. Args are
+      # "[<purchase_id|follower_id|affiliate_id>, <post_id>]" (see PostSendgridApi and
+      # PostResendApi) and the method says which of the three the first integer is.
+      def recipient_id_from_item(item)
+        item["mailer_args"].to_s[/\d+/]&.to_i
+      end
+
+      def purchase_id_from_item(item)
         mailer_method = item["mailer_method"].to_s
         return nil unless mailer_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
 
-        item["mailer_args"].to_s[/\d+/]&.to_i
+        recipient_id_from_item(item)
       end
 
       def upsert_open_item(installment_id:, mailer_method:, mailer_args:)
