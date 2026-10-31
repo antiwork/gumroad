@@ -84,7 +84,7 @@ describe RecommendedProducts::CheckoutService do
 
     it "calls search_products with the correct arguments" do
       expect_any_instance_of(RecommendedProducts::CheckoutService).to receive(:search_products).with(
-        size: 5,
+        size: 5 * RecommendedProducts::CheckoutService::FREE_RESULTS_HEADROOM,
         sort: ProductSortKey::FEATURED,
         user_id: [seller1.id],
         is_alive_on_profile: true,
@@ -96,6 +96,67 @@ describe RecommendedProducts::CheckoutService do
         recommender_model_name:,
         limit: 5
       )
+    end
+
+    context "when the recommendations mix free and paid products" do
+      let!(:free_product) { create(:product, user: seller1, price_cents: 0) }
+      let!(:paid_product) { create(:product, user: seller1, price_cents: 500) }
+
+      before do
+        index_model_records(Link)
+      end
+
+      it "gives the slot to the paid product instead of the free one" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [product1.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([paid_product])
+      end
+
+      it "uses the free product to fill a slot no paid product can take" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [product1.id],
+          recommender_model_name:,
+          limit: 2
+        )
+
+        expect(product_infos.map(&:product)).to eq([paid_product, free_product])
+      end
+
+      it "still recommends free products when the creator has nothing paid to show" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: free_product.id))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [product1.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([free_product])
+      end
+
+      it "leaves the receipt recommendations in their co-purchase order" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
+
+        product_infos = described_class.fetch_for_receipt(
+          purchaser:,
+          receipt_product_ids: [product1.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([free_product])
+      end
     end
 
     describe "affiliate recommendations" do

@@ -10,7 +10,7 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       target: Product::Layout::PROFILE,
       limit:,
       recommendation_type:,
-    ).result
+    ).result(prefer_paid_products: true)
   end
 
   def self.fetch_for_receipt(purchaser:, receipt_product_ids:, recommender_model_name:, limit:)
@@ -26,7 +26,12 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
 
   include SearchProducts
 
-  def result
+  FREE_RESULTS_HEADROOM = 2
+
+  # Only the checkout row asks for paid-first ordering: it sits directly under the cart, so a free
+  # product there advertises a $0 alternative at the moment of payment. Receipt emails keep the raw
+  # co-purchase ranking, where a free lead magnet is a legitimate next step.
+  def result(prefer_paid_products: false)
     recommended_products = fetch_recommended_products(for_seller_ids: affiliated_users.present? ? nil : cart_seller_ids)
     recommended_products = recommended_products.includes(:direct_affiliates) if affiliated_users.present?
     recommended_products = recommended_products.includes(:taxonomy, user: [:alive_bank_accounts]) if global_affiliate.present?
@@ -43,13 +48,17 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
           affiliate_id: direct_affiliate_id || global_affiliate&.external_id_numeric
         )
       end
-    end.take(limit)
+    end
+    product_infos = order_by_price_preference(product_infos) if prefer_paid_products
+    product_infos = product_infos.take(limit)
 
     if product_infos.length < limit && cart_seller_ids.present?
       missing_results_count = limit - product_infos.length
       search_result = search_products(
         {
-          size: missing_results_count,
+          # Free products are dropped from the checkout row whenever a paid one can take the slot,
+          # so ask for headroom and let the preference pick the paid ones out of a longer list.
+          size: prefer_paid_products ? missing_results_count * FREE_RESULTS_HEADROOM : missing_results_count,
           sort: ProductSortKey::FEATURED,
           user_id: cart_seller_ids,
           is_alive_on_profile: true,
@@ -59,12 +68,25 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       products = search_result[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
 
       product_infos += products.map { RecommendedProducts::ProductInfo.new(_1, source: RecommendedProducts::ProductInfo::CREATOR_FEATURED) }
+      product_infos = order_by_price_preference(product_infos) if prefer_paid_products
+      product_infos = product_infos.take(limit)
     end
 
     build_result(product_infos:)
   end
 
   private
+    def order_by_price_preference(product_infos)
+      paid, free = product_infos.partition { !free_product?(_1.product) }
+      paid + free
+    end
+
+    # Free means the price the buyer sees on the card: zero. A catalogue with nothing paid left over
+    # still gets its free products rather than an empty row.
+    def free_product?(product)
+      product.display_price_cents(for_default_duration: true).to_i.zero?
+    end
+
     def cart_seller_ids
       return [] if recommendation_type == User::RecommendationType::NO_RECOMMENDATIONS
       @_seller_ids ||= begin
