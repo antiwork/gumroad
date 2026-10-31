@@ -8,7 +8,7 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       recommender_model_name:,
       recommended_by: RecommendationType::GUMROAD_MORE_LIKE_THIS_RECOMMENDATION,
       target: Product::Layout::PROFILE,
-      limit:,
+      limit: [limit, Link::MAX_RESULT_WINDOW].min,
       recommendation_type:,
     ).result(prefer_paid_products:)
   end
@@ -78,17 +78,20 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       MAX_PAID_SEARCH_PASSES.times do
         break if selected.length >= limit || cart_seller_ids.blank?
 
+        # search_options raises on a window past MAX_RESULT_WINDOW.
+        size = [(limit - selected.length) * FREE_RESULTS_HEADROOM, Link::MAX_RESULT_WINDOW].min
         found = search_creator_featured(
-          size: (limit - selected.length) * FREE_RESULTS_HEADROOM,
+          size:,
           exclude_ids: considered_ids,
           min_price: PAID_MIN_PRICE
         )
-        break if found.empty?
 
         found_paid, found_free = found.partition { !free_product?(_1.product) }
         selected += found_paid.take(limit - selected.length)
         free += found_free
         considered_ids += found.map { _1.product.id }
+        # A short window means nothing priced is left further down.
+        break if found.length < size
       end
 
       selected += free.take(limit - selected.length)

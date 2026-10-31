@@ -172,6 +172,42 @@ describe RecommendedProducts::CheckoutService do
         expect(product_infos.length).to eq(2)
       end
 
+      it "stops searching for paid products once a window comes back short" do
+        free_products = create_list(:product, 2, user: seller, price_cents: 0)
+        index_model_records(Link)
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: free_products.map(&:id)))
+        searches = []
+        allow_any_instance_of(described_class).to receive(:search_creator_featured).and_wrap_original do |method, **options|
+          searches << options
+          method.call(**options)
+        end
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 2,
+          prefer_paid_products: true
+        )
+
+        expect(searches.count { _1[:min_price] }).to eq(1)
+        expect(product_infos.map(&:product).first).to eq(paid_product)
+      end
+
+      it "caps the limit and the paid search window at the search result limit" do
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.none)
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: Link::MAX_RESULT_WINDOW * 2,
+          prefer_paid_products: true
+        )
+
+        expect(product_infos.map(&:product).first).to eq(paid_product)
+      end
+
       it "treats a fully discounted product as free" do
         discounted = create(:product, user: seller, price_cents: 500)
         offer_code = create(:offer_code, products: [discounted], user: seller, amount_percentage: 100, amount_cents: nil)
