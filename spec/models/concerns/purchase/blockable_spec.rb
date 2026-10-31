@@ -1137,10 +1137,11 @@ describe Purchase::Blockable do
 
         context "when support unblocked the buyer within the last 24 hours" do
           before do
+            @guid = SecureRandom.hex
             3.times do |n|
-              create(:failed_purchase, purchaser: @purchaser, email: @purchaser.email, stripe_fingerprint: SecureRandom.hex, created_at: n.days.ago)
+              create(:failed_purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: @guid, stripe_fingerprint: SecureRandom.hex, created_at: n.days.ago)
             end
-            @purchase = create(:purchase, purchaser: @purchaser, email: @purchaser.email, purchase_state: "in_progress", stripe_fingerprint: "hij", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+            @purchase = create(:purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: @guid, purchase_state: "in_progress", stripe_fingerprint: "hij", charge_processor_id: StripeChargeProcessor.charge_processor_id)
             @purchase.block_buyer!
             @purchase.unblock_buyer!
           end
@@ -1153,8 +1154,23 @@ describe Purchase::Blockable do
             )
           end
 
+          it "still blocks a browser support did not clear" do
+            uncleared_purchase = create(:purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: SecureRandom.hex, purchase_state: "in_progress", stripe_fingerprint: "klm", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+
+            uncleared_purchase.mark_failed!
+
+            expect(PlatformBlock.active.pluck(:object_type, :object_value)).to include(["browser_guid", uncleared_purchase.browser_guid])
+          end
+
+          it "gives the grace keys a 24 hour expiry" do
+            keys = $redis.keys("purchase_unblock_grace:*")
+
+            expect(keys).not_to be_empty
+            expect(keys.map { |key| $redis.ttl(key) }).to all(be_within(5).of(Purchase::Blockable::UNBLOCK_GRACE_PERIOD.to_i))
+          end
+
           it "blocks the email and browser again once the grace period lapses" do
-            $redis.keys("purchase_unblock_grace:*").each { |key| $redis.del(key) }
+            $redis.del(*$redis.keys("purchase_unblock_grace:*"))
 
             @purchase.mark_failed!
 

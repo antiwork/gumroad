@@ -724,6 +724,7 @@ module Purchase::Blockable
 
     def ban_fraudulent_buyer_browser_guid!
       return unless stripe_fingerprint
+      return if unblock_grace_active_for?(PlatformBlock::TYPES[:browser_guid], browser_guid)
 
       recent_failures = countable_card_testing_failures.where(browser_guid:)
       return if distinct_card_count(recent_failures) < MAX_NUMBER_OF_FAILED_FINGERPRINTS
@@ -855,29 +856,52 @@ module Purchase::Blockable
       return if buyer_has_clean_checkout_history?
 
       if unblock_grace_active?
-        block_by_ip_address!(expires_in: PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months)
-        block_by_charge_processor_fingerprint!
+        block_buyer_outside_unblock_grace!
         return
       end
 
       block_buyer!
     end
 
-    def unblock_grace_keys(emails, guids)
-      emails.compact_blank.map { |email| "purchase_unblock_grace:email:#{email.downcase}" } +
-        guids.compact_blank.map { |guid| "purchase_unblock_grace:browser_guid:#{guid}" }
+    # A support clear hands the buyer one clean retry, so the velocity rule leaves the values
+    # support cleared alone and still blocks the ones it did not. The IP and card rules always fire.
+    def block_buyer_outside_unblock_grace!
+      block_by_ip_address!(expires_in: PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months)
+      block_by_charge_processor_fingerprint!
+      block_by_browser_guid! unless unblock_grace_active_for?(PlatformBlock::TYPES[:browser_guid], browser_guid)
+      blockable_emails_if_fraudulent_transaction.each do |address|
+        next if unblock_grace_active_for?(PlatformBlock::TYPES[:email], address)
+
+        PlatformBlock.add!(object_type: PlatformBlock::TYPES[:email], object_value: address)
+      end
+    end
+
+    # Grace is per identifier, never per buyer: support cleared specific values, so only those
+    # values are left alone. A browser or email support did not clear still earns its block.
+    def unblock_grace_key(object_type, value)
+      "purchase_unblock_grace:#{object_type}:#{value.downcase}"
+    end
+
+    def unblock_grace_active_for?(object_type, value)
+      return false if value.blank?
+
+      $redis.exists?(unblock_grace_key(object_type, value))
     end
 
     def start_unblock_grace!
       values = buyer_blockable_values
-      unblock_grace_keys(values[PlatformBlock::TYPES[:email]].to_a, values[PlatformBlock::TYPES[:browser_guid]].to_a).each do |key|
-        $redis.setex(key, UNBLOCK_GRACE_PERIOD.to_i, "1")
+      [PlatformBlock::TYPES[:email], PlatformBlock::TYPES[:browser_guid]].each do |object_type|
+        values[object_type].to_a.each do |value|
+          next if value.blank?
+
+          $redis.setex(unblock_grace_key(object_type, value), UNBLOCK_GRACE_PERIOD.to_i, "1")
+        end
       end
     end
 
     def unblock_grace_active?
-      keys = unblock_grace_keys([email, purchaser_email], [browser_guid])
-      keys.any? && $redis.exists?(*keys)
+      unblock_grace_active_for?(PlatformBlock::TYPES[:browser_guid], browser_guid) ||
+        blockable_emails_if_fraudulent_transaction.any? { |address| unblock_grace_active_for?(PlatformBlock::TYPES[:email], address) }
     end
 
     # The velocity rules count DISTINCT fingerprints as a proxy for "how many different cards has
