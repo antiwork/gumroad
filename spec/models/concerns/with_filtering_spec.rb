@@ -1069,5 +1069,12 @@ describe WithFiltering do
 
       expect(installment.delivery_counts_withheld?(1)).to be(false)
     end
+
+    it "shows the counts of a filtered post that was not emailed without resolving the filter" do
+      installment.send_emails = false
+      expect(AudienceMember).not_to receive(:filter_count)
+
+      expect(installment.delivery_counts_withheld?(1)).to be(false)
+    end
   end
 end

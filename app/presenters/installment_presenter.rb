@@ -108,10 +108,11 @@ class InstallmentPresenter
     # stored; mid-send, delivered plus still-owed is the send's size.
     def delivery_counts_withheld?
       return @delivery_counts_withheld if defined?(@delivery_counts_withheld)
+      return @delivery_counts_withheld = false unless installment.published? && installment.send_emails? && installment.behavior_filtered?
 
       blast = installment.latest_regular_blast
       remaining = blast && blast.delivery_status != "sent" ? blast.remaining_recipient_count.to_i : 0
-      @delivery_counts_withheld = installment.published? && installment.delivery_counts_withheld?(installment.customer_count.to_i + remaining)
+      @delivery_counts_withheld = installment.delivery_counts_withheld?(installment.customer_count.to_i + remaining)
     end
 
     # State of the latest regular send. Without it an incomplete blast reads as a finished one:

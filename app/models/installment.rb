@@ -1087,7 +1087,7 @@ class Installment < ApplicationRecord
   # Stored by SendPostBlastEmailsJob against the audience the send went to. A post sent before
   # that was stored is held against today's audience.
   def delivery_counts_withheld?(sent_count = customer_count.to_i)
-    return false unless behavior_filtered?
+    return false unless send_emails? && behavior_filtered?
     return json_data["delivery_counts_withheld"] if json_data.key?("delivery_counts_withheld")
 
     behavior_count_withheld?(sent_count, audience_members_filter_params)
