@@ -8,6 +8,11 @@ module AudienceMember::Searchable
   ].freeze
   AFFILIATE_DETAIL_KEYS = %w[id product_id created_at].freeze
 
+  # One `terms` clause is capped by the index's max_terms_count (65,536 by default), and a
+  # post's clicker list has no cap, so a longer list is counted through the SQL twin instead
+  # of failing the whole count.
+  EMAIL_FILTER_SQL_FALLBACK_SIZE = 10_000
+
   included do
     include Elasticsearch::Model
     include SearchIndexModelCommon
@@ -103,6 +108,12 @@ module AudienceMember::Searchable
       # endpoint timed out with a 500.
       # Waitlist entries live in their own table, so that filter counts through SQL too.
       if params[:minimum_license_uses].present? || params[:waitlisted_product_ids].present?
+        relation = AudienceMember.filter(seller_id:, params:)
+        relation = relation.limit(limit) if limit
+        return relation.count
+      end
+
+      if params[:exclude_emails].present? && params[:exclude_emails].size > EMAIL_FILTER_SQL_FALLBACK_SIZE
         relation = AudienceMember.filter(seller_id:, params:)
         relation = relation.limit(limit) if limit
         return relation.count
