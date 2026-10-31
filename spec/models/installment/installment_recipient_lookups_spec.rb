@@ -74,7 +74,7 @@ describe "Installment non-opener recipient lookups" do
     let!(:follower) { create(:active_follower, user: seller, email: "follower@example.com") }
 
     before do
-      # Everyone posts create no email_infos rows, so the sent set is the post's own.
+      # Only an Everyone post's buyer recipients get email_infos rows, so the sent set is the post's own.
       [opened_buyer, unopened_buyer, follower].each { create(:sent_post_email, post:, email: _1.email) }
       allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id, deadline: nil)
         .and_return({ purchase_ids: [opened_buyer.id], follower_ids: [], affiliate_ids: [] })

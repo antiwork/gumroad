@@ -131,11 +131,13 @@ class InstallmentPresenter
       # Filter the preloaded association in Ruby (rather than a scoped query) so the
       # Published list page doesn't issue one blasts query per row.
       resends = installment.blasts.select(&:to_non_openers?).sort_by(&:requested_at)
-      open_counts = resend_open_counts(resends)
+      # An Everyone post's email_infos only cover the recipients it addressed as buyers, so they
+      # would undercount a resend that also reached followers and affiliates. Its rate shows as n/a.
+      open_counts = installment.audience_type? ? nil : resend_open_counts(resends)
 
       resends.map.with_index do |blast, index|
         completed = blast.completed_at.present?
-        open_count = completed ? open_counts.fetch(index, 0) : nil
+        open_count = completed && open_counts ? open_counts.fetch(index, 0) : nil
         open_rate =
           if open_count.present? && blast.delivery_count > 0
             [open_count / blast.delivery_count.to_f * 100, 100].min.round(1)

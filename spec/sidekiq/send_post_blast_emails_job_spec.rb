@@ -812,7 +812,7 @@ describe SendPostBlastEmailsJob, :freeze_time do
     before do
       # The original send reached everyone but the follower who joined afterwards.
       [opened_sale, unopened_sale, opened_follower, unopened_follower, unsubscribed_follower].each do |recipient|
-        SentPostEmail.create!(post:, email: recipient.email)
+        create(:sent_post_email, post:, email: recipient.email)
       end
       unsubscribed_follower.mark_deleted!
       allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id, deadline: nil)

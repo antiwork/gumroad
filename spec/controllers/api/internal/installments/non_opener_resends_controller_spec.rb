@@ -60,7 +60,7 @@ describe Api::Internal::Installments::NonOpenerResendsController do
       audience_post = create(:audience_post, :published, seller:)
       follower = create(:active_follower, user: seller, email: "follower@example.com")
       [opened_sale, unopened_sale, follower].each { create(:sent_post_email, post: audience_post, email: _1.email) }
-      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(audience_post.id, deadline: anything)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(audience_post.id, deadline: kind_of(Float))
         .and_return({ purchase_ids: [opened_sale.id], follower_ids: [], affiliate_ids: [] })
 
       get :show, params: { id: audience_post.external_id }

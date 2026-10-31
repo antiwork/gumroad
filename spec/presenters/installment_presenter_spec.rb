@@ -469,6 +469,18 @@ describe InstallmentPresenter do
                                                  ])
       end
 
+      it "returns no open count for an Everyone post's resend, whose email_infos only cover buyers" do
+        audience_post = create(:audience_post, :published, seller:)
+        blast = create(:blast, post: audience_post, recipient_filter: "unopened", requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: 1.day.ago, delivery_count: 3)
+        create(:creator_contacting_customers_email_info_opened, installment: audience_post, purchase: create(:free_purchase, link: product), opened_at: 1.hour.ago)
+
+        props = described_class.new(seller:, installment: audience_post).props
+
+        expect(props[:non_opener_resends]).to eq([
+                                                   { requested_at: blast.requested_at, delivery_count: 3, completed: true, expired: false, open_count: nil, open_rate: nil }
+                                                 ])
+      end
+
       it "does not truncate a completed resend's window at a following in-progress resend" do
         completed = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 3.days.ago, started_at: 3.days.ago, completed_at: 3.days.ago, delivery_count: 4)
         in_progress = create(:blast, post: installment, recipient_filter: "unopened", requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: nil, delivery_count: 0)

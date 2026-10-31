@@ -10,11 +10,13 @@ describe EmailEngagementDynamoStore do
 
   before do
     described_class.client = client
+    described_class.deadline_client = client
     allow(described_class).to receive(:sleep)
   end
 
   after do
     described_class.client = nil
+    described_class.deadline_client = nil
   end
 
   def requests
@@ -645,6 +647,26 @@ describe EmailEngagementDynamoStore do
       expect do
         described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) - 1)
       end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+    end
+
+    it "gives up on a page that times out inside the caller's deadline" do
+      client.stub_responses(:query, Seahorse::Client::NetworkingError.new(Net::ReadTimeout.new))
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+    end
+
+    it "reads with a short, unretried client only when the caller has a deadline" do
+      described_class.deadline_client = nil
+      bounded_client = described_class.deadline_client
+
+      expect(bounded_client.config).to have_attributes(http_read_timeout: 0.3, http_open_timeout: 0.3, retry_limit: 0, max_attempts: 1)
+      allow(bounded_client).to receive(:query).and_return(double(items: [opened_purchase], last_evaluated_key: nil))
+
+      expect(described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)[:purchase_ids]).to eq([456])
+      expect(described_class.opened_recipient_ids(123)[:purchase_ids]).to eq([])
+      expect(bounded_client).to have_received(:query).once
     end
   end
 end

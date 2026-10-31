@@ -30,12 +30,16 @@ class EmailEngagementDynamoStore
   # validation error, an item collection limit) won't clear on retry, so it raises.
   RETRYABLE_CANCELLATION_CODES = (["TransactionConflict", "None"] + THROTTLE_CANCELLATION_CODES).freeze
 
+  # A deadline-bound read stops waiting on one slow DynamoDB request after this long, rather
+  # than the SDK's default 60s read timeout and retries, so the deadline bounds each page too.
+  DEADLINE_READ_TIMEOUT_SECONDS = 0.3
+
   # Raised when a partitioned walk was given a deadline and could not reach the end of the
   # partition inside it, so a caller on a web request's budget can degrade instead of blocking.
   class ScanBudgetExceeded < StandardError; end
 
   class << self
-    attr_writer :client
+    attr_writer :client, :deadline_client
 
     def record_open(installment_id:, mailer_method:, mailer_args:)
       upsert_open_item(installment_id: installment_id.to_i, mailer_method:, mailer_args:)
@@ -57,8 +61,16 @@ class EmailEngagementDynamoStore
       # An explicit endpoint is always passed: the global Aws.config endpoint
       # points at MinIO in development and test, and the SDK raises at
       # construction when the option is present but nil.
-      @client ||= Aws::DynamoDB::Client.new(
-        endpoint: GlobalConfig.get("DYNAMODB_ENDPOINT", "https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+      @client ||= Aws::DynamoDB::Client.new(endpoint:)
+    end
+
+    def deadline_client
+      @deadline_client ||= Aws::DynamoDB::Client.new(
+        endpoint:,
+        http_open_timeout: DEADLINE_READ_TIMEOUT_SECONDS,
+        http_read_timeout: DEADLINE_READ_TIMEOUT_SECONDS,
+        retry_limit: 0,
+        max_attempts: 1,
       )
     end
 
@@ -205,6 +217,10 @@ class EmailEngagementDynamoStore
     end
 
     private
+      def endpoint
+        GlobalConfig.get("DYNAMODB_ENDPOINT", "https://dynamodb.#{AWS_DEFAULT_REGION}.amazonaws.com")
+      end
+
       # Every item under one sort-key prefix in an installment's partition. The items are small
       # and one exists per recipient (or per recipient + url), so a six-figure post pages through
       # this a megabyte at a time.
@@ -223,12 +239,21 @@ class EmailEngagementDynamoStore
             },
           }
           params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
-          response = client.query(params)
+          response = deadline ? deadline_query(params) : client.query(params)
           items.concat(response.items)
           exclusive_start_key = response.last_evaluated_key
           break if exclusive_start_key.blank?
         end
         items
+      end
+
+      # A timed-out or throttled page means the walk cannot finish inside the caller's budget.
+      def deadline_query(params)
+        deadline_client.query(params)
+      rescue Seahorse::Client::NetworkingError,
+             Aws::DynamoDB::Errors::ProvisionedThroughputExceededException,
+             Aws::DynamoDB::Errors::ThrottlingException
+        raise ScanBudgetExceeded
       end
 
       # The item keeps the mailer method and args its digest was built from. Args are
