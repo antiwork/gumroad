@@ -1187,8 +1187,11 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         value={notClickedPostId}
                         disabled={isPublished}
                         onChange={(event) => setNotClickedPostId(event.target.value)}
+                        // A native select has no placeholder, so the unset option is coloured like the
+                        // one the two filters above show rather than like a chosen value.
+                        style={notClickedPostId ? undefined : { color: "var(--color-muted)" }}
                       >
-                        <option value="">No filter</option>
+                        <option value="">Select…</option>
                         {context.emailed_posts.map((post) => (
                           <option key={post.external_id} value={post.external_id}>
                             {post.name}
@@ -1196,7 +1199,12 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         ))}
                       </Select>
                       {selectedEmailedPost ? (
-                        <p className="mt-2 text-sm break-words text-muted">{selectedEmailedPost.name}</p>
+                        // Only where the composer's sidebar is narrow enough to clip the select: at that
+                        // width the value cannot be read in full, and the caption is the only place the
+                        // seller can confirm which email they are excluding clickers of.
+                        <p className="mt-2 hidden text-sm break-words text-muted lg:block">
+                          {selectedEmailedPost.name}
+                        </p>
                       ) : null}
                     </Fieldset>
                   </CardContent>

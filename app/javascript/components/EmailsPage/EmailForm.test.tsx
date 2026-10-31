@@ -299,7 +299,7 @@ describe('EmailForm "Has not clicked"', () => {
 
     expect(picker().value).toBe("post-2");
     expect([...picker().options].map((option) => option.textContent)).toEqual([
-      "No filter",
+      "Select…",
       "September update",
       "October update",
     ]);
@@ -322,6 +322,16 @@ describe('EmailForm "Has not clicked"', () => {
     fireEvent.change(picker(), { target: { value: "post-2" } });
 
     expect(screen.getByText("October update", { selector: "p" })).not.toBeNull();
+  });
+
+  it("colours the unset option like the placeholder it is", () => {
+    renderForm(customersDraft, emailedContext);
+
+    expect(picker().style.color).toBe("var(--color-muted)");
+
+    fireEvent.change(picker(), { target: { value: "post-2" } });
+
+    expect(picker().style.color).toBe("");
   });
 
   it("is not offered when the seller has no emailed posts", () => {
