@@ -8,8 +8,6 @@ EsClient = Elasticsearch::Model.client = Elasticsearch::Client.new(
   # hit the same paused cluster and failed again. 15 seconds lets a request
   # ride out a pause instead of failing.
   transport_options: { request: { timeout: 15 } },
-  # Responses only: elasticsearch-transport 7.11 doesn't gzip request bodies (newer clients do).
-  compression: true,
   log: true
 )
 # Debug adds every request and response body after the one-line summary.

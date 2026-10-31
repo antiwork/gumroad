@@ -18,8 +18,7 @@ module RealElasticsearchBridge
     @real_client ||= Elasticsearch::Client.new(
       host: ENV.fetch("ELASTICSEARCH_HOST"),
       retry_on_failure: 5,
-      transport_options: { request: { timeout: 15 } },
-      compression: true
+      transport_options: { request: { timeout: 15 } }
     )
   end
 
