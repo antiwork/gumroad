@@ -20,9 +20,10 @@ import { ViewEmailButton } from "$app/components/EmailsPage/ViewEmailButton";
 import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 
-// Only purchase-backed posts have per-recipient open tracking, so a resend to non-openers
-// is offered for these types alone (follower/affiliate posts have no per-recipient open linkage).
-const NON_OPENER_RESEND_TYPES = ["seller", "product", "variant"];
+// Opens are recorded per recipient for every post type, and an Everyone post addresses followers and
+// affiliates as well as buyers, so its recipients come from the post's own sent set. Follower- and
+// affiliate-only posts stay out: their recipient resolution is not scoped the same way yet.
+const NON_OPENER_RESEND_TYPES = ["seller", "product", "variant", "audience"];
 
 export const canResendToNonOpeners = (installment: SavedInstallment) =>
   installment.display_type === "published" &&
@@ -165,6 +166,9 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
   });
 
   const disableResend = resending || recentlyResent || (!countUnavailable && (count === null || count === 0));
+  // Apple Mail preloads a message body, which the provider counts as an open, so the non-opener
+  // set always under-selects. Say so on the control rather than only in the docs.
+  const showApproximateOpenNote = !recentlyResent && (countUnavailable || (count ?? 0) > 0);
 
   return (
     <>
@@ -201,6 +205,12 @@ export const ResendToNonOpenersButton = ({ installment }: { installment: SavedIn
                       : "Everyone who was emailed has already opened this."
                     : `This will resend "${installment.name}" to ${formatStatNumber({ value: count ?? 0 })} people who were emailed but haven't opened it yet.`}
           </h4>
+          {showApproximateOpenNote ? (
+            <p className="text-muted">
+              Opens are approximate: Apple Mail can preload an email, which counts as an open, so some people who never
+              read it are left out.
+            </p>
+          ) : null}
         </Modal>
       ) : null}
     </>

@@ -924,6 +924,37 @@ describe SendPostBlastEmailsJob, :freeze_time do
     end
   end
 
+  describe "resending an Everyone post to non-openers" do
+    let(:product) { create(:product, user: @seller) }
+    let(:post) { create(:audience_post, :published, seller: @seller) }
+    let!(:opened_sale) { create(:purchase, link: product, seller: @seller) }
+    let!(:unopened_sale) { create(:purchase, link: product, seller: @seller) }
+    let!(:opened_follower) { create(:active_follower, user: @seller) }
+    let!(:unopened_follower) { create(:active_follower, user: @seller) }
+    let!(:unsubscribed_follower) { create(:active_follower, user: @seller) }
+    let!(:joined_later_follower) { create(:active_follower, user: @seller) }
+
+    before do
+      # The original send reached everyone but the follower who joined afterwards.
+      [opened_sale, unopened_sale, opened_follower, unopened_follower, unsubscribed_follower].each do |recipient|
+        create(:sent_post_email, post:, email: recipient.email)
+      end
+      unsubscribed_follower.mark_deleted!
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_ids).with(post.id, deadline: nil)
+        .and_return({ purchase_ids: [opened_sale.id], follower_ids: [opened_follower.id], affiliate_ids: [] })
+    end
+
+    it "reaches the buyers and followers the original send reached who have not opened, and nobody else" do
+      blast = create(:blast, :just_requested, post:, recipient_filter: "unopened")
+
+      described_class.new.perform(blast.id)
+
+      expect(PostSendgridApi.mails.keys).to contain_exactly(unopened_sale.email, unopened_follower.email)
+      expect(blast.reload.completed_at).to be_present
+      expect(SentPostEmail.where(post:).count).to eq(5)
+    end
+  end
+
   describe "audience load statement timeout" do
     it "loads the audience with a raised statement execution cap of one hour by default" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)

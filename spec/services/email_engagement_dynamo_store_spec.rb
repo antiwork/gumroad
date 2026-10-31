@@ -10,11 +10,13 @@ describe EmailEngagementDynamoStore do
 
   before do
     described_class.client = client
+    described_class.deadline_client = client
     allow(described_class).to receive(:sleep)
   end
 
   after do
     described_class.client = nil
+    described_class.deadline_client = nil
   end
 
   def requests
@@ -594,6 +596,89 @@ describe EmailEngagementDynamoStore do
 
       expect(described_class.clicked_recipient_purchase_ids(123)).to eq([456, 789])
       expect(requests.map { _1[:params][:exclusive_start_key] }).to eq([nil, { "pk" => { s: "123" }, "sk" => { s: "CLICKER#aaa" } }])
+    end
+  end
+
+  describe ".opened_recipient_ids" do
+    let(:opened_purchase) { { "sk" => "OPEN#aaa", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" } }
+
+    it "groups the openers by the record the send addressed them as" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            opened_purchase,
+            { "sk" => "OPEN#bbb", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[12, 123]" },
+            { "sk" => "OPEN#ccc", "mailer_method" => "CreatorContactingCustomersMailer.direct_affiliate_installment", "mailer_args" => "[34, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [12], affiliate_ids: [34])
+    end
+
+    it "reads the open items of that installment only" do
+      client.stub_responses(:query, { items: [] })
+
+      described_class.opened_recipient_ids(123)
+
+      expect(requests.last[:params]).to include(
+        table_name: described_class.table_name,
+        key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
+        expression_attribute_values: { ":pk" => { s: "123" }, ":prefix" => { s: "OPEN#" } }
+      )
+    end
+
+    it "returns a recipient once, however many times they opened" do
+      client.stub_responses(:query, { items: [opened_purchase, opened_purchase.merge("sk" => "OPEN#zzz")] })
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [], affiliate_ids: [])
+    end
+
+    it "ignores an item whose args carry no id" do
+      client.stub_responses(:query, { items: [{ "sk" => "OPEN#aaa", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment" }] })
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [], follower_ids: [], affiliate_ids: [])
+    end
+
+    it "stops the walk when the caller's deadline has already passed" do
+      client.stub_responses(:query, { items: [opened_purchase] })
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) - 1)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+    end
+
+    it "gives up on a page that times out inside the caller's deadline" do
+      client.stub_responses(:query, Seahorse::Client::NetworkingError.new(Net::ReadTimeout.new))
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+    end
+
+    it "gives up on a throttled or failed page inside the caller's deadline, but raises it without one" do
+      client.stub_responses(:query, ["ProvisionedThroughputExceededException", "InternalServerError", "InternalServerError"])
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+      expect { described_class.opened_recipient_ids(123) }.to raise_error(Aws::DynamoDB::Errors::InternalServerError)
+    end
+
+    it "reads with a short, unretried client only when the caller has a deadline" do
+      described_class.deadline_client = nil
+      bounded_client = described_class.deadline_client
+
+      expect(bounded_client.config).to have_attributes(http_read_timeout: 0.3, http_open_timeout: 0.3, retry_limit: 0, max_attempts: 1)
+      allow(bounded_client).to receive(:query).and_return(double(items: [opened_purchase], last_evaluated_key: nil))
+
+      expect(described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)[:purchase_ids]).to eq([456])
+      expect(described_class.opened_recipient_ids(123)[:purchase_ids]).to eq([])
+      expect(bounded_client).to have_received(:query).once
     end
   end
 
