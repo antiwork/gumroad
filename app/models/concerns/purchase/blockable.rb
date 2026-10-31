@@ -81,6 +81,9 @@ module Purchase::Blockable
 
   MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK = 5
 
+  # After a support unblock, the velocity rule leaves the buyer's email and browser alone for this long.
+  UNBLOCK_GRACE_PERIOD = 24.hours
+
   class_methods do
     # Shared with Onetime::ClearMistakenBuyerBlocks, which must reproduce these rules exactly: if
     # it counts differently it clears a block a live rule still wants, switching enforcement off
@@ -212,6 +215,7 @@ module Purchase::Blockable
     @blocked_by_attributes = nil
 
     update!(is_buyer_blocked_by_admin: false) if is_buyer_blocked_by_admin?
+    start_unblock_grace!
 
     surviving_buyer_blocks
   end
@@ -850,7 +854,30 @@ module Purchase::Blockable
       return if distinct_card_count(recent_failures) < MAX_NUMBER_OF_FAILED_FINGERPRINTS
       return if buyer_has_clean_checkout_history?
 
+      if unblock_grace_active?
+        block_by_ip_address!(expires_in: PlatformBlock::IP_ADDRESS_BLOCKING_DURATION_IN_MONTHS.months)
+        block_by_charge_processor_fingerprint!
+        return
+      end
+
       block_buyer!
+    end
+
+    def unblock_grace_keys(emails, guids)
+      emails.compact_blank.map { |email| "purchase_unblock_grace:email:#{email.downcase}" } +
+        guids.compact_blank.map { |guid| "purchase_unblock_grace:browser_guid:#{guid}" }
+    end
+
+    def start_unblock_grace!
+      values = buyer_blockable_values
+      unblock_grace_keys(values[PlatformBlock::TYPES[:email]].to_a, values[PlatformBlock::TYPES[:browser_guid]].to_a).each do |key|
+        $redis.setex(key, UNBLOCK_GRACE_PERIOD.to_i, "1")
+      end
+    end
+
+    def unblock_grace_active?
+      keys = unblock_grace_keys([email, purchaser_email], [browser_guid])
+      keys.any? && $redis.exists?(*keys)
     end
 
     # The velocity rules count DISTINCT fingerprints as a proxy for "how many different cards has

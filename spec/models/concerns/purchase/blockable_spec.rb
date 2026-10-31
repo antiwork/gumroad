@@ -1135,6 +1135,33 @@ describe Purchase::Blockable do
           end
         end
 
+        context "when support unblocked the buyer within the last 24 hours" do
+          before do
+            3.times do |n|
+              create(:failed_purchase, purchaser: @purchaser, email: @purchaser.email, stripe_fingerprint: SecureRandom.hex, created_at: n.days.ago)
+            end
+            @purchase = create(:purchase, purchaser: @purchaser, email: @purchaser.email, purchase_state: "in_progress", stripe_fingerprint: "hij", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+            @purchase.block_buyer!
+            @purchase.unblock_buyer!
+          end
+
+          it "re-blocks only the IP address and card" do
+            @purchase.mark_failed!
+
+            expect(PlatformBlock.active.pluck(:object_type, :object_value)).to match_array(
+              [["ip_address", @purchase.ip_address], ["charge_processor_fingerprint", "hij"]]
+            )
+          end
+
+          it "blocks the email and browser again once the grace period lapses" do
+            $redis.keys("purchase_unblock_grace:*").each { |key| $redis.del(key) }
+
+            @purchase.mark_failed!
+
+            expect(PlatformBlock.active.pluck(:object_type)).to include("email", "browser_guid")
+          end
+        end
+
         context "when previous failed purchases weren't made within the week" do
           before do
             3.times do |n|
