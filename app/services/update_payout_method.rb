@@ -219,8 +219,8 @@ class UpdatePayoutMethod
       bank_account.account_type = params[:bank_account][:account_type] if params[:bank_account][:account_type].present?
       return [nil, bank_account_error_for(bank_account)] unless bank_account.valid?
 
-      rejection = BankCodeDirectoryCheck.rejection_message_for(bank_account, previous_bank_account: user.active_bank_account)
-      return [nil, { error: :bank_account_error, data: rejection, field: :bank_code }] if rejection
+      rejection = BankCodeDirectoryCheck.rejection_for(bank_account, previous_bank_account: user.active_bank_account)
+      return [nil, { error: :bank_account_error, data: rejection.message, field: rejection.field }] if rejection
 
       [bank_account, nil]
     end
