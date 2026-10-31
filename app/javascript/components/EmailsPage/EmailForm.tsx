@@ -1173,6 +1173,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         onChangeTagIds={setNotBought}
                         isDisabled={isPublished}
                       />
+                      <FieldsetDescription>Customers who bought any of these won't get this email</FieldsetDescription>
                     </Fieldset>
                   </CardContent>
                 ) : null}
