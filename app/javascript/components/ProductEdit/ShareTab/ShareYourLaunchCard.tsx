@@ -64,26 +64,15 @@ const EMAIL_DRAFT_SUMMARY: Record<NonNullable<MarketingChannel["draft"]>["state"
 
 const pluralize = (count: number, singular: string, plural: string) => (count === 1 ? singular : plural);
 
-// Mirrors Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE: the server withholds smaller counts.
-const MINIMUM_SEGMENT_SIZE = 5;
-
 // One line, naming the product once: the card already sits on the product's own page.
 const draftSummary = (counts: NonNullable<MarketingChannel["counts"]>) => {
-  const { customers, followers, affiliates, total } = counts;
-  if (total === null)
-    return `Launch email drafted for fewer than ${MINIMUM_SEGMENT_SIZE} people in the draft's saved audience.`;
-
-  const people = `${total} ${pluralize(total, "person", "people")}`;
-  // A withheld segment would print as "null", and the segment sizes add up to the total.
-  if (customers === null || followers === null || affiliates === null)
-    return `Launch email drafted for ${people} in the draft's saved audience.`;
-
   const segments = [
-    `${customers} past ${pluralize(customers, "customer", "customers")}`,
-    `${followers} ${pluralize(followers, "follower", "followers")}`,
+    `${counts.customers} past ${pluralize(counts.customers, "customer", "customers")}`,
+    `${counts.followers} ${pluralize(counts.followers, "follower", "followers")}`,
   ];
-  if (affiliates > 0) segments.push(`${affiliates} ${pluralize(affiliates, "affiliate", "affiliates")}`);
-  return `Launch email drafted for ${people} (${segments.join(", ")}) in the draft's saved audience.`;
+  if (counts.affiliates > 0)
+    segments.push(`${counts.affiliates} ${pluralize(counts.affiliates, "affiliate", "affiliates")}`);
+  return `Launch email drafted for ${counts.total} ${pluralize(counts.total, "person", "people")} (${segments.join(", ")}) in the draft's saved audience.`;
 };
 
 const formatUSD = (cents: number) =>

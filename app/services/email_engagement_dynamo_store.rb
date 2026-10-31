@@ -129,12 +129,7 @@ class EmailEngagementDynamoStore
     # the sort key is one-way, and a follower or affiliate click carries that record's
     # id in its args, not a purchase id.
     def clicked_recipient_purchase_ids(installment_id)
-      partition_items(installment_id, "CLICKER#").filter_map { |item| purchase_id_from_item(item) }.uniq
-    end
-
-    # Same mapping for the OPEN items. A click also creates the open item, so a clicker counts as an opener.
-    def opened_recipient_purchase_ids(installment_id)
-      partition_items(installment_id, "OPEN#").filter_map { |item| purchase_id_from_item(item) }.uniq
+      clicker_items(installment_id).filter_map { |item| purchase_id_from_clicker_item(item) }.uniq
     end
 
     def create_table!
@@ -183,9 +178,9 @@ class EmailEngagementDynamoStore
     end
 
     private
-      # Every item with this sort-key prefix in one installment's partition. The items are small and
-      # one exists per recipient, so a six-figure post pages through this a megabyte at a time.
-      def partition_items(installment_id, prefix)
+      # Every CLICKER item in one installment's partition. The items are small and one
+      # exists per clicker, so a six-figure post pages through this a megabyte at a time.
+      def clicker_items(installment_id)
         items = []
         exclusive_start_key = nil
         loop do
@@ -194,7 +189,7 @@ class EmailEngagementDynamoStore
             key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
             expression_attribute_values: {
               ":pk" => partition_key(installment_id),
-              ":prefix" => prefix,
+              ":prefix" => "CLICKER#",
             },
           }
           params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
@@ -209,7 +204,7 @@ class EmailEngagementDynamoStore
       # The item keeps the mailer method and args its digest was built from. Purchase
       # installment args are "[<purchase_id>, <post_id>]" (see PostSendgridApi and
       # PostResendApi), so the first integer is the buyer.
-      def purchase_id_from_item(item)
+      def purchase_id_from_clicker_item(item)
         mailer_method = item["mailer_method"].to_s
         return nil unless mailer_method.end_with?(EmailEventInfo::PURCHASE_INSTALLMENT_MAILER_METHOD)
 

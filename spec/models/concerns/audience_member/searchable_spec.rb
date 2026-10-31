@@ -163,23 +163,14 @@ describe AudienceMember::Searchable, :freeze_time do
       expect_filter_count(2, exclude_emails: ["clicker@example.com"])
     end
 
-    it "limits to the given emails in both engines, alone and with another filter" do
-      create(:audience_member, seller:, email: "opener@example.com", purchases: [{ product_id: 5 }])
-      create(:audience_member, seller:, email: "opener2@example.com", purchases: [{ product_id: 6 }])
-      create(:audience_member, seller:, email: "other@example.com", purchases: [{ product_id: 5 }])
-
-      expect_filter_count(2, include_emails: ["opener@example.com", "opener2@example.com"])
-      expect_filter_count(1, bought_product_ids: [5], include_emails: ["opener@example.com", "opener2@example.com"])
-    end
-
-    it "counts an email list longer than one search clause through SQL" do
-      create(:audience_member, seller:, email: "opener@example.com")
-      emails = Array.new(AudienceMember::Searchable::EMAIL_FILTER_SQL_FALLBACK_SIZE + 1) { |index| "post#{index}@example.com" }
-      emails << "opener@example.com"
+    it "counts an exclusion list longer than one search clause through SQL" do
+      create(:audience_member, seller:, email: "clicker@example.com")
+      create(:audience_member, seller:, email: "stayer@example.com")
+      emails = Array.new(AudienceMember::Searchable::EMAIL_FILTER_SQL_FALLBACK_SIZE) { |index| "post#{index}@example.com" }
+      emails << "clicker@example.com"
 
       expect(EsClient).not_to receive(:count)
-      expect(AudienceMember.filter_count(seller_id:, params: { include_emails: emails })).to eq(1)
-      expect(AudienceMember.filter_count(seller_id:, params: { exclude_emails: emails })).to eq(0)
+      expect(AudienceMember.filter_count(seller_id:, params: { exclude_emails: emails })).to eq(1)
     end
 
     it "counts by purchased and not-purchased products and variants" do

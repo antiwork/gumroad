@@ -305,20 +305,6 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.queryByText(/haven't bought/u)).toBeNull();
   });
 
-  it("withholds a behavior-filtered draft's counts below the floor", async () => {
-    await renderCard([emailChannel({ counts: { customers: null, followers: null, affiliates: null, total: null } })]);
-
-    expect(
-      screen.getByText("Launch email drafted for fewer than 5 people in the draft's saved audience."),
-    ).toBeDefined();
-  });
-
-  it("drops the segment breakdown when only a segment count is withheld", async () => {
-    await renderCard([emailChannel({ counts: { customers: 7, followers: null, affiliates: null, total: 7 } })]);
-
-    expect(screen.getByText("Launch email drafted for 7 people in the draft's saved audience.")).toBeDefined();
-  });
-
   it("shows the gate reason instead of a draft for a seller who cannot email yet", async () => {
     await renderCard([
       xChannel(),
