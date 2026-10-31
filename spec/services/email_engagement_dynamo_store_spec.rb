@@ -657,6 +657,18 @@ describe EmailEngagementDynamoStore do
       end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
     end
 
+    it "gives up on a throttled or failed page inside the caller's deadline, but raises it without one" do
+      client.stub_responses(:query, ["ProvisionedThroughputExceededException", "InternalServerError", "InternalServerError"])
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+      expect { described_class.opened_recipient_ids(123) }.to raise_error(Aws::DynamoDB::Errors::InternalServerError)
+    end
+
     it "reads with a short, unretried client only when the caller has a deadline" do
       described_class.deadline_client = nil
       bounded_client = described_class.deadline_client

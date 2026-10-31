@@ -30,8 +30,8 @@ class EmailEngagementDynamoStore
   # validation error, an item collection limit) won't clear on retry, so it raises.
   RETRYABLE_CANCELLATION_CODES = (["TransactionConflict", "None"] + THROTTLE_CANCELLATION_CODES).freeze
 
-  # A deadline-bound read stops waiting on one slow DynamoDB request after this long, rather
-  # than the SDK's default 60s read timeout and retries, so the deadline bounds each page too.
+  # A deadline-bound read gives up on a slow connect or socket read after this long, rather
+  # than the SDK's default 60s read timeout and retries, so one stuck page cannot hold the caller.
   DEADLINE_READ_TIMEOUT_SECONDS = 0.3
 
   # Raised when a partitioned walk was given a deadline and could not reach the end of the
@@ -247,12 +247,11 @@ class EmailEngagementDynamoStore
         items
       end
 
-      # A timed-out or throttled page means the walk cannot finish inside the caller's budget.
+      # This client does not retry, so a timed-out, throttled or failed page means the walk cannot
+      # finish inside the caller's budget. A caller without a deadline still sees the raw error.
       def deadline_query(params)
         deadline_client.query(params)
-      rescue Seahorse::Client::NetworkingError,
-             Aws::DynamoDB::Errors::ProvisionedThroughputExceededException,
-             Aws::DynamoDB::Errors::ThrottlingException
+      rescue Seahorse::Client::NetworkingError, Aws::DynamoDB::Errors::ServiceError
         raise ScanBudgetExceeded
       end
 
