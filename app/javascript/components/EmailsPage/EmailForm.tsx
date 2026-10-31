@@ -269,6 +269,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     ...(installment?.not_bought_variants ?? []),
   ]);
   const [notClickedPostId, setNotClickedPostId] = React.useState(installment?.not_clicked_post_id ?? "");
+  const selectedEmailedPost = context.emailed_posts.find((post) => post.external_id === notClickedPostId);
   const [paidMoreThanCents, setPaidMoreThanCents] = React.useState<number | null>(
     installment?.paid_more_than_cents ?? null,
   );
@@ -1187,13 +1188,16 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         disabled={isPublished}
                         onChange={(event) => setNotClickedPostId(event.target.value)}
                       >
-                        <option value="">Any previous email</option>
+                        <option value="">No filter</option>
                         {context.emailed_posts.map((post) => (
                           <option key={post.external_id} value={post.external_id}>
                             {post.name}
                           </option>
                         ))}
                       </Select>
+                      {selectedEmailedPost ? (
+                        <p className="mt-2 text-sm break-words text-muted">{selectedEmailedPost.name}</p>
+                      ) : null}
                     </Fieldset>
                   </CardContent>
                 ) : null}

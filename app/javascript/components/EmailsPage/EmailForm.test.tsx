@@ -299,7 +299,7 @@ describe('EmailForm "Has not clicked"', () => {
 
     expect(picker().value).toBe("post-2");
     expect([...picker().options].map((option) => option.textContent)).toEqual([
-      "Any previous email",
+      "No filter",
       "September update",
       "October update",
     ]);
@@ -312,6 +312,16 @@ describe('EmailForm "Has not clicked"', () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(sent.payload?.installment.not_clicked_post_id).toBe("post-2"));
+  });
+
+  it("spells out the chosen post's full title under the picker", () => {
+    renderForm(customersDraft, emailedContext);
+
+    expect(screen.queryByText("October update", { selector: "p" })).toBeNull();
+
+    fireEvent.change(picker(), { target: { value: "post-2" } });
+
+    expect(screen.getByText("October update", { selector: "p" })).not.toBeNull();
   });
 
   it("is not offered when the seller has no emailed posts", () => {
