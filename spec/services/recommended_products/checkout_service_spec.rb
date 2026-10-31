@@ -96,7 +96,8 @@ describe RecommendedProducts::CheckoutService do
         purchaser:,
         cart_product_ids: [product1.id, product3.id],
         recommender_model_name:,
-        limit: 5
+        limit: 5,
+        prefer_paid_products: true
       )
     end
 
@@ -117,7 +118,8 @@ describe RecommendedProducts::CheckoutService do
           purchaser:,
           cart_product_ids: [cart_product.id],
           recommender_model_name:,
-          limit: 1
+          limit: 1,
+          prefer_paid_products: true
         )
 
         expect(product_infos.map(&:product)).to eq([paid_product])
@@ -130,7 +132,8 @@ describe RecommendedProducts::CheckoutService do
           purchaser:,
           cart_product_ids: [cart_product.id],
           recommender_model_name:,
-          limit: 2
+          limit: 2,
+          prefer_paid_products: true
         )
 
         expect(product_infos.map(&:product)).to eq([paid_product, free_product])
@@ -145,7 +148,8 @@ describe RecommendedProducts::CheckoutService do
           purchaser:,
           cart_product_ids: [cart_product.id],
           recommender_model_name:,
-          limit: 1
+          limit: 1,
+          prefer_paid_products: true
         )
 
         expect(product_infos.map(&:product)).to eq([free_product])
@@ -160,7 +164,8 @@ describe RecommendedProducts::CheckoutService do
           purchaser:,
           cart_product_ids: [cart_product.id],
           recommender_model_name:,
-          limit: 2
+          limit: 2,
+          prefer_paid_products: true
         )
 
         expect(product_infos.map(&:product).first).to eq(paid_product)
@@ -179,7 +184,8 @@ describe RecommendedProducts::CheckoutService do
           purchaser:,
           cart_product_ids: [cart_product.id],
           recommender_model_name:,
-          limit: 1
+          limit: 1,
+          prefer_paid_products: true
         )
 
         expect(product_infos.map(&:product)).to eq([later_paid])
@@ -201,14 +207,15 @@ describe RecommendedProducts::CheckoutService do
           purchaser:,
           cart_product_ids: [cart_product.id],
           recommender_model_name:,
-          limit: 1
+          limit: 1,
+          prefer_paid_products: true
         )
 
         expect(product_infos.map(&:product)).to eq([paid_product])
       end
 
       it "leaves the receipt recommendations in their co-purchase order" do
-        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.in_order_of(:id, [free_product.id, paid_product.id]))
 
         product_infos = described_class.fetch_for_receipt(
           purchaser:,

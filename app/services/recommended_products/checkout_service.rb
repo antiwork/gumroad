@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
-  def self.fetch_for_cart(purchaser:, cart_product_ids:, recommender_model_name:, limit:, recommendation_type: nil)
+  def self.fetch_for_cart(purchaser:, cart_product_ids:, recommender_model_name:, limit:, recommendation_type: nil, prefer_paid_products: false)
     new(
       purchaser:,
       cart_product_ids:,
@@ -10,7 +10,7 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
       target: Product::Layout::PROFILE,
       limit:,
       recommendation_type:,
-    ).result(prefer_paid_products: true)
+    ).result(prefer_paid_products:)
   end
 
   def self.fetch_for_receipt(purchaser:, receipt_product_ids:, recommender_model_name:, limit:)
@@ -35,8 +35,9 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
   MAX_PAID_SEARCH_PASSES = 3
 
   # Only the checkout row asks for paid-first ordering: it sits directly under the cart, so a free
-  # product there advertises a $0 alternative at the moment of payment. Receipt emails keep the raw
-  # co-purchase ranking, where a free lead magnet is a legitimate next step.
+  # product there advertises a $0 alternative at the moment of payment. Receipt emails and the
+  # post-purchase "More like this" block keep the raw co-purchase ranking, where a free lead magnet
+  # is a legitimate next step.
   def result(prefer_paid_products: false)
     recommended_products = fetch_recommended_products(for_seller_ids: affiliated_users.present? ? nil : cart_seller_ids)
     recommended_products = recommended_products.includes(:direct_affiliates) if affiliated_users.present?

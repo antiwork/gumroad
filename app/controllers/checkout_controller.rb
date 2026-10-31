@@ -240,7 +240,7 @@ class CheckoutController < ApplicationController
       }
 
       Timeout.timeout(RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS) do
-        RecommendedProducts::CheckoutService.fetch_for_cart(**args).map do |product_info|
+        RecommendedProducts::CheckoutService.fetch_for_cart(**args, prefer_paid_products: true).map do |product_info|
           ProductPresenter.card_for_web(
             product: product_info.product,
             request:,

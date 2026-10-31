@@ -62,5 +62,15 @@ describe RecommendedProductsController do
       )
       expect(response.parsed_body).to eq([product_cards.first.merge(co_purchase: true).with_indifferent_access])
     end
+
+    it "keeps a free co-purchase product ahead of a paid one" do
+      free_product = create(:product, user: cart_product.user, price_cents: 0)
+      paid_product = create(:product, user: cart_product.user, price_cents: 500)
+      allow(RecommendedProductsService).to receive(:fetch).and_return(Link.in_order_of(:id, [free_product.id, paid_product.id]))
+
+      get :index, params: { cart_product_ids: [cart_product.external_id], limit: "1" }, session: { recommender_model_name: }
+
+      expect(response.parsed_body.map { _1["id"] }).to eq([free_product.external_id])
+    end
   end
 end
