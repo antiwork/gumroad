@@ -145,13 +145,15 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect_sent_count 0
     end
 
-    it "stores whether a has-opened email's delivery counts are withheld against the audience it goes to" do
+    it "stores whether a has-opened email's delivery counts are withheld against the audience it goes to, counted in SQL" do
       product = create(:product, user: @seller)
       openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      create_list(:purchase, 2, link: product)
       opened_post = create(:seller_post, :published, seller: @seller)
       allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
       post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
-      allow(AudienceMember).to receive(:filter_count).and_return(openers.size + 2)
+      # Elasticsearch has not indexed the two buyers who did not open yet.
+      allow(AudienceMember).to receive(:filter_count).and_return(openers.size)
 
       described_class.new.perform(create(:blast, :just_requested, post:).id)
 

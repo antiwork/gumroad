@@ -214,20 +214,27 @@ describe("Email List", :js, :sidekiq_inline, :elasticsearch_wait_for_refresh, ty
         end
       end
 
-      it "hides the sent count of a behavior-filtered email whose size would single out buyers" do
+      it "hides the sent count and rates of a behavior-filtered email whose size would single out buyers" do
         installment1.update!(not_clicked_post_id: installment3.external_id, customer_count: 49)
         allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).and_return([])
         allow(AudienceMember).to receive(:filter_count).and_return(50)
+        3.times { EmailEngagementDynamoStore.record_open(installment_id: installment1.id, mailer_method: "M.a", mailer_args: "[#{_1}]") }
+        EmailEngagementDynamoStore.record_click(installment_id: installment1.id, mailer_method: "M.a", mailer_args: "[0]", click_url: "example.com")
+        create(:blast, post: installment1, recipient_filter: "unopened", requested_at: 1.day.ago, started_at: 1.day.ago, completed_at: 1.day.ago, delivery_count: 12)
+        create(:creator_contacting_customers_email_info_opened, installment: installment1, purchase:, opened_at: 1.hour.ago)
 
         visit "#{emails_path}/published"
 
         within_table "Published" do
-          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "Hidden for privacy" })
+          expect(page).to have_table_row({ "Subject" => "Email 1 (sent)", "Emailed" => "Hidden for privacy", "Opened" => "3", "Clicks" => "1" })
+          expect(page).to have_table_row({ "Subject" => "↳ Resend to non-openers", "Emailed" => "Hidden for privacy", "Opened" => "1" })
           find(:table_row, { "Subject" => "Email 1 (sent)" }).click
         end
 
         within_modal "Email 1 (sent)" do
           expect(page).to have_text("Emailed Hidden for privacy", normalize_ws: true)
+          expect(page).to have_text("Opened 3 Clicks 1", normalize_ws: true)
+          expect(page).to have_text("Hidden for privacy, 1 opened")
         end
       end
 

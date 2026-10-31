@@ -110,6 +110,21 @@ export default function EmailsPublished() {
   const resendEmailedText = (count: number | null) =>
     count === null ? WITHHELD_COUNT_TEXT : `${formatStatNumber({ value: count })} emailed`;
 
+  // With delivery counts withheld a rate would give them back, so the open count is shown instead.
+  const resendOpenedValue = (
+    installment: PublishedInstallment,
+    resend: PublishedInstallment["non_opener_resends"][number],
+  ) => (installment.delivery_counts_withheld ? resend.open_count : resend.open_rate);
+  const resendOpenedText = (
+    installment: PublishedInstallment,
+    resend: PublishedInstallment["non_opener_resends"][number],
+  ) =>
+    formatStatNumber({
+      value: resendOpenedValue(installment, resend),
+      suffix: installment.delivery_counts_withheld ? "" : "%",
+      placeholder: "n/a",
+    });
+
   const deliveryNote = (delivery: PublishedInstallment["delivery"], sentCount: number | null) => {
     if (!delivery || delivery.status === "sent") return null;
     const people = (count: number) => `${formatStatNumber({ value: count })} ${count === 1 ? "person" : "people"}`;
@@ -200,7 +215,11 @@ export default function EmailsPublished() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         {installment.send_emails
-                          ? formatStatNumber({ value: installment.open_rate, suffix: "%" })
+                          ? formatStatNumber(
+                              installment.delivery_counts_withheld
+                                ? { value: installment.open_count }
+                                : { value: installment.open_rate, suffix: "%" },
+                            )
                           : "n/a"}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
@@ -249,8 +268,7 @@ export default function EmailsPublished() {
                                   {" · "}
                                   {resendEmailedText(resend.delivery_count)}
                                   {" · "}
-                                  {formatStatNumber({ value: resend.open_rate, suffix: "%", placeholder: "n/a" })}{" "}
-                                  opened
+                                  {resendOpenedText(installment, resend)} opened
                                 </div>
                               ))}
                           </div>
@@ -280,7 +298,7 @@ export default function EmailsPublished() {
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-muted">n/a</TableCell>
                           <TableCell className="whitespace-nowrap text-muted">
-                            {formatStatNumber({ value: resend.open_rate, suffix: "%", placeholder: "n/a" })}
+                            {resendOpenedText(installment, resend)}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-muted">n/a</TableCell>
                           <TableCell className="whitespace-nowrap text-muted">n/a</TableCell>
@@ -322,7 +340,9 @@ export default function EmailsPublished() {
                     {selectedInstallment.send_emails
                       ? selectedInstallment.open_rate !== null
                         ? `${formatStatNumber({ value: selectedInstallment.open_count })} (${formatStatNumber({ value: selectedInstallment.open_rate, suffix: "%" })})`
-                        : formatStatNumber({ value: selectedInstallment.open_rate })
+                        : formatStatNumber({
+                            value: selectedInstallment.delivery_counts_withheld ? selectedInstallment.open_count : null,
+                          })
                       : "n/a"}
                   </CardContent>
                   <CardContent>
@@ -330,7 +350,11 @@ export default function EmailsPublished() {
                     {selectedInstallment.send_emails
                       ? selectedInstallment.click_rate !== null
                         ? `${formatStatNumber({ value: selectedInstallment.click_count })} (${formatStatNumber({ value: selectedInstallment.click_rate, suffix: "%" })})`
-                        : formatStatNumber({ value: selectedInstallment.click_rate })
+                        : formatStatNumber({
+                            value: selectedInstallment.delivery_counts_withheld
+                              ? selectedInstallment.click_count
+                              : null,
+                          })
                       : "n/a"}
                   </CardContent>
                   <CardContent>
@@ -351,8 +375,8 @@ export default function EmailsPublished() {
                             })}
                             {resend.completed
                               ? ` — ${resendEmailedText(resend.delivery_count)}${
-                                  resend.open_rate !== null
-                                    ? `, ${formatStatNumber({ value: resend.open_rate, suffix: "%" })} opened`
+                                  resendOpenedValue(selectedInstallment, resend) !== null
+                                    ? `, ${resendOpenedText(selectedInstallment, resend)} opened`
                                     : ""
                                 }`
                               : resend.expired

@@ -71,7 +71,7 @@ export type PublishedInstallment = SavedInstallment & {
   } | null;
   // Every send expired, so there are no recipients to resend to.
   never_reached_anyone: boolean;
-  // A "Has opened" or "Has not clicked" send whose size would single out buyers: every delivery count is null.
+  // A "Has opened" or "Has not clicked" send whose size would single out buyers: every delivery count and rate is null.
   delivery_counts_withheld: boolean;
 };
 

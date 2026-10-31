@@ -134,12 +134,17 @@ class SendPostBlastEmailsJob
     CHILD_SLICE_SIZE = 2_000
 
     # Decided before anyone gets the email, against the audience it goes to, so the Published page
-    # and the API read a stored flag instead of resolving the behavior filter per row. A failed
-    # count withholds.
+    # and the API read a stored flag instead of resolving the behavior filter per row. The wider
+    # audiences are counted by the query that loaded the recipients: a lagging Elasticsearch count
+    # would be kept for good. A failed count withholds.
     def delivery_counts_withheld_at_send
       return if @blast.to_non_openers? || @blast.first_email_delivered_at.present? || !@post.behavior_filtered?
 
-      @post.behavior_count_withheld?(@audience_size, @filters)
+      @post.behavior_count_withheld?(@audience_size, @filters) do |wider_params|
+        WithMaxExecutionTime.timeout_queries(seconds: audience_load_timeout_seconds) do
+          AudienceMember.filter(seller_id: @post.seller_id, params: wider_params, as_of: @blast.started_at).count
+        end
+      end
     rescue StandardError => e
       ErrorNotifier.notify(e)
       true

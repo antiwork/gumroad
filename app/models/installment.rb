@@ -1095,13 +1095,14 @@ class Installment < ApplicationRecord
 
   # A behavior segment is withheld when it, or the part of a wider audience it leaves out, is
   # below the floor: the seller reads the wider count by turning a behavior filter off, so
-  # either side can single out a buyer.
-  def behavior_count_withheld?(count, params)
+  # either side can single out a buyer. The block, when given, counts a wider audience's params.
+  def behavior_count_withheld?(count, params, &wider_count)
     return true if count < MINIMUM_BEHAVIOR_SEGMENT_SIZE
 
+    wider_count ||= ->(wider_params) { AudienceMember.filter_count(seller_id:, params: wider_params) }
     wider = [params.except(:include_emails, :exclude_emails)]
     wider += [params.except(:include_emails), params.except(:exclude_emails)] if params.key?(:include_emails) && params.key?(:exclude_emails)
-    wider.any? { (AudienceMember.filter_count(seller_id:, params: _1) - count).in?(1...MINIMUM_BEHAVIOR_SEGMENT_SIZE) }
+    wider.any? { (wider_count.call(_1) - count).in?(1...MINIMUM_BEHAVIOR_SEGMENT_SIZE) }
   end
 
   # Sending to fewer would single those buyers out, and the sent count would give away the size

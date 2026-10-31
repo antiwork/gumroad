@@ -30,8 +30,8 @@ class InstallmentPresenter
       sent_count: delivery_counts_withheld? ? nil : installment.customer_count,
       click_count: installment.unique_click_count,
       open_count: installment.unique_open_count,
-      click_rate: installment.click_rate_percent&.round(1),
-      open_rate: installment.open_rate_percent&.round(1),
+      click_rate: delivery_counts_withheld? ? nil : installment.click_rate_percent&.round(1),
+      open_rate: delivery_counts_withheld? ? nil : installment.open_rate_percent&.round(1),
       send_emails: installment.send_emails?,
       shown_on_profile: installment.shown_on_profile?,
       installment_type: installment.installment_type,
@@ -103,8 +103,8 @@ class InstallmentPresenter
   end
 
   private
-    # One decision for every delivery count on the post, since a resend's count plus the opens
-    # gives the sent count away. The size is only read for a post sent before the decision was
+    # One decision for every delivery count and rate on the post, since a resend's count plus the
+    # opens, or a rate with its count, gives the sent count away. The size is only read for a post sent before the decision was
     # stored; mid-send, delivered plus still-owed is the send's size.
     def delivery_counts_withheld?
       return @delivery_counts_withheld if defined?(@delivery_counts_withheld)
@@ -150,7 +150,7 @@ class InstallmentPresenter
         completed = blast.completed_at.present?
         open_count = completed ? open_counts.fetch(index, 0) : nil
         open_rate =
-          if open_count.present? && blast.delivery_count > 0
+          if !delivery_counts_withheld? && open_count.present? && blast.delivery_count > 0
             [open_count / blast.delivery_count.to_f * 100, 100].min.round(1)
           end
 

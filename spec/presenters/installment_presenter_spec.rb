@@ -425,19 +425,23 @@ describe InstallmentPresenter do
     end
 
     context "for a behavior-filtered post" do
-      before { installment.update!(not_clicked_post_id: "abc", customer_count: 30) }
+      before do
+        installment.update!(not_clicked_post_id: "abc", customer_count: 30)
+        allow(installment).to receive_messages(unique_open_count: 9, unique_click_count: 3)
+      end
 
-      it "withholds every delivery count when the send's size is withheld" do
+      it "withholds every delivery count and rate when the send's size is withheld" do
         blast = create(:blast, post: installment, requested_at: 1.hour.ago, last_email_delivered_at: 10.minutes.ago, completed_at: nil, delivery_count: 30)
         $redis.set(RedisKey.blast_pending_recipients(blast.id), 19)
         create(:blast, post: installment, recipient_filter: "unopened", requested_at: 2.days.ago, started_at: 2.days.ago, completed_at: 2.days.ago, delivery_count: 12)
+        create(:creator_contacting_customers_email_info_opened, installment:, purchase: create(:free_purchase, link: product), opened_at: 1.day.ago)
         expect(installment).to receive(:delivery_counts_withheld?).with(49).and_return(true)
 
         props = described_class.new(seller:, installment:).props
 
-        expect(props).to include(sent_count: nil, delivery_counts_withheld: true)
+        expect(props).to include(sent_count: nil, open_count: 9, open_rate: nil, click_count: 3, click_rate: nil, delivery_counts_withheld: true)
         expect(props[:delivery]).to include(status: "sending", delivered_count: nil, remaining_count: nil)
-        expect(props[:non_opener_resends].sole).to include(delivery_count: nil)
+        expect(props[:non_opener_resends].sole).to include(delivery_count: nil, open_count: 1, open_rate: nil)
       ensure
         $redis.del(RedisKey.blast_pending_recipients(blast.id)) if blast
       end
@@ -448,7 +452,7 @@ describe InstallmentPresenter do
 
         props = described_class.new(seller:, installment:).props
 
-        expect(props).to include(sent_count: 30, delivery_counts_withheld: false)
+        expect(props).to include(sent_count: 30, open_rate: 30.0, click_rate: 10.0, delivery_counts_withheld: false)
         expect(props[:delivery]).to include(delivered_count: 30)
       end
     end
