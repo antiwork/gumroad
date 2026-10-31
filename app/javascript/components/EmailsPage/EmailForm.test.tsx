@@ -52,6 +52,10 @@ vi.mock("@rails/activestorage", () => ({
   },
 }));
 const post = vi.hoisted(() => vi.fn((_url: string, options?: { onFinish?: () => void }) => options?.onFinish?.()));
+// The transform callback builds the payload Inertia would send; keeping it lets a test assert
+// what the form would submit.
+type SentPayload = { installment: { not_clicked_post_id: string | null } };
+const sent = vi.hoisted((): { payload: SentPayload | null } => ({ payload: null }));
 vi.mock("@inertiajs/react", () => ({
   Link: ({ href, children }: { href: string; children?: React.ReactNode }) => <a href={href}>{children}</a>,
   usePage: () => ({ url: "/emails/new", props: {} }),
@@ -64,7 +68,9 @@ vi.mock("@inertiajs/react", () => ({
       setData: (key: string, value: string) =>
         setDataState((prev) => ({ installment: { ...prev.installment, [key.replace("installment.", "")]: value } })),
       processing: false,
-      transform: () => {},
+      transform: (build: () => SentPayload) => {
+        sent.payload = build();
+      },
       post,
       put: () => {},
     };
@@ -104,6 +110,7 @@ const context: InstallmentFormContext = {
   countries: [],
   profile_sections: [],
   has_scheduled_emails: false,
+  emailed_posts: [],
   aws_access_key_id: "key",
   s3_url: "https://s3.example/bucket",
   user_id: "1",
@@ -142,6 +149,7 @@ beforeEach(() => {
   cdn.hold = false;
   cdn.release.length = 0;
   post.mockClear();
+  sent.payload = null;
 });
 
 afterEach(cleanup);
@@ -251,5 +259,64 @@ describe('EmailForm "Has not yet bought"', () => {
 
     expect(within(fieldset).getByRole("button", { name: "Design guide" })).not.toBeNull();
     expect(within(fieldset).getByRole("button", { name: "Course" })).not.toBeNull();
+  });
+});
+
+describe('EmailForm "Has not clicked"', () => {
+  const emailedContext: InstallmentFormContext = {
+    ...context,
+    audience_types: ["customers"],
+    emailed_posts: [
+      { external_id: "post-1", name: "September update" },
+      { external_id: "post-2", name: "October update" },
+    ],
+  };
+
+  const customersDraft: Installment = {
+    external_id: "email-2",
+    display_type: "draft",
+    name: "Win-back",
+    message: "Hello",
+    published_at: null,
+    updated_at: "2026-08-01T00:00:00Z",
+    stream_only: false,
+    streamable: false,
+    send_emails: true,
+    shown_on_profile: false,
+    installment_type: "seller",
+    paid_more_than_cents: null,
+    paid_less_than_cents: null,
+    allow_comments: true,
+    full_url: "https://seller.gumroad.com/p/win-back",
+    has_been_blasted: false,
+    files: [],
+  };
+
+  const picker = () => screen.getByLabelText<HTMLSelectElement>("Has not clicked");
+
+  it("offers the seller's emailed posts and restores the saved one", () => {
+    renderForm({ ...customersDraft, not_clicked_post_id: "post-2" }, emailedContext);
+
+    expect(picker().value).toBe("post-2");
+    expect([...picker().options].map((option) => option.textContent)).toEqual([
+      "Any previous email",
+      "September update",
+      "October update",
+    ]);
+  });
+
+  it("submits the chosen post with the form", async () => {
+    renderForm(customersDraft, emailedContext);
+
+    fireEvent.change(picker(), { target: { value: "post-2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(sent.payload?.installment.not_clicked_post_id).toBe("post-2"));
+  });
+
+  it("is not offered when the seller has no emailed posts", () => {
+    renderForm(customersDraft, { ...emailedContext, emailed_posts: [] });
+
+    expect(screen.queryByLabelText("Has not clicked")).toBeNull();
   });
 });
