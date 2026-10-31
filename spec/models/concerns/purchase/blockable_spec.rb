@@ -857,6 +857,14 @@ describe Purchase::Blockable do
           expect(PlatformBlock.active.find_by(object_value: blocked_value)).to be_nil
         end
       end
+
+      it "leaves every block in place when the grace cannot be recorded" do
+        purchase.block_buyer!
+        allow($redis).to receive(:setex).and_raise(Redis::CannotConnectError)
+
+        expect { purchase.unblock_buyer! }.to raise_error(Redis::CannotConnectError)
+        expect(PlatformBlock.active.pluck(:object_value)).to include(purchase.email, purchase.browser_guid, purchase.ip_address, purchase.stripe_fingerprint)
+      end
     end
 
     context "when the stripe_fingerprint is nil" do
@@ -1152,6 +1160,24 @@ describe Purchase::Blockable do
             expect(PlatformBlock.active.pluck(:object_type, :object_value)).to match_array(
               [["ip_address", @purchase.ip_address], ["charge_processor_fingerprint", "hij"]]
             )
+            expect(@purchase.comments.pluck(:content)).to include("Buyer blocked; the 24 hours grace after a support unblock kept #{@guid}, #{@purchaser.email} unblocked")
+          end
+
+          it "also blocks the card on the buyer's newest purchase" do
+            create(:purchase, purchaser: @purchaser, stripe_fingerprint: "newest")
+
+            @purchase.mark_failed!
+
+            expect(PlatformBlock.active.charge_processor_fingerprint.pluck(:object_value)).to match_array(["hij", "newest"])
+          end
+
+          it "does not extend the grace on later declines" do
+            keys = $redis.keys("purchase_unblock_grace:*")
+            keys.each { |key| $redis.expire(key, 100) }
+
+            @purchase.mark_failed!
+
+            expect(keys.map { |key| $redis.ttl(key) }).to all(be <= 100)
           end
 
           it "still blocks a browser support did not clear" do
@@ -1160,6 +1186,7 @@ describe Purchase::Blockable do
             uncleared_purchase.mark_failed!
 
             expect(PlatformBlock.active.pluck(:object_type, :object_value)).to include(["browser_guid", uncleared_purchase.browser_guid])
+            expect(uncleared_purchase.comments.order(:id).last.content).not_to include(uncleared_purchase.browser_guid)
           end
 
           it "gives the grace keys a 24 hour expiry" do
