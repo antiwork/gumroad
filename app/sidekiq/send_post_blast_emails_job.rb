@@ -134,8 +134,9 @@ class SendPostBlastEmailsJob
     CHILD_SLICE_SIZE = 2_000
 
     # Per statement, for up to three wider-audience counts that run before the first email. Kept well
-    # under the recipient load's cap: a timeout withholds, which is the safe side.
-    BEHAVIOR_DECISION_TIMEOUT = 1.minute
+    # under the recipient load's cap: a timeout withholds, which is the safe side. Tunable in Redis
+    # because a large audience can need longer.
+    BEHAVIOR_DECISION_TIMEOUT = 5.minutes
 
     # Decided before anyone gets the email, against the audience it goes to, so the Published page
     # and the API read a stored flag instead of resolving the behavior filter per row. The wider
@@ -144,7 +145,7 @@ class SendPostBlastEmailsJob
     def delivery_counts_withheld_at_send
       return if @blast.to_non_openers? || @blast.first_email_delivered_at.present? || !@post.behavior_filtered?
 
-      WithMaxExecutionTime.timeout_queries(seconds: BEHAVIOR_DECISION_TIMEOUT) do
+      WithMaxExecutionTime.timeout_queries(seconds: behavior_decision_timeout_seconds) do
         @post.behavior_count_withheld?(@audience_size, @filters) do |wider_params|
           # Nothing narrowed the recipients (a not-clicked post nobody clicked), so they are the wider audience.
           next @audience_size if wider_params == @filters
@@ -152,9 +153,16 @@ class SendPostBlastEmailsJob
           AudienceMember.filter(seller_id: @post.seller_id, params: wider_params, as_of: @blast.started_at).count
         end
       end
+    rescue WithMaxExecutionTime::QueryTimeoutError => e
+      Rails.logger.warn("SendPostBlastEmailsJob: withholding counts of post #{@post.id} after #{e.message}")
+      true
     rescue StandardError => e
       ErrorNotifier.notify(e)
       true
+    end
+
+    def behavior_decision_timeout_seconds
+      ($redis.get(RedisKey.behavior_decision_max_execution_time_seconds) || BEHAVIOR_DECISION_TIMEOUT).to_i
     end
 
     # The audience can shrink between publishing or scheduling and the send. Once someone may have

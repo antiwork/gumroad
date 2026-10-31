@@ -183,6 +183,29 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(post.reload.json_data).to include("delivery_counts_withheld" => false)
     end
 
+    it "withholds a has-opened email's delivery counts without an error report when the decision runs out of time" do
+      product = create(:product, user: @seller)
+      openers = create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
+      opened_post = create(:seller_post, :published, seller: @seller)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+      post = create(:seller_post, :published, seller: @seller, opened_post_id: opened_post.external_id)
+      $redis.set(RedisKey.behavior_decision_max_execution_time_seconds, 7)
+      allow(WithMaxExecutionTime).to receive(:timeout_queries).and_call_original
+      allow(AudienceMember).to receive(:filter).and_wrap_original do |original, **kwargs|
+        raise WithMaxExecutionTime::QueryTimeoutError, "Query took more than 7 seconds" unless kwargs[:with_ids]
+
+        original.call(**kwargs)
+      end
+      expect(ErrorNotifier).not_to receive(:notify)
+
+      described_class.new.perform(create(:blast, :just_requested, post:).id)
+
+      expect_sent_count openers.size
+      expect(post.reload.json_data).to include("delivery_counts_withheld" => true)
+      expect(WithMaxExecutionTime).to have_received(:timeout_queries).with(seconds: 7)
+    end
+
     it "decides a has-not-clicked email nobody clicked from the audience it loaded" do
       product = create(:product, user: @seller)
       create_list(:purchase, Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE, link: product)
