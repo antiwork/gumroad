@@ -185,6 +185,28 @@ describe RecommendedProducts::CheckoutService do
         expect(product_infos.map(&:product)).to eq([later_paid])
       end
 
+      it "searches past fully discounted products for a paid one" do
+        # A fully discounted product keeps its list price, so the paid-only search returns it. These
+        # are newer than the paid product, which is where the featured order looks first, so one
+        # search window can hold only free results. The row must still find the paid product.
+        3.times do |index|
+          discounted = create(:product, user: seller, price_cents: 500)
+          offer_code = create(:offer_code, products: [discounted], user: seller, amount_percentage: 100, amount_cents: nil)
+          discounted.update!(default_offer_code: offer_code, created_at: Time.current + (index + 1).minutes)
+        end
+        index_model_records(Link)
+        allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id]))
+
+        product_infos = described_class.fetch_for_cart(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 1
+        )
+
+        expect(product_infos.map(&:product)).to eq([paid_product])
+      end
+
       it "leaves the receipt recommendations in their co-purchase order" do
         allow(RecommendedProductsService).to receive(:fetch).and_return(Link.where(id: [free_product.id, paid_product.id]))
 

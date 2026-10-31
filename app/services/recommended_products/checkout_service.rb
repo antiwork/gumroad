@@ -28,6 +28,11 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
 
   FREE_RESULTS_HEADROOM = 2
   PAID_MIN_PRICE = "0.01"
+  # A fully discounted product keeps its list price, so it passes PAID_MIN_PRICE and comes back from
+  # the paid-only search as a free result. Enough of them ahead in the featured order fill one search
+  # window with no paid product at all, so each pass excludes what it has already looked at and
+  # searches further down. Bounded, because the checkout page cannot pay for unlimited searches.
+  MAX_PAID_SEARCH_PASSES = 3
 
   # Only the checkout row asks for paid-first ordering: it sits directly under the cart, so a free
   # product there advertises a $0 alternative at the moment of payment. Receipt emails keep the raw
@@ -67,16 +72,22 @@ class RecommendedProducts::CheckoutService < RecommendedProducts::BaseService
     def fill_paid_first(product_infos)
       paid, free = product_infos.partition { !free_product?(_1.product) }
       selected = paid.take(limit)
+      considered_ids = product_infos.map { _1.product.id }
 
-      if selected.length < limit && cart_seller_ids.present?
+      MAX_PAID_SEARCH_PASSES.times do
+        break if selected.length >= limit || cart_seller_ids.blank?
+
         found = search_creator_featured(
           size: (limit - selected.length) * FREE_RESULTS_HEADROOM,
-          exclude_ids: product_infos.map { _1.product.id },
+          exclude_ids: considered_ids,
           min_price: PAID_MIN_PRICE
         )
+        break if found.empty?
+
         found_paid, found_free = found.partition { !free_product?(_1.product) }
         selected += found_paid.take(limit - selected.length)
         free += found_free
+        considered_ids += found.map { _1.product.id }
       end
 
       selected += free.take(limit - selected.length)
