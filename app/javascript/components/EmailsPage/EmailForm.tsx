@@ -1187,6 +1187,9 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         value={notClickedPostId}
                         disabled={isPublished}
                         onChange={(event) => setNotClickedPostId(event.target.value)}
+                        // A native select has no placeholder, so the unset option is coloured like the
+                        // one the two filters above show rather than like a chosen value.
+                        style={notClickedPostId ? undefined : { color: "var(--color-muted)" }}
                       >
                         <option value="">Select…</option>
                         {context.emailed_posts.map((post) => (
