@@ -268,6 +268,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     ...(installment?.not_bought_products ?? []),
     ...(installment?.not_bought_variants ?? []),
   ]);
+  const [notClickedPostId, setNotClickedPostId] = React.useState(installment?.not_clicked_post_id ?? "");
   const [paidMoreThanCents, setPaidMoreThanCents] = React.useState<number | null>(
     installment?.paid_more_than_cents ?? null,
   );
@@ -579,6 +580,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     not_bought_variants: audienceType === "affiliates" ? null : notBoughtVariants.map(({ id }) => id),
     affiliate_products: audienceType === "affiliates" ? affiliatedProducts : null,
     waitlisted_products: audienceType === "followers" ? waitlisted : null,
+    not_clicked_post_id: audienceType === "customers" ? notClickedPostId || null : null,
     send_emails: channel.email,
     shown_on_profile: channel.profile,
     allow_comments: allowComments,
@@ -1170,6 +1172,28 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
                         onChangeTagIds={setNotBought}
                         isDisabled={isPublished}
                       />
+                    </Fieldset>
+                  </CardContent>
+                ) : null}
+                {audienceType === "customers" && context.emailed_posts.length > 0 ? (
+                  <CardContent>
+                    <Fieldset className="grow basis-0">
+                      <FieldsetTitle>
+                        <Label htmlFor={`${uid}-not_clicked`}>Has not clicked</Label>
+                      </FieldsetTitle>
+                      <Select
+                        id={`${uid}-not_clicked`}
+                        value={notClickedPostId}
+                        disabled={isPublished}
+                        onChange={(event) => setNotClickedPostId(event.target.value)}
+                      >
+                        <option value="">Any previous email</option>
+                        {context.emailed_posts.map((post) => (
+                          <option key={post.external_id} value={post.external_id}>
+                            {post.name}
+                          </option>
+                        ))}
+                      </Select>
                     </Fieldset>
                   </CardContent>
                 ) : null}

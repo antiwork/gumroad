@@ -221,6 +221,21 @@ class InstallmentPresenter
       end
     end
 
+    # Only posts emailed to buyers have per-recipient click data, so only those can back a
+    # "has not clicked" filter. The saved choice stays in the list when it falls outside the
+    # recent window, so editing an older email never silently drops the filter.
+    def emailed_post_options(limit: 50)
+      posts = seller.installments.alive.not_workflow_installment.published.send_emails.not_single_recipient_email
+        .order(published_at: :desc).limit(limit)
+        .map { { external_id: _1.external_id, name: _1.displayed_name } }
+
+      saved_id = installment&.not_clicked_post_id
+      return posts if saved_id.blank? || posts.any? { _1[:external_id] == saved_id }
+
+      saved = seller.installments.alive.find_by_external_id(saved_id)
+      saved ? [{ external_id: saved.external_id, name: saved.displayed_name }, *posts] : posts
+    end
+
     def installment_form_context_props
       user_presenter = UserPresenter.new(user: seller)
       allow_comments_by_default = seller.installments.not_workflow_installment.order(:created_at).last&.allow_comments?
@@ -249,6 +264,7 @@ class InstallmentPresenter
         countries: ([Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.map(&:last)).uniq,
         profile_sections: seller.seller_profile_posts_sections.map { { id: _1.external_id, name: _1.header } },
         has_scheduled_emails: Installment.alive.not_workflow_installment.scheduled.where(seller:).exists?,
+        emailed_posts: emailed_post_options,
         aws_access_key_id: AWS_ACCESS_KEY,
         s3_url: s3_bucket_url,
         user_id: seller.external_id,

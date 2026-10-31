@@ -257,6 +257,7 @@ module WithFiltering
     end
     json[:affiliate_products] = affiliate_products if affiliate_products.present?
     json[:waitlisted_products] = waitlisted_products if waitlisted_products.present?
+    json[:not_clicked_post_id] = not_clicked_post_id if not_clicked_post_id.present?
     json[:workflow_trigger] = workflow_trigger if workflow_trigger.present?
     json
   end
