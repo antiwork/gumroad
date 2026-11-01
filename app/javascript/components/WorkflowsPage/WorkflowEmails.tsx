@@ -139,7 +139,7 @@ const WorkflowEmails = ({ context, workflow }: WorkflowEmailsProps) => {
         message: "<p></p>",
         files: [],
         delayed_delivery_time_duration: 0,
-        delayed_delivery_time_period: "hour",
+        delayed_delivery_time_period: workflowTrigger === "opened_no_click" ? "day" : "hour",
         stream_only: false,
       },
     ]);
@@ -504,7 +504,10 @@ const EmailRow = ({
                   }
                   onFocus={() => onFocus("delayed_delivery_time_period")}
                 >
-                  {INSTALLMENT_DELIVERY_TIME_PERIODS.map((period) => (
+                  {INSTALLMENT_DELIVERY_TIME_PERIODS.filter(
+                    // The opened-no-click scan runs once a day, so it can't honour hours.
+                    (period) => workflowTrigger !== "opened_no_click" || period !== "hour",
+                  ).map((period) => (
                     <option key={period} value={period}>
                       {`${period}${email.delayed_delivery_time_duration === 1 ? "" : "s"} after ${WORKFLOW_EMAILS_LABELS[workflowTrigger]}`}
                     </option>
