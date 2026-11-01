@@ -155,7 +155,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
   it "claims the daily slot with the recipient count it is about to queue" do
     allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
-    stub_engagement([opener(first_open_at: 4.days.ago), opener(first_open_at: 5.days.ago, digest: "digest-2")])
+    stub_engagement([opener(first_open_at: 3.days.ago - 1.hour), opener(first_open_at: 3.days.ago - 2.hours, digest: "digest-2")])
 
     described_class.new.perform(@installment.id)
 
