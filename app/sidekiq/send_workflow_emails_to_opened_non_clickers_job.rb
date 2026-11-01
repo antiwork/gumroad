@@ -47,6 +47,7 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     end
 
     due_before = Time.current - rule.delayed_delivery_time
+    rolling_scan = opened_after.blank? && lookback_seconds.to_i.positive?
     opened_after = if opened_after.present?
       Time.zone.parse(opened_after)
     elsif lookback_seconds.to_i.positive?
@@ -68,8 +69,10 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     end
 
     # The same per-seller daily ceiling a large new-customer fanout claims: one large workflow send
-    # per seller per day. A scan over it runs in the next deferral window instead.
-    unless SellerLargeBlastQuota.allow?(seller_id: workflow.seller_id, kind: "workflow", blast_id: installment.id, recipient_count: due.size)
+    # per seller per day. A scan over it runs in the next deferral window instead. A daily scan counts
+    # only the last day: the rest of its lookback was queued by the previous run and dedupes away.
+    recipient_count = rolling_scan ? due.count { _1[:first_open_at] > due_before - 1.day } : due.size
+    unless SellerLargeBlastQuota.allow?(seller_id: workflow.seller_id, kind: "workflow", blast_id: installment.id, recipient_count:)
       job_id = self.class.perform_at(SellerLargeBlastQuota.deferred_run_at, installment_id, nil, opened_after&.iso8601, minimum_rule_version)
       raise "Sidekiq did not requeue the opened-no-click scan for the daily limit" unless job_id.present?
 
