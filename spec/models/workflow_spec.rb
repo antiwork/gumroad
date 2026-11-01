@@ -292,6 +292,16 @@ describe Workflow do
       expect { @workflow.publish! }.not_to change { @workflow.reload }
     end
 
+    it "refuses to publish an opened, no click workflow whose email still waits in hours" do
+      watched_post = create(:published_installment, seller: @workflow.seller, link: @product)
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id)
+      installment = create(:installment, workflow: @workflow, seller: @workflow.seller, link: @product)
+      create(:installment_rule, installment:, time_period: InstallmentRule::HOUR, delayed_delivery_time: 2.hours)
+
+      expect { @workflow.publish! }.to raise_error(ActiveRecord::RecordInvalid, /waits in days, weeks, or months/)
+      expect(@workflow.reload.published_at).to be_nil
+    end
+
     it "sets 'published_at' and 'first_published_at'" do
       expect do
         @workflow.publish!

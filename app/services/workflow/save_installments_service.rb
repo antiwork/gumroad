@@ -39,7 +39,7 @@ class Workflow::SaveInstallmentsService
         end
 
         if workflow.opened_no_click_trigger? && params[:installments].any? { _1[:time_period] == InstallmentRule::HOUR }
-          workflow.errors.add(:base, "An opened, no click email waits in days, weeks, or months. Its emails go out once a day.")
+          workflow.errors.add(:base, Workflow::OPENED_NO_CLICK_HOUR_DELAY_ERROR)
           @errors = workflow.errors
           raise ActiveRecord::Rollback
         end

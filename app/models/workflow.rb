@@ -27,6 +27,7 @@ class Workflow < ApplicationRecord
 
   MEMBER_CANCELLATION_WORKFLOW_TRIGGER = "member_cancellation"
   OPENED_NO_CLICK_WORKFLOW_TRIGGER = "opened_no_click"
+  OPENED_NO_CLICK_HOUR_DELAY_ERROR = "An opened, no click email waits in days, weeks, or months. Its emails go out once a day."
 
   # The trigger watches one of the seller's own posts, so the filter is a JSON path read.
   scope :opened_no_click_trigger, -> { where("workflows.json_data->>'$.workflow_trigger' = ?", OPENED_NO_CLICK_WORKFLOW_TRIGGER) }
@@ -91,6 +92,12 @@ class Workflow < ApplicationRecord
 
       if !abandoned_cart_type? && !seller.eligible_to_send_emails?
         errors.add(:base, "You cannot publish a workflow until you have made at least #{Money.from_cents(Installment::MINIMUM_SALES_CENTS_VALUE).format(no_cents: true)} in total earnings and received a payout")
+        raise ActiveRecord::RecordInvalid.new(self)
+      end
+
+      # Emails saved under another trigger can still wait hours.
+      if opened_no_click_trigger? && installments.alive.joins(:installment_rule).where(installment_rules: { time_period: InstallmentRule::HOUR }).exists?
+        errors.add(:base, OPENED_NO_CLICK_HOUR_DELAY_ERROR)
         raise ActiveRecord::RecordInvalid.new(self)
       end
 
