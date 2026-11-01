@@ -18,7 +18,7 @@ describe("Product page waitlist", js: true, type: :system) do
     fill_in "Email address", with: "visitor@example.com"
     expect do
       click_on "Notify me"
-      expect(page).to have_selector("[role=status]", text: "You're on the list. Check your inbox to confirm.")
+      expect(page).to have_selector("[role=status]", text: "You're on the list for #{seller.name_or_username}'s launch. Check your inbox to confirm.")
     end.to change { product.waitlist_entries.count }.by(1)
 
     expect(page).not_to have_button("Notify me")

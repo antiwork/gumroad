@@ -138,7 +138,7 @@ describe "User profile page", type: :system, js: true do
           fill_in "Your email address", with: "subscriber@gumroad.com"
           click_on "Subscribe"
         end
-        expect(page).to have_alert(text: "Check your inbox to confirm your follow request.")
+        expect(page).to have_alert(text: "Check your inbox to confirm your follow request to #{seller.name_or_username}.")
         if page.has_selector?("section", text: "Section 6", wait: 0)
           expect(page).not_to have_text("Subscribe to receive email updates from #{seller.name}", wait: 2)
           within_section "Section 6", section_element: :section do

@@ -227,12 +227,12 @@ class FollowersController < ApplicationController
       if @waitlist_product
         return follower.confirmed? ?
           "You're on the list. #{follower.user.name_or_username} will email you when it launches." :
-          "You're on the list. Check your inbox to confirm."
+          "You're on the list for #{follower.user.name_or_username}'s launch. Check your inbox to confirm."
       end
 
       follower.confirmed? ?
         "You are now following #{follower.user.name_or_username}!" :
-        "Check your inbox to confirm your follow request."
+        "Check your inbox to confirm your follow request to #{follower.user.name_or_username}."
     end
 
     # Reuses the memoized lookup rather than re-querying: both actions have
