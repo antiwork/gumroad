@@ -11,7 +11,10 @@
 # runs it once with `lookback_seconds` nil, which covers every open that is already due, and a delay
 # edit runs it once with `opened_after`, which covers the opens the new delay made due.
 class SendWorkflowEmailsToOpenedNonClickersJob
+  class RuleNotCommittedError < StandardError; end
+
   include Sidekiq::Job
+  include DatabaseRoleRouting
   sidekiq_options retry: 5, queue: :low
 
   # How far back a run reaches for opens that are already due. Wider than the daily cadence, so a
@@ -21,21 +24,27 @@ class SendWorkflowEmailsToOpenedNonClickersJob
 
   # `opened_after` (ISO8601) is a fixed lower bound on the open time and takes the place of the
   # lookback, so a deferred run still covers the opens it was started for.
-  def perform(installment_id, lookback_seconds = LOOKBACK.to_i, opened_after = nil)
-    installment = Installment.find_by(id: installment_id)
-    return if installment.nil?
+  # `minimum_rule_version` comes from a publish or delay edit, which closes its schedule intent once
+  # this is queued: a stale replica read here would lose that pass for good, so it reads the primary.
+  def perform(installment_id, lookback_seconds = LOOKBACK.to_i, opened_after = nil, minimum_rule_version = nil)
+    installment = workflow = post = rule = nil
+    with_primary_database(minimum_rule_version.present?) do
+      installment = Installment.find_by(id: installment_id)
+      return if installment.nil?
 
-    workflow = installment.workflow
-    return if workflow.nil? || !workflow.opened_no_click_trigger?
-    return unless workflow.alive? && installment.alive? && installment.published?
+      workflow = installment.workflow
+      return if workflow.nil? || !workflow.opened_no_click_trigger?
+      return unless workflow.alive? && installment.alive? && installment.published?
 
-    # A post that was deleted or unpublished since the creator picked it reads as absent here, so
-    # the trigger stops firing instead of sending off a stale clock.
-    post = workflow.workflow_trigger_post
-    return if post.nil?
+      # A post that was deleted or unpublished since the creator picked it reads as absent here, so
+      # the trigger stops firing instead of sending off a stale clock.
+      post = workflow.workflow_trigger_post
+      return if post.nil?
 
-    rule = installment.installment_rule
-    return if rule.nil?
+      rule = installment.installment_rule
+      return if rule.nil?
+      raise RuleNotCommittedError if minimum_rule_version.present? && rule.version < minimum_rule_version
+    end
 
     due_before = Time.current - rule.delayed_delivery_time
     opened_after = if opened_after.present?
@@ -52,7 +61,7 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     # audience: a scan that lands in the same window would put both bursts on the primary together.
     unless claim_seller_fanout_lock(workflow.seller_id)
       run_at = Time.current + WorkflowSellerFanoutLock.retry_in
-      job_id = self.class.perform_at(run_at, installment_id, nil, opened_after&.iso8601)
+      job_id = self.class.perform_at(run_at, installment_id, nil, opened_after&.iso8601, minimum_rule_version)
       raise "Sidekiq did not requeue the opened-no-click scan for the seller fanout lock" unless job_id.present?
 
       return
@@ -61,7 +70,7 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     # The same per-seller daily ceiling a large new-customer fanout claims: one large workflow send
     # per seller per day. A scan over it runs in the next deferral window instead.
     unless SellerLargeBlastQuota.allow?(seller_id: workflow.seller_id, kind: "workflow", blast_id: installment.id, recipient_count: due.size)
-      job_id = self.class.perform_at(SellerLargeBlastQuota.deferred_run_at, installment_id, nil, opened_after&.iso8601)
+      job_id = self.class.perform_at(SellerLargeBlastQuota.deferred_run_at, installment_id, nil, opened_after&.iso8601, minimum_rule_version)
       raise "Sidekiq did not requeue the opened-no-click scan for the daily limit" unless job_id.present?
 
       return

@@ -99,7 +99,34 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     described_class.new.perform(@installment.id)
 
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs).to be_empty
-    expect(described_class).to have_enqueued_sidekiq_job(@installment.id, nil, 5.days.ago.iso8601).at(6.hours.from_now)
+    expect(described_class).to have_enqueued_sidekiq_job(@installment.id, nil, 5.days.ago.iso8601, nil).at(6.hours.from_now)
+  end
+
+  it "keeps the publish's rule version on a scan it defers" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+    allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(6.hours.from_now)
+
+    described_class.new.perform(@installment.id, nil, nil, @rule.version)
+
+    expect(described_class).to have_enqueued_sidekiq_job(@installment.id, nil, nil, @rule.version).at(6.hours.from_now)
+  end
+
+  it "reads the publish's scan from the primary and retries while the rule version is not visible" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
+
+    expect do
+      described_class.new.perform(@installment.id, nil, nil, @rule.version + 1)
+    end.to raise_error(described_class::RuleNotCommittedError)
+    expect(SendWorkflowEmailToOpenedNonClickerJob.jobs).to be_empty
+  end
+
+  it "does not retry a pinned scan whose installment was unpublished" do
+    @installment.update!(published_at: nil)
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+
+    expect { described_class.new.perform(@installment.id, nil, nil, @rule.version + 1) }.not_to raise_error
   end
 
   it "covers every open since a fixed time when it is given one, as after a deferral or a delay edit" do
@@ -156,7 +183,18 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs).to be_empty
     expect(described_class.jobs.size).to eq(1)
+    expect(described_class.jobs.first["args"]).to eq([@installment.id, nil, 5.days.ago.iso8601, nil])
     expect(described_class.jobs.first["at"]).to be_within(2.seconds).of(30.seconds.from_now.to_f)
+  end
+
+  it "keeps the publish's rule version and open bound on a scan deferred behind the seller's fanout" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    allow(WorkflowSellerFanoutLock).to receive(:acquire).and_return(nil)
+    allow(WorkflowSellerFanoutLock).to receive(:retry_in).and_return(30.seconds)
+
+    described_class.new.perform(@installment.id, nil, 10.days.ago.iso8601, @rule.version)
+
+    expect(described_class.jobs.sole["args"]).to eq([@installment.id, nil, 10.days.ago.iso8601, @rule.version])
   end
 
   it "releases the seller's fanout lock once the sends are handed over" do

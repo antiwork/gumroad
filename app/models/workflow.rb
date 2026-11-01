@@ -171,13 +171,13 @@ class Workflow < ApplicationRecord
         # them. The extra LOOKBACK re-covers sends the old rule's scans queued, which the rule-version
         # check now drops. Like the member-cancellation recovery, this runs whatever past recipients says.
         opened_after = cutoff_reference_time - old_delayed_delivery_time - SendWorkflowEmailsToOpenedNonClickersJob::LOOKBACK
-        job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, nil, opened_after.iso8601)
+        job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, nil, opened_after.iso8601, minimum_rule_version)
         return job_id.present? ? :not_applicable : :not_enqueued
       end
 
       return :not_applicable unless send_to_past_customers?
 
-      job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, nil)
+      job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, nil, nil, minimum_rule_version)
       return job_id.present? ? :not_applicable : :not_enqueued
     end
 

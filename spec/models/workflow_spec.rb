@@ -186,15 +186,15 @@ describe Workflow do
 
     it "scans the opens a delay edit made due, plus the scan's lookback, even when the workflow leaves out past recipients" do
       @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id, send_to_past_customers: false)
-      @workflow.schedule_installment(@post, old_delayed_delivery_time: 14.days.to_i, cutoff_reference_time: Time.current, reschedule_on_stale: true)
-      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, nil, 16.days.ago.iso8601)
+      @workflow.schedule_installment(@post, old_delayed_delivery_time: 14.days.to_i, cutoff_reference_time: Time.current, reschedule_on_stale: true, minimum_rule_version: 3)
+      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, nil, 16.days.ago.iso8601, 3)
       expect(SendWorkflowPostEmailsJob.jobs).to be_empty
     end
 
     it "scans the opens that already happened when an opened_no_click workflow asks for past recipients" do
       @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id, send_to_past_customers: true)
-      @workflow.schedule_installment(@post)
-      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, nil)
+      @workflow.schedule_installment(@post, minimum_rule_version: 3)
+      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, nil, nil, 3)
       expect(SendWorkflowPostEmailsJob.jobs).to be_empty
     end
 
