@@ -122,8 +122,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
     described_class.new.perform(@installment.id)
 
-    expect(SendWorkflowEmailToOpenedNonClickerJob).not_to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "before-publication")
-    expect(SendWorkflowEmailToOpenedNonClickerJob).to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "after-publication")
+    expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.map { |job| job["args"].last }).to eq(["after-publication"])
   end
 
   it "covers the opens from before the publication when the workflow asks for past openers" do
@@ -133,6 +132,39 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     described_class.new.perform(@installment.id)
 
     expect(SendWorkflowEmailToOpenedNonClickerJob).to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "before-publication")
+  end
+
+  it "defers the scan while the seller already has a fanout in flight" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    allow(WorkflowSellerFanoutLock).to receive(:acquire).and_return(nil)
+    allow(WorkflowSellerFanoutLock).to receive(:retry_in).and_return(30.seconds)
+
+    described_class.new.perform(@installment.id)
+
+    expect(SendWorkflowEmailToOpenedNonClickerJob.jobs).to be_empty
+    expect(described_class.jobs.size).to eq(1)
+    expect(described_class.jobs.first["at"]).to be_within(2.seconds).of(30.seconds.from_now.to_f)
+  end
+
+  it "releases the seller's fanout lock once the sends are handed over" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    lock = instance_double(WorkflowSellerFanoutLock)
+    allow(WorkflowSellerFanoutLock).to receive(:acquire).and_return(lock)
+    expect(lock).to receive(:release)
+
+    described_class.new.perform(@installment.id)
+  end
+
+  it "releases the seller's fanout lock when the scan raises" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    lock = instance_double(WorkflowSellerFanoutLock)
+    allow(WorkflowSellerFanoutLock).to receive(:acquire).and_return(lock)
+    allow(SellerLargeBlastQuota).to receive(:allow?).and_return(false)
+    allow(SellerLargeBlastQuota).to receive(:deferred_run_at).and_return(6.hours.from_now)
+    allow(described_class).to receive(:perform_at).and_raise("redis down")
+    expect(lock).to receive(:release)
+
+    expect { described_class.new.perform(@installment.id) }.to raise_error("redis down")
   end
 
   it "releases a large fanout over time instead of queueing every send at once" do

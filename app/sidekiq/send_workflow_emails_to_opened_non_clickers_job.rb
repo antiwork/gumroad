@@ -45,6 +45,16 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     due = due_openers(post:, delay: rule.delayed_delivery_time, lookback_seconds:, workflow:)
     return if due.empty?
 
+    # One large fanout per seller at a time, the lock the post blast takes while it builds its
+    # audience: a scan that lands in the same window would put both bursts on the primary together.
+    unless claim_seller_fanout_lock(workflow.seller_id)
+      run_at = Time.current + WorkflowSellerFanoutLock.retry_in
+      job_id = self.class.perform_at(run_at, installment_id, lookback_seconds)
+      raise "Sidekiq did not requeue the opened-no-click scan for the seller fanout lock" unless job_id.present?
+
+      return
+    end
+
     # The same per-seller daily ceiling a large new-customer fanout claims: one large workflow send
     # per seller per day. A scan over it runs in the next deferral window instead.
     unless SellerLargeBlastQuota.allow?(seller_id: workflow.seller_id, kind: "workflow", blast_id: installment.id, recipient_count: due.size)
@@ -64,9 +74,18 @@ class SendWorkflowEmailsToOpenedNonClickersJob
         SendWorkflowEmailToOpenedNonClickerJob.perform_in(offset, *args)
       end
     end
+  ensure
+    # Held only while the sends are handed over, so the seller's next fanout is not waiting behind a
+    # lock nobody releases.
+    @seller_fanout_lock&.release
   end
 
   private
+    def claim_seller_fanout_lock(seller_id)
+      @seller_fanout_lock = WorkflowSellerFanoutLock.acquire(seller_id)
+      @seller_fanout_lock.present?
+    end
+
     def due_openers(post:, delay:, lookback_seconds:, workflow:)
       clicked = EmailEngagementDynamoStore.clicked_recipient_digests(post.id).to_set
       due_before = Time.current - delay
