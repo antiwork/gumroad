@@ -395,13 +395,28 @@ describe ContactingCreatorMailer do
       let(:purchase) { create(:purchase, link: create(:product, user: seller)) }
       let(:dispute) { create(:dispute_formalized, purchase:) }
 
-      it "states the dispute reason in seller words, and nothing for a generic one" do
-        dispute.update!(reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
-        body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
-        expect(body).to include "Reason given for the dispute: the cardholder says they did not receive the product."
+      it "states each dispute reason in plain language, and nothing for a generic, missing or unknown one" do
+        reason_lines = {
+          Dispute::REASON_FRAUDULENT => "the cardholder says they did not authorize this charge",
+          Dispute::REASON_UNRECOGNIZED => "the cardholder says they do not recognize this charge",
+          Dispute::REASON_PRODUCT_NOT_RECEIVED => "the cardholder says they did not receive the product",
+          Dispute::REASON_PRODUCT_UNACCEPTABLE => "the cardholder says the product was defective or not as described",
+          Dispute::REASON_DUPLICATE => "the cardholder says they were charged more than once for the same purchase",
+          Dispute::REASON_SUBSCRIPTION_CANCELED => "the cardholder says they were charged after canceling their subscription",
+          Dispute::REASON_CREDIT_NOT_PROCESSED => "the cardholder says they are owed a refund or credit they have not received",
+          Dispute::REASON_DEBIT_NOT_AUTHORIZED => "the account holder says they did not authorize this bank debit",
+        }
+        expect(reason_lines.keys + [Dispute::REASON_GENERAL]).to match_array(Dispute::STRIPE_REASONS)
 
-        dispute.update!(reason: Dispute::REASON_GENERAL)
-        expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).not_to include "Reason given for the dispute"
+        reason_lines.each do |reason, line|
+          dispute.update!(reason:)
+          expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "Reason given for the dispute: #{line}."
+        end
+
+        [Dispute::REASON_GENERAL, nil, "", "noncompliant"].each do |reason|
+          dispute.update!(reason:)
+          expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).not_to include "Reason given for the dispute"
+        end
       end
 
       it "sends chargeback notice correctly" do
@@ -611,12 +626,17 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).to include "Submit additional information"
           end
 
-          it "states the dispute reason" do
+          it "states the dispute reason, and nothing when the processor gave none" do
             dispute.update!(reason: Dispute::REASON_UNRECOGNIZED)
             dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
 
             body = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
             expect(body).to include "Reason given for the dispute: the cardholder says they do not recognize this charge."
+
+            dispute.update!(reason: nil)
+            body = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
+            expect(body).not_to include "Reason given for the dispute"
+            expect(body).to include "You have 23 hours left."
           end
 
           it "still reminds a seller who saved early, since they may keep revising" do
@@ -674,6 +694,12 @@ describe ContactingCreatorMailer do
           purchase.update!(charge_processor_id: PaypalChargeProcessor.charge_processor_id)
         end
 
+        it "leaves the dispute reason to PayPal's own case" do
+          dispute.update!(reason: Dispute::REASON_FRAUDULENT)
+
+          expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).not_to include "Reason given for the dispute"
+        end
+
         it "includes copy about PayPal's dispute process" do
           mail = ContactingCreatorMailer.chargeback_notice(dispute.id)
 
@@ -698,6 +724,12 @@ describe ContactingCreatorMailer do
       end
 
       let(:dispute) { create(:dispute_formalized_on_charge, purchase: nil, charge:) }
+
+      it "states the reason recorded on the charge's dispute" do
+        dispute.update!(reason: Dispute::REASON_DUPLICATE)
+
+        expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).to include "Reason given for the dispute: the cardholder says they were charged more than once for the same purchase."
+      end
 
       it "sends chargeback notice correctly" do
         book_chargeback_debits(dispute)

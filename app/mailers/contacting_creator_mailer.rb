@@ -100,11 +100,11 @@ class ContactingCreatorMailer < ApplicationMailer
     Dispute::REASON_FRAUDULENT => "the cardholder says they did not authorize this charge",
     Dispute::REASON_UNRECOGNIZED => "the cardholder says they do not recognize this charge",
     Dispute::REASON_PRODUCT_NOT_RECEIVED => "the cardholder says they did not receive the product",
-    Dispute::REASON_PRODUCT_UNACCEPTABLE => "the cardholder says the product was not as described",
+    Dispute::REASON_PRODUCT_UNACCEPTABLE => "the cardholder says the product was defective or not as described",
     Dispute::REASON_DUPLICATE => "the cardholder says they were charged more than once for the same purchase",
-    Dispute::REASON_SUBSCRIPTION_CANCELED => "the cardholder says they canceled their subscription before this charge",
-    Dispute::REASON_CREDIT_NOT_PROCESSED => "the cardholder says they were owed a refund that was not processed",
-    Dispute::REASON_DEBIT_NOT_AUTHORIZED => "the cardholder says they did not authorize this debit",
+    Dispute::REASON_SUBSCRIPTION_CANCELED => "the cardholder says they were charged after canceling their subscription",
+    Dispute::REASON_CREDIT_NOT_PROCESSED => "the cardholder says they are owed a refund or credit they have not received",
+    Dispute::REASON_DEBIT_NOT_AUTHORIZED => "the account holder says they did not authorize this bank debit",
   }.freeze
   private_constant :DISPUTE_REASON_COPY
 
