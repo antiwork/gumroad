@@ -12,7 +12,7 @@ RSpec.shared_examples_for "with workflow form 'context' in response" do
 
   it "includes workflow form 'context' in the response" do
     expect(result.keys).to include(:context)
-    expect(result[:context].keys).to match_array(%i[products_and_variant_options affiliate_product_options timezone currency_symbol countries aws_access_key_id gumroad_address email_from s3_url user_id eligible_for_abandoned_cart_workflows])
+    expect(result[:context].keys).to match_array(%i[products_and_variant_options affiliate_product_options timezone currency_symbol countries aws_access_key_id gumroad_address email_from s3_url user_id eligible_for_abandoned_cart_workflows emailed_posts])
     expect(result[:context][:products_and_variant_options]).to match_array([
                                                                              { id: product1.unique_permalink, label: "Product 1", product_permalink: product1.unique_permalink, archived: false, type: "product" },
                                                                              { id: product1.alive_variants.first.external_id, label: "Product 1 — Untitled 1", product_permalink: product1.unique_permalink, archived: false, type: "variant" },
