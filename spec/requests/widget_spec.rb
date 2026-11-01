@@ -213,6 +213,22 @@ describe "Widget Page scenario", js: true, type: :system do
     let(:seller) { create(:named_seller, user_risk_state: "compliant") }
     let!(:product) { create(:product, user: seller) }
 
+    it "tells a visitor who submits the embedded form that the follow is pending" do
+      visit seller.profile_url
+      execute_script(<<~JS, follow_user_from_embed_form_path, seller.external_id)
+        const form = Object.assign(document.createElement("form"), { method: "post", action: arguments[0] });
+        form.append(
+          Object.assign(document.createElement("input"), { name: "seller_id", value: arguments[1] }),
+          Object.assign(document.createElement("input"), { name: "email", value: "visitor@example.com" }),
+        );
+        document.body.append(form);
+        form.submit();
+      JS
+
+      expect(page).to have_selector("h2", text: "Almost there")
+      expect(page).to have_text("Check your inbox to confirm your follow request to #{seller.name_or_username}.")
+    end
+
     context "with seller as logged_in_user" do
       before do
         login_as(seller)
@@ -262,6 +278,7 @@ describe "Widget Page scenario", js: true, type: :system do
             click_on "Follow"
           end
           wait_for_ajax
+          expect(page).to have_alert(text: "Check your inbox to confirm your follow request to #{seller.name_or_username}.")
           expect(seller.reload.followers.last.email).to eq("test@gumroad.com")
         end
       end
