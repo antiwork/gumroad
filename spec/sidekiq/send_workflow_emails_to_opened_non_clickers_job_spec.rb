@@ -176,6 +176,17 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.size).to eq(2)
   end
 
+  it "still counts only the newest day when a daily scan comes back from the seller's fanout lock" do
+    allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
+    stub_engagement([opener(first_open_at: 3.days.ago - 1.hour), opener(first_open_at: 4.days.ago - 1.hour, digest: "digest-2")])
+
+    described_class.new.perform(@installment.id, described_class::LOOKBACK.to_i, 5.days.ago.iso8601)
+
+    expect(SellerLargeBlastQuota).to have_received(:allow?).with(
+      seller_id: @seller.id, kind: "workflow", blast_id: @installment.id, recipient_count: 1
+    )
+  end
+
   it "leaves out the opens from before a new-customers-only email went live" do
     @installment.update!(is_for_new_customers_of_workflow: true, published_at: 4.5.days.ago)
     stub_engagement([opener(first_open_at: 4.days.ago, digest: "after"), opener(first_open_at: 4.8.days.ago, digest: "before")])
@@ -203,7 +214,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs).to be_empty
     expect(described_class.jobs.size).to eq(1)
-    expect(described_class.jobs.first["args"]).to eq([@installment.id, nil, 5.days.ago.iso8601, nil])
+    expect(described_class.jobs.first["args"]).to eq([@installment.id, described_class::LOOKBACK.to_i, 5.days.ago.iso8601, nil])
     expect(described_class.jobs.first["at"]).to be_within(2.seconds).of(30.seconds.from_now.to_f)
   end
 
@@ -225,7 +236,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     described_class.new.perform(@installment.id)
 
     expect(EmailEngagementDynamoStore).not_to have_received(:purchase_open_records)
-    expect(described_class.jobs.sole["args"]).to eq([@installment.id, nil, 5.days.ago.iso8601, nil])
+    expect(described_class.jobs.sole["args"]).to eq([@installment.id, described_class::LOOKBACK.to_i, 5.days.ago.iso8601, nil])
     expect(described_class.jobs.sole["at"]).to be_within(2.seconds).of(30.seconds.from_now.to_f)
   end
 
