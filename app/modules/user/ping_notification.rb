@@ -16,7 +16,7 @@ module User::PingNotification
 
     URI.parse(url) # TestPingsController.create catches URI::InvalidURIError
 
-    ping_params = latest_sale.payload_for_ping_notification.merge(test: true)
+    ping_params = latest_sale.payload_for_ping_notification(url_parameters: latest_sale.url_parameters).merge(test: true)
     ping_params = if notification_content_type == Mime[:json]
       ping_params.to_json
     elsif notification_content_type == Mime[:url_encoded_form]
