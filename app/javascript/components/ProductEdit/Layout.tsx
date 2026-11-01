@@ -17,6 +17,7 @@ import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { usePageHeaderOffset } from "$app/components/ui/usePageHeaderOffset";
 import { useRefToLatest } from "$app/components/useRefToLatest";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -170,6 +171,7 @@ export const Layout = ({
       ? `https://fonts.googleapis.com/css2?family=${currentSeller.profileFont}:wght@400;600&display=swap`
       : null;
 
+  const headerRef = usePageHeaderOffset();
   const [isPublishing, setIsPublishing] = React.useState(false);
   const setPublished = async (published: boolean) => {
     try {
@@ -300,6 +302,7 @@ export const Layout = ({
       {/* TODO: remove this legacy uploader stuff */}
       <form className="hidden" data-id={uniquePermalink} id="edit-link-basic-form" />
       <PageHeader
+        ref={headerRef}
         className="sticky top-0 z-10 bg-body"
         title={product.name || "Untitled"}
         actions={
