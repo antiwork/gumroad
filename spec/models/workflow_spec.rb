@@ -175,6 +175,20 @@ describe Workflow do
       end
     end
 
+    it "does nothing when workflow has an opened_no_click trigger and send_to_past_customers is false" do
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: "post-1", send_to_past_customers: false)
+      @workflow.schedule_installment(@post)
+      expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+      expect(SendWorkflowEmailsToOpenedNonClickersJob.jobs).to be_empty
+    end
+
+    it "scans the opens that already happened when an opened_no_click workflow asks for past recipients" do
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: "post-1", send_to_past_customers: true)
+      @workflow.schedule_installment(@post)
+      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, nil)
+      expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+    end
+
     it "does nothing if the post is only for new recipients and it hasn't been scheduled before" do
       @post.update!(is_for_new_customers_of_workflow: true)
       @workflow.schedule_installment(@post)
@@ -356,6 +370,42 @@ describe Workflow do
       @workflow.update!(first_published_at: 1.day.ago)
 
       expect(@workflow.has_never_been_published?).to be(false)
+    end
+  end
+
+  describe "the opened-no-click trigger" do
+    it "needs the email it watches" do
+      workflow = build(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER)
+
+      expect(workflow).not_to be_valid
+      expect(workflow.errors.full_messages.first).to eq("Pick one of your sent emails as the trigger for this workflow.")
+
+      workflow.workflow_trigger_post_id = "post-1"
+      expect(workflow).to be_valid
+    end
+
+    it "resolves the email it watches from the seller's sent posts" do
+      watched_post = create(:published_installment, seller: @product.user, link: @product)
+      workflow = create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                   workflow_trigger_post_id: watched_post.external_id)
+
+      expect(workflow.opened_no_click_trigger?).to be(true)
+      expect(workflow.workflow_trigger_post).to eq(watched_post)
+    end
+
+    it "resolves nothing once that email is no longer one of the seller's sent posts" do
+      workflow = create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                   workflow_trigger_post_id: "deleted-post")
+
+      expect(workflow.workflow_trigger_post).to be_nil
+    end
+
+    it "finds the workflows with that trigger and not the others" do
+      ours = create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                               workflow_trigger_post_id: "post-1")
+      create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+
+      expect(Workflow.opened_no_click_trigger).to contain_exactly(ours)
     end
   end
 end

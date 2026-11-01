@@ -20,10 +20,16 @@ class Workflow < ApplicationRecord
            class_name: "Installment", inverse_of: :workflow
 
   attr_json_data_accessor :workflow_trigger
+  attr_json_data_accessor :workflow_trigger_post_id
 
   validates_presence_of :seller
+  validate :opened_no_click_trigger_has_a_post, if: :opened_no_click_trigger?
 
   MEMBER_CANCELLATION_WORKFLOW_TRIGGER = "member_cancellation"
+  OPENED_NO_CLICK_WORKFLOW_TRIGGER = "opened_no_click"
+
+  # The trigger watches one of the seller's own posts, so the filter is a JSON path read.
+  scope :opened_no_click_trigger, -> { where("workflows.json_data->>'$.workflow_trigger' = ?", OPENED_NO_CLICK_WORKFLOW_TRIGGER) }
   SAVE_ACTION = "save"
   SAVE_AND_PUBLISH_ACTION = "save_and_publish"
   SAVE_AND_UNPUBLISH_ACTION = "save_and_unpublish"
@@ -46,6 +52,19 @@ class Workflow < ApplicationRecord
 
   def member_cancellation_trigger?
     workflow_trigger == MEMBER_CANCELLATION_WORKFLOW_TRIGGER
+  end
+
+  def opened_no_click_trigger?
+    workflow_trigger == OPENED_NO_CLICK_WORKFLOW_TRIGGER
+  end
+
+  # The email whose opens start this workflow's clock. Resolved through the same scope the
+  # composer's "has not clicked" picker offers, so a post that was deleted or unpublished
+  # afterwards reads as absent and the trigger stops firing instead of erroring.
+  def workflow_trigger_post
+    return nil if workflow_trigger_post_id.blank?
+
+    seller.installments.emailed_posts.find_by_external_id(workflow_trigger_post_id)
   end
 
   def targets_variant?(variant)
@@ -142,6 +161,16 @@ class Workflow < ApplicationRecord
       return :not_applicable
     end
 
+    if opened_no_click_trigger?
+      # New opens are the daily scan's job, which needs no schedule intent; a publish (or a
+      # delay edit) only has to cover the opens that already happened. Returning
+      # :not_applicable releases the intent once that pass is queued.
+      return :not_applicable unless send_to_past_customers?
+
+      job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, nil)
+      return job_id.present? ? :not_applicable : :not_enqueued
+    end
+
     return :not_applicable unless new_customer_trigger?
     # don't schedule the installment if it is only for new customers/followers and it hasn't been scheduled before (old_delayed_delivery_time is nil)
     return :not_applicable if old_delayed_delivery_time.nil? && installment.is_for_new_customers_of_workflow
@@ -169,6 +198,14 @@ class Workflow < ApplicationRecord
   end
 
   private
+    # The trigger has nothing to watch without an email, and a workflow that watches nothing would
+    # silently never send.
+    def opened_no_click_trigger_has_a_post
+      return if workflow_trigger_post_id.present?
+
+      errors.add(:base, "Pick one of your sent emails as the trigger for this workflow.")
+    end
+
     def with_transition_lock
       self.class.transaction do
         # An update acquires the same row lock when a callback leaves the workflow dirty.

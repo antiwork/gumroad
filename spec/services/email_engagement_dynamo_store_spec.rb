@@ -702,4 +702,72 @@ describe EmailEngagementDynamoStore do
       )
     end
   end
+
+  describe ".purchase_open_records" do
+    let(:purchase_open) do
+      {
+        "sk" => "OPEN#abc",
+        "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment",
+        "mailer_args" => "[456, 123]",
+        "first_open_at" => "2026-10-01T12:00:00.000Z",
+      }
+    end
+
+    it "returns the buyer, the recipient digest and the first open of each purchase-keyed open" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            purchase_open,
+            { "sk" => "OPEN#def", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[9, 123]", "first_open_at" => "2026-10-01T12:00:00.000Z" },
+          ],
+        }
+      )
+
+      expect(described_class.purchase_open_records(123)).to eq(
+        [{ purchase_id: 456, recipient_digest: "abc", first_open_at: Time.zone.iso8601("2026-10-01T12:00:00.000Z") }]
+      )
+    end
+
+    it "drops an open whose timestamp cannot be read" do
+      client.stub_responses(:query, { items: [purchase_open.merge("first_open_at" => "not a time")] })
+
+      expect(described_class.purchase_open_records(123)).to eq([])
+    end
+  end
+
+  describe ".clicked?" do
+    it "is true when the recipient has a clicker item" do
+      client.stub_responses(:get_item, { item: { "pk" => "123", "sk" => "CLICKER#abc" } })
+
+      expect(described_class.clicked?(installment_id: 123, recipient_digest: "abc")).to be(true)
+      expect(requests.last[:params][:key]).to eq({ "pk" => { s: "123" }, "sk" => { s: "CLICKER#abc" } })
+    end
+
+    it "is false when the recipient has no clicker item" do
+      client.stub_responses(:get_item, { item: nil })
+
+      expect(described_class.clicked?(installment_id: 123, recipient_digest: "abc")).to be(false)
+    end
+
+    it "is false without a digest" do
+      expect(described_class.clicked?(installment_id: 123, recipient_digest: "")).to be(false)
+      expect(requests).to be_empty
+    end
+  end
+
+  describe ".clicked_recipient_digests" do
+    it "returns the digest of each recipient who clicked" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            { "sk" => "CLICKER#abc", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.clicked_recipient_digests(123)).to eq(["abc"])
+    end
+  end
 end

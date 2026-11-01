@@ -1,6 +1,6 @@
 import type { FileItem } from "$app/components/EmailAttachments";
 export type WorkflowType = "audience" | "seller" | "product" | "variant" | "follower" | "affiliate" | "abandoned_cart";
-export type LegacyWorkflowTrigger = "member_cancellation" | null;
+export type LegacyWorkflowTrigger = "member_cancellation" | "opened_no_click" | null;
 export type SaveActionName = "save" | "save_and_publish" | "save_and_unpublish";
 
 export const INSTALLMENT_DELIVERY_TIME_PERIODS = ["hour", "day", "week", "month"] as const;
@@ -53,6 +53,7 @@ export type Workflow = {
   name: string;
   workflow_type: WorkflowType;
   workflow_trigger: LegacyWorkflowTrigger;
+  workflow_trigger_post_id?: string | null;
   published: boolean;
   first_published_at: string | null;
   send_to_past_customers: boolean;
@@ -101,4 +102,5 @@ export type WorkflowFormContext = {
   gumroad_address: string;
   email_from: string;
   eligible_for_abandoned_cart_workflows: boolean;
+  emailed_posts: { external_id: string; name: string }[];
 };

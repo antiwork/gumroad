@@ -79,6 +79,7 @@ const WORKFLOW_EMAILS_LABELS = {
   abandoned_cart: "cart abandonment",
   legacy_audience: "becoming an audience",
   member_cancels: "membership cancellation takes effect",
+  opened_no_click: "opening that email",
   new_affiliate: "becoming an affiliate",
   new_subscriber: "becoming a subscriber",
   purchase: "purchase",
