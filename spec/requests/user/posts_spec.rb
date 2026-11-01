@@ -166,7 +166,7 @@ describe("Posts on seller profile", type: :system, js: true) do
         expect do
           submit_follow_form(with: @follower_email)
           wait_for_ajax
-          expect(page).to have_alert(text: "Check your inbox to confirm your follow request.")
+          expect(page).to have_alert(text: "Check your inbox to confirm your follow request to #{seller.name_or_username}.")
           Follower.find_by(email: @follower_email).confirm!
         end.to change { Follower.active.count }.by(1)
         expect(Follower.last.email).to eq @follower_email

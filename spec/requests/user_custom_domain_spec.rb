@@ -25,7 +25,7 @@ describe "UserCustomDomainScenario", type: :system, js: true do
     it "loads the user profile page and sends create follower request" do
       visit "http://#{@custom_domain.domain}:#{@port}"
       submit_follow_form(with: "follower@gumroad.com")
-      expect(page).to have_alert(text: "Check your inbox to confirm your follow request.")
+      expect(page).to have_alert(text: "Check your inbox to confirm your follow request to #{@user.name_or_username}.")
     end
 
     it "handles the follow confirmation request" do

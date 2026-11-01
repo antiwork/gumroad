@@ -11,9 +11,11 @@ class FollowerMailer < ApplicationMailer
     @followed_username = User.find(followed_user_id).name_or_username
     @waitlist_product = Link.find_by(id: waitlist_product_id) if waitlist_product_id
     @confirm_follow_url = confirm_follow_url(@follower.external_id)
+    # Subject and heading share this string so they cannot drift.
+    @subject = "Please confirm your follow request to #{@followed_username}."
 
     mail to: @follower.email,
-         subject: "Please confirm your follow request.",
+         subject: @subject,
          delivery_method_options: MailerInfo.random_delivery_method_options(domain: :followers, to: @follower.email)
   end
 

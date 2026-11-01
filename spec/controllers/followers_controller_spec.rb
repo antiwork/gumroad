@@ -193,7 +193,7 @@ describe FollowersController, inertia: true do
         post :create, params: { email: "follower@example.com", seller_id: seller.external_id }
         expect(response).to redirect_to(custom_domain_subscribe_path)
         expect(response).to have_http_status(:see_other)
-        expect(flash[:notice]).to eq("Check your inbox to confirm your follow request.")
+        expect(flash[:notice]).to eq("Check your inbox to confirm your follow request to #{seller.name_or_username}.")
 
         follower = Follower.last
         expect(follower.email).to eq "follower@example.com"
@@ -209,7 +209,7 @@ describe FollowersController, inertia: true do
 
         expect(WaitlistEntry.last.product).to eq product
         expect(WaitlistEntry.last.follower.email).to eq "follower@example.com"
-        expect(response.parsed_body).to eq("success" => true, "message" => "You're on the list. Check your inbox to confirm.")
+        expect(response.parsed_body).to eq("success" => true, "message" => "You're on the list for #{seller.name_or_username}'s launch. Check your inbox to confirm.")
       end
 
       it "tells a confirmed follower that they are on the waitlist" do
@@ -228,7 +228,7 @@ describe FollowersController, inertia: true do
 
         expect do
           post :create, params: { email: "published@example.com", seller_id: seller.external_id, product_id: published_product.external_id }, format: :json
-          expect(response.parsed_body["message"]).to eq("Check your inbox to confirm your follow request.")
+          expect(response.parsed_body["message"]).to eq("Check your inbox to confirm your follow request to #{seller.name_or_username}.")
           post :create, params: { email: "off@example.com", seller_id: seller.external_id, product_id: product_without_waitlist.external_id }
           post :create, params: { email: "takedown@example.com", seller_id: seller.external_id, product_id: taken_down_product.external_id }
         end.to change { seller.followers.count }.by(3)
@@ -348,7 +348,7 @@ describe FollowersController, inertia: true do
 
           expect(response).to redirect_to(custom_domain_subscribe_path)
           expect(response).to have_http_status(:see_other)
-          expect(flash[:notice]).to eq("Check your inbox to confirm your follow request.")
+          expect(flash[:notice]).to eq("Check your inbox to confirm your follow request to #{seller.name_or_username}.")
 
           follower = Follower.last
           expect(follower.email).to eq "follower@example.com"
@@ -497,7 +497,7 @@ describe FollowersController, inertia: true do
         expect(response).to be_successful
         expect(inertia.component).to eq("Followers/FromEmbedForm")
         expect(inertia.props[:success]).to be(true)
-        expect(inertia.props[:message]).to eq("Check your inbox to confirm your follow request.")
+        expect(inertia.props[:message]).to eq("Check your inbox to confirm your follow request to #{seller.name_or_username}.")
       end
 
       it "redirects to seller profile with flash warning on failure" do
@@ -591,7 +591,7 @@ describe FollowersController, inertia: true do
           post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id }, format: :json
 
           expect(response).to be_successful
-          expect(response.parsed_body).to eq("success" => true, "message" => "Check your inbox to confirm your follow request.")
+          expect(response.parsed_body).to eq("success" => true, "message" => "Check your inbox to confirm your follow request to #{seller.name_or_username}.")
           follower = Follower.last
           expect(follower.email).to eq("follower@example.com")
           expect(follower.user).to eq(seller)
@@ -613,7 +613,7 @@ describe FollowersController, inertia: true do
             post :from_embed_form, params: { email: "follower@example.com", seller_id: seller.external_id, product_id: product.external_id }, format: :json
           end.to change { WaitlistEntry.count }.by(1)
 
-          expect(response.parsed_body).to eq("success" => true, "message" => "You're on the list. Check your inbox to confirm.")
+          expect(response.parsed_body).to eq("success" => true, "message" => "You're on the list for #{seller.name_or_username}'s launch. Check your inbox to confirm.")
         end
 
         it "404s an unknown seller id" do
