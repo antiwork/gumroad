@@ -115,8 +115,8 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = @disputable.seller
     @dispute_reason_copy = DISPUTE_REASON_COPY[dispute.reason]
     # The "they don't recognize Gumroad" paragraph guesses a reason of its own, so it only
-    # belongs when the email names no reason, or names fraud — which reads the same way.
-    @explain_unrecognized_charge = @dispute_reason_copy.nil? || dispute.reason == Dispute::REASON_FRAUDULENT
+    # belongs when the email names no reason, or one that reads the same way.
+    @explain_unrecognized_charge = @dispute_reason_copy.nil? || dispute.reason.in?([Dispute::REASON_FRAUDULENT, Dispute::REASON_UNRECOGNIZED])
     @balance_debit = chargeback_balance_debit(@disputable)
     @win_credit = chargeback_win_credit(@disputable, @balance_debit)
     # Mirrors the guard on ContactingCreatorMailer.chargeback_won in handle_event_dispute_won!.

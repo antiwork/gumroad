@@ -412,9 +412,7 @@ describe ContactingCreatorMailer do
           dispute.update!(reason:)
           body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
           expect(body).to include "Reason given for the dispute: #{line}."
-          # The "they don't recognize Gumroad" paragraph guesses a reason of its own, so it
-          # only belongs when the email names no different one.
-          if reason == Dispute::REASON_FRAUDULENT
+          if reason.in?([Dispute::REASON_FRAUDULENT, Dispute::REASON_UNRECOGNIZED])
             expect(body).to include "Sometimes, a customer will dispute a charge"
           else
             expect(body).not_to include "Sometimes, a customer will dispute a charge"
