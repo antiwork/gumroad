@@ -13,6 +13,7 @@ describe FollowerMailer do
       expect(mail.to).to eq [unconfirmed_follower.email]
       expect(mail.subject).to eq("Please confirm your follow request to #{followee.name_or_username}.")
       expect(mail.body.encoded).to include "Please confirm your follow request to #{followee.name_or_username}."
+      expect(mail.body.encoded).to include "Click the button below to confirm:"
       confirm_follow_route = Rails.application.routes.url_helpers.confirm_follow_url(unconfirmed_follower.external_id, host: "#{PROTOCOL}://#{DOMAIN}")
       expect(mail.body.encoded).to include confirm_follow_route
     end

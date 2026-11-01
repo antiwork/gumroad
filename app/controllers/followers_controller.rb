@@ -144,7 +144,7 @@ class FollowersController < ApplicationController
 
     message = follow_confirmation_message(@follower)
     return render json: { success: true, message: } if request.format.json?
-    render inertia: "Followers/FromEmbedForm", props: { success: true, message: }
+    render inertia: "Followers/FromEmbedForm", props: { success: true, message:, confirmed: @follower.confirmed? }
   end
 
   def confirm

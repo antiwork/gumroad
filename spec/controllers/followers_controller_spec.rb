@@ -497,6 +497,7 @@ describe FollowersController, inertia: true do
         expect(response).to be_successful
         expect(inertia.component).to eq("Followers/FromEmbedForm")
         expect(inertia.props[:success]).to be(true)
+        expect(inertia.props[:confirmed]).to be(false)
         expect(inertia.props[:message]).to eq("Check your inbox to confirm your follow request to #{seller.name_or_username}.")
       end
 
@@ -553,6 +554,7 @@ describe FollowersController, inertia: true do
           expect(response).to be_successful
           expect(inertia.component).to eq("Followers/FromEmbedForm")
           expect(inertia.props[:success]).to be(true)
+          expect(inertia.props[:confirmed]).to be(true)
           expect(inertia.props[:message]).to eq("You are now following #{seller.name_or_username}!")
         end
       end
