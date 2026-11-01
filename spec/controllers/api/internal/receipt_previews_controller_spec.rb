@@ -46,6 +46,19 @@ describe Api::Internal::ReceiptPreviewsController do
       expect(response.parsed_body["subject"]).to eq("You got Freebie!")
     end
 
+    it "keeps the listing currency on the item line and converts the total to USD for a non-USD product" do
+      nok_product = create(:product, user: seller, price_cents: 7900, price_currency_type: "nok")
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with("nok").and_return(9.2085)
+      allow_any_instance_of(CurrencyHelper).to receive(:get_rate).with(:nok).and_return(9.2085)
+
+      get :show, params: { product_id: nok_product.unique_permalink }
+
+      html = Capybara.string(response.parsed_body["html"])
+      expect(html).to have_text("79 kr")
+      expect(html).to have_text("$8.58")
+      expect(html).not_to have_text("$79")
+    end
+
     it "shows the total for a paid product" do
       get :show, params: { product_id: product.unique_permalink }
 
