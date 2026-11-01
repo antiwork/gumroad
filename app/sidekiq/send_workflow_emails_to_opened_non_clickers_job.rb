@@ -22,6 +22,8 @@ class SendWorkflowEmailsToOpenedNonClickersJob
   # dedupe lookup per recipient and never a second email.
   LOOKBACK = 2.days
 
+  COVERAGE_MARKER_TTL = LOOKBACK * 3
+
   # `opened_after` (ISO8601) is a fixed lower bound on the open time and takes the place of the
   # lookback, so a deferred run still covers the opens it was started for.
   # `minimum_rule_version` comes from a publish or delay edit, which closes its schedule intent once
@@ -101,7 +103,7 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     end
 
     def record_covered_through(installment_id, time)
-      $redis.set(covered_key(installment_id), time.to_f, ex: LOOKBACK.to_i * 3)
+      $redis.set(covered_key(installment_id), time.to_f, ex: COVERAGE_MARKER_TTL.to_i)
     rescue Redis::BaseError, RedisClient::Error
       nil
     end
