@@ -190,9 +190,9 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
   it "counts every open again after a delay edit, whose queued sends were dropped" do
     allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
-    $redis.set("workflow_opened_no_click_covered_through:#{@installment.id}:#{@rule.version}", 2.days.ago.to_f)
-    @rule.update!(delayed_delivery_time: 2.days)
     stub_engagement([opener(first_open_at: 2.days.ago - 1.hour), opener(first_open_at: 3.days.ago, digest: "digest-2")])
+    described_class.new.perform(@installment.id)
+    @rule.update!(delayed_delivery_time: 2.days)
 
     described_class.new.perform(@installment.id)
 
