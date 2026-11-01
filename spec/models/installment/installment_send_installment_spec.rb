@@ -596,6 +596,18 @@ describe Installment, "sending an opened-no-click workflow email" do
     installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
   end
 
+  it "does not send to a member whose membership has ended" do
+    membership = create(:membership_product, user: seller)
+    membership_workflow = create(:workflow, seller:, link: membership, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                            workflow_trigger_post_id: watched_post.external_id)
+    membership_installment = create(:published_installment, link: membership, workflow: membership_workflow, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER)
+    member_purchase = create(:membership_purchase, link: membership, seller:)
+    member_purchase.subscription.update!(cancelled_at: 1.hour.ago, deactivated_at: 1.hour.ago)
+    expect(PostSendgridApi).not_to receive(:process)
+
+    membership_installment.send_installment_from_workflow_for_opened_no_click(member_purchase.id, recipient_digest: "digest")
+  end
+
   it "does not send to a buyer who clicked the watched email after the scan" do
     allow(EmailEngagementDynamoStore).to receive(:clicked?)
       .with(installment_id: watched_post.id, recipient_digest: "digest").and_return(true)

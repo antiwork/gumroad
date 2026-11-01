@@ -533,6 +533,7 @@ class Installment < ApplicationRecord
     return if sale.nil?
 
     sale = sale.original_purchase
+    return if sale.subscription.present? && !sale.subscription.alive?
     return unless sale.can_contact?
     return if sale.chargedback_not_reversed_or_refunded?
 
