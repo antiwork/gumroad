@@ -181,8 +181,24 @@ class EmailEngagementDynamoStore
     # The per-recipient opens of a post's email, as a send side needs them: the buyer, the digest that
     # identifies that recipient's send (and is also their click key), and the first open. A delay that
     # runs from each recipient's own open is read off `first_open_at`.
-    def purchase_open_records(installment_id, deadline: nil)
-      partition_items(installment_id, "OPEN#", deadline:).filter_map do |item|
+    #
+    # `opened_after` / `opened_before` bound `first_open_at` inclusively in a server-side filter. That
+    # trims what comes back, not the read capacity, and callers keep their own window check.
+    def purchase_open_records(installment_id, deadline: nil, opened_after: nil, opened_before: nil)
+      conditions = []
+      values = {}
+      # Truncating to the millisecond never narrows the window: `first_open_at` is stored to the millisecond.
+      if opened_after
+        conditions << "first_open_at >= :opened_after"
+        values[":opened_after"] = opened_after.utc.iso8601(3)
+      end
+      if opened_before
+        conditions << "first_open_at <= :opened_before"
+        values[":opened_before"] = opened_before.utc.iso8601(3)
+      end
+
+      items = partition_items(installment_id, "OPEN#", deadline:, filter_expression: conditions.join(" AND ").presence, filter_values: values)
+      items.filter_map do |item|
         purchase_id = purchase_id_from_item(item)
         first_open_at = parse_timestamp(item["first_open_at"])
         next if purchase_id.nil? || first_open_at.nil?
@@ -260,7 +276,7 @@ class EmailEngagementDynamoStore
       # and one exists per recipient (or per recipient + url), so a six-figure post pages through
       # this a megabyte at a time. Callers with a budget pass `deadline:` and get a bounded client
       # that gives up (ScanBudgetExceeded) instead of blocking the request.
-      def partition_items(installment_id, prefix, deadline: nil)
+      def partition_items(installment_id, prefix, deadline: nil, filter_expression: nil, filter_values: {})
         items = []
         exclusive_start_key = nil
         loop do
@@ -272,8 +288,9 @@ class EmailEngagementDynamoStore
             expression_attribute_values: {
               ":pk" => partition_key(installment_id),
               ":prefix" => prefix,
-            },
+            }.merge(filter_values),
           }
+          params[:filter_expression] = filter_expression if filter_expression.present?
           params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
           response = deadline ? deadline_query(params) : client.query(params)
           items.concat(response.items)

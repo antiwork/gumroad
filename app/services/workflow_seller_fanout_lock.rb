@@ -37,6 +37,16 @@ class WorkflowSellerFanoutLock
     nil
   end
 
+  # A peek, not a claim. On a Redis error it reports free so the caller falls through to `acquire`,
+  # which fails closed.
+  def self.held?(seller_id)
+    return false if seller_id.blank?
+
+    $redis.exists?(RedisKey.workflow_seller_fanout_lock(seller_id))
+  rescue Redis::BaseError, RedisClient::Error
+    false
+  end
+
   def self.retry_in
     ($redis.get(RedisKey.workflow_seller_fanout_retry_seconds) || DEFAULT_RETRY).to_i.seconds
   rescue Redis::BaseError, RedisClient::Error

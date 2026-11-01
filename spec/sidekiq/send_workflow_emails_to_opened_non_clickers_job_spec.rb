@@ -16,7 +16,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
   end
 
   def stub_engagement(opens, clicked: [])
-    allow(EmailEngagementDynamoStore).to receive(:purchase_open_records).with(@watched_post.id).and_return(opens)
+    allow(EmailEngagementDynamoStore).to receive(:purchase_open_records).with(@watched_post.id, opened_after: anything, opened_before: anything).and_return(opens)
     allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_digests).with(@watched_post.id).and_return(clicked)
   end
 
@@ -137,6 +137,14 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.map { _1["args"].last }).to eq(["recovered"])
   end
 
+  it "asks the store for only the opens inside its window" do
+    stub_engagement([])
+
+    described_class.new.perform(@installment.id)
+
+    expect(EmailEngagementDynamoStore).to have_received(:purchase_open_records).with(@watched_post.id, opened_after: 5.days.ago, opened_before: 3.days.ago)
+  end
+
   it "does not read clicks when no open is due" do
     stub_engagement([opener(first_open_at: 1.day.ago)])
 
@@ -207,6 +215,18 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     described_class.new.perform(@installment.id, nil, 10.days.ago.iso8601, @rule.version)
 
     expect(described_class.jobs.sole["args"]).to eq([@installment.id, nil, 10.days.ago.iso8601, @rule.version])
+  end
+
+  it "defers the scan without reading the opens while the seller's fanout lock is held" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    allow(WorkflowSellerFanoutLock).to receive(:held?).with(@seller.id).and_return(true)
+    allow(WorkflowSellerFanoutLock).to receive(:retry_in).and_return(30.seconds)
+
+    described_class.new.perform(@installment.id)
+
+    expect(EmailEngagementDynamoStore).not_to have_received(:purchase_open_records)
+    expect(described_class.jobs.sole["args"]).to eq([@installment.id, nil, 5.days.ago.iso8601, nil])
+    expect(described_class.jobs.sole["at"]).to be_within(2.seconds).of(30.seconds.from_now.to_f)
   end
 
   it "releases the seller's fanout lock once the sends are handed over" do

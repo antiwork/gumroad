@@ -55,18 +55,16 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     end
     # A new-customers-only email leaves out the opens from before it went live, on every run.
     published_floor = installment.published_at if installment.is_for_new_customers_of_workflow
+    # Behind a held lock this run can only requeue, every retry_in for up to the lock's TTL, so it
+    # skips the partition read. The claim below still waits until work is due.
+    return requeue_behind_seller_fanout(installment_id, opened_after, minimum_rule_version) if WorkflowSellerFanoutLock.held?(workflow.seller_id)
+
     due = due_openers(post:, due_before:, opened_after: [opened_after, published_floor].compact.max)
     return if due.empty?
 
     # One large fanout per seller at a time, the lock the post blast takes while it builds its
     # audience: a scan that lands in the same window would put both bursts on the primary together.
-    unless claim_seller_fanout_lock(workflow.seller_id)
-      run_at = Time.current + WorkflowSellerFanoutLock.retry_in
-      job_id = self.class.perform_at(run_at, installment_id, nil, opened_after&.iso8601, minimum_rule_version)
-      raise "Sidekiq did not requeue the opened-no-click scan for the seller fanout lock" unless job_id.present?
-
-      return
-    end
+    return requeue_behind_seller_fanout(installment_id, opened_after, minimum_rule_version) unless claim_seller_fanout_lock(workflow.seller_id)
 
     # The same per-seller daily ceiling a large new-customer fanout claims: one large workflow send
     # per seller per day. A scan over it runs in the next deferral window instead. A daily scan counts
@@ -92,8 +90,15 @@ class SendWorkflowEmailsToOpenedNonClickersJob
       @seller_fanout_lock.present?
     end
 
+    def requeue_behind_seller_fanout(installment_id, opened_after, minimum_rule_version)
+      run_at = Time.current + WorkflowSellerFanoutLock.retry_in
+      job_id = self.class.perform_at(run_at, installment_id, nil, opened_after&.iso8601, minimum_rule_version)
+      raise "Sidekiq did not requeue the opened-no-click scan for the seller fanout lock" unless job_id.present?
+    end
+
+    # The store's window filter only trims the response; this check stays the authority on the window.
     def due_openers(post:, due_before:, opened_after:)
-      due = EmailEngagementDynamoStore.purchase_open_records(post.id).select do |opener|
+      due = EmailEngagementDynamoStore.purchase_open_records(post.id, opened_after:, opened_before: due_before).select do |opener|
         opener[:first_open_at] <= due_before && (opened_after.nil? || opener[:first_open_at] >= opened_after)
       end
       return due if due.empty?

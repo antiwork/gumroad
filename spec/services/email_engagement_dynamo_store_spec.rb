@@ -734,6 +734,47 @@ describe EmailEngagementDynamoStore do
 
       expect(described_class.purchase_open_records(123)).to eq([])
     end
+
+    it "reads the whole partition when it is given no window" do
+      client.stub_responses(:query, { items: [] })
+
+      described_class.purchase_open_records(123)
+
+      expect(requests.last[:params]).not_to have_key(:filter_expression)
+    end
+
+    context "with a window" do
+      let(:opened_after) { Time.zone.iso8601("2026-10-01T00:00:00.000Z") }
+      let(:opened_before) { Time.zone.iso8601("2026-10-02T00:00:00.000Z") }
+
+      # The stubbed client ignores filters, so apply the one the store sent the way DynamoDB would.
+      before do
+        opens = {
+          "early" => "2026-09-30T23:59:59.999Z",
+          "first" => "2026-10-01T00:00:00.000Z",
+          "middle" => "2026-10-01T12:00:00.000Z",
+          "last" => "2026-10-02T00:00:00.000Z",
+          "late" => "2026-10-02T00:00:00.001Z",
+        }.map { |digest, first_open_at| purchase_open.merge("sk" => "OPEN##{digest}", "first_open_at" => first_open_at) }
+        client.stub_responses(:query, lambda do |context|
+          bounds = plain_hash(context.params[:expression_attribute_values])
+          { items: opens.select { _1["first_open_at"].between?(bounds[":opened_after"], bounds[":opened_before"]) } }
+        end)
+      end
+
+      it "filters the read to the opens inside the window, both bounds included" do
+        records = described_class.purchase_open_records(123, opened_after:, opened_before:)
+
+        expect(records.map { _1[:recipient_digest] }).to eq(%w[first middle last])
+        expect(requests.last[:params][:filter_expression]).to eq("first_open_at >= :opened_after AND first_open_at <= :opened_before")
+      end
+
+      it "keeps an open at a bound that carries sub-millisecond precision" do
+        records = described_class.purchase_open_records(123, opened_after:, opened_before: opened_before + 0.0004)
+
+        expect(records.map { _1[:recipient_digest] }).to eq(%w[first middle last])
+      end
+    end
   end
 
   describe ".clicked?" do

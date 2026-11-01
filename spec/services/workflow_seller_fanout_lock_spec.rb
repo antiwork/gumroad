@@ -18,6 +18,22 @@ describe WorkflowSellerFanoutLock do
     expect(described_class.acquire(seller_id)).to be_present
   end
 
+  it "reports the lock held only while someone holds it" do
+    expect(described_class.held?(seller_id)).to eq(false)
+
+    lock = described_class.acquire(seller_id)
+    expect(described_class.held?(seller_id)).to eq(true)
+
+    lock.release
+    expect(described_class.held?(seller_id)).to eq(false)
+  end
+
+  it "reports the lock free when Redis is down, leaving acquire to fail closed" do
+    allow($redis).to receive(:exists?).and_raise(Redis::CannotConnectError, "no connection")
+
+    expect(described_class.held?(seller_id)).to eq(false)
+  end
+
   it "does not grant a lock when Redis is down" do
     allow($redis).to receive(:set).and_raise(Redis::CannotConnectError, "no connection")
     expect(ErrorNotifier).to receive(:notify)
