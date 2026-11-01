@@ -308,8 +308,8 @@ describe("BankAccountSection Ghana bank code", () => {
     const field = screen.getByLabelText<HTMLInputElement>("Bank code");
 
     expect(field.placeholder).toBe("");
-    expect(new RegExp(`^(?:${field.pattern})$`).test("123456")).toBe(false);
-    expect(new RegExp(`^(?:${field.pattern})$`).test("040101")).toBe(true);
+    expect(new RegExp(`^(?:${field.pattern})$`, "u").test("123456")).toBe(false);
+    expect(new RegExp(`^(?:${field.pattern})$`, "u").test("040101")).toBe(true);
   });
 });
 describe("BankAccountSection account-number placeholders", () => {
