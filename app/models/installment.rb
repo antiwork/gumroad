@@ -518,6 +518,9 @@ class Installment < ApplicationRecord
   # unsubscribed or bounced address, or a refund.
   def send_installment_from_workflow_for_opened_no_click(purchase_id, recipient_digest: nil)
     return unless opened_no_click_trigger?
+    # The scan stops when the watched email is gone; a send it queued before that has to stop there
+    # too, or a watched email deleted or unpublished in between still mails the recipients it found.
+    return if workflow&.workflow_trigger_post.nil?
     return if recipient_clicked_watched_post?(recipient_digest)
 
     sale = Purchase.find_by(id: purchase_id)

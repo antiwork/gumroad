@@ -182,6 +182,13 @@ describe Workflow do
       expect(SendWorkflowEmailsToOpenedNonClickersJob.jobs).to be_empty
     end
 
+    it "scans the opens a delay edit made due even when the workflow leaves out past recipients" do
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: "post-1", send_to_past_customers: false)
+      @workflow.schedule_installment(@post, old_delayed_delivery_time: 14.days.to_i, reschedule_on_stale: true)
+      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, 14.days.to_i)
+      expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+    end
+
     it "scans the opens that already happened when an opened_no_click workflow asks for past recipients" do
       @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: "post-1", send_to_past_customers: true)
       @workflow.schedule_installment(@post)

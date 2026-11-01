@@ -617,6 +617,13 @@ describe Installment, "sending an opened-no-click workflow email" do
     installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
   end
 
+  it "does not send once the watched email is no longer one of the seller's sent posts" do
+    watched_post.mark_deleted!
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+
   it "does not send to a refunded buyer" do
     purchase.update!(stripe_refunded: true)
     expect(PostSendgridApi).not_to receive(:process)

@@ -112,4 +112,36 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
       seller_id: @seller.id, kind: "workflow", blast_id: @installment.id, recipient_count: 2
     )
   end
+
+  it "leaves out the openers who were already there when the workflow was published" do
+    @workflow.update!(send_to_past_customers: false, first_published_at: 4.days.ago)
+    stub_engagement([
+                      opener(first_open_at: 5.days.ago, digest: "before-publication"),
+                      opener(first_open_at: 3.days.ago, digest: "after-publication"),
+                    ])
+
+    described_class.new.perform(@installment.id)
+
+    expect(SendWorkflowEmailToOpenedNonClickerJob).not_to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "before-publication")
+    expect(SendWorkflowEmailToOpenedNonClickerJob).to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "after-publication")
+  end
+
+  it "covers the opens from before the publication when the workflow asks for past openers" do
+    @workflow.update!(send_to_past_customers: true, first_published_at: 4.days.ago)
+    stub_engagement([opener(first_open_at: 5.days.ago, digest: "before-publication")])
+
+    described_class.new.perform(@installment.id)
+
+    expect(SendWorkflowEmailToOpenedNonClickerJob).to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "before-publication")
+  end
+
+  it "releases a large fanout over time instead of queueing every send at once" do
+    stub_engagement((1..90).map { |index| opener(first_open_at: 4.days.ago, digest: "digest-#{index}") })
+
+    described_class.new.perform(@installment.id)
+
+    jobs = SendWorkflowEmailToOpenedNonClickerJob.jobs
+    expect(jobs.size).to eq(90)
+    expect(jobs.count { |job| job["at"].present? }).to be > 0
+  end
 end

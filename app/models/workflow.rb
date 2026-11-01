@@ -165,6 +165,15 @@ class Workflow < ApplicationRecord
       # New opens are the daily scan's job, which needs no schedule intent; a publish (or a
       # delay edit) only has to cover the opens that already happened. Returning
       # :not_applicable releases the intent once that pass is queued.
+      if delay_edit_recovery
+        # A shortened delay makes opens that were still waiting under the old delay due at once, and
+        # by then they are older than the daily scan's lookback, so the edit runs its own pass over
+        # them. This is why the member-cancellation fanout also runs on a reschedule while leaving out
+        # past recipients: the recovery is about opens the workflow already covered, not new ones.
+        job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, old_delayed_delivery_time.to_i)
+        return job_id.present? ? :not_applicable : :not_enqueued
+      end
+
       return :not_applicable unless send_to_past_customers?
 
       job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, nil)
