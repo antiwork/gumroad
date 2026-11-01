@@ -166,7 +166,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
   it "counts only the opens after the last finished daily scan toward the daily slot" do
     allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
-    $redis.set("workflow_opened_no_click_covered_through:#{@installment.id}", (3.days.ago - 30.minutes).to_f)
+    $redis.set("workflow_opened_no_click_covered_through:#{@installment.id}", (3.days.ago - 2.hours).to_f)
     stub_engagement([opener(first_open_at: 3.days.ago - 1.hour), opener(first_open_at: 4.days.ago - 1.hour, digest: "digest-2")])
 
     described_class.new.perform(@installment.id)
