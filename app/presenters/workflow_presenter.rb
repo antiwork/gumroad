@@ -99,6 +99,8 @@ class WorkflowPresenter
       # From value instead of a made-up one.
       email_from: from_address_with_name(seller.name, creators_from_email_address(seller.username)),
       eligible_for_abandoned_cart_workflows: user_presenter.user.eligible_for_abandoned_cart_workflows?,
+      # The same list the composer's behavior filters offer, for the trigger's email picker.
+      emailed_posts: Installment.emailed_post_options(seller:, limit: InstallmentPresenter::EMAILED_POST_OPTIONS_LIMIT, saved_ids: [workflow&.workflow_trigger_post_id]),
     }
   end
 end

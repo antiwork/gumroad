@@ -208,6 +208,11 @@ schedule_abandoned_cart_emails:
   cron: "0 14 * * *" # UTC 14:00
   class: ScheduleAbandonedCartEmailsJob
   description: Schedules abandoned cart emails for users who have not completed their purchase
+schedule_opened_no_click_workflow_emails:
+  cron: "0 15 * * *" # UTC 15:00, an hour after the abandoned cart scan
+  class: ScheduleOpenedNoClickWorkflowEmailsJob
+  queue: low
+  description: Queues workflow emails whose trigger waits on a recipient opening another email
 alert_on_stalled_abandoned_cart_emails:
   cron: "0 17 * * *" # UTC 17:00, three hours after the send job starts
   class: AlertOnStalledAbandonedCartEmailsJob

@@ -278,6 +278,34 @@ describe Workflow::SaveInstallmentsService do
       expect(workflow.installments.alive.pluck(:published_at).uniq).to eq([nil])
     end
 
+    describe "for an opened, no click workflow" do
+      let(:watched_post) { create(:published_installment, seller:, link: product) }
+      let!(:workflow) do
+        create(:workflow, seller:, link: product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id)
+      end
+
+      it "rejects an hour delay because the scan runs once a day" do
+        params[:installments] = [default_installment_params]
+
+        service = described_class.new(seller:, params:, workflow:, preview_email_recipient:)
+        expect do
+          success, errors = service.process
+
+          expect(success).to be(false)
+          expect(errors.full_messages.first).to eq("An opened, no click email waits in days, weeks, or months. Its emails go out once a day.")
+        end.to_not change { workflow.installments.alive.count }
+      end
+
+      it "saves a day delay" do
+        params[:installments] = [default_installment_params.merge(time_period: "day")]
+
+        success, _ = described_class.new(seller:, params:, workflow:, preview_email_recipient:).process
+
+        expect(success).to be(true)
+        expect(workflow.installments.alive.sole.installment_rule.time_period).to eq("day")
+      end
+    end
+
     context "when content moderation flags one email during publish" do
       before do
         allow(ContentModeration::ModerateRecordService).to receive(:check) do |record, _entity_type|

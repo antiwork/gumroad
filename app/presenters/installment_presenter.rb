@@ -238,18 +238,8 @@ class InstallmentPresenter
       end
     end
 
-    # Only a post emailed through the purchase mailer keys its clicks to a buyer; a follower or
-    # affiliate send keys them to that follower or affiliate, so offering one would exclude
-    # nobody. A saved choice outside the recent window stays in the list.
     def emailed_post_options(saved_ids, limit: EMAILED_POST_OPTIONS_LIMIT)
-      posts = seller.installments.alive.not_workflow_installment.published.send_emails.not_single_recipient_email
-        .seller_or_product_or_variant_type
-        .order(published_at: :desc).limit(limit)
-        .map { { external_id: _1.external_id, name: _1.displayed_name } }
-
-      missing = Array.wrap(saved_ids).compact_blank.uniq - posts.map { _1[:external_id] }
-      saved = missing.filter_map { seller.installments.alive.find_by_external_id(_1) }
-      saved.map { { external_id: _1.external_id, name: _1.displayed_name } } + posts
+      Installment.emailed_post_options(seller:, saved_ids:, limit:)
     end
 
     def installment_form_context_props(saved_post_ids: [installment&.not_clicked_post_id, installment&.opened_post_id])

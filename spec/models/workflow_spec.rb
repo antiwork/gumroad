@@ -175,6 +175,29 @@ describe Workflow do
       end
     end
 
+    let(:watched_post) { create(:published_installment, seller: @product.user, link: @product) }
+
+    it "does nothing when workflow has an opened_no_click trigger and send_to_past_customers is false" do
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id, send_to_past_customers: false)
+      @workflow.schedule_installment(@post)
+      expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+      expect(SendWorkflowEmailsToOpenedNonClickersJob.jobs).to be_empty
+    end
+
+    it "scans the opens a delay edit made due, plus the scan's lookback, even when the workflow leaves out past recipients" do
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id, send_to_past_customers: false)
+      @workflow.schedule_installment(@post, old_delayed_delivery_time: 14.days.to_i, cutoff_reference_time: Time.current, reschedule_on_stale: true, minimum_rule_version: 3)
+      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, nil, 16.days.ago.iso8601, 3)
+      expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+    end
+
+    it "scans the opens that already happened when an opened_no_click workflow asks for past recipients" do
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id, send_to_past_customers: true)
+      @workflow.schedule_installment(@post, minimum_rule_version: 3)
+      expect(SendWorkflowEmailsToOpenedNonClickersJob).to have_enqueued_sidekiq_job(@post.id, nil, nil, 3)
+      expect(SendWorkflowPostEmailsJob.jobs).to be_empty
+    end
+
     it "does nothing if the post is only for new recipients and it hasn't been scheduled before" do
       @post.update!(is_for_new_customers_of_workflow: true)
       @workflow.schedule_installment(@post)
@@ -269,6 +292,16 @@ describe Workflow do
       expect { @workflow.publish! }.not_to change { @workflow.reload }
     end
 
+    it "refuses to publish an opened, no click workflow whose email still waits in hours" do
+      watched_post = create(:published_installment, seller: @workflow.seller, link: @product)
+      @workflow.update!(workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER, workflow_trigger_post_id: watched_post.external_id)
+      installment = create(:installment, workflow: @workflow, seller: @workflow.seller, link: @product)
+      create(:installment_rule, installment:, time_period: InstallmentRule::HOUR, delayed_delivery_time: 2.hours)
+
+      expect { @workflow.publish! }.to raise_error(ActiveRecord::RecordInvalid, /waits in days, weeks, or months/)
+      expect(@workflow.reload.published_at).to be_nil
+    end
+
     it "sets 'published_at' and 'first_published_at'" do
       expect do
         @workflow.publish!
@@ -356,6 +389,61 @@ describe Workflow do
       @workflow.update!(first_published_at: 1.day.ago)
 
       expect(@workflow.has_never_been_published?).to be(false)
+    end
+  end
+
+  describe "the opened-no-click trigger" do
+    it "needs the email it watches" do
+      workflow = build(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER)
+
+      expect(workflow).not_to be_valid
+      expect(workflow.errors.full_messages.first).to eq("Pick one of your sent emails as the trigger for this workflow.")
+
+      workflow.workflow_trigger_post_id = create(:published_installment, seller: @product.user, link: @product).external_id
+      expect(workflow).to be_valid
+    end
+
+    it "rejects a newly picked email that is not one of the seller's sent posts" do
+      workflow = build(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                  workflow_trigger_post_id: create(:published_installment).external_id)
+
+      expect(workflow).not_to be_valid
+      expect(workflow.errors.full_messages.first).to eq("Pick one of your sent emails as the trigger for this workflow.")
+    end
+
+    it "still saves once the email it watches is deleted, as long as the pick is unchanged" do
+      watched_post = create(:published_installment, seller: @product.user, link: @product)
+      workflow = create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                   workflow_trigger_post_id: watched_post.external_id)
+      watched_post.mark_deleted!
+
+      expect(workflow.reload.update(name: "Renamed")).to be(true)
+    end
+
+    it "resolves the email it watches from the seller's sent posts" do
+      watched_post = create(:published_installment, seller: @product.user, link: @product)
+      workflow = create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                   workflow_trigger_post_id: watched_post.external_id)
+
+      expect(workflow.opened_no_click_trigger?).to be(true)
+      expect(workflow.workflow_trigger_post).to eq(watched_post)
+    end
+
+    it "resolves nothing once that email is no longer one of the seller's sent posts" do
+      watched_post = create(:published_installment, seller: @product.user, link: @product)
+      workflow = create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                   workflow_trigger_post_id: watched_post.external_id)
+      watched_post.mark_deleted!
+
+      expect(workflow.workflow_trigger_post).to be_nil
+    end
+
+    it "finds the workflows with that trigger and not the others" do
+      ours = create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                               workflow_trigger_post_id: create(:published_installment, seller: @product.user, link: @product).external_id)
+      create(:workflow, seller: @product.user, link: @product, workflow_trigger: Workflow::MEMBER_CANCELLATION_WORKFLOW_TRIGGER)
+
+      expect(Workflow.opened_no_click_trigger).to contain_exactly(ours)
     end
   end
 end

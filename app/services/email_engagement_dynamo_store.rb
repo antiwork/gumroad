@@ -178,6 +178,50 @@ class EmailEngagementDynamoStore
       partition_items(installment_id, "OPEN#").filter_map { |item| purchase_id_from_item(item) }.uniq
     end
 
+    # The per-recipient opens of a post's email, as a send side needs them: the buyer, the digest that
+    # identifies that recipient's send (and is also their click key), and the first open. A delay that
+    # runs from each recipient's own open is read off `first_open_at`.
+    #
+    # `opened_after` / `opened_before` bound `first_open_at` inclusively in a server-side filter. That
+    # trims what comes back, not the read capacity, and callers keep their own window check.
+    def purchase_open_records(installment_id, deadline: nil, opened_after: nil, opened_before: nil)
+      conditions = []
+      values = {}
+      # Truncating to the millisecond never narrows the window: `first_open_at` is stored to the millisecond.
+      if opened_after
+        conditions << "first_open_at >= :opened_after"
+        values[":opened_after"] = opened_after.utc.iso8601(3)
+      end
+      if opened_before
+        conditions << "first_open_at <= :opened_before"
+        values[":opened_before"] = opened_before.utc.iso8601(3)
+      end
+
+      items = partition_items(installment_id, "OPEN#", deadline:, filter_expression: conditions.join(" AND ").presence, filter_values: values)
+      items.filter_map do |item|
+        purchase_id = purchase_id_from_item(item)
+        first_open_at = parse_timestamp(item["first_open_at"])
+        next if purchase_id.nil? || first_open_at.nil?
+
+        { purchase_id:, recipient_digest: item["sk"].to_s.delete_prefix("OPEN#"), first_open_at: }
+      end
+    end
+
+    # Whether this recipient has clicked the post's email at least once. The digest is the one the
+    # caller walked off the OPEN# item, so a caller that already knows its openers needs no lookup per
+    # recipient to leave the clickers out.
+    def clicked?(installment_id:, recipient_digest:)
+      return false if recipient_digest.blank?
+
+      client.get_item(table_name:, key: item_key(installment_id, "CLICKER##{recipient_digest}")).item.present?
+    end
+
+    # The digests of the recipients who clicked, for a caller walking the opens that wants to drop the
+    # clickers in one pass. Same digest space as `purchase_open_records`.
+    def clicked_recipient_digests(installment_id, deadline: nil)
+      partition_items(installment_id, "CLICKER#", deadline:).filter_map { |item| item["sk"].to_s.delete_prefix("CLICKER#").presence }
+    end
+
     def create_table!
       client.create_table(
         table_name:,
@@ -232,7 +276,7 @@ class EmailEngagementDynamoStore
       # and one exists per recipient (or per recipient + url), so a six-figure post pages through
       # this a megabyte at a time. Callers with a budget pass `deadline:` and get a bounded client
       # that gives up (ScanBudgetExceeded) instead of blocking the request.
-      def partition_items(installment_id, prefix, deadline: nil)
+      def partition_items(installment_id, prefix, deadline: nil, filter_expression: nil, filter_values: {})
         items = []
         exclusive_start_key = nil
         loop do
@@ -244,8 +288,9 @@ class EmailEngagementDynamoStore
             expression_attribute_values: {
               ":pk" => partition_key(installment_id),
               ":prefix" => prefix,
-            },
+            }.merge(filter_values),
           }
+          params[:filter_expression] = filter_expression if filter_expression.present?
           params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
           response = deadline ? deadline_query(params) : client.query(params)
           items.concat(response.items)
@@ -440,6 +485,14 @@ class EmailEngagementDynamoStore
 
       def timestamp
         Time.current.utc.iso8601(3)
+      end
+
+      # `first_open_at` is written as an ISO8601 string. An item whose value cannot be read is dropped
+      # by the caller rather than sending on a clock that cannot be established.
+      def parse_timestamp(value)
+        Time.zone.iso8601(value.to_s)
+      rescue ArgumentError
+        nil
       end
   end
 end

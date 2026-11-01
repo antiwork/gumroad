@@ -38,6 +38,12 @@ class Workflow::SaveInstallmentsService
           raise ActiveRecord::Rollback
         end
 
+        if workflow.opened_no_click_trigger? && params[:installments].any? { _1[:time_period] == InstallmentRule::HOUR }
+          workflow.errors.add(:base, Workflow::OPENED_NO_CLICK_HOUR_DELAY_ERROR)
+          @errors = workflow.errors
+          raise ActiveRecord::Rollback
+        end
+
         if workflow.has_never_been_published? && (replace_all || params.key?(:send_to_past_customers))
           @workflow.update!(send_to_past_customers: params[:send_to_past_customers])
         end
