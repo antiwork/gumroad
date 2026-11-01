@@ -395,6 +395,15 @@ describe ContactingCreatorMailer do
       let(:purchase) { create(:purchase, link: create(:product, user: seller)) }
       let(:dispute) { create(:dispute_formalized, purchase:) }
 
+      it "states the dispute reason in seller words, and nothing for a generic one" do
+        dispute.update!(reason: Dispute::REASON_PRODUCT_NOT_RECEIVED)
+        body = ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded
+        expect(body).to include "Reason given for the dispute: the cardholder says they did not receive the product."
+
+        dispute.update!(reason: Dispute::REASON_GENERAL)
+        expect(ContactingCreatorMailer.chargeback_notice(dispute.id).body.encoded).not_to include "Reason given for the dispute"
+      end
+
       it "sends chargeback notice correctly" do
         book_chargeback_debits(dispute)
         expect(purchase.reload.purchase_chargeback_balance).to be_present
@@ -600,6 +609,14 @@ describe ContactingCreatorMailer do
             expect(mail.body.encoded).to include "Please submit any additional information by"
             expect(mail.body.encoded).to include "You have 23 hours left."
             expect(mail.body.encoded).to include "Submit additional information"
+          end
+
+          it "states the dispute reason" do
+            dispute.update!(reason: Dispute::REASON_UNRECOGNIZED)
+            dispute_evidence.update!(seller_contacted_at: 49.hours.ago)
+
+            body = ContactingCreatorMailer.chargeback_evidence_due_soon(dispute.id).body.encoded
+            expect(body).to include "Reason given for the dispute: the cardholder says they do not recognize this charge."
           end
 
           it "still reminds a seller who saved early, since they may keep revising" do
