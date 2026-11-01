@@ -6,6 +6,9 @@ class GhanaBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /\A[0-9]{6}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
+  NOT_A_SORT_CODE = "123456"
+  private_constant :NOT_A_SORT_CODE
+
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{8,20}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
@@ -44,8 +47,11 @@ class GhanaBankAccount < BankAccount
 
   private
     def validate_bank_code
-      return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
-      errors.add :base, "The bank code is invalid."
+      if bank_code == NOT_A_SORT_CODE
+        errors.add :base, "Enter the 6-digit sort code of your own bank branch."
+      elsif !BANK_CODE_FORMAT_REGEX.match?(bank_code)
+        errors.add :base, "The bank code is invalid."
+      end
     end
 
     def validate_account_number
