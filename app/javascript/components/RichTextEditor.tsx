@@ -585,7 +585,7 @@ export const RichTextEditorToolbar = ({
       <div
         role="toolbar"
         className={classNames(
-          "sticky top-0 z-1 flex flex-wrap gap-1 px-2 py-1 text-foreground",
+          "sticky z-1 flex flex-wrap gap-1 px-2 py-1 text-foreground",
           // In light mode the toolbar is an inverted (black) bar. Inverting in dark mode would
           // make it near-white — a glaring light strip on a dark page — so there it uses the
           // page background instead, which sits slightly lighter than the black text field
@@ -593,8 +593,11 @@ export const RichTextEditorToolbar = ({
           color === "ghost" ? "bg-background" : "bg-primary text-primary-foreground dark:bg-body dark:text-foreground",
           className,
         )}
-        style={
-          color === "primary"
+        style={{
+          // Clears a sticky page header instead of sticking underneath it (usePageHeaderOffset
+          // publishes the height). Falls back to the top of the scroll region on pages with none.
+          top: "var(--page-header-height, 0px)",
+          ...(color === "primary"
             ? {
                 // Fix muted to work with the toolbar's own background. This is necessary because muted is
                 // currently semitransparent, but when we're fully in Tailwind we can remove the --gray-3
@@ -602,8 +605,8 @@ export const RichTextEditorToolbar = ({
                 // text color in both schemes (inverted in light mode, regular foreground in dark mode).
                 "--color-muted": "color-mix(in srgb, currentColor calc(var(--gray-3) * 100%), transparent)",
               }
-            : {}
-        }
+            : {}),
+        }}
         onMouseLeave={() => setShowTooltip(false)}
       >
         <Popover>
