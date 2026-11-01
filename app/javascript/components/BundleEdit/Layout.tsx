@@ -14,6 +14,7 @@ import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
+import { usePageHeaderOffset } from "$app/components/ui/usePageHeaderOffset";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 import { WithTooltip } from "$app/components/WithTooltip";
 
@@ -74,6 +75,7 @@ export const BundleEditLayout = ({
 }: BundleEditLayoutProps) => {
   const tab = useCurrentTab();
   const currentSeller = useCurrentSeller();
+  const headerRef = usePageHeaderOffset();
 
   const url = useProductUrl(uniquePermalink, customPermalink);
 
@@ -140,6 +142,7 @@ export const BundleEditLayout = ({
   return (
     <>
       <PageHeader
+        ref={headerRef}
         className="sticky top-0 z-10 bg-body"
         title={name || "Untitled"}
         actions={
