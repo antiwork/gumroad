@@ -463,8 +463,9 @@ class Installment < ApplicationRecord
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
     # Cancellation posts are delivered on the subscription path, which rechecks the membership
-    # is still ended. This path can't, so stale enqueued jobs bail out here.
-    return if member_cancellation_trigger?
+    # is still ended, and opened-no-click posts on their own path, which rechecks the click. This
+    # path can't, so purchase-keyed jobs for either (a resubscription reschedule, say) bail out here.
+    return if member_cancellation_trigger? || opened_no_click_trigger?
 
     sale = sale.original_purchase
     return unless sale.can_contact?
@@ -518,10 +519,15 @@ class Installment < ApplicationRecord
   # unsubscribed or bounced address, or a refund.
   def send_installment_from_workflow_for_opened_no_click(purchase_id, recipient_digest: nil)
     return unless opened_no_click_trigger?
+    # Without the digest there is no click to rule out.
+    return if recipient_digest.blank?
     # The scan stops when the watched email is gone; a send it queued before that has to stop there
     # too, or a watched email deleted or unpublished in between still mails the recipients it found.
-    return if workflow&.workflow_trigger_post.nil?
-    return if recipient_clicked_watched_post?(recipient_digest)
+    watched_post = workflow&.workflow_trigger_post
+    return if watched_post.nil?
+    # An open that turns into a click between the scan and this send is still a click, and the digest
+    # the scan walked is the same key the click was written under.
+    return if EmailEngagementDynamoStore.clicked?(installment_id: watched_post.id, recipient_digest:)
 
     sale = Purchase.find_by(id: purchase_id)
     return if sale.nil?
@@ -1391,17 +1397,6 @@ class Installment < ApplicationRecord
                                .not_fully_refunded
                                .not_chargedback_or_chargedback_reversed
       CreatorContactingCustomersEmailInfo.where(installment_id: id).joins(:purchase).merge(purchase_scope).exists?
-    end
-
-    # An open that turns into a click between the scan and this send is still a click, and the digest
-    # the scan walked is the same key the click was written under.
-    def recipient_clicked_watched_post?(recipient_digest)
-      return false if recipient_digest.blank?
-
-      post = workflow&.workflow_trigger_post
-      return false if post.nil?
-
-      EmailEngagementDynamoStore.clicked?(installment_id: post.id, recipient_digest:)
     end
 
     def send_email(recipient)

@@ -3735,7 +3735,8 @@ class Purchase < ApplicationRecord
       # Cancellation posts belong to the subscription — Subscription#schedule_member_cancellation_workflow_jobs
       # schedules them on the next cancellation. Enqueueing them here sends them down the
       # purchase path, which never rechecks whether the membership is still cancelled.
-      next if workflow.member_cancellation_trigger?
+      # Opened-no-click posts run off the buyer's open of another email, not the purchase.
+      next if workflow.member_cancellation_trigger? || workflow.opened_no_click_trigger?
 
       active_workflow_installments = workflow.installments.includes(:installment_rule).alive.published
       has_any_past_workflow_installments = active_workflow_installments.any? do |installment|

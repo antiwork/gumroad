@@ -618,6 +618,7 @@ describe Installment, "sending an opened-no-click workflow email" do
   end
 
   it "does not send once the watched email is no longer one of the seller's sent posts" do
+    installment
     watched_post.mark_deleted!
     expect(PostSendgridApi).not_to receive(:process)
 
@@ -629,6 +630,19 @@ describe Installment, "sending an opened-no-click workflow email" do
     expect(PostSendgridApi).not_to receive(:process)
 
     installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+
+  it "does not send without the recipient's digest, since a click cannot be ruled out" do
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: nil)
+  end
+
+  it "does not send down the purchase path, which never checks the open or the click" do
+    create(:installment_rule, installment:, delayed_delivery_time: 0)
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_purchase(purchase.id)
   end
 
   it "does nothing for a workflow email of another trigger" do

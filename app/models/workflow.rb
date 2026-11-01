@@ -168,9 +168,10 @@ class Workflow < ApplicationRecord
       if delay_edit_recovery
         # A shortened delay makes opens that were still waiting under the old delay due at once, and
         # by then they are older than the daily scan's lookback, so the edit runs its own pass over
-        # them. This is why the member-cancellation fanout also runs on a reschedule while leaving out
-        # past recipients: the recovery is about opens the workflow already covered, not new ones.
-        job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, old_delayed_delivery_time.to_i)
+        # them. The extra LOOKBACK re-covers sends the old rule's scans queued, which the rule-version
+        # check now drops. Like the member-cancellation recovery, this runs whatever past recipients says.
+        opened_after = cutoff_reference_time - old_delayed_delivery_time - SendWorkflowEmailsToOpenedNonClickersJob::LOOKBACK
+        job_id = SendWorkflowEmailsToOpenedNonClickersJob.perform_async(installment.id, nil, opened_after.iso8601)
         return job_id.present? ? :not_applicable : :not_enqueued
       end
 
@@ -208,9 +209,11 @@ class Workflow < ApplicationRecord
 
   private
     # The trigger has nothing to watch without an email, and a workflow that watches nothing would
-    # silently never send.
+    # silently never send. Only a newly picked email has to resolve: one deleted later must not block
+    # unrelated edits.
     def opened_no_click_trigger_has_a_post
-      return if workflow_trigger_post_id.present?
+      picked = new_record? || json_data_in_database.to_h["workflow_trigger_post_id"] != workflow_trigger_post_id
+      return if workflow_trigger_post_id.present? && (!picked || seller.nil? || workflow_trigger_post.present?)
 
       errors.add(:base, "Pick one of your sent emails as the trigger for this workflow.")
     end

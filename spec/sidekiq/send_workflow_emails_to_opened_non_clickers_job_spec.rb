@@ -99,7 +99,23 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     described_class.new.perform(@installment.id)
 
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs).to be_empty
-    expect(described_class).to have_enqueued_sidekiq_job(@installment.id, 2.days.to_i).at(6.hours.from_now)
+    expect(described_class).to have_enqueued_sidekiq_job(@installment.id, nil, 5.days.ago.iso8601).at(6.hours.from_now)
+  end
+
+  it "covers every open since a fixed time when it is given one, as after a deferral or a delay edit" do
+    stub_engagement([opener(first_open_at: 8.days.ago, digest: "recovered"), opener(first_open_at: 12.days.ago, digest: "too-old")])
+
+    described_class.new.perform(@installment.id, nil, 10.days.ago.iso8601)
+
+    expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.map { _1["args"].last }).to eq(["recovered"])
+  end
+
+  it "does not read clicks when no open is due" do
+    stub_engagement([opener(first_open_at: 1.day.ago)])
+
+    described_class.new.perform(@installment.id)
+
+    expect(EmailEngagementDynamoStore).not_to have_received(:clicked_recipient_digests)
   end
 
   it "claims the daily slot with the recipient count it is about to queue" do
@@ -113,25 +129,22 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     )
   end
 
-  it "leaves out the openers who were already there when the workflow was published" do
-    @workflow.update!(send_to_past_customers: false, first_published_at: 4.days.ago)
-    stub_engagement([
-                      opener(first_open_at: 5.days.ago, digest: "before-publication"),
-                      opener(first_open_at: 3.days.ago, digest: "after-publication"),
-                    ])
+  it "leaves out the opens from before a new-customers-only email went live" do
+    @installment.update!(is_for_new_customers_of_workflow: true, published_at: 4.5.days.ago)
+    stub_engagement([opener(first_open_at: 4.days.ago, digest: "after"), opener(first_open_at: 4.8.days.ago, digest: "before")])
 
-    described_class.new.perform(@installment.id)
+    described_class.new.perform(@installment.id, nil)
 
-    expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.map { |job| job["args"].last }).to eq(["after-publication"])
+    expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.map { _1["args"].last }).to eq(["after"])
   end
 
-  it "covers the opens from before the publication when the workflow asks for past openers" do
-    @workflow.update!(send_to_past_customers: true, first_published_at: 4.days.ago)
-    stub_engagement([opener(first_open_at: 5.days.ago, digest: "before-publication")])
+  it "covers the opens from before the email went live when it is not for new customers only" do
+    @installment.update!(published_at: 4.5.days.ago)
+    stub_engagement([opener(first_open_at: 4.8.days.ago, digest: "before")])
 
-    described_class.new.perform(@installment.id)
+    described_class.new.perform(@installment.id, nil)
 
-    expect(SendWorkflowEmailToOpenedNonClickerJob).to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "before-publication")
+    expect(SendWorkflowEmailToOpenedNonClickerJob).to have_enqueued_sidekiq_job(@installment.id, @rule.version, @purchase.id, "before")
   end
 
   it "defers the scan while the seller already has a fanout in flight" do
@@ -167,13 +180,50 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     expect { described_class.new.perform(@installment.id) }.to raise_error("redis down")
   end
 
-  it "releases a large fanout over time instead of queueing every send at once" do
-    stub_engagement((1..90).map { |index| opener(first_open_at: 4.days.ago, digest: "digest-#{index}") })
+  context "with a large batch" do
+    before do
+      $redis.set(RedisKey.workflow_immediate_fanout_threshold, 3)
+      $redis.set(RedisKey.workflow_immediate_enqueue_per_second, 1)
+    end
 
-    described_class.new.perform(@installment.id)
+    after do
+      $redis.del(RedisKey.workflow_immediate_fanout_threshold, RedisKey.workflow_immediate_enqueue_per_second, RedisKey.workflow_immediate_fanout_max_spread_seconds)
+    end
 
-    jobs = SendWorkflowEmailToOpenedNonClickerJob.jobs
-    expect(jobs.size).to eq(90)
-    expect(jobs.count { |job| job["at"].present? }).to be > 0
+    def run_at_by_digest
+      SendWorkflowEmailToOpenedNonClickerJob.jobs.to_h { [_1["args"].last, _1["at"]&.round(3)] }
+    end
+
+    it "spreads the sends out at the configured rate instead of making every one runnable at once" do
+      stub_engagement(%w[a b c].map { opener(first_open_at: 4.days.ago, digest: _1) })
+
+      described_class.new.perform(@installment.id)
+
+      expect(run_at_by_digest).to eq("a" => nil, "b" => 1.second.from_now.to_f.round(3), "c" => 2.seconds.from_now.to_f.round(3))
+    end
+
+    it "speeds up to fit the batch inside the maximum spread rather than clumping the tail at the end" do
+      $redis.set(RedisKey.workflow_immediate_fanout_max_spread_seconds, 1)
+      stub_engagement(%w[a b c d].map { opener(first_open_at: 4.days.ago, digest: _1) })
+
+      described_class.new.perform(@installment.id)
+
+      expect(run_at_by_digest.values).to eq([nil] + [0.25, 0.5, 0.75].map { (Time.current + _1).to_f.round(3) })
+    end
+
+    it "leaves a batch under the threshold unpaced" do
+      stub_engagement(%w[a b].map { opener(first_open_at: 4.days.ago, digest: _1) })
+
+      described_class.new.perform(@installment.id)
+
+      expect(run_at_by_digest.values).to all(be_nil)
+    end
+  end
+
+  it "raises when Sidekiq does not enqueue a send" do
+    stub_engagement([opener(first_open_at: 4.days.ago)])
+    allow(SendWorkflowEmailToOpenedNonClickerJob).to receive(:perform_async).and_return(nil)
+
+    expect { described_class.new.perform(@installment.id) }.to raise_error("Sidekiq did not enqueue the opened-no-click send")
   end
 end

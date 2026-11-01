@@ -8,7 +8,8 @@
 # opens whose delay has just elapsed, drops the ones who have clicked, and queues one send each,
 # releasing a large fanout over time rather than all at once.
 # Runs daily from ScheduleOpenedNoClickWorkflowEmailsJob; a publish that asks for past recipients
-# runs it once with `lookback_seconds` nil, which covers every open that is already due.
+# runs it once with `lookback_seconds` nil, which covers every open that is already due, and a delay
+# edit runs it once with `opened_after`, which covers the opens the new delay made due.
 class SendWorkflowEmailsToOpenedNonClickersJob
   include Sidekiq::Job
   sidekiq_options retry: 5, queue: :low
@@ -18,15 +19,9 @@ class SendWorkflowEmailsToOpenedNonClickersJob
   # dedupe lookup per recipient and never a second email.
   LOOKBACK = 2.days
 
-  # A scan that finds more than this many due recipients releases their jobs over time instead of
-  # all at once: `SellerLargeBlastQuota` bounds how many large sends a seller starts per day, not how
-  # fast the recipient jobs of one of them run, so an unpaced loop over a big watched email puts tens
-  # of thousands of primary-database jobs on the queues together. Same shape as the post blast's
-  # immediate fanout pacing.
-  SENDS_PER_SECOND = 80
-  MAX_ENQUEUE_SPREAD = 15.minutes
-
-  def perform(installment_id, lookback_seconds = LOOKBACK.to_i)
+  # `opened_after` (ISO8601) is a fixed lower bound on the open time and takes the place of the
+  # lookback, so a deferred run still covers the opens it was started for.
+  def perform(installment_id, lookback_seconds = LOOKBACK.to_i, opened_after = nil)
     installment = Installment.find_by(id: installment_id)
     return if installment.nil?
 
@@ -42,14 +37,22 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     rule = installment.installment_rule
     return if rule.nil?
 
-    due = due_openers(post:, delay: rule.delayed_delivery_time, lookback_seconds:, workflow:)
+    due_before = Time.current - rule.delayed_delivery_time
+    opened_after = if opened_after.present?
+      Time.zone.parse(opened_after)
+    elsif lookback_seconds.to_i.positive?
+      due_before - lookback_seconds.to_i
+    end
+    # A new-customers-only email leaves out the opens from before it went live, on every run.
+    published_floor = installment.published_at if installment.is_for_new_customers_of_workflow
+    due = due_openers(post:, due_before:, opened_after: [opened_after, published_floor].compact.max)
     return if due.empty?
 
     # One large fanout per seller at a time, the lock the post blast takes while it builds its
     # audience: a scan that lands in the same window would put both bursts on the primary together.
     unless claim_seller_fanout_lock(workflow.seller_id)
       run_at = Time.current + WorkflowSellerFanoutLock.retry_in
-      job_id = self.class.perform_at(run_at, installment_id, lookback_seconds)
+      job_id = self.class.perform_at(run_at, installment_id, nil, opened_after&.iso8601)
       raise "Sidekiq did not requeue the opened-no-click scan for the seller fanout lock" unless job_id.present?
 
       return
@@ -58,22 +61,13 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     # The same per-seller daily ceiling a large new-customer fanout claims: one large workflow send
     # per seller per day. A scan over it runs in the next deferral window instead.
     unless SellerLargeBlastQuota.allow?(seller_id: workflow.seller_id, kind: "workflow", blast_id: installment.id, recipient_count: due.size)
-      run_at = SellerLargeBlastQuota.deferred_run_at
-      job_id = self.class.perform_at(run_at, installment_id, lookback_seconds)
+      job_id = self.class.perform_at(SellerLargeBlastQuota.deferred_run_at, installment_id, nil, opened_after&.iso8601)
       raise "Sidekiq did not requeue the opened-no-click scan for the daily limit" unless job_id.present?
 
       return
     end
 
-    due.each_with_index do |opener, index|
-      args = [installment.id, rule.version, opener[:purchase_id], opener[:recipient_digest]]
-      offset = enqueue_offset_for(index, due.size)
-      if offset.zero?
-        SendWorkflowEmailToOpenedNonClickerJob.perform_async(*args)
-      else
-        SendWorkflowEmailToOpenedNonClickerJob.perform_in(offset, *args)
-      end
-    end
+    enqueue_sends(installment:, rule:, due:)
   ensure
     # Held only while the sends are handed over, so the seller's next fanout is not waiting behind a
     # lock nobody releases.
@@ -86,36 +80,44 @@ class SendWorkflowEmailsToOpenedNonClickersJob
       @seller_fanout_lock.present?
     end
 
-    def due_openers(post:, delay:, lookback_seconds:, workflow:)
-      clicked = EmailEngagementDynamoStore.clicked_recipient_digests(post.id).to_set
-      due_before = Time.current - delay
-      due_after = lookback_seconds.to_i.positive? ? due_before - lookback_seconds.to_i : nil
-      floor = past_openers_floor(workflow)
+    def due_openers(post:, due_before:, opened_after:)
+      due = EmailEngagementDynamoStore.purchase_open_records(post.id).select do |opener|
+        opener[:first_open_at] <= due_before && (opened_after.nil? || opener[:first_open_at] >= opened_after)
+      end
+      return due if due.empty?
 
-      EmailEngagementDynamoStore.purchase_open_records(post.id).select do |opener|
-        !clicked.include?(opener[:recipient_digest]) &&
-          opener[:first_open_at] <= due_before &&
-          (due_after.nil? || opener[:first_open_at] >= due_after) &&
-          (floor.nil? || opener[:first_open_at] >= floor)
+      clicked = EmailEngagementDynamoStore.clicked_recipient_digests(post.id).to_set
+      due.reject { clicked.include?(_1[:recipient_digest]) }
+    end
+
+    # Every due send is runnable now, so a large batch is spread out at the pace of
+    # SendWorkflowPostEmailsJob's immediate fanout, under the same tunables.
+    def enqueue_sends(installment:, rule:, due:)
+      started_at = Time.current
+      per_second = paced_per_second(due.size)
+      due.each_with_index do |opener, index|
+        args = [installment.id, rule.version, opener[:purchase_id], opener[:recipient_digest]]
+        job_id = if per_second
+          SendWorkflowEmailToOpenedNonClickerJob.perform_at(started_at + index / per_second, *args)
+        else
+          SendWorkflowEmailToOpenedNonClickerJob.perform_async(*args)
+        end
+        raise "Sidekiq did not enqueue the opened-no-click send" unless job_id.present?
       end
     end
 
-    # The lookback recovers opens a previous tick missed; it must not widen who the workflow covers.
-    # A creator who did not ask for the openers who were already there when the workflow was published
-    # gets only the opens from that publication onwards, however far back the lookback reaches (the
-    # publish pass is the one that honours the other answer, by running with no lookback at all).
-    # A workflow with no publication recorded yet has no such boundary to draw.
-    def past_openers_floor(workflow)
-      return nil if workflow.send_to_past_customers?
+    def paced_per_second(count)
+      return if count < redis_tunable(RedisKey.workflow_immediate_fanout_threshold, SendWorkflowPostEmailsJob::IMMEDIATE_FANOUT_THRESHOLD)
 
-      workflow.first_published_at
+      per_second = redis_tunable(RedisKey.workflow_immediate_enqueue_per_second, SendWorkflowPostEmailsJob::DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND)
+      max_spread = redis_tunable(RedisKey.workflow_immediate_fanout_max_spread_seconds, SendWorkflowPostEmailsJob::MAX_IMMEDIATE_SPREAD.to_i)
+      [per_second, count / max_spread].max
     end
 
-    # Index 0 keeps its natural timing, so a run under the per-second rate is unchanged; a larger one
-    # spreads its later jobs out, capped so a scan never drifts far from its tick.
-    def enqueue_offset_for(index, due_count)
-      return 0 if due_count <= SENDS_PER_SECOND
-
-      [index.to_f / SENDS_PER_SECOND, MAX_ENQUEUE_SPREAD.to_i].min.round
+    def redis_tunable(key, default)
+      value = ($redis.get(key) || default).to_f
+      value.positive? ? value : default.to_f
+    rescue Redis::BaseError, RedisClient::Error
+      default.to_f
     end
 end

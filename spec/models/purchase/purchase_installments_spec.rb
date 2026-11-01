@@ -1050,6 +1050,24 @@ describe "PurchaseInstallments", :vcr do
           expect(enqueued_installment_ids).to_not include(cancellation_installment.id)
         end
       end
+
+      it "does not reschedule opened-no-click workflow installments" do
+        unsubscribed_interval = 4.days
+
+        watched_post = create(:published_installment, seller: @purchase.seller, link: @purchase.link)
+        opened_no_click_workflow = create(:workflow, seller: @purchase.seller, link: @purchase.link,
+                                                     workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                                     workflow_trigger_post_id: watched_post.external_id, published_at: Time.current)
+        opened_no_click_installment = create(:installment, link: @purchase.link, workflow: opened_no_click_workflow, published_at: Time.current)
+        create(:installment_rule, installment: opened_no_click_installment, delayed_delivery_time: 2.days)
+
+        travel_to(@purchase.created_at + unsubscribed_interval) do
+          @purchase.reschedule_workflow_installments(send_delay: unsubscribed_interval)
+
+          enqueued_installment_ids = SendWorkflowInstallmentWorker.jobs.map { _1["args"].first }
+          expect(enqueued_installment_ids).to match_array([@past_installment_1.id, @past_installment_2.id, @future_installment.id])
+        end
+      end
     end
   end
 end
