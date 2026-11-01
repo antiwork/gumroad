@@ -69,10 +69,10 @@ class SendWorkflowEmailsToOpenedNonClickersJob
 
     # The same per-seller daily ceiling a large new-customer fanout claims: one large workflow send
     # per seller per day. A scan over it runs in the next deferral window instead. A daily scan counts
-    # only the last day: the rest of its lookback was queued by the previous run and dedupes away. The
-    # day runs from the pinned bound, so a lock requeue still counts the opens that came due meanwhile.
-    new_day_after = opened_after + lookback_seconds.to_i - 1.day if rolling_scan
-    recipient_count = rolling_scan ? due.count { _1[:first_open_at] > new_day_after } : due.size
+    # every open since the last scan that finished handing over its sends, so a run that follows a
+    # failed one counts the opens it is recovering rather than only the newest day.
+    covered_through = rolling_scan ? last_covered_through(installment.id) : nil
+    recipient_count = covered_through ? due.count { _1[:first_open_at] > covered_through } : due.size
     unless SellerLargeBlastQuota.allow?(seller_id: workflow.seller_id, kind: "workflow", blast_id: installment.id, recipient_count:)
       job_id = self.class.perform_at(SellerLargeBlastQuota.deferred_run_at, installment_id, nil, opened_after&.iso8601, minimum_rule_version)
       raise "Sidekiq did not requeue the opened-no-click scan for the daily limit" unless job_id.present?
@@ -81,6 +81,7 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     end
 
     enqueue_sends(installment:, rule:, due:)
+    record_covered_through(installment.id, due_before) if rolling_scan
   ensure
     # Held only while the sends are handed over, so the seller's next fanout is not waiting behind a
     # lock nobody releases.
@@ -88,6 +89,23 @@ class SendWorkflowEmailsToOpenedNonClickersJob
   end
 
   private
+    def covered_key(installment_id)
+      "workflow_opened_no_click_covered_through:#{installment_id}"
+    end
+
+    def last_covered_through(installment_id)
+      value = $redis.get(covered_key(installment_id))
+      value.present? ? Time.zone.at(value.to_f) : nil
+    rescue Redis::BaseError, RedisClient::Error
+      nil
+    end
+
+    def record_covered_through(installment_id, time)
+      $redis.set(covered_key(installment_id), time.to_f, ex: LOOKBACK.to_i * 3)
+    rescue Redis::BaseError, RedisClient::Error
+      nil
+    end
+
     def claim_seller_fanout_lock(seller_id)
       @seller_fanout_lock = WorkflowSellerFanoutLock.acquire(seller_id)
       @seller_fanout_lock.present?

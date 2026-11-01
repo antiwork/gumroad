@@ -164,8 +164,9 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     )
   end
 
-  it "counts only the opens the previous daily scan did not cover toward the daily slot" do
+  it "counts only the opens after the last finished daily scan toward the daily slot" do
     allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
+    $redis.set("workflow_opened_no_click_covered_through:#{@installment.id}", (3.days.ago - 30.minutes).to_f)
     stub_engagement([opener(first_open_at: 3.days.ago - 1.hour), opener(first_open_at: 4.days.ago - 1.hour, digest: "digest-2")])
 
     described_class.new.perform(@installment.id)
@@ -176,20 +177,26 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.size).to eq(2)
   end
 
-  it "counts the newest day from where a daily scan started when it comes back from the seller's fanout lock" do
+  it "counts every open it is recovering when the previous daily scan never finished" do
     allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
-    stub_engagement([
-                      opener(first_open_at: 3.days.ago - 1.hour),
-                      opener(first_open_at: 4.days.ago - 30.minutes, digest: "due-while-waiting"),
-                      opener(first_open_at: 4.days.ago - 2.hours, digest: "covered-yesterday"),
-                    ])
+    stub_engagement([opener(first_open_at: 3.days.ago - 1.hour), opener(first_open_at: 4.days.ago - 1.hour, digest: "digest-2")])
 
-    # Started an hour ago, so its window began at 5 days and 1 hour ago.
-    described_class.new.perform(@installment.id, described_class::LOOKBACK.to_i, (5.days.ago - 1.hour).iso8601)
+    described_class.new.perform(@installment.id)
 
     expect(SellerLargeBlastQuota).to have_received(:allow?).with(
       seller_id: @seller.id, kind: "workflow", blast_id: @installment.id, recipient_count: 2
     )
+  end
+
+  it "records where a finished daily scan stopped, and not for a past-recipients run" do
+    stub_engagement([opener(first_open_at: 3.days.ago - 1.hour)])
+    key = "workflow_opened_no_click_covered_through:#{@installment.id}"
+
+    described_class.new.perform(@installment.id, nil)
+    expect($redis.get(key)).to be_nil
+
+    described_class.new.perform(@installment.id)
+    expect($redis.get(key).to_f).to be_within(60).of((Time.current - @rule.delayed_delivery_time).to_f)
   end
 
   it "leaves out the opens from before a new-customers-only email went live" do
