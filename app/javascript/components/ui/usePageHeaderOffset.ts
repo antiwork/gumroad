@@ -4,10 +4,14 @@ import * as React from "react";
 // of the scroll region. Publishing the header's measured height lets the toolbar offset itself by
 // it; the height is not a constant because the header wraps at narrow widths.
 export const usePageHeaderOffset = () => {
-  const headerRef = React.useRef<HTMLDivElement>(null);
+  const cleanupRef = React.useRef<(() => void) | null>(null);
 
-  React.useEffect(() => {
-    const header = headerRef.current;
+  // A callback ref rather than an effect: a page can render its header in only one of several
+  // branches, so the height has to be measured whenever the header appears, not only on mount.
+  return React.useCallback((header: HTMLDivElement | null) => {
+    cleanupRef.current?.();
+    cleanupRef.current = null;
+
     const scroller = header?.parentElement;
     if (!header || !scroller) return;
 
@@ -18,11 +22,9 @@ export const usePageHeaderOffset = () => {
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(publish);
     observer?.observe(header);
 
-    return () => {
+    cleanupRef.current = () => {
       observer?.disconnect();
       scroller.style.removeProperty("--page-header-height");
     };
   }, []);
-
-  return headerRef;
 };

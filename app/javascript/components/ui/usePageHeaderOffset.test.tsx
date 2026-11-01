@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -90,5 +90,30 @@ describe("usePageHeaderOffset", () => {
     unmount();
 
     expect(region.style.getPropertyValue("--page-header-height")).toBe("");
+  });
+
+  it("publishes when the page renders its header after the first mount", () => {
+    setHeaderHeight(96);
+
+    const Deferred = () => {
+      const [showHeader, setShowHeader] = React.useState(false);
+      const headerRef = usePageHeaderOffset();
+
+      return (
+        <div data-testid="scroller">
+          {showHeader ? <PageHeader ref={headerRef} className="sticky top-0 z-10 bg-body" title="Untitled" /> : null}
+          <button onClick={() => setShowHeader(true)}>show the header</button>
+        </div>
+      );
+    };
+
+    // Pages/Edit and Settings/Profile/Show each render their header in only one of several
+    // branches, so the height has to be measured when the header appears, not only at mount.
+    render(<Deferred />);
+    expect(publishedHeight()).toBe("");
+
+    fireEvent.click(screen.getByRole("button", { name: "show the header" }));
+
+    expect(publishedHeight()).toBe("96px");
   });
 });
