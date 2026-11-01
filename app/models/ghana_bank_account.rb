@@ -48,6 +48,8 @@ class GhanaBankAccount < BankAccount
   private
     def validate_bank_code
       if bank_code == NOT_A_SORT_CODE
+        return unless new_record? || will_save_change_to_bank_number?
+
         errors.add :base, "Enter the 6-digit sort code of your own bank branch."
       elsif !BANK_CODE_FORMAT_REGEX.match?(bank_code)
         errors.add :base, "The bank code is invalid."
