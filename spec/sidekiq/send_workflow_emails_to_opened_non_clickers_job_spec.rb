@@ -166,7 +166,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
   it "counts only the opens after the last finished daily scan toward the daily slot" do
     allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
-    $redis.set("workflow_opened_no_click_covered_through:#{@installment.id}", (3.days.ago - 2.hours).to_f)
+    $redis.set("workflow_opened_no_click_covered_through:#{@installment.id}:#{@rule.version}", (3.days.ago - 2.hours).to_f)
     stub_engagement([opener(first_open_at: 3.days.ago - 1.hour), opener(first_open_at: 4.days.ago - 1.hour, digest: "digest-2")])
 
     described_class.new.perform(@installment.id)
@@ -188,9 +188,22 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     )
   end
 
+  it "counts every open again after a delay edit, whose queued sends were dropped" do
+    allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
+    $redis.set("workflow_opened_no_click_covered_through:#{@installment.id}:#{@rule.version}", 2.days.ago.to_f)
+    @rule.update!(delayed_delivery_time: 2.days)
+    stub_engagement([opener(first_open_at: 2.days.ago - 1.hour), opener(first_open_at: 3.days.ago, digest: "digest-2")])
+
+    described_class.new.perform(@installment.id)
+
+    expect(SellerLargeBlastQuota).to have_received(:allow?).with(
+      seller_id: @seller.id, kind: "workflow", blast_id: @installment.id, recipient_count: 2
+    )
+  end
+
   it "records where a finished daily scan stopped, and not for a past-recipients run" do
     stub_engagement([opener(first_open_at: 3.days.ago - 1.hour)])
-    key = "workflow_opened_no_click_covered_through:#{@installment.id}"
+    key = "workflow_opened_no_click_covered_through:#{@installment.id}:#{@rule.version}"
 
     described_class.new.perform(@installment.id, nil)
     expect($redis.get(key)).to be_nil
