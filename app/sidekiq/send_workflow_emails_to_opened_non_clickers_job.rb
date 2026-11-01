@@ -69,8 +69,10 @@ class SendWorkflowEmailsToOpenedNonClickersJob
 
     # The same per-seller daily ceiling a large new-customer fanout claims: one large workflow send
     # per seller per day. A scan over it runs in the next deferral window instead. A daily scan counts
-    # only the last day: the rest of its lookback was queued by the previous run and dedupes away.
-    recipient_count = rolling_scan ? due.count { _1[:first_open_at] > due_before - 1.day } : due.size
+    # only the last day: the rest of its lookback was queued by the previous run and dedupes away. The
+    # day runs from the pinned bound, so a lock requeue still counts the opens that came due meanwhile.
+    new_day_after = opened_after + lookback_seconds.to_i - 1.day if rolling_scan
+    recipient_count = rolling_scan ? due.count { _1[:first_open_at] > new_day_after } : due.size
     unless SellerLargeBlastQuota.allow?(seller_id: workflow.seller_id, kind: "workflow", blast_id: installment.id, recipient_count:)
       job_id = self.class.perform_at(SellerLargeBlastQuota.deferred_run_at, installment_id, nil, opened_after&.iso8601, minimum_rule_version)
       raise "Sidekiq did not requeue the opened-no-click scan for the daily limit" unless job_id.present?
@@ -125,11 +127,18 @@ class SendWorkflowEmailsToOpenedNonClickersJob
     end
 
     def paced_per_second(count)
-      return if count < redis_tunable(RedisKey.workflow_immediate_fanout_threshold, SendWorkflowPostEmailsJob::IMMEDIATE_FANOUT_THRESHOLD)
+      return if count < immediate_fanout_threshold
 
       per_second = redis_tunable(RedisKey.workflow_immediate_enqueue_per_second, SendWorkflowPostEmailsJob::DEFAULT_IMMEDIATE_ENQUEUE_PER_SECOND)
       max_spread = redis_tunable(RedisKey.workflow_immediate_fanout_max_spread_seconds, SendWorkflowPostEmailsJob::MAX_IMMEDIATE_SPREAD.to_i)
       [per_second, count / max_spread].max
+    end
+
+    # Read as SendWorkflowPostEmailsJob reads it: an override of 0 paces every batch.
+    def immediate_fanout_threshold
+      ($redis.get(RedisKey.workflow_immediate_fanout_threshold) || SendWorkflowPostEmailsJob::IMMEDIATE_FANOUT_THRESHOLD).to_i
+    rescue Redis::BaseError, RedisClient::Error
+      SendWorkflowPostEmailsJob::IMMEDIATE_FANOUT_THRESHOLD
     end
 
     def redis_tunable(key, default)

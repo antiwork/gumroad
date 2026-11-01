@@ -176,14 +176,19 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     expect(SendWorkflowEmailToOpenedNonClickerJob.jobs.size).to eq(2)
   end
 
-  it "still counts only the newest day when a daily scan comes back from the seller's fanout lock" do
+  it "counts the newest day from where a daily scan started when it comes back from the seller's fanout lock" do
     allow(SellerLargeBlastQuota).to receive(:allow?).and_call_original
-    stub_engagement([opener(first_open_at: 3.days.ago - 1.hour), opener(first_open_at: 4.days.ago - 1.hour, digest: "digest-2")])
+    stub_engagement([
+                      opener(first_open_at: 3.days.ago - 1.hour),
+                      opener(first_open_at: 4.days.ago - 30.minutes, digest: "due-while-waiting"),
+                      opener(first_open_at: 4.days.ago - 2.hours, digest: "covered-yesterday"),
+                    ])
 
-    described_class.new.perform(@installment.id, described_class::LOOKBACK.to_i, 5.days.ago.iso8601)
+    # Started an hour ago, so its window began at 5 days and 1 hour ago.
+    described_class.new.perform(@installment.id, described_class::LOOKBACK.to_i, (5.days.ago - 1.hour).iso8601)
 
     expect(SellerLargeBlastQuota).to have_received(:allow?).with(
-      seller_id: @seller.id, kind: "workflow", blast_id: @installment.id, recipient_count: 1
+      seller_id: @seller.id, kind: "workflow", blast_id: @installment.id, recipient_count: 2
     )
   end
 
@@ -290,6 +295,15 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
       described_class.new.perform(@installment.id)
 
       expect(run_at_by_digest.values).to eq([nil] + [0.25, 0.5, 0.75].map { (Time.current + _1).to_f.round(3) })
+    end
+
+    it "paces every batch when the threshold is set to 0, as the post blast does" do
+      $redis.set(RedisKey.workflow_immediate_fanout_threshold, 0)
+      stub_engagement(%w[a b].map { opener(first_open_at: 4.days.ago, digest: _1) })
+
+      described_class.new.perform(@installment.id)
+
+      expect(run_at_by_digest).to eq("a" => nil, "b" => 1.second.from_now.to_f.round(3))
     end
 
     it "leaves a batch under the threshold unpaced" do
