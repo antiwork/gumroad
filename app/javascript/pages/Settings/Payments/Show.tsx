@@ -89,6 +89,10 @@ const COPIED_EXAMPLE_ERRORS: Partial<
   ],
 };
 
+// Same reason as Gambia above. 123456 is not a Ghanaian sort code: Stripe has no bank for it, so the
+// payout account can never link.
+const GHANA_NOT_A_SORT_CODE = "123456";
+
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
@@ -733,8 +737,13 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "BoliviaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");
     }
-    if (form.data.bank_account.type === "GhanaBankAccount" && !form.data.bank_account.bank_code) {
-      markFieldInvalid("bank_code");
+    if (form.data.bank_account.type === "GhanaBankAccount") {
+      if (!form.data.bank_account.bank_code) {
+        markFieldInvalid("bank_code");
+      } else if (form.data.bank_account.bank_code === GHANA_NOT_A_SORT_CODE) {
+        markFieldInvalid("bank_code");
+        setClientErrorMessage({ message: "Enter the 6-digit sort code of your own bank branch." });
+      }
     }
     if (form.data.bank_account.type === "AlbaniaBankAccount" && !form.data.bank_account.bank_code) {
       markFieldInvalid("bank_code");

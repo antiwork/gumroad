@@ -286,7 +286,6 @@ describe("BankAccountSection bank-code placeholders", () => {
   // A placeholder equal to a country's Stripe test routing number is refused outright in live
   // mode, and a seller cannot tell it apart from a real branch code.
   it.each([
-    ["GH", "Bank code", "123456", "022112", false],
     ["ID", "Bank code", "123", "000", false],
   ])("does not hint %s with a value Stripe reserves for tests", (code, label, expected, reserved, supportsIban) => {
     renderForCountry(code, supportsIban);
@@ -308,6 +307,16 @@ describe("BankAccountSection copyable example hints", () => {
     renderForCountry(code, supportsIban);
 
     expect(screen.getByLabelText<HTMLInputElement>(label).placeholder).toBe("");
+  });
+});
+describe("BankAccountSection Ghana bank code", () => {
+  it("has no copyable example and refuses 123456", () => {
+    renderForCountry("GH");
+    const field = screen.getByLabelText<HTMLInputElement>("Bank code");
+
+    expect(field.placeholder).toBe("");
+    expect(new RegExp(`^(?:${field.pattern})$`, "u").test("123456")).toBe(false);
+    expect(new RegExp(`^(?:${field.pattern})$`, "u").test("040101")).toBe(true);
   });
 });
 describe("BankAccountSection account-number placeholders", () => {

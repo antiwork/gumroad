@@ -1769,13 +1769,15 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="123456"
                     maxLength={6}
+                    pattern="(?!123456$)[0-9]{6}"
+                    title="Enter the 6-digit sort code of your own bank branch"
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
+                  <FieldsetDescription>The 6-digit sort code of your own bank branch.</FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "US" ? (
                 <Fieldset state={errorFieldNames.has("routing_number") ? "danger" : undefined}>
