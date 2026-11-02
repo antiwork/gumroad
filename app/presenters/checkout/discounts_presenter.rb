@@ -73,7 +73,7 @@ class Checkout::DiscountsPresenter
         else
           product.alive_variants
             .select { |variant| variant.variant_category_id == product.variant_categories_alive.first&.id }
-            .sort_by { |variant| [variant.position_in_category.nil? ? 0 : 1, variant.position_in_category.to_i, variant.created_at] }
+            .sort_by { |variant| [variant.position_in_category.nil? ? 0 : 1, variant.position_in_category.to_i, variant.created_at || Time.at(0)] }
         end
         props[:options] = options.map do |option|
           { id: option.external_id, name: option.name == "Untitled" ? product.name : option.name.to_s }

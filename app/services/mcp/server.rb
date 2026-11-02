@@ -1435,7 +1435,7 @@ module Mcp
 
         # Built from the loaded associations, so list_products preloads them instead of querying per tier.
         recurrences = product.alive_prices.filter_map { _1.recurrence if _1.is_buy? }
-        tier_records = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at] }
+        tier_records = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at || Time.at(0)] }
         tiers = tier_records.map do |tier|
           prices = tier.alive_prices.select { _1.is_buy? && recurrences.include?(_1.recurrence) }
             .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: tier.customizable_price? ? _1.suggested_price_cents : nil }] }
