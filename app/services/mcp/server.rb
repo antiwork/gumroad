@@ -750,8 +750,7 @@ module Mcp
           # Currency before price: `price_cents=` writes its Price row scoped to the currency in
           # force at that moment, so the amounts have to be carried into the new currency or the
           # product is left with no price in it. This is the v2 API's carry, rental price
-          # included (a buy_and_rent product would otherwise lose its rental offer); like v2, the
-          # row in the old currency stays alive and the reads pick the product's currency.
+          # included (a buy_and_rent product would otherwise lose its rental offer).
           if changes.key?("currency") && currency != product.price_currency_type
             if product.is_tiered_membership
               raise ToolError, "Currency cannot be changed for a membership with tiers: its tier prices are stored per currency. Change it in the product editor."
@@ -776,6 +775,9 @@ module Mcp
             end
             product.price_cents = carried_price_cents if carried_price_cents.present?
             product.rental_price_cents = carried_rental_price_cents if carried_rental_price_cents.present?
+            # available_price_cents reads every alive buy row, so one left in the old currency would be
+            # checked against the new currency's minimum below; retire it, as save_recurring_prices! does.
+            product.prices.alive.where.not(currency: currency).each(&:mark_deleted!)
             currency_changed = true
           end
           if changes.key?("price_cents")

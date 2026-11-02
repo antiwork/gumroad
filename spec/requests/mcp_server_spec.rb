@@ -2180,6 +2180,16 @@ describe "MCP server" do
       expect(response.parsed_body.dig("result", "structuredContent", "warning")).to eq("These discount codes are in a different currency than the product now uses, so they no longer apply to it: gbp50. Edit them in Gumroad if they should.")
     end
 
+    it "checks discount codes against the new price only when re-pricing with the currency" do
+      product = create(:product, user: @seller, price_cents: 1000)
+      create(:percentage_offer_code, user: @seller, products: [product], code: "half", amount_percentage: 50, currency_type: nil)
+
+      call_tool("update_product", { id: product.external_id, currency: "inr", price_cents: 100_000 })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "warning")).to be_nil
+      expect(product.reload.alive_prices.pluck(:currency, :price_cents)).to eq([["inr", 100_000]])
+    end
+
     it "stays quiet when the discount codes still clear the new currency's minimum" do
       create(:percentage_offer_code, user: @seller, products: [@product], code: "tenoff", amount_percentage: 10)
 
