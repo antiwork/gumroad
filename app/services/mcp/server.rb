@@ -26,6 +26,10 @@ module Mcp
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
     TIER_KEYS = %w[name price_cents recurrence].freeze
+    # The editor's tag picker: up to ten tags of two to twenty characters each.
+    MAX_TAGS = 10
+    MIN_TAG_LENGTH = 2
+    MAX_TAG_LENGTH = 20
     MICROSECONDS_PER_SECOND = 1_000_000
     # The last year MySQL DATETIME holds; a bound outside 0..this year fails in SQL instead of as a bad argument.
     MAX_DATETIME_YEAR = 9999
@@ -338,7 +342,7 @@ module Mcp
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description, summary, additional details and covers, and the products a bundle sells. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description, summary, additional details, tags and covers, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
@@ -362,7 +366,7 @@ module Mcp
                    }
                  }
                }, required: %w[name]),
-          tool("update_product", "Change the name, description, summary, additional details, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, summary, additional details, tags, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
@@ -377,6 +381,11 @@ module Mcp
                        "value" => { type: "string", description: "Row value, e.g. \"40\"." }
                      }
                    }
+                 },
+                 "tags" => {
+                   type: "array",
+                   description: "The tags Discover matches the product to shoppers by, e.g. \"field-notes\". Up to ten, two to twenty characters each. This replaces the whole list; send an empty array to remove every tag.",
+                   items: { type: "string" }
                  },
                  "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
                  "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
@@ -542,7 +551,7 @@ module Mcp
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
-        details = { description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), covers: covers_payload(product) }
+        details = { description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name), covers: covers_payload(product) }
         # A caller editing a bundle needs the members it has now, before replacing them.
         details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
@@ -648,8 +657,8 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "summary", "additional_details", "price_cents", "permalink")
-        raise Error.new("Pass at least one of name, description, summary, additional_details, price_cents, or permalink", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "summary", "additional_details", "tags", "price_cents", "permalink")
+        raise Error.new("Pass at least one of name, description, summary, additional_details, tags, price_cents, or permalink", code: -32602) if changes.empty?
 
         # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
         # Whitespace-only is neither: allowing it through would store a value the model treats as blank
@@ -698,8 +707,11 @@ module Mcp
           # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
           product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
+          # Tag rows after the product row, in the same transaction, so one call still saves
+          # all-or-nothing with every field above.
+          product.save_tags!(normalized_tags(changes["tags"], product)) if changes.key?("tags")
         end
-        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product)) }
+        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name)) }
         # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
         if changes.key?("price_cents")
           invalid_codes = product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(product) }.map(&:code)
@@ -762,6 +774,21 @@ module Mcp
         product.custom_attributes.filter_map do |row|
           { name: row["name"], value: row["value"] } if row["name"].present? || row["value"].present?
         end
+      end
+
+      # The editor's tag picker takes up to ten tags of two to twenty characters, and a product that
+      # already has more than ten can only lose them. The rest of the Tag rules (no commas, no
+      # leading hash) are its own.
+      def normalized_tags(tags, product)
+        names = tags.map do |tag|
+          raise Error.new("each tag must be text", code: -32602) unless tag.is_a?(String)
+
+          tag.downcase.strip
+        end.uniq
+        raise Error.new("each tag must be #{MIN_TAG_LENGTH}-#{MAX_TAG_LENGTH} characters", code: -32602) if names.any? { !_1.length.between?(MIN_TAG_LENGTH, MAX_TAG_LENGTH) }
+        raise Error.new("a product can have up to #{MAX_TAGS} tags", code: -32602) if names.length > MAX_TAGS && names.length >= product.tags.length
+
+        names
       end
 
       def normalized_additional_details(rows)
