@@ -161,6 +161,32 @@ describe "Purchase Notifications", :vcr do
     end
   end
 
+  describe "#notify_affiliate!" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller, price_cents: 20_00) }
+    let(:collaborator) { create(:collaborator, seller:, products: [product]) }
+    let(:purchase) { create(:purchase_in_progress, affiliate: collaborator, link: product, seller:) }
+
+    before { purchase.process! }
+
+    it "sends the sale email when the affiliate is credited" do
+      expect do
+        purchase.update_balance_and_mark_successful!
+      end.to have_enqueued_mail(AffiliateMailer, :notify_affiliate_of_sale).with(purchase.id)
+    end
+
+    it "does not send the sale email when the fee leaves no credit to post" do
+      # On a very cheap product the fee share can exceed the cut, so the credit floors below zero
+      # and no credit row is posted.
+      purchase.affiliate_credit_cents = -1
+
+      expect do
+        purchase.update_balance_and_mark_successful!
+      end.to_not have_enqueued_mail(AffiliateMailer, :notify_affiliate_of_sale)
+      expect(purchase.reload.affiliate_credit).to be_nil
+    end
+  end
+
   describe "#send_refunded_notification_webhook" do
     it "enqueues the post to ping job for refunded notification" do
       purchase = create(:purchase)

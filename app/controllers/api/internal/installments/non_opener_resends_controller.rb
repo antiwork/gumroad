@@ -27,13 +27,17 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
 
   def show
     authorize @installment, :resend_to_non_openers?
+    if @installment.delivery_counts_withheld?
+      # Non-openers plus the opens is the sent count.
+      return render json: { count: nil, count_withheld: true, recently_resent: recently_resent?, audience_filtered_out: false }
+    end
 
     count = nil
     audience_filtered_out = false
     begin
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + COUNT_PREVIEW_TOTAL_BUDGET_SECONDS
 
-      unopened_emails = within_preview_budget(deadline) { @installment.unopened_recipient_emails }
+      unopened_emails = within_preview_budget(deadline) { @installment.unopened_recipient_emails(deadline:) }
       if unopened_emails.empty?
         count = 0
       else
@@ -44,7 +48,7 @@ class Api::Internal::Installments::NonOpenerResendsController < Api::Internal::B
         end
         audience_filtered_out = count.zero?
       end
-    rescue WithMaxExecutionTime::QueryTimeoutError
+    rescue WithMaxExecutionTime::QueryTimeoutError, EmailEngagementDynamoStore::ScanBudgetExceeded
       # The audience is too large to count within the budget. A null count tells the
       # UI to offer the resend without a recipient number — the actual send happens in
       # a background job, so a missing preview count doesn't block anything.

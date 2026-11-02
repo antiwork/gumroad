@@ -65,8 +65,10 @@ export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; previ
             if (!preview) return;
             evt.preventDefault();
             try {
-              await followFromEmbed(sellerId, email);
-              showAlert("Check your inbox to confirm your follow request.", "success");
+              // The server's own outcome copy, so the preview a seller tests with
+              // reads exactly like the page a real subscriber lands on.
+              const { message } = await followFromEmbed(sellerId, email);
+              showAlert(message, "success");
             } catch (e) {
               assertResponseError(e);
               showAlert("Sorry, something went wrong. Please try again.", "error");

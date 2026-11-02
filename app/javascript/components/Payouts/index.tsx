@@ -244,6 +244,8 @@ export type PayoutsProps = {
   past_payout_period_data: PayoutPeriodData[];
   instant_payout: {
     instant_payout_fee_percent: number;
+    payout_frequency: "daily" | "weekly" | "monthly" | "quarterly";
+    standard_payout_frequency: "weekly" | "monthly" | "quarterly";
     payable_amount_cents: number;
     unpaid_amount_cents: number;
     payable_balances: {

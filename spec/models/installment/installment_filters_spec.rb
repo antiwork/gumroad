@@ -47,9 +47,9 @@ describe "InstallmentFilters"  do
     let(:clicker_purchase) { create(:free_purchase, link: product, seller: @creator, email: "Clicker@Example.com") }
 
     it "excludes the buyers who clicked the chosen post, downcased" do
-      post_being_sent.update!(not_clicked_post_id: clicked_post.external_id)
       allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids)
         .with(clicked_post.id).and_return([clicker_purchase.id])
+      post_being_sent.update!(not_clicked_post_id: clicked_post.external_id)
 
       expect(post_being_sent.audience_members_filter_params[:exclude_emails]).to eq(["clicker@example.com"])
     end

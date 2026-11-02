@@ -15,7 +15,6 @@ describe "refunds and chargebacks of a collab purchase that also credits a direc
   let(:direct_affiliate) do
     create(:direct_affiliate, seller:, affiliate_user: direct_affiliate_user, affiliate_basis_points: 1000, products: [product])
   end
-  let(:collab_and_affiliates_enabled) { true }
   let(:purchase) do
     params = {
       purchase: {
@@ -35,10 +34,8 @@ describe "refunds and chargebacks of a collab purchase that also credits a direc
   let(:direct_credit) { purchase.direct_affiliate_credit.reload }
 
   before do
-    Feature.activate_user(:collab_and_affiliates, seller)
     create(:product_affiliate, affiliate: collaborator, product:, affiliate_basis_points: 5000)
     direct_affiliate
-    Feature.deactivate_user(:collab_and_affiliates, seller) unless collab_and_affiliates_enabled
     purchase
   end
 
@@ -107,16 +104,5 @@ describe "refunds and chargebacks of a collab purchase that also credits a direc
     verify_balance(collaborator_user, 8_633)
     verify_balance(direct_affiliate_user, 22_50)
     verify_balance(seller, 8_634)
-  end
-
-  context "when the seller's flag is disabled" do
-    let(:collab_and_affiliates_enabled) { false }
-
-    it "keeps the collaborator as the only affiliate" do
-      expect(purchase.affiliate).to eq(collaborator)
-      expect(purchase.direct_affiliate_id).to be_nil
-      expect(purchase.direct_affiliate_credit).to be_nil
-      expect(purchase.affiliate_credit_cents).to eq(9_758)
-    end
   end
 end

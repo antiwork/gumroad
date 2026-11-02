@@ -64,6 +64,30 @@ describe CreateLicensesForExistingCustomersWorker do
       expect(@product.licenses.map(&:purchase_id)).to(match_array([@purchase1.id, @purchase2.id, @purchase3.id, original_subscription_purchase.id]))
     end
 
+    it "mints onto the current original of a subscription whose original was archived by a plan change" do
+      user = create(:user)
+      subscription = create(:subscription, user:, link: @product)
+      archived = create(:purchase, link: @product, email: user.email, is_original_subscription_purchase: true, is_archived_original_subscription_purchase: true, subscription:)
+      current = create(:purchase, link: @product, email: user.email, is_original_subscription_purchase: true, subscription:, purchase_state: "not_charged")
+
+      described_class.new.perform(@product.id)
+
+      expect(License.where(purchase_id: archived.id)).to be_empty
+      expect(License.where(link: @product, purchase_id: current.id).count).to eq(1)
+    end
+
+    it "does not mint a second key when the archived original of a plan change already has one" do
+      user = create(:user)
+      subscription = create(:subscription, user:, link: @product)
+      archived = create(:purchase, link: @product, email: user.email, is_original_subscription_purchase: true, is_archived_original_subscription_purchase: true, subscription:)
+      current = create(:purchase, link: @product, email: user.email, is_original_subscription_purchase: true, subscription:, purchase_state: "not_charged")
+      license = create(:license, link: @product, purchase: archived)
+
+      described_class.new.perform(@product.id)
+
+      expect(License.where(purchase_id: [archived.id, current.id])).to eq([license])
+    end
+
     it "skips purchases of variants whose per-variant content has no license-key block" do
       category = create(:variant_category, link: @product)
       free_variant = create(:variant, variant_category: category)

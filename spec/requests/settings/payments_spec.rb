@@ -4063,8 +4063,8 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         select("1980", from: "Year")
 
         fill_in("Pay to the order of", with: "Azerbaijani Creator")
-        fill_in("Bank code", with: "123456")
-        fill_in("Branch code", with: "123456")
+        fill_in("Bank code", with: "200004")
+        fill_in("Branch code", with: "200004")
         fill_in("IBAN", with: "AZ77ADJE12345678901234567890")
         fill_in("Confirm IBAN", with: "AZ77ADJE12345678901234567890")
 
@@ -4084,7 +4084,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+994124980335")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("AZ77ADJE12345678901234567890")
-        expect(@user.reload.active_bank_account.routing_number).to eq("123456-123456")
+        expect(@user.reload.active_bank_account.routing_number).to eq("200004-200004")
       end
     end
 
@@ -4532,6 +4532,30 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.routing_number).to eq("022112")
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
+      end
+
+      it "refuses the bank code 123456 before saving" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "ghanaian")
+        fill_in("Last name", with: "creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Accra")
+        fill_in("Phone number", with: "302213850")
+        fill_in("Postal code", with: "00233")
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        fill_in("Pay to the order of", with: "ghanaian creator")
+        expect(find_field("Bank code")[:placeholder]).to be_blank
+        fill_in("Bank code", with: "123456")
+        fill_in("Account #", with: "000123456789")
+        fill_in("Confirm account #", with: "000123456789")
+
+        click_on("Update settings")
+
+        expect(page).to have_status(text: "Enter the 6-digit sort code of your own bank branch.")
+        expect(@user.reload.active_bank_account).to be_nil
       end
 
       it "allows saving unrelated changes when a legacy individual P.O. Box address is unchanged" do
@@ -6815,7 +6839,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(find(:select, "Country")).not_to have_selector(:option, "Cuba")
           expect(find(:select, "Country")).not_to have_selector(:option, "Syrian Arab Republic")
           select "United States", from: "Country"
-          check "I have a valid, government-issued photo ID"
+          check "I can provide a valid, government-issued photo ID when my payouts are due"
           expect(page).to have_button "Save", disabled: true
           check "I can provide proof of residence in the country above, or my business is registered there"
           expect(page).to have_button "Save", disabled: false

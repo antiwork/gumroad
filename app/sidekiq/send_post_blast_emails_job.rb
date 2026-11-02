@@ -57,6 +57,9 @@ class SendPostBlastEmailsJob
     with_replica_database do
       @members = load_audience_members
       remove_members_without_email
+      # Before anyone already emailed is dropped: the floor applies to the audience, not to the rest.
+      @audience_size = @members.size
+      @delivery_counts_withheld = delivery_counts_withheld_at_send
 
       if @blast.to_non_openers?
         keep_emails = load_non_opener_emails
@@ -69,6 +72,14 @@ class SendPostBlastEmailsJob
         remove_already_emailed_members
       end
     end
+
+    unless @delivery_counts_withheld.nil?
+      @post.delivery_counts_withheld = @delivery_counts_withheld
+      # Validation re-counts the audience, and a send already under way must not fail on it.
+      @post.save!(validate: false)
+    end
+
+    return if below_behavior_floor? && expire_below_behavior_floor
 
     # A parent retry reloads the same stale rows a prior attempt already charged
     # and recorded as skipped. Drop them before publishing pending, or the new
@@ -108,9 +119,10 @@ class SendPostBlastEmailsJob
 
     # Filter params `AudienceMember.filter(as_of:)` cannot rewind: each reads state outside the
     # dated purchase, follow or affiliation (a live counter, a variant swap, a refund, an added
-    # product affiliation), or the absence of one.
+    # product affiliation, today's openers), or the absence of one.
     UNREBUILDABLE_FILTER_KEYS = %i[
       minimum_license_uses active_customers_only bought_variant_ids not_bought_product_ids not_bought_variant_ids affiliate_product_ids
+      include_emails
     ].freeze
 
     # Blasts above this many recipients are split into slice jobs. Small blasts send
@@ -120,6 +132,58 @@ class SendPostBlastEmailsJob
     # Recipients handed to each slice job. Tunable via Redis so an operator can resize
     # future split attempts without a deploy.
     CHILD_SLICE_SIZE = 2_000
+
+    # Per statement, for up to three wider-audience counts that run before the first email. Kept well
+    # under the recipient load's cap: a timeout withholds, which is the safe side. Tunable in Redis
+    # because a large audience can need longer.
+    BEHAVIOR_DECISION_TIMEOUT = 5.minutes
+
+    # Decided before anyone gets the email, against the audience it goes to, so the Published page
+    # and the API read a stored flag instead of resolving the behavior filter per row. The wider
+    # audiences are counted by the query that loaded the recipients: a lagging Elasticsearch count
+    # would be kept for good. A failed count withholds.
+    def delivery_counts_withheld_at_send
+      return if @blast.to_non_openers? || @blast.first_email_delivered_at.present? || !@post.behavior_filtered?
+
+      WithMaxExecutionTime.timeout_queries(seconds: behavior_decision_timeout_seconds) do
+        @post.behavior_count_withheld?(@audience_size, @filters) do |wider_params|
+          # Nothing narrowed the recipients (a not-clicked post nobody clicked), so they are the wider audience.
+          next @audience_size if wider_params == @filters
+
+          AudienceMember.filter(seller_id: @post.seller_id, params: wider_params, as_of: @blast.started_at).count
+        end
+      end
+    rescue WithMaxExecutionTime::QueryTimeoutError => e
+      Rails.logger.warn("SendPostBlastEmailsJob: withholding counts of post #{@post.id} after #{e.message}")
+      true
+    rescue StandardError => e
+      ErrorNotifier.notify(e)
+      true
+    end
+
+    def behavior_decision_timeout_seconds
+      ($redis.get(RedisKey.behavior_decision_max_execution_time_seconds) || BEHAVIOR_DECISION_TIMEOUT).to_i
+    end
+
+    # The audience can shrink between publishing or scheduling and the send. Once someone may have
+    # got the email, finishing the send reveals nothing the started one has not.
+    def below_behavior_floor?
+      !@blast.to_non_openers? && @blast.first_email_delivered_at.nil? && @post.behavior_filtered? &&
+        @audience_size < Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE &&
+        !$redis.exists?(RedisKey.blast_pending_recipients(@blast.id))
+    end
+
+    # True when the send should stop. A blast that may have sent already, and that no other copy
+    # has expired or completed, is finished instead.
+    def expire_below_behavior_floor
+      if PostEmailBlast.expire(@blast.id, reason: PostEmailBlast::EXPIRY_TOO_FEW_RECIPIENTS, never_sent: true).zero?
+        return !PostEmailBlast.where(id: @blast.id, completed_at: nil, expired_at: nil).exists?
+      end
+
+      clear_blast_state
+      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the behavior-filtered audience fell below the floor")
+      true
+    end
 
     def send_inline
       start_pending_recipients

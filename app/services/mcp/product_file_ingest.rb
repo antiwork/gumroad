@@ -8,6 +8,13 @@ module Mcp
   class ProductFileIngest
     MAX_BYTES = 250.megabytes
 
+    # The fetch runs on the request thread, so it has to fail well inside the 120s Rack::Timeout.
+    # Net::HTTP defaults to 60s connect plus 60s read, and the gem follows up to 10 redirects, each
+    # with that budget, so a stalled host would otherwise hold the worker until the timeout kills it.
+    OPEN_TIMEOUT_SECONDS = 5
+    READ_TIMEOUT_SECONDS = 10
+    MAX_REDIRECTS = 3
+
     class InvalidUrl < StandardError; end
     class TooLarge < StandardError; end
     class DownloadFailed < StandardError; end
@@ -66,7 +73,14 @@ module Mcp
 
       def download(uri)
         tempfile = Tempfile.new(binmode: true)
-        response = SsrfFilter.get(uri.to_s) do |http_response|
+        response = SsrfFilter.get(
+          uri.to_s,
+          max_redirects: MAX_REDIRECTS,
+          http_options: {
+            open_timeout: OPEN_TIMEOUT_SECONDS,
+            read_timeout: READ_TIMEOUT_SECONDS,
+          }
+        ) do |http_response|
           raise TooLarge if http_response["content-length"].to_i > MAX_BYTES
 
           success = http_response.is_a?(Net::HTTPSuccess)

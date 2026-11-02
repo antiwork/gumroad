@@ -568,3 +568,99 @@ describe Installment, "workflow reschedule references", :freeze_time do
     )
   end
 end
+
+describe Installment, "sending an opened-no-click workflow email" do
+  let(:seller) { create(:user) }
+  let(:product) { create(:product, user: seller) }
+  let(:watched_post) { create(:published_installment, seller:, link: product) }
+  let(:workflow) do
+    create(:workflow, seller:, link: product, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                      workflow_trigger_post_id: watched_post.external_id)
+  end
+  let(:installment) do
+    create(:published_installment, link: product, workflow:, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER)
+  end
+  let(:purchase) { create(:purchase, link: product, seller:) }
+
+  before do
+    allow(EmailEngagementDynamoStore).to receive(:clicked?).and_return(false)
+  end
+
+  it "sends to a buyer who opened the watched email and has not clicked it" do
+    expect(PostSendgridApi).to receive(:process).with(
+      post: installment,
+      recipients: [{ email: purchase.email, purchase: }],
+      cache: anything
+    )
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+
+  it "does not send to a member whose membership has ended" do
+    membership = create(:membership_product, user: seller)
+    membership_workflow = create(:workflow, seller:, link: membership, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER,
+                                            workflow_trigger_post_id: watched_post.external_id)
+    membership_installment = create(:published_installment, link: membership, workflow: membership_workflow, workflow_trigger: Workflow::OPENED_NO_CLICK_WORKFLOW_TRIGGER)
+    member_purchase = create(:membership_purchase, link: membership, seller:)
+    member_purchase.subscription.update!(cancelled_at: 1.hour.ago, deactivated_at: 1.hour.ago)
+    expect(PostSendgridApi).not_to receive(:process)
+
+    membership_installment.send_installment_from_workflow_for_opened_no_click(member_purchase.id, recipient_digest: "digest")
+  end
+
+  it "does not send to a buyer who clicked the watched email after the scan" do
+    allow(EmailEngagementDynamoStore).to receive(:clicked?)
+      .with(installment_id: watched_post.id, recipient_digest: "digest").and_return(true)
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+
+  it "does not send twice for the same buyer" do
+    expect(PostSendgridApi).to receive(:process).once
+
+    2.times { installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest") }
+  end
+
+  it "does not send to an unsubscribed or bounced address" do
+    purchase.update!(can_contact: false)
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+
+  it "does not send once the watched email is no longer one of the seller's sent posts" do
+    installment
+    watched_post.mark_deleted!
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+
+  it "does not send to a refunded buyer" do
+    purchase.update!(stripe_refunded: true)
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+
+  it "does not send without the recipient's digest, since a click cannot be ruled out" do
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: nil)
+  end
+
+  it "does not send down the purchase path, which never checks the open or the click" do
+    create(:installment_rule, installment:, delayed_delivery_time: 0)
+    expect(PostSendgridApi).not_to receive(:process)
+
+    installment.send_installment_from_workflow_for_purchase(purchase.id)
+  end
+
+  it "does nothing for a workflow email of another trigger" do
+    other = create(:published_installment, link: product, workflow: create(:workflow, seller:, link: product))
+    expect(PostSendgridApi).not_to receive(:process)
+
+    other.send_installment_from_workflow_for_opened_no_click(purchase.id, recipient_digest: "digest")
+  end
+end

@@ -836,7 +836,7 @@ describe DirectAffiliate do
     let!(:unaffiliated_product) { create(:product, user: affiliate.seller, name: "Unaffiliated Product") }
     let(:archived_product) { create(:product, user: affiliate.seller, name: "Archived", archived: true) }
     let!(:other_archived_product) { create(:product, user: affiliate.seller, archived: true) }
-    let!(:ineligible_product) { create(:product, :is_collab, user: affiliate.seller, name: "Ineligible Product") }
+    let!(:collab_product) { create(:product, :is_collab, user: affiliate.seller, name: "Collab Product") }
 
     before do
       create(:product_affiliate, affiliate:, product:, affiliate_basis_points: 40_00, destination_url: "https://example.com")
@@ -873,6 +873,16 @@ describe DirectAffiliate do
             id: unaffiliated_product.external_id_numeric,
             name: "Unaffiliated Product",
             referral_url: affiliate.referral_url_for_product(unaffiliated_product),
+            sales_count: 0,
+            volume_cents: 0
+          },
+          {
+            destination_url: nil,
+            enabled: false,
+            fee_percent: 3,
+            id: collab_product.external_id_numeric,
+            name: "Collab Product",
+            referral_url: affiliate.referral_url_for_product(collab_product),
             sales_count: 0,
             volume_cents: 0
           }
@@ -915,6 +925,16 @@ describe DirectAffiliate do
               id: unaffiliated_product.external_id_numeric,
               name: "Unaffiliated Product",
               referral_url: affiliate.referral_url_for_product(unaffiliated_product),
+              sales_count: 0,
+              volume_cents: 0
+            },
+            {
+              destination_url: nil,
+              enabled: false,
+              fee_percent: 3,
+              id: collab_product.external_id_numeric,
+              name: "Collab Product",
+              referral_url: affiliate.referral_url_for_product(collab_product),
               sales_count: 0,
               volume_cents: 0
             }

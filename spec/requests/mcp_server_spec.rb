@@ -451,6 +451,7 @@ describe "MCP server" do
         "add_cover" => "Add cover",
         "list_files" => "List files",
         "add_file" => "Add file",
+        "add_content_link" => "Add content link",
         "publish_product" => "Publish product",
         "unpublish_product" => "Unpublish product",
         "list_sales" => "List sales",
@@ -522,7 +523,7 @@ describe "MCP server" do
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
         "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
-        "list_files", "add_file", "publish_product", "unpublish_product", "list_sales", "get_analytics", "get_customers", "get_sales_totals", "get_subscriptions", "list_payouts",
+        "list_files", "add_file", "add_content_link", "publish_product", "unpublish_product", "list_sales", "get_analytics", "get_customers", "get_sales_totals", "get_subscriptions", "list_payouts",
         "create_bundle", "update_bundle", "create_discount_code", "update_discount_code", "expire_discount_code"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
@@ -530,7 +531,7 @@ describe "MCP server" do
       %w[get_account list_products get_product list_files list_sales get_analytics get_customers get_sales_totals get_subscriptions list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
       end
-      %w[create_draft_product add_cover add_file create_discount_code].each do |name|
+      %w[create_draft_product add_cover add_file add_content_link create_discount_code].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => false, "destructiveHint" => false)
       end
       %w[update_product publish_product unpublish_product update_bundle update_discount_code expire_discount_code].each do |name|
@@ -1456,6 +1457,245 @@ describe "MCP server" do
       expect(@product.price_cents).to eq(1900)
     end
 
+    it "sets the receipt message and the receipt button text" do
+      call_tool("update_product", { id: @product.external_id, custom_receipt_text: "Thanks for your order!", custom_view_content_button_text: "Open it" })
+
+      expect(response).to be_successful
+      product = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(product).to include("custom_receipt_text" => "Thanks for your order!", "custom_view_content_button_text" => "Open it")
+      @product.reload
+      expect(@product.custom_receipt_text).to eq("Thanks for your order!")
+      expect(@product.custom_view_content_button_text).to eq("Open it")
+    end
+
+    it "reads the receipt fields back on get_product" do
+      @product.update!(custom_receipt_text: "Thanks!", custom_view_content_button_text: "Open")
+
+      call_tool("get_product", { id: @product.external_id })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product")).to include(
+        "custom_receipt_text" => "Thanks!",
+        "custom_view_content_button_text" => "Open"
+      )
+    end
+
+    it "clears the receipt fields with an empty string" do
+      @product.update!(custom_receipt_text: "Thanks!", custom_view_content_button_text: "Open")
+
+      call_tool("update_product", { id: @product.external_id, custom_receipt_text: "", custom_view_content_button_text: "" })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.custom_receipt_text).to be_nil
+      expect(@product.custom_view_content_button_text).to be_nil
+    end
+
+    it "refuses a receipt message longer than the editor allows" do
+      expect { call_tool("update_product", { id: @product.external_id, custom_receipt_text: "x" * 501, name: "Kept out" }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("too long")
+    end
+
+    it "refuses receipt button text longer than the editor allows" do
+      expect { call_tool("update_product", { id: @product.external_id, custom_view_content_button_text: "x" * 27 }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("max: 26")
+    end
+
+    it "sets the summary the product page shows under the buy button" do
+      call_tool("update_product", { id: @product.external_id, summary: "Twelve pages of field notes." })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "summary")).to eq("Twelve pages of field notes.")
+      @product.reload
+      expect(@product.custom_summary).to eq("Twelve pages of field notes.")
+      expect(@product.name).to eq("Field notes")
+    end
+
+    it "clears the summary when given an empty string" do
+      @product.save_custom_summary("Kept until cleared")
+
+      call_tool("update_product", { id: @product.external_id, summary: "" })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "summary")).to be_nil
+      expect(@product.reload.custom_summary).to be_nil
+    end
+
+    it "reads the summary back with the product" do
+      @product.save_custom_summary("A short line")
+
+      call_tool("get_product", { id: @product.external_id })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "summary")).to eq("A short line")
+    end
+
+    it "sets the additional details the product page shows in the card with the summary" do
+      call_tool("update_product", { id: @product.external_id, additional_details: [{ name: "Pages", value: "40" }, { name: "Format", value: "PDF" }] })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "additional_details")).to eq([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
+      expect(@product.reload.custom_attributes).to eq([{ "name" => "Pages", "value" => "40" }, { "name" => "Format", "value" => "PDF" }])
+    end
+
+    it "replaces the whole list of additional details" do
+      @product.save_custom_attributes([{ "name" => "Pages", "value" => "12" }])
+
+      call_tool("update_product", { id: @product.external_id, additional_details: [{ name: "Length", value: "3 hours" }] })
+
+      expect(response).to be_successful
+      expect(@product.reload.custom_attributes).to eq([{ "name" => "Length", "value" => "3 hours" }])
+    end
+
+    it "clears the additional details when given an empty array" do
+      @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
+
+      call_tool("update_product", { id: @product.external_id, additional_details: [] })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "additional_details")).to eq([])
+      expect(@product.reload.custom_attributes).to eq([])
+    end
+
+    it "drops an additional detail with nothing in it, as the editor does" do
+      call_tool("update_product", { id: @product.external_id, additional_details: [{ name: "", value: "" }, { name: "Pages", value: "40" }] })
+
+      expect(response).to be_successful
+      expect(@product.reload.custom_attributes).to eq([{ "name" => "Pages", "value" => "40" }])
+    end
+
+    it "rejects an additional detail with a value but no name" do
+      expect { call_tool("update_product", { id: @product.external_id, additional_details: [{ name: "", value: "40" }] }) }.not_to change { @product.reload.custom_attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "each additional detail needs a name")
+    end
+
+    it "rejects a detail whose value is not text, without replacing the details already there" do
+      @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
+
+      expect { call_tool("update_product", { id: @product.external_id, additional_details: [{ name: "Pages", value: { count: 40 } }] }) }.not_to change { @product.reload.custom_attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "additional detail value must be text")
+    end
+
+    it "rejects a detail whose name is not text" do
+      expect { call_tool("update_product", { id: @product.external_id, additional_details: [{ name: ["Pages"], value: "40" }] }) }.not_to change { @product.reload.custom_attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "additional detail name must be text")
+    end
+
+    it "reads the additional details back with the product" do
+      @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
+
+      call_tool("get_product", { id: @product.external_id })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "additional_details")).to eq([{ "name" => "Pages", "value" => "40" }])
+    end
+
+    it "sets the tags Discover matches the product to shoppers by" do
+      call_tool("update_product", { id: @product.external_id, tags: ["field-notes", "journals"] })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "tags")).to contain_exactly("field-notes", "journals")
+      expect(@product.reload.tags.pluck(:name)).to contain_exactly("field-notes", "journals")
+    end
+
+    it "replaces the whole list of tags" do
+      @product.save_tags!(["field-notes", "journals"])
+
+      call_tool("update_product", { id: @product.external_id, tags: ["field-notes", "maps"] })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "tags")).to contain_exactly("field-notes", "maps")
+      expect(@product.reload.tags.pluck(:name)).to contain_exactly("field-notes", "maps")
+    end
+
+    it "removes every tag when given an empty list" do
+      @product.save_tags!(["field-notes"])
+
+      call_tool("update_product", { id: @product.external_id, tags: [] })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "tags")).to eq([])
+      expect(@product.reload.tags).to be_empty
+    end
+
+    it "keeps the tags when the call does not carry them" do
+      @product.save_tags!(["field-notes"])
+
+      call_tool("update_product", { id: @product.external_id, name: "Field notes, vol. 2" })
+
+      expect(response).to be_successful
+      expect(@product.reload.name).to eq("Field notes, vol. 2")
+      expect(@product.tags.pluck(:name)).to eq(["field-notes"])
+    end
+
+    it "reads the tags back with the product" do
+      @product.save_tags!(["field-notes"])
+
+      call_tool("get_product", { id: @product.external_id })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "tags")).to eq(["field-notes"])
+    end
+
+    it "lowercases and trims a tag the way the editor's picker does" do
+      call_tool("update_product", { id: @product.external_id, tags: ["  Field Notes  "] })
+
+      expect(@product.reload.tags.pluck(:name)).to eq(["field notes"])
+    end
+
+    it "saves one tag when the same tag is sent twice in different cases" do
+      call_tool("update_product", { id: @product.external_id, tags: ["field-notes", "FIELD-NOTES"] })
+
+      expect(response).to be_successful
+      expect(@product.reload.tags.pluck(:name)).to eq(["field-notes"])
+    end
+
+    it "refuses more than ten tags without changing the product" do
+      expect { call_tool("update_product", { id: @product.external_id, tags: (1..11).map { |i| "tag#{i}" } }) }
+        .not_to change { @product.reload.tags.count }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "a product can have up to 10 tags")
+    end
+
+    it "lets a product that already has more than ten tags lose them" do
+      @product.save_tags!((1..12).map { |i| "tag#{i}" })
+
+      call_tool("update_product", { id: @product.external_id, tags: (1..11).map { |i| "tag#{i}" } })
+
+      expect(response).to be_successful
+      expect(@product.reload.tags.pluck(:name)).to contain_exactly(*(1..11).map { |i| "tag#{i}" })
+    end
+
+    it "refuses a tag shorter than two or longer than twenty characters" do
+      expect { call_tool("update_product", { id: @product.external_id, tags: ["a"] }) }.not_to change { @product.reload.tags.count }
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "each tag must be 2-20 characters")
+
+      expect { call_tool("update_product", { id: @product.external_id, tags: ["a" * 21] }) }.not_to change { @product.reload.tags.count }
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "each tag must be 2-20 characters")
+    end
+
+    it "refuses a tag that is not text" do
+      expect { call_tool("update_product", { id: @product.external_id, tags: [{ name: "field-notes" }] }) }
+        .not_to change { @product.reload.tags.count }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "each tag must be text")
+    end
+
+    it "saves the name and the tags together or not at all" do
+      expect { call_tool("update_product", { id: @product.external_id, name: "Field notes, vol. 2", tags: ["a"] }) }
+        .not_to change { @product.reload.name }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "each tag must be 2-20 characters")
+    end
+
+    it "saves one tag when two spellings differ only in inner spacing" do
+      call_tool("update_product", { id: @product.external_id, tags: ["field  notes", "field notes"] })
+
+      expect(response).to be_successful
+      expect(@product.reload.tags.pluck(:name)).to eq(["field notes"])
+    end
+
     it "changes the URL and keeps the old one pointing at the product" do
       @product.update!(custom_permalink: "field-notes-original")
 
@@ -1564,7 +1804,7 @@ describe "MCP server" do
     it "rejects an update with no fields to change" do
       expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
 
-      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, price_cents, or permalink")
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, summary, additional_details, tags, price_cents, custom_receipt_text, custom_view_content_button_text, or permalink")
     end
 
     it "rejects a blank name without changing the product" do
@@ -1902,6 +2142,18 @@ describe "MCP server" do
       expect(response.headers["WWW-Authenticate"]).to be_nil
       names = response.parsed_body.dig("result", "structuredContent", "products").map { |product| product["name"] }
       expect(names).to include("Field notes")
+    end
+
+    it "orders membership tiers that predate position and timestamp tracking" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: @seller, name: "Field club")
+      tiers = membership.tier_category.alive_variants.to_a
+      BaseVariant.where(id: tiers.map(&:id)).update_all(position_in_category: nil)
+      BaseVariant.where(id: tiers.first.id).update_all(created_at: nil)
+
+      post_mcp({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "get_product", arguments: { id: membership.external_id } } })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "tiers").map { _1["id"] }).to match_array(tiers.map(&:external_id))
     end
 
     it "refuses a write tool with a 403 step-up challenge that keeps the token's scopes" do
@@ -2626,7 +2878,7 @@ describe "MCP server" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers."},"description":{"type":"string","description":"HTML or plain-text description."},"product_type":{"type":"string","enum":["digital","membership"],"description":"digital (default) or membership."},"tiers":{"type":"array","minItems":1,"description":"Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.","items":{"type":"object","properties":{"name":{"type":"string","description":"Tier name."},"price_cents":{"type":"integer","description":"Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want."},"recurrence":{"type":"string","enum":["monthly","quarterly","biannually","yearly","every_two_years"],"description":"Billing period."}},"required":["name","price_cents","recurrence"],"additionalProperties":false}}},"additionalProperties":false,"required":["name"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."},"permalink":{"type":"string","description":"New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."},"email":{"type":"string","description":"Filter by buyer email."},"product_id":{"type":"string","description":"Only sales of this product (id from list_products)."},"after":{"type":"string","description":"Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01."},"before":{"type":"string","description":"Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01."},"payment":{"type":"string","enum":["paid","free"],"description":"paid = price above zero, free = zero-price sales."},"kind":{"type":"string","enum":["subscription","one_time"],"description":"subscription = membership charges, one_time = everything else."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_analytics","title":"Get analytics","description":"Product page views, sales and revenue for a date range, so conversion rate (sales / views) can be computed. breakdown=product (default) gives one row per product; breakdown=referrer gives views, sales and revenue per traffic source. Revenue is price minus refunds and chargebacks, before fees, in minor units of USD. Dates are in the creator's time zone and default to the last 30 days.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","referrer"],"description":"product (default) or referrer."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_customers","title":"Get customers","description":"Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, refunded and charged-back amounts, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who later paid, with days to convert. Amounts are price before fees in minor units of USD, with refunds and chargebacks reported on their own lines; start_date and end_date are days in the creator's time zone that bound order dates, or the purchase that converted.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["spend","conversion"],"description":"spend (default) or conversion."},"email":{"type":"string","description":"Only this buyer's email."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD, in the creator's time zone. Omit for all time."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD, inclusive. Omit for all time."},"limit":{"type":"integer","description":"Max buyers to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_sales_totals","title":"Get sales totals","description":"Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","country","day","week","month"],"description":"product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_subscriptions","title":"Get subscriptions","description":"The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["subscriptions","churn"],"description":"subscriptions (default) or churn."},"limit":{"type":"integer","description":"Max subscriptions to return (1-50, default 25). breakdown=subscriptions only."},"cursor":{"type":"string","description":"next_cursor from the previous page. breakdown=subscriptions only."},"status":{"type":"string","enum":["alive","ended"],"description":"alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"create_discount_code","title":"Create discount code","description":"Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The code buyers enter. Letters, numbers, dashes, and underscores."},"product_id":{"type":"string","description":"Product id or permalink. Omit for a code that covers all of the creator's products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_discount_code","title":"Update discount code","description":"Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"expire_discount_code","title":"Expire discount code","description":"End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description, summary, additional details, tags, covers, receipt message and button text, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers."},"description":{"type":"string","description":"HTML or plain-text description."},"product_type":{"type":"string","enum":["digital","membership"],"description":"digital (default) or membership."},"tiers":{"type":"array","minItems":1,"description":"Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.","items":{"type":"object","properties":{"name":{"type":"string","description":"Tier name."},"price_cents":{"type":"integer","description":"Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want."},"recurrence":{"type":"string","enum":["monthly","quarterly","biannually","yearly","every_two_years"],"description":"Billing period."}},"required":["name","price_cents","recurrence"],"additionalProperties":false}}},"additionalProperties":false,"required":["name"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, summary, additional details, tags, price, URL, receipt message, or receipt button text of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"summary":{"type":"string","description":"New summary: the short plain-text line under the buy button on the product page. Send an empty string to remove it."},"additional_details":{"type":"array","description":"The name and value rows the product page shows in the card with the summary, e.g. \"Pages: 40\", in the order to show them. This replaces the whole list; send an empty array to remove every row.","items":{"type":"object","properties":{"name":{"type":"string","description":"Row label, e.g. \"Pages\"."},"value":{"type":"string","description":"Row value, e.g. \"40\"."}}}},"tags":{"type":"array","description":"The tags Discover matches the product to shoppers by, e.g. \"field-notes\". Up to ten, two to twenty characters each. This replaces the whole list; send an empty array to remove every tag.","items":{"type":"string"}},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."},"custom_receipt_text":{"type":"string","description":"The message the buyer sees on the receipt, up to 500 characters. Send an empty string to remove it."},"custom_view_content_button_text":{"type":"string","description":"The text on the receipt's button that opens the product, up to 26 characters. Send an empty string to remove it."},"permalink":{"type":"string","description":"New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"add_content_link","title":"Add content link","description":"Add a button with a link to a product's content page, which the buyer opens after purchase. Use it when the product is delivered as a link, like a Notion template's duplication link. Confirm the link and the button text with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"The link the buyer opens. https is assumed when the value has no scheme."},"label":{"type":"string","description":"Text on the button. Defaults to the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."},"email":{"type":"string","description":"Filter by buyer email."},"product_id":{"type":"string","description":"Only sales of this product (id from list_products)."},"after":{"type":"string","description":"Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01."},"before":{"type":"string","description":"Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01."},"payment":{"type":"string","enum":["paid","free"],"description":"paid = price above zero, free = zero-price sales."},"kind":{"type":"string","enum":["subscription","one_time"],"description":"subscription = membership charges, one_time = everything else."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_analytics","title":"Get analytics","description":"Product page views, sales and revenue for a date range, so conversion rate (sales / views) can be computed. breakdown=product (default) gives one row per product; breakdown=referrer gives views, sales and revenue per traffic source. Revenue is price minus refunds and chargebacks, before fees, in minor units of USD. Dates are in the creator's time zone and default to the last 30 days.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","referrer"],"description":"product (default) or referrer."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_customers","title":"Get customers","description":"Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, refunded and charged-back amounts, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who later paid, with days to convert. Amounts are price before fees in minor units of USD, with refunds and chargebacks reported on their own lines; start_date and end_date are days in the creator's time zone that bound order dates, or the purchase that converted.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["spend","conversion"],"description":"spend (default) or conversion."},"email":{"type":"string","description":"Only this buyer's email."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD, in the creator's time zone. Omit for all time."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD, inclusive. Omit for all time."},"limit":{"type":"integer","description":"Max buyers to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_sales_totals","title":"Get sales totals","description":"Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","country","day","week","month"],"description":"product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_subscriptions","title":"Get subscriptions","description":"The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["subscriptions","churn"],"description":"subscriptions (default) or churn."},"limit":{"type":"integer","description":"Max subscriptions to return (1-50, default 25). breakdown=subscriptions only."},"cursor":{"type":"string","description":"next_cursor from the previous page. breakdown=subscriptions only."},"status":{"type":"string","enum":["alive","ended"],"description":"alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"create_discount_code","title":"Create discount code","description":"Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The code buyers enter. Letters, numbers, dashes, and underscores."},"product_id":{"type":"string","description":"Product id or permalink. Omit for a code that covers all of the creator's products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_discount_code","title":"Update discount code","description":"Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"expire_discount_code","title":"Expire discount code","description":"End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
       JSON
     end
 

@@ -114,9 +114,9 @@ module User::Taxation
            .where(created_at: range)
     end
 
-    # affiliate_credit_cents on a collab purchase that also credits a direct affiliate
-    # (:collab_and_affiliates) is the sum of both credits, so the collaborator's total drops the
-    # direct affiliate's row, and the direct affiliate (not the purchase's `affiliate`) adds theirs.
+    # affiliate_credit_cents on a collab purchase that also credits a direct affiliate is the sum of
+    # both credits, so the collaborator's total drops the direct affiliate's row, and the direct
+    # affiliate (not the purchase's `affiliate`) adds theirs.
     def affiliate_credit_cents_for_1099_misc(year)
       scope = affiliate_sales_scope_for(year)
       direct_credits = AffiliateCredit.where(is_direct_affiliate_credit: true)

@@ -21,7 +21,14 @@ const runShim = ({
   windowName = "",
   replies = [],
   beaconMaxBytes = 60000,
-}: { save?: Record<string, string>; windowName?: string; replies?: Reply[]; beaconMaxBytes?: number } = {}) => {
+  saveUrl = "/save",
+}: {
+  save?: Record<string, string>;
+  windowName?: string;
+  replies?: Reply[];
+  beaconMaxBytes?: number;
+  saveUrl?: string | null;
+} = {}) => {
   const listeners: Record<string, () => void> = {};
   const timers: (() => void)[] = [];
   const sent: Batch[] = [];
@@ -44,7 +51,7 @@ const runShim = ({
   };
   const config = {
     save,
-    saveUrl: "/save",
+    saveUrl,
     flushDelayMs: 1000,
     beaconMaxBytes,
     failedMessageType: "gumroad:build-save-failed",
@@ -94,7 +101,18 @@ const runShim = ({
     frameDocument.visibilityState = "hidden";
     listeners.visibilitychange?.();
   };
-  return { storage, slot, sent, beacons, alerts, tick, hide, leave: () => listeners.pagehide?.(), frameWindow };
+  return {
+    storage,
+    slot,
+    sent,
+    beacons,
+    alerts,
+    tick,
+    hide,
+    leave: () => listeners.pagehide?.(),
+    frameWindow,
+    timers,
+  };
 };
 
 describe("save shim", () => {
@@ -290,5 +308,23 @@ describe("save shim", () => {
     await next.tick();
     expect(next.sent[0]).toMatchObject({ set: { level: "4", coins: "10" }, writer: first.beacons[0]?.writer });
     expect(next.sent[0]?.sequence).toBeGreaterThan(first.beacons[0]?.sequence ?? Infinity);
+  });
+
+  it("with no save URL, as in a demo, keeps writes in memory and sends nothing, even across pages", async () => {
+    const first = runShim({ saveUrl: null });
+    first.storage.setItem("level", "4");
+    first.slot.set("snapshot");
+    first.hide();
+    first.leave();
+
+    expect(first.storage.getItem("level")).toBe("4");
+    expect(first.timers).toHaveLength(0);
+    expect(first.sent).toHaveLength(0);
+    expect(first.beacons).toHaveLength(0);
+
+    const next = runShim({ saveUrl: null, windowName: String(first.frameWindow.name) });
+    await next.tick();
+    expect(next.storage.getItem("level")).toBe("4");
+    expect(next.sent).toHaveLength(0);
   });
 });

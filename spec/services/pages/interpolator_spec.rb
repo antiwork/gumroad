@@ -433,6 +433,18 @@ describe Pages::Interpolator do
       expect(result).to include(%(data-gumroad-checkout-params='{"price":"19.99"}'))
     end
 
+    it "bakes price=0 into the checkout href for a free PWYW product, and leaves price-less buttons alone" do
+      product = create(:product, customizable_price: true, price_cents: 0)
+
+      result = described_class.interpolate(
+        %(<a data-gumroad-action="buy" data-gumroad-price="0">Free</a><a data-gumroad-action="buy">Plain</a>),
+        product: product
+      )
+
+      expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true&amp;price=0"))
+      expect(result).to include(%(href="/l/#{product.unique_permalink}?wanted=true">Plain</a>))
+    end
+
     it "silently drops selection attributes the product can't honor (lenient fallback)" do
       product = create(:product, price_cents: 100) # simple product, no variants/PWYW/quantity/recurrence
 

@@ -119,7 +119,7 @@ class ScheduleWorkflowInstallmentJob
       return if old_delayed_delivery_time.nil?
 
       workflow = installment.workflow
-      return if workflow.member_cancellation_trigger?
+      return if workflow.member_cancellation_trigger? || workflow.opened_no_click_trigger?
       return unless workflow.seller_or_product_or_variant_type? || workflow.audience_type?
 
       restarted_after = cutoff_reference_time - old_delayed_delivery_time

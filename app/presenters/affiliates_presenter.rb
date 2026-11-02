@@ -42,7 +42,6 @@ class AffiliatesPresenter
       disable_global_affiliate: seller.disable_global_affiliate?,
       global_affiliate_percentage: seller.global_affiliate&.affiliate_percentage,
       affiliates_disabled_reason:,
-      collab_products_only: collab_products_only?,
     }
   end
 
@@ -71,7 +70,7 @@ class AffiliatesPresenter
         hash[product.product_id] = existing_self_service_affiliate_product_details(product)
       end
 
-    seller.links.alive.affiliate_eligible_for(seller).each_with_object({}) do |product, hash|
+    seller.links.alive.each_with_object({}) do |product, hash|
       product_details = existing_self_service_affiliate_products.fetch(product.id) { disabled_product_details(product) }
       next if product.archived? && !product_details[:enabled]
 
@@ -88,12 +87,6 @@ class AffiliatesPresenter
 
     def products_props
       @products_props ||= self_service_affiliate_product_details.values.sort_by { |product| [product[:enabled] ? 0 : 1, product[:name]] }
-    end
-
-    # The affiliate lists skip collab-flagged products, so an empty list can mean every published
-    # product has a collaborator rather than that the seller has no published product.
-    def collab_products_only?
-      products_props.empty? && seller.links.alive.is_collab.exists?
     end
 
     def existing_self_service_affiliate_product_details(self_service_affiliate_product)

@@ -83,7 +83,6 @@ describe Purchase, "collab purchase that also credits a direct affiliate" do
   end
 
   it "posts the recorded collaborator rate when its product rate changes before posting" do
-    Feature.activate_user(:collab_and_affiliates, seller)
     assignment = create(:product_affiliate, affiliate: collaborator, product:, affiliate_basis_points: 5000)
     direct_affiliate.update!(affiliate_basis_points: 1000)
     paid_purchase = create(:purchase, link: product, affiliate: collaborator, price_cents: 225_00,
