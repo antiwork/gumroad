@@ -177,7 +177,6 @@ describe AffiliatesPresenter do
         disable_global_affiliate: false,
         global_affiliate_percentage: 10,
         affiliates_disabled_reason: nil,
-        collab_products_only: false,
       })
     end
 
@@ -193,33 +192,18 @@ describe AffiliatesPresenter do
     end
   end
 
-  describe "#onboarding_props when the product list is empty" do
+  describe "#onboarding_props for collab products" do
     let(:seller) { create(:named_user) }
     let(:admin_for_seller) { create(:user, username: "adminforseller") }
     let(:pundit_user) { SellerContext.new(user: admin_for_seller, seller:) }
+    let!(:collab_product) { create(:product, :is_collab, user: seller, name: "Collab product") }
 
     before { create(:team_membership, user: admin_for_seller, seller:, role: TeamMembership::ROLE_ADMIN) }
 
-    context "when every published product is a collab" do
-      before { create_list(:product, 2, :is_collab, user: seller) }
+    it "lists them" do
+      props = described_class.new(pundit_user).onboarding_props
 
-      it "reports the collab cause for the empty product list" do
-        props = described_class.new(pundit_user).onboarding_props
-
-        expect(props[:products]).to be_empty
-        expect(props[:collab_products_only]).to eq(true)
-      end
-    end
-
-    context "when the only collab product is not published" do
-      before { create(:product, :is_collab, user: seller, purchase_disabled_at: Time.current) }
-
-      it "does not report a collab cause" do
-        props = described_class.new(pundit_user).onboarding_props
-
-        expect(props[:products]).to be_empty
-        expect(props[:collab_products_only]).to eq(false)
-      end
+      expect(props[:products].map { _1[:id] }).to eq([collab_product.external_id_numeric])
     end
   end
 

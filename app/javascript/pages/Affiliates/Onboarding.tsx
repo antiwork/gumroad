@@ -36,7 +36,6 @@ type Props = {
   disable_global_affiliate: boolean;
   global_affiliate_percentage: number | null;
   affiliates_disabled_reason: string | null;
-  collab_products_only: boolean;
 };
 
 const MIN_FEE_PERCENT = 1;
@@ -134,28 +133,15 @@ export default function AffiliatesOnboarding() {
         <section className="p-4! md:p-8!">
           <Placeholder>
             <PlaceholderImage src={placeholderImage} />
-            {props.collab_products_only ? (
-              <>
-                <h2>No products available for affiliates</h2>
-                All of your published products have collaborators, so none of them can be used for affiliates. Remove
-                the collaborator to make the product available again.
-                <Button asChild color="accent">
-                  <Link href={cast<string>(Routes.collaborators_path())}>Manage collaborators</Link>
-                </Button>
-              </>
-            ) : (
-              <>
-                <h2>Almost there!</h2>
-                You need a published product to add affiliates.
-                <NavigationButtonInertia
-                  href={Routes.new_product_path()}
-                  color="accent"
-                  disabled={!loggedInUser?.policies.product.create}
-                >
-                  New product
-                </NavigationButtonInertia>
-              </>
-            )}
+            <h2>Almost there!</h2>
+            You need a published product to add affiliates.
+            <NavigationButtonInertia
+              href={Routes.new_product_path()}
+              color="accent"
+              disabled={!loggedInUser?.policies.product.create}
+            >
+              New product
+            </NavigationButtonInertia>
           </Placeholder>
         </section>
       ) : (

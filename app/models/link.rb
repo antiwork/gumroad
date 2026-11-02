@@ -415,11 +415,6 @@ class Link < ApplicationRecord
     distinct.joins(user: [:categories]).where(categories: category_ids)
   }
 
-  # Products of `seller` that can have direct affiliates: all of them with the :collab_and_affiliates
-  # flag, otherwise only those without a collaborator.
-  scope :affiliate_eligible_for, ->(seller) do
-    Feature.active?(:collab_and_affiliates, seller) ? all : not_is_collab
-  end
   scope :collabs_as_collaborator, ->(user) do
     joins(product_affiliates: :affiliate)
       .is_collab
@@ -635,15 +630,13 @@ class Link < ApplicationRecord
           end
         end
 
-        if !is_collab? || Feature.active?(:collab_and_affiliates, user)
-          user.direct_affiliates.alive.apply_to_all_products.order(:id).each do |affiliate|
-            next unless ProductAffiliate.create_if_missing!(affiliate:, product: self)
+        user.direct_affiliates.alive.apply_to_all_products.order(:id).each do |affiliate|
+          next unless ProductAffiliate.create_if_missing!(affiliate:, product: self)
 
-            affiliate_id = affiliate.id
-            product_id = id
-            AfterCommitEverywhere.after_commit do
-              AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate_id, product_id).deliver_later
-            end
+          affiliate_id = affiliate.id
+          product_id = id
+          AfterCommitEverywhere.after_commit do
+            AffiliateMailer.notify_direct_affiliate_of_new_product(affiliate_id, product_id).deliver_later
           end
         end
       end

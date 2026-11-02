@@ -43,8 +43,8 @@ class AffiliateMailer < ApplicationMailer
   end
 
   # `direct_affiliate` is true for the email to the direct affiliate of a collab purchase that credits
-  # both a collaborator and a direct affiliate (:collab_and_affiliates); `affiliate` is then the
-  # collaborator, who gets the default email.
+  # both a collaborator and a direct affiliate; `affiliate` is then the collaborator, who gets the
+  # default email.
   def notify_affiliate_of_sale(purchase_id, direct_affiliate = false)
     # A worker's replica read can see the purchase but not the credit created with it, and the render
     # dereferences nil, so the credit has to come back with the purchase from the primary.

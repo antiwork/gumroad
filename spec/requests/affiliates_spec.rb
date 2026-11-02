@@ -283,7 +283,7 @@ describe "Affiliates", type: :system, js: true do
 
         fill_in "Email", with: new_affiliate_user.email
 
-        expect(page).not_to have_content "Collab product" # excludes ineligible products
+        expect(page).to have_table_row({ "Product" => collab_product.name })
 
         within :table_row, { "Product" => "All products" } do
           check "Enable all products"
@@ -303,12 +303,12 @@ describe "Affiliates", type: :system, js: true do
 
         # Show the most recently updated affiliate as the first row
         expect(page).to have_table "Affiliates", with_rows: [
-          { "Name" => new_affiliate_user.name, "Products" => "2 products", "Commission" => "10%" },
+          { "Name" => new_affiliate_user.name, "Products" => "3 products", "Commission" => "10%" },
           { "Name" => existing_affiliate_user.name, "Products" => product_one.name, "Commission" => "15%" }
         ]
         expect(page).to have_table "Requests", with_rows: [{ "Name" => affiliate_request.name }]
 
-        find(:table_row, { "Name" => new_affiliate_user.name, "Product" => "2 products" }).click
+        find(:table_row, { "Name" => new_affiliate_user.name, "Product" => "3 products" }).click
         within_modal new_affiliate_user.name do
           within_section product_one.name do
             expect(page).to have_text("Revenue $0", normalize_ws: true)
@@ -331,7 +331,7 @@ describe "Affiliates", type: :system, js: true do
         new_direct_affiliate = DirectAffiliate.find_by(affiliate_user_id: new_affiliate_user.id)
         expect(new_direct_affiliate.apply_to_all_products).to be true
         expect(new_direct_affiliate.destination_url).to eq "https://my-site.com#section?foo=bar&baz=qux"
-        expect(new_direct_affiliate.products).to match_array [product_one, product_two]
+        expect(new_direct_affiliate.products).to match_array [product_one, product_two, collab_product]
       end
 
       it "creates a new affiliate for one specific enabled product" do
@@ -493,7 +493,9 @@ describe "Affiliates", type: :system, js: true do
       expect(page).to have_field("Email", with: affiliate_user.email, disabled: true)
       expect(page).to have_unchecked_field("Enable all products")
 
-      expect(page).not_to have_content "Collab product" # excludes ineligible products
+      within :table_row, { "Product" => collab_product.name } do
+        expect(page).to have_unchecked_field("Enable product")
+      end
 
       within :table_row, { "Product" => "a product" } do
         expect(page).to have_checked_field("Enable product")
@@ -572,8 +574,9 @@ describe "Affiliates", type: :system, js: true do
 
       expect(direct_affiliate.reload.apply_to_all_products).to be true
       expect(direct_affiliate.affiliate_basis_points).to eq 1500
-      expect(direct_affiliate.product_affiliates.count).to eq(2)
-      expect(page).to have_table_row({ "Name" => affiliate_user.name, "Products" => "2 products", "Commission" => "15%" })
+      expect(direct_affiliate.product_affiliates.count).to eq(3)
+      expect(direct_affiliate.products).to include(collab_product)
+      expect(page).to have_table_row({ "Name" => affiliate_user.name, "Products" => "3 products", "Commission" => "15%" })
     end
 
     it "can clear affiliate products" do
