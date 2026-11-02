@@ -1611,7 +1611,8 @@ module Mcp
       end
 
       # Slug path -> Taxonomy for the whole tree, walked in memory: a few hundred rows, one query,
-      # however deep the path the caller sent.
+      # however deep the path the caller sent. Read live, not through Discover::TaxonomyPresenter's
+      # hour-long nav cache: update_product writes the id it resolves, which must be in the current tree.
       def taxonomy_paths
         @taxonomy_paths ||= begin
           taxonomies = Taxonomy.all.to_a
