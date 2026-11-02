@@ -123,7 +123,7 @@ module Mcp
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files buyers receive and a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
@@ -392,6 +392,11 @@ module Mcp
                  "id" => { type: "string", description: "Product id or permalink." },
                  "url" => { type: "string", description: "Public https URL of the file." },
                  "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL." }
+               }, required: %w[id url]),
+          tool("add_content_link", "Add a button with a link to a product's content page, which the buyer opens after purchase. Use it when the product is delivered as a link, like a Notion template's duplication link. Confirm the link and the button text with the creator first.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "url" => { type: "string", description: "The link the buyer opens. https is assumed when the value has no scheme." },
+                 "label" => { type: "string", description: "Text on the button. Defaults to the URL." }
                }, required: %w[id url]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." }
@@ -811,6 +816,23 @@ module Mcp
 
         product.reload
         { product: product_payload(product), files: files_payload(product), message: "#{file&.name_displayable || 'File'} is now attached to #{product.name}." }
+      end
+
+      def tool_add_content_link(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        url = args["url"].to_s.strip
+        raise Error.new("url is required", code: -32602) if url.blank?
+
+        begin
+          links = Mcp::ProductContentLink.new(product:, url:, label: args["label"]).perform
+        rescue Mcp::ProductContentLink::BlockedScheme
+          raise ToolError, "A content link cannot use a #{RichContent::BLOCKED_HREF_SCHEMES.join(', ')} URL, because a browser would run it instead of opening a page."
+        rescue Mcp::ProductContentLink::InvalidUrl
+          raise ToolError, "That is not a link. Use a full URL, like https://example.com/your-template."
+        end
+
+        { product: product_payload(product.reload), links:, message: "Buyers now see this link as a button on #{product.name}'s content page." }
       end
 
       def tool_publish_product(args)
