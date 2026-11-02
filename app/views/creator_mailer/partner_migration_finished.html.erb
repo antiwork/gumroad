@@ -1,0 +1,12 @@
+<%= header_section(@subject) %>
+<div>
+  <% if @migration.status == PartnerMigration::STATUS_FAILED %>
+    <p>Some of your products from <%= @migration.oauth_application.name %> could not be imported. We try them again when <%= @migration.oauth_application.name %> sends them again. The products that imported are on Gumroad as drafts.</p>
+  <% else %>
+    <p>Your products from <%= @migration.oauth_application.name %> are on Gumroad as drafts. Review them, and publish each one when you are ready.</p>
+  <% end %>
+  <% if @migration.account_setup_open? %>
+    <p>To see them, first set your password with the link in the email "Your Gumroad account is ready".</p>
+  <% end %>
+  <p><%= link_to "Review drafts", products_url(host: DOMAIN, protocol: PROTOCOL), class: "button primary" %></p>
+</div>

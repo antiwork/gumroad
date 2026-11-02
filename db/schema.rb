@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_23_000007) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_23_000008) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1678,6 +1678,41 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_23_000007) do
     t.index ["oauth_application_id", "external_user_id"], name: "index_partner_sellers_on_application_and_external_user", unique: true
     t.index ["oauth_application_id", "user_id"], name: "index_partner_sellers_on_application_and_user", unique: true
     t.index ["user_id"], name: "index_partner_sellers_on_user_id"
+  end
+
+  create_table "partner_migrations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.integer "oauth_application_id", null: false
+    t.string "external_user_id", null: false, collation: "utf8mb4_0900_bin"
+    t.string "public_id", limit: 21, null: false, collation: "utf8mb4_0900_bin"
+    t.string "code_digest", null: false
+    t.json "products", null: false
+    t.json "results"
+    t.string "status", default: "pending", null: false
+    t.bigint "user_id"
+    t.datetime "expires_at", null: false
+    t.datetime "claimed_at"
+    t.datetime "completed_at"
+    t.string "failure_reason"
+    t.integer "resumes_count", default: 0, null: false
+    t.string "email"
+    t.json "profile"
+    t.boolean "account_created", default: false, null: false
+    t.string "account_setup_token_digest"
+    t.string "account_setup_password_digest"
+    t.datetime "account_setup_sent_at"
+    t.integer "account_setup_emails_count", default: 0, null: false
+    t.datetime "notified_at"
+    t.string "notification_failed_email"
+    t.datetime "failure_notified_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_setup_token_digest"], name: "index_partner_migrations_on_account_setup_token_digest", unique: true
+    t.index ["code_digest"], name: "index_partner_migrations_on_code_digest", unique: true
+    t.index ["notified_at", "completed_at"], name: "index_partner_migrations_on_notified_at_and_completed_at"
+    t.index ["oauth_application_id", "external_user_id"], name: "index_partner_migrations_on_application_and_external_user"
+    t.index ["public_id"], name: "index_partner_migrations_on_public_id", unique: true
+    t.index ["status", "updated_at"], name: "index_partner_migrations_on_status_and_updated_at"
+    t.index ["user_id"], name: "index_partner_migrations_on_user_id"
   end
 
   create_table "payment_options", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
