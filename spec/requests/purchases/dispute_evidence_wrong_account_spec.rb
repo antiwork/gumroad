@@ -19,7 +19,7 @@ describe "Dispute evidence link opened while signed in to another account", type
 
   before do
     host! DOMAIN
-    # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+    # Devise builds its mappings when routes are drawn; reload them so this spec also passes when run on its own.
     Rails.application.reload_routes!
     create(:merchant_account, user: other_account)
     $redis.sadd(RedisKey.user_ids_with_payment_requirements_key, other_account.id)
