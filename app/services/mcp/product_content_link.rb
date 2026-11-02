@@ -101,9 +101,22 @@ module Mcp
       def first_page(owner, seed)
         existing = owner.alive_rich_contents.min_by(&:position)
         return existing if existing
-        return seed.map { |attrs| owner.alive_rich_contents.create!(**attrs) }.first if seed
+
+        if seed
+          pages = seed.map { |attrs| owner.alive_rich_contents.create!(**attrs) }
+          adopt_embedded_files(owner, pages)
+          return pages.first
+        end
 
         owner.alive_rich_contents.create!(description: file_embed_nodes(owner), position: 0)
+      end
+
+      # A copy carries the holder's file embeds, and UrlRedirect#alive_product_files serves only the
+      # embeds the reading version's own files hold, so the files join it too or its buyers lose them.
+      def adopt_embedded_files(owner, pages)
+        held_ids = owner.product_files.pluck(:id)
+        embedded_ids = pages.flat_map(&:embedded_product_file_ids_in_order).uniq - held_ids
+        ProductFile.where(id: embedded_ids).alive.find_each { owner.product_files << _1 }
       end
 
       def file_embed_nodes(owner)

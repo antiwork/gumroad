@@ -264,6 +264,29 @@ describe "MCP server content links" do
         expect(page.dig("description", "content", 1, "attrs", "href")).to eq("https://notion.so/template")
       end
 
+      it "keeps the downloads the copied page embeds for the buyers it serves" do
+        host! DOMAIN
+        file = create(:product_file, link: @versioned, position: 0)
+        @content_version.product_files << file
+        holder = @content_version.alive_rich_contents.sole
+        holder.update!(description: [{ "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }] + holder.description)
+
+        call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
+
+        # The copy is what a buyer without a version reads, so the file its page embeds has to be
+        # one that version delivers, or the download rows stay on the page the buyer no longer sees.
+        expect(@empty_version.reload.alive_rich_contents.sole.embedded_product_file_ids_in_order).to eq([file.id])
+
+        purchase = create(:purchase, link: @versioned, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
+        get "/d/#{purchase.url_redirect.token}", headers: { "X-Inertia" => "true" }
+
+        expect(response).to have_http_status(:ok)
+        items = response.parsed_body.dig("props", "content", "content_items")
+        expect(items.filter_map { _1["id"] if _1["type"] == "file" }).to eq([file.external_id])
+        page = response.parsed_body.dig("props", "content", "rich_content_pages").sole
+        expect(page.dig("description", "content").map { _1["type"] }).to eq(%w[fileEmbed paragraph button])
+      end
+
       it "keeps serving versionless buyers the pages they read, now with the button on them" do
         host! DOMAIN
         purchase = create(:purchase, link: @versioned, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
