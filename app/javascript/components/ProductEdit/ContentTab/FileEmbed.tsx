@@ -652,12 +652,10 @@ const FileEmbedNodeView = ({
                       knows which row the deploy pipeline owns. */}
                   {file.web_build ? (
                     <li>
-                      <Pill size="small">Web build v{file.web_build.number}</Pill>
+                      <Pill size="small">Web app, version {file.web_build.number}</Pill>
                     </li>
                   ) : null}
-                  {file.web_build?.status === "live" ? (
-                    <li>Deployed {deployedAgo(file.web_build.deployed_at)}</li>
-                  ) : null}
+                  {file.web_build?.status === "live" ? <li>Added {deployedAgo(file.web_build.deployed_at)}</li> : null}
 
                   {file.extension ? <li>{file.extension}</li> : null}
 

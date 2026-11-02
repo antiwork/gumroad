@@ -295,7 +295,7 @@ export const FileRow = ({
             <>
               {/* A hostable build is a zip a browser runs, not a document to read in place, so the
                   row says what it is before the buyer downloads it. */}
-              {file.web_build ? <li>Web build v{file.web_build.number}</li> : null}
+              {file.web_build ? <li>Web app, version {file.web_build.number}</li> : null}
 
               {file.extension ? <li>{file.extension}</li> : null}
 

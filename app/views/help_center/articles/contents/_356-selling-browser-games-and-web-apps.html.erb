@@ -11,7 +11,7 @@
     <li><a href="#If-something-doesnt-work-Fx5tB" target="_self">If something doesn't work</a></li>
   </ul>
   <p>You can sell a web app: a game, an interactive course, or anything else that runs in a web browser from an <code>index.html</code> file. Your buyers open it on Gumroad. They don't download or install anything, and you don't need your own website to host it.</p>
-  <p>On Gumroad, each upload of your web app is a version. You upload versions with the Gumroad command line tool, or you ask your AI coding assistant to do it for you. You choose which version your buyers get.</p>
+  <p>On Gumroad, each upload of your web app is a version. You upload versions in the product editor, with the Gumroad command line tool, or with your AI coding assistant. You choose which version your buyers get.</p>
 
   <h3 id="What-your-buyers-get-Hb3wK">What your buyers get</h3>
   <p>After they buy, your buyers see a Play button next to your web app on their content page. Play opens your web app in a new tab, in the full window. They can also open it in full screen.</p>
@@ -29,7 +29,15 @@
   </ul>
 
   <h3 id="Add-your-web-app-to-a-product-Gk2rS">Add your web app to a product</h3>
-  <p>Before you start, create the product in your dashboard, and find its ID. The ID is the part of the product's edit page address after <code>/products/</code>. For example, in <code>gumroad.com/products/demo/edit</code>, the ID is <code>demo</code>.</p>
+  <p>To upload your web app in the product editor:</p>
+  <ol>
+    <li>Put your web app in a zip file, with <code>index.html</code> at the top level.</li>
+    <li>Open the product, and go to the Content tab.</li>
+    <li>Click Upload files, then click Web app.</li>
+    <li>Click Upload a zip, and choose your zip file.</li>
+    <li>Under "Ready to go live", click Make live, and confirm.</li>
+  </ol>
+  <p>To use the command line tool instead, create the product in your dashboard first, and find its ID. The ID is the part of the product's edit page address after <code>/products/</code>. For example, in <code>gumroad.com/products/demo/edit</code>, the ID is <code>demo</code>.</p>
   <ol>
     <li>Install the <a href="https://gumroad.com/api#api-cli" target="_blank">Gumroad command line tool</a>.</li>
     <li>Sign in with <code>gumroad auth login</code>.</li>
@@ -37,13 +45,13 @@
       <br><code>gumroad builds deploy ./my-web-app --product demo --promote</code>
     </li>
   </ol>
-  <p>Your web app appears in the product's content as a file, labeled "Web build". Your buyers get it the next time they open the product.</p>
+  <p>Your web app appears in the product's content as a file, labeled "Web app" with its version number. Your buyers get it the next time they open the product.</p>
   <p>If you use an AI coding assistant, such as Claude Code, Codex, or Cursor, you can ask it to do these steps. For example: "Deploy this web app to my Gumroad product demo and make it live."</p>
   <p>To try the whole process with a small example first, run <code>gumroad builds init</code>. It creates a working <code>index.html</code> and a script that uploads it.</p>
 
   <h3 id="Release-a-new-version-Vm9dQ">Release a new version</h3>
-  <p>Run the same command again with your updated web app. Each upload becomes the next version.</p>
-  <p>If you leave out <code>--promote</code>, the new version is uploaded but your buyers keep the current one. This lets you check a version before your buyers get it. When you are ready:</p>
+  <p>Upload your updated web app the same way. In the editor, click History on your web app's row, then Upload a zip. With the command line tool, run the same command again. Each upload becomes the next version.</p>
+  <p>A new version uploaded in the editor, or with the command line tool without <code>--promote</code>, does not go live yet: your buyers keep the current one. This lets you check a version before your buyers get it. When you are ready:</p>
   <ol>
     <li>Open the product, and go to the Content tab.</li>
     <li>On your web app's row, click History.</li>
@@ -60,7 +68,7 @@
     <li>Click Make live, and confirm.</li>
   </ol>
   <p>Your buyers get that version the next time they open the product. Their saved progress stays.</p>
-  <p>If you removed your web app's row from the content, the Content tab shows "Your web app is not in this product's content yet." Click History there, then click Add to content on the live version.</p>
+  <p>If you removed your web app's row from the content, the Content tab shows "Your web app is not in this product's content yet." Click Open version history there, then click Add to content on the live version.</p>
 
   <h3 id="How-saved-progress-works-Sp6xF">How saved progress works</h3>
   <p>Your web app saves the way it does on any website, with <code>localStorage</code> or IndexedDB. You don't need to change your code. Gumroad keeps each buyer's saved data with their purchase, so it is there when they come back. Godot and Unity games save this way too.</p>

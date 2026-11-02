@@ -163,6 +163,7 @@ const renderPreview = ({
         cancellationDiscountsEnabled: false,
         receiptEmailFrom: "seller@example.com",
         priceCheckerEnabled: false,
+        webBuildPlayerEnabled: false,
         hasWebBuilds: false,
         customHtmlPagesEnabled: false,
         autoMarketingEnabled: false,

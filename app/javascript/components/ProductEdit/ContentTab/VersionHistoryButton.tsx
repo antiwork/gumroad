@@ -1,28 +1,33 @@
 import { DotsHorizontalRounded } from "@boxicons/react";
 import * as React from "react";
 
-import { getProductBuilds, promoteProductBuild, ProductBuild } from "$app/data/product_builds";
+import { createProductBuild, getProductBuilds, promoteProductBuild, ProductBuild } from "$app/data/product_builds";
 import { deployedAgo } from "$app/utils/date";
 import FileUtils from "$app/utils/file";
+import GuidGenerator from "$app/utils/guid_generator";
+import { ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
+import { useEvaporateUploader } from "$app/components/EvaporateUploader";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { filesAreUploading, hasLiveBuildFile, useProductEditContext } from "$app/components/ProductEdit/state";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
+import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { showAlert } from "$app/components/server-components/Alert";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { InlineList } from "$app/components/ui/InlineList";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
-import { Pill } from "$app/components/ui/Pill";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
 // Earlier versions shown before "Show all"; rollback almost always goes to one of the last few.
 const EARLIER_BUILDS_SHOWN = 10;
+// ProductBuild::MAX_BYTE_SIZE; the server checks it too, this only saves a doomed upload.
+const MAX_WEB_APP_ZIP_BYTES = 2 * 1024 * 1024 * 1024;
 
 const VersionRow = ({ build, children }: { build: ProductBuild; children?: React.ReactNode }) => {
   const live = build.status === "live";
@@ -30,16 +35,9 @@ const VersionRow = ({ build, children }: { build: ProductBuild; children?: React
     <Row role="listitem" className="grid-cols-[1fr_auto]">
       <RowContent>
         <div>
-          <h4 className="flex items-center gap-2">
-            Version {build.number}
-            {live ? (
-              <Pill size="small" color="primary">
-                Live
-              </Pill>
-            ) : null}
-          </h4>
+          <h4>Version {build.number}</h4>
           <InlineList>
-            <li>Deployed {deployedAgo(build.created_at)}</li>
+            <li>Added {deployedAgo(build.created_at)}</li>
             {live ? <li>{FileUtils.getFullFileSizeString(build.byte_size)}</li> : null}
             {live ? <li>Buyers get this version</li> : null}
           </InlineList>
@@ -53,28 +51,113 @@ const VersionRow = ({ build, children }: { build: ProductBuild; children?: React
 // Builds are called versions for sellers. Making one live saves the editor first: promoting rewrites the
 // product's content on the server, and the page reloads to show it.
 export const VersionHistoryButton = () => {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>History</Button>
+      <VersionHistory open={open} onOpenChange={setOpen} />
+    </>
+  );
+};
+
+export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) => {
   const { uniquePermalink, save, product } = useProductEditContext();
   // The save before promoting would send files whose upload has not finished, and the reload after it
   // would cut the upload off.
   const imageSettings = useImageUploadSettings();
-  const uploading = filesAreUploading(product) || !!imageSettings?.isUploading;
-  const [open, setOpen] = React.useState(false);
+  // null while no zip is uploading; "adding" once the upload is done and the server records the version.
+  const [zipUpload, setZipUpload] = React.useState<{ key: string; percent: number } | "adding" | null>(null);
+  const uploading = filesAreUploading(product) || !!imageSettings?.isUploading || zipUpload !== null;
   const [builds, setBuilds] = React.useState<ProductBuild[] | null>(null);
   const [showAll, setShowAll] = React.useState(false);
   const [confirming, setConfirming] = React.useState<ProductBuild | null>(null);
   const [promoting, setPromoting] = React.useState(false);
+  // The upload button sits below the list, so the new version is announced next to it as well.
+  const [addedNumber, setAddedNumber] = React.useState<number | null>(null);
+  const zipInputRef = React.useRef<HTMLInputElement>(null);
+  const uploader = useEvaporateUploader();
+  const s3UploadConfig = useS3UploadConfig();
   const uid = React.useId();
 
-  const show = async () => {
-    setOpen(true);
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
     setBuilds(null);
     setShowAll(false);
-    try {
-      setBuilds(await getProductBuilds(uniquePermalink));
-    } catch {
-      setOpen(false);
-      showAlert("Sorry, the version history could not be loaded. Please try again.", "error");
+    setAddedNumber(null);
+    getProductBuilds(uniquePermalink).then(
+      (loaded) => {
+        if (!cancelled) setBuilds(loaded);
+      },
+      () => {
+        if (cancelled) return;
+        onOpenChange(false);
+        showAlert("Sorry, the version history could not be loaded. Please try again.", "error");
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [open, uniquePermalink]);
+
+  // Leaving the page cuts the upload off, as it does for the editor's own files.
+  React.useEffect(() => {
+    if (!zipUpload) return;
+    const beforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [zipUpload !== null]);
+
+  // The picked file stays in the input until its upload ends: Chromium can drop a file's data once the
+  // input that picked it is reset.
+  const finishZipUpload = () => {
+    setZipUpload(null);
+    if (zipInputRef.current) zipInputRef.current.value = "";
+  };
+
+  const uploadZip = (file: File) => {
+    if (!uploader) return;
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      finishZipUpload();
+      showAlert("Choose a .zip file of your web app.", "error");
+      return;
     }
+    if (file.size > MAX_WEB_APP_ZIP_BYTES) {
+      finishZipUpload();
+      showAlert("A web app's zip can be up to 2 GB.", "error");
+      return;
+    }
+    const key = `web_app_${GuidGenerator.generate()}`;
+    const { s3key, fileUrl } = s3UploadConfig.generateS3KeyForUpload(key, file.name);
+    setZipUpload({ key, percent: 0 });
+    setAddedNumber(null);
+    uploader.scheduleUpload({
+      cancellationKey: key,
+      name: s3key,
+      file,
+      mimeType: "application/zip",
+      onProgress: ({ percent }) => setZipUpload({ key, percent }),
+      onComplete: () => {
+        setZipUpload("adding");
+        createProductBuild(uniquePermalink, fileUrl)
+          .then((added) => {
+            // The list is newest first, and adding a version changes no other one.
+            setBuilds((current) => current && [added, ...current]);
+            setAddedNumber(added.number);
+          })
+          .catch((error: unknown) =>
+            showAlert(
+              error instanceof ResponseError ? error.message : "Sorry, the version could not be added.",
+              "error",
+            ),
+          )
+          .finally(finishZipUpload);
+      },
+      onError: () => {
+        finishZipUpload();
+        showAlert("Sorry, the upload failed. Please try again.", "error");
+      },
+    });
   };
 
   const makeLive = async (build: ProductBuild) => {
@@ -94,21 +177,85 @@ export const VersionHistoryButton = () => {
   };
 
   const live = builds?.find((build) => build.status === "live");
-  // Deployed after the live one and never made live: what the seller most likely came here to publish.
+  // Added after the live one and never made live: what the seller most likely came here to publish.
   const ready = builds?.filter((build) => build.status === "uploaded" && build.number > (live?.number ?? 0)) ?? [];
   const earlier = builds?.filter((build) => build !== live && !ready.includes(build)) ?? [];
   const shownEarlier = showAll ? earlier : earlier.slice(0, EARLIER_BUILDS_SHOWN);
-  const deployCommand = `gumroad builds deploy ./my-game --product ${uniquePermalink}`;
+  const deployCommand = `gumroad builds deploy ./my-web-app --product ${uniquePermalink}`;
 
   return (
     <>
-      <Button onClick={() => void show()}>History</Button>
-      <Sheet open={open} onOpenChange={(next) => setOpen(next || promoting)} modal>
-        <SheetHeader>Version history</SheetHeader>
+      <Sheet open={open} onOpenChange={(next) => onOpenChange(next || promoting || zipUpload !== null)} modal>
+        <SheetHeader>{builds?.length === 0 ? "Add a web app" : "Version history"}</SheetHeader>
         {builds ? (
           <>
+            <section aria-label={builds.length > 0 ? "Add a new version" : "Add a web app"} className="grid gap-2">
+              {builds.length > 0 ? <h3>Add a new version</h3> : null}
+              <p>Upload a zip of your web app. Put index.html at the top level of the zip, not inside a folder.</p>
+              <p>
+                {live
+                  ? "Buyers keep the live version until you make the new one live."
+                  : "Buyers get it once you make it live."}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                {zipUpload === null ? (
+                  <>
+                    <Button disabled={!uploader} onClick={() => zipInputRef.current?.click()}>
+                      Upload a zip
+                    </Button>
+                    {addedNumber !== null ? (
+                      <span role="status">Version {addedNumber} is ready. Make it live below.</span>
+                    ) : null}
+                  </>
+                ) : zipUpload === "adding" ? (
+                  <span role="status">Adding the new version...</span>
+                ) : (
+                  <>
+                    <span role="status">Uploading... {Math.round(zipUpload.percent * 100)}%</span>
+                    <LinkButton
+                      onClick={() => {
+                        uploader?.cancelUpload(zipUpload.key);
+                        finishZipUpload();
+                      }}
+                    >
+                      Cancel
+                    </LinkButton>
+                  </>
+                )}
+                <input
+                  ref={zipInputRef}
+                  type="file"
+                  accept=".zip,application/zip"
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-label="Web app zip"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadZip(file);
+                  }}
+                />
+              </div>
+              <p>
+                Or deploy it with the{" "}
+                <a href={`${Routes.api_path()}#api-cli`} target="_blank" rel="noopener noreferrer">
+                  Gumroad CLI
+                </a>
+                , or ask your AI coding assistant to do it:
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="min-w-0 grow">
+                  <CodeSnippet>{deployCommand}</CodeSnippet>
+                </div>
+                <div className="shrink-0">
+                  <CopyToClipboard text={deployCommand} copyTooltip="Copy command">
+                    <Button size="sm">Copy</Button>
+                  </CopyToClipboard>
+                </div>
+              </div>
+            </section>
             {live ? (
-              <section aria-label="Live version">
+              <section aria-labelledby={`${uid}-live`} className="grid gap-2">
+                <h3 id={`${uid}-live`}>Live version</h3>
                 <Rows role="list">
                   <VersionRow build={live}>
                     {/* Making the live version live again puts its row back in the content. */}
@@ -163,26 +310,6 @@ export const VersionHistoryButton = () => {
                 ) : null}
               </section>
             ) : null}
-            <section aria-labelledby={`${uid}-add`} className="grid gap-2">
-              <h3 id={`${uid}-add`}>Add a new version</h3>
-              <p>Deploy it with the Gumroad CLI, or ask your AI coding assistant to do it:</p>
-              <div className="flex items-center gap-2">
-                <div className="min-w-0 grow">
-                  <CodeSnippet>{deployCommand}</CodeSnippet>
-                </div>
-                <div className="shrink-0">
-                  <CopyToClipboard text={deployCommand} copyTooltip="Copy command">
-                    <Button size="sm">Copy</Button>
-                  </CopyToClipboard>
-                </div>
-              </div>
-              <p>
-                Buyers keep the live version until you make the new one live.{" "}
-                <a href={`${Routes.api_path()}#api-cli`} target="_blank" rel="noopener noreferrer">
-                  Get the Gumroad CLI
-                </a>
-              </p>
-            </section>
           </>
         ) : (
           <div className="flex justify-center">

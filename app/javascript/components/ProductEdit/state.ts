@@ -350,6 +350,7 @@ export const ProductEditContext = React.createContext<{
   // shown in the Receipt tab's email-style preview chrome.
   receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
+  webBuildPlayerEnabled: boolean;
   hasWebBuilds: boolean;
   customHtmlPagesEnabled: boolean;
   autoMarketingEnabled: boolean;
