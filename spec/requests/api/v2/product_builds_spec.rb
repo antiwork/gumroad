@@ -427,6 +427,71 @@ describe "Product builds API" do
     end
   end
 
+  describe "POST / DELETE demo" do
+    let!(:first) { create(:product_build, :live, product:, number: 1, site_unpacked_at: Time.current) }
+    let!(:second) { create(:product_build, product:, number: 2) }
+
+    def select_demo(build)
+      post "/api/v2/products/#{product.external_id}/builds/#{build.public_id}/demo", params: { access_token: token.token }
+    end
+
+    it "makes the build the product's only demo" do
+      third = create(:product_build, product:, number: 3)
+      select_demo(third)
+      select_demo(second)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["build"]).to include("id" => second.public_id, "demo" => true)
+      expect(product.product_builds.demo_selected).to eq([second])
+      expect(third.reload).not_to be_demo_selected
+    end
+
+    it "queues the unpack of a build that was never promoted, so it can play" do
+      expect { select_demo(second) }.to change { ProductBuildUnpackJob.jobs.size }.by(1)
+      expect(ProductBuildUnpackJob.jobs.last["args"]).to eq([second.id])
+    end
+
+    it "does not unpack a build whose site is ready" do
+      second.update!(site_unpacked_at: Time.current)
+
+      expect { select_demo(second) }.not_to change { ProductBuildUnpackJob.jobs.size }
+    end
+
+    it "refuses the live build of a paid product, which buyers pay for" do
+      select_demo(first)
+
+      expect(response.parsed_body).to include("success" => false, "message" => "This build is what buyers get. Deploy a separate build to use as the demo.")
+      expect(first.reload).not_to be_demo_selected
+    end
+
+    it "refuses a build whose zip could not be unpacked" do
+      second.update!(site_unpack_error: "no index.html")
+
+      expect { select_demo(second) }.not_to change { ProductBuildUnpackJob.jobs.size }
+
+      expect(response.parsed_body["success"]).to be false
+      expect(second.reload).not_to be_demo_selected
+    end
+
+    it "stops using the build as the demo" do
+      select_demo(second)
+
+      delete "/api/v2/products/#{product.external_id}/builds/#{second.public_id}/demo", params: { access_token: token.token }
+
+      expect(response.parsed_body["build"]).to include("demo" => false)
+      expect(second.reload).not_to be_demo_selected
+    end
+
+    it "does not touch another seller's product" do
+      other = create(:product_build, product: create(:product), number: 1)
+
+      post "/api/v2/products/#{other.product.external_id}/builds/#{other.public_id}/demo", params: { access_token: token.token }
+
+      expect(response.parsed_body["success"]).to be false
+      expect(other.reload).not_to be_demo_selected
+    end
+  end
+
   describe "GET index / show" do
     it "lists builds and shows one" do
       deploy(upload_zip)

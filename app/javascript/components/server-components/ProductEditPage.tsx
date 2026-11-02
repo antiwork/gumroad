@@ -1,7 +1,7 @@
 import { DirectUpload } from "@rails/activestorage";
 import { isEqual } from "lodash-es";
 import * as React from "react";
-import { createBrowserRouter, RouteObject, RouterProvider } from "react-router-dom";
+import { RouteObject, RouterProvider } from "react-router-dom";
 
 import {
   applyRichContentPageSaveResponse,
@@ -30,6 +30,7 @@ import { useDedupeInFlight } from "$app/utils/dedupeInFlight";
 import { Taxonomy } from "$app/utils/discover";
 import { ALLOWED_EXTENSIONS } from "$app/utils/file";
 import GuidGenerator from "$app/utils/guid_generator";
+import { claimPopstate } from "$app/utils/popstateClaims";
 import { request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -41,6 +42,7 @@ import { Page, titleWithFallback } from "$app/components/ProductEdit/ContentTab/
 import { ProductTab } from "$app/components/ProductEdit/ProductTab";
 import { ReceiptTab } from "$app/components/ProductEdit/ReceiptTab";
 import { RefundPolicy } from "$app/components/ProductEdit/RefundPolicy";
+import { createProductEditRouter } from "$app/components/ProductEdit/router";
 import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import {
   ContentUpdates,
@@ -552,7 +554,8 @@ const ProductEditPage = (props: Props) => {
       return updated;
     });
   const [existingFiles, setExistingFiles] = React.useState(props.existing_files);
-  const [router] = React.useState(() => createBrowserRouter(routes));
+  const [{ router, claimTabMove }] = React.useState(() => createProductEditRouter(routes));
+  React.useEffect(() => claimPopstate(claimTabMove), [claimTabMove]);
 
   const [saving, setSaving] = React.useState(false);
   const [imagesUploading, setImagesUploading] = React.useState<Set<File>>(new Set());

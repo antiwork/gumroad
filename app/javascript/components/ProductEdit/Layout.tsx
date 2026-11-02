@@ -1,6 +1,6 @@
 import cx from "classnames";
 import * as React from "react";
-import { Link, useMatches, useNavigate } from "react-router-dom";
+import { Link, NavigationType, useBlocker, useMatches, useNavigate } from "react-router-dom";
 
 import { setProductPublished } from "$app/data/publish_product";
 import { classNames } from "$app/utils/classNames";
@@ -238,16 +238,24 @@ export const Layout = ({
     </WithTooltip>
   );
 
-  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
-    const message = isUploadingFiles
-      ? "Some files are still uploading, please wait..."
-      : isUploadingFilesOrImages
-        ? "Some images are still uploading, please wait..."
-        : undefined;
+  const uploadingMessage = isUploadingFiles
+    ? "Some files are still uploading, please wait..."
+    : isUploadingFilesOrImages
+      ? "Some images are still uploading, please wait..."
+      : undefined;
 
-    if (message) {
+  // Back and Forward between tabs get the same guard as a tab click.
+  const blocker = useBlocker(({ historyAction }) => historyAction === NavigationType.Pop && !!uploadingMessage);
+  React.useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    if (uploadingMessage) showAlert(uploadingMessage, "warning");
+    blocker.reset();
+  }, [blocker, uploadingMessage]);
+
+  const onTabClick = (e: React.MouseEvent<HTMLAnchorElement>, callback?: () => void) => {
+    if (uploadingMessage) {
       e.preventDefault();
-      showAlert(message, "warning");
+      showAlert(uploadingMessage, "warning");
       return;
     }
 

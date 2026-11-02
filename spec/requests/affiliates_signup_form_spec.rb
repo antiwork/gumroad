@@ -17,32 +17,6 @@ describe "Affiliate Signup Form", type: :system, js: true do
     end
   end
 
-  context "when every published product is a collab" do
-    let!(:product_one) { create(:product, :is_collab, name: "Product 1", user: seller) }
-    let!(:product_two) { create(:product, :is_collab, name: "Product 2", user: seller) }
-
-    it "names the collaborator as the cause instead of asking for a published product" do
-      visit "/affiliates/onboarding"
-
-      expect(page).to have_text("No products available for affiliates")
-      expect(page).to have_link("Manage collaborators", href: collaborators_path)
-      expect(page).to_not have_text("You need a published product to add affiliates.")
-      expect(page).to_not have_button("New product")
-    end
-
-    it "lists collab products when the seller's flag is enabled" do
-      Feature.activate_user(:collab_and_affiliates, seller)
-
-      visit "/affiliates/onboarding"
-
-      within_table "Enable specific products" do
-        expect(page).to have_text("Product 1")
-        expect(page).to have_text("Product 2")
-      end
-      expect(page).to_not have_text("No products available for affiliates")
-    end
-  end
-
   context "when using the old form page" do
     it "redirects to the new affiliate signup form" do
       visit "/affiliate_requests/onboarding_form"
@@ -61,14 +35,12 @@ describe "Affiliate Signup Form", type: :system, js: true do
     let!(:archived_product) { create(:product, name: "Archived product", user: seller, archived: true) }
     let!(:not_enabled_archived_product) { create(:product, user: seller, name: "Not selected archived product", archived: true) }
     let!(:collab_product) { create(:product, :is_collab, name: "Collab product", user: seller) }
-    let!(:self_service_collab_product) { create(:product, :is_collab, name: "Self service collab product", user: seller) }
 
     before do
       create(:self_service_affiliate_product, enabled: true, seller:, product: archived_product)
-      create(:self_service_affiliate_product, enabled: false, seller:, product: self_service_collab_product) # enabled prior to conversion to a collab product
     end
 
-    it "shows published, eligible products and allows enabling and disabling them" do
+    it "shows published products and allows enabling and disabling them" do
       visit "/affiliates/onboarding" # react route
 
       table_label = "Enable specific products"
@@ -121,11 +93,11 @@ describe "Affiliate Signup Form", type: :system, js: true do
         end
         expect(page).to have_table_row({ name_label => archived_product.name })
         expect(page).not_to have_table_row({ name_label => not_enabled_archived_product.name })
-      end
 
-      # excludes ineligible products
-      expect(page).not_to have_content collab_product.name
-      expect(page).not_to have_content self_service_collab_product.name
+        within(:table_row, { name_label => collab_product.name }) do
+          expect(page).to have_unchecked_field("Enable product")
+        end
+      end
 
       click_on "Save changes"
       expect(page).to have_alert(text: "There are some errors on the page. Please fix them and try again.")

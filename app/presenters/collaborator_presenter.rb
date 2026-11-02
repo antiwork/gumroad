@@ -7,7 +7,6 @@ class CollaboratorPresenter
   end
 
   DEFAULT_PERCENT_COMMISSION = 50
-  MAX_PRODUCTS_WITH_AFFILIATES_TO_SHOW = 10
 
   def new_collaborator_props
     collaborator_form_props.compact
@@ -66,7 +65,6 @@ class CollaboratorPresenter
           default_percent_commission: DEFAULT_PERCENT_COMMISSION,
           min_percent_commission: Collaborator::MIN_PERCENT_COMMISSION,
           max_percent_commission: Collaborator::MAX_PERCENT_COMMISSION,
-          max_products_with_affiliates_to_show: MAX_PRODUCTS_WITH_AFFILIATES_TO_SHOW,
           title:,
         }.compact,
       }
@@ -84,9 +82,6 @@ class CollaboratorPresenter
     end
 
     def all_products(apply_to_all_products: true, percent_commission: DEFAULT_PERCENT_COMMISSION, product_affiliates: [], dont_show_as_co_creator: false)
-      # With :collab_and_affiliates adding a collaborator keeps the product's affiliates, so there is
-      # nothing to warn about.
-      affiliates_removed_on_collab = !Feature.active?(:collab_and_affiliates, seller)
       seller.products.includes(product_affiliates: :affiliate).visible_and_not_archived.map do |product|
         product_affiliate = product.product_affiliates.find_by(affiliate: collaborator)
         has_another_collaborator = product.has_another_collaborator?(collaborator:)
@@ -94,7 +89,6 @@ class CollaboratorPresenter
           id: product.external_id,
           name: product.name,
           has_another_collaborator:,
-          has_affiliates: affiliates_removed_on_collab && product.direct_affiliates.alive.exists?,
           published: product.published?,
           enabled: collaborator ? product_affiliate.present? : (!has_another_collaborator && product.published?),
           percent_commission: product_affiliate&.affiliate_percentage || percent_commission,

@@ -25,11 +25,11 @@ describe CollaboratorPresenter do
       props = described_class.new(seller:).new_collaborator_props
 
       expect(props[:form_data][:products]).to eq([
-                                                   { id: visible_product.external_id, name: visible_product.name, published: true, has_another_collaborator: false, has_affiliates: false, enabled: true, percent_commission: 50, dont_show_as_co_creator: false },
-                                                   { id: product_with_affiliates.external_id, name: product_with_affiliates.name, published: true, has_another_collaborator: false, has_affiliates: true, enabled: true, percent_commission: 50, dont_show_as_co_creator: false },
-                                                   { id: ineligible_product.external_id, name: ineligible_product.name, published: true, has_another_collaborator: true, has_affiliates: false, enabled: false, percent_commission: 50, dont_show_as_co_creator: false },
-                                                   { id: product_with_global_affiliate.external_id, name: product_with_global_affiliate.name, published: false, has_another_collaborator: false, has_affiliates: false, enabled: false, percent_commission: 50, dont_show_as_co_creator: false },
-                                                   { id: product_with_deleted_collaborator.external_id, name: product_with_deleted_collaborator.name, published: true, has_another_collaborator: false, has_affiliates: false, enabled: true, percent_commission: 50, dont_show_as_co_creator: false },
+                                                   { id: visible_product.external_id, name: visible_product.name, published: true, has_another_collaborator: false, enabled: true, percent_commission: 50, dont_show_as_co_creator: false },
+                                                   { id: product_with_affiliates.external_id, name: product_with_affiliates.name, published: true, has_another_collaborator: false, enabled: true, percent_commission: 50, dont_show_as_co_creator: false },
+                                                   { id: ineligible_product.external_id, name: ineligible_product.name, published: true, has_another_collaborator: true, enabled: false, percent_commission: 50, dont_show_as_co_creator: false },
+                                                   { id: product_with_global_affiliate.external_id, name: product_with_global_affiliate.name, published: false, has_another_collaborator: false, enabled: false, percent_commission: 50, dont_show_as_co_creator: false },
+                                                   { id: product_with_deleted_collaborator.external_id, name: product_with_deleted_collaborator.name, published: true, has_another_collaborator: false, enabled: true, percent_commission: 50, dont_show_as_co_creator: false },
                                                  ])
       expect(props[:form_data]).to_not include(:id)
       expect(props[:form_data]).to include(
@@ -44,7 +44,6 @@ describe CollaboratorPresenter do
        default_percent_commission: CollaboratorPresenter::DEFAULT_PERCENT_COMMISSION,
        min_percent_commission: Collaborator::MIN_PERCENT_COMMISSION,
        max_percent_commission: Collaborator::MAX_PERCENT_COMMISSION,
-       max_products_with_affiliates_to_show: CollaboratorPresenter::MAX_PRODUCTS_WITH_AFFILIATES_TO_SHOW,
      )
     end
   end
@@ -96,11 +95,11 @@ describe CollaboratorPresenter do
       )
 
       expect(props[:form_data][:products]).to eq([
-                                                   { id: visible_product.external_id, name: visible_product.name, published: true, has_another_collaborator: false, has_affiliates: false, enabled: true, percent_commission: default_commission, dont_show_as_co_creator: false },
-                                                   { id: product_with_affiliates.external_id, name: product_with_affiliates.name, published: true, has_another_collaborator: false, has_affiliates: true, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
-                                                   { id: ineligible_product.external_id, name: ineligible_product.name, published: true, has_another_collaborator: true, has_affiliates: false, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
-                                                   { id: product_with_global_affiliate.external_id, name: product_with_global_affiliate.name, published: false, has_another_collaborator: false, has_affiliates: false, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
-                                                   { id: product_with_deleted_collaborator.external_id, name: product_with_deleted_collaborator.name, published: true, has_another_collaborator: false, has_affiliates: false, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
+                                                   { id: visible_product.external_id, name: visible_product.name, published: true, has_another_collaborator: false, enabled: true, percent_commission: default_commission, dont_show_as_co_creator: false },
+                                                   { id: product_with_affiliates.external_id, name: product_with_affiliates.name, published: true, has_another_collaborator: false, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
+                                                   { id: ineligible_product.external_id, name: ineligible_product.name, published: true, has_another_collaborator: true, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
+                                                   { id: product_with_global_affiliate.external_id, name: product_with_global_affiliate.name, published: false, has_another_collaborator: false, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
+                                                   { id: product_with_deleted_collaborator.external_id, name: product_with_deleted_collaborator.name, published: true, has_another_collaborator: false, enabled: false, percent_commission: default_commission, dont_show_as_co_creator: false },
                                                  ])
 
       expect(props[:page_metadata]).to eq(
@@ -108,7 +107,6 @@ describe CollaboratorPresenter do
         default_percent_commission: CollaboratorPresenter::DEFAULT_PERCENT_COMMISSION,
         min_percent_commission: Collaborator::MIN_PERCENT_COMMISSION,
         max_percent_commission: Collaborator::MAX_PERCENT_COMMISSION,
-        max_products_with_affiliates_to_show: CollaboratorPresenter::MAX_PRODUCTS_WITH_AFFILIATES_TO_SHOW,
       )
     end
   end

@@ -14,6 +14,8 @@ vi.mock("react-router-dom", () => ({
   Link: ({ to, children }: { to: string; children?: React.ReactNode }) => <a href={to}>{children}</a>,
   useMatches: () => [{ handle: matchHandle.current }],
   useNavigate: () => vi.fn(),
+  useBlocker: () => ({ state: "unblocked" }),
+  NavigationType: { Pop: "POP" },
 }));
 
 vi.mock("$app/components/Preview", () => ({ Preview: () => null }));

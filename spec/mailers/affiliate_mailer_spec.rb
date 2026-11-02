@@ -166,6 +166,25 @@ describe AffiliateMailer do
         expect(mail.body.encoded).to include "Variants"
         expect(mail.body.encoded).to include "(Blue, Small)"
       end
+
+      context "for a free trial purchase" do
+        let(:product) { create(:membership_product, :with_free_trial_enabled, user: seller, name: product_name, price_cents: 20_00) }
+        let(:purchase) { create(:free_trial_membership_purchase, purchase_state: "in_progress", affiliate: collaborator, link: product, seller:) }
+
+        it "tells the collaborator their cut is added once the trial converts" do
+          expect(purchase).to be_not_charged
+          expect(purchase.affiliate_credit).to be_nil
+
+          mail = AffiliateMailer.notify_affiliate_of_sale(purchase.id)
+
+          expect(mail.to).to eq([collaborator.affiliate_user.form_email])
+          rows = email_rows(mail)
+          expect(rows["Your cut"]).to eq(format_usd(purchase.affiliate_credit_cents))
+          expect(rows).to_not have_key "Your share of fees"
+          expect(rows).to_not have_key "Added to your balance"
+          expect(mail.body.encoded).to include("If the subscriber continues with their subscription after their free trial has expired on #{purchase.subscription.free_trial_end_date_formatted}, we'll add your cut to your balance.")
+        end
+      end
     end
 
     context "when the purchase's subscription is not attached yet" do

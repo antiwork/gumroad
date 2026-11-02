@@ -105,10 +105,10 @@ class Purchase < ApplicationRecord
   # Why `can_contact` is false. Only `BUYER_UNSUBSCRIBE`/`SPAM_REPORT` are first-party consent;
   # a restore must never reverse those, only `INHERITED`.
   attr_json_data_accessor :can_contact_reason
-  # Collab products with the :collab_and_affiliates flag: the direct affiliate who referred the sale,
-  # credited ON TOP of the collaborator (who stays in `affiliate`). `affiliate_credit_cents` then
-  # holds the sum of both credits, so every seller-side net (price - fee - affiliate_credit_cents)
-  # stays right; the direct affiliate's own part is `direct_affiliate_credit_cents`.
+  # Collab products: the direct affiliate who referred the sale, credited ON TOP of the collaborator
+  # (who stays in `affiliate`). `affiliate_credit_cents` then holds the sum of both credits, so every
+  # seller-side net (price - fee - affiliate_credit_cents) stays right; the direct affiliate's own
+  # part is `direct_affiliate_credit_cents`.
   attr_json_data_accessor :direct_affiliate_id
   attr_json_data_accessor :direct_affiliate_credit_cents
   attr_json_data_accessor :direct_affiliate_basis_points
@@ -2074,7 +2074,7 @@ class Purchase < ApplicationRecord
 
   # True when this purchase credits a direct affiliate on top of the collaborator in `affiliate`.
   # Decided once, at checkout (Purchase::CreateService), so later refunds and disputes follow the
-  # same split even if the :collab_and_affiliates flag changes in between.
+  # sale's split even if the product's collaborator or affiliates change.
   def credits_direct_affiliate?
     direct_affiliate_id.present? && affiliate.present? && affiliate.collaborator? && direct_affiliate.present?
   end
@@ -2084,12 +2084,11 @@ class Purchase < ApplicationRecord
     @direct_affiliate = direct_affiliate_id.present? ? DirectAffiliate.find_by(id: direct_affiliate_id) : nil
   end
 
-  # Records `candidate` as the direct affiliate of a collab purchase when the seller has the
-  # :collab_and_affiliates flag. Only a direct affiliate of this product's seller qualifies, never
-  # the collaborator or the seller themself. Returns whether it was recorded.
+  # Records `candidate` as the direct affiliate of a collab purchase. Only a direct affiliate of this
+  # product's seller qualifies, never the collaborator or the seller themself. Returns whether it was
+  # recorded.
   def assign_direct_affiliate_for_collab(candidate)
     return false unless candidate.is_a?(DirectAffiliate) && affiliate&.collaborator?
-    return false unless Feature.active?(:collab_and_affiliates, seller || link&.user)
     return false unless candidate.seller_id == link.user_id
     return false if candidate.affiliate_user_id.in?([link.user_id, affiliate.affiliate_user_id])
 
@@ -2176,7 +2175,8 @@ class Purchase < ApplicationRecord
   def notify_affiliate!
     notify_direct_affiliate_of_collab_sale!
     return unless affiliate.affiliate_user.enable_payment_email?
-    return if own_affiliate_credit_cents == 0
+    # Matches `increment_affiliates_balance!`: a cut that floors below zero is never posted.
+    return unless own_affiliate_credit_cents > 0
 
     after_commit do
       next if destroyed?
