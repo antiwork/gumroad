@@ -10,10 +10,12 @@ export const Layout = ({
   children,
   header,
   headerActions,
+  migration,
 }: {
   children: React.ReactNode;
   header: React.ReactNode;
   headerActions?: React.ReactNode;
+  migration?: { productCount: number; applicationName: string | null } | undefined;
 }) => {
   const { rootDomain, scheme } = useDomains();
 
@@ -30,6 +32,14 @@ export const Layout = ({
           className="p-8 sm:p-16"
         >
           {header}
+          {migration ? (
+            <p className="mt-4">
+              {migration.productCount === 1 ? "Your product" : `Your ${migration.productCount} products`}
+              {migration.applicationName ? ` from ${migration.applicationName}` : ""}{" "}
+              {migration.productCount === 1 ? "arrives on Gumroad as a draft" : "arrive on Gumroad as drafts"}. Next,
+              you confirm the import.
+            </p>
+          ) : null}
         </PageHeader>
         <div className="p-8 sm:p-16">{children}</div>
       </div>

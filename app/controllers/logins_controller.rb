@@ -23,7 +23,7 @@ class LoginsController < Devise::SessionsController
     set_meta_tag(title: "Log in to Gumroad")
     set_meta_tag(name: "description", content: "Log in to your Gumroad account to access your dashboard, library, and sales.")
     set_meta_tag(tag_name: "link", rel: "canonical", href: "#{UrlService.domain_with_protocol}#{login_path}", head_key: "canonical")
-    auth_presenter = AuthPresenter.new(params:, application: @application)
+    auth_presenter = AuthPresenter.new(params:, application: @application, partner_migration: @partner_migration)
     render inertia: "Logins/New", props: auth_presenter.login_props.merge(
       is_gumroad_mobile_app: cookies[:is_gumroad_mobile_app].present?,
       passkey_login_options: build_webauthn_authentication_options,
@@ -66,6 +66,6 @@ class LoginsController < Devise::SessionsController
     end
 
     def redirect_with_login_error(message)
-      redirect_to login_path, warning: message, status: :see_other
+      redirect_to login_path(next: params[:next].presence), warning: message, status: :see_other
     end
 end

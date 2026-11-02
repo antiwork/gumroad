@@ -15,13 +15,17 @@ describe "Partner API migrations", type: :request do
     post "/api/v2/partner/migrations", params: body.to_json, headers: { "CONTENT_TYPE" => "application/json", "AUTHORIZATION" => "Bearer #{token.token}" }
   end
 
-  it "stores the products and returns the migration" do
+  it "stores the products and returns a one-time onboarding link" do
     expect do
       post_migration(external_user_id: "ext-1", products:)
     end.to change { PartnerMigration.count }.by(1)
 
     expect(response).to have_http_status(:created)
     migration = PartnerMigration.last
+    onboarding_url = response.parsed_body["onboarding_url"]
+    code = Rack::Utils.parse_query(URI(onboarding_url).query)["migration_code"]
+    expect(onboarding_url).to eq(partner_migration_url(migration_code: code, host: DOMAIN, protocol: PROTOCOL))
+    expect(PartnerMigration.find_by_code(code)).to eq(migration)
     expect(response.parsed_body["expires_at"]).to eq(migration.expires_at.iso8601)
     expect(migration).to have_attributes(oauth_application: partner_application, external_user_id: "ext-1", status: PartnerMigration::STATUS_PENDING)
     expect(migration.products.first).to include("name" => "Texture Pack", "files" => [{ "url" => "https://files.example.com/pack.zip", "display_name" => "Pack" }])
@@ -87,7 +91,7 @@ describe "Partner API migrations", type: :request do
   it "keeps the accepted catalog when a changed export conflicts with it" do
     post_migration(external_user_id: "ext-1", products:)
     migration = PartnerMigration.last
-    migration.update!(user: create(:user), status: PartnerMigration::STATUS_CLAIMED)
+    migration.claim!(create(:user), expected_code_digest: migration.code_digest)
 
     post_migration(external_user_id: "ext-1", products: [{ name: "Another product", price: 1500 }])
 
