@@ -636,11 +636,10 @@ export default function PayoutsIndex() {
                   (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
                 ) ? (
                   <p>
-                    One day's balance is over the $9,999 maximum for an instant payout, so it can't be paid out
-                    instantly. That day goes out with your standard {instant_payout.standard_payout_frequency} payout
-                    instead.
+                    One day's earnings are over $9,999, the instant payout limit. We'll send them with your{" "}
+                    {instant_payout.standard_payout_frequency} payout.
                     {instant_payout.payout_frequency === "daily"
-                      ? " Daily instant payouts are skipped while your balance is over $9,999."
+                      ? " Daily instant payouts pause while your balance is over $9,999."
                       : null}
                   </p>
                 ) : (
