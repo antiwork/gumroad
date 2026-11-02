@@ -45,6 +45,7 @@ vi.mock("@inertiajs/react", async () => {
 const context: WorkflowFormContext = {
   products_and_variant_options: [],
   affiliate_product_options: [],
+  emailed_posts: [],
   timezone: "UTC",
   currency_symbol: "$",
   countries: ["United States"],

@@ -58,6 +58,7 @@ class Installment < ApplicationRecord
   }.freeze
 
   attr_json_data_accessor :workflow_trigger
+  attr_json_data_accessor :workflow_trigger_post_id
   attr_json_data_accessor :single_recipient_purchase_id
   # Read through `delivery_counts_withheld?`: the json_data reader would turn a stored false into nil.
   attr_json_data_writer :delivery_counts_withheld
@@ -104,6 +105,12 @@ class Installment < ApplicationRecord
             check_for_column: false
 
   scope :published,                       -> { where.not(published_at: nil) }
+  # The seller's posts whose opens and clicks can be read back per buyer: only a post emailed through
+  # the purchase mailer keys its clicks to a buyer, since a follower or affiliate send keys them to
+  # that follower or affiliate. Feeds the composer's behavior filters and a workflow's opened-no-click
+  # trigger; a saved choice that has fallen out of the recent window stays in the list.
+  scope :emailed_posts,                   -> { alive.not_workflow_installment.published.send_emails.not_single_recipient_email.seller_or_product_or_variant_type }
+
   scope :not_published,                   -> { where(published_at: nil) }
   scope :scheduled,                       -> { not_published.ready_to_publish }
   scope :draft,                           -> { not_published.not_ready_to_publish }
@@ -273,6 +280,18 @@ class Installment < ApplicationRecord
   MINIMUM_SALES_CENTS_VALUE = 100_00 # $100
 
   MEMBER_CANCELLATION_WORKFLOW_TRIGGER = "member_cancellation"
+  OPENED_NO_CLICK_WORKFLOW_TRIGGER = "opened_no_click"
+
+  # Options for the pickers that name one of the seller's emails (the composer's behavior filters and
+  # a workflow's opened-no-click trigger). A saved choice that has fallen out of the recent window
+  # stays in the list.
+  def self.emailed_post_options(seller:, limit:, saved_ids: [])
+    posts = seller.installments.emailed_posts.order(published_at: :desc).limit(limit)
+              .map { { external_id: _1.external_id, name: _1.displayed_name } }
+    missing = Array.wrap(saved_ids).compact_blank.uniq - posts.map { _1[:external_id] }
+    saved = missing.filter_map { seller.installments.alive.find_by_external_id(_1) }
+    saved.map { { external_id: _1.external_id, name: _1.displayed_name } } + posts
+  end
 
   def user
     seller.presence || link.user
@@ -329,6 +348,12 @@ class Installment < ApplicationRecord
     # `workflow_trigger` is copied down at save time, so it goes stale when the workflow's own
     # trigger changes afterwards. The workflow is the source of truth.
     workflow.present? && workflow.member_cancellation_trigger?
+  end
+
+  def opened_no_click_trigger?
+    return true if workflow_trigger == OPENED_NO_CLICK_WORKFLOW_TRIGGER
+
+    workflow.present? && workflow.opened_no_click_trigger?
   end
 
   def displayed_name
@@ -438,8 +463,9 @@ class Installment < ApplicationRecord
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
     # Cancellation posts are delivered on the subscription path, which rechecks the membership
-    # is still ended. This path can't, so stale enqueued jobs bail out here.
-    return if member_cancellation_trigger?
+    # is still ended, and opened-no-click posts on their own path, which rechecks the click. This
+    # path can't, so purchase-keyed jobs for either (a resubscription reschedule, say) bail out here.
+    return if member_cancellation_trigger? || opened_no_click_trigger?
 
     sale = sale.original_purchase
     return unless sale.can_contact?
@@ -484,6 +510,40 @@ class Installment < ApplicationRecord
     SentPostEmail.ensure_uniqueness(post: self, email: sale.email, source: sale) do
       recipient = { email: sale.email, purchase: sale, subscription: }
       recipient[:url_redirect] = generate_url_redirect_for_subscription(sale) if has_files?
+      send_email(recipient)
+    end
+  end
+
+  # A recipient's own open of the email this workflow watches starts their clock, so the scan that
+  # found them owns the timing and this only re-reads what can have changed since: a click, an
+  # unsubscribed or bounced address, or a refund.
+  def send_installment_from_workflow_for_opened_no_click(purchase_id, recipient_digest: nil)
+    return unless opened_no_click_trigger?
+    # Without the digest there is no click to rule out.
+    return if recipient_digest.blank?
+    # The scan stops when the watched email is gone; a send it queued before that has to stop there
+    # too, or a watched email deleted or unpublished in between still mails the recipients it found.
+    watched_post = workflow&.workflow_trigger_post
+    return if watched_post.nil?
+    # An open that turns into a click between the scan and this send is still a click, and the digest
+    # the scan walked is the same key the click was written under.
+    return if EmailEngagementDynamoStore.clicked?(installment_id: watched_post.id, recipient_digest:)
+
+    sale = Purchase.find_by(id: purchase_id)
+    return if sale.nil?
+
+    sale = sale.original_purchase
+    return if sale.subscription.present? && !sale.subscription.alive?
+    return unless sale.can_contact?
+    return if sale.chargedback_not_reversed_or_refunded?
+
+    return if already_emailed_workflow_purchase?(sale)
+
+    return if workflow.present? && !workflow.applies_to_purchase?(sale)
+
+    SentPostEmail.ensure_uniqueness(post: self, email: sale.email, source: sale) do
+      recipient = { email: sale.email, purchase: sale }
+      recipient[:url_redirect] = generate_url_redirect_for_purchase(sale) if has_files?
       send_email(recipient)
     end
   end
