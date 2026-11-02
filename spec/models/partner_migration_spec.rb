@@ -463,6 +463,28 @@ describe PartnerMigration do
       expect(head.reload.notification_failed_email).to be_nil
     end
 
+    it "drops the parts above total_parts when the catalog shrinks before the confirmation" do
+      head, = send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      products, = described_class.normalize_products([{ external_product_id: "Texture Pack", name: "Texture Pack", price: 500 }, { external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
+
+      _head, code = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 1, total_parts: 1)
+
+      expect(head.parts.pluck(:part)).to eq([1])
+      expect(head.catalog_size).to eq(2)
+      expect(described_class.find_by_code(code)).to eq(head)
+      expect { send_part(1, "Texture Pack", total_parts: 0) }.to raise_error(described_class::PartError)
+    end
+
+    it "does not drop a part after the confirmation" do
+      head, = send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+
+      expect { send_part(1, "Texture Pack", total_parts: 1) }.to raise_error(described_class::CatalogConflict)
+      expect(head.parts.count).to eq(2)
+    end
+
     it "rejects a later part before part 1" do
       expect { send_part(2, "Brush Set") }.to raise_error(described_class::PartError, "Send part 1 before part 2.")
     end

@@ -71,7 +71,7 @@ class PartnerMigration < ApplicationRecord
   scope :stalled, -> { where(status: STATUS_CLAIMED, updated_at: ...STALLED_AFTER.ago).where.not(import_started_at: nil) }
 
   # Part 1 holds the seller's link, email and profile. The link of part 1 opens the whole catalog.
-  def self.create_for!(oauth_application:, external_user_id:, products:, part: 1, email: nil, profile: nil, new_link: false)
+  def self.create_for!(oauth_application:, external_user_id:, products:, part: 1, total_parts: nil, email: nil, profile: nil, new_link: false)
     attempts = 0
 
     begin
@@ -81,9 +81,13 @@ class PartnerMigration < ApplicationRecord
         # Locked before any later part, in the order that the claim and the result email take them.
         head = lock.find_by(oauth_application:, external_user_id:, part: 1)
         raise PartError, "Send part 1 before part #{part}." if part > 1 && head.nil?
+        raise PartError, "total_parts must be at least #{part}." if total_parts && total_parts < part
 
+        siblings = where(oauth_application:, external_user_id:)
+        # A catalog that shrank drops the parts above total_parts, before the seller confirms.
+        obsolete_parts = total_parts ? siblings.where(part: (total_parts + 1)..) : none
         # Each part imports on its own, so a product in two parts would import twice.
-        other_ids = where(oauth_application:, external_user_id:).where.not(part:).pluck(Arel.sql("JSON_EXTRACT(products, '$[*].external_product_id')"))
+        other_ids = siblings.where.not(part:).where.not(id: obsolete_parts.select(:id)).pluck(Arel.sql("JSON_EXTRACT(products, '$[*].external_product_id')"))
         shared_id = other_ids.flat_map { Array(_1.is_a?(String) ? JSON.parse(_1) : _1) }.intersection(products.map { _1["external_product_id"] }).first
         raise PartError, "external_product_id #{shared_id.inspect} is already in another part." if shared_id
 
@@ -108,6 +112,12 @@ class PartnerMigration < ApplicationRecord
           # A later part gets a code that is never sent, because the link of part 1 opens it.
           own_code = part == 1 ? code : SecureRandom.urlsafe_base64(32)
           migration = create!(oauth_application:, external_user_id:, part:, products:, **(part == 1 ? { email:, profile: } : {}), code_digest: digest(own_code), expires_at: EXPIRES_IN.from_now)
+          keep_link = false
+        end
+        if obsolete_parts.exists?
+          raise CatalogConflict, "This seller already confirmed #{obsolete_parts.maximum(:part)} parts, so total_parts cannot remove any." if confirmed
+
+          obsolete_parts.delete_all
           keep_link = false
         end
         # A new part 1 already has its link. An update would also clear previously_new_record?, which the

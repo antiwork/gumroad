@@ -22,8 +22,10 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
     part = params[:part].nil? ? 1 : params[:part]
     return render_bad_request("part must be a whole number from 1 to #{PartnerMigration::MAX_PARTS}.") unless part.is_a?(Integer) && part.between?(1, PartnerMigration::MAX_PARTS)
     return render_bad_request("Send email and profile with part 1.") if part > 1 && (params.key?(:email) || params.key?(:profile))
+    total_parts = params[:total_parts]
+    return render_bad_request("total_parts must be a whole number from 1 to #{PartnerMigration::MAX_PARTS}.") unless total_parts.nil? || (total_parts.is_a?(Integer) && total_parts.between?(1, PartnerMigration::MAX_PARTS))
 
-    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:, part:, **seller, new_link: params[:new_onboarding_url] == true)
+    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:, part:, total_parts:, **seller, new_link: params[:new_onboarding_url] == true)
 
     render json: {
       success: true,
