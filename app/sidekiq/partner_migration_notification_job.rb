@@ -6,20 +6,24 @@ class PartnerMigrationNotificationJob
 
   def perform(partner_migration_id)
     ApplicationRecord.connected_to(role: :writing) do
-      migration = PartnerMigration.find_by(id: partner_migration_id)
-      return unless migration
+      part = PartnerMigration.find_by(id: partner_migration_id)
+      return unless part
 
+      # The seller gets one email for the whole catalog, so part 1 holds the notification state, and the
+      # email waits until every part has finished.
+      migration = part.head
       migration.with_lock do
-        next unless migration.completed_at && migration.notified_at.nil?
+        parts = migration.parts.lock.to_a
+        next unless parts.all?(&:completed_at) && parts.any? { _1.notified_at.nil? }
+
+        notify_parts = -> { parts.each { _1.update!(notified_at: Time.current) } }
+        failed = parts.any? { _1.status == PartnerMigration::STATUS_FAILED }
         # The account setup email already said that the products are importing, so while its link works,
         # the seller hears again only when something needs attention.
-        if migration.account_setup_open? && migration.status == PartnerMigration::STATUS_COMPLETED
-          next migration.update!(notified_at: Time.current)
-        end
+        next notify_parts.call if migration.account_setup_open? && !failed
         # The partner can send the export again any number of times, so a failure is emailed once.
         # A later success is still emailed.
-        failed = migration.status == PartnerMigration::STATUS_FAILED
-        next migration.update!(notified_at: Time.current) if failed && migration.failure_notified_at
+        next notify_parts.call if failed && migration.failure_notified_at
         next unless migration.user&.account_active? && migration.user.form_email.present?
         recipient = migration.user.form_email
         next if migration.notification_failed_email == recipient
@@ -29,9 +33,11 @@ class PartnerMigrationNotificationJob
         raise mail if mail.is_a?(Exception)
 
         # SMTP and MySQL cannot commit together. A crash after delivery can repeat this email.
-        migration.update!(notified_at: Time.current, failure_notified_at: failed ? Time.current : migration.failure_notified_at)
+        notify_parts.call
+        migration.update!(failure_notified_at: Time.current) if failed
       rescue Net::SMTPFatalError, Net::SMTPSyntaxError => e
-        migration.update!(notification_failed_email: recipient)
+        # Every part, so that the scheduled dispatch stops queueing them for this address.
+        parts.each { _1.update!(notification_failed_email: recipient) }
         Rails.logger.error("Partner migration #{migration.id}: result email rejected (#{e.class})")
       end
     end

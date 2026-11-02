@@ -15,6 +15,27 @@ describe PartnerMigrationNotificationJob do
     migration
   end
 
+  it "sends one email for a catalog in parts, once every part finished" do
+    export = ->(part, name) do
+      products, = PartnerMigration.normalize_products([{ external_product_id: name, name:, price: 500 }])
+      PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "seller-2", products:, part:).first
+    end
+    head = export.call(1, "Texture Pack")
+    second = export.call(2, "Sculpt Kit")
+    head.reload.claim!(seller, expected_code_digest: head.code_digest)
+    head.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current)
+
+    described_class.new.perform(head.id)
+    expect(ActionMailer::Base.deliveries).to be_empty
+
+    second.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current)
+    described_class.new.perform(second.id)
+    described_class.new.perform(head.id)
+
+    expect(ActionMailer::Base.deliveries.sole.subject).to eq("Some products did not import")
+    expect([head.reload, second.reload].map(&:notified_at)).to all(be_present)
+  end
+
   it "does not email a new account again when its import completes, because the setup email covered it" do
     migration.update!(account_created: true, account_setup_token_digest: "pending", account_setup_password_digest: PartnerMigration.digest(seller.encrypted_password))
 

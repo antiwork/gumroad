@@ -8,6 +8,6 @@ module PartnerMigrationsHelper
   end
 
   def partner_migration_title(migration)
-    "Move #{pluralize(migration.products.size, "product")} from #{migration.oauth_application.name} to Gumroad?"
+    "Move #{pluralize(migration.catalog_size, "product")} from #{migration.oauth_application.name} to Gumroad?"
   end
 end

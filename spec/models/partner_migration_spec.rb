@@ -409,6 +409,64 @@ describe PartnerMigration do
     end
   end
 
+  describe "parts" do
+    def send_part(part, name, **options)
+      products, = described_class.normalize_products([{ external_product_id: name, name:, price: 500 }])
+      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part:, **options)
+    end
+
+    it "takes a large catalog in parts, under the one link of part 1" do
+      head, first_code = send_part(1, "Texture Pack")
+      second, second_code = send_part(2, "Brush Set")
+
+      expect(second).to have_attributes(part: 2, status: described_class::STATUS_PENDING)
+      expect(second_code).to be_present
+      expect(described_class.find_by_code(first_code)).to be_nil
+      expect(described_class.find_by_code(second_code)).to eq(head)
+      expect(head.catalog_size).to eq(2)
+      expect(head.reload.expires_at).to be_within(1.minute).of(described_class::EXPIRES_IN.from_now)
+    end
+
+    it "rejects a later part before part 1" do
+      expect { send_part(2, "Brush Set") }.to raise_error(described_class::PartError, "Send part 1 before part 2.")
+    end
+
+    it "claims every part and queues an import for each" do
+      head, = send_part(1, "Texture Pack")
+      second, = send_part(2, "Brush Set")
+      Sidekiq::Worker.clear_all
+
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+
+      expect([head.reload, second.reload].map { [_1.status, _1.user] }).to eq([[described_class::STATUS_CLAIMED, seller]] * 2)
+      expect(PartnerMigrationImportJob.jobs.map { _1["args"] }).to contain_exactly([head.id], [second.id])
+    end
+
+    it "locks every part after the confirmation, but still lets the partner refresh a part's URLs" do
+      head, = send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+
+      expect { send_part(3, "Sculpt Kit") }.to raise_error(described_class::CatalogConflict)
+      expect { send_part(2, "Another product") }.to raise_error(described_class::CatalogConflict)
+      _second, code = send_part(2, "Brush Set")
+      expect(code).to be_nil
+    end
+
+    it "reports the catalog as importing until every part finished, then failed if any part failed" do
+      head, = send_part(1, "Texture Pack")
+      second, = send_part(2, "Brush Set")
+      head.update!(status: described_class::STATUS_COMPLETED)
+      second.update!(status: described_class::STATUS_CLAIMED)
+
+      expect(head.catalog_status).to eq(described_class::STATUS_CLAIMED)
+      second.update!(status: described_class::STATUS_FAILED)
+      expect(head.catalog_status).to eq(described_class::STATUS_FAILED)
+      second.update!(status: described_class::STATUS_COMPLETED)
+      expect(head.catalog_status).to eq(described_class::STATUS_COMPLETED)
+    end
+  end
+
   describe ".create_for!" do
     it "stores only a digest of the code" do
       migration, code = create_migration

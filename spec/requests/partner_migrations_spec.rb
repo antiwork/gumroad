@@ -52,6 +52,21 @@ describe "Partner migration onboarding", type: :request do
     expect(Nokogiri::HTML(response.body).at_css("input[name='partner_migration_id']")["value"]).to eq(migration.public_id)
   end
 
+  it "shows and claims the whole catalog when it comes in parts" do
+    products, = PartnerMigration.normalize_products([{ external_product_id: "sculpt-kit", name: "Sculpt Kit", price: 500 }])
+    second, code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 2)
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
+
+    expect(response.body).to include("Move 3 products from", "Import 3 products", "Texture Pack", "Brush Set")
+    claim
+
+    expect(flash[:notice]).to eq("We're importing your 3 products from Example App. They appear here as drafts.")
+    expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
+    expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(second.id)
+  end
+
   it "keeps the export while an account without an email adds an address" do
     seller.update_columns(provider: "apple", email: nil, unconfirmed_email: nil)
     sign_in seller

@@ -9,7 +9,7 @@
     <%= form_tag partner_migration_path, method: :post, style: "display: contents" do %>
       <%= hidden_field_tag :partner_migration_id, @migration.public_id %>
       <%= hidden_field_tag :partner_migration_code_digest, @migration.code_digest %>
-      <%= button_tag "Import #{pluralize(@migration.products.size, "product")}", disabled: email.nil?, class: partner_migration_button_class %>
+      <%= button_tag "Import #{pluralize(@migration.catalog_size, "product")}", disabled: email.nil?, class: partner_migration_button_class %>
     <% end %>
     <small>This links this Gumroad account to your <%= application_name %> account.</small>
   <% end %>
