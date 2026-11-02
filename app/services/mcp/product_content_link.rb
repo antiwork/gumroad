@@ -66,8 +66,15 @@ module Mcp
         with_content, without_content = owners.partition { _1.alive_rich_contents.any?(&:has_editor_content?) }
         return owners if with_content.empty?
 
-        cheapest_content_price = with_content.map(&:price_difference_cents).min
-        with_content + without_content.select { _1.price_difference_cents > cheapest_content_price }
+        cheapest_content_order = with_content.map { price_order(_1) }.min
+        with_content + without_content.select { (price_order(_1) <=> cheapest_content_order).positive? }
+      end
+
+      # UrlRedirect orders versions by `price_difference_cents` ascending, and a version with no price
+      # difference sorts first there, so it ranks cheapest here too. Comparing the values directly
+      # would raise on that nil and take the whole call down with it.
+      def price_order(owner)
+        [owner.price_difference_cents.nil? ? 0 : 1, owner.price_difference_cents.to_i]
       end
 
       # Appends to the page the editor reads first, creating it when the owner has none. Once pages

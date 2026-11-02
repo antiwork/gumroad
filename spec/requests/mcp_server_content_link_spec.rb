@@ -204,6 +204,16 @@ describe "MCP server content links" do
                                                                ])
       end
 
+      it "treats a version with no price difference as the cheapest, the way the download page orders them" do
+        free = create(:variant, variant_category: @content_version.variant_category, name: "Free", price_difference_cents: nil)
+
+        result = call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
+
+        expect(result["isError"]).to be_falsey
+        expect(free.reload.alive_rich_contents).to be_empty
+        expect(@content_version.reload.alive_rich_contents.sole.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
+      end
+
       it "gives a version with no content a page of its own when that leaves the versionless fallback alone" do
         host! DOMAIN
         pricier = create(:variant, variant_category: @content_version.variant_category, name: "Team", price_difference_cents: 5000)
