@@ -114,6 +114,7 @@ type Props = {
   cancellation_discounts_enabled: boolean;
   receipt_email_from: string;
   price_checker_enabled: boolean;
+  web_build_player_enabled: boolean;
   has_web_builds: boolean;
   custom_html_pages_enabled: boolean;
   auto_marketing_enabled: boolean;
@@ -168,6 +169,7 @@ const createContextValue = (props: Props) => ({
   cancellationDiscountsEnabled: props.cancellation_discounts_enabled,
   receiptEmailFrom: props.receipt_email_from,
   priceCheckerEnabled: props.price_checker_enabled,
+  webBuildPlayerEnabled: props.web_build_player_enabled,
   hasWebBuilds: props.has_web_builds,
   customHtmlPagesEnabled: props.custom_html_pages_enabled,
   autoMarketingEnabled: props.auto_marketing_enabled,
@@ -177,6 +179,8 @@ const createContextValue = (props: Props) => ({
   customHtmlGlobalNavPaths: props.custom_html_global_nav_paths,
   contentUpdates: null,
   setContentUpdates: () => {},
+  webAppUploading: false,
+  setWebAppUploading: () => {},
   aiGenerated: props.ai_generated,
   customAttributeNameSuggestions: props.custom_attribute_name_suggestions,
 });
@@ -538,6 +542,7 @@ const ProductEditPage = (props: Props) => {
     customizable_price: reconcileCustomizablePrice(props.product),
   }));
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
+  const [webAppUploading, setWebAppUploading] = React.useState(false);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
@@ -904,6 +909,8 @@ const ProductEditPage = (props: Props) => {
       richContentRemovedFileEmbedIds,
       contentUpdates,
       setContentUpdates,
+      webAppUploading,
+      setWebAppUploading,
       filesById,
     }),
     [
@@ -916,6 +923,7 @@ const ProductEditPage = (props: Props) => {
       richContentIdMappings,
       fileIdMappings,
       richContentRemovedFileEmbedIds,
+      webAppUploading,
     ],
   );
 

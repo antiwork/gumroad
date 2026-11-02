@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,16 +10,38 @@ import { VersionHistoryButton } from "$app/components/ProductEdit/ContentTab/Ver
 
 const getProductBuilds = vi.fn<() => Promise<ProductBuild[]>>();
 const promoteProductBuild = vi.fn<() => Promise<void>>();
+const createProductBuild = vi.fn<(permalink: string, url: string) => Promise<ProductBuild>>();
 vi.mock("$app/data/product_builds", () => ({
   getProductBuilds: () => getProductBuilds(),
   promoteProductBuild: () => promoteProductBuild(),
+  createProductBuild: (permalink: string, url: string) => createProductBuild(permalink, url),
 }));
-vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+const showAlert = vi.fn<(message: string, type: string) => void>();
+vi.mock("$app/components/server-components/Alert", () => ({
+  showAlert: (message: string, type: string) => showAlert(message, type),
+}));
+// Completes the upload at once, as if S3 had the whole zip.
+const scheduleUpload = vi.fn((options: { onComplete: () => void }) => {
+  options.onComplete();
+  return 1;
+});
+vi.mock("$app/components/EvaporateUploader", () => ({
+  useEvaporateUploader: () => ({ scheduleUpload, cancelUpload: vi.fn() }),
+}));
+vi.mock("$app/components/S3UploadConfig", () => ({
+  useS3UploadConfig: () => ({
+    generateS3KeyForUpload: (guid: string, name: string) => ({
+      s3key: `attachments/seller/${guid}/original/${name}`,
+      fileUrl: `https://s3.example.com/bucket/attachments/seller/${guid}/original/${name}`,
+    }),
+  }),
+}));
 const save = vi.fn<() => Promise<boolean>>();
+const setWebAppUploading = vi.fn<(uploading: boolean) => void>();
 let uploading = false;
 let liveRowShown = true;
 vi.mock("$app/components/ProductEdit/state", () => ({
-  useProductEditContext: () => ({ uniquePermalink: "demo", save, product: {} }),
+  useProductEditContext: () => ({ uniquePermalink: "demo", save, product: {}, setWebAppUploading }),
   filesAreUploading: () => uploading,
   hasLiveBuildFile: () => liveRowShown,
 }));
@@ -98,12 +120,98 @@ describe("VersionHistoryButton", () => {
     expect(await screen.findByRole("dialog", { name: "Add version 2 back to the content?" })).toBeDefined();
   });
 
+  it("uploads a zip as a new version and shows it ready to go live", async () => {
+    // The new version shows without loading the list again, so a failed reload cannot hide it.
+    getProductBuilds.mockResolvedValueOnce([build(1, "live")]).mockRejectedValue(new Error("offline"));
+    createProductBuild.mockResolvedValue(build(2, "uploaded"));
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    await screen.findByRole("region", { name: "Live version" });
+
+    fireEvent.change(screen.getByLabelText("Web app zip"), {
+      target: { files: [new File(["PK"], "my game.zip", { type: "application/zip" })] },
+    });
+
+    const ready = await screen.findByRole("region", { name: "Ready to go live" });
+    expect(ready.textContent).toContain("Version 2");
+    expect(screen.getByText("Version 2 is ready. Make it live below.")).toBeDefined();
+    expect(createProductBuild).toHaveBeenCalledWith("demo", expect.stringMatching(/\/original\/my game\.zip$/u));
+    expect(showAlert).not.toHaveBeenCalled();
+  });
+
+  it("tells the editor a zip is uploading until the upload ends", async () => {
+    let complete = () => {};
+    scheduleUpload.mockImplementationOnce((options: { onComplete: () => void }) => {
+      complete = options.onComplete;
+      return 1;
+    });
+    createProductBuild.mockResolvedValue(build(3, "uploaded"));
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    await screen.findByRole("region", { name: "Live version" });
+
+    fireEvent.change(screen.getByLabelText("Web app zip"), {
+      target: { files: [new File(["PK"], "game.zip", { type: "application/zip" })] },
+    });
+    expect(setWebAppUploading).toHaveBeenLastCalledWith(true);
+
+    act(() => complete());
+    await screen.findByText("Version 3 is ready. Make it live below.");
+    expect(setWebAppUploading).toHaveBeenLastCalledWith(false);
+  });
+
+  it("does not make a version live while a zip uploads", async () => {
+    scheduleUpload.mockImplementationOnce(() => 1);
+    getProductBuilds.mockResolvedValue([build(2, "uploaded"), build(1, "live")]);
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    await screen.findByRole("region", { name: "Ready to go live" });
+
+    fireEvent.change(screen.getByLabelText("Web app zip"), {
+      target: { files: [new File(["PK"], "game.zip", { type: "application/zip" })] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Make live" }));
+
+    expect(await screen.findByRole("button", { name: "Make version 2 live" })).toHaveProperty("disabled", true);
+  });
+
+  it("refuses a file that is not a zip", async () => {
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    await screen.findByRole("region", { name: "Live version" });
+
+    fireEvent.change(screen.getByLabelText("Web app zip"), { target: { files: [new File(["x"], "game.html")] } });
+
+    expect(scheduleUpload).not.toHaveBeenCalled();
+    expect(showAlert).toHaveBeenCalledWith("Choose a .zip file of your web app.", "error");
+  });
+
+  it("puts the upload above the versions", async () => {
+    getProductBuilds.mockResolvedValue([build(1, "live")]);
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+
+    const live = await screen.findByRole("region", { name: "Live version" });
+    const add = screen.getByRole("region", { name: "Add a new version" });
+    expect(add.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("asks for a first web app when the product has no versions", async () => {
+    getProductBuilds.mockResolvedValue([]);
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+
+    expect(await screen.findByRole("region", { name: "Add a web app" })).toBeDefined();
+    expect(screen.getByRole("dialog", { name: "Add a web app" })).toBeDefined();
+    expect(screen.getByText("Buyers get it once you make it live.")).toBeDefined();
+  });
+
   it("shows a deploy command for this product", async () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
 
     const add = await screen.findByRole("region", { name: "Add a new version" });
-    expect(add.textContent).toContain("gumroad builds deploy ./my-game --product demo");
+    expect(add.textContent).toContain("gumroad builds deploy ./my-web-app --product demo");
   });
 
   it("shows the last ten earlier builds until asked for all", async () => {

@@ -137,7 +137,7 @@ describe "Download page web build player", type: :system, js: true do
   it "keeps the content page as it is, with Download next to Play" do
     visit("/d/#{url_redirect.token}")
 
-    expect(page).to have_text("Web build v1")
+    expect(page).to have_text("Web app, version 1")
     expect(page).to have_link("Download")
     expect(page).to have_link("Play", href: "/d/#{url_redirect.token}/play")
     expect(find_link("Play")[:target]).to eq("_blank")
@@ -158,7 +158,7 @@ describe "Download page web build player", type: :system, js: true do
 
     visit("/d/#{url_redirect.token}")
 
-    expect(page).to have_text("Web build v1")
+    expect(page).to have_text("Web app, version 1")
     expect(page).to have_link("Download")
     expect(page).not_to have_link("Play")
   end
