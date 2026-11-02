@@ -1904,6 +1904,18 @@ describe "MCP server" do
       expect(names).to include("Field notes")
     end
 
+    it "orders membership tiers that predate position and timestamp tracking" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: @seller, name: "Field club")
+      tiers = membership.tier_category.alive_variants.to_a
+      BaseVariant.where(id: tiers.map(&:id)).update_all(position_in_category: nil)
+      BaseVariant.where(id: tiers.first.id).update_all(created_at: nil)
+
+      post_mcp({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "get_product", arguments: { id: membership.external_id } } })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "tiers").map { _1["id"] }).to match_array(tiers.map(&:external_id))
+    end
+
     it "refuses a write tool with a 403 step-up challenge that keeps the token's scopes" do
       expect { post_mcp({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Nope", price_cents: 500 } } }) }.not_to change(Link, :count)
 
