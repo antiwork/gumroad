@@ -43,8 +43,12 @@ class FindSubscriptionsWithMissingChargeWorker
     # With every charge refunded or charged back there is no paid period, so overdue is measured from the last charge.
     def seconds_overdue(subscription)
       return subscription.seconds_overdue_for_charge if subscription.end_time_of_last_paid_period.present?
-      return 0 unless subscription.overdue_for_charge? && subscription.last_successful_charge_at.present?
+      # Do not re-bill a buyer with a standing chargeback; a chargeback is meant to end the membership.
+      return 0 if subscription.purchases.chargedback.not_chargeback_reversed.exists?
 
-      (Time.current - (subscription.last_successful_charge_at + subscription.period)).to_i
+      last_successful_charge_at = subscription.last_successful_charge_at
+      return 0 if last_successful_charge_at.nil?
+
+      (Time.current - (last_successful_charge_at + subscription.period)).to_i
     end
 end

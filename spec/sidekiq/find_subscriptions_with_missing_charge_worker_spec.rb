@@ -83,16 +83,6 @@ describe FindSubscriptionsWithMissingChargeWorker do
           end
         end
 
-        it "queues subscriptions whose charges were all refunded" do
-          @subscription.original_purchase.update_columns(stripe_refunded: true)
-
-          travel_to @six_months_after_purchase do
-            described_class.new.perform(@batch_number)
-
-            expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id, true)
-          end
-        end
-
         it "queues a fully refunded subscription only once its period plus 75 minutes has elapsed" do
           @subscription.original_purchase.update_columns(stripe_refunded: true)
           subscription_end_time = @initial_purchase_time + @subscription.period
@@ -113,6 +103,16 @@ describe FindSubscriptionsWithMissingChargeWorker do
             described_class.new.perform(@batch_number)
 
             expect(RecurringChargeWorker).to have_enqueued_sidekiq_job(@subscription.id, true)
+          end
+        end
+
+        it "does not queue subscriptions with a standing chargeback" do
+          @subscription.original_purchase.update_columns(chargeback_date: @initial_purchase_time + 1.day)
+
+          travel_to @six_months_after_purchase do
+            described_class.new.perform(@batch_number)
+
+            expect(RecurringChargeWorker.jobs.size).to eq(0)
           end
         end
 
