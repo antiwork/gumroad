@@ -31,6 +31,10 @@ const EARLIER_BUILDS_SHOWN = 10;
 // ProductBuild::MAX_BYTE_SIZE; the server checks it too, this only saves a doomed upload.
 const MAX_WEB_APP_ZIP_BYTES = 2 * 1024 * 1024 * 1024;
 
+// One line for the title and one for the details, cut short when narrow: the upload's row and the version
+// that replaces it are then the same height, so the rows below never move.
+const VERSION_ROW_CLASS = "grid-cols-[minmax(0,1fr)_auto]";
+
 const VersionRow = ({
   build,
   ready,
@@ -42,9 +46,9 @@ const VersionRow = ({
 }) => {
   const live = build.status === "live";
   return (
-    <Row role="listitem" aria-label={`Version ${build.number}`} className="grid-cols-[1fr_auto]">
+    <Row role="listitem" aria-label={`Version ${build.number}`} className={VERSION_ROW_CLASS}>
       <RowContent>
-        <div>
+        <div className="min-w-0">
           <h4 className="flex items-center gap-2">
             Version {build.number}
             {live ? (
@@ -53,10 +57,11 @@ const VersionRow = ({
               </Pill>
             ) : null}
           </h4>
-          <InlineList>
+          {/* The status comes first, so a narrow row cuts off the date, never the status. */}
+          <InlineList className="truncate">
+            {live ? <li>Buyers get this version</li> : ready ? <li>Not live yet</li> : null}
             <li>Added {deployedAgo(build.created_at)}</li>
             {live ? <li>{FileUtils.getFullFileSizeString(build.byte_size)}</li> : null}
-            {live ? <li>Buyers get this version</li> : ready ? <li>Not live yet</li> : null}
           </InlineList>
         </div>
       </RowContent>
@@ -251,11 +256,11 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
               <section aria-label="Versions" className="grid gap-2">
                 <Rows role="list">
                   {zipUpload ? (
-                    <Row role="listitem" className="grid-cols-[1fr_auto]">
+                    <Row role="listitem" className={VERSION_ROW_CLASS}>
                       <RowContent>
-                        <div>
-                          <h4>Uploading {zipUpload.name}</h4>
-                          <InlineList>
+                        <div className="min-w-0">
+                          <h4 className="truncate">Uploading {zipUpload.name}</h4>
+                          <InlineList className="truncate">
                             <li>
                               {zipUpload.percent === null
                                 ? "Adding the new version..."
