@@ -87,7 +87,8 @@ class PartnerMigrationImportJob
       migration.touch
       PartnerMigration::RemoteFileTransfer.download(url, max_bytes: User::Validations::MAXIMUM_AVATAR_FILE_SIZE, max_duration: AVATAR_DOWNLOAD_DURATION) do |tempfile, filename|
         content_type = Marcel::MimeType.for(tempfile, name: filename)
-        next unless user.valid_avatar_content_type?(content_type)
+        # The seller may have set a picture while the partner's image downloaded.
+        next if !user.valid_avatar_content_type?(content_type) || user.reload.avatar.attached?
 
         blob = ActiveStorage::Blob.create_and_upload!(io: tempfile, filename:, content_type:)
         blob.purge unless user.avatar.attach(blob)
