@@ -57,17 +57,11 @@ describe SelfServiceAffiliateProduct do
       end
     end
 
-    describe "product_is_not_a_collab" do
+    context "when the product is a collab" do
       let(:product) { create(:product, :is_collab, user: creator) }
 
-      it "validates that the product is not a collab when enabled" do
+      it "is valid when enabled" do
         self_service_affiliate_product.enabled = true
-        expect(self_service_affiliate_product).to be_invalid
-        expect(self_service_affiliate_product.errors.full_messages).to match_array(["Collab products cannot have affiliates"])
-      end
-
-      it "does not validate that the product is not a collab when disabled" do
-        self_service_affiliate_product.enabled = false
         expect(self_service_affiliate_product).to be_valid
       end
     end
@@ -111,19 +105,19 @@ describe SelfServiceAffiliateProduct do
     end
 
     it "raises an error with invalid params" do
-      collab_product = create(:product, :is_collab, user: creator)
+      other_sellers_product = create(:product)
 
       products_with_details << {
-        id: collab_product.external_id_numeric,
+        id: other_sellers_product.external_id_numeric,
         enabled: true,
-        name: collab_product.name,
+        name: other_sellers_product.name,
         fee_percent: 10,
         destination_url: nil,
       }
 
       expect do
         described_class.bulk_upsert!(products_with_details, creator.id)
-      end.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: Collab products cannot have affiliates")
+      end.to raise_error(ActiveRecord::RecordInvalid, "Validation failed: The product '#{other_sellers_product.name}' does not belong to you (#{creator.email}).")
     end
   end
 end

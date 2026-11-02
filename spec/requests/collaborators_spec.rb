@@ -343,42 +343,15 @@ describe "Collaborators", type: :system, js: true do
         end
       end
 
-      it "disables affiliates when adding a collaborator to a product with affiliates" do
+      it "keeps affiliates when adding a collaborator to a product with affiliates" do
         affiliate = create(:direct_affiliate, seller:)
-        affiliated_products = (1..12).map { |i| create(:product, user: seller, name: "Number #{i} affiliate product") }
+        affiliated_products = (1..2).map { |i| create(:product, user: seller, name: "Number #{i} affiliate product") }
         affiliate.products = affiliated_products
 
         visit new_collaborator_path
         expect do
           fill_in "email", with: collaborating_user.email
-
-          affiliated_products.each do |product|
-            within find(:table_row, { "Product" => product.name }) do
-              expect(page).to have_content "Selecting this product will remove all its affiliates."
-            end
-          end
-
           click_on "Add collaborator"
-
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            expect(page).to have_text("Affiliates will be removed from the following products:")
-            affiliated_products.first(10).each do |product|
-              expect(page).to have_text(product.name)
-            end
-            affiliated_products.last(2).each do |product|
-              expect(page).not_to have_text(product.name)
-            end
-            expect(page).to have_text("and 2 others.")
-            click_on "No, cancel"
-          end
-          expect(page).not_to have_modal("Remove affiliates?")
-
-          click_on "Add collaborator"
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            click_on "Yes, continue"
-          end
 
           expect(page).to have_alert(text: "Changes saved!")
           expect(page).to have_current_path(collaborators_path)
@@ -386,7 +359,7 @@ describe "Collaborators", type: :system, js: true do
           collaborator = seller.collaborators.last
           expect(collaborator.products).to match_array([product1, product2, product3] + affiliated_products)
         end.to change { seller.collaborators.count }.from(1).to(2)
-           .and change { affiliate.reload.products.count }.from(12).to(0)
+           .and not_change { affiliate.reload.products.count }
       end
 
       it "does not allow adding a collaborator if creator is using a Brazilian Stripe Connect account" do
@@ -541,7 +514,6 @@ describe "Collaborators", type: :system, js: true do
             check product3.name
           end
           within find(:table_row, { "Product" => product4.name }) do
-            expect(page).to have_content "Selecting this product will remove all its affiliates."
             check product4.name
             fill_in "Percentage", with: 45
           end
@@ -555,25 +527,11 @@ describe "Collaborators", type: :system, js: true do
 
           click_on "Save changes"
 
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            expect(page).to have_text("Affiliates will be removed from the following products:")
-            expect(page).to have_text(product4.name)
-            click_on "Close"
-          end
-          expect(page).not_to have_modal("Remove affiliates?")
-
-          click_on "Save changes"
-          expect(page).to have_modal("Remove affiliates?")
-          within_modal("Remove affiliates?") do
-            click_on "Yes, continue"
-          end
-
           expect(page).to have_alert(text: "Changes saved!")
           expect(page).to have_current_path(collaborators_path)
         end.to change { collaborator.products.count }.from(2).to(3)
            .and change { product1.reload.is_collab }.from(true).to(false)
-           .and change { product4.direct_affiliates.count }.from(1).to(0)
+           .and not_change { product4.direct_affiliates.count }
 
         collaborator.reload
         expect(collaborator.affiliate_basis_points).to eq 30_00

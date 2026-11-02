@@ -97,7 +97,7 @@ module Product::Stats
       }
     else
       # The affiliate is paid through one of the purchase's credits, so each is scoped to them: the
-      # query also finds a collab purchase (:collab_and_affiliates) through the other credit.
+      # query also finds a collab purchase through the other credit.
       PurchaseSearchService.affiliate_credit_aggs_for_user(for_user.id)
     end
     search_options = Purchase::CHARGED_SALES_SEARCH_OPTIONS.merge(
@@ -110,8 +110,7 @@ module Product::Stats
 
     if for_seller
       affiliate_total = aggregations.affiliate_cents_total.value + aggregations.affiliate_fees_total.value - aggregations.amount_refunded_cents_total.value
-      # A direct affiliate's commission on a collab purchase (:collab_and_affiliates) also comes out
-      # of the seller's share.
+      # A direct affiliate's commission on a collab purchase also comes out of the seller's share.
       direct_affiliate_total = aggregations.direct_affiliate_cents_total.value + aggregations.direct_affiliate_fees_total.value
       return aggregations.price_cents_total.value - affiliate_total - direct_affiliate_total
     end

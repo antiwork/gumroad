@@ -16,11 +16,7 @@ describe AffiliateRequests::OnboardingFormController do
   let!(:deleted_product) { create(:product, user: seller, deleted_at: DateTime.current) }
   let!(:enabled_self_service_affiliate_product_for_published_product_one) { create(:self_service_affiliate_product, enabled: true, seller:, product: published_product_one, affiliate_basis_points: 1000) }
   let!(:enabled_self_service_affiliate_product_for_published_product_two) { create(:self_service_affiliate_product, enabled: true, seller:, product: published_product_two, destination_url: "https://example.com") }
-  let!(:enabled_self_service_affiliate_product_for_collab_product) do
-    create(:self_service_affiliate_product, enabled: true, seller:).tap do
-      _1.product.update!(is_collab: true) # bypass `product_is_not_a_collab` validation
-    end
-  end
+  let!(:enabled_self_service_affiliate_product_for_collab_product) { create(:self_service_affiliate_product, enabled: true, seller:, product: create(:product, :is_collab, user: seller)) }
   let(:self_service_collab_product) { enabled_self_service_affiliate_product_for_collab_product.product }
 
   include_context "with user signed in as admin for seller"
@@ -50,24 +46,22 @@ describe AffiliateRequests::OnboardingFormController do
           expect(response.parsed_body["error"]).to eq "Validation failed: Affiliate commission must be between 1% and 75%."
         end
       end
+    end
 
-      context "such as an ineligible product" do
-        let(:params) do
-          {
-            products: [
-              { id: published_collab_product.external_id_numeric, enabled: true, name: published_collab_product.name, fee_percent: 40, destination_url: nil }
-            ]
-          }
-        end
+    context "when the request payload enables a collab product" do
+      let(:params) do
+        {
+          products: [
+            { id: published_collab_product.external_id_numeric, enabled: true, name: published_collab_product.name, fee_percent: 40, destination_url: nil }
+          ]
+        }
+      end
 
-        it "responds with an error without persisting any changes" do
-          expect do
-            patch :update, params:, format: :json
-          end.to_not change { seller.self_service_affiliate_products.reload }
+      it "enables it" do
+        patch :update, params:, format: :json
 
-          expect(response.parsed_body["success"]).to eq false
-          expect(response.parsed_body["error"]).to eq "Validation failed: Collab products cannot have affiliates"
-        end
+        expect(response.parsed_body["success"]).to eq true
+        expect(seller.self_service_affiliate_products.find_by(product: published_collab_product)).to have_attributes(enabled: true, affiliate_basis_points: 4000)
       end
     end
 

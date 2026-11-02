@@ -7,7 +7,6 @@ import { isValidEmail } from "$app/utils/email";
 
 import { Button } from "$app/components/Button";
 import { Layout } from "$app/components/Collaborators/Layout";
-import { Modal } from "$app/components/Modal";
 import { NavigationButtonInertia } from "$app/components/NavigationButton";
 import { NumberInput } from "$app/components/NumberInput";
 import { showAlert } from "$app/components/server-components/Alert";
@@ -22,8 +21,6 @@ import { Switch } from "$app/components/ui/Switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 import { WithTooltip } from "$app/components/WithTooltip";
 
-const WITH_CONFIRMED_ACKNOWLEDGEMENT = "withConfirmedAcknowledgement";
-
 const validCommission = (
   percentCommission: number | null,
   minPercentCommission: number,
@@ -36,7 +33,6 @@ const CollaboratorForm = ({
   collaborators_disabled_reason: collaboratorsDisabledReason,
   page_metadata: pageMetadata,
 }: NewPageProps | EditPageProps) => {
-  const [isConfirmationModalOpen, setIsConfirmationModalOpen] = React.useState(false);
   const form = useForm(formData);
   const emailInputRef = React.useRef<HTMLInputElement>(null);
   const isEditPage = "id" in formData;
@@ -57,13 +53,7 @@ const CollaboratorForm = ({
     return !product.has_another_collaborator && product.published;
   };
 
-  const productsWithAffiliates = form.data.products.filter((product) => product.enabled && product.has_affiliates);
-  const listedProductsWithAffiliatesCount =
-    productsWithAffiliates.length <= pageMetadata.max_products_with_affiliates_to_show + 1
-      ? productsWithAffiliates.length
-      : pageMetadata.max_products_with_affiliates_to_show;
-
-  const submitForm = (acknowledgement?: typeof WITH_CONFIRMED_ACKNOWLEDGEMENT) => {
+  const submitForm = () => {
     let commissionErrorMessage: string | null = null;
     if (
       form.data.apply_to_all_products &&
@@ -124,15 +114,6 @@ const CollaboratorForm = ({
       return;
     }
 
-    if (
-      acknowledgement !== WITH_CONFIRMED_ACKNOWLEDGEMENT &&
-      form.data.products.some((product) => product.enabled && product.has_affiliates) &&
-      !isConfirmationModalOpen
-    ) {
-      setIsConfirmationModalOpen(true);
-      return;
-    }
-
     form.clearErrors();
 
     form.transform((data) => ({
@@ -165,7 +146,7 @@ const CollaboratorForm = ({
           <WithTooltip position="bottom" tip={collaboratorsDisabledReason}>
             <Button
               color="accent"
-              onClick={() => submitForm()}
+              onClick={submitForm}
               disabled={collaboratorsDisabledReason !== null || form.processing}
             >
               {form.processing ? "Saving..." : isEditPage ? "Save changes" : "Add collaborator"}
@@ -298,12 +279,8 @@ const CollaboratorForm = ({
                       </TableCell>
                       <TableCell>
                         <Label htmlFor={`enable-product-${product.id}`}>{product.name}</Label>
-                        {product.has_another_collaborator || product.has_affiliates ? (
-                          <small className="block text-muted">
-                            {product.has_another_collaborator
-                              ? "Already has a collaborator"
-                              : "Selecting this product will remove all its affiliates."}
-                          </small>
+                        {product.has_another_collaborator ? (
+                          <small className="block text-muted">Already has a collaborator</small>
                         ) : null}
                       </TableCell>
                       <TableCell>
@@ -365,38 +342,6 @@ const CollaboratorForm = ({
             Show unpublished and ineligible products
           </Label>
         </FormSection>
-        <Modal
-          open={isConfirmationModalOpen}
-          title="Remove affiliates?"
-          onClose={() => setIsConfirmationModalOpen(false)}
-        >
-          <h4 className="mb-3">
-            Affiliates will be removed from the following products:
-            <ul>
-              {productsWithAffiliates.slice(0, listedProductsWithAffiliatesCount).map((product) => (
-                <li key={product.id}>{product.name}</li>
-              ))}
-            </ul>
-            {listedProductsWithAffiliatesCount < productsWithAffiliates.length ? (
-              <span>{`and ${productsWithAffiliates.length - listedProductsWithAffiliatesCount} others.`}</span>
-            ) : null}
-          </h4>
-          <div className="flex justify-between gap-3">
-            <Button className="grow" onClick={() => setIsConfirmationModalOpen(false)}>
-              No, cancel
-            </Button>
-            <Button
-              color="primary"
-              className="grow"
-              onClick={() => {
-                setIsConfirmationModalOpen(false);
-                submitForm(WITH_CONFIRMED_ACKNOWLEDGEMENT);
-              }}
-            >
-              Yes, continue
-            </Button>
-          </div>
-        </Modal>
       </form>
     </Layout>
   );
