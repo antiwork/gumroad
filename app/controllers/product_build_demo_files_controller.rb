@@ -13,5 +13,5 @@ class ProductBuildDemoFilesController < ProductBuildPlayerFilesController
 
     def save_data = {}
 
-    def save_url = nil
+    def save_endpoint = nil
 end

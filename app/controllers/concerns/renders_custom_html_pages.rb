@@ -1103,7 +1103,9 @@ module RendersCustomHtmlPages
       share_image = product.thumbnail&.alive&.url || product.social_share_image
       share_image_tags = if share_image
         escaped_share_image = ERB::Util.h(share_image)
-        %(<meta property="og:image" content="#{escaped_share_image}">\n    <meta property="twitter:card" content="summary_large_image">\n    <meta property="twitter:image" content="#{escaped_share_image}">)
+        twitter_card = demo_player_card_meta(product, image: share_image) || { "twitter:card" => "summary_large_image", "twitter:image" => share_image }
+        twitter_tags = twitter_card.map { |property, content| %(<meta property="#{property}" content="#{ERB::Util.h(content)}">) }
+        ([%(<meta property="og:image" content="#{escaped_share_image}">)] + twitter_tags).join("\n    ")
       else
         ""
       end

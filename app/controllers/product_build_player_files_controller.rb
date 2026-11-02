@@ -79,7 +79,7 @@ class ProductBuildPlayerFilesController < ApplicationController
 
     def save_data = ProductBuildSave.find_by(purchase_id: @grant["purchase_id"])&.data || {}
 
-    def save_url
+    def save_endpoint
       "/d/#{params[:id]}/play/#{ProductBuild.player_save_grant(url_redirect_token: params[:id], purchase_id: @grant["purchase_id"])}/save"
     end
 
@@ -120,7 +120,7 @@ class ProductBuildPlayerFilesController < ApplicationController
       # The unpack rejects larger pages; this guards pages unpacked before that limit.
       return e404 if head.content_length > ProductBuild::MAX_PAGE_BYTE_SIZE
 
-      body = ProductBuilds::PlayerDocument.render(s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read, save_data:, save_url:)
+      body = ProductBuilds::PlayerDocument.render(s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read, save_data:, save_url: save_endpoint)
       # The page carries the buyer's save.
       response.set_header("Cache-Control", "private, no-store")
       send_data body, type: head.content_type, disposition: "inline"

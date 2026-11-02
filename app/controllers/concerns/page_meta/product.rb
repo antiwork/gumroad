@@ -105,19 +105,29 @@ module PageMeta::Product
       set_meta_tag(property: "og:image:alt", content: "")
     end
 
+    # The X player card tags that play the product's public demo, or nil when it has none. X shows the
+    # image until the card plays, so a product without one keeps its usual card. The flag goes first so
+    # most product pages skip the build query.
+    def demo_player_card_meta(product, image:)
+      return if image.blank? || !Feature.active?(ProductBuild::DEMO_FEATURE, product.user)
+      return unless product.product_builds.live.first&.demo?
+
+      {
+        "twitter:card" => "player",
+        "twitter:image" => image,
+        "twitter:player" => product_build_demo_url(product.external_id, host: DOMAIN, protocol: PROTOCOL),
+        "twitter:player:width" => DEMO_PLAYER_CARD_WIDTH,
+        "twitter:player:height" => DEMO_PLAYER_CARD_HEIGHT,
+      }
+    end
+
     # Equivalent to `twitter_product_card(product, product_description:).html_safe`
     def set_twitter_meta(product, product_description:)
       set_meta_tag(property: "twitter:title", content: product.name)
 
-      # The flag goes first so most product pages skip the build query. X shows the poster image until
-      # the card plays, so a demo without one keeps the usual card.
-      demo_image = product.social_share_image if Feature.active?(ProductBuild::DEMO_FEATURE, product.user)
-      if demo_image.present? && product.product_builds.live.first&.demo?
-        set_meta_tag(property: "twitter:card", content: "player")
-        set_meta_tag(property: "twitter:image", content: demo_image)
-        set_meta_tag(property: "twitter:player", content: product_build_demo_url(product.external_id, host: DOMAIN, protocol: PROTOCOL))
-        set_meta_tag(property: "twitter:player:width", content: DEMO_PLAYER_CARD_WIDTH)
-        set_meta_tag(property: "twitter:player:height", content: DEMO_PLAYER_CARD_HEIGHT)
+      demo_card = demo_player_card_meta(product, image: product.social_share_image)
+      if demo_card
+        demo_card.each { |property, content| set_meta_tag(property:, content:) }
       elsif product.preview_image_path?
         set_meta_tag(property: "twitter:card", content: "summary_large_image")
         set_meta_tag(property: "twitter:image", content: product.preview_url)

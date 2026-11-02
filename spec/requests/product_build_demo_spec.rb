@@ -50,6 +50,18 @@ describe "Web build demo", type: :request, inertia: true do
       expect(twitter_meta("twitter:image")).to eq(product.social_share_image)
     end
 
+    it "points X at the demo from a custom HTML product page too" do
+      Feature.activate_user(:custom_html_pages, seller)
+      product.update!(custom_html: "<section><h1>Play it</h1></section>")
+
+      get short_link_url(product.unique_permalink, host: seller.subdomain_with_protocol)
+
+      expect(response.body).to include("/landing/embed")
+      expect(twitter_meta("twitter:card")).to eq("player")
+      expect(twitter_meta("twitter:player")).to eq("#{PROTOCOL}://#{DOMAIN}/demo/#{product.external_id}")
+      expect(twitter_meta("twitter:player:width")).to eq("640")
+    end
+
     it "keeps the usual card for a paid product" do
       product.update!(price_cents: 500)
 
