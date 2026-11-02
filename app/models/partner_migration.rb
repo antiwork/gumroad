@@ -8,9 +8,9 @@ require "digest"
 class PartnerMigration < ApplicationRecord
   EXPIRES_IN = 7.days
   # The job touches the migration around each transfer, and one download stops after
-  # RemoteFileTransfer::MAX_DOWNLOAD_DURATION. A longer gap usually means the job was lost, so
-  # ResumeStalledPartnerMigrationsJob queues it again. Twice the download limit leaves the same time
-  # again for the upload that follows it.
+  # RemoteFileTransfer::MAX_DOWNLOAD_DURATION. A longer gap after an attempt started usually means the
+  # job was lost, so ResumeStalledPartnerMigrationsJob queues it again. Twice the download limit leaves
+  # the same time again for the upload that follows it.
   STALLED_AFTER = PartnerMigration::RemoteFileTransfer::MAX_DOWNLOAD_DURATION * 2
   CONFIRMATION_PREVIEW_SIZE = 5
   MAX_PRODUCTS = 500
@@ -62,7 +62,8 @@ class PartnerMigration < ApplicationRecord
   validates :expires_at, presence: true
   validates :public_id, format: { with: PUBLIC_ID_FORMAT }
 
-  scope :stalled, -> { where(status: STATUS_CLAIMED, updated_at: ...STALLED_AFTER.ago) }
+  # Only an attempt that started counts: a job can wait in the queue for longer than STALLED_AFTER.
+  scope :stalled, -> { where(status: STATUS_CLAIMED, updated_at: ...STALLED_AFTER.ago).where.not(import_started_at: nil) }
 
   def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil)
     attempts = 0
@@ -309,7 +310,7 @@ class PartnerMigration < ApplicationRecord
   def account_setup_expired? = claimed_at.nil? || claimed_at + ACCOUNT_SETUP_EXPIRES_IN <= Time.current
   # The seller can still set a password from the setup email.
   def account_setup_open? = account_setup_pending? && !account_setup_expired?
-  def stalled? = status == STATUS_CLAIMED && updated_at < STALLED_AFTER.ago
+  def stalled? = status == STATUS_CLAIMED && import_started_at.present? && updated_at < STALLED_AFTER.ago
 
   def masked_email
     local_part, domain = email.split("@", 2)
@@ -430,7 +431,7 @@ class PartnerMigration < ApplicationRecord
     queued = with_lock(requires_new: true) do
       next false unless status == STATUS_FAILED && user&.account_active?
 
-      update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil, notified_at: nil, notification_failed_email: nil, resumes_count: 0)
+      update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil, notified_at: nil, notification_failed_email: nil, resumes_count: 0, import_started_at: nil)
       # A nil enqueue means the previous job still holds its lock. Keep the failed state, so the next
       # export tries again.
       raise ActiveRecord::Rollback if PartnerMigrationImportJob.perform_async(id).nil?
@@ -454,7 +455,8 @@ class PartnerMigration < ApplicationRecord
       # worker, and a rejected enqueue means a killed worker left its lock behind. The job skips products
       # that another run saved, so a job still waiting in the queue cannot import them twice.
       elsif PartnerMigrationImportJob.perform_async(id) || PartnerMigrationImportJob.enqueue_releasing_lock(id)
-        update!(resumes_count: resumes_count + 1)
+        # The queued job has not started, so the scan does not count it again while it waits.
+        update!(resumes_count: resumes_count + 1, import_started_at: nil)
       end
       if failure_reason
         update!(status: STATUS_FAILED, completed_at: Time.current, failure_reason:)

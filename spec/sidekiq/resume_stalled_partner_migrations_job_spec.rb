@@ -5,10 +5,10 @@ require "spec_helper"
 describe ResumeStalledPartnerMigrationsJob do
   let(:partner_application) { create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api") }
 
-  def migration_with(status:, updated_at:, resumes_count: 0, user: create(:user))
+  def migration_with(status:, updated_at:, resumes_count: 0, user: create(:user), import_started_at: updated_at)
     products, = PartnerMigration.normalize_products([{ name: "Texture Pack", price: 500 }])
     migration, = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-#{SecureRandom.hex(4)}", products:)
-    migration.update_columns(status:, updated_at:, resumes_count:, user_id: user.id)
+    migration.update_columns(status:, updated_at:, resumes_count:, user_id: user.id, import_started_at:)
     migration
   end
 
@@ -22,7 +22,17 @@ describe ResumeStalledPartnerMigrationsJob do
 
     expect(PartnerMigrationImportJob.jobs.map { _1["args"] }).to eq([[stalled.id]])
     expect([running.reload, finished.reload].map(&:resumes_count)).to eq([0, 0])
-    expect(stalled.reload.resumes_count).to eq(1)
+    expect(stalled.reload).to have_attributes(resumes_count: 1, import_started_at: nil)
+  end
+
+  it "does not resume an import whose job still waits in the queue" do
+    waiting = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago, import_started_at: nil)
+    Sidekiq::Worker.clear_all
+
+    described_class.new.perform
+
+    expect(PartnerMigrationImportJob.jobs).to be_empty
+    expect(waiting.reload).to have_attributes(status: PartnerMigration::STATUS_CLAIMED, resumes_count: 0)
   end
 
   it "releases the lock that a killed worker left, then resumes the import" do

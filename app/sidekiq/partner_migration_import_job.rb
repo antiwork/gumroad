@@ -53,7 +53,12 @@ class PartnerMigrationImportJob
     ApplicationRecord.connected_to(role: :writing) do
       migration = PartnerMigration.find(partner_migration_id)
       # A manual retry enqueues inside its transaction, so wait for that transaction to commit.
-      unless migration.with_lock { migration.status == PartnerMigration::STATUS_CLAIMED }
+      started = migration.with_lock do
+        next false unless migration.status == PartnerMigration::STATUS_CLAIMED
+
+        migration.update!(import_started_at: Time.current)
+      end
+      unless started
         # Retry a failed notification enqueue without importing the products again.
         PartnerMigrationNotificationJob.perform_async(migration.id) if migration.completed_at
         return
