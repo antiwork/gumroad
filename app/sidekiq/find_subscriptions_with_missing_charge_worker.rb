@@ -29,7 +29,7 @@ class FindSubscriptionsWithMissingChargeWorker
         # A hold may have no paid period to be overdue from, and nothing else rechecks its mandate.
         next false if subscription.indian_card_mandate_held?
 
-        subscription.last_successful_purchase.blank? || subscription.seconds_overdue_for_charge < 75.minutes
+        subscription.last_successful_purchase.blank? || seconds_overdue(subscription) < 75.minutes
       end
 
       subscriptions.each do |subscription|
@@ -38,4 +38,17 @@ class FindSubscriptionsWithMissingChargeWorker
       end
     end
   end
+
+  private
+    # With every charge refunded or charged back there is no paid period, so overdue is measured from the last charge.
+    def seconds_overdue(subscription)
+      return subscription.seconds_overdue_for_charge if subscription.end_time_of_last_paid_period.present?
+      # Do not re-bill a buyer with a standing chargeback; a chargeback is meant to end the membership.
+      return 0 if subscription.purchases.chargedback.not_chargeback_reversed.exists?
+
+      last_successful_charge_at = subscription.last_successful_charge_at
+      return 0 if last_successful_charge_at.nil?
+
+      (Time.current - (last_successful_charge_at + subscription.period)).to_i
+    end
 end
