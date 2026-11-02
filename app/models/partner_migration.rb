@@ -67,7 +67,7 @@ class PartnerMigration < ApplicationRecord
   # Only an attempt that started counts: a job can wait in the queue for longer than STALLED_AFTER.
   scope :stalled, -> { where(status: STATUS_CLAIMED, updated_at: ...STALLED_AFTER.ago).where.not(import_started_at: nil) }
 
-  def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil)
+  def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil, new_link: false)
     attempts = 0
 
     begin
@@ -84,7 +84,8 @@ class PartnerMigration < ApplicationRecord
           seller = migration.pending? ? { email:, profile: } : {}
           # New URLs alone keep the seller's link, so the partner does not have to send it again. Any other
           # change replaces the link, so a page that showed the old catalog or email cannot confirm it.
-          keep_link = same_catalog && seller.all? { |key, value| migration[key] == value }
+          # `new_link` lets a partner that lost the response get a link again.
+          keep_link = !new_link && same_catalog && seller.all? { |key, value| migration[key] == value }
           migration.update!(products:, expires_at: EXPIRES_IN.from_now, **seller, **(keep_link ? {} : { code_digest: digest(code) }))
           migration.retry_failed_products!
           code = nil if keep_link

@@ -118,6 +118,17 @@ describe "Partner API migrations", type: :request do
     expect(PartnerMigration.find_by_code(code)).to eq(PartnerMigration.last)
   end
 
+  it "returns a new onboarding link on request, for a partner that lost the earlier response" do
+    post_migration(external_user_id: "ext-1", products:)
+    first_url = response.parsed_body.fetch("onboarding_url")
+
+    post_migration(external_user_id: "ext-1", products:, new_onboarding_url: true)
+
+    expect(response.parsed_body.fetch("onboarding_url")).not_to eq(first_url)
+    post_migration(external_user_id: "ext-1", products:, new_onboarding_url: "yes")
+    expect(response).to have_http_status(:bad_request)
+  end
+
   it "keeps the accepted catalog when a changed export conflicts with it" do
     post_migration(external_user_id: "ext-1", products:)
     migration = PartnerMigration.last

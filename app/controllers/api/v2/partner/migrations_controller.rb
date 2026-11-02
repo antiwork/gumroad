@@ -17,7 +17,9 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
     seller, error = PartnerMigration.normalize_seller(email: params[:email], profile: params[:profile])
     return render_bad_request(error) if error
 
-    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:, **seller)
+    return render_bad_request("new_onboarding_url must be true or false.") unless [nil, true, false].include?(params[:new_onboarding_url])
+
+    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:, **seller, new_link: params[:new_onboarding_url] == true)
 
     render json: {
       success: true,
