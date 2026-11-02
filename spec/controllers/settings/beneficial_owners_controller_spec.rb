@@ -14,7 +14,7 @@ describe Settings::BeneficialOwnersController, type: :controller do
   before do
     create(:user_compliance_info_business, user: seller, business_country: "United Kingdom", country: "United Kingdom")
     create(:merchant_account, user: seller, country: "GB", currency: "gbp", charge_processor_merchant_id: stripe_account_id)
-    # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+    # Devise builds its mappings when routes are drawn; reload them so this spec also passes when run on its own.
     Rails.application.reload_routes!
     sign_in seller
   end

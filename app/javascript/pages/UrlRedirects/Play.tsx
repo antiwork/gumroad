@@ -5,7 +5,7 @@ import * as React from "react";
 import { cast } from "$app/utils/cast";
 
 import { Button } from "$app/components/Button";
-import { WebBuildPlayer, WebBuildPlayerHandle } from "$app/components/Download/WebBuildPlayer";
+import { useCanFullscreen, WebBuildPlayer, WebBuildPlayerHandle } from "$app/components/Download/WebBuildPlayer";
 
 type Props = {
   title: string;
@@ -16,12 +16,7 @@ type Props = {
 const Play = () => {
   const { title, frame_url, content_page_url } = cast<Props>(usePage().props);
   const playerRef = React.useRef<WebBuildPlayerHandle>(null);
-  // iPhone Safari has no element fullscreen, so the button only shows where it can work.
-  const [canFullscreen, setCanFullscreen] = React.useState(false);
-  React.useEffect(
-    () => setCanFullscreen(document.fullscreenEnabled && "requestFullscreen" in HTMLIFrameElement.prototype),
-    [],
-  );
+  const canFullscreen = useCanFullscreen();
 
   return (
     <div className="scoped-tailwind-preflight flex h-dvh flex-col bg-black">

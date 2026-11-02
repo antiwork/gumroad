@@ -65,6 +65,7 @@ class RedisKey
     def workflow_installment_rule_version(installment_id) = "workflow_installment_rule:#{installment_id}:version"
     def workflow_installment_rule_pending_token(installment_id) = "workflow_installment_rule:#{installment_id}:pending_token"
     def audience_member_load_max_execution_time_seconds = "audience_member_load:max_execution_time_seconds"
+    def behavior_decision_max_execution_time_seconds = "behavior_decision:max_execution_time_seconds"
     def impersonated_user(admin_user_id) = "impersonated_user_by_admin_#{admin_user_id}"
     def undeliverable_ping_subscription_notified(resource_subscription_id, reason) = "undeliverable_ping_subscription:#{resource_subscription_id}:#{reason}"
     def undeliverable_ping_subscription_enqueued(resource_subscription_id, reason) = "undeliverable_ping_subscription_enqueued:#{resource_subscription_id}:#{reason}"

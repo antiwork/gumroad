@@ -12,6 +12,16 @@ const isSaveFailedMessage = (data: unknown) =>
 
 export type WebBuildPlayerHandle = { enterFullscreen: () => void };
 
+// iPhone Safari has no element fullscreen, so a Full screen button only shows where it can work.
+export const useCanFullscreen = () => {
+  const [canFullscreen, setCanFullscreen] = React.useState(false);
+  React.useEffect(
+    () => setCanFullscreen(document.fullscreenEnabled && "requestFullscreen" in HTMLIFrameElement.prototype),
+    [],
+  );
+  return canFullscreen;
+};
+
 // Fills its container. The build saves on its own, under the grant in frameUrl; this page only
 // tells the buyer when a save fails.
 export const WebBuildPlayer = React.forwardRef<WebBuildPlayerHandle, { title: string; frameUrl: string }>(

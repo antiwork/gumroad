@@ -569,9 +569,8 @@ class Purchase::CreateService < Purchase::BaseService
 
       purchase = product.sales.build(params_for_purchase)
       purchase.authenticated_offer_code_buyer = buyer
-      # A collab product credits its collaborator through `affiliate`. With :collab_and_affiliates the
-      # direct affiliate who referred the sale (vetted by OrdersController#fetch_affiliates) is kept
-      # as a second credit instead of being dropped.
+      # A collab product credits its collaborator through `affiliate`. The direct affiliate who
+      # referred the sale (vetted by OrdersController#fetch_affiliates) is kept as a second credit.
       referring_affiliate = purchase.affiliate
       purchase.affiliate = product.collaborator if product.collaborator.present?
       should_ship = product.is_physical || product.require_shipping

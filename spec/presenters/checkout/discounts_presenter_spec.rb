@@ -321,4 +321,22 @@ describe Checkout::DiscountsPresenter do
       expect(presenter.offer_code_props(offer_code1)[:option_ids_by_product]).to eq({ product3.external_id => [tier.external_id, removed.external_id] })
     end
   end
+
+  describe "#discounts_props with variants predating position and timestamp tracking" do
+    let(:product4) { create(:product, user: seller) }
+    let(:category) { create(:variant_category, link: product4) }
+    let!(:variants) { create_list(:variant, 2, variant_category: category) }
+
+    before do
+      BaseVariant.where(id: variants.map(&:id)).update_all(position_in_category: nil)
+      BaseVariant.where(id: variants.first.id).update_all(created_at: nil)
+    end
+
+    it "orders the product options instead of raising" do
+      props = described_class.new(pundit_user: SellerContext.new(user:, seller:), offer_codes: [], pagination: nil).discounts_props
+
+      expect(props[:products].find { _1[:id] == product4.external_id }[:options].map { _1[:id] })
+        .to match_array(variants.map(&:external_id))
+    end
+  end
 end

@@ -17,7 +17,6 @@ export type CollaboratorFormProduct = {
   id: string;
   name: string;
   has_another_collaborator: boolean;
-  has_affiliates: boolean;
   published: boolean;
   enabled: boolean;
   percent_commission: number | null;
@@ -40,7 +39,6 @@ export type CollaboratorFormPageMetaData = {
   default_percent_commission: number;
   min_percent_commission: number;
   max_percent_commission: number;
-  max_products_with_affiliates_to_show: number;
   title: string;
 };
 

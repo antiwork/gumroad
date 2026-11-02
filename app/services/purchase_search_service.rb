@@ -70,7 +70,7 @@ class PurchaseSearchService
   attr_accessor :body
 
   # A purchase credits a collaborator (`affiliate_credit_*`) and, on a collab purchase that also
-  # credits a direct affiliate (:collab_and_affiliates), that affiliate (`direct_affiliate_credit_*`).
+  # credits a direct affiliate, that affiliate (`direct_affiliate_credit_*`).
   # A filter that matches either credit's user matches both on such a purchase, so money read out of
   # the result has to be scoped to the credit whose affiliate user was asked for.
   AFFILIATE_CREDIT_PREFIXES = %w[affiliate_credit direct_affiliate_credit].freeze
@@ -298,9 +298,9 @@ class PurchaseSearchService
       ids = Array.wrap(@options[:affiliate_user]).map do |affiliate_user|
         affiliate_user.is_a?(User) ? affiliate_user.id : affiliate_user
       end
-      # Either credit can make this user an affiliate of the purchase: on a collab purchase
-      # (:collab_and_affiliates) a direct affiliate is credited beside the collaborator. Reading money
-      # out of the result needs `affiliate_credit_aggs_for_user`, which scopes each credit.
+      # Either credit can make this user an affiliate of the purchase: on a collab purchase a direct
+      # affiliate is credited beside the collaborator. Reading money out of the result needs
+      # `affiliate_credit_aggs_for_user`, which scopes each credit.
       @body[:query][:bool][:filter] << {
         bool: {
           minimum_should_match: 1,

@@ -305,6 +305,20 @@ describe("ShareYourLaunchCard", () => {
     expect(screen.queryByText(/haven't bought/u)).toBeNull();
   });
 
+  it("withholds a behavior-filtered draft's counts below the floor", async () => {
+    await renderCard([emailChannel({ counts: { customers: null, followers: null, affiliates: null, total: null } })]);
+
+    expect(
+      screen.getByText("Launch email drafted for the draft's saved audience. The count is hidden for privacy."),
+    ).toBeDefined();
+  });
+
+  it("drops the segment breakdown when only a segment count is withheld", async () => {
+    await renderCard([emailChannel({ counts: { customers: 7, followers: null, affiliates: null, total: 7 } })]);
+
+    expect(screen.getByText("Launch email drafted for 7 people in the draft's saved audience.")).toBeDefined();
+  });
+
   it("shows the gate reason instead of a draft for a seller who cannot email yet", async () => {
     await renderCard([
       xChannel(),
@@ -375,6 +389,11 @@ describe("ShareYourLaunchCard", () => {
       "A problem on our side stopped your launch email about Gumstein Letters before it reached anyone.",
     ],
     ["stopped", "Stopped", "Your launch email about Gumstein Letters was stopped because this newsletter was retired."],
+    [
+      "too_few_recipients",
+      "Not sent",
+      "Your launch email about Gumstein Letters wasn't sent because fewer than 5 customers matched its filters.",
+    ],
   ] as const)("shows truthful %s email state", async (state, label, summary) => {
     await renderCard([
       emailChannel({ draft: { id: "draft1", subject: "Gumstein Letters", state, edit_url: "/emails/draft1/edit" } }),

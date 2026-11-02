@@ -7,7 +7,7 @@
 // the save endpoint in config.saveUrl, one batch at a time. The frame has no cookies, so the grant in
 // that URL is the credential. Each batch is numbered for this page load (the writer), so the server
 // skips one that arrives after a newer one; a batch that fails goes back in front of newer changes
-// and is sent again.
+// and is sent again. A demo has no saveUrl, so its writes stay in memory.
 //
 // The IndexedDB shim keeps its snapshot in the same save, under config.indexedDBKey. That key is
 // reached only through the slot left on the window for it; the build's localStorage never shows it.
@@ -165,6 +165,9 @@
   }
 
   function changed() {
+    if (!saveUrl) {
+      return;
+    }
     if (!timer) {
       timer = setTimeout(flush, config.flushDelayMs);
     }
@@ -173,6 +176,9 @@
   // A beacon is delivered even as the page closes, but the browser only says it was queued.
   // Returns the size it sent, for a later beacon that has to share the quota with this one.
   function beacon(changes, maxBytes) {
+    if (!saveUrl) {
+      return 0;
+    }
     const payload = body(changes);
     const size = new Blob([payload]).size;
     if (size <= maxBytes && navigator.sendBeacon(saveUrl, payload)) {

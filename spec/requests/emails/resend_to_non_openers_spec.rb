@@ -74,6 +74,22 @@ describe("Resend to non-openers flow", :js, type: :system) do
     expect(SendPostBlastEmailsJob).not_to have_enqueued_sidekiq_job(anything)
   end
 
+  it "hides the non-opener count of an email whose delivery counts are withheld and still resends" do
+    installment.update!(opened_post_id: "post-1", delivery_counts_withheld: true)
+
+    visit emails_path
+    find(:table_row, { "Subject" => "Product update" }).click
+    click_on "Resend to non-openers"
+
+    within_modal "Resend to non-openers?" do
+      expect(page).to have_text("Recipient count: Hidden for privacy.")
+      click_on "Resend"
+    end
+
+    expect(page).to have_alert(text: "Resending to everyone who hasn't opened this yet. This may take a while.")
+    expect(installment.blasts.where(recipient_filter: "unopened").count).to eq(1)
+  end
+
   it "does not offer the resend for a follower email with no per-recipient open tracking" do
     follower_installment = create(:published_installment, seller:, link: nil, installment_type: "follower", name: "Follower update")
     create(:post_email_blast, post: follower_installment, completed_at: 1.day.ago)

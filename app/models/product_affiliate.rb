@@ -21,8 +21,7 @@ class ProductAffiliate < ApplicationRecord
                                                      less_than_or_equal_to: Collaborator::MAX_PERCENT_COMMISSION * 100,
                                                      allow_nil: true }, if: -> { affiliate.is_a?(Collaborator) }
   validate :product_is_eligible_for_collabs, if: -> { affiliate.is_a?(Collaborator) }
-  validate :product_is_not_a_collab, if: -> { affiliate.is_a?(DirectAffiliate) }
-  after_create :enable_product_collaborator_flag_and_disable_affiliates, if: -> { affiliate.is_a?(Collaborator) }
+  after_create :enable_product_collaborator_flag, if: -> { affiliate.is_a?(Collaborator) }
   after_destroy :disable_product_collaborator_flag, if: -> { affiliate.is_a?(Collaborator) }
   after_create :update_audience_member_with_added_product
   after_destroy :update_audience_member_with_removed_product
@@ -155,20 +154,8 @@ class ProductAffiliate < ApplicationRecord
       errors.add(:affiliate, :taken) if matching_assignments.exists?
     end
 
-    def enable_product_collaborator_flag_and_disable_affiliates
+    def enable_product_collaborator_flag
       product.update!(is_collab: true)
-      # With :collab_and_affiliates a sale credits the collaborator and a direct affiliate, so the
-      # product keeps its affiliates.
-      return if collab_and_affiliates_enabled?
-
-      product.self_service_affiliate_products.map { _1.update!(enabled: false) }
-      product.product_affiliates
-        .where.not(id:)
-        .joins(:affiliate)
-        .merge(Affiliate.direct_affiliates)
-        .order(:affiliate_id, :id)
-        .lock
-        .map { _1.destroy! }
     end
 
     def disable_product_collaborator_flag
@@ -186,15 +173,5 @@ class ProductAffiliate < ApplicationRecord
     def product_is_eligible_for_collabs
       return unless product.has_another_collaborator?(collaborator: affiliate)
       errors.add :base, "This product is not eligible for the Gumroad Affiliate Program."
-    end
-
-    def product_is_not_a_collab
-      return unless product.is_collab?
-      return if collab_and_affiliates_enabled?
-      errors.add :base, "Collab products cannot have affiliates"
-    end
-
-    def collab_and_affiliates_enabled?
-      Feature.active?(:collab_and_affiliates, product.user)
     end
 end

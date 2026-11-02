@@ -10,7 +10,6 @@ class SelfServiceAffiliateProduct < ApplicationRecord
   validates :seller, :product, presence: true
   validates :affiliate_basis_points, presence: true, if: :enabled?
   validate :affiliate_basis_points_must_fall_in_an_acceptable_range, if: :enabled?
-  validate :product_is_not_a_collab, if: :enabled?
   validate :product_user_and_seller_is_same
 
   scope :enabled, -> { where(enabled: true) }
@@ -29,12 +28,6 @@ class SelfServiceAffiliateProduct < ApplicationRecord
   end
 
   private
-    def product_is_not_a_collab
-      return unless product.present? && product.is_collab?
-      return if Feature.active?(:collab_and_affiliates, product.user)
-      errors.add :base, "Collab products cannot have affiliates"
-    end
-
     def product_user_and_seller_is_same
       return if product_id.nil? || seller_id.nil?
       return if product.user == seller

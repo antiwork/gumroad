@@ -26,6 +26,10 @@ module Mcp
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
     TIER_KEYS = %w[name price_cents recurrence].freeze
+    # The editor's tag picker: up to ten tags of two to twenty characters each.
+    MAX_TAGS = 10
+    MIN_TAG_LENGTH = 2
+    MAX_TAG_LENGTH = 20
     MICROSECONDS_PER_SECOND = 1_000_000
     # The last year MySQL DATETIME holds; a bound outside 0..this year fails in SQL instead of as a bad argument.
     MAX_DATETIME_YEAR = 9999
@@ -123,7 +127,7 @@ module Mcp
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files buyers receive and a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
@@ -338,7 +342,7 @@ module Mcp
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description and covers, and the products a bundle sells. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description, summary, additional details, tags, covers, receipt message and button text, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
@@ -362,11 +366,30 @@ module Mcp
                    }
                  }
                }, required: %w[name]),
-          tool("update_product", "Change the name, description, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, summary, additional details, tags, price, URL, receipt message, or receipt button text of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
+                 "summary" => { type: "string", description: "New summary: the short plain-text line under the buy button on the product page. Send an empty string to remove it." },
+                 "additional_details" => {
+                   type: "array",
+                   description: "The name and value rows the product page shows in the card with the summary, e.g. \"Pages: 40\", in the order to show them. This replaces the whole list; send an empty array to remove every row.",
+                   items: {
+                     type: "object",
+                     properties: {
+                       "name" => { type: "string", description: "Row label, e.g. \"Pages\"." },
+                       "value" => { type: "string", description: "Row value, e.g. \"40\"." }
+                     }
+                   }
+                 },
+                 "tags" => {
+                   type: "array",
+                   description: "The tags Discover matches the product to shoppers by, e.g. \"field-notes\". Up to ten, two to twenty characters each. This replaces the whole list; send an empty array to remove every tag.",
+                   items: { type: "string" }
+                 },
                  "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
+                 "custom_receipt_text" => { type: "string", description: "The message the buyer sees on the receipt, up to #{Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH} characters. Send an empty string to remove it." },
+                 "custom_view_content_button_text" => { type: "string", description: "The text on the receipt's button that opens the product, up to #{Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH} characters. Send an empty string to remove it." },
                  "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
                }, required: %w[id], destructive: true),
           tool("add_cover", "Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.", {
@@ -380,6 +403,11 @@ module Mcp
                  "id" => { type: "string", description: "Product id or permalink." },
                  "url" => { type: "string", description: "Public https URL of the file." },
                  "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL." }
+               }, required: %w[id url]),
+          tool("add_content_link", "Add a button with a link to a product's content page, which the buyer opens after purchase. Use it when the product is delivered as a link, like a Notion template's duplication link. Confirm the link and the button text with the creator first.", {
+                 "id" => { type: "string", description: "Product id or permalink." },
+                 "url" => { type: "string", description: "The link the buyer opens. https is assumed when the value has no scheme." },
+                 "label" => { type: "string", description: "Text on the button. Defaults to the URL." }
                }, required: %w[id url]),
           tool("publish_product", "Make a draft product purchasable. Confirm with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." }
@@ -525,7 +553,7 @@ module Mcp
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
-        details = { description: product.description, covers: covers_payload(product) }
+        details = { description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name), custom_receipt_text: product.custom_receipt_text, custom_view_content_button_text: product.custom_view_content_button_text, covers: covers_payload(product) }
         # A caller editing a bundle needs the members it has now, before replacing them.
         details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
@@ -631,8 +659,8 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "price_cents", "permalink")
-        raise Error.new("Pass at least one of name, description, price_cents, or permalink", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "summary", "additional_details", "tags", "price_cents", "custom_receipt_text", "custom_view_content_button_text", "permalink")
+        raise Error.new("Pass at least one of name, description, summary, additional_details, tags, price_cents, custom_receipt_text, custom_view_content_button_text, or permalink", code: -32602) if changes.empty?
 
         # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
         # Whitespace-only is neither: allowing it through would store a value the model treats as blank
@@ -674,11 +702,21 @@ module Mcp
           if changes.key?("description")
             product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
           end
+          # The same json_data key the editor's Summary field writes; an empty value clears it.
+          product.json_data = product.json_data.to_h.merge("custom_summary" => changes["summary"].to_s.presence) if changes.key?("summary")
+          # The same json_data keys the editor's Additional details rows write; the list is replaced whole.
+          product.json_data = product.json_data.to_h.merge("custom_attributes" => normalized_additional_details(changes["additional_details"])) if changes.key?("additional_details")
+          # The Receipt tab's two fields, the same json_data keys the editor writes; an empty value clears one.
+          product.json_data = product.json_data.to_h.merge("custom_receipt_text" => changes["custom_receipt_text"].to_s.presence) if changes.key?("custom_receipt_text")
+          product.json_data = product.json_data.to_h.merge("custom_view_content_button_text" => changes["custom_view_content_button_text"].to_s.presence) if changes.key?("custom_view_content_button_text")
           # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
           product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
+          # Tag rows after the product row, in the same transaction, so one call still saves
+          # all-or-nothing with every field above.
+          product.save_tags!(normalized_tags(changes["tags"], product)) if changes.key?("tags")
         end
-        result = { product: product_payload(product.reload).merge(description: product.description) }
+        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name), custom_receipt_text: product.custom_receipt_text, custom_view_content_button_text: product.custom_view_content_button_text) }
         # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
         if changes.key?("price_cents")
           invalid_codes = product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(product) }.map(&:code)
@@ -735,6 +773,53 @@ module Mcp
         product.display_asset_previews.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } }
       end
 
+      # The rows the product page shows in the card with the summary: the editor's Additional
+      # details, in order, with the same blank rows skipped as the presenters skip.
+      def additional_details_payload(product)
+        product.custom_attributes.filter_map do |row|
+          { name: row["name"], value: row["value"] } if row["name"].present? || row["value"].present?
+        end
+      end
+
+      # The editor's tag picker takes up to ten tags of two to twenty characters, and a product that
+      # already has more than ten can only lose them. The rest of the Tag rules (no commas, no
+      # leading hash) are its own.
+      def normalized_tags(tags, product)
+        names = tags.map do |tag|
+          raise Error.new("each tag must be text", code: -32602) unless tag.is_a?(String)
+
+          tag.downcase.strip.gsub(/[[:space:]]+/, " ")
+        end.uniq
+        raise Error.new("each tag must be #{MIN_TAG_LENGTH}-#{MAX_TAG_LENGTH} characters", code: -32602) if names.any? { !_1.length.between?(MIN_TAG_LENGTH, MAX_TAG_LENGTH) }
+        raise Error.new("a product can have up to #{MAX_TAGS} tags", code: -32602) if names.length > MAX_TAGS && names.length >= product.tags.length
+
+        names
+      end
+
+      def normalized_additional_details(rows)
+        rows.map do |row|
+          raise Error.new("each additional detail must be an object with name and value", code: -32602) unless row.is_a?(Hash)
+
+          name = additional_detail_text(row["name"], "name")
+          value = additional_detail_text(row["value"], "value")
+          # The editor keeps a row only when it has a name, so a value on its own is refused rather
+          # than dropped without telling the caller.
+          raise Error.new("each additional detail needs a name", code: -32602) if name.blank? && value.present?
+
+          { "name" => name, "value" => value }
+        end.reject { _1["name"].blank? && _1["value"].blank? }
+      end
+
+      # Both fields are declared as strings. Anything else would be stored as Ruby's own text for
+      # the object and shown to buyers as the value, so it is refused rather than coerced.
+      def additional_detail_text(field, key)
+        return "" if field.nil?
+
+        raise Error.new("additional detail #{key} must be text", code: -32602) unless field.is_a?(String)
+
+        field
+      end
+
       def tool_list_files(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
@@ -763,6 +848,23 @@ module Mcp
 
         product.reload
         { product: product_payload(product), files: files_payload(product), message: "#{file&.name_displayable || 'File'} is now attached to #{product.name}." }
+      end
+
+      def tool_add_content_link(args)
+        require_scopes!(:edit_products, :account)
+        product = find_product!(args["id"])
+        url = args["url"].to_s.strip
+        raise Error.new("url is required", code: -32602) if url.blank?
+
+        begin
+          links = Mcp::ProductContentLink.new(product:, url:, label: args["label"]).perform
+        rescue Mcp::ProductContentLink::BlockedScheme
+          raise ToolError, "A content link cannot use a #{RichContent::BLOCKED_HREF_SCHEMES.join(', ')} URL, because a browser would run it instead of opening a page."
+        rescue Mcp::ProductContentLink::InvalidUrl
+          raise ToolError, "That is not a link. Use a full URL, like https://example.com/your-template."
+        end
+
+        { product: product_payload(product.reload), links:, message: "Buyers now see this link as a button on #{product.name}'s content page." }
       end
 
       def tool_publish_product(args)
@@ -1435,7 +1537,7 @@ module Mcp
 
         # Built from the loaded associations, so list_products preloads them instead of querying per tier.
         recurrences = product.alive_prices.filter_map { _1.recurrence if _1.is_buy? }
-        tier_records = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at] }
+        tier_records = product.tier_categories.flat_map(&:alive_variants).sort_by { [_1.position_in_category.to_i, _1.created_at || Time.at(0)] }
         tiers = tier_records.map do |tier|
           prices = tier.alive_prices.select { _1.is_buy? && recurrences.include?(_1.recurrence) }
             .to_h { [_1.recurrence, { price_cents: _1.price_cents, suggested_price_cents: tier.customizable_price? ? _1.suggested_price_cents : nil }] }

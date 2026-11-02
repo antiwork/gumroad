@@ -17,22 +17,10 @@ describe Link do
       expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_present
     end
 
-    it "does not add apply-to-all affiliates to a collab product" do
+    it "adds apply-to-all affiliates to a collab product" do
       seller = create(:user)
       affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
       product = create(:product, user: seller, draft: true, is_collab: true)
-
-      product.publish!
-
-      expect(product.reload).to be_published
-      expect(affiliate.product_affiliates.find_by(link_id: product.id)).to be_nil
-    end
-
-    it "uses the current collaboration state" do
-      seller = create(:user)
-      affiliate = create(:direct_affiliate, seller:, apply_to_all_products: true)
-      product = create(:product, user: seller, draft: true, is_collab: true)
-      Link.find(product.id).update_flag!(:is_collab, false, true)
 
       product.publish!
 

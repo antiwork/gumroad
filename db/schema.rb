@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_23_000007) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_24_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1901,6 +1901,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.integer "site_file_count"
     t.bigint "site_byte_size"
     t.text "site_unpack_error"
+    t.datetime "demo_selected_at"
     t.index ["product_file_id"], name: "index_product_builds_on_product_file_id"
     t.index ["product_id", "number"], name: "index_product_builds_on_product_id_and_number", unique: true
     t.index ["product_id", "source_url"], name: "index_product_builds_on_product_id_and_source_url", unique: true, length: { source_url: 191 }

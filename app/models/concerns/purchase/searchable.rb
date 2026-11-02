@@ -108,7 +108,7 @@ module Purchase::Searchable
       indexes :affiliate_credit_fee_cents, type: :long
       indexes :affiliate_credit_amount_partially_refunded_cents, type: :long
       indexes :affiliate_credit_fee_partially_refunded_cents, type: :long
-      # The direct affiliate's credit on a collab purchase that credits both (:collab_and_affiliates).
+      # The direct affiliate's credit on a collab purchase that credits both.
       # The affiliate_credit_* fields above keep describing the collaborator's credit.
       indexes :direct_affiliate_credit_affiliate_user_id, type: :long
       indexes :direct_affiliate_credit_amount_cents, type: :long

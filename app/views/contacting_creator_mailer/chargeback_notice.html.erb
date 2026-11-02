@@ -43,9 +43,16 @@
         </p>
       <% end %>
     <% end %>
-    <p>
-      Sometimes, a customer will dispute a charge with their bank because they don't recognize "Gumroad" on their credit card transaction. We have contacted the customer about this, and have asked them to contact you (if they have a legitimate issue) or their bank (to cancel the dispute).
-    </p>
+    <% if @dispute_reason_copy %>
+      <p>
+        Reason given for the dispute: <%= @dispute_reason_copy %>.
+      </p>
+    <% end %>
+    <% if @explain_unrecognized_charge %>
+      <p>
+        Sometimes, a customer will dispute a charge with their bank because they don't recognize "Gumroad" on their credit card transaction. We have contacted the customer about this, and have asked them to contact you (if they have a legitimate issue) or their bank (to cancel the dispute).
+      </p>
+    <% end %>
     <%= @dispute_evidence_content %>
     <% case @balance_debit %>
     <% when :stripe_connect %>

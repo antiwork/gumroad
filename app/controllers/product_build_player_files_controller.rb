@@ -2,7 +2,8 @@
 
 # Serves a web build's files to the player's frame, under the grant UrlRedirectsController#play
 # issued. The frame is an opaque origin, so these requests carry no cookies: the grant is the only
-# credential, and checking it needs no database query.
+# credential, and checking it needs no database query. ProductBuildDemoFilesController serves a
+# public demo the same way.
 #
 # Files that resolve other URLs, or that a browser can open as a page, are served from here so they
 # keep the grant path. A redirected module script or stylesheet would take the CDN link as its base
@@ -64,8 +65,22 @@ class ProductBuildPlayerFilesController < ApplicationController
 
   private
     def verify_grant
-      @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id])
+      @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id], purpose: grant_purpose)
       e404 if @grant.nil?
+    end
+
+    def grant_purpose = ProductBuild::PLAYER_GRANT_PURPOSE
+
+    # Each page load is a new play session, so this is checked per page and not per file.
+    def page_allowed? = Feature.active?(:product_build_player, User.find_by(id: @grant["seller_id"]))
+
+    # Origins besides the app that may frame the player page.
+    def frame_ancestors = []
+
+    def save_data = ProductBuildSave.find_by(purchase_id: @grant["purchase_id"])&.data || {}
+
+    def save_endpoint
+      "/d/#{params[:id]}/play/#{ProductBuild.player_save_grant(url_redirect_token: params[:id], purchase_id: @grant["purchase_id"])}/save"
     end
 
     def verify_save_grant
@@ -86,14 +101,13 @@ class ProductBuildPlayerFilesController < ApplicationController
 
     def serve_file
       page = ProductBuild::PAGE_EXTENSIONS.include?(extension)
-      # Each page load is a new play session, so the kill switch is checked here and not per file.
-      return e404 if page && !Feature.active?(:product_build_player, User.find_by(id: @grant["seller_id"]))
+      return e404 if page && !page_allowed?
 
       s3 = Aws::S3::Client.new
       head = s3.head_object(bucket: S3_BUCKET, key: s3_key)
       if DOCUMENT_EXTENSIONS.include?(extension)
         SecureHeaders.opt_out_of_header(request, :csp)
-        response.set_header("Content-Security-Policy", ProductBuilds::PlayerDocument.content_security_policy(request_origin: request.base_url, cdn_origin:))
+        response.set_header("Content-Security-Policy", ProductBuilds::PlayerDocument.content_security_policy(request_origin: request.base_url, cdn_origin:, frame_ancestors:))
       end
       # The path holds the content-page token and the grant, so it must not reach the CDN or a game's server.
       response.set_header("Referrer-Policy", "no-referrer")
@@ -106,12 +120,7 @@ class ProductBuildPlayerFilesController < ApplicationController
       # The unpack rejects larger pages; this guards pages unpacked before that limit.
       return e404 if head.content_length > ProductBuild::MAX_PAGE_BYTE_SIZE
 
-      save = ProductBuildSave.find_by(purchase_id: @grant["purchase_id"])
-      body = ProductBuilds::PlayerDocument.render(
-        s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read,
-        save_data: save&.data || {},
-        save_url: "/d/#{params[:id]}/play/#{ProductBuild.player_save_grant(url_redirect_token: params[:id], purchase_id: @grant["purchase_id"])}/save",
-      )
+      body = ProductBuilds::PlayerDocument.render(s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read, save_data:, save_url: save_endpoint)
       # The page carries the buyer's save.
       response.set_header("Cache-Control", "private, no-store")
       send_data body, type: head.content_type, disposition: "inline"

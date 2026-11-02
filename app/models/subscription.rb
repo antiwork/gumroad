@@ -1271,9 +1271,6 @@ class Subscription < ApplicationRecord
       new_purchase.quantity = new_quantity if new_quantity.present?
       original_purchase.purchase_custom_fields.each { new_purchase.purchase_custom_fields << _1.dup }
 
-      license = original_purchase.license
-      license.purchase = new_purchase if license.present?
-
       # update price
       self.price = new_price
       payment_option.price = new_price
@@ -1346,6 +1343,8 @@ class Subscription < ApplicationRecord
       # update email infos once new_purchase is successfully saved
       email_infos = original_purchase.email_infos
       email_infos.each { |email| email.update!(purchase_id: new_purchase.id) }
+
+      original_purchase.license&.update!(purchase_id: new_purchase.id)
 
       # update the purchase associated with comments
       Comment.where(purchase: original_purchase).update_all(purchase_id: new_purchase.id)

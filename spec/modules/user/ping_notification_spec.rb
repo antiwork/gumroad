@@ -24,6 +24,17 @@ describe User::PingNotification do
       end
     end
 
+    it "includes the last sale's url_params in the test ping" do
+      @user.update_attribute(:notification_content_type, Mime[:json])
+      @purchase.update!(url_parameters: { "utm_source" => "newsletter" })
+
+      expect(HTTParty).to receive(:post) do |_url, options|
+        expect(JSON.parse(options[:body])["url_params"]).to eq("utm_source" => "newsletter")
+      end
+
+      @user.send_test_ping("https://example.com")
+    end
+
     context "when notification_content_type is application/x-www-form-urlencoded" do
       before do
         @user.update_attribute(:notification_content_type, Mime[:url_encoded_form])

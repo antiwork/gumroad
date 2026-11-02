@@ -144,6 +144,8 @@ describe PayoutsPresenter do
       expect(instance.instant_payout_data).to eq(
         {
           instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
+          payout_frequency: "weekly",
+          standard_payout_frequency: "weekly",
           payable_amount_cents: 1000,
           unpaid_amount_cents: 0,
           payable_balances: [],

@@ -131,12 +131,11 @@ describe ProductAffiliate do
     end
 
     context "for a direct affiliate" do
-      it "validates that the product is not a collab" do
+      it "allows a collab product" do
         affiliate = create(:direct_affiliate)
         product = create(:product, :is_collab)
         product_affiliate = build(:product_affiliate, affiliate:, product:)
-        expect(product_affiliate).not_to be_valid
-        expect(product_affiliate.errors.full_messages).to eq ["Collab products cannot have affiliates"]
+        expect(product_affiliate).to be_valid
       end
     end
   end
@@ -222,7 +221,7 @@ describe ProductAffiliate do
       context "for a collaborator" do
         let!(:affiliate) { create(:collaborator) }
 
-        it "enables the is_collab flag when a product affiiate is created, and disables any self service affiliate products and direct affiliates" do
+        it "enables the is_collab flag when a product affiliate is created, and keeps self service affiliate products and direct affiliates" do
           product = create(:product, is_collab: false)
           self_service_affiliate_product = create(:self_service_affiliate_product, seller: product.user, product: product, enabled: true)
           direct_affiliate = create(:direct_affiliate, seller: product.user, products: [product])
@@ -230,27 +229,8 @@ describe ProductAffiliate do
           expect do
             create(:product_affiliate, affiliate:, product:)
           end.to change { product.reload.is_collab }.from(false).to(true)
-             .and change { self_service_affiliate_product.reload.enabled }.from(true).to(false)
-             .and change { direct_affiliate.product_affiliates.count }.from(1).to(0)
-        end
-
-        it "deletes direct affiliate assignments in affiliate order" do
-          product = create(:product, is_collab: false)
-          first_affiliate = create(:direct_affiliate, seller: product.user)
-          second_affiliate = create(:direct_affiliate, seller: product.user)
-          create(:product_affiliate, affiliate: second_affiliate, product:)
-          create(:product_affiliate, affiliate: first_affiliate, product:)
-          assignment_query = nil
-          subscriber = lambda do |_name, _start, _finish, _id, payload|
-            sql = payload[:sql]
-            assignment_query = sql if sql.include?("FROM `affiliates_links`") && sql.include?("ORDER BY")
-          end
-
-          ActiveSupport::Notifications.subscribed(subscriber, "sql.active_record") do
-            create(:product_affiliate, affiliate:, product:)
-          end
-
-          expect(assignment_query).to include("`affiliates_links`.`affiliate_id` ASC, `affiliates_links`.`id` ASC")
+             .and not_change { self_service_affiliate_product.reload.enabled }
+             .and not_change { direct_affiliate.product_affiliates.count }
         end
 
         it "disables the is_collab flag when a product affiliate is deleted" do
@@ -276,8 +256,7 @@ describe ProductAffiliate do
 
         it "does not change the is_collab flag when a product affiliate is deleted" do
           product = create(:product, is_collab: true)
-          product_affiliate = build(:product_affiliate, affiliate:, product:)
-          product_affiliate.save(validate: false) # bypass `product_is_not_a_collab` validation
+          product_affiliate = create(:product_affiliate, affiliate:, product:)
 
           expect do
             product_affiliate.destroy

@@ -20,6 +20,18 @@ describe "MCP server product files" do
     Rails.root.join("spec", "support", "fixtures", name)
   end
 
+  # The ingest bounds its outbound fetch to fit the request budget, so stubbing SsrfFilter.get
+  # without these options would not match the real call.
+  def fetch_options
+    {
+      max_redirects: Mcp::ProductFileIngest::MAX_REDIRECTS,
+      http_options: {
+        open_timeout: Mcp::ProductFileIngest::OPEN_TIMEOUT_SECONDS,
+        read_timeout: Mcp::ProductFileIngest::READ_TIMEOUT_SECONDS,
+      }
+    }
+  end
+
   # Stub SsrfFilter.get the way the thumbnail and media-ingest specs do: a fake Net::HTTP response
   # backed by a fixture file, yielded to the streaming block and returned.
   def stub_remote_file(url, fixture_name, content_type, content_length: nil, response_class: Net::HTTPOK)
@@ -43,7 +55,7 @@ describe "MCP server product files" do
       end
     end.new
 
-    allow(SsrfFilter).to receive(:get).with(url).and_yield(response).and_return(response)
+    allow(SsrfFilter).to receive(:get).with(url, fetch_options).and_yield(response).and_return(response)
   end
 
   def file_embed(file)
@@ -291,12 +303,24 @@ describe "MCP server product files" do
 
     it "refuses a URL that the fetch guard rejects" do
       url = "http://169.254.169.254/latest/meta-data"
-      allow(SsrfFilter).to receive(:get).with(url).and_raise(SsrfFilter::PrivateIPAddress.new("private address"))
+      allow(SsrfFilter).to receive(:get).with(url, fetch_options).and_raise(SsrfFilter::PrivateIPAddress.new("private address"))
 
       result = call_tool("add_file", { id: @product.unique_permalink, url: })
 
       expect(result.dig("isError")).to eq(true)
       expect(result.dig("content", 0, "text")).to include("public https link")
+      expect(@product.reload.alive_product_files).to be_empty
+    end
+
+    it "bounds the outbound fetch so a stalled host cannot outlive the request budget" do
+      url = "https://slow.example.com/huge.zip"
+      allow(SsrfFilter).to receive(:get).and_raise(Net::ReadTimeout.new("stalled"))
+
+      result = call_tool("add_file", { id: @product.unique_permalink, url: })
+
+      expect(SsrfFilter).to have_received(:get).with(url, fetch_options)
+      expect(result.dig("isError")).to eq(true)
+      expect(result.dig("content", 0, "text")).to include("Could not download a file from that URL")
       expect(@product.reload.alive_product_files).to be_empty
     end
 

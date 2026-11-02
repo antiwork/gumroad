@@ -177,6 +177,26 @@ describe UpdatePayoutMethod do
         end
       end
 
+      context "when the new bank account has a copied example branch code" do
+        it "returns the reason and keeps the existing bank account alive" do
+          params = ActionController::Parameters.new(
+            bank_account: {
+              type: JamaicaBankAccount.name,
+              account_holder_full_name: "Named User",
+              account_number: "000123456789",
+              account_number_confirmation: "000123456789",
+              bank_code: "111",
+              branch_code: "12345",
+            }
+          )
+
+          result = described_class.new(user_params: params, seller: user).process
+
+          expect(result).to include(error: :bank_account_error, data: "Enter the 5-digit branch code of your own bank branch.")
+          expect(user.active_bank_account).to eq(existing_bank_account)
+        end
+      end
+
       context "when the user already has multiple alive bank accounts" do
         let!(:orphaned_bank_account) { create(:ach_account, user:) }
 
