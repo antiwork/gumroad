@@ -351,6 +351,29 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
 
+  go_web:
+    name: Test go_web
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    defaults:
+      run:
+        working-directory: go_web
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go_web/go.mod
+          # Fork PRs run here under pull_request_target, so a saved cache would be
+          # shared with main's runs.
+          cache: false
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      - run: go test -race ./...
+
   migration_versions:
     name: Migration versions
     runs-on: ubicloud-standard-2
