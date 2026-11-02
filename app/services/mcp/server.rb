@@ -342,7 +342,7 @@ module Mcp
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description, summary, additional details, tags and covers, and the products a bundle sells. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description, summary, additional details, tags, covers, receipt message and button text, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
@@ -366,7 +366,7 @@ module Mcp
                    }
                  }
                }, required: %w[name]),
-          tool("update_product", "Change the name, description, summary, additional details, tags, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, summary, additional details, tags, price, URL, receipt message, or receipt button text of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
@@ -388,6 +388,8 @@ module Mcp
                    items: { type: "string" }
                  },
                  "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
+                 "custom_receipt_text" => { type: "string", description: "The message the buyer sees on the receipt, up to #{Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH} characters. Send an empty string to remove it." },
+                 "custom_view_content_button_text" => { type: "string", description: "The text on the receipt's button that opens the product, up to #{Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH} characters. Send an empty string to remove it." },
                  "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
                }, required: %w[id], destructive: true),
           tool("add_cover", "Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.", {
@@ -551,7 +553,7 @@ module Mcp
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
-        details = { description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name), covers: covers_payload(product) }
+        details = { description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name), custom_receipt_text: product.custom_receipt_text, custom_view_content_button_text: product.custom_view_content_button_text, covers: covers_payload(product) }
         # A caller editing a bundle needs the members it has now, before replacing them.
         details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
@@ -657,8 +659,8 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "summary", "additional_details", "tags", "price_cents", "permalink")
-        raise Error.new("Pass at least one of name, description, summary, additional_details, tags, price_cents, or permalink", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "summary", "additional_details", "tags", "price_cents", "custom_receipt_text", "custom_view_content_button_text", "permalink")
+        raise Error.new("Pass at least one of name, description, summary, additional_details, tags, price_cents, custom_receipt_text, custom_view_content_button_text, or permalink", code: -32602) if changes.empty?
 
         # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
         # Whitespace-only is neither: allowing it through would store a value the model treats as blank
@@ -702,8 +704,11 @@ module Mcp
           end
           # The same json_data key the editor's Summary field writes; an empty value clears it.
           product.json_data = product.json_data.to_h.merge("custom_summary" => changes["summary"].to_s.presence) if changes.key?("summary")
-          # The same json_data key the editor's Additional details rows write; the list is replaced whole.
+          # The same json_data keys the editor's Additional details rows write; the list is replaced whole.
           product.json_data = product.json_data.to_h.merge("custom_attributes" => normalized_additional_details(changes["additional_details"])) if changes.key?("additional_details")
+          # The Receipt tab's two fields, the same json_data keys the editor writes; an empty value clears one.
+          product.json_data = product.json_data.to_h.merge("custom_receipt_text" => changes["custom_receipt_text"].to_s.presence) if changes.key?("custom_receipt_text")
+          product.json_data = product.json_data.to_h.merge("custom_view_content_button_text" => changes["custom_view_content_button_text"].to_s.presence) if changes.key?("custom_view_content_button_text")
           # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
           product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
@@ -711,7 +716,7 @@ module Mcp
           # all-or-nothing with every field above.
           product.save_tags!(normalized_tags(changes["tags"], product)) if changes.key?("tags")
         end
-        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name)) }
+        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name), custom_receipt_text: product.custom_receipt_text, custom_view_content_button_text: product.custom_view_content_button_text) }
         # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
         if changes.key?("price_cents")
           invalid_codes = product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(product) }.map(&:code)
