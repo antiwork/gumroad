@@ -47,7 +47,13 @@ class BangladeshBankAccount < BankAccount
 
   private
     def validate_bank_code
-      return errors.add(:base, "Enter your own bank's 9-digit BEFTN routing number.") if bank_code == NOT_A_ROUTING_NUMBER
+      # The `validate` declaration above already skips this on unrelated saves (legacy codes are not
+      # re-checked), but keep the dirty check explicit so the copied-example rule reads the same as
+      # in the other countries' models and never blocks a stored row from any other edit.
+      if bank_code == NOT_A_ROUTING_NUMBER
+        errors.add :base, "Enter your own bank's 9-digit BEFTN routing number." if new_record? || will_save_change_to_bank_number?
+        return
+      end
 
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "Enter your bank's 9-digit BEFTN routing number (for example 250110123), not a SWIFT/BIC code."
