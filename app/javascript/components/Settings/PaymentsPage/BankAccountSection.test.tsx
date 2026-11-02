@@ -285,15 +285,16 @@ describe("BankAccountSection Bolivia bank picker", () => {
 describe("BankAccountSection bank-code placeholders", () => {
   // A placeholder equal to a country's Stripe test routing number is refused outright in live
   // mode, and a seller cannot tell it apart from a real branch code.
-  it.each([
-    ["ID", "Bank code", "123", "000", false],
-  ])("does not hint %s with a value Stripe reserves for tests", (code, label, expected, reserved, supportsIban) => {
-    renderForCountry(code, supportsIban);
-    const field = screen.getByLabelText<HTMLInputElement>(label);
+  it.each([["ID", "Bank code", "123", "000", false]])(
+    "does not hint %s with a value Stripe reserves for tests",
+    (code, label, expected, reserved, supportsIban) => {
+      renderForCountry(code, supportsIban);
+      const field = screen.getByLabelText<HTMLInputElement>(label);
 
-    expect(field.placeholder).toBe(expected);
-    expect(field.placeholder).not.toBe(reserved);
-  });
+      expect(field.placeholder).toBe(expected);
+      expect(field.placeholder).not.toBe(reserved);
+    },
+  );
 });
 describe("BankAccountSection copyable example hints", () => {
   it.each([
