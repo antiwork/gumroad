@@ -888,6 +888,71 @@ describe("Bangladesh bank code validation", () => {
   });
 });
 
+describe("copied example bank codes", () => {
+  const renderSeller = (country: string, currency: string, fields: [string, string][]) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: country, payout_currency: currency }, { country }),
+        countries: { [country]: country },
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: false,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+    for (const [label, value] of fields) fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    fireEvent.change(screen.getByLabelText("Pay to the order of"), { target: { value: "Test Seller" } });
+    fireEvent.change(screen.getByLabelText("Account #"), { target: { value: "0000123456789" } });
+    fireEvent.change(screen.getByLabelText("Confirm account #"), { target: { value: "0000123456789" } });
+    save();
+  };
+
+  it.each([
+    ["BD", "bdt", [["Bank code", "123456789"]], "Enter your own bank's 9-digit BEFTN routing number."],
+    ["VN", "vnd", [["Bank code", "12345678"]], "Enter the 8-digit code of your own bank."],
+    [
+      "JM",
+      "jmd",
+      [
+        ["Bank code", "123"],
+        ["Branch code", "00000"],
+      ],
+      "Enter the 3-digit code of your own bank.",
+    ],
+    [
+      "JM",
+      "jmd",
+      [
+        ["Bank code", "111"],
+        ["Branch code", "12345"],
+      ],
+      "Enter the 5-digit branch code of your own bank branch.",
+    ],
+  ] as const)("%s refuses the old example before the request is sent", (country, currency, fields, message) => {
+    renderSeller(
+      country,
+      currency,
+      fields.map(([l, v]) => [l, v]),
+    );
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(message).length).toBeGreaterThan(0);
+  });
+
+  it("saves a real Vietnam bank code", () => {
+    renderSeller("VN", "vnd", [["Bank code", "01101100"]]);
+
+    expect(mocks.put).toHaveBeenCalled();
+  });
+});
+
 describe("switching to PayPal where the bank rail cannot be re-created", () => {
   // An India seller with a live bank account: the save deletes it and Stripe refuses a new IND
   // account, so the confirmation must fire even with nothing forfeitable.

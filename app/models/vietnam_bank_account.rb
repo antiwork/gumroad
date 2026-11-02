@@ -8,6 +8,9 @@ class VietnamBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /\A[0-9]{8}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
+  NOT_A_BANK_CODE = "12345678"
+  private_constant :NOT_A_BANK_CODE
+
   ACCOUNT_NUMBER_FORMAT_REGEX = /\A[0-9]{1,17}\z/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
@@ -48,6 +51,11 @@ class VietnamBankAccount < BankAccount
 
   private
     def validate_bank_code
+      if bank_code == NOT_A_BANK_CODE
+        errors.add :base, "Enter the 8-digit code of your own bank." if new_record? || will_save_change_to_bank_number?
+        return
+      end
+
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "The bank code is invalid."
     end

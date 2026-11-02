@@ -1299,13 +1299,13 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="12345678"
                     maxLength={8}
                     required
                     disabled={isFormDisabled}
                     aria-invalid={errorFieldNames.has("bank_code")}
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
+                  <FieldsetDescription>The 8-digit code of your own bank.</FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "TW" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
@@ -1416,13 +1416,13 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-bank-code`}
-                      placeholder="123"
                       maxLength={3}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("bank_code")}
                       onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                     />
+                    <FieldsetDescription>The 3-digit code of your own bank.</FieldsetDescription>
                   </Fieldset>
                   <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
                     <FieldsetTitle>
@@ -1431,13 +1431,13 @@ const BankAccountSection = ({
                     <Input
                       type="text"
                       id={`${uid}-branch-code`}
-                      placeholder="12345"
                       maxLength={5}
                       required
                       disabled={isFormDisabled}
                       aria-invalid={errorFieldNames.has("branch_code")}
                       onChange={(evt) => updateBankAccount({ branch_code: evt.target.value })}
                     />
+                    <FieldsetDescription>The 5-digit code of your own bank branch.</FieldsetDescription>
                   </Fieldset>
                 </>
               ) : user.country_code === "UY" ? (
@@ -2074,7 +2074,6 @@ const BankAccountSection = ({
                   <Input
                     type="text"
                     id={`${uid}-bank-code`}
-                    placeholder="123456789"
                     maxLength={9}
                     pattern="[0-9]{9}"
                     inputMode="numeric"
@@ -2083,6 +2082,7 @@ const BankAccountSection = ({
                     aria-invalid={errorFieldNames.has("bank_code")}
                     onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                   />
+                  <FieldsetDescription>The 9-digit BEFTN routing number of your own bank.</FieldsetDescription>
                 </Fieldset>
               ) : user.country_code === "BT" ? (
                 <Fieldset state={errorFieldNames.has("bank_code") ? "danger" : undefined}>
@@ -2470,13 +2470,13 @@ const BankAccountSection = ({
                         <Input
                           type="text"
                           id={`${uid}-branch-code`}
-                          placeholder="234567"
                           maxLength={6}
                           required
                           disabled={isFormDisabled}
                           aria-invalid={errorFieldNames.has("branch_code")}
                           onChange={(evt) => updateBankAccount({ branch_code: evt.target.value })}
                         />
+                        <FieldsetDescription>The 6-digit code of your own bank branch.</FieldsetDescription>
                       </Fieldset>
                     </>
                   ) : user.country_code === "AO" ? (

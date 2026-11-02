@@ -23,8 +23,8 @@ describe JamaicaBankAccount do
 
   describe "#bank_code" do
     it "is an alias for bank_number" do
-      ba = create(:jamaica_bank_account, bank_number: "123")
-      expect(ba.bank_code).to eq("123")
+      ba = create(:jamaica_bank_account, bank_number: "124")
+      expect(ba.bank_code).to eq("124")
     end
   end
 
@@ -36,7 +36,7 @@ describe JamaicaBankAccount do
 
   describe "#validate_bank_code" do
     it "allows 3 digits only" do
-      expect(build(:jamaica_bank_account, bank_number: "123")).to be_valid
+      expect(build(:jamaica_bank_account, bank_number: "124")).to be_valid
       expect(build(:jamaica_bank_account, bank_number: "12")).not_to be_valid
       expect(build(:jamaica_bank_account, bank_number: "1234")).not_to be_valid
       expect(build(:jamaica_bank_account, bank_number: "abc")).not_to be_valid
@@ -45,7 +45,7 @@ describe JamaicaBankAccount do
 
   describe "#validate_branch_code" do
     it "allows 5 digits only" do
-      expect(build(:jamaica_bank_account, branch_code: "12345")).to be_valid
+      expect(build(:jamaica_bank_account, branch_code: "12346")).to be_valid
       expect(build(:jamaica_bank_account, branch_code: "1234")).not_to be_valid
       expect(build(:jamaica_bank_account, branch_code: "123456")).not_to be_valid
       expect(build(:jamaica_bank_account, branch_code: "abcde")).not_to be_valid
@@ -63,11 +63,43 @@ describe JamaicaBankAccount do
 
   describe "#to_hash" do
     it "returns the correct hash representation" do
-      ba = create(:jamaica_bank_account, bank_number: "123", branch_code: "12345", account_number_last_four: "5678")
+      ba = create(:jamaica_bank_account, bank_number: "124", branch_code: "12346", account_number_last_four: "5678")
       hash = ba.to_hash
-      expect(hash[:routing_number]).to eq("123-12345")
+      expect(hash[:routing_number]).to eq("124-12346")
       expect(hash[:account_number]).to eq("******5678")
       expect(hash[:bank_account_type]).to eq("JM")
+    end
+  end
+
+  describe "copied example bank code" do
+    it "refuses a new account with 123" do
+      account = build(:jamaica_bank_account, bank_code: "123")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter the 3-digit code of your own bank.")
+    end
+
+    it "does not block saving a stored row whose bank code is unchanged" do
+      account = create(:jamaica_bank_account)
+      account.update_column(:bank_number, "123")
+
+      expect(account.reload.update(account_holder_full_name: "Renamed Creator")).to be(true)
+    end
+  end
+
+  describe "copied example branch code" do
+    it "refuses a new account with 12345" do
+      account = build(:jamaica_bank_account, branch_code: "12345")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter the 5-digit branch code of your own bank branch.")
+    end
+
+    it "does not block saving a stored row whose branch code is unchanged" do
+      account = create(:jamaica_bank_account)
+      account.update_column(:branch_code, "12345")
+
+      expect(account.reload.update(account_holder_full_name: "Renamed Creator")).to be(true)
     end
   end
 end

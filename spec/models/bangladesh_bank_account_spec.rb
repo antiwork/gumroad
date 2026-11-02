@@ -77,4 +77,20 @@ describe BangladeshBankAccount do
       expect(bd_bank_account.errors.full_messages.to_sentence).to eq("Bangladesh account numbers are 13 to 17 digits. If yours is shorter, your bank's full-length format usually adds leading zeros (for example, 12345678901 becomes 0012345678901).")
     end
   end
+
+  describe "copied example bank code" do
+    it "refuses a new account with 123456789" do
+      account = build(:bangladesh_bank_account, bank_code: "123456789")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter your own bank's 9-digit BEFTN routing number.")
+    end
+
+    it "does not block saving a stored row whose bank code is unchanged" do
+      account = create(:bangladesh_bank_account)
+      account.update_column(:bank_number, "123456789")
+
+      expect(account.reload.update(account_holder_full_name: "Renamed Creator")).to be(true)
+    end
+  end
 end

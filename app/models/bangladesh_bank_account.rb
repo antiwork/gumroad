@@ -6,6 +6,9 @@ class BangladeshBankAccount < BankAccount
   BANK_CODE_FORMAT_REGEX = /\A[0-9]{9}\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
+  NOT_A_ROUTING_NUMBER = "123456789"
+  private_constant :NOT_A_ROUTING_NUMBER
+
   ACCOUNT_NUMBER_FORMAT_REGEX = /^([0-9a-zA-Z]){13,17}$/
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
@@ -44,6 +47,8 @@ class BangladeshBankAccount < BankAccount
 
   private
     def validate_bank_code
+      return errors.add(:base, "Enter your own bank's 9-digit BEFTN routing number.") if bank_code == NOT_A_ROUTING_NUMBER
+
       return if BANK_CODE_FORMAT_REGEX.match?(bank_code)
       errors.add :base, "Enter your bank's 9-digit BEFTN routing number (for example 250110123), not a SWIFT/BIC code."
     end

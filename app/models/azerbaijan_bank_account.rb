@@ -9,6 +9,9 @@ class AzerbaijanBankAccount < BankAccount
   BRANCH_CODE_FORMAT_REGEX = /^\d{6}$/
   private_constant :BRANCH_CODE_FORMAT_REGEX
 
+  NOT_A_BRANCH_CODE = "234567"
+  private_constant :NOT_A_BRANCH_CODE
+
   alias_attribute :bank_code, :bank_number
 
   validate :validate_bank_code
@@ -50,6 +53,11 @@ class AzerbaijanBankAccount < BankAccount
     end
 
     def validate_branch_code
+      if branch_code == NOT_A_BRANCH_CODE
+        errors.add :base, "Enter the 6-digit branch code of your own bank branch." if new_record? || will_save_change_to_branch_code?
+        return
+      end
+
       return if BRANCH_CODE_FORMAT_REGEX.match?(branch_code)
       errors.add :base, "The branch code is invalid."
     end

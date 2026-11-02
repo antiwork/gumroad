@@ -287,20 +287,26 @@ describe("BankAccountSection bank-code placeholders", () => {
   // mode, and a seller cannot tell it apart from a real branch code.
   it.each([
     ["GH", "Bank code", "123456", "022112", false],
-    ["BD", "Bank code", "123456789", "110000000", false],
-    ["VN", "Bank code", "12345678", "01101100", false],
     ["ID", "Bank code", "123", "000", false],
-    ["JM", "Bank code", "123", "111", false],
-    ["JM", "Branch code", "12345", "00000", false],
-    // Azerbaijan's Stripe test routing is the PAIR 123456-123456, so the two fields must not both
-    // carry the sequence. Its bank fields render for IBAN countries only.
-    ["AZ", "Branch code", "234567", "123456", true],
   ])("does not hint %s with a value Stripe reserves for tests", (code, label, expected, reserved, supportsIban) => {
     renderForCountry(code, supportsIban);
     const field = screen.getByLabelText<HTMLInputElement>(label);
 
     expect(field.placeholder).toBe(expected);
     expect(field.placeholder).not.toBe(reserved);
+  });
+});
+describe("BankAccountSection copyable example hints", () => {
+  it.each([
+    ["BD", "Bank code", false],
+    ["VN", "Bank code", false],
+    ["JM", "Bank code", false],
+    ["JM", "Branch code", false],
+    ["AZ", "Branch code", true],
+  ])("%s %s has no copyable example", (code, label, supportsIban) => {
+    renderForCountry(code, supportsIban);
+
+    expect(screen.getByLabelText<HTMLInputElement>(label).placeholder).toBe("");
   });
 });
 describe("BankAccountSection account-number placeholders", () => {

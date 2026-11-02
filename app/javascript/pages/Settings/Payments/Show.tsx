@@ -69,6 +69,26 @@ const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const BANGLADESH_BANK_CODE_REGEX = /^[0-9]{9}$/u;
 
+// Placeholders these fields used to show: not real codes, so a copied one saves a payout row that can never link.
+const COPIED_EXAMPLE_ERRORS: Record<
+  string,
+  { field: "bank_code" | "branch_code"; example: string; message: string }[]
+> = {
+  BangladeshBankAccount: [
+    { field: "bank_code", example: "123456789", message: "Enter your own bank's 9-digit BEFTN routing number." },
+  ],
+  VietnamBankAccount: [
+    { field: "bank_code", example: "12345678", message: "Enter the 8-digit code of your own bank." },
+  ],
+  JamaicaBankAccount: [
+    { field: "bank_code", example: "123", message: "Enter the 3-digit code of your own bank." },
+    { field: "branch_code", example: "12345", message: "Enter the 5-digit branch code of your own bank branch." },
+  ],
+  AzerbaijanBankAccount: [
+    { field: "branch_code", example: "234567", message: "Enter the 6-digit branch code of your own bank branch." },
+  ],
+};
+
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
 
@@ -760,6 +780,13 @@ export default function PaymentsPage() {
     }
     if (form.data.bank_account.type === "SriLankaBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
+    }
+    const account = form.data.bank_account;
+    for (const { field, example, message } of (account.type ? COPIED_EXAMPLE_ERRORS[account.type] : undefined) ?? []) {
+      if (new Map<string, unknown>(Object.entries(account)).get(field) === example) {
+        markFieldInvalid(field);
+        setClientErrorMessage({ message });
+      }
     }
     if (form.data.bank_account.type === "BangladeshBankAccount") {
       if (!form.data.bank_account.bank_code) {
