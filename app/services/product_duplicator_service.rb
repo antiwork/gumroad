@@ -55,6 +55,7 @@ class ProductDuplicatorService
         duplicate_shipping_exclusions
         duplicate_refund_policy
         duplicate_profile_sections
+        duplicate_bundle_products
       end
 
       # Post process Asset Previews if product was persisted from outside the transaction
@@ -349,6 +350,20 @@ class ProductDuplicatorService
 
       duplicated_product.sections = product.sections.filter_map { |id| section_id_mapping[id] }
       duplicated_product.save!(validate: false)
+    end
+
+    # A bundle's Contents list is BundleProduct rows keyed on the bundle, so nothing about the link's
+    # own attributes carries them over. The members stay shared links — the copy points at the same
+    # products and pinned variants, which is what a duplicate should do.
+    def duplicate_bundle_products
+      product.bundle_products.alive.in_order.each do |bundle_product|
+        duplicated_product.bundle_products.create!(
+          product: bundle_product.product,
+          variant: bundle_product.variant,
+          quantity: bundle_product.quantity,
+          position: bundle_product.position
+        )
+      end
     end
 
     def duplicate_rich_content(original_entity:, duplicate_entity:)
