@@ -207,3 +207,23 @@ func TestHTMLEscapeMatchesERBUtil(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestLastListEntryMatchesRubySplit(t *testing.T) {
+	// Expected values from `value.split(/,\s?/).last` in Ruby.
+	for value, want := range map[string]string{
+		"a.com":            "a.com",
+		"a.com, b.com":     "b.com",
+		"a.com,b.com":      "b.com",
+		"a.com,":           "a.com",
+		"a.com, ":          "a.com",
+		"a.com,,":          "a.com",
+		"a.com,  b.com":    " b.com",
+		"a.com,\tb.com":    "b.com",
+		",a.com":           "a.com",
+		"a.com, b.com, , ": "b.com",
+	} {
+		if got := lastListEntry([]string{value}); got != want {
+			t.Errorf("lastListEntry(%q) = %q, want %q", value, got, want)
+		}
+	}
+}

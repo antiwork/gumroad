@@ -4,11 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
-	"regexp"
 	"strings"
 )
-
-var listSeparator = regexp.MustCompile(`,\s?`)
 
 // Host is ActionDispatch::Request#host: the last X-Forwarded-Host entry when present,
 // otherwise the Host header, without its port.
@@ -34,20 +31,29 @@ func rawHostWithPort(r *http.Request) string {
 	return r.Host
 }
 
-// lastListEntry is `value.split(/,\s?/).last`, where Ruby's split drops trailing empty fields.
+// lastListEntry is `value.split(/,\s?/).last`: the last field that isn't a trailing empty one,
+// with one leading whitespace character dropped, as the separator consumes it.
 func lastListEntry(values []string) string {
 	joined := strings.Join(values, ",")
 	if strings.TrimSpace(joined) == "" {
 		return ""
 	}
-	parts := listSeparator.Split(joined, -1)
-	for len(parts) > 0 && parts[len(parts)-1] == "" {
-		parts = parts[:len(parts)-1]
+	for end := len(joined); end > 0; {
+		start := strings.LastIndexByte(joined[:end], ',') + 1
+		field := joined[start:end]
+		if start > 0 && field != "" && isRubySpace(field[0]) {
+			field = field[1:]
+		}
+		if field != "" {
+			return field
+		}
+		end = start - 1
 	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return parts[len(parts)-1]
+	return ""
+}
+
+func isRubySpace(c byte) bool {
+	return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r'
 }
 
 // splitPort strips a trailing `:digits`, as `sub(/:\d+$/, "")` does.
