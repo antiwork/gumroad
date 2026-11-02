@@ -70,6 +70,18 @@ describe PartnerMigrationImportJob do
     expect(PartnerMigrationNotificationJob).to have_enqueued_sidekiq_job(migration.id)
   end
 
+  it "records when an attempt starts, so the resume scan can tell it from a job that waits in the queue" do
+    migration = create_claimed_migration([product_attributes])
+    allow(PartnerMigration::ProductImporter).to receive(:new).and_wrap_original do |original, **kwargs|
+      expect(migration.reload.import_started_at).to be_within(1.minute).of(Time.current)
+      original.call(**kwargs)
+    end
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.links.sole.name).to eq("Texture Pack")
+  end
+
   it "records a product that cannot be imported and continues with the others" do
     migration = create_claimed_migration([
                                            product_attributes.merge(name: "Missing file", files: [{ url: "https://files.example.com/missing.zip" }]),

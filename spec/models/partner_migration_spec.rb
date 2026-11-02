@@ -582,12 +582,13 @@ describe PartnerMigration do
     it "retries only failed products, keeping saved ones, when the partner sends the export again" do
       migration, = create_migration
       migration.claim!(seller, expected_code_digest: migration.code_digest)
-      migration.update!(status: described_class::STATUS_FAILED, results: { "0" => { "product_id" => "saved" }, "1" => { "error" => "Missing file" } })
+      migration.update!(status: described_class::STATUS_FAILED, results: { "0" => { "product_id" => "saved" }, "1" => { "error" => "Missing file" } }, import_started_at: 1.day.ago)
       Sidekiq::Worker.clear_all
 
       create_migration
 
-      expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, results: { "0" => { "product_id" => "saved" } })
+      # The retry has not started, so the resume scan must not count it while it waits in the queue.
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, results: { "0" => { "product_id" => "saved" } }, import_started_at: nil)
       expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
     end
 
