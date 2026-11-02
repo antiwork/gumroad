@@ -27,15 +27,15 @@ module Mcp
     def perform
       href = normalized_href
       label = @label || href
-      owners = page_owners
-      # Read before anything is written, so a version that opens with a copy gets the pages as buyers
-      # read them now rather than a sibling's button.
-      seeds = owners.map { |owner| [owner, page_seed(owner)] }
       added = []
-      # The lock serializes concurrent adds: appending to a page is read-modify-write.
+      # The lock serializes concurrent adds: appending to a page is read-modify-write, and a version
+      # that opens with a copy reads the pages as buyers see them now rather than a sibling's button.
       ActiveRecord::Base.transaction do
         product.lock!
-        seeds.each { |owner, seed| added.concat(append_button(owner, seed, href, label)) }
+        owners = page_owners
+        owners.map { |owner| [owner, page_seed(owner)] }.each do |owner, seed|
+          added.concat(append_button(owner, seed, href, label))
+        end
       end
       added
     end
