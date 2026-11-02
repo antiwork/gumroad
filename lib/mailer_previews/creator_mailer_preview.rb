@@ -2,6 +2,10 @@
 
 class CreatorMailerPreview < ActionMailer::Preview
   include CdnUrlHelper
+  def partner_migration_account_setup
+    CreatorMailer.partner_migration_account_setup(partner_migration&.id, PartnerMigration.encrypt_account_setup_token("preview-token"))
+  end
+
   def gumroad_day_fee_saved
     CreatorMailer.gumroad_day_fee_saved(seller_id: seller&.id)
   end
@@ -67,6 +71,10 @@ class CreatorMailerPreview < ActionMailer::Preview
   end
 
   private
+    def partner_migration
+      PartnerMigration.where.not(user_id: nil).last
+    end
+
     def seller
       @_seller ||= User.first
     end

@@ -126,6 +126,239 @@ describe PartnerMigration do
     end
   end
 
+  describe ".normalize_seller" do
+    it "keeps the email in lower case and only the supported profile keys" do
+      seller, error = described_class.normalize_seller(email: " Seller@Example.com ", profile: { name: " Ada ", bio: "3D artist", avatar_url: "https://files.example.com/a.png", unknown: "x" })
+
+      expect(error).to be_nil
+      expect(seller).to eq(email: "seller@example.com", profile: { "name" => "Ada", "bio" => "3D artist", "avatar_url" => "https://files.example.com/a.png" })
+    end
+
+    it "accepts an export without an email or a profile" do
+      expect(described_class.normalize_seller(email: nil, profile: nil)).to eq([{ email: nil, profile: nil }, nil])
+    end
+
+    it "rejects an email that is not valid" do
+      _seller, error = described_class.normalize_seller(email: "not-an-email", profile: nil)
+
+      expect(error).to eq("email must be a valid email address with at most 255 characters.")
+    end
+
+    it "rejects profile values that a Gumroad profile cannot hold" do
+      expect(described_class.normalize_seller(email: nil, profile: { name: "a" * 101 }).last).to start_with("profile.name")
+      expect(described_class.normalize_seller(email: nil, profile: { name: "Ada: 3D" }).last).to start_with("profile.name")
+      expect(described_class.normalize_seller(email: nil, profile: { bio: "a" * 5_001 }).last).to start_with("profile.bio")
+      expect(described_class.normalize_seller(email: nil, profile: { avatar_url: "http://files.example.com/a.png" }).last).to start_with("profile.avatar_url")
+    end
+  end
+
+  describe "#create_account_and_claim!" do
+    def create_migration_for(email, profile: nil)
+      products, _error = described_class.normalize_products([product_attributes])
+      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, email:, profile:).first
+    end
+
+    it "creates the account, claims the import, and sends only the setup email" do
+      migration = create_migration_for("new-seller@example.com", profile: { "name" => "Ada", "bio" => "3D artist" })
+
+      expect do
+        expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to be_nil
+      end.to have_enqueued_mail(CreatorMailer, :partner_migration_account_setup)
+
+      user = User.find_by!(email: "new-seller@example.com")
+      expect(user).to have_attributes(name: "Ada", bio: "3D artist", account_created_ip: "203.0.113.10", confirmed?: false)
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, user:, account_created: true, account_setup_pending?: true)
+      expect(partner_application.partner_sellers.sole.user).to eq(user)
+      expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
+    end
+
+    it "does not send Devise's confirmation email, because the setup email confirms the address" do
+      migration = create_migration_for("new-seller@example.com")
+
+      expect { migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest) }.not_to have_enqueued_mail(UserSignupMailer, :confirmation_instructions)
+    end
+
+    it "turns announcements off for a Canadian address, as signup does" do
+      migration = create_migration_for("new-seller@example.com")
+      allow(GeoIp).to receive(:lookup).and_call_original
+      allow(GeoIp).to receive(:lookup).with("203.0.113.10").and_return(double(country_code: Compliance::Countries::CAN.alpha2))
+
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      expect(User.find_by!(email: "new-seller@example.com").announcement_notification_enabled).to be(false)
+    end
+
+    it "returns a message for the seller when the partner user ID is linked to another account" do
+      PartnerSeller.create!(oauth_application: partner_application, user: create(:user), external_user_id: "ext-1")
+      migration = create_migration_for("new-seller@example.com")
+
+      expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to eq("This Example App account is already linked to a different Gumroad account.")
+      expect(User.where(email: "new-seller@example.com")).to be_empty
+    end
+
+    it "keeps the setup token out of the mail job in plain text" do
+      migration = create_migration_for("new-seller@example.com")
+      encrypted_tokens = []
+      allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, encrypted_token|
+        encrypted_tokens << encrypted_token
+        original.call(id, encrypted_token)
+      end
+
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      token = described_class.decrypt_account_setup_token(encrypted_tokens.sole)
+      expect(described_class.find_by_account_setup_token(token)).to eq(migration)
+      expect(ActiveJob::Base.queue_adapter.enqueued_jobs.to_json).not_to include(token)
+    end
+
+    it "does not create an account for an email that already has one" do
+      create(:user, email: "seller@example.com")
+      migration = create_migration_for("Seller@example.com")
+
+      expect(migration.account_creatable?).to be(false)
+      expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to be_nil
+      expect(migration.reload).to be_pending
+    end
+
+    it "creates one account when the link opens twice" do
+      migration = create_migration_for("new-seller@example.com")
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      expect(described_class.find(migration.id).create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)).to be_nil
+      expect(User.where(email: "new-seller@example.com").count).to eq(1)
+    end
+  end
+
+  describe "account setup" do
+    let(:migration) do
+      products, _error = described_class.normalize_products([product_attributes])
+      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, email: "new-seller@example.com").first
+    end
+
+    it "finds the migration by the emailed token until it expires" do
+      emailed_tokens = []
+      allow(CreatorMailer).to receive(:partner_migration_account_setup).and_wrap_original do |original, id, encrypted_token|
+        emailed_tokens << described_class.decrypt_account_setup_token(encrypted_token)
+        original.call(id, encrypted_token)
+      end
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      token = emailed_tokens.sole
+
+      expect(described_class.find_by_account_setup_token(token)).to eq(migration)
+      travel_to((described_class::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).from_now) do
+        expect(described_class.find_by_account_setup_token(token)).to be_nil
+      end
+    end
+
+    it "does not create an account for a catalog that the partner replaced after the page showed it" do
+      expect(migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: "digest-of-the-page")).to eq(described_class::OUT_OF_DATE_MESSAGE)
+
+      expect(User.find_by(email: migration.email)).to be_nil
+      expect(migration.reload).to be_pending
+    end
+
+    it "rejects the password from a page whose setup link a resend replaced" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      shown_digest = migration.reload.account_setup_token_digest
+      travel_to((described_class::ACCOUNT_SETUP_RESEND_INTERVAL + 1.second).from_now) { migration.resend_account_setup! }
+
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: shown_digest) }.to raise_error(described_class::AccountSetupError)
+      expect(migration.user.reload.valid_password?("a-long-new-password-123")).to be(false)
+    end
+
+    it "ends the setup once anyone gets into the account another way, such as a password reset" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      migration.user.update!(sign_in_count: 1)
+
+      expect(migration.reload).to have_attributes(account_setup_pending?: false, account_setup_open?: false)
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+      expect(migration.resend_account_setup!).to eq(:expired)
+    end
+
+    it "ends the setup when a password reset changes the password, even before a two-factor sign-in" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      migration.user.reload.update!(password: "a-reset-password-789")
+
+      expect(migration.reload.account_setup_pending?).to be(false)
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+      expect(migration.user.reload.valid_password?("a-reset-password-789")).to be(true)
+    end
+
+    it "locks the seller before the migration, in the order that the import job uses" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      locked_tables = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        locked_tables << payload[:sql][/FROM `(\w+)`/, 1] if payload[:sql].include?("FOR UPDATE")
+      end
+
+      migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest)
+
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+      expect(locked_tables).to eq(%w[users partner_migrations])
+    end
+
+    it "ends the setup when the account is closed, because the setup link signs the holder in" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      migration.user.update_columns(deleted_at: Time.current)
+
+      expect(migration.reload.account_setup_pending?).to be(false)
+      expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+    end
+
+    it "attaches the address's guest purchases, as email confirmation does" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest)
+
+      expect(AttachPastPurchasesToUserWorker.jobs.map { _1["args"] }).to eq([[migration.user_id, migration.email]])
+    end
+
+    it "sets the password, confirms the email, records the terms, and ends the setup" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest)
+
+      user = migration.user.reload
+      expect(user.valid_password?("a-long-new-password-123")).to be(true)
+      expect(user).to be_confirmed
+      expect(user.tos_agreements.sole.ip).to eq("203.0.113.11")
+      expect(migration.reload.account_setup_pending?).to be(false)
+      expect { migration.complete_account_setup!(password: "another-password-456", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+    end
+
+    it "reports an expired setup instead of asking the seller to wait" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+
+      travel_to((described_class::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).from_now) do
+        expect(migration.resend_account_setup!).to eq(:expired)
+      end
+    end
+
+    it "stops resending after the maximum, and a resend does not extend the link" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      (described_class::MAX_ACCOUNT_SETUP_EMAILS - 1).times do |i|
+        travel_to(((i + 1) * (described_class::ACCOUNT_SETUP_RESEND_INTERVAL + 1.second)).from_now) { expect(migration.resend_account_setup!).to eq(:sent) }
+      end
+
+      travel_to(1.hour.from_now) { expect(migration.resend_account_setup!).to eq(:limit) }
+      expect(migration.reload.account_setup_emails_count).to eq(described_class::MAX_ACCOUNT_SETUP_EMAILS)
+      travel_to((described_class::ACCOUNT_SETUP_EXPIRES_IN + 1.minute).from_now) do
+        expect { migration.complete_account_setup!(password: "a-long-new-password-123", ip: "203.0.113.11", expected_token_digest: migration.account_setup_token_digest) }.to raise_error(described_class::AccountSetupError)
+      end
+    end
+
+    it "replaces the link when the seller asks again, at most once a minute" do
+      migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: migration.code_digest)
+      first_digest = migration.reload.account_setup_token_digest
+
+      expect(migration.resend_account_setup!).to eq(:too_soon)
+      travel_to((described_class::ACCOUNT_SETUP_RESEND_INTERVAL + 1.second).from_now) do
+        expect { expect(migration.resend_account_setup!).to eq(:sent) }.to have_enqueued_mail(CreatorMailer, :partner_migration_account_setup)
+      end
+      expect(migration.reload.account_setup_token_digest).not_to eq(first_digest)
+    end
+  end
+
   describe ".create_for!" do
     it "stores only a digest of the code" do
       migration, code = create_migration

@@ -1,0 +1,19 @@
+<% if @migration.account_setup_expired? %>
+  <% content_for :partner_migration_footer do %>
+    <%= link_to "Reset my password", new_user_password_path, class: partner_migration_button_class %>
+  <% end %>
+  <%= render layout: "card", locals: { application: @migration.oauth_application, title: "Your setup link expired" } do %>
+    <p>Your account and your drafts are safe. To get in, reset your password for <strong><%= @migration.masked_email %></strong>.</p>
+  <% end %>
+<% else %>
+  <% content_for :partner_migration_footer do %>
+    <% if @migration.account_setup_emails_count < PartnerMigration::MAX_ACCOUNT_SETUP_EMAILS %>
+      <%= button_to "Resend email", resend_partner_migration_account_setup_path, method: :post, form: { style: "display: contents" }, class: partner_migration_button_class(primary: false) %>
+    <% end %>
+    <small>No email after a few minutes? Check your spam folder.</small>
+  <% end %>
+  <%= render layout: "card", locals: { application: @migration.oauth_application, title: "Check your email" } do %>
+    <p>Your account is ready. Open the link we sent to <strong><%= @migration.masked_email %></strong> to set your password.</p>
+    <p>Your products are importing in the meantime.</p>
+  <% end %>
+<% end %>

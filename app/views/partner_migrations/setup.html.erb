@@ -1,0 +1,31 @@
+<% if @migration.nil? %>
+  <% content_for :partner_migration_footer do %>
+    <%= link_to "Reset my password", new_user_password_path, class: partner_migration_button_class %>
+  <% end %>
+  <%= render layout: "card", locals: { application: nil, title: "This link expired" } do %>
+    <p>Use the link in the newest email we sent you. Or reset your password to get into your account.</p>
+  <% end %>
+<% else %>
+  <%= form_tag partner_migration_account_setup_path, method: :post, style: "display: contents" do %>
+    <%= hidden_field_tag :partner_migration_id, @migration.public_id %>
+    <%= hidden_field_tag :account_setup_token_digest, @migration.account_setup_token_digest %>
+    <% content_for :partner_migration_footer do %>
+      <%= button_tag "Set password and see my products", class: partner_migration_button_class %>
+    <% end %>
+    <%= render layout: "card", locals: { application: @migration.oauth_application, title: "Set your password" } do %>
+      <p>For <strong><%= @migration.user.email %></strong>.</p>
+      <% if @error_message.present? %>
+        <p role="alert"><%= @error_message %></p>
+      <% end %>
+      <label class="flex flex-col gap-2">
+        Password
+        <%= password_field_tag :password, nil, required: true, autocomplete: "new-password", autofocus: true, aria: { describedby: "password-hint" }, class: "w-full rounded border border-border bg-background p-3" %>
+        <small id="password-hint">Use a password that you do not use on other sites. Common passwords are not accepted.</small>
+      </label>
+      <label class="flex items-start gap-2">
+        <%= check_box_tag :terms_accepted, "1", false, required: true, class: "mt-1" %>
+        <span>I agree to the <%= link_to "Terms of Use", "https://gumroad.com/terms", class: "underline", target: "_blank", rel: "noopener" %> and the <%= link_to "Privacy Policy", "https://gumroad.com/privacy", class: "underline", target: "_blank", rel: "noopener" %>.</span>
+      </label>
+    <% end %>
+  <% end %>
+<% end %>
