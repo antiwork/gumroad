@@ -31,6 +31,17 @@ if [ -z "$TAG" ]; then
   exit 1
 fi
 
+# go_web bakes in the GeoIP database copy_secrets.sh put on the agent. Its digest joins the tag
+# so a refreshed database ships without a go_web/ commit.
+if [ "$SERVICE_DIR" = "go_web" ] && [ -s lib/GeoIP2-City.mmdb ]; then
+  cp lib/GeoIP2-City.mmdb go_web/GeoIP2-City.mmdb
+  TAG="${TAG}-geoip-$(sha256sum go_web/GeoIP2-City.mmdb | cut -c1-12)"
+fi
+# The deploy step reads the tag from here rather than recomputing the digest.
+if command -v buildkite-agent >/dev/null 2>&1; then
+  buildkite-agent meta-data set "go-image-tag-${SERVICE_DIR}" "$TAG"
+fi
+
 if docker manifest inspect "$REPO:$TAG" > /dev/null 2>&1; then
   logger "$REPO:$TAG already exists"
   exit 0

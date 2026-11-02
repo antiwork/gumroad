@@ -208,6 +208,26 @@ func TestHTMLEscapeMatchesERBUtil(t *testing.T) {
 	}
 }
 
+func TestAppHandsUnmatchedRequestsToNotFound(t *testing.T) {
+	app, _ := newTestApp(t, "")
+	app.HandleNotFound(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		io.WriteString(w, "rails 404")
+	}))
+	for _, c := range []struct{ method, path string }{{"GET", "/missing"}, {"POST", "/robots.txt"}} {
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, httptest.NewRequest(c.method, c.path, nil))
+		if w.Code != http.StatusNotFound || w.Body.String() != "rails 404" || w.Header().Get("X-Revision") != "abc123" {
+			t.Errorf("%s %s: %d %q %v", c.method, c.path, w.Code, w.Body.String(), w.Header())
+		}
+	}
+	w := httptest.NewRecorder()
+	app.ServeHTTP(w, httptest.NewRequest("GET", "/robots.txt", nil))
+	if w.Code != http.StatusOK {
+		t.Errorf("a matched route still reaches its handler: %d", w.Code)
+	}
+}
+
 func TestLastListEntryMatchesRubySplit(t *testing.T) {
 	// Expected values from `value.split(/,\s?/).last` in Ruby.
 	for value, want := range map[string]string{

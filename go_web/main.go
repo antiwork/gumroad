@@ -12,12 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/go-redis/v9/logging"
 
-	"github.com/antiwork/gumroad/go_web/internal/robots"
+	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -68,18 +66,15 @@ func run(logger *slog.Logger) error {
 	}
 	defer redisClient.Close()
 
-	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithDefaultRegion("us-east-1"))
-	if err != nil {
+	app := web.NewApp(env, logger, redisClient)
+	stack := rails.NewStack(env, getenv("CUSTOM_DOMAIN"))
+	app.HandleNotFound(stack.NotFound())
+
+	deps := &dependencies{env: env, logger: logger, redis: redisClient, stack: stack}
+	defer deps.close()
+	if err := registerRouteGroups(app, deps, getenv("GO_WEB_ROUTE_GROUPS")); err != nil {
 		return err
 	}
-	// S3 is only read on a sitemap cache miss, so bad credentials would otherwise surface days later.
-	if _, err := awsCfg.Credentials.Retrieve(context.Background()); err != nil {
-		return fmt.Errorf("AWS credentials: %w", err)
-	}
-
-	app := web.NewApp(env, logger, redisClient)
-	app.Handle("GET /robots.txt", "RobotsController#index",
-		robots.NewHandler(env, redisClient, &robots.S3Lister{Client: s3.NewFromConfig(awsCfg)}))
 
 	port := getenv("PORT")
 	if port == "" {

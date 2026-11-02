@@ -9,8 +9,11 @@ import (
 // Environment carries the config/domain.rb and config/initializers values the ported
 // routes read. Keep each table in step with its Ruby source.
 type Environment struct {
-	Name                 string
-	Protocol             string
+	Name     string
+	Protocol string
+	// DOMAIN and ROOT_DOMAIN.
+	Domain               string
+	RootDomain           string
 	ValidRequestHosts    []string
 	ValidAPIRequestHosts []string
 	// PUBLIC_STORAGE_S3_BUCKET and PUBLIC_STORAGE_CDN_S3_PROXY_HOST.
@@ -26,6 +29,8 @@ type Environment struct {
 var environments = map[string]Environment{
 	"production": {
 		Protocol:             "https",
+		Domain:               "gumroad.com",
+		RootDomain:           "gumroad.com",
 		ValidRequestHosts:    []string{"gumroad.com", "app.gumroad.com"},
 		ValidAPIRequestHosts: []string{"api.gumroad.com"},
 		PublicStorageBucket:  "gumroad-public-storage",
@@ -34,6 +39,8 @@ var environments = map[string]Environment{
 	},
 	"staging": {
 		Protocol:             "https",
+		Domain:               "staging.gumroad.com",
+		RootDomain:           "staging.gumroad.com",
 		ValidRequestHosts:    []string{"staging.gumroad.com", "app.staging.gumroad.com"},
 		ValidAPIRequestHosts: []string{"api.staging.gumroad.com"},
 		PublicStorageBucket:  "gumroad-dev-public-storage",
@@ -78,6 +85,7 @@ func LoadEnvironment(getenv func(string) string) (*Environment, error) {
 
 	if name == "development" {
 		port := getenvDefault(getenv, "DEV_LANE_PORT", "3000")
+		env.Domain, env.RootDomain = "localhost:"+port, "localhost:"+port
 		env.ValidRequestHosts = append(env.ValidRequestHosts, "app.localhost:"+port, "localhost:"+port)
 		env.ValidAPIRequestHosts = append(env.ValidAPIRequestHosts, "api.localhost:"+port)
 		env.PublicStorageHost = getenvDefault(getenv, "AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
@@ -86,6 +94,7 @@ func LoadEnvironment(getenv func(string) string) (*Environment, error) {
 		env.Protocol = protocol
 	}
 	if domain := getenv("CUSTOM_DOMAIN"); domain != "" {
+		env.Domain, env.RootDomain = domain, domain
 		env.ValidRequestHosts = append(env.ValidRequestHosts, domain)
 		env.ValidAPIRequestHosts = append(env.ValidAPIRequestHosts, "api."+domain)
 		if getenv("BRANCH_DEPLOYMENT") != "" {

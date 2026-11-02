@@ -82,6 +82,9 @@ func (a *App) Handle(pattern, action string, h http.Handler) {
 			)
 		}()
 
+		// Rails runs this redirect after verify_authenticity_token and
+		// invalidate_session_if_necessary; here it comes first, so a redirected host+path
+		// never gets their 422 or /login answers.
 		location, err := a.redirects.Location(r)
 		switch {
 		case err != nil:
@@ -109,6 +112,15 @@ func (a *App) setDefaultHeaders(h http.Header, requestID string) {
 	h.Set("X-XSS-Protection", "1; mode=block")
 	h.Set("X-Download-Options", "noopen")
 	h.Set("X-Permitted-Cross-Domain-Policies", "none")
+}
+
+// HandleNotFound answers what no pattern matches, a wrong method included, as Rails' router
+// would. Without it ServeMux answers with its plain-text 404/405.
+func (a *App) HandleNotFound(h http.Handler) {
+	a.mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		a.setDefaultHeaders(w.Header(), requestID(r))
+		h.ServeHTTP(w, r)
+	}))
 }
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {

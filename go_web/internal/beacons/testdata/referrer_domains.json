@@ -1,0 +1,114 @@
+[
+  {
+    "input": "https://www.Example.com/path?q=1",
+    "domain": "example.com"
+  },
+  {
+    "input": "http://example.com",
+    "domain": "example.com"
+  },
+  {
+    "input": "example.com/path",
+    "domain": "direct"
+  },
+  {
+    "input": "//cdn.example.com/x",
+    "domain": "cdn.example.com"
+  },
+  {
+    "input": "direct",
+    "domain": "direct"
+  },
+  {
+    "input": "",
+    "domain": "direct"
+  },
+  {
+    "input": "https://example.com/a b",
+    "domain": "example.com"
+  },
+  {
+    "input": "https://ex ample.com/",
+    "domain": "example.com"
+  },
+  {
+    "input": "https://例え.jp/",
+    "domain": ".jp"
+  },
+  {
+    "input": "https://xn--r8jz45g.jp/",
+    "domain": "xn--r8jz45g.jp"
+  },
+  {
+    "input": "https://user:pw@example.com:8080/",
+    "domain": "example.com"
+  },
+  {
+    "input": "https://[::1]:80/",
+    "domain": "[::1]"
+  },
+  {
+    "input": "https://example.com/%7B",
+    "domain": "direct"
+  },
+  {
+    "input": "https://example.com/{",
+    "domain": "direct"
+  },
+  {
+    "input": "android-app://com.google.android.gm/",
+    "domain": "com.google.android.gm"
+  },
+  {
+    "input": "https://www.google.com/url?q=https://other.example",
+    "domain": "google.com"
+  },
+  {
+    "input": "https://exa%6dple.com/",
+    "domain": "example.com"
+  },
+  {
+    "input": "https://example.com:abc/",
+    "domain": "direct"
+  },
+  {
+    "input": "mailto:x@example.com",
+    "domain": "direct"
+  },
+  {
+    "input": "https://www./",
+    "domain": "direct"
+  },
+  {
+    "input": "https://www.www.example.com",
+    "domain": "www.example.com"
+  },
+  {
+    "input": "file:///etc/passwd",
+    "domain": "direct"
+  },
+  {
+    "input": "https://example.com\\foo",
+    "domain": "direct"
+  },
+  {
+    "input": "https://EXAMPLE.COM.",
+    "domain": "example.com."
+  },
+  {
+    "input": "https://-bad-.example.com/",
+    "domain": "-bad-.example.com"
+  },
+  {
+    "input": "https://under_score.example.com/",
+    "domain": "under_score.example.com"
+  },
+  {
+    "input": "http://192.168.0.1/",
+    "domain": "192.168.0.1"
+  },
+  {
+    "input": "https://example.com/%",
+    "domain": "direct"
+  }
+]

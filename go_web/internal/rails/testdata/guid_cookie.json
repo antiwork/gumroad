@@ -1,0 +1,4 @@
+{
+  "rack": "_gumroad_guid=11111111-2222-4333-8444-555555555555; domain=gumroad.com; path=/; expires=Sun, 02 Nov 2036 10:00:00 GMT; httponly; samesite=lax",
+  "secure_headers": "_gumroad_guid=11111111-2222-4333-8444-555555555555; domain=gumroad.com; path=/; expires=Sun, 02 Nov 2036 10:00:00 GMT; httponly; samesite=lax; secure"
+}
