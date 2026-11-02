@@ -28,6 +28,14 @@ class ProductBuild < ApplicationRecord
   # The save endpoint writes only into the buyer's own save, so its grant can outlive a play session:
   # a tab left open overnight can still save.
   PLAYER_SAVE_GRANT_VALID_FOR = 30.days
+  PLAYER_DEMO_GRANT_PURPOSE = "product_build_player_demo"
+  # Only pages check that the demo is still allowed, so a product made paid or banned keeps its other
+  # files public until running grants expire.
+  PLAYER_DEMO_GRANT_VALID_FOR = 1.hour
+  DEMO_FEATURE = :product_build_demo
+  # The origins that frame an X player card. CSP checks frame-ancestors against every ancestor, so the
+  # demo's own page and the build's frame inside it both list them.
+  DEMO_FRAME_ANCESTORS = %w[https://x.com https://*.x.com https://twitter.com https://*.twitter.com].freeze
 
   belongs_to :product, class_name: "Link"
   belongs_to :product_file, optional: true
@@ -59,6 +67,23 @@ class ProductBuild < ApplicationRecord
 
   # Whether buyers get a Play action for this build on the content page.
   def playable? = live? && site_ready? && player_enabled?
+
+  # Whether anyone can play this build with no purchase, from the public demo page and its X player
+  # card. Only a free product on sale qualifies: every buyer gets its whole build for nothing anyway.
+  # The queries come last.
+  def demo?
+    Feature.active?(DEMO_FEATURE, product.user) && playable? && on_sale? && free_for_everyone?
+  end
+
+  # A grant like player_grant, for the public demo: no purchase, so nothing to save to. The token is
+  # the product's external id, which the demo route carries in place of a content-page token.
+  def demo_grant
+    self.class.player_grant_encryptor.encrypt_and_sign(
+      { "token" => product.external_id, "build_id" => id, "site_prefix" => site_prefix },
+      purpose: PLAYER_DEMO_GRANT_PURPOSE,
+      expires_in: PLAYER_DEMO_GRANT_VALID_FOR,
+    )
+  end
 
   # An encrypted path segment that lets the player's frame load this build's files for one purchase.
   # The frame is an opaque origin, so its file requests carry no session cookies: the access check
@@ -138,6 +163,21 @@ class ProductBuild < ApplicationRecord
   end
 
   private
+    # The product page 404s for a banned product or a deleted seller, and a preorder delivers nothing yet.
+    def on_sale?
+      product.published? && !product.banned? && !product.is_in_preorder_state && !product.user.deleted? && !product.user.suspended?
+    end
+
+    # Free only when a buyer of any version can buy it for nothing (BaseVariant#free?, for all versions at
+    # once). A rental-only product has no buy price.
+    def free_for_everyone?
+      return false if product.rent_only? || product.is_recurring_billing || product.price_cents != 0
+
+      variants = product.alive_variants
+      variants.where("price_difference_cents > 0").none? &&
+        VariantPrice.alive.is_buy.where(variant_id: variants.select(:id)).where("price_cents > 0").none?
+    end
+
     def set_public_id
       self.public_id ||= Array.new(PUBLIC_ID_LENGTH) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.size)] }.join
     end

@@ -6,6 +6,10 @@ module PageMeta::Product
   include PageMeta::Base
   include CurrencyHelper
 
+  # 4:3 leaves room for the demo page's bar above the game.
+  DEMO_PLAYER_CARD_WIDTH = 640
+  DEMO_PLAYER_CARD_HEIGHT = 480
+
   private
     def set_product_page_meta(product)
       product_description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
@@ -105,7 +109,16 @@ module PageMeta::Product
     def set_twitter_meta(product, product_description:)
       set_meta_tag(property: "twitter:title", content: product.name)
 
-      if product.preview_image_path?
+      # The flag goes first so most product pages skip the build query. X shows the poster image until
+      # the card plays, so a demo without one keeps the usual card.
+      demo_image = product.social_share_image if Feature.active?(ProductBuild::DEMO_FEATURE, product.user)
+      if demo_image.present? && product.product_builds.live.first&.demo?
+        set_meta_tag(property: "twitter:card", content: "player")
+        set_meta_tag(property: "twitter:image", content: demo_image)
+        set_meta_tag(property: "twitter:player", content: product_build_demo_url(product.external_id, host: DOMAIN, protocol: PROTOCOL))
+        set_meta_tag(property: "twitter:player:width", content: DEMO_PLAYER_CARD_WIDTH)
+        set_meta_tag(property: "twitter:player:height", content: DEMO_PLAYER_CARD_HEIGHT)
+      elsif product.preview_image_path?
         set_meta_tag(property: "twitter:card", content: "summary_large_image")
         set_meta_tag(property: "twitter:image", content: product.preview_url)
         set_meta_tag(property: "twitter:image:alt", content: "")
