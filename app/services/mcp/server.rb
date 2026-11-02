@@ -680,15 +680,6 @@ module Mcp
         changes = args.slice("name", "description", "summary", "additional_details", "category", "tags", "price_cents", "pay_what_you_want", "suggested_price_cents", "custom_receipt_text", "custom_view_content_button_text", "permalink")
         raise Error.new("Pass at least one of name, description, summary, additional_details, category, tags, price_cents, pay_what_you_want, suggested_price_cents, custom_receipt_text, custom_view_content_button_text, or permalink", code: -32602) if changes.empty?
 
-        if changes.key?("suggested_price_cents")
-          # The amount only means something while the switch is on: stored without it, the product
-          # reports no suggested price and the caller's write reads as lost.
-          wants_pay_what_you_want = changes.key?("pay_what_you_want") ? changes["pay_what_you_want"] : product.customizable_price?
-          unless wants_pay_what_you_want
-            raise Error.new("suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call", code: -32602)
-          end
-        end
-
         # Resolved before the transaction: an unknown category is an argument error, not a rollback.
         taxonomy = resolve_category!(changes["category"]) if changes.key?("category")
 
@@ -735,7 +726,13 @@ module Mcp
           end
           # After price_cents: the suggested price is validated against the price set in this save.
           product.customizable_price = changes["pay_what_you_want"] if changes.key?("pay_what_you_want")
-          product.suggested_price_cents = changes["suggested_price_cents"] if changes.key?("suggested_price_cents")
+          if changes.key?("suggested_price_cents")
+            # Checked against the switch the lock reloaded, not the pre-lock read: an amount stored
+            # while it is off reads back as no suggested price, so the caller's write would look lost.
+            raise Error.new("suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call", code: -32602) unless product.customizable_price?
+
+            product.suggested_price_cents = changes["suggested_price_cents"]
+          end
           if changes.key?("description")
             product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
           end

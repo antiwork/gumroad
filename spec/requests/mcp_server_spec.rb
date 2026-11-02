@@ -1524,6 +1524,18 @@ describe "MCP server" do
       expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
     end
 
+    it "refuses a suggested price when another save turns pay what you want off while it waits for the lock" do
+      @product.update!(customizable_price: true)
+      allow_any_instance_of(Link).to receive(:lock!).and_wrap_original do |original, *args|
+        Link.where(id: @product.id).update_all(customizable_price: false)
+        original.call(*args)
+      end
+
+      expect { call_tool("update_product", { id: @product.external_id, suggested_price_cents: 2500 }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
+    end
+
     it "turns pay what you want off and stops reporting a suggested price" do
       @product.update!(customizable_price: true, suggested_price_cents: 2500)
 
