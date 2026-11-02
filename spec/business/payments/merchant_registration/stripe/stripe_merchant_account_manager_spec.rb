@@ -7684,7 +7684,7 @@ describe StripeMerchantAccountManager, :vcr do
                                                                   street_address: "address_full_match", state: nil, zip_code: "43200",
                                                                   country: "Azerbaijan", individual_tax_id: nil) end
       # Stripe's AZ test routing is 123456-123456; the model refuses that bank code on new rows.
-      let(:bank_account) { build(:azerbaijan_bank_account, user:, bank_code: "123456").tap { _1.save!(validate: false) } }
+      let(:bank_account) { build(:azerbaijan_bank_account, user:, bank_code: "123456", branch_code: "123456").tap { _1.save!(validate: false) } }
       let(:tos_agreement) { create(:tos_agreement, user:) }
 
       before do

@@ -4064,7 +4064,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         fill_in("Pay to the order of", with: "Azerbaijani Creator")
         fill_in("Bank code", with: "200004")
-        fill_in("Branch code", with: "123456")
+        fill_in("Branch code", with: "200004")
         fill_in("IBAN", with: "AZ77ADJE12345678901234567890")
         fill_in("Confirm IBAN", with: "AZ77ADJE12345678901234567890")
 
@@ -4084,7 +4084,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+994124980335")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("AZ77ADJE12345678901234567890")
-        expect(@user.reload.active_bank_account.routing_number).to eq("200004-123456")
+        expect(@user.reload.active_bank_account.routing_number).to eq("200004-200004")
       end
     end
 

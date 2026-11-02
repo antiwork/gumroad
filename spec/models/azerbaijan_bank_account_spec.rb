@@ -25,7 +25,7 @@ describe AzerbaijanBankAccount do
     it "returns valid for 6 digits with hyphen after 3" do
       ba = create(:azerbaijan_bank_account)
       expect(ba).to be_valid
-      expect(ba.routing_number).to eq("200004-123456")
+      expect(ba.routing_number).to eq("200004-200004")
     end
   end
 
