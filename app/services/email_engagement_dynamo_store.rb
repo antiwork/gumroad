@@ -388,16 +388,7 @@ class EmailEngagementDynamoStore
       # it is ACTIVE. Running setup again after a timeout resumes the wait on the same build.
       def ensure_open_time_index!
         status = open_time_index_status
-        if status.nil?
-          client.update_table(
-            table_name:,
-            attribute_definitions: [
-              { attribute_name: "pk", attribute_type: "S" },
-              { attribute_name: "first_open_at", attribute_type: "S" },
-            ],
-            global_secondary_index_updates: [{ create: open_time_index_definition }]
-          )
-        end
+        add_open_time_index if status.nil?
 
         waited = 0
         until status == "ACTIVE"
@@ -408,6 +399,21 @@ class EmailEngagementDynamoStore
           waited += OPEN_TIME_INDEX_POLL_SECONDS
           status = open_time_index_status
         end
+      end
+
+      def add_open_time_index
+        client.update_table(
+          table_name:,
+          attribute_definitions: [
+            { attribute_name: "pk", attribute_type: "S" },
+            { attribute_name: "first_open_at", attribute_type: "S" },
+          ],
+          global_secondary_index_updates: [{ create: open_time_index_definition }]
+        )
+      rescue Aws::DynamoDB::Errors::ResourceInUseException
+        # Another setup's UpdateTable got there first. Escaping here would skip the wait, because the
+        # setup callers rescue this class.
+        nil
       end
 
       def open_time_index_status

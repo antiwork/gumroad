@@ -481,6 +481,15 @@ describe EmailEngagementDynamoStore do
         expect(operations).to eq([:create_table, :describe_table, :update_table, :describe_table, :describe_table])
       end
 
+      it "waits for the index when another setup's UpdateTable is adding it at the same time" do
+        stub_index_statuses(nil, "CREATING", "ACTIVE")
+        client.stub_responses(:update_table, "ResourceInUseException")
+
+        expect { described_class.create_table! }.to raise_error(Aws::DynamoDB::Errors::ResourceInUseException)
+
+        expect(operations).to eq([:create_table, :describe_table, :update_table, :describe_table, :describe_table])
+      end
+
       it "leaves a table whose index is ACTIVE alone" do
         stub_index_statuses("ACTIVE")
 
