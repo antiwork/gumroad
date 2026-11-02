@@ -207,6 +207,17 @@ describe ProductDuplicatorService do
 
       expect(duplicate_product.bundle_products.alive.map(&:product)).to eq([first_member])
     end
+
+    it "copies a membership whose product gained versions after it was added" do
+      create(:bundle_product, bundle:, product: first_member, position: 0)
+      create_list(:variant, 2, variant_category: create(:variant_category, link: first_member, title: "License"))
+
+      duplicate_product = described_class.new(bundle.id).duplicate
+
+      duplicated_bundle_product = duplicate_product.bundle_products.alive.sole
+      expect(duplicated_bundle_product.product).to eq(first_member)
+      expect(duplicated_bundle_product.variant).to be_nil
+    end
   end
 
   it "duplicates the product and marks is_duplicating as false" do
