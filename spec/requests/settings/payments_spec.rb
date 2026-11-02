@@ -6815,7 +6815,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
           expect(find(:select, "Country")).not_to have_selector(:option, "Cuba")
           expect(find(:select, "Country")).not_to have_selector(:option, "Syrian Arab Republic")
           select "United States", from: "Country"
-          check "I have a valid, government-issued photo ID"
+          check "I can provide a valid, government-issued photo ID when my payouts are due"
           expect(page).to have_button "Save", disabled: true
           check "I can provide proof of residence in the country above, or my business is registered there"
           expect(page).to have_button "Save", disabled: false
