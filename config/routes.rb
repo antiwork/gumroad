@@ -1292,6 +1292,11 @@ Rails.application.routes.draw do
     get "/d/:id/play", to: "url_redirects#play", as: :url_redirect_play
     post "/d/:id/play/:grant/save", to: "product_build_player_files#save", as: :product_build_player_save
     get "/d/:id/play/:grant(/*path)", to: "product_build_player_files#show", as: :product_build_player_file, format: false
+    # A free product's web build, public for X player cards. Only on the app domain: the card must
+    # never point at a seller's subdomain or custom domain.
+    get "/demo/:id", to: "product_build_demos#show", as: :product_build_demo
+    get "/demo/:id/product", to: "product_build_demos#product", as: :product_build_demo_product
+    get "/demo/:id/:grant(/*path)", to: "product_build_demo_files#show", as: :product_build_demo_file, format: false
 
     get "crossdomain", to: "public#crossdomain"
 
