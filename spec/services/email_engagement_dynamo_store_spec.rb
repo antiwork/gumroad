@@ -955,5 +955,42 @@ describe EmailEngagementDynamoStore do
       expect(requests.last[:params][:expression_attribute_values]).to include(":prefix" => { s: "CLICKER#" })
       expect(requests.map { _1[:operation_name] }).not_to include(:batch_get_item)
     end
+
+    it "splits more than the batch limit into several batch reads" do
+      stub_click_count(10_000)
+      digests = (1..150).map { |i| format("%064d", i) }
+      client.stub_responses(
+        :batch_get_item,
+        [
+          { responses: { described_class.table_name => [{ "sk" => "CLICKER##{digests[0]}" }] }, unprocessed_keys: {} },
+          { responses: { described_class.table_name => [{ "sk" => "CLICKER##{digests[100]}" }] }, unprocessed_keys: {} },
+        ]
+      )
+
+      expect(described_class.clicked_recipient_digests_among(123, digests)).to eq(Set[digests[0], digests[100]])
+
+      batches = requests.select { |r| r[:operation_name] == :batch_get_item }
+      key_lists = batches.map { |b| b[:params][:request_items][described_class.table_name][:keys] }
+      expect(key_lists.map(&:size)).to eq([100, 50])
+      expect(key_lists.flatten.map { |key| plain_hash(key)["sk"] }).to eq(digests.map { |digest| "CLICKER##{digest}" })
+    end
+
+    it "retries the keys DynamoDB leaves unprocessed and keeps the items from both attempts" do
+      stub_click_count(1_000)
+      allow(described_class).to receive(:sleep)
+      client.stub_responses(
+        :batch_get_item,
+        [
+          {
+            responses: { described_class.table_name => [{ "sk" => "CLICKER#abc" }] },
+            unprocessed_keys: { described_class.table_name => { keys: [{ "pk" => "123", "sk" => "CLICKER#def" }] } },
+          },
+          { responses: { described_class.table_name => [{ "sk" => "CLICKER#def" }] } },
+        ]
+      )
+
+      expect(described_class.clicked_recipient_digests_among(123, %w[abc def])).to eq(Set["abc", "def"])
+      expect(requests.select { _1[:operation_name] == :batch_get_item }.size).to eq(2)
+    end
   end
 end

@@ -113,18 +113,8 @@ class EmailEngagementDynamoStore
       return {} if ids.empty?
 
       counts = {}
-      ids.each_slice(BATCH_GET_LIMIT) do |slice|
-        request_items = { table_name => { keys: slice.map { |id| item_key(id, SUMMARY_SORT_KEY) } } }
-        BATCH_GET_MAX_ATTEMPTS.times do |attempt|
-          response = client.batch_get_item(request_items:)
-          (response.responses[table_name] || []).each do |item|
-            counts[item["pk"].to_i] = summary_from_item(item)
-          end
-          request_items = response.unprocessed_keys
-          break if request_items.blank?
-          raise "Unprocessed keys remain after #{BATCH_GET_MAX_ATTEMPTS} BatchGetItem attempts" if attempt == BATCH_GET_MAX_ATTEMPTS - 1
-          sleep(2**attempt * 0.1)
-        end
+      batch_get_items(ids.map { |id| item_key(id, SUMMARY_SORT_KEY) }).each do |item|
+        counts[item["pk"].to_i] = summary_from_item(item)
       end
       ids.index_with { |id| counts[id] || summary_from_item(nil) }
     end
