@@ -10,7 +10,8 @@ module CurrentApiUser
   end
 
   def current_api_user
-    return unless defined?(doorkeeper_token) && doorkeeper_token.present?
+    # Client-credentials tokens act as an application, not a user.
+    return unless defined?(doorkeeper_token) && doorkeeper_token&.resource_owner_id.present?
 
     @_current_api_user ||= User.find(doorkeeper_token.resource_owner_id)
   rescue ActionDispatch::Http::Parameters::ParseError

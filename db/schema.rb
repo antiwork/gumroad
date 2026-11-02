@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_23_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_23_000007) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1529,6 +1529,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_23_000005) do
     t.boolean "device_authorization_enabled", default: false, null: false
     t.boolean "is_first_party_agent_app", default: false, null: false
     t.boolean "mcp_dynamic_client", default: false, null: false
+    t.boolean "is_partner", default: false, null: false
     t.index ["owner_id", "owner_type", "is_first_party_agent_app"], name: "index_oauth_applications_on_owner_and_first_party_agent"
     t.index ["owner_id", "owner_type"], name: "index_oauth_applications_on_owner_id_and_owner_type"
     t.index ["uid"], name: "index_oauth_applications_on_uid", unique: true
@@ -1664,6 +1665,19 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_23_000005) do
     t.string "seo_title"
     t.text "seo_description"
     t.index ["pageable_type", "pageable_id", "slug"], name: "index_pages_on_pageable_and_slug", unique: true
+  end
+
+  create_table "partner_sellers", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.integer "oauth_application_id", null: false
+    t.bigint "user_id", null: false
+    t.string "external_user_id", null: false, collation: "utf8mb4_0900_bin"
+    t.datetime "migrated_at"
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["oauth_application_id", "external_user_id"], name: "index_partner_sellers_on_application_and_external_user", unique: true
+    t.index ["oauth_application_id", "user_id"], name: "index_partner_sellers_on_application_and_user", unique: true
+    t.index ["user_id"], name: "index_partner_sellers_on_user_id"
   end
 
   create_table "payment_options", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

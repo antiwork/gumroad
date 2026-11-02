@@ -12,6 +12,7 @@ module OauthScopeHelper
     "ifttt" => "See your sales data.",
     "mark_sales_as_shipped" => "Mark your sales as shipped.",
     "mobile_api" => "Mobile API",
+    "partner_api" => "Partner API",
     "refund_sales" => "Refund your sales.",
     "revenue_share" => "Revenue Share",
     "unfurl" => "Fetch public information of any product to preview it in Notion.",

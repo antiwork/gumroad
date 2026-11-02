@@ -27,6 +27,17 @@ class Api::Mobile::BaseController < ApplicationController
   end
 
   private
+    # Every mobile endpoint acts for the token's user. A client-credentials token has none, and
+    # a nil owner drops the seller filter from queries such as the sales search, so treat it as an
+    # invalid token (401). Both overrides are needed, as in Api::V2::BaseController.
+    def valid_doorkeeper_token?
+      super && doorkeeper_token.resource_owner_id.present?
+    end
+
+    def doorkeeper_invalid_token_response?
+      super || doorkeeper_token.resource_owner_id.blank?
+    end
+
     def check_mobile_token
       fetch_error("Invalid request", status: :unauthorized) unless ActiveSupport::SecurityUtils.secure_compare(params[:mobile_token].to_s, MOBILE_TOKEN)
     end
