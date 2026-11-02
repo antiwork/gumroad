@@ -26,6 +26,7 @@ module Mcp
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
     TIER_KEYS = %w[name price_cents recurrence].freeze
+    TIER_PRICING_KEYS = %w[pay_what_you_want suggested_price_cents].freeze
     # The editor's tag picker: up to ten tags of two to twenty characters each.
     MAX_TAGS = 10
     MIN_TAG_LENGTH = 2
@@ -351,7 +352,7 @@ module Mcp
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
                  "name" => { type: "string", description: "Product name." },
                  "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers." },
-                 "pay_what_you_want" => { type: "boolean", description: "Whether buyers may pay more than price_cents, which stays the minimum. Not accepted for a membership, whose tiers carry their own switch; a tier priced 0 is pay what you want." },
+                 "pay_what_you_want" => { type: "boolean", description: "Whether buyers may pay more than price_cents, which stays the minimum. Not accepted for a membership; set it on each tier." },
                  "suggested_price_cents" => { type: "integer", description: "The amount the price box suggests to buyers when pay what you want is on, in minor units. Must be at least price_cents. Needs pay_what_you_want true in the same call." },
                  "description" => { type: "string", description: "HTML or plain-text description." },
                  "product_type" => { type: "string", enum: PRODUCT_TYPES, description: "digital (default) or membership." },
@@ -364,6 +365,8 @@ module Mcp
                      properties: {
                        "name" => { type: "string", description: "Tier name." },
                        "price_cents" => { type: "integer", description: "Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want." },
+                       "pay_what_you_want" => { type: "boolean", description: "Whether buyers may pay more than this tier's price_cents, which stays the minimum." },
+                       "suggested_price_cents" => { type: "integer", description: "The amount this tier's price box suggests to buyers, in minor units. Must be at least the tier's price_cents. Needs pay_what_you_want true on the same tier." },
                        "recurrence" => { type: "string", enum: BasePrice::Recurrence::ALLOWED_RECURRENCES, description: "Billing period." }
                      },
                      required: TIER_KEYS,
@@ -575,7 +578,7 @@ module Mcp
         if membership
           raise Error.new("price_cents is not accepted for a membership; set each tier's price_cents", code: -32602) if args.key?("price_cents")
           if args.key?("pay_what_you_want") || args.key?("suggested_price_cents")
-            raise Error.new("pay_what_you_want and suggested_price_cents are not accepted for a membership; a tier priced 0 is pay what you want", code: -32602)
+            raise Error.new("pay_what_you_want and suggested_price_cents are not accepted for a membership; set them on each tier", code: -32602)
           end
           tiers = validated_tiers!(args["tiers"])
         else
@@ -594,20 +597,18 @@ module Mcp
         price_cents = args["price_cents"]
         raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
 
-        attributes = {
+        product = user.links.build(
           name:,
           description: args["description"].to_s,
           native_type: Link::NATIVE_TYPE_DIGITAL,
           price_cents:,
+          customizable_price: args["pay_what_you_want"],
+          suggested_price_cents: args["suggested_price_cents"],
           price_currency_type: user.currency_type,
           draft: true,
           purchase_disabled_at: Time.current,
           display_product_reviews: true
-        }
-        # Only when asked: assigning nil would write NULL over the column's false default.
-        attributes[:customizable_price] = args["pay_what_you_want"] if args.key?("pay_what_you_want")
-        attributes[:suggested_price_cents] = args["suggested_price_cents"] if args.key?("suggested_price_cents")
-        product = user.links.build(**attributes)
+        )
         product.taxonomy = Taxonomy.find_by(slug: "other")
         product.save!
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
@@ -640,7 +641,9 @@ module Mcp
               {
                 id: index.zero? ? product.default_tier.external_id : nil,
                 name: tier["name"].strip,
-                recurrence_price_values: { recurrence => { enabled: true, price_cents: tier["price_cents"] } }
+                customizable_price: tier["pay_what_you_want"],
+                # The tier updater refuses a suggested amount below the tier's price, as in the editor.
+                recurrence_price_values: { recurrence => { enabled: true, price_cents: tier["price_cents"], suggested_price_cents: tier["suggested_price_cents"] } }
               }
             end
             Product::VariantsUpdaterService.new(product:, variants_params: [{ id: product.tier_category.external_id, name: product.tier_category.title, options: }]).perform
@@ -657,13 +660,20 @@ module Mcp
 
         tiers.each_with_index do |tier, index|
           raise Error.new("tiers[#{index}] must be an object", code: -32602) unless tier.is_a?(Hash)
-          unknown = tier.keys - TIER_KEYS
+          unknown = tier.keys - TIER_KEYS - TIER_PRICING_KEYS
           raise Error.new("tiers[#{index}] has unknown argument: #{unknown.first}", code: -32602) if unknown.any?
           missing = TIER_KEYS - tier.keys
           raise Error.new("tiers[#{index}].#{missing.first} is required", code: -32602) if missing.any?
           raise Error.new("tiers[#{index}].name must be a non-blank string", code: -32602) unless tier["name"].is_a?(String) && tier["name"].strip.present?
           raise Error.new("tiers[#{index}].price_cents must be an integer of zero or more", code: -32602) unless tier["price_cents"].is_a?(Integer) && tier["price_cents"] >= 0
           raise Error.new("tiers[#{index}].price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}", code: -32602) if tier["price_cents"] > BasePrice::Shared::MAX_PRICE_CENTS
+          raise Error.new("tiers[#{index}].pay_what_you_want must be a boolean", code: -32602) if tier.key?("pay_what_you_want") && ![true, false].include?(tier["pay_what_you_want"])
+          if tier.key?("suggested_price_cents")
+            suggested_price_cents = tier["suggested_price_cents"]
+            raise Error.new("tiers[#{index}].suggested_price_cents must be an integer of zero or more", code: -32602) unless suggested_price_cents.is_a?(Integer) && suggested_price_cents >= 0
+            raise Error.new("tiers[#{index}].suggested_price_cents must be at most #{BasePrice::Shared::MAX_PRICE_CENTS}", code: -32602) if suggested_price_cents > BasePrice::Shared::MAX_PRICE_CENTS
+            raise Error.new("tiers[#{index}].suggested_price_cents needs pay_what_you_want: true on the same tier", code: -32602) unless tier["pay_what_you_want"] == true
+          end
           unless BasePrice::Recurrence::ALLOWED_RECURRENCES.include?(tier["recurrence"])
             raise Error.new("tiers[#{index}].recurrence must be one of: #{BasePrice::Recurrence::ALLOWED_RECURRENCES.join(', ')}", code: -32602)
           end
