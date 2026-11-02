@@ -29,8 +29,16 @@ describe PartnerMigrationNotificationJob do
     expect(ActionMailer::Base.deliveries).to be_empty
 
     second.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current)
+    part_row_loads = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+      part_row_loads << payload[:sql] if payload[:sql].match?(/SELECT `partner_migrations`\.\* .*ORDER BY `partner_migrations`\.`part`/)
+    end
     described_class.new.perform(second.id)
     described_class.new.perform(head.id)
+    ActiveSupport::Notifications.unsubscribe(subscriber)
+
+    # A part's catalog can have 500 products, so the job reads only the columns that it needs.
+    expect(part_row_loads).to be_empty
 
     expect(ActionMailer::Base.deliveries.sole.subject).to eq("Some products did not import")
     expect([head.reload, second.reload].map(&:notified_at)).to all(be_present)

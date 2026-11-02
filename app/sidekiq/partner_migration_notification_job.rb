@@ -13,11 +13,12 @@ class PartnerMigrationNotificationJob
       # email waits until every part has finished.
       migration = part.head
       migration.with_lock do
-        parts = migration.parts.lock.to_a
-        next unless parts.all?(&:completed_at) && parts.any? { _1.notified_at.nil? }
+        # Only the columns that decide the email: a part's catalog can have 500 products.
+        parts = migration.parts.lock.pluck(:status, :completed_at, :notified_at)
+        next unless parts.all? { |_status, completed_at, _notified_at| completed_at } && parts.any? { |*, notified_at| notified_at.nil? }
 
-        notify_parts = -> { parts.each { _1.update!(notified_at: Time.current) } }
-        failed = parts.any? { _1.status == PartnerMigration::STATUS_FAILED }
+        notify_parts = -> { migration.parts.update_all(notified_at: Time.current) }
+        failed = parts.any? { |status, *| status == PartnerMigration::STATUS_FAILED }
         # The account setup email already said that the products are importing, so while its link works,
         # the seller hears again only when something needs attention.
         next notify_parts.call if migration.account_setup_open? && !failed
@@ -37,7 +38,7 @@ class PartnerMigrationNotificationJob
         migration.update!(failure_notified_at: Time.current) if failed
       rescue Net::SMTPFatalError, Net::SMTPSyntaxError => e
         # Every part, so that the scheduled dispatch stops queueing them for this address.
-        parts.each { _1.update!(notification_failed_email: recipient) }
+        migration.parts.update_all(notification_failed_email: recipient)
         Rails.logger.error("Partner migration #{migration.id}: result email rejected (#{e.class})")
       end
     end
