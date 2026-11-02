@@ -84,6 +84,7 @@ const COPIED_EXAMPLE_ERRORS: Partial<
     { field: "branch_code", example: "12345", message: "Enter the 5-digit branch code of your own bank branch." },
   ],
   AzerbaijanBankAccount: [
+    { field: "bank_code", example: "123456", message: "Enter the 6-digit code of your own bank." },
     { field: "branch_code", example: "234567", message: "Enter the 6-digit branch code of your own bank branch." },
   ],
 };
@@ -784,7 +785,7 @@ export default function PaymentsPage() {
     for (const { field, example, message } of (account.type && COPIED_EXAMPLE_ERRORS[account.type]) || []) {
       if (Object.entries<unknown>(account).some(([key, value]) => key === field && value === example)) {
         markFieldInvalid(field);
-        // Jamaica can match both fields: keep the first one's reason.
+        // Jamaica and Azerbaijan can match both fields: keep the first one's reason.
         setClientErrorMessage((current: ErrorMessageInfo | null) => current ?? { message });
       }
     }

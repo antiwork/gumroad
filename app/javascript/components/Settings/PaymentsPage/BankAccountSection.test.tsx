@@ -302,6 +302,7 @@ describe("BankAccountSection copyable example hints", () => {
     ["VN", "Bank code", false],
     ["JM", "Bank code", false],
     ["JM", "Branch code", false],
+    ["AZ", "Bank code", true],
     ["AZ", "Branch code", true],
   ])("%s %s has no copyable example", (code, label, supportsIban) => {
     renderForCountry(code, supportsIban);

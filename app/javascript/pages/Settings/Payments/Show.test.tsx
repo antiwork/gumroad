@@ -979,6 +979,22 @@ describe("copied example bank codes", () => {
     expect(screen.getAllByText("Enter the 6-digit branch code of your own bank branch.").length).toBeGreaterThan(0);
   });
 
+  it("AZ refuses the old bank example before the request is sent", () => {
+    renderSeller(
+      "AZ",
+      "azn",
+      [
+        ["Bank code", "123456"],
+        ["Branch code", "123456"],
+      ],
+      true,
+    );
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Enter the 6-digit code of your own bank.").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Bank code").getAttribute("aria-invalid")).toBe("true");
+  });
+
   it("saves an 8-digit Vietnam bank code", () => {
     renderSeller("VN", "vnd", [["Bank code", "01101100"]]);
 

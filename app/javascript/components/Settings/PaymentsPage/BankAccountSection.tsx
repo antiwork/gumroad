@@ -2455,13 +2455,13 @@ const BankAccountSection = ({
                         <Input
                           type="text"
                           id={`${uid}-bank-code`}
-                          placeholder="123456"
                           maxLength={6}
                           required
                           disabled={isFormDisabled}
                           aria-invalid={errorFieldNames.has("bank_code")}
                           onChange={(evt) => updateBankAccount({ bank_code: evt.target.value })}
                         />
+                        <FieldsetDescription>The 6-digit code of your own bank.</FieldsetDescription>
                       </Fieldset>
                       <Fieldset state={errorFieldNames.has("branch_code") ? "danger" : undefined}>
                         <FieldsetTitle>
