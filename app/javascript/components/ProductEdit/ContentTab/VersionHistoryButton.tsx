@@ -22,6 +22,7 @@ import { InlineList } from "$app/components/ui/InlineList";
 import { Input } from "$app/components/ui/Input";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
+import { Pill } from "$app/components/ui/Pill";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
 import { Sheet, SheetHeader } from "$app/components/ui/Sheet";
 
@@ -30,17 +31,32 @@ const EARLIER_BUILDS_SHOWN = 10;
 // ProductBuild::MAX_BYTE_SIZE; the server checks it too, this only saves a doomed upload.
 const MAX_WEB_APP_ZIP_BYTES = 2 * 1024 * 1024 * 1024;
 
-const VersionRow = ({ build, children }: { build: ProductBuild; children?: React.ReactNode }) => {
+const VersionRow = ({
+  build,
+  ready,
+  children,
+}: {
+  build: ProductBuild;
+  ready?: boolean;
+  children?: React.ReactNode;
+}) => {
   const live = build.status === "live";
   return (
-    <Row role="listitem" className="grid-cols-[1fr_auto]">
+    <Row role="listitem" aria-label={`Version ${build.number}`} className="grid-cols-[1fr_auto]">
       <RowContent>
         <div>
-          <h4>Version {build.number}</h4>
+          <h4 className="flex items-center gap-2">
+            Version {build.number}
+            {live ? (
+              <Pill size="small" color="primary">
+                Live
+              </Pill>
+            ) : null}
+          </h4>
           <InlineList>
             <li>Added {deployedAgo(build.created_at)}</li>
             {live ? <li>{FileUtils.getFullFileSizeString(build.byte_size)}</li> : null}
-            {live ? <li>Buyers get this version</li> : null}
+            {live ? <li>Buyers get this version</li> : ready ? <li>Not live yet</li> : null}
           </InlineList>
         </div>
       </RowContent>
@@ -66,19 +82,18 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
   // The save before promoting would send files whose upload has not finished, and the reload after it
   // would cut the upload off.
   const imageSettings = useImageUploadSettings();
-  // null while no zip is uploading; "adding" once the upload is done and the server records the version.
-  const [zipUpload, setZipUpload] = React.useState<{ key: string; percent: number } | "adding" | null>(null);
+  // null while no zip is uploading; percent is null once the upload is done and the server records the version.
+  const [zipUpload, setZipUpload] = React.useState<{ key: string; name: string; percent: number | null } | null>(null);
   const uploading = filesAreUploading(product) || !!imageSettings?.isUploading || zipUpload !== null;
   const [builds, setBuilds] = React.useState<ProductBuild[] | null>(null);
   const [showAll, setShowAll] = React.useState(false);
   const [confirming, setConfirming] = React.useState<ProductBuild | null>(null);
   const [promoting, setPromoting] = React.useState(false);
-  // The upload button sits below the list, so the new version is announced next to it as well.
+  // The new version replaces the upload's row in place; this tells screen readers what that row now is.
   const [addedNumber, setAddedNumber] = React.useState<number | null>(null);
   const zipInputRef = React.useRef<HTMLInputElement>(null);
   const uploader = useEvaporateUploader();
   const s3UploadConfig = useS3UploadConfig();
-  const uid = React.useId();
 
   React.useEffect(() => {
     if (!open) return;
@@ -130,29 +145,32 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
     }
     const key = `web_app_${GuidGenerator.generate()}`;
     const { s3key, fileUrl } = s3UploadConfig.generateS3KeyForUpload(key, file.name);
-    setZipUpload({ key, percent: 0 });
+    setZipUpload({ key, name: file.name, percent: 0 });
     setAddedNumber(null);
     uploader.scheduleUpload({
       cancellationKey: key,
       name: s3key,
       file,
       mimeType: "application/zip",
-      onProgress: ({ percent }) => setZipUpload({ key, percent }),
+      onProgress: ({ percent }) => setZipUpload({ key, name: file.name, percent }),
       onComplete: () => {
-        setZipUpload("adding");
-        createProductBuild(uniquePermalink, fileUrl)
-          .then((added) => {
-            // The list is newest first, and adding a version changes no other one.
+        setZipUpload({ key, name: file.name, percent: null });
+        createProductBuild(uniquePermalink, fileUrl).then(
+          (added) => {
+            // The list is newest first, and adding a version changes no other one. The version takes the
+            // upload's row in the same render, so the list does not move.
             setBuilds((current) => current && [added, ...current]);
             setAddedNumber(added.number);
-          })
-          .catch((error: unknown) =>
+            finishZipUpload();
+          },
+          (error: unknown) => {
+            finishZipUpload();
             showAlert(
               error instanceof ResponseError ? error.message : "Sorry, the version could not be added.",
               "error",
-            ),
-          )
-          .finally(finishZipUpload);
+            );
+          },
+        );
       },
       onError: () => {
         finishZipUpload();
@@ -182,6 +200,8 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
   const ready = builds?.filter((build) => build.status === "uploaded" && build.number > (live?.number ?? 0)) ?? [];
   const earlier = builds?.filter((build) => build !== live && !ready.includes(build)) ?? [];
   const shownEarlier = showAll ? earlier : earlier.slice(0, EARLIER_BUILDS_SHOWN);
+  // Newest first: versions not live yet, then the live one, then earlier ones.
+  const shown = builds?.filter((build) => !earlier.includes(build) || shownEarlier.includes(build)) ?? [];
   const deployCommand = `gumroad builds deploy ./my-web-app --product ${uniquePermalink}`;
 
   return (
@@ -190,53 +210,121 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
         <SheetHeader>{builds?.length === 0 ? "Add a web app" : "Version history"}</SheetHeader>
         {builds ? (
           <>
-            <section aria-label={builds.length > 0 ? "Add a new version" : "Add a web app"} className="grid gap-2">
-              {builds.length > 0 ? <h3>Add a new version</h3> : null}
-              <p>Upload a zip of your web app. Put index.html at the top level of the zip, not inside a folder.</p>
+            <section aria-label={builds.length > 0 ? "Add a new version" : "Add a web app"} className="grid gap-3">
               <p>
+                Upload a zip of your web app. Put index.html at the top level of the zip, not inside a folder.{" "}
                 {live
                   ? "Buyers keep the live version until you make the new one live."
                   : "Buyers get it once you make it live."}
               </p>
-              <div className="flex flex-wrap items-center gap-2">
-                {zipUpload === null ? (
-                  <>
-                    <Button disabled={!uploader} onClick={() => zipInputRef.current?.click()}>
-                      Upload a zip
-                    </Button>
-                    {addedNumber !== null ? (
-                      <span role="status">Version {addedNumber} is ready. Make it live below.</span>
-                    ) : null}
-                  </>
-                ) : zipUpload === "adding" ? (
-                  <span role="status">Adding the new version...</span>
-                ) : (
-                  <>
-                    <span role="status">Uploading... {Math.round(zipUpload.percent * 100)}%</span>
-                    <LinkButton
-                      onClick={() => {
-                        uploader?.cancelUpload(zipUpload.key);
-                        finishZipUpload();
-                      }}
-                    >
-                      Cancel
-                    </LinkButton>
-                  </>
-                )}
-                <Input
-                  ref={zipInputRef}
-                  type="file"
-                  accept=".zip,application/zip"
-                  // Important: Input's padding and width would otherwise win over sr-only.
-                  className="sr-only!"
-                  tabIndex={-1}
-                  aria-label="Web app zip"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadZip(file);
-                  }}
-                />
+              <div>
+                {/* Stays in place while uploading, so nothing below it moves: the progress is the new row. */}
+                <Button disabled={!uploader || zipUpload !== null} onClick={() => zipInputRef.current?.click()}>
+                  Upload a zip
+                </Button>
               </div>
+              <Input
+                ref={zipInputRef}
+                type="file"
+                accept=".zip,application/zip"
+                // Important: Input's padding and width would otherwise win over sr-only.
+                className="sr-only!"
+                tabIndex={-1}
+                aria-label="Web app zip"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) uploadZip(file);
+                }}
+              />
+              {/* The upload's row shows its progress; this says the same to screen readers. */}
+              <span role="status" className="sr-only">
+                {zipUpload
+                  ? zipUpload.percent === null
+                    ? "Adding the new version..."
+                    : `Uploading ${zipUpload.name}: ${Math.round(zipUpload.percent * 100)}%`
+                  : addedNumber !== null
+                    ? `Version ${addedNumber} is ready to go live.`
+                    : null}
+              </span>
+            </section>
+            {zipUpload || builds.length > 0 ? (
+              <section aria-label="Versions" className="grid gap-2">
+                <Rows role="list">
+                  {zipUpload ? (
+                    <Row role="listitem" className="grid-cols-[1fr_auto]">
+                      <RowContent>
+                        <div>
+                          <h4>Uploading {zipUpload.name}</h4>
+                          <InlineList>
+                            <li>
+                              {zipUpload.percent === null
+                                ? "Adding the new version..."
+                                : `${Math.round(zipUpload.percent * 100)}%`}
+                            </li>
+                          </InlineList>
+                        </div>
+                      </RowContent>
+                      <RowActions>
+                        <Button
+                          size="sm"
+                          disabled={zipUpload.percent === null}
+                          onClick={() => {
+                            uploader?.cancelUpload(zipUpload.key);
+                            finishZipUpload();
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      </RowActions>
+                    </Row>
+                  ) : null}
+                  {shown.map((build) =>
+                    build === live ? (
+                      <VersionRow key={build.id} build={build}>
+                        {/* Making the live version live again puts its row back in the content. */}
+                        {hasLiveBuildFile(product) ? null : (
+                          <Button size="sm" onClick={() => setConfirming(build)}>
+                            Add to content
+                          </Button>
+                        )}
+                      </VersionRow>
+                    ) : ready.includes(build) ? (
+                      <VersionRow key={build.id} build={build} ready>
+                        {/* Only the newest is filled: it is the one the seller most likely came to publish. */}
+                        <Button
+                          size="sm"
+                          color={build === ready[0] ? "primary" : undefined}
+                          onClick={() => setConfirming(build)}
+                        >
+                          Make live
+                        </Button>
+                      </VersionRow>
+                    ) : (
+                      <VersionRow key={build.id} build={build}>
+                        <Popover>
+                          <PopoverTrigger aria-label={`Actions for version ${build.number}`} asChild>
+                            <Button size="sm">
+                              <DotsHorizontalRounded className="size-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
+                            <Menu>
+                              <PopoverClose asChild>
+                                <MenuItem onClick={() => setConfirming(build)}>Make live</MenuItem>
+                              </PopoverClose>
+                            </Menu>
+                          </PopoverContent>
+                        </Popover>
+                      </VersionRow>
+                    ),
+                  )}
+                </Rows>
+                {shown.length < builds.length ? (
+                  <LinkButton onClick={() => setShowAll(true)}>Show all {builds.length} versions</LinkButton>
+                ) : null}
+              </section>
+            ) : null}
+            <section aria-label="Deploy from the command line" className="grid gap-2 text-muted">
               <p>
                 Or deploy it with the{" "}
                 <a href={`${Routes.api_path()}#api-cli`} target="_blank" rel="noopener noreferrer">
@@ -255,63 +343,6 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
                 </div>
               </div>
             </section>
-            {live ? (
-              <section aria-labelledby={`${uid}-live`} className="grid gap-2">
-                <h3 id={`${uid}-live`}>Live version</h3>
-                <Rows role="list">
-                  <VersionRow build={live}>
-                    {/* Making the live version live again puts its row back in the content. */}
-                    {hasLiveBuildFile(product) ? null : (
-                      <Button size="sm" color="primary" onClick={() => setConfirming(live)}>
-                        Add to content
-                      </Button>
-                    )}
-                  </VersionRow>
-                </Rows>
-              </section>
-            ) : null}
-            {ready.length > 0 ? (
-              <section aria-labelledby={`${uid}-ready`} className="grid gap-2">
-                <h3 id={`${uid}-ready`}>Ready to go live</h3>
-                <Rows role="list">
-                  {ready.map((build) => (
-                    <VersionRow key={build.id} build={build}>
-                      <Button size="sm" color="primary" onClick={() => setConfirming(build)}>
-                        Make live
-                      </Button>
-                    </VersionRow>
-                  ))}
-                </Rows>
-              </section>
-            ) : null}
-            {earlier.length > 0 ? (
-              <section aria-labelledby={`${uid}-earlier`} className="grid gap-2">
-                <h3 id={`${uid}-earlier`}>Earlier versions</h3>
-                <Rows role="list">
-                  {shownEarlier.map((build) => (
-                    <VersionRow key={build.id} build={build}>
-                      <Popover>
-                        <PopoverTrigger aria-label={`Actions for version ${build.number}`} asChild>
-                          <Button size="sm">
-                            <DotsHorizontalRounded className="size-4" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent sideOffset={4} className="border-0 p-0 shadow-none">
-                          <Menu>
-                            <PopoverClose asChild>
-                              <MenuItem onClick={() => setConfirming(build)}>Make live</MenuItem>
-                            </PopoverClose>
-                          </Menu>
-                        </PopoverContent>
-                      </Popover>
-                    </VersionRow>
-                  ))}
-                </Rows>
-                {shownEarlier.length < earlier.length ? (
-                  <LinkButton onClick={() => setShowAll(true)}>Show all {earlier.length} earlier versions</LinkButton>
-                ) : null}
-              </section>
-            ) : null}
           </>
         ) : (
           <div className="flex justify-center">
