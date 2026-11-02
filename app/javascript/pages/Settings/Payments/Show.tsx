@@ -69,6 +69,26 @@ const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const BANGLADESH_BANK_CODE_REGEX = /^[0-9]{9}$/u;
 
+// Placeholders these fields used to show: not real codes, so a copied one saves a payout row that can never link.
+const COPIED_EXAMPLE_ERRORS: Partial<
+  Record<BankAccount["type"], { field: "bank_code" | "branch_code"; example: string; message: string }[]>
+> = {
+  BangladeshBankAccount: [
+    { field: "bank_code", example: "123456789", message: "Enter your own bank's 9-digit BEFTN routing number." },
+  ],
+  VietnamBankAccount: [
+    { field: "bank_code", example: "12345678", message: "Enter the 8-digit code of your own bank." },
+  ],
+  JamaicaBankAccount: [
+    { field: "bank_code", example: "123", message: "Enter the 3-digit code of your own bank." },
+    { field: "branch_code", example: "12345", message: "Enter the 5-digit branch code of your own bank branch." },
+  ],
+  AzerbaijanBankAccount: [
+    { field: "bank_code", example: "123456", message: "Enter the 6-digit code of your own bank." },
+    { field: "branch_code", example: "234567", message: "Enter the 6-digit branch code of your own bank branch." },
+  ],
+};
+
 // Same reason as Gambia above. 123456 is not a Ghanaian sort code: Stripe has no bank for it, so the
 // payout account can never link.
 const GHANA_NOT_A_SORT_CODE = "123456";
@@ -769,6 +789,14 @@ export default function PaymentsPage() {
     }
     if (form.data.bank_account.type === "SriLankaBankAccount" && !form.data.bank_account.branch_code) {
       markFieldInvalid("branch_code");
+    }
+    const account = form.data.bank_account;
+    for (const { field, example, message } of (account.type && COPIED_EXAMPLE_ERRORS[account.type]) || []) {
+      if (Object.entries<unknown>(account).some(([key, value]) => key === field && value === example)) {
+        markFieldInvalid(field);
+        // A country can match both fields: keep the first one's reason.
+        setClientErrorMessage((current: ErrorMessageInfo | null) => current ?? { message });
+      }
     }
     if (form.data.bank_account.type === "BangladeshBankAccount") {
       if (!form.data.bank_account.bank_code) {
