@@ -1524,6 +1524,20 @@ describe "MCP server" do
       expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "each additional detail needs a name")
     end
 
+    it "rejects a detail whose value is not text, without replacing the details already there" do
+      @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
+
+      expect { call_tool("update_product", { id: @product.external_id, additional_details: [{ name: "Pages", value: { count: 40 } }] }) }.not_to change { @product.reload.custom_attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "additional detail value must be text")
+    end
+
+    it "rejects a detail whose name is not text" do
+      expect { call_tool("update_product", { id: @product.external_id, additional_details: [{ name: ["Pages"], value: "40" }] }) }.not_to change { @product.reload.custom_attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "additional detail name must be text")
+    end
+
     it "reads the additional details back with the product" do
       @product.save_custom_attributes([{ "name" => "Pages", "value" => "40" }])
 

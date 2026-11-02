@@ -763,14 +763,24 @@ module Mcp
         rows.map do |row|
           raise Error.new("each additional detail must be an object with name and value", code: -32602) unless row.is_a?(Hash)
 
-          name = row["name"].to_s
-          value = row["value"].to_s
+          name = additional_detail_text(row["name"], "name")
+          value = additional_detail_text(row["value"], "value")
           # The editor keeps a row only when it has a name, so a value on its own is refused rather
           # than dropped without telling the caller.
           raise Error.new("each additional detail needs a name", code: -32602) if name.blank? && value.present?
 
           { "name" => name, "value" => value }
         end.reject { _1["name"].blank? && _1["value"].blank? }
+      end
+
+      # Both fields are declared as strings. Anything else would be stored as Ruby's own text for
+      # the object and shown to buyers as the value, so it is refused rather than coerced.
+      def additional_detail_text(field, key)
+        return "" if field.nil?
+
+        raise Error.new("additional detail #{key} must be text", code: -32602) unless field.is_a?(String)
+
+        field
       end
 
       def tool_list_files(args)
