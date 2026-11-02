@@ -404,7 +404,18 @@ describe EmailEngagementDynamoStore do
   end
 
   describe ".create_table!" do
-    it "creates the on-demand table with the generic pk/sk string key schema" do
+    let(:open_time_index) do
+      {
+        index_name: "pk-first_open_at-index",
+        key_schema: [
+          { attribute_name: "pk", key_type: "HASH" },
+          { attribute_name: "first_open_at", key_type: "RANGE" },
+        ],
+        projection: { projection_type: "INCLUDE", non_key_attributes: ["mailer_method", "mailer_args"] },
+      }
+    end
+
+    it "creates the on-demand table with the generic pk/sk string key schema and the open-time index" do
       described_class.create_table!
 
       request = requests.sole
@@ -415,6 +426,7 @@ describe EmailEngagementDynamoStore do
         [
           { attribute_name: "pk", attribute_type: "S" },
           { attribute_name: "sk", attribute_type: "S" },
+          { attribute_name: "first_open_at", attribute_type: "S" },
         ]
       )
       expect(request[:params][:key_schema]).to eq(
@@ -423,6 +435,34 @@ describe EmailEngagementDynamoStore do
           { attribute_name: "sk", key_type: "RANGE" },
         ]
       )
+      expect(request[:params][:global_secondary_indexes]).to eq([open_time_index])
+    end
+
+    context "when the table already exists" do
+      before { client.stub_responses(:create_table, "ResourceInUseException") }
+
+      it "adds the open-time index to a table that predates it, then re-raises for the callers that rescue it" do
+        client.stub_responses(:describe_table, { table: { table_name: described_class.table_name } })
+
+        expect { described_class.create_table! }.to raise_error(Aws::DynamoDB::Errors::ResourceInUseException)
+
+        update = requests.find { _1[:operation_name] == :update_table }
+        expect(update[:params][:global_secondary_index_updates]).to eq([{ create: open_time_index }])
+        expect(update[:params][:attribute_definitions]).to eq(
+          [
+            { attribute_name: "pk", attribute_type: "S" },
+            { attribute_name: "first_open_at", attribute_type: "S" },
+          ]
+        )
+      end
+
+      it "leaves a table that already has the index alone" do
+        client.stub_responses(:describe_table, { table: { table_name: described_class.table_name, global_secondary_indexes: [{ index_name: "pk-first_open_at-index" }] } })
+
+        expect { described_class.create_table! }.to raise_error(Aws::DynamoDB::Errors::ResourceInUseException)
+
+        expect(requests.map { _1[:operation_name] }).to eq([:create_table, :describe_table])
+      end
     end
   end
 
@@ -735,19 +775,35 @@ describe EmailEngagementDynamoStore do
       expect(described_class.purchase_open_records(123)).to eq([])
     end
 
-    it "reads the whole partition when it is given no window" do
+    it "reads the post's opens off the open-time index" do
       client.stub_responses(:query, { items: [] })
 
       described_class.purchase_open_records(123)
 
-      expect(requests.last[:params]).not_to have_key(:filter_expression)
+      params = requests.last[:params]
+      expect(params[:index_name]).to eq("pk-first_open_at-index")
+      expect(params[:key_condition_expression]).to eq("pk = :pk")
+      expect(params[:expression_attribute_values]).to eq({ ":pk" => { s: "123" } })
+      expect(params).not_to have_key(:filter_expression)
+    end
+
+    it "follows every page of the index" do
+      pages = [
+        { items: [purchase_open.merge("sk" => "OPEN#one")], last_evaluated_key: { "pk" => "123", "sk" => "OPEN#one", "first_open_at" => "2026-10-01T12:00:00.000Z" } },
+        { items: [purchase_open.merge("sk" => "OPEN#two")] },
+      ]
+      client.stub_responses(:query, pages)
+
+      expect(described_class.purchase_open_records(123).map { _1[:recipient_digest] }).to eq(%w[one two])
+      expect(requests.last[:params][:exclusive_start_key]).to be_present
+      expect(requests.last[:params][:index_name]).to eq("pk-first_open_at-index")
     end
 
     context "with a window" do
       let(:opened_after) { Time.zone.iso8601("2026-10-01T00:00:00.000Z") }
       let(:opened_before) { Time.zone.iso8601("2026-10-02T00:00:00.000Z") }
 
-      # The stubbed client ignores filters, so apply the one the store sent the way DynamoDB would.
+      # The stubbed client ignores key conditions, so apply the one the store sent the way DynamoDB would.
       before do
         opens = {
           "early" => "2026-09-30T23:59:59.999Z",
@@ -758,21 +814,70 @@ describe EmailEngagementDynamoStore do
         }.map { |digest, first_open_at| purchase_open.merge("sk" => "OPEN##{digest}", "first_open_at" => first_open_at) }
         client.stub_responses(:query, lambda do |context|
           bounds = plain_hash(context.params[:expression_attribute_values])
-          { items: opens.select { _1["first_open_at"].between?(bounds[":opened_after"], bounds[":opened_before"]) } }
+          { items: opens.select { _1["first_open_at"] >= bounds.fetch(":opened_after", "") && _1["first_open_at"] <= bounds.fetch(":opened_before", "~") } }
         end)
       end
 
-      it "filters the read to the opens inside the window, both bounds included" do
+      it "reads only the opens inside the window, both bounds included, as a key condition" do
         records = described_class.purchase_open_records(123, opened_after:, opened_before:)
 
         expect(records.map { _1[:recipient_digest] }).to eq(%w[first middle last])
-        expect(requests.last[:params][:filter_expression]).to eq("first_open_at >= :opened_after AND first_open_at <= :opened_before")
+        params = requests.last[:params]
+        expect(params[:index_name]).to eq("pk-first_open_at-index")
+        expect(params[:key_condition_expression]).to eq("pk = :pk AND first_open_at BETWEEN :opened_after AND :opened_before")
+        expect(plain_hash(params[:expression_attribute_values])).to eq(
+          ":pk" => "123", ":opened_after" => "2026-10-01T00:00:00.000Z", ":opened_before" => "2026-10-02T00:00:00.000Z"
+        )
+        expect(params).not_to have_key(:filter_expression)
       end
 
       it "keeps an open at a bound that carries sub-millisecond precision" do
         records = described_class.purchase_open_records(123, opened_after:, opened_before: opened_before + 0.0004)
 
         expect(records.map { _1[:recipient_digest] }).to eq(%w[first middle last])
+      end
+
+      it "bounds only the side it is given" do
+        expect(described_class.purchase_open_records(123, opened_after:).map { _1[:recipient_digest] }).to eq(%w[first middle last late])
+        expect(requests.last[:params][:key_condition_expression]).to eq("pk = :pk AND first_open_at >= :opened_after")
+
+        expect(described_class.purchase_open_records(123, opened_before:).map { _1[:recipient_digest] }).to eq(%w[early first middle last])
+        expect(requests.last[:params][:key_condition_expression]).to eq("pk = :pk AND first_open_at <= :opened_before")
+      end
+
+      it "returns nothing without a read when the window is empty" do
+        expect(described_class.purchase_open_records(123, opened_after: opened_before + 1, opened_before:)).to eq([])
+        expect(requests).to be_empty
+      end
+    end
+
+    # Runs against DynamoDB Local, so the table create_table! built for the suite has to carry the
+    # index and the key condition has to be one DynamoDB accepts.
+    context "against the real table" do
+      let(:installment_id) { 10**12 + SecureRandom.random_number(10**9) }
+
+      before do
+        described_class.client = nil
+        described_class.deadline_client = nil
+      end
+
+      def open_at(time, purchase_id)
+        travel_to(time) do
+          described_class.record_open(installment_id:, mailer_method: "CreatorContactingCustomersMailer.purchase_installment", mailer_args: "[#{purchase_id}, #{installment_id}]")
+        end
+      end
+
+      it "reads only the opens inside the window off the index" do
+        open_at(Time.zone.iso8601("2026-10-01T09:00:00.000Z"), 1)
+        open_at(Time.zone.iso8601("2026-10-02T09:00:00.000Z"), 2)
+        open_at(Time.zone.iso8601("2026-10-03T09:00:00.000Z"), 3)
+        described_class.record_click(installment_id:, mailer_method: "CreatorContactingCustomersMailer.purchase_installment", mailer_args: "[2, #{installment_id}]", click_url: "https://example.com")
+
+        records = described_class.purchase_open_records(installment_id, opened_after: Time.zone.iso8601("2026-10-02T00:00:00Z"), opened_before: Time.zone.iso8601("2026-10-02T23:59:59Z"))
+
+        expect(records).to eq([{ purchase_id: 2, recipient_digest: described_class.recipient_digest(mailer_method: "CreatorContactingCustomersMailer.purchase_installment", mailer_args: "[2, #{installment_id}]"), first_open_at: Time.zone.iso8601("2026-10-02T09:00:00.000Z") }])
+        expect(described_class.purchase_open_records(installment_id).map { _1[:purchase_id] }).to eq([1, 2, 3])
+        expect(described_class.clicked_recipient_digests_among(installment_id, [records.sole[:recipient_digest], "nobody"])).to eq(Set[records.sole[:recipient_digest]])
       end
     end
   end
@@ -809,6 +914,46 @@ describe EmailEngagementDynamoStore do
       )
 
       expect(described_class.clicked_recipient_digests(123)).to eq(["abc"])
+    end
+  end
+
+  describe ".clicked_recipient_digests_among" do
+    def stub_click_count(count)
+      client.stub_responses(:get_item, { item: { "pk" => "123", "sk" => "SUMMARY", "click_count" => count } })
+    end
+
+    it "reads nothing without digests" do
+      expect(described_class.clicked_recipient_digests_among(123, [nil, ""])).to eq(Set.new)
+      expect(requests).to be_empty
+    end
+
+    it "stops at the summary when nobody clicked" do
+      stub_click_count(0)
+
+      expect(described_class.clicked_recipient_digests_among(123, %w[abc def])).to eq(Set.new)
+      expect(requests.map { _1[:operation_name] }).to eq([:get_item])
+    end
+
+    it "reads only the asked recipients' clicker items when they are few against the clickers" do
+      stub_click_count(1_000)
+      client.stub_responses(:batch_get_item, { responses: { described_class.table_name => [{ "sk" => "CLICKER#abc" }] }, unprocessed_keys: {} })
+
+      expect(described_class.clicked_recipient_digests_among(123, %w[abc def])).to eq(Set["abc"])
+
+      batch = requests.find { _1[:operation_name] == :batch_get_item }
+      request = batch[:params][:request_items][described_class.table_name]
+      expect(request[:keys].map { plain_hash(_1) }).to eq([{ "pk" => "123", "sk" => "CLICKER#abc" }, { "pk" => "123", "sk" => "CLICKER#def" }])
+      expect(request[:projection_expression]).to eq("sk")
+      expect(requests.map { _1[:operation_name] }).not_to include(:query)
+    end
+
+    it "walks the clicker prefix once when the ask is large against the clickers" do
+      stub_click_count(3)
+      client.stub_responses(:query, { items: [{ "sk" => "CLICKER#abc" }, { "sk" => "CLICKER#zzz" }] })
+
+      expect(described_class.clicked_recipient_digests_among(123, %w[abc def])).to eq(Set["abc"])
+      expect(requests.last[:params][:expression_attribute_values]).to include(":prefix" => { s: "CLICKER#" })
+      expect(requests.map { _1[:operation_name] }).not_to include(:batch_get_item)
     end
   end
 end

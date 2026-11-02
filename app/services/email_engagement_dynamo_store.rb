@@ -14,6 +14,12 @@
 # <recipient> and <url> are SHA256 hex digests (raw values are attributes on the
 # items). Per-url totals are separate items rather than a map on SUMMARY so
 # link-heavy posts can't grow SUMMARY toward the 400KB item cap.
+#
+# Global secondary index OPEN_TIME_INDEX: hash `pk`, range `first_open_at` (S). Only OPEN# items
+# carry `first_open_at`, so the index holds the opens and nothing else, ordered by first open. It
+# lets a send side read one window of opens instead of the post's whole OPEN# prefix. Production
+# and staging declare it in Terraform (gumroad-private#4213); `create_table!` declares it for dev,
+# test and branch apps.
 class EmailEngagementDynamoStore
   TABLE_BASE_NAME = "email_engagement"
   SUMMARY_SORT_KEY = "SUMMARY"
@@ -29,6 +35,16 @@ class EmailEngagementDynamoStore
   # Reasons that leave a transaction worth retrying in place. Any other reason (a
   # validation error, an item collection limit) won't clear on retry, so it raises.
   RETRYABLE_CANCELLATION_CODES = (["TransactionConflict", "None"] + THROTTLE_CANCELLATION_CODES).freeze
+
+  OPEN_TIME_INDEX = "pk-first_open_at-index"
+  # What the open-time index carries besides its keys and the table's (pk, sk, first_open_at): the
+  # two attributes a send side reads off an open. Must match the Terraform projection.
+  OPEN_TIME_INDEX_ATTRIBUTES = ["mailer_method", "mailer_args"].freeze
+
+  # A CLICKER# item is a few hundred bytes, so one 4KB read unit of a prefix walk returns well over
+  # this many of them, while a keyed read costs a read unit per item. Below this ratio of clickers to
+  # recipients asked about, reading the recipients' own items is the cheaper way to find the clickers.
+  CLICKERS_PER_KEYED_READ = 8
 
   # A deadline-bound read gives up on a slow connect or socket read after this long, rather
   # than the SDK's default 60s read timeout and retries, so one stuck page cannot hold the caller.
@@ -182,23 +198,30 @@ class EmailEngagementDynamoStore
     # identifies that recipient's send (and is also their click key), and the first open. A delay that
     # runs from each recipient's own open is read off `first_open_at`.
     #
-    # `opened_after` / `opened_before` bound `first_open_at` inclusively in a server-side filter. That
-    # trims what comes back, not the read capacity, and callers keep their own window check.
+    # Read from OPEN_TIME_INDEX, where `opened_after` / `opened_before` bound `first_open_at`
+    # inclusively in the key condition, so only the opens inside the window are read (and paid for).
+    # Callers keep their own window check.
     def purchase_open_records(installment_id, deadline: nil, opened_after: nil, opened_before: nil)
-      conditions = []
-      values = {}
-      # Truncating to the millisecond never narrows the window: `first_open_at` is stored to the millisecond.
-      if opened_after
-        conditions << "first_open_at >= :opened_after"
-        values[":opened_after"] = opened_after.utc.iso8601(3)
-      end
-      if opened_before
-        conditions << "first_open_at <= :opened_before"
-        values[":opened_before"] = opened_before.utc.iso8601(3)
+      key_condition = "pk = :pk"
+      values = { ":pk" => partition_key(installment_id) }
+      # `first_open_at` is a fixed-width millisecond ISO8601 UTC string, so string order is time order
+      # and the bounds compare as strings. Truncating to the millisecond never narrows the window:
+      # `first_open_at` is stored to the millisecond.
+      values[":opened_after"] = opened_after.utc.iso8601(3) if opened_after
+      values[":opened_before"] = opened_before.utc.iso8601(3) if opened_before
+      if opened_after && opened_before
+        # BETWEEN with its bounds out of order is a ValidationException, not an empty result.
+        return [] if values[":opened_after"] > values[":opened_before"]
+
+        key_condition += " AND first_open_at BETWEEN :opened_after AND :opened_before"
+      elsif opened_after
+        key_condition += " AND first_open_at >= :opened_after"
+      elsif opened_before
+        key_condition += " AND first_open_at <= :opened_before"
       end
 
-      items = partition_items(installment_id, "OPEN#", deadline:, filter_expression: conditions.join(" AND ").presence, filter_values: values)
-      items.filter_map do |item|
+      params = { table_name:, index_name: OPEN_TIME_INDEX, key_condition_expression: key_condition, expression_attribute_values: values }
+      query_all(params, deadline:).filter_map do |item|
         purchase_id = purchase_id_from_item(item)
         first_open_at = parse_timestamp(item["first_open_at"])
         next if purchase_id.nil? || first_open_at.nil?
@@ -222,19 +245,46 @@ class EmailEngagementDynamoStore
       partition_items(installment_id, "CLICKER#", deadline:).filter_map { |item| item["sk"].to_s.delete_prefix("CLICKER#").presence }
     end
 
+    # Which of these recipient digests have clicked, read the cheaper way for the size of the ask. A
+    # post nobody clicked costs the SUMMARY read alone. A few recipients against many clickers (the
+    # daily scan's window) read only those recipients' CLICKER# items; anything larger walks the
+    # CLICKER# prefix once, which is cheaper per clicker than a keyed read each.
+    def clicked_recipient_digests_among(installment_id, digests)
+      digests = digests.compact_blank.uniq
+      return Set.new if digests.empty?
+
+      click_count = summary(installment_id)[:click_count]
+      return Set.new if click_count.zero?
+
+      if digests.size * CLICKERS_PER_KEYED_READ <= click_count
+        keys = digests.map { item_key(installment_id, "CLICKER##{_1}") }
+        batch_get_items(keys, projection_expression: "sk").to_set { _1["sk"].to_s.delete_prefix("CLICKER#") }
+      else
+        clicked_recipient_digests(installment_id).to_set & digests
+      end
+    end
+
+    # A table that already exists from before the open-time index (a dev or test container, a branch
+    # app) gets the index added, then the ResourceInUseException is re-raised for the callers that
+    # rescue it. Without the index, `purchase_open_records` fails on that table.
     def create_table!
       client.create_table(
         table_name:,
         attribute_definitions: [
           { attribute_name: "pk", attribute_type: "S" },
           { attribute_name: "sk", attribute_type: "S" },
+          { attribute_name: "first_open_at", attribute_type: "S" },
         ],
         key_schema: [
           { attribute_name: "pk", key_type: "HASH" },
           { attribute_name: "sk", key_type: "RANGE" },
         ],
+        global_secondary_indexes: [open_time_index_definition],
         billing_mode: "PAY_PER_REQUEST"
       )
+    rescue Aws::DynamoDB::Errors::ResourceInUseException
+      ensure_open_time_index!
+      raise
     end
 
     # Key derivation is public because the historical data was backfilled with
@@ -276,28 +326,76 @@ class EmailEngagementDynamoStore
       # and one exists per recipient (or per recipient + url), so a six-figure post pages through
       # this a megabyte at a time. Callers with a budget pass `deadline:` and get a bounded client
       # that gives up (ScanBudgetExceeded) instead of blocking the request.
-      def partition_items(installment_id, prefix, deadline: nil, filter_expression: nil, filter_values: {})
+      def partition_items(installment_id, prefix, deadline: nil)
+        query_all(
+          {
+            table_name:,
+            key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
+            expression_attribute_values: { ":pk" => partition_key(installment_id), ":prefix" => prefix },
+          },
+          deadline:
+        )
+      end
+
+      # Every page of one query. Callers with a budget pass `deadline:` and get a bounded client that
+      # gives up (ScanBudgetExceeded) instead of blocking the request.
+      def query_all(params, deadline: nil)
         items = []
         exclusive_start_key = nil
         loop do
           raise ScanBudgetExceeded if deadline && Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
 
-          params = {
-            table_name:,
-            key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
-            expression_attribute_values: {
-              ":pk" => partition_key(installment_id),
-              ":prefix" => prefix,
-            }.merge(filter_values),
-          }
-          params[:filter_expression] = filter_expression if filter_expression.present?
-          params[:exclusive_start_key] = exclusive_start_key if exclusive_start_key.present?
-          response = deadline ? deadline_query(params) : client.query(params)
+          page_params = exclusive_start_key.present? ? params.merge(exclusive_start_key:) : params
+          response = deadline ? deadline_query(page_params) : client.query(page_params)
           items.concat(response.items)
           exclusive_start_key = response.last_evaluated_key
           break if exclusive_start_key.blank?
         end
         items
+      end
+
+      # BatchGetItem in slices of BATCH_GET_LIMIT, retrying the keys DynamoDB leaves unprocessed.
+      def batch_get_items(keys, projection_expression: nil)
+        items = []
+        keys.each_slice(BATCH_GET_LIMIT) do |slice|
+          request = { keys: slice }
+          request[:projection_expression] = projection_expression if projection_expression
+          request_items = { table_name => request }
+          BATCH_GET_MAX_ATTEMPTS.times do |attempt|
+            response = client.batch_get_item(request_items:)
+            items.concat(response.responses[table_name] || [])
+            request_items = response.unprocessed_keys
+            break if request_items.blank?
+            raise "Unprocessed keys remain after #{BATCH_GET_MAX_ATTEMPTS} BatchGetItem attempts" if attempt == BATCH_GET_MAX_ATTEMPTS - 1
+            sleep(2**attempt * 0.1)
+          end
+        end
+        items
+      end
+
+      def open_time_index_definition
+        {
+          index_name: OPEN_TIME_INDEX,
+          key_schema: [
+            { attribute_name: "pk", key_type: "HASH" },
+            { attribute_name: "first_open_at", key_type: "RANGE" },
+          ],
+          projection: { projection_type: "INCLUDE", non_key_attributes: OPEN_TIME_INDEX_ATTRIBUTES },
+        }
+      end
+
+      def ensure_open_time_index!
+        indexes = client.describe_table(table_name:).table.global_secondary_indexes.to_a
+        return if indexes.any? { _1.index_name == OPEN_TIME_INDEX }
+
+        client.update_table(
+          table_name:,
+          attribute_definitions: [
+            { attribute_name: "pk", attribute_type: "S" },
+            { attribute_name: "first_open_at", attribute_type: "S" },
+          ],
+          global_secondary_index_updates: [{ create: open_time_index_definition }]
+        )
       end
 
       # This client does not retry, so a timed-out, throttled or failed page means the walk cannot
