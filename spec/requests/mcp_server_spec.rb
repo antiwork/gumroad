@@ -2125,6 +2125,42 @@ describe "MCP server" do
       expect(content["warning"]).to include("usd500")
     end
 
+    it "warns about a universal discount code left behind in the old currency" do
+      create(:universal_offer_code, user: @seller, code: "unistale", amount_cents: 500, currency_type: "usd")
+
+      call_tool("update_product", { id: @product.external_id, currency: "eur" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "currency")).to eq("eur")
+      expect(content["warning"]).to include("unistale")
+    end
+
+    it "warns when the new currency's minimum pushes an existing percentage code below it" do
+      product = create(:product, user: @seller, name: "Cheap notes", price_cents: 100, price_currency_type: "gbp")
+      create(:percentage_offer_code, user: @seller, products: [product], code: "gbp20", amount_percentage: 20)
+
+      call_tool("update_product", { id: product.external_id, currency: "usd" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      product.reload
+      expect(product.price_currency_type).to eq("usd")
+      expect(product.default_price_cents).to eq(100)
+      expect(content["warning"]).to include("gbp20")
+    end
+
+    it "stays quiet when the discount codes still clear the new currency's minimum" do
+      create(:percentage_offer_code, user: @seller, products: [@product], code: "tenoff", amount_percentage: 10)
+
+      call_tool("update_product", { id: @product.external_id, currency: "eur" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "currency")).to eq("eur")
+      expect(content["warning"]).to be_nil
+    end
+
     it "refuses a currency change on a membership with tiers and leaves it alone" do
       membership = create(:membership_product_with_preset_tiered_pricing, user: @seller)
 

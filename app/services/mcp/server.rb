@@ -725,8 +725,10 @@ module Mcp
         end
 
         # A currency change moves every price row, so it is decided under the lock below; the
-        # warning after the save needs to know whether it happened.
+        # warning after the save needs to know whether it happened, and which discount codes were
+        # attached before it did.
         currency_changed = false
+        codes_before_currency_change = nil
         # `price_cents=` saves its Price row at once, so a later validation failure must roll it back.
         ActiveRecord::Base.transaction do
           if changes.key?("permalink")
@@ -756,6 +758,11 @@ module Mcp
             end
             raise ToolError, "Currency cannot be changed for a product sold on more than one payment option: only one of its prices could be carried across. Change it in the product editor." if product.has_multiple_recurrences?
 
+            # universal_offer_codes is scoped to the product's price_currency_type, so the codes
+            # denominated in the old currency leave that list the moment the new one lands: capture
+            # them first, or the warning below never sees the codes this change strands.
+            # Bundles::ProductController#update takes the same precaution.
+            codes_before_currency_change = product.product_and_universal_offer_codes
             carried_price_cents = product.default_price_cents
             carried_rental_price_cents = product.rentable? ? product.rental_price_cents : nil
             product.price_currency_type = currency
@@ -801,11 +808,13 @@ module Mcp
         end
         result = { product: product_payload(product.reload).merge(category: category_payload(product), description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), tags: product.tags.pluck(:name), custom_receipt_text: product.custom_receipt_text, custom_view_content_button_text: product.custom_view_content_button_text) }
         # A lower price can push an existing discount below the minimum, and a new currency strands
-        # the codes denominated in the old one; the editor warns rather than refuses.
+        # the codes denominated in the old one; the editor warns rather than refuses. Both checks run
+        # on either change: the minimum is per currency, so re-denominating at the same number can
+        # put a percentage code under the new currency's minimum with nothing else moved.
         if changes.key?("price_cents") || currency_changed
-          codes = product.product_and_universal_offer_codes.to_a
+          codes = (codes_before_currency_change || []) | product.product_and_universal_offer_codes
           mismatched_codes = currency_changed ? codes.reject { _1.is_currency_valid?(product) }.map(&:code) : []
-          below_minimum_codes = changes.key?("price_cents") ? codes.reject { _1.is_amount_valid?(product) }.map(&:code) : []
+          below_minimum_codes = codes.reject { _1.is_amount_valid?(product) }.map(&:code)
           warnings = []
           warnings << "These discount codes are in a different currency than the product now uses, so they will not work at checkout: #{mismatched_codes.join(', ')}. Edit or delete them in Gumroad." if mismatched_codes.any?
           warnings << "These discount codes would discount this product below #{product.min_price_formatted}: #{below_minimum_codes.join(', ')}. Edit or delete them in Gumroad." if below_minimum_codes.any?
