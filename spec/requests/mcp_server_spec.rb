@@ -1611,7 +1611,7 @@ describe "MCP server" do
       end
 
       it "clears the seller's answers for the category the product leaves" do
-        TaxonomyAttribute.create!(taxonomy: design, name: "format", label: "Format", value_type: "enum", values: %w[PSD AI], position: 0)
+        create(:taxonomy_attribute, taxonomy: design, name: "format", label: "Format", values: %w[PSD AI])
         @product.update!(taxonomy: design)
         @product.save_taxonomy_attribute_values({ "format" => "PSD" })
         expect(@product.reload.seller_taxonomy_attribute_values).to eq("format" => "PSD")
@@ -1619,6 +1619,16 @@ describe "MCP server" do
         call_tool("update_product", { id: @product.external_id, category: "3d/blender" })
 
         expect(@product.reload.seller_taxonomy_attribute_values).to eq({})
+      end
+
+      it "classifies the new category's attributes in the same request as the change" do
+        fonts = create(:taxonomy, slug: "fonts", parent: design)
+        create(:taxonomy_attribute, taxonomy: fonts, name: "format", label: "Format", values: %w[OTF TTF])
+        create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/font.otf")
+
+        call_tool("update_product", { id: @product.external_id, category: "design/fonts" })
+
+        expect(@product.reload.inferred_taxonomy_attribute_values).to eq("format" => "OTF")
       end
 
       it "reads the category back with the product" do

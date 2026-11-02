@@ -705,10 +705,11 @@ module Mcp
           # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
           product.custom_permalink = permalink if changes.key?("permalink")
           product.taxonomy = taxonomy if taxonomy
+          # The editor re-normalizes the seller's answers on a category switch; clearing them in this
+          # save keeps the taxonomy change the last write, so the product's after_commit classification
+          # still sees it and a second save does not swallow the callback.
+          product.json_data = product.json_data.to_h.merge("taxonomy_attribute_values" => {}) if taxonomy && product.taxonomy_id_changed?
           product.save!
-          # The editor re-normalizes the seller's attribute answers on a taxonomy switch; without
-          # this, values answered for the old category stay in json_data.
-          product.save_taxonomy_attribute_values(nil) if taxonomy && product.saved_change_to_taxonomy_id?
         end
         result = { product: product_payload(product.reload).merge(category: category_payload(product), description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product)) }
         # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
@@ -1534,7 +1535,7 @@ module Mcp
         taxonomy = product.taxonomy
         return if taxonomy.nil?
 
-        { path: category_path(taxonomy), label: category_label(taxonomy) }
+        { path: category_slug_path_for(taxonomy), label: category_label(taxonomy) }
       end
 
       def category_label(taxonomy)
@@ -1543,7 +1544,7 @@ module Mcp
 
       # Walked from parent_id like taxonomy_paths, not from ancestry_path: the closure table can lag a
       # moved node, and the path we return has to be one update_product accepts back.
-      def category_path(taxonomy)
+      def category_slug_path_for(taxonomy)
         @category_paths ||= taxonomy_paths.each_with_object({}) { |(path, record), paths| paths[record.id] = path }
         @category_paths[taxonomy.id] || taxonomy.slug
       end
