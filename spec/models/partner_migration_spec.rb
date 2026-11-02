@@ -94,6 +94,9 @@ describe PartnerMigration do
       expect(described_class.normalize_products([product_attributes.except(:external_product_id)]).last).to start_with("products[0]: external_product_id must be a string")
       expect(described_class.normalize_products([product_attributes.merge(external_product_id: " ")]).last).to start_with("products[0]: external_product_id must be a string")
       expect(described_class.normalize_products([product_attributes, product_attributes.merge(name: "Copy")]).last).to eq('external_product_id "Texture Pack" appears more than once.')
+      longest = "x" * described_class::MAX_EXTERNAL_USER_ID_LENGTH
+      expect(described_class.normalize_products([product_attributes.merge(external_product_id: longest)]).last).to be_nil
+      expect(described_class.normalize_products([product_attributes.merge(external_product_id: " #{longest}")]).last).to start_with("products[0]: external_product_id must be a string")
     end
 
     it "keeps the adult flag, and rejects a value that is not true or false" do
@@ -125,6 +128,9 @@ describe PartnerMigration do
       files = Array.new(described_class::MAX_FILES_PER_PRODUCT) { { url: "https://files.example.com/#{_1}.zip" } }
       shared = [{ name: "Standard", files: files.first(10) }]
       _products, error = described_class.normalize_products([product_attributes.merge(files:, variant_categories: [{ title: "License", variants: shared }])])
+      expect(error).to be_nil
+
+      _products, error = described_class.normalize_products([product_attributes.merge(files: files + files.first(1))])
       expect(error).to be_nil
 
       extra = [{ name: "Extended", files: [{ url: "https://files.example.com/extra.zip" }] }]
