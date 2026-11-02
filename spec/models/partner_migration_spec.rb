@@ -578,5 +578,55 @@ describe PartnerMigration do
 
       expect(partner_seller.reload.migrated_at).to eq(seller.links.sole.first_published_at)
     end
+
+    it "retries only failed products, keeping saved ones, when the partner sends the export again" do
+      migration, = create_migration
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
+      migration.update!(status: described_class::STATUS_FAILED, results: { "0" => { "product_id" => "saved" }, "1" => { "error" => "Missing file" } })
+      Sidekiq::Worker.clear_all
+
+      create_migration
+
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_CLAIMED, results: { "0" => { "product_id" => "saved" } })
+      expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
+    end
+
+    it "keeps the failed state when the previous job still holds its queue lock" do
+      migration, = create_migration
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
+      results = { "0" => { "error" => "Missing file" } }
+      migration.update!(status: described_class::STATUS_FAILED, results:)
+      allow(PartnerMigrationImportJob).to receive(:perform_async).with(migration.id).and_return(nil)
+
+      returned_migration, = create_migration
+
+      expect(returned_migration.status).to eq(described_class::STATUS_FAILED)
+      expect(migration.reload).to have_attributes(status: described_class::STATUS_FAILED, results:)
+    end
+
+    it "does not restart a failed import for an account that can no longer import" do
+      migration, = create_migration
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
+      migration.update!(status: described_class::STATUS_FAILED, results: { "0" => { "error" => "Missing file" } })
+      seller.update!(user_risk_state: "suspended_for_fraud")
+      Sidekiq::Worker.clear_all
+
+      create_migration
+
+      expect(migration.reload.status).to eq(described_class::STATUS_FAILED)
+      expect(PartnerMigrationImportJob.jobs).to be_empty
+    end
+
+    it "does not restart a completed import when the partner sends the export again" do
+      migration, = create_migration
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
+      migration.update!(status: described_class::STATUS_COMPLETED, completed_at: Time.current, notified_at: Time.current)
+      Sidekiq::Worker.clear_all
+
+      create_migration
+
+      expect(migration.reload.status).to eq(described_class::STATUS_COMPLETED)
+      expect(PartnerMigrationImportJob.jobs).to be_empty
+    end
   end
 end

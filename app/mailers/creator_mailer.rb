@@ -6,6 +6,13 @@ class CreatorMailer < ApplicationMailer
   helper CurrencyHelper
   layout "layouts/email"
 
+  def partner_migration_finished(partner_migration_id, recipient:)
+    @migration = PartnerMigration.find(partner_migration_id)
+    @subject = @migration.status == PartnerMigration::STATUS_COMPLETED ? "Your products are ready to review" : "Some products did not import"
+
+    mail to: recipient, subject: @subject
+  end
+
   # A positional string, so the mailer header that records the arguments keeps only its first characters.
   def partner_migration_account_setup(partner_migration_id, encrypted_token)
     @migration = PartnerMigration.find(partner_migration_id)

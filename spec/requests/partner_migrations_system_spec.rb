@@ -69,7 +69,11 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
     visit logout_path
     PartnerMigrationImportJob.new.perform(migration.id)
-    visit products_path
+    PartnerMigrationNotificationJob.new.perform(migration.id)
+    mail = ActionMailer::Base.deliveries.find { _1.subject == "Your products are ready to review" }
+    review_link = Nokogiri::HTML(mail.html_part.body.decoded).css("a").find { _1.text == "Review drafts" }
+    expect(review_link["href"]).to end_with(products_path)
+    visit review_link["href"]
     fill_in "Email", with: seller.email
     fill_in "Password", with: seller.password
     click_on "Login"
@@ -111,5 +115,28 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     expect(migration.reload.user.email).to eq("new-seller@example.com")
     expect(migration.user.links.sole).to be_draft
     expect(partner_application.partner_sellers.sole.migrated_at).to be_nil
+  end
+
+  it "retries a failed file by itself when the partner refreshes its URL, without duplicating successful products" do
+    stub_request(:get, file_url).to_return(status: 403)
+    catalog = [product_attributes, { name: "Brush Set", price: 500 }]
+    visit export_catalog(catalog)
+    log_in
+    click_on "Import 2 products"
+    expect(page).to have_current_path(products_path)
+    migration = PartnerMigration.last
+    PartnerMigrationImportJob.new.perform(migration.id)
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_FAILED)
+    expect(seller.links.pluck(:name)).to eq(["Brush Set"])
+
+    refreshed_url = "#{file_url}?signature=refreshed"
+    stub_request(:get, refreshed_url).to_return(status: 200, body: file_bytes)
+    export_catalog([product_attributes.merge(files: [{ url: refreshed_url, display_name: "Texture" }]), catalog.last])
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_CLAIMED)
+    PartnerMigrationImportJob.new.perform(migration.id)
+
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_COMPLETED)
+    expect(seller.links.pluck(:name)).to contain_exactly("Texture Pack", "Brush Set")
+    expect(PartnerMigration.count).to eq(1)
   end
 end

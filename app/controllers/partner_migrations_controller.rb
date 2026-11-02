@@ -122,7 +122,7 @@ class PartnerMigrationsController < ApplicationController
                when PartnerMigration::STATUS_COMPLETED
                  "Your #{products} from #{app_name} #{count == 1 ? "is" : "are"} here as drafts."
                when PartnerMigration::STATUS_FAILED
-                 "Some products from #{app_name} did not import. The others are here as drafts."
+                 "Some products from #{app_name} did not import. We try them again when #{app_name} sends them again."
                else
                  "We're importing your #{products} from #{app_name}. #{count == 1 ? "It appears" : "They appear"} here as drafts."
       end
