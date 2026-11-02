@@ -61,7 +61,7 @@ export const VersionHistoryButton = () => {
 };
 
 export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) => {
-  const { uniquePermalink, save, product } = useProductEditContext();
+  const { uniquePermalink, save, product, setWebAppUploading } = useProductEditContext();
   // The save before promoting would send files whose upload has not finished, and the reload after it
   // would cut the upload off.
   const imageSettings = useImageUploadSettings();
@@ -100,12 +100,12 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
     };
   }, [open, uniquePermalink]);
 
-  // Leaving the page cuts the upload off, as it does for the editor's own files.
+  // The layout keeps the seller on the page while this is set: leaving cuts the upload off, and leaving
+  // the Content tab unmounts its progress and Cancel.
   React.useEffect(() => {
     if (!zipUpload) return;
-    const beforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", beforeUnload);
-    return () => window.removeEventListener("beforeunload", beforeUnload);
+    setWebAppUploading(true);
+    return () => setWebAppUploading(false);
   }, [zipUpload !== null]);
 
   // The picked file stays in the input until its upload ends: Chromium can drop a file's data once the

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -37,10 +37,11 @@ vi.mock("$app/components/S3UploadConfig", () => ({
   }),
 }));
 const save = vi.fn<() => Promise<boolean>>();
+const setWebAppUploading = vi.fn<(uploading: boolean) => void>();
 let uploading = false;
 let liveRowShown = true;
 vi.mock("$app/components/ProductEdit/state", () => ({
-  useProductEditContext: () => ({ uniquePermalink: "demo", save, product: {} }),
+  useProductEditContext: () => ({ uniquePermalink: "demo", save, product: {}, setWebAppUploading }),
   filesAreUploading: () => uploading,
   hasLiveBuildFile: () => liveRowShown,
 }));
@@ -136,6 +137,27 @@ describe("VersionHistoryButton", () => {
     expect(screen.getByText("Version 2 is ready. Make it live below.")).toBeDefined();
     expect(createProductBuild).toHaveBeenCalledWith("demo", expect.stringMatching(/\/original\/my game\.zip$/u));
     expect(showAlert).not.toHaveBeenCalled();
+  });
+
+  it("tells the editor a zip is uploading until the upload ends", async () => {
+    let complete = () => {};
+    scheduleUpload.mockImplementationOnce((options: { onComplete: () => void }) => {
+      complete = options.onComplete;
+      return 1;
+    });
+    createProductBuild.mockResolvedValue(build(3, "uploaded"));
+    render(<VersionHistoryButton />);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    await screen.findByRole("region", { name: "Live version" });
+
+    fireEvent.change(screen.getByLabelText("Web app zip"), {
+      target: { files: [new File(["PK"], "game.zip", { type: "application/zip" })] },
+    });
+    expect(setWebAppUploading).toHaveBeenLastCalledWith(true);
+
+    act(() => complete());
+    await screen.findByText("Version 3 is ready. Make it live below.");
+    expect(setWebAppUploading).toHaveBeenLastCalledWith(false);
   });
 
   it("does not make a version live while a zip uploads", async () => {

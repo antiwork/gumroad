@@ -179,6 +179,8 @@ const createContextValue = (props: Props) => ({
   customHtmlGlobalNavPaths: props.custom_html_global_nav_paths,
   contentUpdates: null,
   setContentUpdates: () => {},
+  webAppUploading: false,
+  setWebAppUploading: () => {},
   aiGenerated: props.ai_generated,
   customAttributeNameSuggestions: props.custom_attribute_name_suggestions,
 });
@@ -540,6 +542,7 @@ const ProductEditPage = (props: Props) => {
     customizable_price: reconcileCustomizablePrice(props.product),
   }));
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
+  const [webAppUploading, setWebAppUploading] = React.useState(false);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
 
@@ -906,6 +909,8 @@ const ProductEditPage = (props: Props) => {
       richContentRemovedFileEmbedIds,
       contentUpdates,
       setContentUpdates,
+      webAppUploading,
+      setWebAppUploading,
       filesById,
     }),
     [
@@ -918,6 +923,7 @@ const ProductEditPage = (props: Props) => {
       richContentIdMappings,
       fileIdMappings,
       richContentRemovedFileEmbedIds,
+      webAppUploading,
     ],
   );
 

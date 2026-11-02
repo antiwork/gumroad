@@ -11,7 +11,11 @@ import { showAlert } from "$app/components/server-components/Alert";
 
 const matchHandle = vi.hoisted(() => ({ current: "product" }));
 vi.mock("react-router-dom", () => ({
-  Link: ({ to, children }: { to: string; children?: React.ReactNode }) => <a href={to}>{children}</a>,
+  Link: ({ to, children, onClick }: { to: string; children?: React.ReactNode; onClick?: React.MouseEventHandler }) => (
+    <a href={to} onClick={onClick}>
+      {children}
+    </a>
+  ),
   useMatches: () => [{ handle: matchHandle.current }],
   useNavigate: () => vi.fn(),
   useBlocker: () => ({ state: "unblocked" }),
@@ -154,7 +158,12 @@ const renderLayout = (
   {
     saveBlocked = false,
     updateProduct = vi.fn(),
-  }: { saveBlocked?: boolean; updateProduct?: (update: Partial<Product> | ((product: Product) => void)) => void } = {},
+    webAppUploading = false,
+  }: {
+    saveBlocked?: boolean;
+    updateProduct?: (update: Partial<Product> | ((product: Product) => void)) => void;
+    webAppUploading?: boolean;
+  } = {},
 ) =>
   render(
     <DomainSettingsProvider
@@ -220,6 +229,8 @@ const renderLayout = (
             customHtmlGlobalNavPaths: [],
             contentUpdates: null,
             setContentUpdates: vi.fn(),
+            webAppUploading,
+            setWebAppUploading: vi.fn(),
             filesById: new Map(),
             aiGenerated: false,
             customAttributeNameSuggestions: [],
@@ -255,6 +266,14 @@ describe("ProductEdit Layout save gating", () => {
             url: "blob:huge",
           }
         : { type: "unsaved", uploadStatus: { type: "failed" }, url: "blob:huge" },
+  });
+
+  it("keeps the seller on the tab while a web app zip uploads", () => {
+    renderLayout(minor, { webAppUploading: true });
+
+    fireEvent.click(screen.getByRole("link", { name: "Content" }));
+
+    expect(showAlert).toHaveBeenCalledWith("Your web app is still uploading, please wait...", "warning");
   });
 
   it("keeps Save disabled while a file is still uploading", () => {

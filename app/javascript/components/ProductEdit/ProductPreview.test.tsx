@@ -173,6 +173,8 @@ const renderPreview = ({
         customHtmlGlobalNavPaths: [],
         contentUpdates: null,
         setContentUpdates: vi.fn(),
+        webAppUploading: false,
+        setWebAppUploading: vi.fn(),
         filesById: new Map(),
         aiGenerated: false,
         customAttributeNameSuggestions: [],
