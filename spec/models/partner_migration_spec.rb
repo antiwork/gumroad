@@ -427,6 +427,42 @@ describe PartnerMigration do
       expect(head.reload.expires_at).to be_within(1.minute).of(described_class::EXPIRES_IN.from_now)
     end
 
+    it "rejects a product ID that another part already has" do
+      send_part(1, "Texture Pack")
+
+      expect { send_part(2, "Texture Pack") }.to raise_error(described_class::PartError, 'external_product_id "Texture Pack" is already in another part.')
+      second, = send_part(2, "Brush Set")
+      expect(second.reload.products.first["name"]).to eq("Brush Set")
+    end
+
+    it "locks part 1 before it writes a later part, in the order that the result email takes them" do
+      send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        statements << payload[:sql] if payload[:sql].include?("partner_migrations") && payload[:sql].match?(/FOR UPDATE|\AUPDATE/)
+      end
+
+      products, = described_class.normalize_products([{ external_product_id: "Brush Set", name: "Brush Set", price: 500, files: [{ url: "https://files.example.com/new.zip" }] }])
+      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 2)
+
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+      expect(statements.first).to include("FOR UPDATE")
+    end
+
+    it "clears a rejected address on part 1 when a later part retries, so the result email can go out" do
+      head, = send_part(1, "Texture Pack")
+      second, = send_part(2, "Brush Set")
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+      head.update!(status: described_class::STATUS_COMPLETED, completed_at: Time.current, notification_failed_email: seller.email)
+      second.update!(status: described_class::STATUS_FAILED, completed_at: Time.current, notification_failed_email: seller.email, results: { "0" => { "error" => "Missing file" } })
+
+      send_part(2, "Brush Set")
+
+      expect(second.reload.status).to eq(described_class::STATUS_CLAIMED)
+      expect(head.reload.notification_failed_email).to be_nil
+    end
+
     it "rejects a later part before part 1" do
       expect { send_part(2, "Brush Set") }.to raise_error(described_class::PartError, "Send part 1 before part 2.")
     end

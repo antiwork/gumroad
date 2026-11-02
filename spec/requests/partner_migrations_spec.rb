@@ -67,6 +67,16 @@ describe "Partner migration onboarding", type: :request do
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(second.id)
   end
 
+  it "counts the products that the confirmation page does not name" do
+    products, = PartnerMigration.normalize_products(Array.new(5) { { external_product_id: "brush-#{_1}", name: "Brush #{_1}", price: 500 } })
+    _second, code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 2)
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
+
+    expect(response.body).to include("Move 7 products from", "and 5 more")
+  end
+
   it "keeps the export while an account without an email adds an address" do
     seller.update_columns(provider: "apple", email: nil, unconfirmed_email: nil)
     sign_in seller

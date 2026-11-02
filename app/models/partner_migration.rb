@@ -78,8 +78,14 @@ class PartnerMigration < ApplicationRecord
       attempts += 1
       code = SecureRandom.urlsafe_base64(32)
       oauth_application.with_lock do
-        head = find_by(oauth_application:, external_user_id:, part: 1)
+        # Locked before any later part, in the order that the claim and the result email take them.
+        head = lock.find_by(oauth_application:, external_user_id:, part: 1)
         raise PartError, "Send part 1 before part #{part}." if part > 1 && head.nil?
+
+        # Each part imports on its own, so a product in two parts would import twice.
+        other_ids = where(oauth_application:, external_user_id:).where.not(part:).pluck(Arel.sql("JSON_EXTRACT(products, '$[*].external_product_id')"))
+        shared_id = other_ids.flat_map { Array(_1.is_a?(String) ? JSON.parse(_1) : _1) }.intersection(products.map { _1["external_product_id"] }).first
+        raise PartError, "external_product_id #{shared_id.inspect} is already in another part." if shared_id
 
         migration = part == 1 ? head : find_by(oauth_application:, external_user_id:, part:)
         # The seller confirms every part at once, so after that no part can change its catalog.
@@ -507,6 +513,9 @@ class PartnerMigration < ApplicationRecord
       next false unless status == STATUS_FAILED && user&.account_active?
 
       update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil, notified_at: nil, notification_failed_email: nil, resumes_count: 0, import_started_at: nil)
+      # The result email reads a rejected address from part 1, so the retry clears it there too.
+      # create_for! has already locked part 1.
+      head.update!(notification_failed_email: nil) if part > 1
       # A nil enqueue means the previous job still holds its lock. Keep the failed state, so the next
       # export tries again.
       raise ActiveRecord::Rollback if PartnerMigrationImportJob.perform_async(id).nil?
