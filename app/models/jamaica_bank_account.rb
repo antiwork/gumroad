@@ -46,7 +46,7 @@ class JamaicaBankAccount < BankAccount
 
   private
     def validate_bank_code
-      if bank_code == NOT_A_BANK_CODE
+      if bank_code.to_s.strip == NOT_A_BANK_CODE
         errors.add :base, "Enter the 3-digit code of your own bank." if new_record? || will_save_change_to_bank_number?
         return
       end
@@ -56,7 +56,7 @@ class JamaicaBankAccount < BankAccount
     end
 
     def validate_branch_code
-      if branch_code == NOT_A_BRANCH_CODE
+      if branch_code.to_s.strip == NOT_A_BRANCH_CODE
         errors.add :base, "Enter the 5-digit branch code of your own bank branch." if new_record? || will_save_change_to_branch_code?
         return
       end

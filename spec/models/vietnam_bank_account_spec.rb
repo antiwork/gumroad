@@ -52,6 +52,13 @@ describe VietnamBankAccount do
       expect(account.errors.full_messages.to_sentence).to eq("Enter the 8-digit code of your own bank.")
     end
 
+    it "refuses the copied value with surrounding whitespace" do
+      account = build(:vietnam_bank_account, bank_code: "12345678 ")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter the 8-digit code of your own bank.")
+    end
+
     it "does not block saving a stored row whose bank code is unchanged" do
       account = create(:vietnam_bank_account)
       account.update_column(:bank_number, "12345678")

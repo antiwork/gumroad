@@ -79,6 +79,13 @@ describe JamaicaBankAccount do
       expect(account.errors.full_messages.to_sentence).to eq("Enter the 3-digit code of your own bank.")
     end
 
+    it "refuses the copied value with a trailing newline, which the format regex would accept" do
+      account = build(:jamaica_bank_account, bank_code: "123\n")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter the 3-digit code of your own bank.")
+    end
+
     it "does not block saving a stored row whose bank code is unchanged" do
       account = create(:jamaica_bank_account)
       account.update_column(:bank_number, "123")
@@ -90,6 +97,13 @@ describe JamaicaBankAccount do
   describe "copied example branch code" do
     it "refuses a new account with 12345" do
       account = build(:jamaica_bank_account, branch_code: "12345")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter the 5-digit branch code of your own bank branch.")
+    end
+
+    it "refuses the copied value with a trailing newline, which the format regex would accept" do
+      account = build(:jamaica_bank_account, branch_code: "12345\n")
 
       expect(account).not_to be_valid
       expect(account.errors.full_messages.to_sentence).to eq("Enter the 5-digit branch code of your own bank branch.")

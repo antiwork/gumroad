@@ -61,6 +61,13 @@ describe AzerbaijanBankAccount do
       expect(account.errors.full_messages.to_sentence).to eq("Enter the 6-digit branch code of your own bank branch.")
     end
 
+    it "refuses the copied value with a trailing newline, which the format regex would accept" do
+      account = build(:azerbaijan_bank_account, branch_code: "234567\n")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter the 6-digit branch code of your own bank branch.")
+    end
+
     it "does not block saving a stored row whose branch code is unchanged" do
       account = create(:azerbaijan_bank_account)
       account.update_column(:branch_code, "234567")

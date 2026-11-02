@@ -51,7 +51,7 @@ class VietnamBankAccount < BankAccount
 
   private
     def validate_bank_code
-      if bank_code == NOT_A_BANK_CODE
+      if bank_code.to_s.strip == NOT_A_BANK_CODE
         errors.add :base, "Enter the 8-digit code of your own bank." if new_record? || will_save_change_to_bank_number?
         return
       end
