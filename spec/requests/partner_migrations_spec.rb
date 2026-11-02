@@ -97,6 +97,25 @@ describe "Partner migration onboarding", type: :request do
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(migration.id)
   end
 
+  it "opens the products of the account that imported, not of a selected team seller" do
+    membership = create(:team_membership, user: seller)
+    sign_in seller
+    get partner_migration_path(migration_code: code)
+    select_team_seller(membership)
+
+    claim
+
+    expect(response).to redirect_to(products_path)
+    expect(cookies[:current_seller_id]).to be_blank
+
+    get partner_migration_path(migration_code: code)
+    select_team_seller(membership)
+    get partner_migration_path
+
+    expect(response).to redirect_to(products_path)
+    expect(cookies[:current_seller_id]).to be_blank
+  end
+
   it "does not accept a used link from another account" do
     sign_in seller
     get partner_migration_path(migration_code: code)
@@ -232,6 +251,13 @@ describe "Partner migration onboarding", type: :request do
     follow_redirect!
 
     expect(response).to redirect_to(products_path)
+  end
+
+  def select_team_seller(membership)
+    get products_path
+    authenticity_token = Nokogiri::HTML(response.body).at_css("meta[name='csrf-token']")["content"]
+    post sellers_switch_path, params: { authenticity_token:, team_membership_id: membership.external_id }
+    expect(cookies[:current_seller_id]).to be_present
   end
 
   def claim

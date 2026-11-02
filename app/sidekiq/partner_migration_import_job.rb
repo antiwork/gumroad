@@ -13,10 +13,13 @@ class PartnerMigrationImportJob
 
   AVATAR_DOWNLOAD_DURATION = 1.minute
 
-  # Releases the lock that a killed worker left, then queues the import. Only for a stalled import,
-  # which has no live worker.
-  def self.enqueue_releasing_lock(partner_migration_id)
+  # Releases the lock that a killed worker left. Only for a stalled import, which has no live worker.
+  def self.release_lock(partner_migration_id)
     SidekiqUniqueJobs::Unlockable.delete!(get_sidekiq_options.transform_keys(&:to_s).merge("class" => name, "queue" => get_sidekiq_options["queue"].to_s, "args" => [partner_migration_id]))
+  end
+
+  def self.enqueue_releasing_lock(partner_migration_id)
+    release_lock(partner_migration_id)
     perform_async(partner_migration_id)
   end
 
@@ -103,7 +106,8 @@ class PartnerMigrationImportJob
       migration.touch
       PartnerMigration::RemoteFileTransfer.download(url, max_bytes: User::Validations::MAXIMUM_AVATAR_FILE_SIZE, max_duration: AVATAR_DOWNLOAD_DURATION) do |tempfile, filename|
         content_type = Marcel::MimeType.for(tempfile, name: filename)
-        next unless user.valid_avatar_content_type?(content_type)
+        # The seller may have set a picture while the partner's image downloaded.
+        next if !user.valid_avatar_content_type?(content_type) || user.reload.avatar.attached?
 
         blob = ActiveStorage::Blob.create_and_upload!(io: tempfile, filename:, content_type:)
         blob.purge unless user.avatar.attach(blob)

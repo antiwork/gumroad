@@ -456,7 +456,11 @@ class PartnerMigration < ApplicationRecord
       elsif PartnerMigrationImportJob.perform_async(id) || PartnerMigrationImportJob.enqueue_releasing_lock(id)
         update!(resumes_count: resumes_count + 1)
       end
-      update!(status: STATUS_FAILED, completed_at: Time.current, failure_reason:) if failure_reason
+      if failure_reason
+        update!(status: STATUS_FAILED, completed_at: Time.current, failure_reason:)
+        # A killed worker may have left its lock, which would stop the next export from retrying the products.
+        PartnerMigrationImportJob.release_lock(id)
+      end
     end
     PartnerMigrationNotificationJob.perform_async(id) if failure_reason
   end
