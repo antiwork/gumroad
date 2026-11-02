@@ -17,7 +17,7 @@ class AuthPresenter
     {
       email: params[:email] || retrieve_team_invitation_email(params[:next]),
       application_name: application&.name,
-    }.merge(@partner_migration ? { migration_product_count: @partner_migration.products.size } : {})
+    }.merge(@partner_migration ? { migration_product_count: @partner_migration.catalog_size } : {})
   end
 
   def signup_props

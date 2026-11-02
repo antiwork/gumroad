@@ -67,6 +67,17 @@ describe "Partner migration onboarding", type: :request do
     expect(PartnerMigrationImportJob).to have_enqueued_sidekiq_job(second.id)
   end
 
+  it "gives the login page the product count of every part" do
+    products, = PartnerMigration.normalize_products([{ external_product_id: "sculpt-kit", name: "Sculpt Kit", price: 500 }])
+    _second, code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 2)
+    get partner_migration_path(migration_code: code)
+    follow_redirect!
+    follow_redirect!
+
+    page_props = JSON.parse(Nokogiri::HTML(response.body).at_css("[data-page]")["data-page"])["props"]
+    expect(page_props["migration_product_count"]).to eq(3)
+  end
+
   it "counts the products that the confirmation page does not name" do
     products, = PartnerMigration.normalize_products(Array.new(5) { { external_product_id: "brush-#{_1}", name: "Brush #{_1}", price: 500 } })
     _second, code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 2)
