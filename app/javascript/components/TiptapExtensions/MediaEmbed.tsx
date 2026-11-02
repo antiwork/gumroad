@@ -36,6 +36,9 @@ const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "D
 // Iframely sizes a rich embed by putting a fixed pixel height on the div wrapping the frame, and
 // the frame is 100% of it: the number it picks is what clips a long form or squashes a bookshelf.
 const EMBED_HEIGHT_PX = /^(\d+(?:\.\d+)?)px$/u;
+// Videos come back as a wrapper shaped by percentage padding (usually height 0) instead. That box
+// sizes itself, so a pixel height next to it would stack on top of the ratio.
+const PERCENT_PADDING = /padding(?:-[a-z]+)?\s*:\s*[^;]*%/iu;
 
 export const DEFAULT_RAW_EMBED_HEIGHT = 800;
 export const RAW_EMBED_HEIGHT_OPTIONS = [560, 800, 1200, 1800];
@@ -43,7 +46,9 @@ export const RAW_EMBED_HEIGHT_OPTIONS = [560, 800, 1200, 1800];
 const embedHeightWrapper = (doc: Document): HTMLElement | null => {
   const wrapper = doc.querySelector("iframe")?.parentElement;
   if (!wrapper || wrapper === doc.body) return null;
-  return EMBED_HEIGHT_PX.test(wrapper.style.height.trim().toLowerCase()) ? wrapper : null;
+  if (PERCENT_PADDING.test(wrapper.getAttribute("style") ?? "")) return null;
+  const declared = EMBED_HEIGHT_PX.exec(wrapper.style.height.trim().toLowerCase());
+  return declared && Number(declared[1]) > 0 ? wrapper : null;
 };
 
 export const rawEmbedHeight = (html: string): number | null => {

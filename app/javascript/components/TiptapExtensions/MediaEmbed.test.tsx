@@ -263,6 +263,9 @@ describe("Raw node view", () => {
   });
 });
 
+const RESPONSIVE_VIDEO =
+  '<div style="left: 0; width: 100%; height: 0px; position: relative; padding-bottom: 56.25%;"><iframe src="about:blank" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen=""></iframe></div>';
+
 const HEYZINE_SHELF = {
   html: '<div><div style="left: 0; width: 100%; height: 170px; position: relative;"><iframe src="about:blank" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen=""></iframe></div></div>',
   title: "Online flipbook bookshelf",
@@ -295,6 +298,13 @@ describe("raw embed height", () => {
     expect(rawEmbedHeight('<div style="padding-bottom: 56.25%;"><iframe src="about:blank"></iframe></div>')).toBeNull();
   });
 
+  it("ignores a wrapper shaped by percentage padding, so a responsive video is not stretched", () => {
+    const video = RESPONSIVE_VIDEO;
+
+    expect(rawEmbedHeight(video)).toBeNull();
+    expect(resizedRawEmbedHtml(video, 1200)).toBe(video);
+  });
+
   it("rewrites only that height, keeping the frame and its wrapper markup", () => {
     const html = resizedRawEmbedHtml(HEYZINE_SHELF.html, 1200);
 
@@ -320,6 +330,17 @@ describe("insertMediaEmbed", () => {
       expect(node?.type).toBe("raw");
       expect(rawEmbedHeight(String(node?.attrs?.html))).toBe(DEFAULT_RAW_EMBED_HEIGHT);
       expect(String(node?.attrs?.html)).toContain('src="about:blank"');
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("stores a provider's responsive video layout without a pixel height", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, { ...HEYZINE_SHELF, html: RESPONSIVE_VIDEO });
+
+      expect(String(insertedNode(editor)?.attrs?.html)).toBe(RESPONSIVE_VIDEO);
     } finally {
       editor.destroy();
     }
