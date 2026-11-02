@@ -69,10 +69,9 @@ const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const BANGLADESH_BANK_CODE_REGEX = /^[0-9]{9}$/u;
 
-// Same reason as Gambia above, and 123456 is not a Ghanaian sort code at all: it is the example the
-// field used to show. Stripe has no bank for it, so a seller who copies it saves a payout row that
-// can never link.
-const GHANA_BANK_CODE_EXAMPLE = "123456";
+// Same reason as Gambia above. 123456 is not a Ghanaian sort code: Stripe has no bank for it, so the
+// payout account can never link.
+const GHANA_NOT_A_SORT_CODE = "123456";
 
 const KANA_NAME_ERROR = "may only contain katakana characters, spaces, dashes, and dots.";
 const KANA_ADDRESS_ERROR = "may only contain katakana, latin characters, digits, spaces, dashes, and dots.";
@@ -721,7 +720,7 @@ export default function PaymentsPage() {
     if (form.data.bank_account.type === "GhanaBankAccount") {
       if (!form.data.bank_account.bank_code) {
         markFieldInvalid("bank_code");
-      } else if (form.data.bank_account.bank_code === GHANA_BANK_CODE_EXAMPLE) {
+      } else if (form.data.bank_account.bank_code === GHANA_NOT_A_SORT_CODE) {
         markFieldInvalid("bank_code");
         setClientErrorMessage({ message: "Enter the 6-digit sort code of your own bank branch." });
       }
