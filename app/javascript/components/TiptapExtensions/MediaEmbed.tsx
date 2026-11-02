@@ -65,13 +65,34 @@ export const resizedRawEmbedHtml = (html: string, height: number): string => {
   return doc.body.innerHTML;
 };
 
-// A provider outside the video whitelist stores iframely's html as-is, so a frame shorter than a
-// form needs is the only thing standing between the seller and a clipped embed. A provider that
-// asks for more height than the default keeps its own.
-const insertedRawEmbedHtml = (html: string): string => {
-  const declaredHeight = rawEmbedHeight(html);
-  if (declaredHeight === null || declaredHeight >= DEFAULT_RAW_EMBED_HEIGHT) return html;
-  return resizedRawEmbedHtml(html, DEFAULT_RAW_EMBED_HEIGHT);
+// Only a provider that clips its own embed gets a taller frame than iframely asked for (a Tally
+// quiz is pinned at 600px, a Heyzine bookshelf at 170px). Raising every short wrapper would
+// stretch a compact player — Spotify asks for 152px, SoundCloud 166px — into an 800px block, and
+// the Height menu's smallest preset leaves no way back. Matched on provider name, or on host for
+// the responses that omit provider_name.
+const RAW_EMBED_GROWING_PROVIDERS = ["Tally Forms", "Heyzine"];
+const RAW_EMBED_GROWING_HOSTS = ["tally.so", "heyzine.com"];
+
+const hostOf = (url: string): string | null => {
+  try {
+    return new URL(url).hostname.trim().toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+const growsOnInsert = (data: IframelyEmbedData): boolean => {
+  if (data.provider_name !== undefined && RAW_EMBED_GROWING_PROVIDERS.includes(data.provider_name)) return true;
+  const host = hostOf(data.url);
+  return host !== null && RAW_EMBED_GROWING_HOSTS.some((known) => host === known || host.endsWith(`.${known}`));
+};
+
+// Any other provider keeps the height iframely (or the seller, from the menu) chose for it.
+const insertedRawEmbedHtml = (data: IframelyEmbedData): string => {
+  if (!growsOnInsert(data)) return data.html;
+  const declaredHeight = rawEmbedHeight(data.html);
+  if (declaredHeight === null || declaredHeight >= DEFAULT_RAW_EMBED_HEIGHT) return data.html;
+  return resizedRawEmbedHtml(data.html, DEFAULT_RAW_EMBED_HEIGHT);
 };
 
 const VideoEmbed = Extension.create({
@@ -87,8 +108,14 @@ const renderRawDOM = (editor: Editor, node: ProseMirrorNode) =>
 const RawNodeView = ({ editor, node, getPos, selected }: NodeViewProps) => {
   const dom = React.useMemo(() => renderRawDOM(editor, node), [editor, node]);
   const html = assertString(node.attrs.html);
+  const declaredHeight = rawEmbedHeight(html);
+  // The provider's own height stays on the menu, so growing an embed is always reversible.
+  const heightOptions =
+    declaredHeight === null
+      ? []
+      : [...new Set([declaredHeight, ...RAW_EMBED_HEIGHT_OPTIONS])].sort((left, right) => left - right);
   const heightActions =
-    rawEmbedHeight(html) === null
+    heightOptions.length === 0
       ? []
       : [
           {
@@ -100,7 +127,7 @@ const RawNodeView = ({ editor, node, getPos, selected }: NodeViewProps) => {
             ),
             menu: (close: () => void) => (
               <>
-                {RAW_EMBED_HEIGHT_OPTIONS.map((height) => (
+                {heightOptions.map((height) => (
                   <MenuListItem
                     key={height}
                     onClick={() => {
@@ -383,7 +410,7 @@ export const insertMediaEmbed = (editor: Editor, data: IframelyEmbedData) => {
       .chain()
       .focus()
       .setRaw({
-        html: insertedRawEmbedHtml(data.html),
+        html: insertedRawEmbedHtml(data),
         title: data.title,
         url: data.url,
         thumbnail: data.thumbnail_url,

@@ -346,6 +346,39 @@ describe("insertMediaEmbed", () => {
     }
   });
 
+  it("keeps the height a compact provider asked for", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, {
+        html: '<div style="left: 0; width: 100%; height: 152px; position: relative;"><iframe src="about:blank" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;"></iframe></div>',
+        title: "A track",
+        url: "https://open.spotify.com/track/1",
+        provider_name: "Spotify",
+        thumbnail_url: "https://i.scdn.co/image/cover",
+      });
+
+      expect(rawEmbedHeight(String(insertedNode(editor)?.attrs?.html))).toBe(152);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("grows a provider whose own embed is clipped", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, {
+        html: '<div style="height: 600px; position: relative;"><iframe src="about:blank" style="width: 100%; height: 100%; border: 0;"></iframe></div>',
+        title: "A quiz",
+        url: "https://tally.so/r/1",
+        provider_name: "Tally Forms",
+      });
+
+      expect(rawEmbedHeight(String(insertedNode(editor)?.attrs?.html))).toBe(DEFAULT_RAW_EMBED_HEIGHT);
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it("keeps a frame the provider already sized taller than the default", () => {
     const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
     try {
@@ -396,6 +429,7 @@ describe("raw embed height menu", () => {
       act(() => {
         fireEvent.click(screen.getByRole("menuitem", { name: "Height" }));
       });
+      expect(screen.getByRole("menuitem", { name: "170 px" }), "provider height is not restorable").toBeDefined();
       act(() => {
         fireEvent.click(screen.getByRole("menuitem", { name: "1800 px" }));
       });
