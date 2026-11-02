@@ -204,6 +204,35 @@ describe "MCP server content links" do
                                                                ])
       end
 
+      it "gives a version with no content a page of its own when that leaves the versionless fallback alone" do
+        host! DOMAIN
+        pricier = create(:variant, variant_category: @content_version.variant_category, name: "Team", price_difference_cents: 5000)
+        purchase = create(:purchase, link: @versioned, ip_address: "127.0.0.1")
+        purchase.variant_attributes = [pricier]
+        purchase.create_url_redirect!
+
+        call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
+
+        expect(@empty_version.reload.alive_rich_contents).to be_empty
+        expect(pricier.reload.alive_rich_contents.sole.description).to eq([button("https://notion.so/template", "Duplicate")])
+
+        # The buyer who selected that version reads its page, with the button on it.
+        get "/d/#{purchase.url_redirect.token}", headers: { "X-Inertia" => "true" }
+
+        expect(response).to have_http_status(:ok)
+        page = response.parsed_body.dig("props", "content", "rich_content_pages").sole
+        expect(page.dig("description", "content").map { _1["type"] }).to eq(%w[button])
+        expect(page.dig("description", "content", 0, "attrs", "href")).to eq("https://notion.so/template")
+
+        # A buyer without a version still reads the version that has content, not a button-only page.
+        versionless = create(:purchase, link: @versioned, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
+        get "/d/#{versionless.url_redirect.token}", headers: { "X-Inertia" => "true" }
+
+        page = response.parsed_body.dig("props", "content", "rich_content_pages").sole
+        expect(page.dig("description", "content").map { _1["type"] }).to eq(%w[paragraph button])
+        expect(page.dig("description", "content", 0, "content", 0, "text")).to eq("Watch the lessons")
+      end
+
       it "keeps serving versionless buyers the pages they read, now with the button on them" do
         host! DOMAIN
         purchase = create(:purchase, link: @versioned, ip_address: "127.0.0.1").tap(&:create_url_redirect!)

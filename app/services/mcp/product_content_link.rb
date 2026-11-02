@@ -44,14 +44,6 @@ module Mcp
       def page_owners
         return [product] if product.has_product_level_rich_content?
 
-        # In the state the July 21, 2026 restore left behind (the shared-content flag on, the product
-        # level blank, the real pages on a version) a buyer without a version reads the cheapest
-        # version that has content (UrlRedirect#product_or_cheapest_variant_as_rich_content_provider).
-        # A page created here on a cheaper version that has none would become that version's content
-        # and take those buyers off the pages they read today, so this state writes only to the
-        # versions that already have some.
-        return product.alive_variants.select { _1.alive_rich_contents.any?(&:has_editor_content?) } if product.recoverable_hidden_variant_rich_content?
-
         owners = product.alive_variants.to_a
         # A purchase that names no version reads the product's own pages as soon as those carry
         # content (UrlRedirect#rich_content_provider), so a button written only on the versions
@@ -59,7 +51,23 @@ module Mcp
         # only when its pages already hold content: a product-level page created here would take
         # the version content those buyers read today and leave them the button alone.
         owners << product if product.alive_rich_contents.any?(&:has_editor_content?)
+        owners = version_owners_that_keep_the_fallback(owners) if product.recoverable_hidden_variant_rich_content?
         owners
+      end
+
+      # In the state the July 21, 2026 restore left behind (the shared-content flag on, the product
+      # level blank, the real pages on a version) a buyer without a version reads the cheapest
+      # version that has content (UrlRedirect#product_or_cheapest_variant_as_rich_content_provider).
+      # A page created here on a version with none counts as its content, so one cheaper than every
+      # version that already has some would take those buyers off the pages they read today; a
+      # version that is not cheaper leaves the fallback where it is, and its own buyers (who read its
+      # pages when they selected it) get the button too.
+      def version_owners_that_keep_the_fallback(owners)
+        with_content, without_content = owners.partition { _1.alive_rich_contents.any?(&:has_editor_content?) }
+        return owners if with_content.empty?
+
+        cheapest_content_price = with_content.map(&:price_difference_cents).min
+        with_content + without_content.select { _1.price_difference_cents > cheapest_content_price }
       end
 
       # Appends to the page the editor reads first, creating it when the owner has none. Once pages
