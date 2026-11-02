@@ -1,4 +1,4 @@
-import { PlayCircle, Trash, TwitterX, Video } from "@boxicons/react";
+import { PlayCircle, RowResize, Trash, TwitterX, Video } from "@boxicons/react";
 import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec, DOMSerializer, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -33,6 +33,42 @@ declare module "@tiptap/core" {
 
 const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "Dailymotion"];
 
+// Iframely sizes a rich embed by putting a fixed pixel height on the div wrapping the frame, and
+// the frame is 100% of it: the number it picks is what clips a long form or squashes a bookshelf.
+const EMBED_HEIGHT_PX = /^(\d+(?:\.\d+)?)px$/u;
+
+export const DEFAULT_RAW_EMBED_HEIGHT = 800;
+export const RAW_EMBED_HEIGHT_OPTIONS = [560, 800, 1200, 1800];
+
+const embedHeightWrapper = (doc: Document): HTMLElement | null => {
+  const wrapper = doc.querySelector("iframe")?.parentElement;
+  if (!wrapper || wrapper === doc.body) return null;
+  return EMBED_HEIGHT_PX.test(wrapper.style.height.trim().toLowerCase()) ? wrapper : null;
+};
+
+export const rawEmbedHeight = (html: string): number | null => {
+  const wrapper = embedHeightWrapper(new DOMParser().parseFromString(html, "text/html"));
+  const match = wrapper ? EMBED_HEIGHT_PX.exec(wrapper.style.height.trim().toLowerCase()) : null;
+  return match ? Number(match[1]) : null;
+};
+
+export const resizedRawEmbedHtml = (html: string, height: number): string => {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const wrapper = embedHeightWrapper(doc);
+  if (!wrapper) return html;
+  wrapper.style.height = `${height}px`;
+  return doc.body.innerHTML;
+};
+
+// A provider outside the video whitelist stores iframely's html as-is, so a frame shorter than a
+// form needs is the only thing standing between the seller and a clipped embed. A provider that
+// asks for more height than the default keeps its own.
+const insertedRawEmbedHtml = (html: string): string => {
+  const declaredHeight = rawEmbedHeight(html);
+  if (declaredHeight === null || declaredHeight >= DEFAULT_RAW_EMBED_HEIGHT) return html;
+  return resizedRawEmbedHtml(html, DEFAULT_RAW_EMBED_HEIGHT);
+};
+
 const VideoEmbed = Extension.create({
   name: "videoEmbed",
   menuItem: (_editor, onOpen) => (
@@ -45,10 +81,43 @@ const renderRawDOM = (editor: Editor, node: ProseMirrorNode) =>
 
 const RawNodeView = ({ editor, node, getPos, selected }: NodeViewProps) => {
   const dom = React.useMemo(() => renderRawDOM(editor, node), [editor, node]);
+  const html = assertString(node.attrs.html);
+  const heightActions =
+    rawEmbedHeight(html) === null
+      ? []
+      : [
+          {
+            item: () => (
+              <>
+                <RowResize className="size-5" />
+                <span>Height</span>
+              </>
+            ),
+            menu: (close: () => void) => (
+              <>
+                {RAW_EMBED_HEIGHT_OPTIONS.map((height) => (
+                  <MenuListItem
+                    key={height}
+                    onClick={() => {
+                      editor
+                        .chain()
+                        .focus()
+                        .updateAttributes("raw", { html: resizedRawEmbedHtml(html, height) })
+                        .run();
+                      close();
+                    }}
+                  >
+                    <span>{`${height} px`}</span>
+                  </MenuListItem>
+                ))}
+              </>
+            ),
+          },
+        ];
   return (
     <NodeActionsWrapper selected={selected} asChild>
       <NodeViewWrapper contentEditable={false}>
-        <NodeActionsMenu editor={editor} getPos={getPos} />
+        <NodeActionsMenu editor={editor} getPos={getPos} actions={heightActions} />
         {/* The iframe swallows clicks; without this the block can never be selected. */}
         <div
           className="tiptap__raw [&_iframe]:pointer-events-none"
@@ -124,14 +193,22 @@ export const Raw = TiptapNode.create({
   },
   addExtensions: () => [VideoEmbed],
 });
-type IframelyEmbedData = { html: string; title: string; url: string; provider_name: string; thumbnail_url?: string };
+type IframelyEmbedData = {
+  html: string;
+  title: string;
+  url: string;
+  // Iframely omits provider metadata for some rich embeds (Heyzine shelves among them); the html
+  // it returns is still the whole embed, so only the fields we actually render are required.
+  provider_name?: string;
+  thumbnail_url?: string;
+};
 
 const isIframelyEmbedData = (data: unknown): data is IframelyEmbedData =>
   isRecord(data) &&
   isString(data.html) &&
   isString(data.title) &&
   isString(data.url) &&
-  isString(data.provider_name) &&
+  (data.provider_name === undefined || isString(data.provider_name)) &&
   (data.thumbnail_url === undefined || isString(data.thumbnail_url));
 
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/u;
@@ -286,7 +363,12 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
 EmbedMediaForm.displayName = "EmbedMediaForm";
 
 export const insertMediaEmbed = (editor: Editor, data: IframelyEmbedData) => {
-  if ("insertMediaEmbed" in editor.commands && MEDIA_EMBED_SUPPORTING_PROVIDERS.includes(data.provider_name)) {
+  const { provider_name } = data;
+  if (
+    "insertMediaEmbed" in editor.commands &&
+    provider_name !== undefined &&
+    MEDIA_EMBED_SUPPORTING_PROVIDERS.includes(provider_name)
+  ) {
     const responseHTML = new DOMParser().parseFromString(data.html, "text/html");
     const iframe = responseHTML.querySelector("iframe");
     const html = iframe ? iframe.outerHTML : data.html;
@@ -295,7 +377,12 @@ export const insertMediaEmbed = (editor: Editor, data: IframelyEmbedData) => {
     editor
       .chain()
       .focus()
-      .setRaw({ html: data.html, title: data.title, url: data.url, thumbnail: data.thumbnail_url })
+      .setRaw({
+        html: insertedRawEmbedHtml(data.html),
+        title: data.title,
+        url: data.url,
+        thumbnail: data.thumbnail_url,
+      })
       .run();
   }
 };

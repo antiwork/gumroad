@@ -8,10 +8,14 @@ import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  DEFAULT_RAW_EMBED_HEIGHT,
   EmbedMediaForm,
   ExternalMediaFileEmbed,
+  insertMediaEmbed,
   mediaEmbedUrlCandidates,
   Raw,
+  rawEmbedHeight,
+  resizedRawEmbedHtml,
 } from "$app/components/TiptapExtensions/MediaEmbed";
 
 const state = vi.hoisted(() => ({ requests: new Array<string>(), bodies: new Array<unknown>() }));
@@ -30,7 +34,7 @@ const EMBED_URL = `https://www.youtube.com/embed/${ID}`;
 const SHORT_URL = `https://youtu.be/${ID}`;
 const NOCOOKIE = `https://www.youtube-nocookie.com/embed/${ID}`;
 const EMBED = {
-  html: '<iframe src="https://iframely.net/api/iframe?url=x"></iframe>',
+  html: '<iframe src="about:blank"></iframe>',
   title: "Welcome",
   url: CANONICAL,
   provider_name: "YouTube",
@@ -176,7 +180,7 @@ describe("ExternalMediaFileEmbed node view", () => {
         render(<EditorContent editor={editor} />);
       });
 
-      const remove = [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Remove");
+      const remove = [...document.querySelectorAll("button")].find((button) => button.textContent.trim() === "Remove");
 
       expect(remove, "remove control did not mount").toBeDefined();
     } finally {
@@ -255,6 +259,130 @@ describe("Raw node view", () => {
       expect(readOnly.view.dom.querySelector("[aria-label='Actions']")).toBeNull();
     } finally {
       readOnly.destroy();
+    }
+  });
+});
+
+const HEYZINE_SHELF = {
+  html: '<div><div style="left: 0; width: 100%; height: 170px; position: relative;"><iframe src="about:blank" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen=""></iframe></div></div>',
+  title: "Online flipbook bookshelf",
+  url: "https://heyzine.com/shelf/66f3c4fc1e.html",
+  thumbnail_url: "https://cdnm.heyzine.com/files/library-thumb.jpg",
+};
+
+describe("rich embeds with no provider metadata", () => {
+  it("accepts a lookup whose response omits provider_name", async () => {
+    state.bodies = [HEYZINE_SHELF];
+
+    const onEmbedReceived = await insertUrl(HEYZINE_SHELF.url);
+
+    expect(askedUrls()).toEqual([HEYZINE_SHELF.url]);
+    expect(onEmbedReceived).toHaveBeenCalledWith(HEYZINE_SHELF);
+  });
+
+  it("still rejects a response that carries no embed html", async () => {
+    state.bodies = [{ type: "link", title: "Page not found", url: HEYZINE_SHELF.url }];
+
+    const onEmbedReceived = await insertUrl(HEYZINE_SHELF.url);
+
+    expect(onEmbedReceived).not.toHaveBeenCalled();
+  });
+});
+
+describe("raw embed height", () => {
+  it("reads the fixed height iframely puts around the frame", () => {
+    expect(rawEmbedHeight(HEYZINE_SHELF.html)).toBe(170);
+    expect(rawEmbedHeight('<div style="padding-bottom: 56.25%;"><iframe src="about:blank"></iframe></div>')).toBeNull();
+  });
+
+  it("rewrites only that height, keeping the frame and its wrapper markup", () => {
+    const html = resizedRawEmbedHtml(HEYZINE_SHELF.html, 1200);
+
+    expect(rawEmbedHeight(html)).toBe(1200);
+    expect(html).toContain('src="about:blank"');
+    expect(html).toContain("position: absolute");
+  });
+});
+
+describe("insertMediaEmbed", () => {
+  const editorWith = (content: object) =>
+    new Editor({ extensions: [StarterKit, Raw, ExternalMediaFileEmbed], content });
+
+  const insertedNode = (editor: Editor) =>
+    editor.getJSON().content?.find((node) => node.type === "raw" || node.type === "mediaEmbed");
+
+  it("stores a form embed as a block tall enough to hold a quiz", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, HEYZINE_SHELF);
+
+      const node = insertedNode(editor);
+      expect(node?.type).toBe("raw");
+      expect(rawEmbedHeight(String(node?.attrs?.html))).toBe(DEFAULT_RAW_EMBED_HEIGHT);
+      expect(String(node?.attrs?.html)).toContain('src="about:blank"');
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("keeps a frame the provider already sized taller than the default", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, { ...HEYZINE_SHELF, html: resizedRawEmbedHtml(HEYZINE_SHELF.html, 1200) });
+
+      expect(rawEmbedHeight(String(insertedNode(editor)?.attrs?.html))).toBe(1200);
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("still inserts a whitelisted video provider through the media embed node", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, EMBED);
+
+      const node = insertedNode(editor);
+      expect(node?.type).toBe("mediaEmbed");
+      expect(String(node?.attrs?.html)).toBe('<iframe src="about:blank"></iframe>');
+    } finally {
+      editor.destroy();
+    }
+  });
+});
+
+describe("raw embed height menu", () => {
+  it("sets a taller frame on the block so a long form is not clipped", () => {
+    const editor = new Editor({
+      extensions: [StarterKit, Raw],
+      content: {
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Intro" }] },
+          { type: "raw", attrs: { html: HEYZINE_SHELF.html, title: HEYZINE_SHELF.title, url: HEYZINE_SHELF.url } },
+        ],
+      },
+    });
+    try {
+      act(() => {
+        render(<EditorContent editor={editor} />);
+      });
+
+      const trigger = document.querySelector<HTMLElement>("[aria-label='Actions']");
+      if (!trigger) throw new Error("actions menu did not mount");
+      act(() => {
+        fireEvent.click(trigger);
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Height" }));
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "1800 px" }));
+      });
+
+      const raw = editor.getJSON().content?.find((node) => node.type === "raw");
+      expect(rawEmbedHeight(String(raw?.attrs?.html))).toBe(1800);
+    } finally {
+      editor.destroy();
     }
   });
 });
