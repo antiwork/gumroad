@@ -413,14 +413,41 @@ describe PartnerMigration do
       expect(migration.expires_at).to be_within(1.minute).of(described_class::EXPIRES_IN.from_now)
     end
 
-    it "reuses one migration when the partner retries a seller export" do
+    it "reuses one migration and replaces the link when the partner changes the catalog" do
       first, first_code = create_migration
-      second, second_code = create_migration
+      products, = described_class.normalize_products([product_attributes.merge(name: "Renamed pack")])
+      second, second_code = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
 
       expect(second.id).to eq(first.id)
       expect(first_code).not_to eq(second_code)
       expect(described_class.find_by_code(first_code)).to be_nil
       expect(described_class.find_by_code(second_code)).to eq(first)
+    end
+
+    it "keeps the link and extends it when the partner sends only new download URLs" do
+      export = ->(url) do
+        products, = described_class.normalize_products([product_attributes.merge(files: [{ url: }])])
+        described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+      end
+      migration, code = export.call("https://files.example.com/pack.zip?signature=old")
+      migration.update_columns(expires_at: 1.day.from_now)
+
+      refreshed, refreshed_code = export.call("https://files.example.com/pack.zip?signature=new")
+
+      expect(refreshed_code).to be_nil
+      expect(described_class.find_by_code(code)).to eq(migration)
+      expect(refreshed.reload.expires_at).to be_within(1.minute).of(described_class::EXPIRES_IN.from_now)
+      expect(refreshed.products.first["files"].first["url"]).to end_with("signature=new")
+    end
+
+    it "replaces the link when the seller's email changes before the confirmation" do
+      products, = described_class.normalize_products([product_attributes])
+      _migration, code = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, email: "old@example.com")
+
+      _migration, new_code = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, email: "new@example.com")
+
+      expect(new_code).to be_present
+      expect(described_class.find_by_code(code)).to be_nil
     end
 
     it "refreshes signed URLs without clearing products that already imported" do

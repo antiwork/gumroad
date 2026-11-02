@@ -23,7 +23,8 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
       success: true,
       migration_id: migration.public_id,
       status: migration.status,
-      onboarding_url: partner_migration_url(migration_code: code, host: DOMAIN, protocol: PROTOCOL),
+      # Absent when the request changed only download URLs: the link that the partner has stays valid.
+      **(code ? { onboarding_url: partner_migration_url(migration_code: code, host: DOMAIN, protocol: PROTOCOL) } : {}),
       expires_at: migration.expires_at.iso8601,
     }, status: migration.previously_new_record? ? :created : :ok
   rescue PartnerMigration::CatalogConflict => e
