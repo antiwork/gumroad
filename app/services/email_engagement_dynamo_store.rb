@@ -40,6 +40,10 @@ class EmailEngagementDynamoStore
   # What the open-time index carries besides its keys and the table's (pk, sk, first_open_at): the
   # two attributes a send side reads off an open. Must match the Terraform projection.
   OPEN_TIME_INDEX_ATTRIBUTES = ["mailer_method", "mailer_args"].freeze
+  # DynamoDB Local builds the index in seconds; a real table's backfill can take hours, so setup gives
+  # up after this long instead of hanging.
+  OPEN_TIME_INDEX_READY_TIMEOUT_SECONDS = 600
+  OPEN_TIME_INDEX_POLL_SECONDS = 2
 
   # A CLICKER# item is a few hundred bytes, so one 4KB read unit of a prefix walk returns well over
   # this many of them, while a keyed read costs a read unit per item. Below this ratio of clickers to
@@ -53,6 +57,10 @@ class EmailEngagementDynamoStore
   # Raised when a partitioned walk was given a deadline and could not reach the end of the
   # partition inside it, so a caller on a web request's budget can degrade instead of blocking.
   class ScanBudgetExceeded < StandardError; end
+
+  # Raised by `create_table!` when the open-time index is not queryable in time. Not a
+  # ResourceInUseException, so the setup callers that rescue that one still fail.
+  class OpenTimeIndexNotReady < StandardError; end
 
   class << self
     attr_writer :client, :deadline_client
@@ -256,7 +264,8 @@ class EmailEngagementDynamoStore
 
     # A table that already exists from before the open-time index (a dev or test container, a branch
     # app) gets the index added, then the ResourceInUseException is re-raised for the callers that
-    # rescue it. Without the index, `purchase_open_records` fails on that table.
+    # rescue it. Without the index, `purchase_open_records` fails on that table. Either way this
+    # returns or re-raises only once the index is ACTIVE.
     def create_table!
       client.create_table(
         table_name:,
@@ -272,6 +281,7 @@ class EmailEngagementDynamoStore
         global_secondary_indexes: [open_time_index_definition],
         billing_mode: "PAY_PER_REQUEST"
       )
+      ensure_open_time_index!
     rescue Aws::DynamoDB::Errors::ResourceInUseException
       ensure_open_time_index!
       raise
@@ -374,18 +384,34 @@ class EmailEngagementDynamoStore
         }
       end
 
+      # DescribeTable lists an index as soon as it starts building, but AWS rejects queries on it until
+      # it is ACTIVE. Running setup again after a timeout resumes the wait on the same build.
       def ensure_open_time_index!
-        indexes = client.describe_table(table_name:).table.global_secondary_indexes.to_a
-        return if indexes.any? { _1.index_name == OPEN_TIME_INDEX }
+        status = open_time_index_status
+        if status.nil?
+          client.update_table(
+            table_name:,
+            attribute_definitions: [
+              { attribute_name: "pk", attribute_type: "S" },
+              { attribute_name: "first_open_at", attribute_type: "S" },
+            ],
+            global_secondary_index_updates: [{ create: open_time_index_definition }]
+          )
+        end
 
-        client.update_table(
-          table_name:,
-          attribute_definitions: [
-            { attribute_name: "pk", attribute_type: "S" },
-            { attribute_name: "first_open_at", attribute_type: "S" },
-          ],
-          global_secondary_index_updates: [{ create: open_time_index_definition }]
-        )
+        waited = 0
+        until status == "ACTIVE"
+          if waited >= OPEN_TIME_INDEX_READY_TIMEOUT_SECONDS
+            raise OpenTimeIndexNotReady, "#{OPEN_TIME_INDEX} on #{table_name} is not ACTIVE after #{waited}s; run setup again once it is"
+          end
+          sleep(OPEN_TIME_INDEX_POLL_SECONDS)
+          waited += OPEN_TIME_INDEX_POLL_SECONDS
+          status = open_time_index_status
+        end
+      end
+
+      def open_time_index_status
+        client.describe_table(table_name:).table.global_secondary_indexes.to_a.find { _1.index_name == OPEN_TIME_INDEX }&.index_status
       end
 
       # This client does not retry, so a timed-out, throttled or failed page means the walk cannot

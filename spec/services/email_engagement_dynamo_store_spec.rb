@@ -415,10 +415,24 @@ describe EmailEngagementDynamoStore do
       }
     end
 
+    # One DescribeTable response per status, in order; nil is a table without the open-time index.
+    def stub_index_statuses(*statuses)
+      client.stub_responses(:describe_table, statuses.map do |status|
+        indexes = status ? [{ index_name: "pk-first_open_at-index", index_status: status }] : []
+        { table: { table_name: described_class.table_name, global_secondary_indexes: indexes } }
+      end)
+    end
+
+    def operations
+      requests.map { _1[:operation_name] }
+    end
+
     it "creates the on-demand table with the generic pk/sk string key schema and the open-time index" do
+      stub_index_statuses("ACTIVE")
+
       described_class.create_table!
 
-      request = requests.sole
+      request = requests.first
       expect(request[:operation_name]).to eq(:create_table)
       expect(request[:params][:table_name]).to eq(described_class.table_name)
       expect(request[:params][:billing_mode]).to eq("PAY_PER_REQUEST")
@@ -436,13 +450,23 @@ describe EmailEngagementDynamoStore do
         ]
       )
       expect(request[:params][:global_secondary_indexes]).to eq([open_time_index])
+      expect(operations).to eq([:create_table, :describe_table])
+    end
+
+    it "returns a new table only once its open-time index is ACTIVE" do
+      stub_index_statuses("CREATING", "CREATING", "ACTIVE")
+
+      described_class.create_table!
+
+      expect(operations).to eq([:create_table, :describe_table, :describe_table, :describe_table])
+      expect(described_class).to have_received(:sleep).with(described_class::OPEN_TIME_INDEX_POLL_SECONDS).twice
     end
 
     context "when the table already exists" do
       before { client.stub_responses(:create_table, "ResourceInUseException") }
 
-      it "adds the open-time index to a table that predates it, then re-raises for the callers that rescue it" do
-        client.stub_responses(:describe_table, { table: { table_name: described_class.table_name } })
+      it "adds the open-time index to a table that predates it and re-raises for the callers that rescue it once the index is ACTIVE" do
+        stub_index_statuses(nil, "CREATING", "ACTIVE")
 
         expect { described_class.create_table! }.to raise_error(Aws::DynamoDB::Errors::ResourceInUseException)
 
@@ -454,14 +478,67 @@ describe EmailEngagementDynamoStore do
             { attribute_name: "first_open_at", attribute_type: "S" },
           ]
         )
+        expect(operations).to eq([:create_table, :describe_table, :update_table, :describe_table, :describe_table])
       end
 
-      it "leaves a table that already has the index alone" do
-        client.stub_responses(:describe_table, { table: { table_name: described_class.table_name, global_secondary_indexes: [{ index_name: "pk-first_open_at-index" }] } })
+      it "leaves a table whose index is ACTIVE alone" do
+        stub_index_statuses("ACTIVE")
 
         expect { described_class.create_table! }.to raise_error(Aws::DynamoDB::Errors::ResourceInUseException)
 
-        expect(requests.map { _1[:operation_name] }).to eq([:create_table, :describe_table])
+        expect(operations).to eq([:create_table, :describe_table])
+        expect(described_class).not_to have_received(:sleep)
+      end
+
+      it "waits for an index that is still building without adding it again" do
+        stub_index_statuses("CREATING", "CREATING", "ACTIVE")
+
+        expect { described_class.create_table! }.to raise_error(Aws::DynamoDB::Errors::ResourceInUseException)
+
+        expect(operations).to eq([:create_table, :describe_table, :describe_table, :describe_table])
+      end
+
+      it "gives up with an error the setup callers do not rescue when the index stays CREATING past the bound" do
+        stub_index_statuses("CREATING")
+
+        expect { described_class.create_table! }.to raise_error(
+          described_class::OpenTimeIndexNotReady,
+          "pk-first_open_at-index on #{described_class.table_name} is not ACTIVE after 600s; run setup again once it is"
+        )
+
+        polls = described_class::OPEN_TIME_INDEX_READY_TIMEOUT_SECONDS / described_class::OPEN_TIME_INDEX_POLL_SECONDS
+        expect(described_class).to have_received(:sleep).exactly(polls).times
+        expect(operations.count(:describe_table)).to eq(polls + 1)
+      end
+    end
+
+    # DynamoDB Local reports an index it is adding as CREATING for a moment, like AWS does for longer.
+    context "against DynamoDB Local" do
+      let(:table_name) { "test_upgrade_#{SecureRandom.hex(4)}_email_engagement" }
+      let(:installment_id) { 10**12 + SecureRandom.random_number(10**9) }
+
+      before do
+        described_class.client = nil
+        allow(described_class).to receive(:table_name).and_return(table_name)
+        allow(described_class).to receive(:sleep).and_call_original
+        described_class.client.create_table(
+          table_name:,
+          attribute_definitions: [{ attribute_name: "pk", attribute_type: "S" }, { attribute_name: "sk", attribute_type: "S" }],
+          key_schema: [{ attribute_name: "pk", key_type: "HASH" }, { attribute_name: "sk", key_type: "RANGE" }],
+          billing_mode: "PAY_PER_REQUEST"
+        )
+      end
+
+      after { described_class.client.delete_table(table_name:) }
+
+      it "adds the index to a table that predates it and hands it back queryable" do
+        described_class.record_open(installment_id:, mailer_method:, mailer_args: "[1, #{installment_id}]")
+
+        expect { described_class.create_table! }.to raise_error(Aws::DynamoDB::Errors::ResourceInUseException)
+
+        indexes = described_class.client.describe_table(table_name:).table.global_secondary_indexes
+        expect(indexes.map { [_1.index_name, _1.index_status] }).to eq([["pk-first_open_at-index", "ACTIVE"]])
+        expect(described_class.purchase_open_records(installment_id, opened_after: 1.minute.ago, opened_before: 1.minute.from_now).map { _1[:purchase_id] }).to eq([1])
       end
     end
   end
