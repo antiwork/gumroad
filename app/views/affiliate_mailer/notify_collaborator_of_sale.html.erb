@@ -68,6 +68,12 @@
   <% end %>
 </div>
 
+<% if @purchase&.is_free_trial_purchase? %>
+  <div>
+    <p>If the subscriber continues with their subscription after their free trial has expired<%= " on #{@free_trial_end_date}" if @free_trial_end_date %>, we'll add your cut to your balance.</p>
+  </div>
+<% end %>
+
 <% if @purchase.nil? || @purchase.is_test_purchase? %>
   <div>
     <p>Because this was a test sale, this amount will not be added to your account balance.</p>

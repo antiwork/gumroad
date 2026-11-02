@@ -255,7 +255,9 @@ class AffiliateMailer < ApplicationMailer
       @buyer_email = @purchase.email.presence || @purchase.purchaser&.email
       # The balance credits the cut MINUS the collaborator's share of the Gumroad fee, so show that
       # deduction; a bare "Your cut" overstates what actually lands in the balance.
-      @fee_share_cents = @purchase.affiliate_credit.fee_cents
+      # A free trial is not charged, so its credit is only posted when the trial converts.
+      @fee_share_cents = @purchase.is_free_trial_purchase? ? 0 : @purchase.affiliate_credit.fee_cents
+      @free_trial_end_date = @purchase.subscription&.free_trial_end_date_formatted
       credited_cents = @purchase.own_affiliate_credit_cents
       @cut = MoneyFormatter.format(credited_cents + @fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
       @fee_share_formatted = MoneyFormatter.format(@fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)

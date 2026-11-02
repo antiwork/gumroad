@@ -2176,7 +2176,8 @@ class Purchase < ApplicationRecord
   def notify_affiliate!
     notify_direct_affiliate_of_collab_sale!
     return unless affiliate.affiliate_user.enable_payment_email?
-    return if own_affiliate_credit_cents == 0
+    # Matches `increment_affiliates_balance!`: a cut that floors below zero is never posted.
+    return unless own_affiliate_credit_cents > 0
 
     after_commit do
       next if destroyed?
