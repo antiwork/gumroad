@@ -635,7 +635,13 @@ export default function PayoutsIndex() {
                 {instant_payout.payable_balances.some(
                   (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
                 ) ? (
-                  <a href="mailto:support@gumroad.com">Contact us for an instant payout</a>
+                  <p>
+                    One day's earnings are over $9,999, the instant payout limit. We'll send them with your{" "}
+                    {instant_payout.standard_payout_frequency} payout.
+                    {instant_payout.payout_frequency === "daily"
+                      ? " Daily instant payouts pause while your balance is over $9,999."
+                      : null}
+                  </p>
                 ) : (
                   <Button
                     size="sm"

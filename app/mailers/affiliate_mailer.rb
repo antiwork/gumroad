@@ -43,8 +43,8 @@ class AffiliateMailer < ApplicationMailer
   end
 
   # `direct_affiliate` is true for the email to the direct affiliate of a collab purchase that credits
-  # both a collaborator and a direct affiliate (:collab_and_affiliates); `affiliate` is then the
-  # collaborator, who gets the default email.
+  # both a collaborator and a direct affiliate; `affiliate` is then the collaborator, who gets the
+  # default email.
   def notify_affiliate_of_sale(purchase_id, direct_affiliate = false)
     # A worker's replica read can see the purchase but not the credit created with it, and the render
     # dereferences nil, so the credit has to come back with the purchase from the primary.
@@ -255,7 +255,9 @@ class AffiliateMailer < ApplicationMailer
       @buyer_email = @purchase.email.presence || @purchase.purchaser&.email
       # The balance credits the cut MINUS the collaborator's share of the Gumroad fee, so show that
       # deduction; a bare "Your cut" overstates what actually lands in the balance.
-      @fee_share_cents = @purchase.affiliate_credit.fee_cents
+      # A free trial is not charged, so its credit is only posted when the trial converts.
+      @fee_share_cents = @purchase.is_free_trial_purchase? ? 0 : @purchase.affiliate_credit.fee_cents
+      @free_trial_end_date = @purchase.subscription&.free_trial_end_date_formatted
       credited_cents = @purchase.own_affiliate_credit_cents
       @cut = MoneyFormatter.format(credited_cents + @fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)
       @fee_share_formatted = MoneyFormatter.format(@fee_share_cents, :usd, no_cents_if_whole: true, symbol: true)

@@ -20,6 +20,7 @@ import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
+import { usePageHeaderOffset } from "$app/components/ui/usePageHeaderOffset";
 
 type PageProps = {
   page: {
@@ -75,6 +76,7 @@ export default function PagesEdit() {
   // covers everything the editor can change. Viewers without it get a
   // read-only editor instead of buttons whose requests would fail.
   const canEdit = !!loggedInUser?.policies.page.create;
+  const headerRef = usePageHeaderOffset();
 
   const [title, setTitle] = React.useState(page.title);
   const [content, setContent] = React.useState(page.content);
@@ -363,6 +365,7 @@ export default function PagesEdit() {
     return (
       <>
         <PageHeader
+          ref={headerRef}
           className="sticky top-0 z-10 bg-body"
           // "Home" matches the pinned entry in the Pages list — the same page
           // shouldn't change names between the list and its editor.
@@ -407,6 +410,7 @@ export default function PagesEdit() {
   return (
     <>
       <PageHeader
+        ref={headerRef}
         className="sticky top-0 z-10 bg-body"
         title={is_new ? "New page" : page.title}
         actions={

@@ -144,6 +144,11 @@ module User::PayoutSchedule
     upcoming_payouts
   end
 
+  # The schedule that pays what a daily instant payout can't, such as a day over the instant cap.
+  def standard_payout_frequency
+    payout_frequency == DAILY ? WEEKLY : payout_frequency
+  end
+
   def payout_amount_for_payout_date(payout_date)
     if payout_frequency == DAILY && Payouts.is_user_payable(self, payout_date - 1, payout_type: Payouts::PAYOUT_TYPE_INSTANT)
       instantly_payable_unpaid_balance_cents_up_to_date(payout_date - 1)

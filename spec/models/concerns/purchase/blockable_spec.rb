@@ -857,6 +857,14 @@ describe Purchase::Blockable do
           expect(PlatformBlock.active.find_by(object_value: blocked_value)).to be_nil
         end
       end
+
+      it "leaves every block in place when the grace cannot be recorded" do
+        purchase.block_buyer!
+        allow($redis).to receive(:setex).and_raise(Redis::CannotConnectError)
+
+        expect { purchase.unblock_buyer! }.to raise_error(Redis::CannotConnectError)
+        expect(PlatformBlock.active.pluck(:object_value)).to include(purchase.email, purchase.browser_guid, purchase.ip_address, purchase.stripe_fingerprint)
+      end
     end
 
     context "when the stripe_fingerprint is nil" do
@@ -1132,6 +1140,68 @@ describe Purchase::Blockable do
               @purchase.mark_failed!
             end.to change { PlatformBlock.count }.from(0).to(4)
             expect(PlatformBlock.pluck(:object_type, :object_value)).to match_array(@expected_blocked_objects)
+          end
+        end
+
+        context "when support unblocked the buyer within the last 24 hours" do
+          before do
+            @guid = SecureRandom.hex
+            3.times do |n|
+              create(:failed_purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: @guid, stripe_fingerprint: SecureRandom.hex, created_at: n.days.ago)
+            end
+            @purchase = create(:purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: @guid, purchase_state: "in_progress", stripe_fingerprint: "hij", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+            @purchase.block_buyer!
+            @purchase.unblock_buyer!
+          end
+
+          it "re-blocks only the IP address and card" do
+            @purchase.mark_failed!
+
+            expect(PlatformBlock.active.pluck(:object_type, :object_value)).to match_array(
+              [["ip_address", @purchase.ip_address], ["charge_processor_fingerprint", "hij"]]
+            )
+            expect(@purchase.comments.pluck(:content)).to include("Buyer blocked; the 24 hours grace after a support unblock kept #{@guid}, #{@purchaser.email} unblocked")
+          end
+
+          it "also blocks the card on the buyer's newest purchase" do
+            create(:purchase, purchaser: @purchaser, stripe_fingerprint: "newest")
+
+            @purchase.mark_failed!
+
+            expect(PlatformBlock.active.charge_processor_fingerprint.pluck(:object_value)).to match_array(["hij", "newest"])
+          end
+
+          it "does not extend the grace on later declines" do
+            keys = $redis.keys("purchase_unblock_grace:*")
+            keys.each { |key| $redis.expire(key, 100) }
+
+            @purchase.mark_failed!
+
+            expect(keys.map { |key| $redis.ttl(key) }).to all(be <= 100)
+          end
+
+          it "still blocks a browser support did not clear" do
+            uncleared_purchase = create(:purchase, purchaser: @purchaser, email: @purchaser.email, browser_guid: SecureRandom.hex, purchase_state: "in_progress", stripe_fingerprint: "klm", charge_processor_id: StripeChargeProcessor.charge_processor_id)
+
+            uncleared_purchase.mark_failed!
+
+            expect(PlatformBlock.active.pluck(:object_type, :object_value)).to include(["browser_guid", uncleared_purchase.browser_guid])
+            expect(uncleared_purchase.comments.order(:id).last.content).not_to include(uncleared_purchase.browser_guid)
+          end
+
+          it "gives the grace keys a 24 hour expiry" do
+            keys = $redis.keys("purchase_unblock_grace:*")
+
+            expect(keys).not_to be_empty
+            expect(keys.map { |key| $redis.ttl(key) }).to all(be_within(5).of(Purchase::Blockable::UNBLOCK_GRACE_PERIOD.to_i))
+          end
+
+          it "blocks the email and browser again once the grace period lapses" do
+            $redis.del(*$redis.keys("purchase_unblock_grace:*"))
+
+            @purchase.mark_failed!
+
+            expect(PlatformBlock.active.pluck(:object_type)).to include("email", "browser_guid")
           end
         end
 

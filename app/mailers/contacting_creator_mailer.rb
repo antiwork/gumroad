@@ -96,11 +96,27 @@ class ContactingCreatorMailer < ApplicationMailer
     do_not_send unless should_send_email?
   end
 
+  DISPUTE_REASON_COPY = {
+    Dispute::REASON_FRAUDULENT => "the cardholder says they did not authorize this charge",
+    Dispute::REASON_UNRECOGNIZED => "the cardholder says they do not recognize this charge",
+    Dispute::REASON_PRODUCT_NOT_RECEIVED => "the cardholder says they did not receive the product",
+    Dispute::REASON_PRODUCT_UNACCEPTABLE => "the cardholder says the product was defective or not as described",
+    Dispute::REASON_DUPLICATE => "the cardholder says they were charged more than once for the same purchase",
+    Dispute::REASON_SUBSCRIPTION_CANCELED => "the cardholder says they were charged after canceling their subscription",
+    Dispute::REASON_CREDIT_NOT_PROCESSED => "the cardholder says they are owed a refund or credit they have not received",
+    Dispute::REASON_DEBIT_NOT_AUTHORIZED => "the account holder says they did not authorize this bank debit",
+  }.freeze
+  private_constant :DISPUTE_REASON_COPY
+
   def chargeback_notice(dispute_id)
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
     @is_paypal = @disputable.charge_processor == PaypalChargeProcessor.charge_processor_id
     @seller = @disputable.seller
+    @dispute_reason_copy = DISPUTE_REASON_COPY[dispute.reason]
+    # The "they don't recognize Gumroad" paragraph guesses a reason of its own, so it only
+    # belongs when the email names no reason, or one that reads the same way.
+    @explain_unrecognized_charge = @dispute_reason_copy.nil? || dispute.reason.in?([Dispute::REASON_FRAUDULENT, Dispute::REASON_UNRECOGNIZED])
     @balance_debit = chargeback_balance_debit(@disputable)
     @win_credit = chargeback_win_credit(@disputable, @balance_debit)
     # Mirrors the guard on ContactingCreatorMailer.chargeback_won in handle_event_dispute_won!.
@@ -151,6 +167,7 @@ class ContactingCreatorMailer < ApplicationMailer
     dispute = Dispute.find(dispute_id)
     @disputable = dispute.disputable
     @seller = @disputable.seller
+    @dispute_reason_copy = DISPUTE_REASON_COPY[dispute.reason]
     @dispute_evidence = dispute.dispute_evidence
     return do_not_send unless @dispute_evidence&.accepting_evidence?
 

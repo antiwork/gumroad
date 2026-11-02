@@ -35,6 +35,17 @@ describe Api::Internal::Installments::AudienceCountsController do
       expect(response).to have_http_status(:not_found)
     end
 
+    it "withholds a has-not-clicked count when the clickers it leaves out are below the floor" do
+      index_model_records(AudienceMember)
+      clicked_post = create(:seller_post, seller:, published_at: 1.day.ago)
+      allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_purchase_ids).with(clicked_post.id).and_return([product1_purchase2.id])
+
+      get :show, params: { id: create(:audience_post, seller:, not_clicked_post_id: clicked_post.external_id).external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq({ "count" => nil })
+    end
+
     it "returns audience count" do
       # Counts are served from Elasticsearch, but the fixtures' indexing jobs only sit
       # in the fake Sidekiq queue — run them synchronously so the index has the members.

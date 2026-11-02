@@ -6,7 +6,7 @@
 class Api::V2::ProductBuildsController < Api::V2::BaseController
   before_action { doorkeeper_authorize! :edit_products }
   before_action :fetch_product
-  before_action :set_build, only: [:show, :promote]
+  before_action :set_build, only: [:show, :promote, :select_demo, :unselect_demo]
 
   def index
     render_response(true, builds: @product.product_builds.map(&:as_json))
@@ -56,6 +56,19 @@ class Api::V2::ProductBuildsController < Api::V2::BaseController
   def promote
     @build.promote!
     render_response(true, build: @build.reload.as_json)
+  end
+
+  def select_demo
+    return render_response(false, message: "This build's zip could not be unpacked, so it cannot play. Deploy a fixed zip as a new build.") if @build.site_unpack_error.present?
+    return render_response(false, message: "This build is what buyers get. Deploy a separate build to use as the demo.") if @build.purchased_version?
+
+    @build.select_as_demo!
+    render_response(true, build: @build.reload.as_json)
+  end
+
+  def unselect_demo
+    @build.unselect_as_demo!
+    render_response(true, build: @build.as_json)
   end
 
   private

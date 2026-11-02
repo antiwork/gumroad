@@ -53,7 +53,7 @@ describe "Profile custom HTML page follow bridge", type: :system, js: true do
       click_on "Subscribe"
       # The wrapper's reply fills the message slot and flags the form, so a
       # page can show a confirmation with no scripting of its own.
-      expect(page).to have_text("Check your inbox to confirm your follow request.", wait: 10)
+      expect(page).to have_text("Check your inbox to confirm your follow request to #{seller.name_or_username}.", wait: 10)
       expect(page).to have_css('form[data-gumroad-follow-state="success"]')
     end
 

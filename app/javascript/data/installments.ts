@@ -25,6 +25,7 @@ export type Installment = {
   affiliate_products?: string[];
   waitlisted_products?: string[];
   not_clicked_post_id?: string | null;
+  opened_post_id?: string | null;
   paid_more_than_cents: number | null;
   paid_less_than_cents: number | null;
   created_after?: string;
@@ -55,21 +56,23 @@ export type PublishedInstallment = SavedInstallment & {
   published_at: string;
   non_opener_resends: {
     requested_at: string;
-    delivery_count: number;
+    delivery_count: number | null;
     completed: boolean;
     expired: boolean;
     open_count: number | null;
     open_rate: number | null;
   }[];
   delivery: {
-    status: "sent" | "sending" | "waiting" | "incomplete" | "expired" | "abandoned" | "stopped";
-    delivered_count: number;
+    status: "sent" | "sending" | "waiting" | "incomplete" | "expired" | "abandoned" | "stopped" | "too_few_recipients";
+    delivered_count: number | null;
     remaining_count: number | null;
     scheduled_for: string | null;
     retrying: boolean;
   } | null;
   // Every send expired, so there are no recipients to resend to.
   never_reached_anyone: boolean;
+  // A "Has opened" or "Has not clicked" send whose size would single out buyers: every delivery count and rate is null.
+  delivery_counts_withheld: boolean;
 };
 
 export type ScheduledInstallment = SavedInstallment & {
@@ -118,6 +121,12 @@ export type InstallmentFormContext = {
   from_tab: EmailTab | null;
 };
 
+// Mirrors Installment::MINIMUM_BEHAVIOR_SEGMENT_SIZE: the server withholds smaller behavior-segment counts.
+export const MINIMUM_BEHAVIOR_SEGMENT_SIZE = 5;
+
+// Shown for a count the server withheld (null): the segment, or the part it leaves out, is too small to show.
+export const WITHHELD_COUNT_TEXT = "Hidden for privacy";
+
 export async function getAudienceCount(externalId: string) {
   const response = await request({
     method: "GET",
@@ -126,7 +135,7 @@ export async function getAudienceCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  return cast<{ count: number }>(await response.json());
+  return cast<{ count: number | null }>(await response.json());
 }
 
 type RecipientCountRequestPayload = {
@@ -145,6 +154,7 @@ type RecipientCountRequestPayload = {
   affiliate_products: string[] | null;
   waitlisted_products: string[] | null;
   not_clicked_post_id: string | null;
+  opened_post_id: string | null;
 };
 export function getRecipientCount(requestPayload: RecipientCountRequestPayload) {
   const abort = new AbortController();
@@ -158,7 +168,7 @@ export function getRecipientCount(requestPayload: RecipientCountRequestPayload) 
       if (!res.ok) throw new ResponseError();
       return res.json();
     })
-    .then((json) => cast<{ recipient_count: number; audience_count: number }>(json));
+    .then((json) => cast<{ recipient_count: number | null; audience_count: number }>(json));
 
   return {
     response,
@@ -188,11 +198,14 @@ export async function getNonOpenerCount(externalId: string) {
   });
 
   if (!response.ok) throw new ResponseError();
-  // `count` is null when the audience is too large to count within the request; the
-  // resend itself still works (recipients are resolved in a background job).
-  return cast<{ count: number | null; recently_resent: boolean; audience_filtered_out: boolean }>(
-    await response.json(),
-  );
+  // `count` is null when the audience is too large to count within the request, or when it is
+  // withheld; the resend itself still works (recipients are resolved in a background job).
+  return cast<{
+    count: number | null;
+    count_withheld?: boolean;
+    recently_resent: boolean;
+    audience_filtered_out: boolean;
+  }>(await response.json());
 }
 
 export async function resendToNonOpeners(externalId: string) {

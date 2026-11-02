@@ -9,6 +9,7 @@ export { PublishButton } from "$app/components/WorkflowsPage/PublishButton";
 const PAST_CUSTOMERS_LABELS: Record<WorkflowTrigger, string> = {
   new_subscriber: "Also send to past email subscribers",
   member_cancels: "Also send to past members who canceled",
+  opened_no_click: "Also send to past openers of the watched email",
   new_affiliate: "Also send to past affiliates",
   purchase: "Also send to past customers",
   abandoned_cart: "Also send to past customers",

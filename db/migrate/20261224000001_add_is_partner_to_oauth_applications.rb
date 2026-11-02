@@ -4,7 +4,7 @@ class AddIsPartnerToOauthApplications < ActiveRecord::Migration[8.1]
   # This migration first ran as these numbers. main uses them for its own migrations now, so a database
   # with main's migrations records them too, and down keeps the column there, as CONTRIBUTING.md asks
   # for a renumbered migration.
-  SUPERSEDED_VERSIONS = %w[20261220000001 20261221000001].freeze
+  SUPERSEDED_VERSIONS = %w[20261220000001 20261221000001 20261222000001 20261223000006].freeze
 
   def up
     add_column :oauth_applications, :is_partner, :boolean, default: false, null: false, if_not_exists: true

@@ -864,7 +864,7 @@ module User::Stats
       total += result.aggregations.fee_refunded_cents_total.value
       total -= result.aggregations.affiliate_credit_amount_cents_total.value
       total += result.aggregations.affiliate_credit_amount_partially_refunded_cents_total.value
-      # A collab purchase can also credit a direct affiliate (:collab_and_affiliates).
+      # A collab purchase can also credit a direct affiliate.
       total -= result.aggregations.direct_affiliate_credit_amount_cents_total.value
       total += result.aggregations.direct_affiliate_credit_amount_partially_refunded_cents_total.value
       total.to_i

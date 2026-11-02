@@ -17,7 +17,7 @@ class InstantPayoutsService
     return { success: false, error: "You need at least $1 in settled balance to request an instant payout." } if balances.sum(&:holding_amount_cents) < StripePayoutProcessor::MINIMUM_INSTANT_PAYOUT_AMOUNT_CENTS
 
     if balances.any? { |balance| balance.holding_amount_cents > StripePayoutProcessor::MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS }
-      return { success: false, error: "Your balance exceeds the maximum instant payout amount. Please contact support for assistance." }
+      return { success: false, error: "One day's earnings are over $9,999, the instant payout limit. We'll send them with your #{seller.standard_payout_frequency} payout." }
     end
 
     balances.each_with_object([[]]) do |balance, batches|

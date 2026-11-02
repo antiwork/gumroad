@@ -38,6 +38,8 @@ class PayoutsPresenter
       # frontend so the fee shown to the creator is always the rate the Stripe
       # payout processor deducts, rather than a separately maintained constant.
       instant_payout_fee_percent: StripePayoutProcessor::INSTANT_PAYOUT_FEE_PERCENT,
+      payout_frequency: seller.payout_frequency,
+      standard_payout_frequency: seller.standard_payout_frequency,
       payable_amount_cents: seller.instantly_payable_unpaid_balance_cents,
       unpaid_amount_cents: seller.instant_payout_unsettled_balance_cents,
       payable_balances: seller.instantly_payable_unpaid_balances.sort_by(&:date).reverse.map do |balance|

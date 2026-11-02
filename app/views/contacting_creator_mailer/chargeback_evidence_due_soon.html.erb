@@ -12,6 +12,11 @@
       </p>
     <% end %>
   <% end %>
+  <% if @dispute_reason_copy %>
+    <p>
+      Reason given for the dispute: <%= @dispute_reason_copy %>.
+    </p>
+  <% end %>
   <p>
     <strong>
       Please submit any additional information by <%= @seller_response_due_at_formatted %>.

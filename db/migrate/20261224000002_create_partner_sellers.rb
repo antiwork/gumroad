@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 class CreatePartnerSellers < ActiveRecord::Migration[8.1]
-  # Renumbered after main took 20261221000001. A preview database that ran the old number already has
-  # the table, so up skips it, and down keeps it while the old number is recorded.
-  SUPERSEDED_VERSION = "20261221000002"
+  # Renumbered each time main took a version this branch had used. A preview database that ran an old
+  # number already has the table, so up skips it, and down keeps it while an old number is recorded.
+  SUPERSEDED_VERSIONS = %w[20261221000002 20261222000002 20261223000007].freeze
 
   def up
     create_table :partner_sellers, if_not_exists: true do |t|
@@ -22,7 +22,7 @@ class CreatePartnerSellers < ActiveRecord::Migration[8.1]
   end
 
   def down
-    return if select_value("SELECT 1 FROM schema_migrations WHERE version = #{connection.quote(SUPERSEDED_VERSION)}").present?
+    return if select_value("SELECT 1 FROM schema_migrations WHERE version IN (#{SUPERSEDED_VERSIONS.map { connection.quote(_1) }.join(", ")})").present?
 
     drop_table :partner_sellers
   end

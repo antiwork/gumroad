@@ -33,6 +33,7 @@ module ProductBuilds::PlayerDocument
   # bytes right after the doctype, before any tag of the page. There the parser opens <html> and <head>
   # for them, so no tag has to be found, and a <head> inside a comment or a script cannot mislead it.
   # Anything before the doctype would put the page in quirks mode.
+  # A nil `save_url` keeps the build's storage in memory for the page's life.
   def self.render(html, save_data:, save_url:)
     config = {
       save: save_data,
@@ -69,8 +70,9 @@ module ProductBuilds::PlayerDocument
 
   # `request_origin` is the app or custom-domain origin serving the frame, and `cdn_origin` the
   # host the build's other files redirect to. 'self' is not used: on a sandboxed document it would
-  # not match the frame's own URL in every browser.
-  def self.content_security_policy(request_origin:, cdn_origin:)
+  # not match the frame's own URL in every browser. `frame_ancestors` are other origins that may
+  # frame the player page.
+  def self.content_security_policy(request_origin:, cdn_origin:, frame_ancestors: [])
     hosts = "#{request_origin} #{cdn_origin}"
     [
       "sandbox #{SANDBOX}",
@@ -82,7 +84,7 @@ module ProductBuilds::PlayerDocument
       "font-src #{hosts} blob: data:",
       "connect-src #{hosts} blob: data:",
       "worker-src blob:",
-      "frame-ancestors #{request_origin}",
+      "frame-ancestors #{[request_origin, *frame_ancestors].join(" ")}",
       "form-action 'none'",
       "base-uri 'none'",
     ].join("; ")

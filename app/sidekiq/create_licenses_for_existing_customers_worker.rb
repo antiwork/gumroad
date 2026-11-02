@@ -11,6 +11,14 @@ class CreateLicensesForExistingCustomersWorker
     product = Link.find(product_id)
 
     product.sales.successful_gift_or_nongift.not_is_gift_sender_purchase.not_recurring_charge.find_each do |purchase|
+      # An archived original (replaced by a plan change) is not where the license is read from.
+      if purchase.is_archived_original_subscription_purchase?
+        next if purchase.license.present?
+
+        purchase = purchase.subscription&.original_purchase
+        next if purchase.nil?
+      end
+
       # Skip purchases that shouldn't emit a license key — e.g. a variant whose
       # per-variant content doesn't embed a license-key block (free variants of
       # an otherwise licensed product).

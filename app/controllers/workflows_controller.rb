@@ -103,7 +103,7 @@ class WorkflowsController < Sellers::BaseController
 
     def workflow_params
       params.require(:workflow).permit(
-        :name, :workflow_type, :variant_external_id, :workflow_trigger,
+        :name, :workflow_type, :variant_external_id, :workflow_trigger, :workflow_trigger_post_id,
         :paid_more_than, :paid_less_than, :bought_from,
         :created_after, :created_before, :permalink,
         :send_to_past_customers, :save_action_name,

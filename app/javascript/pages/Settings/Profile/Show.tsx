@@ -39,6 +39,7 @@ import { Label } from "$app/components/ui/Label";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { Textarea } from "$app/components/ui/Textarea";
+import { usePageHeaderOffset } from "$app/components/ui/usePageHeaderOffset";
 import { useReactNativeMessage } from "$app/components/useReactNativeMessage";
 
 type ProfileSettingsTab = "about" | "design" | "pages" | "share";
@@ -180,6 +181,7 @@ export default function SettingsPage() {
 
   const isDirtyRef = React.useRef(isDirty);
   isDirtyRef.current = isDirty;
+  const headerRef = usePageHeaderOffset();
   // Remembers the user's most recent answer to the unsaved-changes prompt so that a burst of
   // navigation attempts (for example a caller that retries after being blocked, or several visits
   // queued while the dialog was open) reuses that answer instead of opening one dialog per attempt.
@@ -414,6 +416,7 @@ export default function SettingsPage() {
         <div className="border-b border-border p-4 md:p-8">{tabBar}</div>
       ) : (
         <PageHeader
+          ref={headerRef}
           className="sticky top-0 z-10 bg-body"
           title="Profile settings"
           actions={

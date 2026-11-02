@@ -58,7 +58,10 @@ class Installment < ApplicationRecord
   }.freeze
 
   attr_json_data_accessor :workflow_trigger
+  attr_json_data_accessor :workflow_trigger_post_id
   attr_json_data_accessor :single_recipient_purchase_id
+  # Read through `delivery_counts_withheld?`: the json_data reader would turn a stored false into nil.
+  attr_json_data_writer :delivery_counts_withheld
 
   belongs_to :link, optional: true
   belongs_to :base_variant, optional: true
@@ -102,6 +105,12 @@ class Installment < ApplicationRecord
             check_for_column: false
 
   scope :published,                       -> { where.not(published_at: nil) }
+  # The seller's posts whose opens and clicks can be read back per buyer: only a post emailed through
+  # the purchase mailer keys its clicks to a buyer, since a follower or affiliate send keys them to
+  # that follower or affiliate. Feeds the composer's behavior filters and a workflow's opened-no-click
+  # trigger; a saved choice that has fallen out of the recent window stays in the list.
+  scope :emailed_posts,                   -> { alive.not_workflow_installment.published.send_emails.not_single_recipient_email.seller_or_product_or_variant_type }
+
   scope :not_published,                   -> { where(published_at: nil) }
   scope :scheduled,                       -> { not_published.ready_to_publish }
   scope :draft,                           -> { not_published.not_ready_to_publish }
@@ -266,9 +275,23 @@ class Installment < ApplicationRecord
   }
 
   SENDING_LIMIT = 100
+  MINIMUM_BEHAVIOR_SEGMENT_SIZE = 5
+  BEHAVIOR_SEGMENT_TOO_SMALL_MESSAGE = "Fewer than #{MINIMUM_BEHAVIOR_SEGMENT_SIZE} customers match these filters. Remove a filter to send this email."
   MINIMUM_SALES_CENTS_VALUE = 100_00 # $100
 
   MEMBER_CANCELLATION_WORKFLOW_TRIGGER = "member_cancellation"
+  OPENED_NO_CLICK_WORKFLOW_TRIGGER = "opened_no_click"
+
+  # Options for the pickers that name one of the seller's emails (the composer's behavior filters and
+  # a workflow's opened-no-click trigger). A saved choice that has fallen out of the recent window
+  # stays in the list.
+  def self.emailed_post_options(seller:, limit:, saved_ids: [])
+    posts = seller.installments.emailed_posts.order(published_at: :desc).limit(limit)
+              .map { { external_id: _1.external_id, name: _1.displayed_name } }
+    missing = Array.wrap(saved_ids).compact_blank.uniq - posts.map { _1[:external_id] }
+    saved = missing.filter_map { seller.installments.alive.find_by_external_id(_1) }
+    saved.map { { external_id: _1.external_id, name: _1.displayed_name } } + posts
+  end
 
   def user
     seller.presence || link.user
@@ -325,6 +348,12 @@ class Installment < ApplicationRecord
     # `workflow_trigger` is copied down at save time, so it goes stale when the workflow's own
     # trigger changes afterwards. The workflow is the source of truth.
     workflow.present? && workflow.member_cancellation_trigger?
+  end
+
+  def opened_no_click_trigger?
+    return true if workflow_trigger == OPENED_NO_CLICK_WORKFLOW_TRIGGER
+
+    workflow.present? && workflow.opened_no_click_trigger?
   end
 
   def displayed_name
@@ -434,8 +463,9 @@ class Installment < ApplicationRecord
     sale = Purchase.find(purchase_id)
     return if sale.is_recurring_subscription_charge
     # Cancellation posts are delivered on the subscription path, which rechecks the membership
-    # is still ended. This path can't, so stale enqueued jobs bail out here.
-    return if member_cancellation_trigger?
+    # is still ended, and opened-no-click posts on their own path, which rechecks the click. This
+    # path can't, so purchase-keyed jobs for either (a resubscription reschedule, say) bail out here.
+    return if member_cancellation_trigger? || opened_no_click_trigger?
 
     sale = sale.original_purchase
     return unless sale.can_contact?
@@ -480,6 +510,40 @@ class Installment < ApplicationRecord
     SentPostEmail.ensure_uniqueness(post: self, email: sale.email, source: sale) do
       recipient = { email: sale.email, purchase: sale, subscription: }
       recipient[:url_redirect] = generate_url_redirect_for_subscription(sale) if has_files?
+      send_email(recipient)
+    end
+  end
+
+  # A recipient's own open of the email this workflow watches starts their clock, so the scan that
+  # found them owns the timing and this only re-reads what can have changed since: a click, an
+  # unsubscribed or bounced address, or a refund.
+  def send_installment_from_workflow_for_opened_no_click(purchase_id, recipient_digest: nil)
+    return unless opened_no_click_trigger?
+    # Without the digest there is no click to rule out.
+    return if recipient_digest.blank?
+    # The scan stops when the watched email is gone; a send it queued before that has to stop there
+    # too, or a watched email deleted or unpublished in between still mails the recipients it found.
+    watched_post = workflow&.workflow_trigger_post
+    return if watched_post.nil?
+    # An open that turns into a click between the scan and this send is still a click, and the digest
+    # the scan walked is the same key the click was written under.
+    return if EmailEngagementDynamoStore.clicked?(installment_id: watched_post.id, recipient_digest:)
+
+    sale = Purchase.find_by(id: purchase_id)
+    return if sale.nil?
+
+    sale = sale.original_purchase
+    return if sale.subscription.present? && !sale.subscription.alive?
+    return unless sale.can_contact?
+    return if sale.chargedback_not_reversed_or_refunded?
+
+    return if already_emailed_workflow_purchase?(sale)
+
+    return if workflow.present? && !workflow.applies_to_purchase?(sale)
+
+    SentPostEmail.ensure_uniqueness(post: self, email: sale.email, source: sale) do
+      recipient = { email: sale.email, purchase: sale }
+      recipient[:url_redirect] = generate_url_redirect_for_purchase(sale) if has_files?
       send_email(recipient)
     end
   end
@@ -680,7 +744,7 @@ class Installment < ApplicationRecord
       send_emails: send_emails?,
       shown_on_profile: shown_on_profile?,
       audience_count: include_audience_count ? api_audience_members_count : nil,
-      recipients_count: published? ? customer_count : nil,
+      recipients_count: published? ? api_recipients_count : nil,
       url: published? ? public_page_location : nil,
       created_at:,
       updated_at:,
@@ -805,7 +869,12 @@ class Installment < ApplicationRecord
   # purchase_id) is the right key because AudienceMember collapses a buyer's multiple
   # purchases into one row keyed by (seller_id, email), so the email_info purchase
   # may not match the audience row's max(purchase_id).
-  def unopened_recipient_emails
+  #
+  # An Everyone post is the exception: it addresses followers and affiliates as well as buyers, and
+  # only its buyer recipients get purchase-keyed email_infos rows, so it is computed from the post's
+  # own sent_post_emails minus Dynamo's per-recipient opens (recorded for every post type).
+  def unopened_recipient_emails(deadline: nil)
+    return emailed_recipient_emails - dynamo_opened_recipient_emails(deadline:) if audience_type?
     return [] unless seller_or_product_or_variant_type?
 
     emailed_ids = emailed_recipient_purchase_ids
@@ -814,6 +883,23 @@ class Installment < ApplicationRecord
     emailed_emails = purchase_emails_for(emailed_ids)
     opened_emails = purchase_emails_for(opened_recipient_purchase_ids)
     (emailed_emails - opened_emails).to_a
+  end
+
+  # Emails this post has been sent to, written at the original send's handoff. A non-opener resend
+  # only targets a subset of them, so this stays the original recipient set however often it is resent.
+  def emailed_recipient_emails
+    sent_post_emails.distinct.pluck(:email).compact.map(&:downcase).to_set
+  end
+
+  # Emails of the people who have opened this post's email. The Dynamo item names the purchase,
+  # follower or affiliate the send addressed, so all three have to be resolved to reach the
+  # follower and affiliate recipients an Everyone post has. Named apart from the memoized
+  # `opened_recipient_emails(post_external_id)` above, which serves the purchase-keyed filters.
+  def dynamo_opened_recipient_emails(deadline: nil)
+    ids = EmailEngagementDynamoStore.opened_recipient_ids(id, deadline:)
+    emails_for(Purchase, ids[:purchase_ids])
+      .merge(emails_for(Follower, ids[:follower_ids]))
+      .merge(affiliate_emails_for(ids[:affiliate_ids]))
   end
 
   # Accepts a precomputed `candidates` list so callers that already have the unopened
@@ -838,7 +924,7 @@ class Installment < ApplicationRecord
   # Whether a "resend to non-openers" blast is applicable to this post. A post whose send
   # expired and never reached anyone has no non-openers.
   def resendable_to_non_openers?
-    published? && send_emails? && seller_or_product_or_variant_type? && !never_reached_anyone?
+    published? && send_emails? && (seller_or_product_or_variant_type? || audience_type?) && !never_reached_anyone?
   end
 
   def unique_click_count
@@ -1033,34 +1119,89 @@ class Installment < ApplicationRecord
       params[:waitlisted_product_ids] = seller.products.where(unique_permalink: waitlisted_products).ids.presence || [nil]
     end
 
+    # A post that does not resolve, or an empty opener list, must match nobody: compact_blank!
+    # below would drop an empty list and send to everyone, while "" matches nobody.
+    params[:include_emails] = opened_recipient_emails(opened_post_id).presence || [""] if opened_post_id.present?
+
     if not_clicked_post_id.present?
       clicked_emails = clicked_recipient_emails(not_clicked_post_id)
-      params[:exclude_emails] = clicked_emails if clicked_emails.any?
+      if clicked_emails.nil?
+        params[:include_emails] = [""]
+      elsif clicked_emails.any?
+        params[:exclude_emails] = clicked_emails
+      end
     end
 
     params.compact_blank!
   end
 
-  # Emails of the buyers who clicked the referenced post's email. Resolved here, where a saved
-  # filter turns into query params, so the count the seller sees and the recipients a blast
-  # picks up go through one path. A reference that no longer resolves excludes nobody: worst
-  # case the filter behaves as if it were not set, never as if everyone had clicked.
+  # Emails of the buyers who clicked the referenced post's email, or nil when it is not one of
+  # the seller's posts. Resolved here, where a saved filter turns into query params, so the
+  # count the seller sees and the recipients a blast picks up go through one path.
   def clicked_recipient_emails(post_external_id)
-    post = seller.installments.find_by_external_id(post_external_id)
-    return [] if post.blank?
+    (@clicked_recipient_emails ||= {})[post_external_id] ||= begin
+      post = seller.installments.find_by_external_id(post_external_id)
+      post && purchase_emails_for(EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)).to_a
+    end
+  end
 
-    purchase_ids = EmailEngagementDynamoStore.clicked_recipient_purchase_ids(post.id)
-    return [] if purchase_ids.empty?
-
-    purchase_emails_for(purchase_ids).to_a
+  # Both lists are memoized per instance: each read scans a whole Dynamo partition, and one
+  # request, blast or launch card resolves the filters several times.
+  def opened_recipient_emails(post_external_id)
+    (@opened_recipient_emails ||= {})[post_external_id] ||= begin
+      post = seller.installments.find_by_external_id(post_external_id)
+      post ? purchase_emails_for(EmailEngagementDynamoStore.opened_recipient_purchase_ids(post.id)).to_a : []
+    end
   end
 
   def audience_members_count(limit = nil)
     AudienceMember.filter_count(seller_id:, params: audience_members_filter_params, limit:)
   end
 
+  def behavior_filtered? = opened_post_id.present? || not_clicked_post_id.present?
+
+  # The count a seller may see, for the saved filters or a per-type split of them; nil when withheld.
+  def displayed_audience_members_count(params = audience_members_filter_params)
+    count = AudienceMember.filter_count(seller_id:, params:)
+    behavior_filtered? && behavior_count_withheld?(count, params) ? nil : count
+  end
+
+  # Stored by SendPostBlastEmailsJob against the audience the send went to. A post sent before
+  # that was stored is held against today's audience.
+  def delivery_counts_withheld?(sent_count = customer_count.to_i)
+    return false unless send_emails? && behavior_filtered?
+    return json_data["delivery_counts_withheld"] if json_data.key?("delivery_counts_withheld")
+
+    behavior_count_withheld?(sent_count, audience_members_filter_params)
+  end
+
+  # A behavior segment is withheld when it, or the part of a wider audience it leaves out, is
+  # below the floor: the seller reads the wider count by turning a behavior filter off, so
+  # either side can single out a buyer. The block, when given, counts a wider audience's params.
+  def behavior_count_withheld?(count, params, &wider_count)
+    return true if count < MINIMUM_BEHAVIOR_SEGMENT_SIZE
+
+    wider_count ||= ->(wider_params) { AudienceMember.filter_count(seller_id:, params: wider_params) }
+    wider = [params.except(:include_emails, :exclude_emails)]
+    wider += [params.except(:include_emails), params.except(:exclude_emails)] if params.key?(:include_emails) && params.key?(:exclude_emails)
+    wider.any? { (wider_count.call(_1) - count).in?(1...MINIMUM_BEHAVIOR_SEGMENT_SIZE) }
+  end
+
+  # Sending to fewer would single those buyers out, and the sent count would give away the size
+  # the composer withholds.
+  def behavior_segment_below_floor?
+    send_emails? && behavior_filtered? &&
+      audience_members_count(MINIMUM_BEHAVIOR_SEGMENT_SIZE) < MINIMUM_BEHAVIOR_SEGMENT_SIZE
+  end
+
   def api_audience_members_count
-    audience_members_count
+    displayed_audience_members_count
+  rescue StandardError
+    nil
+  end
+
+  def api_recipients_count
+    delivery_counts_withheld? ? nil : customer_count
   rescue StandardError
     nil
   end
@@ -1317,9 +1458,28 @@ class Installment < ApplicationRecord
     # quietly abandon the primary key and scan the entire purchases table. Returns a Set
     # because every caller only needs membership/difference.
     def purchase_emails_for(purchase_ids)
+      emails_for(Purchase, purchase_ids)
+    end
+
+    # Same chunked lookup for any record whose email a Dynamo engagement item can name
+    # (a purchase, a follower, or the user behind an affiliate).
+    # An affiliate recipient is addressed by its Affiliate row id (post_blast_sending builds
+    # `Affiliate.new(id: member.affiliate_id)`), and that row's address is its affiliate user's.
+    def affiliate_emails_for(ids)
       emails = Set.new
-      purchase_ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
-        emails.merge(Purchase.where(id: ids_slice).pluck(:email).compact.map(&:downcase))
+      ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
+        Affiliate.where(id: ids_slice).includes(:affiliate_user).each do |affiliate|
+          email = affiliate.affiliate_user&.email
+          emails << email.downcase if email.present?
+        end
+      end
+      emails
+    end
+
+    def emails_for(relation, ids)
+      emails = Set.new
+      ids.each_slice(PURCHASE_LOOKUP_BATCH_SIZE) do |ids_slice|
+        emails.merge(relation.where(id: ids_slice).pluck(:email).compact.map(&:downcase))
       end
       emails
     end

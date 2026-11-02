@@ -10,11 +10,13 @@ describe EmailEngagementDynamoStore do
 
   before do
     described_class.client = client
+    described_class.deadline_client = client
     allow(described_class).to receive(:sleep)
   end
 
   after do
     described_class.client = nil
+    described_class.deadline_client = nil
   end
 
   def requests
@@ -594,6 +596,219 @@ describe EmailEngagementDynamoStore do
 
       expect(described_class.clicked_recipient_purchase_ids(123)).to eq([456, 789])
       expect(requests.map { _1[:params][:exclusive_start_key] }).to eq([nil, { "pk" => { s: "123" }, "sk" => { s: "CLICKER#aaa" } }])
+    end
+  end
+
+  describe ".opened_recipient_ids" do
+    let(:opened_purchase) { { "sk" => "OPEN#aaa", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" } }
+
+    it "groups the openers by the record the send addressed them as" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            opened_purchase,
+            { "sk" => "OPEN#bbb", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[12, 123]" },
+            { "sk" => "OPEN#ccc", "mailer_method" => "CreatorContactingCustomersMailer.direct_affiliate_installment", "mailer_args" => "[34, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [12], affiliate_ids: [34])
+    end
+
+    it "reads the open items of that installment only" do
+      client.stub_responses(:query, { items: [] })
+
+      described_class.opened_recipient_ids(123)
+
+      expect(requests.last[:params]).to include(
+        table_name: described_class.table_name,
+        key_condition_expression: "pk = :pk AND begins_with(sk, :prefix)",
+        expression_attribute_values: { ":pk" => { s: "123" }, ":prefix" => { s: "OPEN#" } }
+      )
+    end
+
+    it "returns a recipient once, however many times they opened" do
+      client.stub_responses(:query, { items: [opened_purchase, opened_purchase.merge("sk" => "OPEN#zzz")] })
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [456], follower_ids: [], affiliate_ids: [])
+    end
+
+    it "ignores an item whose args carry no id" do
+      client.stub_responses(:query, { items: [{ "sk" => "OPEN#aaa", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment" }] })
+
+      expect(described_class.opened_recipient_ids(123)).to eq(purchase_ids: [], follower_ids: [], affiliate_ids: [])
+    end
+
+    it "stops the walk when the caller's deadline has already passed" do
+      client.stub_responses(:query, { items: [opened_purchase] })
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) - 1)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+    end
+
+    it "gives up on a page that times out inside the caller's deadline" do
+      client.stub_responses(:query, Seahorse::Client::NetworkingError.new(Net::ReadTimeout.new))
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+    end
+
+    it "gives up on a throttled or failed page inside the caller's deadline, but raises it without one" do
+      client.stub_responses(:query, ["ProvisionedThroughputExceededException", "InternalServerError", "InternalServerError"])
+
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+      expect do
+        described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)
+      end.to raise_error(EmailEngagementDynamoStore::ScanBudgetExceeded)
+      expect { described_class.opened_recipient_ids(123) }.to raise_error(Aws::DynamoDB::Errors::InternalServerError)
+    end
+
+    it "reads with a short, unretried client only when the caller has a deadline" do
+      described_class.deadline_client = nil
+      bounded_client = described_class.deadline_client
+
+      expect(bounded_client.config).to have_attributes(http_read_timeout: 0.3, http_open_timeout: 0.3, retry_limit: 0, max_attempts: 1)
+      allow(bounded_client).to receive(:query).and_return(double(items: [opened_purchase], last_evaluated_key: nil))
+
+      expect(described_class.opened_recipient_ids(123, deadline: Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60)[:purchase_ids]).to eq([456])
+      expect(described_class.opened_recipient_ids(123)[:purchase_ids]).to eq([])
+      expect(bounded_client).to have_received(:query).once
+    end
+  end
+
+  describe ".opened_recipient_purchase_ids" do
+    it "returns the buyer behind each purchase installment open, once, from the OPEN items only" do
+      open_item = { "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" }
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            open_item.merge("sk" => "OPEN#aaa"),
+            open_item.merge("sk" => "OPEN#bbb"),
+            { "sk" => "OPEN#ccc", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[12, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.opened_recipient_purchase_ids(123)).to eq([456])
+      expect(requests.last[:params]).to include(
+        expression_attribute_values: { ":pk" => { s: "123" }, ":prefix" => { s: "OPEN#" } }
+      )
+    end
+  end
+
+  describe ".purchase_open_records" do
+    let(:purchase_open) do
+      {
+        "sk" => "OPEN#abc",
+        "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment",
+        "mailer_args" => "[456, 123]",
+        "first_open_at" => "2026-10-01T12:00:00.000Z",
+      }
+    end
+
+    it "returns the buyer, the recipient digest and the first open of each purchase-keyed open" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            purchase_open,
+            { "sk" => "OPEN#def", "mailer_method" => "CreatorContactingCustomersMailer.follower_installment", "mailer_args" => "[9, 123]", "first_open_at" => "2026-10-01T12:00:00.000Z" },
+          ],
+        }
+      )
+
+      expect(described_class.purchase_open_records(123)).to eq(
+        [{ purchase_id: 456, recipient_digest: "abc", first_open_at: Time.zone.iso8601("2026-10-01T12:00:00.000Z") }]
+      )
+    end
+
+    it "drops an open whose timestamp cannot be read" do
+      client.stub_responses(:query, { items: [purchase_open.merge("first_open_at" => "not a time")] })
+
+      expect(described_class.purchase_open_records(123)).to eq([])
+    end
+
+    it "reads the whole partition when it is given no window" do
+      client.stub_responses(:query, { items: [] })
+
+      described_class.purchase_open_records(123)
+
+      expect(requests.last[:params]).not_to have_key(:filter_expression)
+    end
+
+    context "with a window" do
+      let(:opened_after) { Time.zone.iso8601("2026-10-01T00:00:00.000Z") }
+      let(:opened_before) { Time.zone.iso8601("2026-10-02T00:00:00.000Z") }
+
+      # The stubbed client ignores filters, so apply the one the store sent the way DynamoDB would.
+      before do
+        opens = {
+          "early" => "2026-09-30T23:59:59.999Z",
+          "first" => "2026-10-01T00:00:00.000Z",
+          "middle" => "2026-10-01T12:00:00.000Z",
+          "last" => "2026-10-02T00:00:00.000Z",
+          "late" => "2026-10-02T00:00:00.001Z",
+        }.map { |digest, first_open_at| purchase_open.merge("sk" => "OPEN##{digest}", "first_open_at" => first_open_at) }
+        client.stub_responses(:query, lambda do |context|
+          bounds = plain_hash(context.params[:expression_attribute_values])
+          { items: opens.select { _1["first_open_at"].between?(bounds[":opened_after"], bounds[":opened_before"]) } }
+        end)
+      end
+
+      it "filters the read to the opens inside the window, both bounds included" do
+        records = described_class.purchase_open_records(123, opened_after:, opened_before:)
+
+        expect(records.map { _1[:recipient_digest] }).to eq(%w[first middle last])
+        expect(requests.last[:params][:filter_expression]).to eq("first_open_at >= :opened_after AND first_open_at <= :opened_before")
+      end
+
+      it "keeps an open at a bound that carries sub-millisecond precision" do
+        records = described_class.purchase_open_records(123, opened_after:, opened_before: opened_before + 0.0004)
+
+        expect(records.map { _1[:recipient_digest] }).to eq(%w[first middle last])
+      end
+    end
+  end
+
+  describe ".clicked?" do
+    it "is true when the recipient has a clicker item" do
+      client.stub_responses(:get_item, { item: { "pk" => "123", "sk" => "CLICKER#abc" } })
+
+      expect(described_class.clicked?(installment_id: 123, recipient_digest: "abc")).to be(true)
+      expect(requests.last[:params][:key]).to eq({ "pk" => { s: "123" }, "sk" => { s: "CLICKER#abc" } })
+    end
+
+    it "is false when the recipient has no clicker item" do
+      client.stub_responses(:get_item, { item: nil })
+
+      expect(described_class.clicked?(installment_id: 123, recipient_digest: "abc")).to be(false)
+    end
+
+    it "is false without a digest" do
+      expect(described_class.clicked?(installment_id: 123, recipient_digest: "")).to be(false)
+      expect(requests).to be_empty
+    end
+  end
+
+  describe ".clicked_recipient_digests" do
+    it "returns the digest of each recipient who clicked" do
+      client.stub_responses(
+        :query,
+        {
+          items: [
+            { "sk" => "CLICKER#abc", "mailer_method" => "CreatorContactingCustomersMailer.purchase_installment", "mailer_args" => "[456, 123]" },
+          ],
+        }
+      )
+
+      expect(described_class.clicked_recipient_digests(123)).to eq(["abc"])
     end
   end
 end

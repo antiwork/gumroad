@@ -6,6 +6,10 @@ module PageMeta::Product
   include PageMeta::Base
   include CurrencyHelper
 
+  # 4:3 leaves room for the demo page's bar above the game.
+  DEMO_PLAYER_CARD_WIDTH = 640
+  DEMO_PLAYER_CARD_HEIGHT = 480
+
   private
     def set_product_page_meta(product)
       product_description = product.description.present? ? product.plaintext_description : "Available on Gumroad"
@@ -101,11 +105,30 @@ module PageMeta::Product
       set_meta_tag(property: "og:image:alt", content: "")
     end
 
+    # The X player card tags that play the product's public demo, or nil when it has none. X shows the
+    # image until the card plays, so a product without one keeps its usual card. The flag goes first so
+    # a seller without it skips the build query.
+    def demo_player_card_meta(product, image:)
+      return if image.blank? || !Feature.active?(ProductBuild::DEMO_FEATURE, product.user)
+      return unless ProductBuild.demo_for(product)
+
+      {
+        "twitter:card" => "player",
+        "twitter:image" => image,
+        "twitter:player" => product_build_demo_url(product.external_id, host: DOMAIN, protocol: PROTOCOL),
+        "twitter:player:width" => DEMO_PLAYER_CARD_WIDTH,
+        "twitter:player:height" => DEMO_PLAYER_CARD_HEIGHT,
+      }
+    end
+
     # Equivalent to `twitter_product_card(product, product_description:).html_safe`
     def set_twitter_meta(product, product_description:)
       set_meta_tag(property: "twitter:title", content: product.name)
 
-      if product.preview_image_path?
+      demo_card = demo_player_card_meta(product, image: product.social_share_image)
+      if demo_card
+        demo_card.each { |property, content| set_meta_tag(property:, content:) }
+      elsif product.preview_image_path?
         set_meta_tag(property: "twitter:card", content: "summary_large_image")
         set_meta_tag(property: "twitter:image", content: product.preview_url)
         set_meta_tag(property: "twitter:image:alt", content: "")

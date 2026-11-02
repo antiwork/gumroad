@@ -7,7 +7,7 @@ describe ProductFilesUtilityController, :vcr do
   describe "GET external_link_title", :skip_ssrf_stub do
     before do
       @user = create(:user)
-      # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+      # Devise builds its mappings when routes are drawn; reload them so this spec also passes when run on its own.
       Rails.application.reload_routes!
       sign_in @user
     end

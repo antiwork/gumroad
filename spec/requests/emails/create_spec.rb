@@ -740,6 +740,31 @@ describe("Email Creation Flow", :js, type: :system) do
     expect(Installment.count).to eq(0)
   end
 
+  it "refuses to publish a has-opened email that matches fewer customers than the floor" do
+    product = create(:product, name: "Sample product", user: seller)
+    buyers = create_list(:purchase, 6, link: product)
+    opened_post = create(:seller_post, :published, seller:, name: "October update")
+    allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(buyers.first(4).map(&:id))
+    index_audience_members_into_elasticsearch
+
+    visit emails_path
+    click_on "New email", match: :first
+    fill_in "Title", with: "Hello"
+    set_rich_text_editor_input(find("[aria-label='Email message']"), to_text: "Hello, world!")
+    choose "Customers only"
+    select "October update", from: "Has opened (approximate)"
+    wait_for_ajax
+    expect(page).to have_text("Audience Hidden for privacy / 6", normalize_ws: true)
+
+    select_disclosure "Publish" do
+      click_on "Publish now"
+    end
+    wait_for_ajax
+
+    expect(page).to have_alert(text: "Fewer than 5 customers match these filters. Remove a filter to send this email.")
+    expect(seller.installments.where(name: "Hello")).to be_empty
+  end
+
   context "when both 'Send email' and 'Post to profile' channels are selected" do
     it "creates and previews the email" do
       product = create(:product, name: "Sample product", user: seller)

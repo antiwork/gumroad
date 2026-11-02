@@ -240,7 +240,7 @@ describe ProductAffiliate, "assignment concurrency" do
     expect(@product.reload).to be_published.and be_is_collab
     expect(@product).to be_transcode_videos_on_purchase
     expect(ProductAffiliate.where(affiliate: collaborator, product: @product).count).to eq(1)
-    expect(ProductAffiliate.where(affiliate: @affiliate, product: @product)).to be_empty
+    expect(ProductAffiliate.where(affiliate: @affiliate, product: @product).count).to eq(1)
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
     release_first << true if defined?(release_first) && release_first
@@ -319,10 +319,10 @@ describe ProductAffiliate, "assignment concurrency" do
     [collaborator_writer, direct_affiliate_editor].each { expect(_1.join(10)).to be_present }
 
     expect(errors).to be_empty
-    expect(2.times.map { results.pop }).to contain_exactly({ success: true }, false)
+    expect(2.times.map { results.pop }).to contain_exactly({ success: true }, true)
     expect(@product.reload).to be_is_collab
     expect(ProductAffiliate.where(affiliate: collaborator, product: @product).count).to eq(1)
-    expect(ProductAffiliate.where(affiliate: @affiliate, product: @product)).to be_empty
+    expect(assignment.reload.affiliate_basis_points).to eq(20_00)
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
     release_collaborator << true if defined?(release_collaborator) && release_collaborator
@@ -340,7 +340,7 @@ describe ProductAffiliate, "assignment concurrency" do
     User.where(id: collaborator_user&.id).delete_all
   end
 
-  it "revalidates a direct assignment after a collaborator locks the product" do
+  it "serializes a direct assignment after a collaborator locks the product" do
     collaborator_user = create(:affiliate_user, username: "pae#{SecureRandom.hex(8)}")
     collaborator = create(:collaborator, seller: @seller, affiliate_user: collaborator_user, affiliate_basis_points: 40_00)
     collaborator_lock = Queue.new
@@ -399,12 +399,11 @@ describe ProductAffiliate, "assignment concurrency" do
     release_collaborator << true
     [collaborator_writer, direct_affiliate_writer].each { expect(_1.join(10)).to be_present }
 
-    expect(results.pop).to eq(success: true)
-    expect(errors.size).to eq(1)
-    expect(errors.pop).to be_a(ActiveRecord::RecordInvalid)
+    expect(errors).to be_empty
+    expect(2.times.map { results.pop }).to contain_exactly({ success: true }, :direct_affiliate_created)
     expect(@product.reload).to be_is_collab
     expect(ProductAffiliate.where(affiliate: collaborator, product: @product).count).to eq(1)
-    expect(ProductAffiliate.where(affiliate: @affiliate, product: @product)).to be_empty
+    expect(ProductAffiliate.where(affiliate: @affiliate, product: @product).count).to eq(1)
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
     release_collaborator << true if defined?(release_collaborator) && release_collaborator

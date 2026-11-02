@@ -153,8 +153,8 @@ class BalancesByProductService
       }
     end
 
-    # `@user` earns through one of a purchase's credits, and a collab purchase (:collab_and_affiliates)
-    # credits a collaborator and a direct affiliate on the same sale, so a bucket can hold rows where
+    # `@user` earns through one of a purchase's credits, and a collab purchase can credit a
+    # collaborator and a direct affiliate on the same sale, so a bucket can hold rows where
     # they are either. `revenue_sharing_user` matches all of them, hence one sum per credit, filtered
     # to `@user` — an unscoped sum would count the other affiliate's money as theirs.
     def own_affiliate_credit_sums(amount: "amount", fee: "fee")

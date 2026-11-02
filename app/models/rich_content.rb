@@ -11,6 +11,7 @@ class RichContent < ApplicationRecord
   BULLET_LIST_NODE_TYPE = "bulletList"
   LIST_ITEM_NODE_TYPE = "listItem"
   BLOCKQUOTE_NODE_TYPE = "blockquote"
+  BUTTON_NODE_TYPE = "button"
   LICENSE_KEY_NODE_TYPE = "licenseKey"
   POSTS_NODE_TYPE = "posts"
   SHORT_ANSWER_NODE_TYPE = "shortAnswer"
@@ -96,7 +97,7 @@ class RichContent < ApplicationRecord
   # them client-side too (validateUrl in app/javascript/components/RichTextEditor.tsx); this is the
   # backstop for anything writing rich content through the API.
   BLOCKED_HREF_SCHEMES = %w[javascript data vbscript file blob].freeze
-  LINK_NODE_TYPES = ["link", "tiptap-link", "button"].freeze
+  LINK_NODE_TYPES = ["link", "tiptap-link", BUTTON_NODE_TYPE].freeze
   # Not every node keeps its click-through URL under `attrs.href`. An image stores it in
   # `attrs.link` and a media embed in `attrs.url`, and both renderers turn that value straight into
   # an anchor's `href` on the content page, so all of them need the same scheme check. Keep this map
@@ -104,7 +105,7 @@ class RichContent < ApplicationRecord
   URL_ATTRS_BY_NODE_TYPE = {
     "link" => "href",
     "tiptap-link" => "href",
-    "button" => "href",
+    BUTTON_NODE_TYPE => "href",
     "image" => "link",
     "mediaEmbed" => "url",
   }.freeze

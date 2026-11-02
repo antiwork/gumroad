@@ -287,6 +287,9 @@ RSpec.configure do |config|
   end
 
   config.before(:suite) do
+    # Routes load lazily outside CI, and Devise builds its mappings from them, so a
+    # controller spec run on its own would sign in before any mapping exists.
+    Rails.application.reload_routes_unless_loaded
     # Disable webmock while cleanup, see also https://github.com/teamcapybara/capybara#gotchas
     WebMock.allow_net_connect!(net_http_connect_on_start: true)
     [

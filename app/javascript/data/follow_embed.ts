@@ -1,4 +1,4 @@
-import { request, ResponseError } from "$app/utils/request";
+import { readJson, request } from "$app/utils/request";
 
 export const followFromEmbed = async (sellerId: string, email: string) => {
   const response = await request({
@@ -7,5 +7,5 @@ export const followFromEmbed = async (sellerId: string, email: string) => {
     accept: "json",
     data: { seller_id: sellerId, email },
   });
-  if (!response.ok) throw new ResponseError();
+  return readJson<{ message: string }>(response);
 };

@@ -59,6 +59,19 @@ describe Api::Internal::Installments::RecipientCountsController do
       expect(response.parsed_body).to eq("recipient_count" => 1, "audience_count" => 5)
     end
 
+    it "withholds a has-opened count when the customers it leaves out are below the floor" do
+      openers = [product1_variant_purchase1, product1_purchase2, product1_purchase3, *create_list(:purchase, 2, seller:, link: product2)]
+      create(:purchase, seller:, link: product2)
+      sync_elasticsearch_audience_index
+      opened_post = create(:seller_post, seller:, published_at: 1.day.ago)
+      allow(EmailEngagementDynamoStore).to receive(:opened_recipient_purchase_ids).with(opened_post.id).and_return(openers.map(&:id))
+
+      get :show, params: { installment_type: "seller", opened_post_id: opened_post.external_id }
+
+      expect(response).to be_successful
+      expect(response.parsed_body).to eq("recipient_count" => nil, "audience_count" => 8)
+    end
+
     it "returns counts for seller installment type" do
       get :show, params: { installment_type: "seller" }
       expect(response).to be_successful
@@ -73,7 +86,7 @@ describe Api::Internal::Installments::RecipientCountsController do
 
     it "serves both counts from Elasticsearch for follower installment type" do
       expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id).and_call_original
-      expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id, params: hash_including(type: "follower"), limit: nil).and_call_original
+      expect(AudienceMember).to receive(:filter_count).with(seller_id: seller.id, params: hash_including(type: "follower")).and_call_original
 
       get :show, params: { installment_type: "follower" }
 
