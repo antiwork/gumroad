@@ -128,7 +128,7 @@ describe InstantPayoutsService, :vcr do
             result = described_class.new(seller).perform
             expect(result).to eq(
               success: false,
-              error: "Your balance exceeds the maximum instant payout amount. Please contact support for assistance."
+              error: "The balance for a single day is over the $9,999 maximum for an instant payout, so it can't be paid out instantly. That day goes out with your next standard weekly payout."
             )
           end.not_to change { Payment.count }
         end

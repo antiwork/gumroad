@@ -1088,7 +1088,9 @@ describe "Balance Pages Scenario", js: true, type: :system do
           visit balance_path
 
           expect(page).to have_status(text: "You have $15,000.00 available for instant payout")
-          expect(page).to have_selector("a", text: "Contact us for an instant payout")
+          expect(page).to have_text("over the $9,999 maximum for an instant payout")
+          expect(page).to have_text("goes out with your next standard weekly payout")
+          expect(page).not_to have_selector("a", text: "Contact us for an instant payout")
         end
       end
 

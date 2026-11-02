@@ -635,7 +635,11 @@ export default function PayoutsIndex() {
                 {instant_payout.payable_balances.some(
                   (balance) => balance.amount_cents > MAXIMUM_INSTANT_PAYOUT_AMOUNT_CENTS,
                 ) ? (
-                  <a href="mailto:support@gumroad.com">Contact us for an instant payout</a>
+                  <p>
+                    One day's balance is over the $9,999 maximum for an instant payout, so it can't be paid out
+                    instantly. That day goes out with your next standard weekly payout. Daily instant payouts are
+                    skipped until it is paid.
+                  </p>
                 ) : (
                   <Button
                     size="sm"
