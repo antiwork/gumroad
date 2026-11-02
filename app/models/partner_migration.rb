@@ -193,7 +193,7 @@ class PartnerMigration < ApplicationRecord
 
   def self.normalize_product(raw)
     return [nil, "must be an object."] unless raw.respond_to?(:key?)
-    unless string?(raw[:external_product_id]) && raw[:external_product_id].strip.length.between?(1, MAX_EXTERNAL_USER_ID_LENGTH)
+    unless string?(raw[:external_product_id]) && raw[:external_product_id].strip.present? && raw[:external_product_id].length <= MAX_EXTERNAL_USER_ID_LENGTH
       return [nil, "external_product_id must be a string with 1 to #{MAX_EXTERNAL_USER_ID_LENGTH} characters, not only spaces."]
     end
     return [nil, "is_adult must be true or false."] unless [nil, true, false].include?(raw[:is_adult])
@@ -249,8 +249,10 @@ class PartnerMigration < ApplicationRecord
 
   def self.normalize_files(raw_files, field)
     files = raw_files.nil? ? [] : raw_files
-    return [nil, "#{field} must be an array with up to #{MAX_FILES_PER_PRODUCT} items."] unless files.is_a?(Array) && files.size <= MAX_FILES_PER_PRODUCT
+    return [nil, "#{field} must be an array."] unless files.is_a?(Array)
     return [nil, "each file in #{field} needs an https url and an optional display_name string."] unless files.all? { _1.respond_to?(:key?) && https_url?(_1[:url]) && (_1[:display_name].nil? || string?(_1[:display_name])) }
+    # A URL counts once, as normalize_product counts it across the variants.
+    return [nil, "#{field} can have up to #{MAX_FILES_PER_PRODUCT} different URLs."] if files.map { _1[:url] }.uniq.size > MAX_FILES_PER_PRODUCT
     return [nil, "file display_name must have at most #{MAX_NAME_LENGTH} characters."] if files.any? { _1[:display_name].to_s.length > MAX_NAME_LENGTH }
 
     [files.map { { "url" => _1[:url], "display_name" => _1[:display_name] } }, nil]
