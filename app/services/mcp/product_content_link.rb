@@ -44,6 +44,14 @@ module Mcp
       def page_owners
         return [product] if product.has_product_level_rich_content?
 
+        # In the state the July 21, 2026 restore left behind (the shared-content flag on, the product
+        # level blank, the real pages on a version) a buyer without a version reads the cheapest
+        # version that has content (UrlRedirect#product_or_cheapest_variant_as_rich_content_provider).
+        # A page created here on a cheaper version that has none would become that version's content
+        # and take those buyers off the pages they read today, so this state writes only to the
+        # versions that already have some.
+        return product.alive_variants.select { _1.alive_rich_contents.any?(&:has_editor_content?) } if product.recoverable_hidden_variant_rich_content?
+
         owners = product.alive_variants.to_a
         # A purchase that names no version reads the product's own pages as soon as those carry
         # content (UrlRedirect#rich_content_provider), so a button written only on the versions

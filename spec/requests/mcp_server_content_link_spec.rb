@@ -179,6 +179,48 @@ describe "MCP server content links" do
       end
     end
 
+    # The state the July 21, 2026 restore left behind: the shared-content flag on, the product level
+    # blank, and the real pages on a version. A buyer without a version reads the cheapest version
+    # that has content, so a page created on a cheaper version that has none would take them off it.
+    context "when the shared-content flag hides the versions' pages behind a blank product level" do
+      before do
+        @versioned = create(:product, user: @seller, name: "Course")
+        category = create(:variant_category, link: @versioned)
+        @empty_version = create(:variant, variant_category: category, name: "Basic", price_difference_cents: 0)
+        @content_version = create(:variant, variant_category: category, name: "Pro", price_difference_cents: 1000)
+        create(:rich_content, entity: @content_version, description: [text("Watch the lessons")], position: 0)
+        create(:rich_content, entity: @versioned, description: [{ "type" => "paragraph" }], position: 0)
+        @versioned.update!(has_same_rich_content_for_all_variants: true)
+      end
+
+      it "leaves a version with no content alone and writes to the one buyers read" do
+        result = call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
+
+        expect(@empty_version.reload.alive_rich_contents).to be_empty
+        page = @content_version.reload.alive_rich_contents.sole
+        expect(page.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
+        expect(result.dig("structuredContent", "links")).to eq([
+                                                                 { "page_id" => page.external_id, "label" => "Duplicate", "url" => "https://notion.so/template" }
+                                                               ])
+      end
+
+      it "keeps serving versionless buyers the pages they read, now with the button on them" do
+        host! DOMAIN
+        purchase = create(:purchase, link: @versioned, ip_address: "127.0.0.1").tap(&:create_url_redirect!)
+        expect(purchase.variant_attributes).to be_empty
+
+        call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
+
+        get "/d/#{purchase.url_redirect.token}", headers: { "X-Inertia" => "true" }
+
+        expect(response).to have_http_status(:ok)
+        page = response.parsed_body.dig("props", "content", "rich_content_pages").sole
+        expect(page.dig("description", "content").map { _1["type"] }).to eq(%w[paragraph button])
+        expect(page.dig("description", "content", 0, "content", 0, "text")).to eq("Watch the lessons")
+        expect(page.dig("description", "content", 1, "attrs", "href")).to eq("https://notion.so/template")
+      end
+    end
+
     context "when a client runs the handshake a connector runs" do
       before do
         Feature.activate(:mcp_protocol_2026_07_28)
