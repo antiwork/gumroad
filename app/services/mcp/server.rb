@@ -351,6 +351,8 @@ module Mcp
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
                  "name" => { type: "string", description: "Product name." },
                  "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers." },
+                 "pay_what_you_want" => { type: "boolean", description: "Whether buyers may pay more than price_cents, which stays the minimum. Not accepted for a membership, whose tiers carry their own switch; a tier priced 0 is pay what you want." },
+                 "suggested_price_cents" => { type: "integer", description: "The amount the price box suggests to buyers when pay what you want is on, in minor units. Must be at least price_cents. Needs pay_what_you_want true in the same call." },
                  "description" => { type: "string", description: "HTML or plain-text description." },
                  "product_type" => { type: "string", enum: PRODUCT_TYPES, description: "digital (default) or membership." },
                  "tiers" => {
@@ -369,7 +371,7 @@ module Mcp
                    }
                  }
                }, required: %w[name]),
-          tool("update_product", "Change the name, description, summary, additional details, category, tags, price, URL, receipt message, or receipt button text of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, summary, additional details, category, tags, price, pay-what-you-want amount, URL, receipt message, or receipt button text of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "category" => { type: "string", description: "Category slug path from the list_categories result, e.g. 3d/3d-assets/blender. \"other\" means not categorised." },
@@ -392,6 +394,8 @@ module Mcp
                    items: { type: "string" }
                  },
                  "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
+                 "pay_what_you_want" => { type: "boolean", description: "Whether buyers may pay more than the price, which stays the minimum. Not available for memberships with tiers, whose tiers carry their own switch; a product priced 0 stays pay what you want." },
+                 "suggested_price_cents" => { type: "integer", description: "The amount the price box suggests to buyers when pay what you want is on, in minor units of the product's currency. Must be at least the price. Needs pay what you want to be on, from this call or already." },
                  "custom_receipt_text" => { type: "string", description: "The message the buyer sees on the receipt, up to #{Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH} characters. Send an empty string to remove it." },
                  "custom_view_content_button_text" => { type: "string", description: "The text on the receipt's button that opens the product, up to #{Product::Validations::MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH} characters. Send an empty string to remove it." },
                  "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
@@ -530,8 +534,8 @@ module Mcp
           property = schema[:properties][key]
           raise Error.new("Unknown argument: #{key}", code: -32602) unless property
 
-          type = { "integer" => Integer, "array" => Array }.fetch(property[:type], String)
-          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless value.is_a?(type)
+          types = { "integer" => [Integer], "array" => [Array], "boolean" => [TrueClass, FalseClass] }.fetch(property[:type], [String])
+          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless types.any? { |type| value.is_a?(type) }
           raise Error.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
         end
       end
@@ -570,10 +574,16 @@ module Mcp
         # Argument errors come before the scope check, so a bad call does not ask the creator for write access.
         if membership
           raise Error.new("price_cents is not accepted for a membership; set each tier's price_cents", code: -32602) if args.key?("price_cents")
+          if args.key?("pay_what_you_want") || args.key?("suggested_price_cents")
+            raise Error.new("pay_what_you_want and suggested_price_cents are not accepted for a membership; a tier priced 0 is pay what you want", code: -32602)
+          end
           tiers = validated_tiers!(args["tiers"])
         else
           raise Error.new("price_cents is required", code: -32602) unless args.key?("price_cents")
           raise Error.new("tiers are only accepted with product_type membership", code: -32602) if args.key?("tiers")
+          if args.key?("suggested_price_cents") && !args["pay_what_you_want"]
+            raise Error.new("suggested_price_cents needs pay_what_you_want: true in the same call", code: -32602)
+          end
         end
 
         require_scopes!(:edit_products, :account)
@@ -584,7 +594,7 @@ module Mcp
         price_cents = args["price_cents"]
         raise Error.new("price_cents must be zero or more", code: -32602) if price_cents.negative?
 
-        product = user.links.build(
+        attributes = {
           name:,
           description: args["description"].to_s,
           native_type: Link::NATIVE_TYPE_DIGITAL,
@@ -593,7 +603,11 @@ module Mcp
           draft: true,
           purchase_disabled_at: Time.current,
           display_product_reviews: true
-        )
+        }
+        # Only when asked: assigning nil would write NULL over the column's false default.
+        attributes[:customizable_price] = args["pay_what_you_want"] if args.key?("pay_what_you_want")
+        attributes[:suggested_price_cents] = args["suggested_price_cents"] if args.key?("suggested_price_cents")
+        product = user.links.build(**attributes)
         product.taxonomy = Taxonomy.find_by(slug: "other")
         product.save!
         { product: product_payload(product), message: "Draft saved. It is not for sale until publish_product." }
@@ -663,8 +677,17 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "summary", "additional_details", "category", "tags", "price_cents", "custom_receipt_text", "custom_view_content_button_text", "permalink")
-        raise Error.new("Pass at least one of name, description, summary, additional_details, category, tags, price_cents, custom_receipt_text, custom_view_content_button_text, or permalink", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "summary", "additional_details", "category", "tags", "price_cents", "pay_what_you_want", "suggested_price_cents", "custom_receipt_text", "custom_view_content_button_text", "permalink")
+        raise Error.new("Pass at least one of name, description, summary, additional_details, category, tags, price_cents, pay_what_you_want, suggested_price_cents, custom_receipt_text, custom_view_content_button_text, or permalink", code: -32602) if changes.empty?
+
+        if changes.key?("suggested_price_cents")
+          # The amount only means something while the switch is on: stored without it, the product
+          # reports no suggested price and the caller's write reads as lost.
+          wants_pay_what_you_want = changes.key?("pay_what_you_want") ? changes["pay_what_you_want"] : product.customizable_price?
+          unless wants_pay_what_you_want
+            raise Error.new("suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call", code: -32602)
+          end
+        end
 
         # Resolved before the transaction: an unknown category is an argument error, not a rollback.
         taxonomy = resolve_category!(changes["category"]) if changes.key?("category")
@@ -706,6 +729,13 @@ module Mcp
 
             product.price_cents = changes["price_cents"]
           end
+          if changes.key?("pay_what_you_want") || changes.key?("suggested_price_cents")
+            # A membership with tiers keeps both on its tiers, priced per billing period.
+            raise ToolError, "Pay what you want is set on each tier of a membership, not on the product. Edit the tiers in the product editor." if product.is_tiered_membership
+          end
+          # After price_cents: the suggested price is validated against the price set in this save.
+          product.customizable_price = changes["pay_what_you_want"] if changes.key?("pay_what_you_want")
+          product.suggested_price_cents = changes["suggested_price_cents"] if changes.key?("suggested_price_cents")
           if changes.key?("description")
             product.description = SaveContentUpsellsService.new(seller: user, content: changes["description"], old_content: product.description).from_html
           end
