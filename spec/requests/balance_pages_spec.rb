@@ -1088,7 +1088,24 @@ describe "Balance Pages Scenario", js: true, type: :system do
           visit balance_path
 
           expect(page).to have_status(text: "You have $15,000.00 available for instant payout")
-          expect(page).to have_selector("a", text: "Contact us for an instant payout")
+          expect(page).to have_text("One day's earnings are over $9,999, the instant payout limit. We'll send them with your weekly payout.")
+          expect(page).not_to have_text("Daily instant payouts pause")
+          expect(page).not_to have_selector("a", text: "Contact us for an instant payout")
+        end
+
+        it "tells a daily seller the day goes out weekly and daily payouts pause over the cap" do
+          seller.update!(payout_frequency: User::PayoutSchedule::DAILY)
+          visit balance_path
+
+          expect(page).to have_text("We'll send them with your weekly payout. Daily instant payouts pause while your balance is over $9,999.")
+        end
+
+        it "names the monthly payout for a monthly seller" do
+          seller.update!(payout_frequency: User::PayoutSchedule::MONTHLY)
+          visit balance_path
+
+          expect(page).to have_text("We'll send them with your monthly payout.")
+          expect(page).not_to have_text("Daily instant payouts pause")
         end
       end
 
