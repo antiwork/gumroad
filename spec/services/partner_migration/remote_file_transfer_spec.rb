@@ -10,10 +10,16 @@ describe PartnerMigration::RemoteFileTransfer do
       response = (Net::HTTPResponse::CODE_TO_OBJ[code] || Net::HTTPResponse::CODE_CLASS_TO_OBJ.fetch(code[0])).new("1.1", code, "")
       response["content-length"] = content_length.to_s if content_length
       response["content-disposition"] = content_disposition if content_disposition
-      allow(response).to receive(:read_body).and_yield(body)
+      chunks = Array(body)
+      allow(response).to receive(:read_body) { |&read| chunks.each(&read) }
+      @last_response = response
       block&.call(response)
       response
     end
+  end
+
+  def seller_objects
+    Aws::S3::Resource.new.bucket(S3_BUCKET).objects(prefix: "attachments/#{seller.external_id}/").to_a
   end
 
   it "copies the file into the seller's attachments folder" do
@@ -24,6 +30,104 @@ describe PartnerMigration::RemoteFileTransfer do
     expect(url).to start_with("#{S3_BASE_URL}attachments/#{seller.external_id}/")
     expect(url).to end_with("/original/Texture Pack.zip")
     expect(Aws::S3::Resource.new.bucket(S3_BUCKET).object(url.delete_prefix(S3_BASE_URL)).get.body.read).to eq("zip bytes")
+  end
+
+  it "streams a binary file across chunks and parts into S3 without a tempfile for the whole file" do
+    stub_const("#{described_class}::UPLOAD_PART_SIZE", 5.megabytes)
+    bytes = Random.bytes(12.megabytes)
+    stub_download((0...bytes.bytesize).step(1.megabyte).map { bytes.byteslice(_1, 1.megabyte) })
+    allow(Tempfile).to receive(:new).and_call_original
+
+    url = described_class.new(seller:, url: "https://files.example.com/pack.zip").perform
+
+    # Only the SDK's part buffers touch the disk, never a tempfile for the whole file.
+    expect(Tempfile).to have_received(:new).with("aws-sdk-s3-upload_stream").at_least(:once)
+    expect(Tempfile).not_to have_received(:new).with("partner-migration", anything)
+
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).object(url.delete_prefix(S3_BASE_URL)).get.body.read.b).to eq(bytes.b)
+  end
+
+  it "reports the storage error, not the closed pipe, when a part fails to upload" do
+    stub_const("#{described_class}::UPLOAD_PART_SIZE", 5.megabytes)
+    stub_download((0...12).map { Random.bytes(1.megabyte) })
+    # One concrete client: the SDK's upload threads call it at the same time, and any_instance stubs are not thread-safe.
+    client = Aws::S3::Client.new
+    allow(client).to receive(:upload_part).and_raise(Aws::S3::Errors::AccessDenied.new(nil, "Access Denied"))
+    allow(Aws::S3::Client).to receive(:new).and_return(client)
+
+    expect { described_class.new(seller:, url: "https://files.example.com/pack.zip").perform }.to raise_error(Aws::S3::Errors::AccessDenied)
+  end
+
+  it "keeps the size limit error when aborting the upload fails too" do
+    stub_const("#{described_class}::MAX_BYTES", 5)
+    stub_const("#{described_class}::SNIFF_BYTES", 2)
+    stub_download(%w[123 45 6])
+    expect_any_instance_of(Aws::S3::Client).to receive(:create_multipart_upload).and_call_original
+    allow_any_instance_of(Aws::S3::Client).to receive(:abort_multipart_upload).and_raise(Aws::S3::Errors::NoSuchUpload.new(nil, "No such upload"))
+
+    expect { described_class.new(seller:, url: "https://files.example.com/pack.zip").perform }.to raise_error(described_class::Error, /larger than/)
+  end
+
+  it "reads a redirect's body under a limit" do
+    stub_const("#{described_class}::MAX_REDIRECT_BODY_BYTES", 4)
+    allow(SsrfFilter).to receive(:get) do |_url, &block|
+      redirect = Net::HTTPFound.new("1.1", "302", "")
+      allow(redirect).to receive(:read_body) { |&read| %w[123 45].each(&read) }
+      block.call(redirect)
+      redirect
+    end
+
+    expect { described_class.new(seller:, url: "https://files.example.com/pack.zip").perform }.to raise_error(described_class::Error, "The redirect page is larger than 4 Bytes.")
+  end
+
+  it "applies one download's time limit to its redirects too" do
+    allow(SsrfFilter).to receive(:get) do |_url, &block|
+      redirect = Net::HTTPFound.new("1.1", "302", "")
+      allow(redirect).to receive(:read_body) { |&read| ["moved"].each(&read) }
+      block.call(redirect)
+      redirect
+    end
+
+    expect { described_class.download("https://files.example.com/avatar.png", max_bytes: 1.megabyte, max_duration: -1.second) { } }.to raise_error(described_class::TemporaryError, /took longer than/)
+  end
+
+  it "keeps only the last attempt's body in a downloaded tempfile" do
+    allow(SsrfFilter).to receive(:get) do |_url, &block|
+      %w[broken-first-attempt cover-bytes].map do |body|
+        Net::HTTPOK.new("1.1", "200", "").tap do |response|
+          allow(response).to receive(:read_body) { |&read| [body].each(&read) }
+          block.call(response)
+        end
+      end.last
+    end
+
+    described_class.download("https://files.example.com/cover.png", max_bytes: 1.megabyte) do |tempfile, _filename|
+      expect(tempfile.read).to eq("cover-bytes")
+    end
+  end
+
+  it "follows a redirect to the file" do
+    allow(SsrfFilter).to receive(:get) do |_url, &block|
+      redirect = Net::HTTPFound.new("1.1", "302", "")
+      allow(redirect).to receive(:read_body) { |&read| ["moved"].each(&read) }
+      block.call(redirect)
+      file = Net::HTTPOK.new("1.1", "200", "")
+      allow(file).to receive(:read_body) { |&read| ["zip bytes"].each(&read) }
+      block.call(file)
+      file
+    end
+
+    url = described_class.new(seller:, url: "https://files.example.com/pack.zip").perform
+
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).object(url.delete_prefix(S3_BASE_URL)).get.body.read).to eq("zip bytes")
+  end
+
+  it "keeps an empty file" do
+    stub_download("")
+
+    url = described_class.new(seller:, url: "https://files.example.com/empty.txt").perform
+
+    expect(Aws::S3::Resource.new.bucket(S3_BUCKET).object(url.delete_prefix(S3_BASE_URL)).content_length).to eq(0)
   end
 
   it "uses the filename from the Content-Disposition header" do
@@ -50,8 +154,8 @@ describe PartnerMigration::RemoteFileTransfer do
     expect(url).to end_with("/original/Caf_.zip")
   end
 
-  it "adds the extension of the detected type to a filename without one" do
-    stub_download(File.binread(Rails.root.join("spec/support/fixtures/smilie.png")))
+  it "adds the extension of the detected type to a filename without one, also when the bytes arrive in small chunks" do
+    stub_download(File.binread(Rails.root.join("spec/support/fixtures/smilie.png")).bytes.each_slice(4).map { _1.pack("C*") })
 
     url = described_class.new(seller:, url: "https://files.example.com/download?id=123").perform
 
@@ -73,15 +177,17 @@ describe PartnerMigration::RemoteFileTransfer do
 
   it "stops a download that grows past the limit without a content-length header" do
     stub_const("#{described_class}::MAX_BYTES", 4)
-    stub_download("12345")
+    stub_download(%w[123 45])
 
     expect { described_class.new(seller:, url: "https://files.example.com/pack.zip").perform }.to raise_error(described_class::Error, /larger than/)
+    expect(seller_objects).to be_empty
   end
 
-  it "rejects a failed download" do
+  it "rejects a failed download without reading its body" do
     stub_download("", code: "404")
 
     expect { described_class.new(seller:, url: "https://files.example.com/missing.zip").perform }.to raise_error(described_class::Error, "The file download failed with HTTP 404.")
+    expect(@last_response).not_to have_received(:read_body)
   end
 
   it "rejects a response that ends before its declared length", :skip_ssrf_stub do
@@ -96,6 +202,7 @@ describe PartnerMigration::RemoteFileTransfer do
     end
 
     expect { described_class.new(seller:, url: "https://files.example.com/pack.zip").perform }.to raise_error(EOFError)
+    expect(seller_objects).to be_empty
   end
 
   it "raises a temporary error for a response that can succeed later" do
