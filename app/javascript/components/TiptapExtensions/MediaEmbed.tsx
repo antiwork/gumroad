@@ -61,6 +61,10 @@ export const resizedRawEmbedHtml = (html: string, height: number): string => {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const wrapper = embedHeightWrapper(doc);
   if (!wrapper) return html;
+  // Retain the provider's size in saved HTML so resizing remains reversible after reload.
+  if (!wrapper.hasAttribute("data-original-height")) {
+    wrapper.setAttribute("data-original-height", wrapper.style.height);
+  }
   wrapper.style.height = `${height}px`;
   return doc.body.innerHTML;
 };
@@ -109,11 +113,20 @@ const RawNodeView = ({ editor, node, getPos, selected }: NodeViewProps) => {
   const dom = React.useMemo(() => renderRawDOM(editor, node), [editor, node]);
   const html = assertString(node.attrs.html);
   const declaredHeight = rawEmbedHeight(html);
+  const wrapper = embedHeightWrapper(new DOMParser().parseFromString(html, "text/html"));
+  const originalHeight = EMBED_HEIGHT_PX.exec(wrapper?.getAttribute("data-original-height") ?? "");
+  const providerHeight = originalHeight && Number(originalHeight[1]) > 0 ? Number(originalHeight[1]) : null;
   // The provider's own height stays on the menu, so growing an embed is always reversible.
   const heightOptions =
     declaredHeight === null
       ? []
-      : [...new Set([declaredHeight, ...RAW_EMBED_HEIGHT_OPTIONS])].sort((left, right) => left - right);
+      : [
+          ...new Set([
+            declaredHeight,
+            ...(providerHeight === null ? [] : [providerHeight]),
+            ...RAW_EMBED_HEIGHT_OPTIONS,
+          ]),
+        ].sort((left, right) => left - right);
   const heightActions =
     heightOptions.length === 0
       ? []

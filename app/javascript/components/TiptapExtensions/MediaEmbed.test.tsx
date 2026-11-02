@@ -305,6 +305,35 @@ describe("raw embed height", () => {
     expect(resizedRawEmbedHtml(video, 1200)).toBe(video);
   });
 
+  it("preserves the provider height through repeated resizing and HTML round trips", () => {
+    const resized = resizedRawEmbedHtml(resizedRawEmbedHtml(HEYZINE_SHELF.html, 800), 1800);
+    const editor = new Editor({
+      extensions: [StarterKit, Raw],
+      content: { type: "doc", content: [{ type: "raw", attrs: { html: resized } }] },
+    });
+    try {
+      const saved = editor.getHTML();
+      expect(saved).toContain('data-original-height="170px"');
+      editor.commands.setContent(saved);
+      act(() => {
+        render(<EditorContent editor={editor} />);
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole("button", { name: "Actions" }));
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "Height" }));
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "170 px" }));
+      });
+      const raw = editor.getJSON().content?.find((node) => node.type === "raw");
+      expect(rawEmbedHeight(String(raw?.attrs?.html))).toBe(170);
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it("rewrites only that height, keeping the frame and its wrapper markup", () => {
     const html = resizedRawEmbedHtml(HEYZINE_SHELF.html, 1200);
 
@@ -346,18 +375,21 @@ describe("insertMediaEmbed", () => {
     }
   });
 
-  it("keeps the height a compact provider asked for", () => {
+  it.each([
+    ["Spotify", 152],
+    ["SoundCloud", 166],
+  ])("keeps the height %s asked for", (provider, height) => {
     const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
     try {
       insertMediaEmbed(editor, {
-        html: '<div style="left: 0; width: 100%; height: 152px; position: relative;"><iframe src="about:blank" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;"></iframe></div>',
+        html: `<div style="left: 0; width: 100%; height: ${height}px; position: relative;"><iframe src="about:blank" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;"></iframe></div>`,
         title: "A track",
-        url: "https://open.spotify.com/track/1",
-        provider_name: "Spotify",
-        thumbnail_url: "https://i.scdn.co/image/cover",
+        url: "https://example.com/track/1",
+        provider_name: provider,
+        thumbnail_url: "https://example.com/cover",
       });
 
-      expect(rawEmbedHeight(String(insertedNode(editor)?.attrs?.html))).toBe(152);
+      expect(rawEmbedHeight(String(insertedNode(editor)?.attrs?.html))).toBe(height);
     } finally {
       editor.destroy();
     }
@@ -436,6 +468,15 @@ describe("raw embed height menu", () => {
 
       const raw = editor.getJSON().content?.find((node) => node.type === "raw");
       expect(rawEmbedHeight(String(raw?.attrs?.html))).toBe(1800);
+
+      act(() => {
+        fireEvent.click(trigger);
+      });
+      act(() => {
+        fireEvent.click(screen.getByRole("menuitem", { name: "170 px" }));
+      });
+      const restored = editor.getJSON().content?.find((node) => node.type === "raw");
+      expect(rawEmbedHeight(String(restored?.attrs?.html))).toBe(170);
     } finally {
       editor.destroy();
     }
