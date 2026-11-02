@@ -19,6 +19,7 @@ import { useS3UploadConfig } from "$app/components/S3UploadConfig";
 import { showAlert } from "$app/components/server-components/Alert";
 import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { InlineList } from "$app/components/ui/InlineList";
+import { Input } from "$app/components/ui/Input";
 import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Row, RowActions, RowContent, Rows } from "$app/components/ui/Rows";
@@ -222,11 +223,12 @@ export const VersionHistory = ({ open, onOpenChange }: { open: boolean; onOpenCh
                     </LinkButton>
                   </>
                 )}
-                <input
+                <Input
                   ref={zipInputRef}
                   type="file"
                   accept=".zip,application/zip"
-                  className="sr-only"
+                  // Important: Input's padding and width would otherwise win over sr-only.
+                  className="sr-only!"
                   tabIndex={-1}
                   aria-label="Web app zip"
                   onChange={(e) => {
