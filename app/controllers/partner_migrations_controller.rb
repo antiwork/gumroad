@@ -21,7 +21,10 @@ class PartnerMigrationsController < ApplicationController
   before_action :load_migration, only: [:show, :create]
 
   def show
-    redirect_to products_path if @migration&.user_id == current_user.id
+    return unless @migration&.user_id == current_user.id
+
+    reset_current_seller
+    redirect_to products_path
   end
 
   def create
@@ -126,6 +129,9 @@ class PartnerMigrationsController < ApplicationController
                else
                  "We're importing your #{products} from #{app_name}. #{count == 1 ? "It appears" : "They appear"} here as drafts."
       end
+      # The import belongs to the logged-in account, so the products page must not show a seller that
+      # the account switcher selected.
+      reset_current_seller
       redirect_to products_path, notice:, status: :see_other
     end
 
