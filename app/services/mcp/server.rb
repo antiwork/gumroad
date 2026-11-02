@@ -777,7 +777,9 @@ module Mcp
             product.rental_price_cents = carried_rental_price_cents if carried_rental_price_cents.present?
             # available_price_cents reads every alive buy row, so one left in the old currency would be
             # checked against the new currency's minimum below; retire it, as save_recurring_prices! does.
-            product.prices.alive.where.not(currency: currency).each(&:mark_deleted!)
+            retired_prices = product.prices.alive.where.not(currency: currency)
+            retired_prices.map(&:mark_deleted!)
+            product.enqueue_index_update_for(["price_cents", "available_price_cents"]) if retired_prices.any?
             currency_changed = true
           end
           if changes.key?("price_cents")
