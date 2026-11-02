@@ -254,4 +254,88 @@ describe "Web build demo", type: :request, inertia: true do
       expect(response).to have_http_status(:not_found)
     end
   end
+
+  describe "a demo build the seller chose" do
+    let(:demo_html) { %(<!doctype html><html><head><title>Demo</title></head><body>Demo level</body></html>) }
+    let!(:demo) { create(:product_build, product:, number: 2, site_unpacked_at: Time.current, demo_selected_at: Time.current) }
+
+    before do
+      s3.put_object(bucket: S3_BUCKET, key: "#{demo.site_prefix}/index.html", body: demo_html, content_type: "text/html")
+    end
+
+    after do
+      s3.list_objects_v2(bucket: S3_BUCKET, prefix: "#{demo.site_prefix}/").contents.each { s3.delete_object(bucket: S3_BUCKET, key: _1.key) }
+    end
+
+    it "plays on a paid product, which has no demo otherwise, while buyers keep the live build" do
+      product.update!(price_cents: 500)
+
+      get frame_path
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("Demo level")
+      expect(ProductBuild.demo_for(product)).to eq(demo)
+    end
+
+    it "points the paid product's X card at the demo" do
+      product.update!(price_cents: 500)
+      create(:asset_preview, link: product)
+
+      get short_link_url(product.unique_permalink, host: seller.subdomain_with_protocol)
+
+      expect(twitter_meta("twitter:card")).to eq("player")
+      expect(twitter_meta("twitter:player")).to eq("#{PROTOCOL}://#{DOMAIN}/demo/#{product.external_id}")
+    end
+
+    it "takes the place of a free product's live build" do
+      get frame_path
+
+      expect(response.body).to include("Demo level")
+    end
+
+    it "stops a running demo of the live build at its next page load" do
+      demo.update!(demo_selected_at: nil)
+      live_path = frame_path
+      demo.select_as_demo!
+
+      get live_path
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is never public once it is what buyers of a paid product get" do
+      product.update!(price_cents: 500)
+      demo.promote!
+
+      get demo_path
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is not played while its site is not unpacked yet" do
+      product.update!(price_cents: 500)
+      demo.update!(site_unpacked_at: nil)
+
+      get demo_path
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is not played once the seller stops using it, on a paid product" do
+      product.update!(price_cents: 500)
+      demo.unselect_as_demo!
+
+      get demo_path
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "is not played while the product is off sale" do
+      product.update!(price_cents: 500, draft: true)
+
+      get demo_path
+
+      expect(response).to have_http_status(:not_found)
+    end
+  end
 end
