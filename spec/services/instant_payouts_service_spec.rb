@@ -128,9 +128,30 @@ describe InstantPayoutsService, :vcr do
             result = described_class.new(seller).perform
             expect(result).to eq(
               success: false,
-              error: "The balance for a single day is over the $9,999 maximum for an instant payout, so it can't be paid out instantly. That day goes out with your next scheduled standard payout."
+              error: "The balance for a single day is over the $9,999 maximum for an instant payout, so it can't be paid out instantly. That day goes out with your standard weekly payout instead."
             )
           end.not_to change { Payment.count }
+        end
+      end
+    end
+
+    context "when one day's balance is over the instant payout maximum" do
+      before do
+        allow(seller).to receive(:instant_payouts_supported?).and_return(true)
+        allow(seller).to receive(:instantly_payable_unpaid_balances).and_return(
+          [build(:balance, user: seller, date: Date.yesterday, amount_cents: 11_000_00, holding_amount_cents: 11_000_00)]
+        )
+      end
+
+      it "names the standard payout that pays that day" do
+        {
+          User::PayoutSchedule::DAILY => "weekly",
+          User::PayoutSchedule::WEEKLY => "weekly",
+          User::PayoutSchedule::MONTHLY => "monthly",
+          User::PayoutSchedule::QUARTERLY => "quarterly",
+        }.each do |payout_frequency, standard_payout|
+          seller.update!(payout_frequency:)
+          expect(described_class.new(seller).perform[:error]).to end_with("goes out with your standard #{standard_payout} payout instead.")
         end
       end
     end

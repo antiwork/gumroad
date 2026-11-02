@@ -1089,8 +1089,24 @@ describe "Balance Pages Scenario", js: true, type: :system do
 
           expect(page).to have_status(text: "You have $15,000.00 available for instant payout")
           expect(page).to have_text("over the $9,999 maximum for an instant payout")
-          expect(page).to have_text("goes out with your next scheduled standard payout")
+          expect(page).to have_text("goes out with your standard weekly payout instead")
+          expect(page).not_to have_text("Daily instant payouts are skipped")
           expect(page).not_to have_selector("a", text: "Contact us for an instant payout")
+        end
+
+        it "tells a daily seller the day goes out weekly and daily payouts are skipped over the cap" do
+          seller.update!(payout_frequency: User::PayoutSchedule::DAILY)
+          visit balance_path
+
+          expect(page).to have_text("goes out with your standard weekly payout instead. Daily instant payouts are skipped while your balance is over $9,999.")
+        end
+
+        it "names the monthly payout for a monthly seller" do
+          seller.update!(payout_frequency: User::PayoutSchedule::MONTHLY)
+          visit balance_path
+
+          expect(page).to have_text("goes out with your standard monthly payout instead")
+          expect(page).not_to have_text("Daily instant payouts are skipped")
         end
       end
 

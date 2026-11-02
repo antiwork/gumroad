@@ -637,8 +637,11 @@ export default function PayoutsIndex() {
                 ) ? (
                   <p>
                     One day's balance is over the $9,999 maximum for an instant payout, so it can't be paid out
-                    instantly. That day goes out with your next scheduled standard payout. Daily instant payouts are
-                    skipped until it is paid.
+                    instantly. That day goes out with your standard {instant_payout.standard_payout_frequency} payout
+                    instead.
+                    {instant_payout.payout_frequency === "daily"
+                      ? " Daily instant payouts are skipped while your balance is over $9,999."
+                      : null}
                   </p>
                 ) : (
                   <Button
