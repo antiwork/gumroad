@@ -765,7 +765,15 @@ module Mcp
             codes_before_currency_change = product.product_and_universal_offer_codes
             carried_price_cents = product.default_price_cents
             carried_rental_price_cents = product.rentable? ? product.rental_price_cents : nil
+            previous_currency = product.price_currency_type
             product.price_currency_type = currency
+            # The tools have no rental price field, so a rental price the new currency rejects is
+            # refused by name, as the editor does; the generic price error would point at price_cents.
+            if product.buy_and_rent? && carried_rental_price_cents.present? && (violation = product.price_range_violation(carried_rental_price_cents))
+              rental_price = ->(currency_type) { MoneyFormatter.format(carried_rental_price_cents, currency_type.to_sym, no_cents_if_whole: true, symbol: true) }
+              problem = violation == :below_minimum ? "below the #{product.min_price_formatted} minimum" : "above the price limit"
+              raise ToolError, "Currency cannot be changed: the #{rental_price.(previous_currency)} rental price would become #{rental_price.(currency)}, #{problem}. Keep the current currency, or contact Gumroad support."
+            end
             product.price_cents = carried_price_cents if carried_price_cents.present?
             product.rental_price_cents = carried_rental_price_cents if carried_rental_price_cents.present?
             currency_changed = true
@@ -813,10 +821,12 @@ module Mcp
         # put a percentage code under the new currency's minimum with nothing else moved.
         if changes.key?("price_cents") || currency_changed
           codes = (codes_before_currency_change || []) | product.product_and_universal_offer_codes
-          mismatched_codes = currency_changed ? codes.reject { _1.is_currency_valid?(product) }.map(&:code) : []
-          below_minimum_codes = codes.reject { _1.is_amount_valid?(product) }.map(&:code)
+          mismatched_codes = currency_changed ? codes.reject { _1.is_currency_valid?(product) } : []
+          # A code in the wrong currency no longer applies at all, so it is named only once, above.
+          below_minimum_codes = (codes - mismatched_codes).reject { _1.is_amount_valid?(product) }.map(&:code)
           warnings = []
-          warnings << "These discount codes are in a different currency than the product now uses, so they will not work at checkout: #{mismatched_codes.join(', ')}. Edit or delete them in Gumroad." if mismatched_codes.any?
+          # Not "delete": an all-products code, or one shared with other products, still works on those.
+          warnings << "These discount codes are in a different currency than the product now uses, so they no longer apply to it: #{mismatched_codes.map(&:code).join(', ')}. Edit them in Gumroad if they should." if mismatched_codes.any?
           warnings << "These discount codes would discount this product below #{product.min_price_formatted}: #{below_minimum_codes.join(', ')}. Edit or delete them in Gumroad." if below_minimum_codes.any?
           result[:warning] = warnings.join(" ") if warnings.any?
         end

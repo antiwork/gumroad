@@ -2114,6 +2114,27 @@ describe "MCP server" do
       expect(product.rental_price_cents).to eq(500)
     end
 
+    it "refuses a currency change that would put the rental price below the new currency's minimum" do
+      product = create(:product, user: @seller, price_cents: 2000, purchase_type: :buy_and_rent, rental_price_cents: 100)
+
+      expect do
+        call_tool("update_product", { id: product.external_id, currency: "inr", price_cents: 200_000 })
+      end.not_to change { [product.reload.price_currency_type, product.alive_prices.pluck(:currency, :price_cents)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("Currency cannot be changed: the $1 rental price would become ₹1, below the ₹73 minimum. Keep the current currency, or contact Gumroad support.")
+    end
+
+    it "changes the currency of a rentable product that has no rental price in its current currency" do
+      product = create(:product, user: @seller, price_cents: 2000, purchase_type: :buy_and_rent, rental_price_cents: 100)
+      product.prices.alive.is_rental.each(&:mark_deleted!)
+
+      call_tool("update_product", { id: product.external_id, currency: "eur" })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "currency")).to eq("eur")
+      expect(product.reload.default_price_cents).to eq(2000)
+    end
+
     it "warns that a currency change strands the discount codes in the old currency" do
       create(:offer_code, user: @seller, products: [@product], code: "usd500", amount_cents: 500)
 
@@ -2133,7 +2154,7 @@ describe "MCP server" do
       expect(response).to be_successful
       content = response.parsed_body.dig("result", "structuredContent")
       expect(content.dig("product", "currency")).to eq("eur")
-      expect(content["warning"]).to include("unistale")
+      expect(content["warning"]).to eq("These discount codes are in a different currency than the product now uses, so they no longer apply to it: unistale. Edit them in Gumroad if they should.")
     end
 
     it "warns when the new currency's minimum pushes an existing percentage code below it" do
@@ -2148,6 +2169,15 @@ describe "MCP server" do
       expect(product.price_currency_type).to eq("usd")
       expect(product.default_price_cents).to eq(100)
       expect(content["warning"]).to include("gbp20")
+    end
+
+    it "names a code stranded in the old currency once, not also as below the new minimum" do
+      product = create(:product, user: @seller, price_cents: 120, price_currency_type: "gbp")
+      create(:offer_code, user: @seller, products: [product], code: "gbp50", amount_cents: 50, currency_type: "gbp")
+
+      call_tool("update_product", { id: product.external_id, currency: "usd" })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "warning")).to eq("These discount codes are in a different currency than the product now uses, so they no longer apply to it: gbp50. Edit them in Gumroad if they should.")
     end
 
     it "stays quiet when the discount codes still clear the new currency's minimum" do
