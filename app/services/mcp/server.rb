@@ -338,7 +338,7 @@ module Mcp
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description, summary and covers, and the products a bundle sells. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its description, summary, additional details and covers, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
@@ -362,11 +362,22 @@ module Mcp
                    }
                  }
                }, required: %w[name]),
-          tool("update_product", "Change the name, description, summary, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, summary, additional details, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
                  "summary" => { type: "string", description: "New summary: the short plain-text line under the buy button on the product page. Send an empty string to remove it." },
+                 "additional_details" => {
+                   type: "array",
+                   description: "The name and value rows the product page shows in the card with the summary, e.g. \"Pages: 40\", in the order to show them. This replaces the whole list; send an empty array to remove every row.",
+                   items: {
+                     type: "object",
+                     properties: {
+                       "name" => { type: "string", description: "Row label, e.g. \"Pages\"." },
+                       "value" => { type: "string", description: "Row value, e.g. \"40\"." }
+                     }
+                   }
+                 },
                  "price_cents" => { type: "integer", description: "New price in minor units of the product's currency. Not available for memberships with tiers." },
                  "permalink" => { type: "string", description: "New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL." }
                }, required: %w[id], destructive: true),
@@ -526,7 +537,7 @@ module Mcp
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
-        details = { description: product.description, summary: product.custom_summary, covers: covers_payload(product) }
+        details = { description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), covers: covers_payload(product) }
         # A caller editing a bundle needs the members it has now, before replacing them.
         details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
@@ -632,8 +643,8 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "summary", "price_cents", "permalink")
-        raise Error.new("Pass at least one of name, description, summary, price_cents, or permalink", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "summary", "additional_details", "price_cents", "permalink")
+        raise Error.new("Pass at least one of name, description, summary, additional_details, price_cents, or permalink", code: -32602) if changes.empty?
 
         # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
         # Whitespace-only is neither: allowing it through would store a value the model treats as blank
@@ -677,11 +688,13 @@ module Mcp
           end
           # The same json_data key the editor's Summary field writes; an empty value clears it.
           product.json_data = product.json_data.to_h.merge("custom_summary" => changes["summary"].to_s.presence) if changes.key?("summary")
+          # The same json_data key the editor's Additional details rows write; the list is replaced whole.
+          product.json_data = product.json_data.to_h.merge("custom_attributes" => normalized_additional_details(changes["additional_details"])) if changes.key?("additional_details")
           # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
           product.custom_permalink = permalink if changes.key?("permalink")
           product.save!
         end
-        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary) }
+        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product)) }
         # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
         if changes.key?("price_cents")
           invalid_codes = product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(product) }.map(&:code)
@@ -736,6 +749,28 @@ module Mcp
 
       def covers_payload(product)
         product.display_asset_previews.map { |preview| { id: preview.guid, url: preview.url, type: preview.display_type } }
+      end
+
+      # The rows the product page shows in the card with the summary: the editor's Additional
+      # details, in order, with the same blank rows skipped as the presenters skip.
+      def additional_details_payload(product)
+        product.custom_attributes.filter_map do |row|
+          { name: row["name"], value: row["value"] } if row["name"].present? || row["value"].present?
+        end
+      end
+
+      def normalized_additional_details(rows)
+        rows.map do |row|
+          raise Error.new("each additional detail must be an object with name and value", code: -32602) unless row.is_a?(Hash)
+
+          name = row["name"].to_s
+          value = row["value"].to_s
+          # The editor keeps a row only when it has a name, so a value on its own is refused rather
+          # than dropped without telling the caller.
+          raise Error.new("each additional detail needs a name", code: -32602) if name.blank? && value.present?
+
+          { "name" => name, "value" => value }
+        end.reject { _1["name"].blank? && _1["value"].blank? }
       end
 
       def tool_list_files(args)
