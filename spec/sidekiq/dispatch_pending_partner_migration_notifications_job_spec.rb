@@ -5,7 +5,7 @@ require "spec_helper"
 describe DispatchPendingPartnerMigrationNotificationsJob do
   def create_migration(status:, completed_at:, notified_at: nil, user: create(:user))
     application = create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api")
-    products, = PartnerMigration.normalize_products([{ name: "Texture Pack", price: 500 }])
+    products, = PartnerMigration.normalize_products([{ external_product_id: "Texture Pack", name: "Texture Pack", price: 500 }])
     migration, = PartnerMigration.create_for!(oauth_application: application, external_user_id: "seller-1", products:)
     migration.update!(user:, status:, completed_at:, notified_at:)
     migration

@@ -5,7 +5,7 @@ require "spec_helper"
 describe "Partner API migrations", type: :request do
   let(:partner_application) { create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api") }
   let(:token) { create("doorkeeper/access_token", application: partner_application, resource_owner_id: nil, scopes: "partner_api") }
-  let(:products) { [{ name: "Texture Pack", price: 1500, files: [{ url: "https://files.example.com/pack.zip", display_name: "Pack" }] }] }
+  let(:products) { [{ external_product_id: "Texture Pack", name: "Texture Pack", price: 1500, files: [{ url: "https://files.example.com/pack.zip", display_name: "Pack" }] }] }
 
   before do
     host! "test.gumroad.com"
@@ -81,7 +81,7 @@ describe "Partner API migrations", type: :request do
 
   it "rejects products that are not valid" do
     expect do
-      post_migration(external_user_id: "ext-1", products: [{ name: "No price" }])
+      post_migration(external_user_id: "ext-1", products: [{ external_product_id: "No price", name: "No price" }])
     end.not_to change { PartnerMigration.count }
 
     expect(response).to have_http_status(:bad_request)
@@ -111,7 +111,7 @@ describe "Partner API migrations", type: :request do
     migration = PartnerMigration.last
     migration.claim!(create(:user), expected_code_digest: migration.code_digest)
 
-    post_migration(external_user_id: "ext-1", products: [{ name: "Another product", price: 1500 }])
+    post_migration(external_user_id: "ext-1", products: [{ external_product_id: "Another product", name: "Another product", price: 1500 }])
 
     expect(response).to have_http_status(:conflict)
     expect(migration.reload.products.first["name"]).to eq("Texture Pack")
@@ -120,7 +120,7 @@ describe "Partner API migrations", type: :request do
   it "rejects an option name that does not fit the product model" do
     categories = [{ title: "License", variants: [{ name: "x" * (PartnerMigration::MAX_NAME_LENGTH + 1) }] }]
 
-    post_migration(external_user_id: "ext-1", products: [{ name: "Asset", price: 1500, variant_categories: categories }])
+    post_migration(external_user_id: "ext-1", products: [{ external_product_id: "Asset", name: "Asset", price: 1500, variant_categories: categories }])
 
     expect(response).to have_http_status(:bad_request)
     expect(response.parsed_body["message"]).to include("products[0]", "variant name")
@@ -140,6 +140,16 @@ describe "Partner API migrations", type: :request do
     get "/api/v2/partner/migrations/#{migration_id}", params: { access_token: another_token.token }
 
     expect(response).to have_http_status(:not_found)
+  end
+
+  it "returns each product's result under the partner's product ID" do
+    post_migration(external_user_id: "ext-1", products: products + [{ external_product_id: "brush-set", name: "Brush Set", price: 500 }])
+    migration = PartnerMigration.last
+    migration.update!(results: { "0" => { "product_id" => "saved" }, "1" => { "error" => "Missing file" } })
+
+    get "/api/v2/partner/migrations/#{migration.public_id}", params: { access_token: token.token }
+
+    expect(response.parsed_body["results"]).to eq("Texture Pack" => { "product_id" => "saved" }, "brush-set" => { "error" => "Missing file" })
   end
 
   it "does not return import progress for a row ID, another case, or extra characters" do

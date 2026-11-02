@@ -9,6 +9,7 @@ describe PartnerMigrationImportJob do
   let(:remote_files) do
     {
       "https://files.example.com/pack.zip" => ["application/zip", "zip bytes"],
+      "https://files.example.com/extended.zip" => ["application/zip", "extended zip bytes"],
       "https://files.example.com/cover.png" => ["image/png", image],
       "https://files.example.com/thumb.png" => ["image/png", image],
       "https://files.example.com/wide.png" => ["image/png", File.binread(Rails.root.join("spec/support/fixtures/lemons-640x362.png"))],
@@ -16,6 +17,7 @@ describe PartnerMigrationImportJob do
   end
   let(:product_attributes) do
     {
+      external_product_id: "Texture Pack",
       name: "Texture Pack",
       description: "<p>Forty textures.</p>",
       price: 1500,
@@ -82,10 +84,44 @@ describe PartnerMigrationImportJob do
     expect(seller.links.sole.name).to eq("Texture Pack")
   end
 
+  it "imports the adult flag and the variant descriptions" do
+    variants = [{ name: "Standard", description: "Personal and client work." }]
+    migration = create_claimed_migration([product_attributes.merge(is_adult: true, variant_categories: [{ title: "License", variants: }])])
+
+    described_class.new.perform(migration.id)
+
+    product = seller.links.sole
+    expect(product.is_adult?).to be(true)
+    expect(product.variant_categories.sole.variants.sole.description).to eq("Personal and client work.")
+  end
+
+  it "gives each license its own files, and downloads a file that licenses share once" do
+    variants = [
+      { name: "Standard" },
+      { name: "Extended", price_difference_cents: 3000, files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/extended.zip", display_name: "Extended" }] },
+    ]
+    migration = create_claimed_migration([product_attributes.merge(variant_categories: [{ title: "License", variants: }])])
+
+    described_class.new.perform(migration.id)
+
+    product = seller.links.sole
+    expect(product.alive_product_files.map(&:display_name)).to contain_exactly("Pack", "Extended")
+    expect(SsrfFilter).to have_received(:get).with("https://files.example.com/pack.zip", any_args).once
+    expect(product.has_product_level_rich_content?).to be(false)
+    standard, extended = product.variant_categories.sole.variants.sort_by(&:price_difference_cents)
+    embedded_names = ->(variant) { variant.alive_rich_contents.sole.embedded_product_file_ids_in_order.map { ProductFile.find(_1).display_name } }
+    expect(embedded_names.call(standard)).to eq(["Pack"])
+    expect(embedded_names.call(extended)).to eq(["Pack", "Extended"])
+    expect(extended.product_files.map(&:display_name)).to contain_exactly("Pack", "Extended")
+    delivered_names = ->(variant) { create(:url_redirect, purchase: create(:purchase, link: product, variant_attributes: [variant])).alive_product_files.map(&:display_name) }
+    expect(delivered_names.call(standard)).to eq(["Pack"])
+    expect(delivered_names.call(extended)).to eq(["Pack", "Extended"])
+  end
+
   it "records a product that cannot be imported and continues with the others" do
     migration = create_claimed_migration([
-                                           product_attributes.merge(name: "Missing file", files: [{ url: "https://files.example.com/missing.zip" }]),
-                                           { name: "Brush Set", price: 500 },
+                                           product_attributes.merge(external_product_id: "Missing file", name: "Missing file", files: [{ url: "https://files.example.com/missing.zip" }]),
+                                           { external_product_id: "Brush Set", name: "Brush Set", price: 500 },
                                          ])
 
     described_class.new.perform(migration.id)
@@ -99,7 +135,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "imports a catalog above the daily editor quota", :enforce_product_creation_limit do
-    migration = create_claimed_migration(Array.new(11) { |index| { name: "Asset #{index}", price: 500 } })
+    migration = create_claimed_migration(Array.new(11) { |index| { external_product_id: "Asset #{index}", name: "Asset #{index}", price: 500 } })
 
     described_class.new.perform(migration.id)
 
@@ -149,7 +185,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "touches the migration around each transfer" do
-    migration = create_claimed_migration([product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/pack.zip" }])])
+    migration = create_claimed_migration([product_attributes.merge(files: [{ url: "https://files.example.com/pack.zip" }, { url: "https://files.example.com/extended.zip" }])])
     touches = 0
     allow_any_instance_of(PartnerMigration).to receive(:touch).and_wrap_original { |original, *args| touches += 1; original.call(*args) }
 
@@ -160,7 +196,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "sets the profile picture of an account that the import created" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" })
 
     described_class.new.perform(migration.id)
@@ -169,7 +205,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "imports the products when the profile picture fails with an unexpected error" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" })
     allow(ActiveStorage::Blob).to receive(:create_and_upload!).and_raise(ActiveStorage::IntegrityError)
 
@@ -181,7 +217,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "tries the profile picture only on the first run, so retries do not download it again" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }, { name: "Texture Pack", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }, { external_product_id: "Texture Pack", name: "Texture Pack", price: 500 }])
     migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" }, results: { "0" => { "product_id" => "saved" } })
 
     described_class.new.perform(migration.id)
@@ -191,7 +227,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "keeps a profile picture that the seller sets while the partner's picture downloads" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" })
     seller_picture_set = false
     allow(Marcel::MimeType).to receive(:for).and_wrap_original do |original, *args, **kwargs|
@@ -208,7 +244,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "keeps the profile picture of an existing account" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration.update!(profile: { "avatar_url" => "https://files.example.com/wide.png" })
 
     described_class.new.perform(migration.id)
@@ -238,7 +274,7 @@ describe PartnerMigrationImportJob do
 
       Net::HTTPServiceUnavailable.new("1.1", "503", "")
     end
-    migration = create_claimed_migration([product_attributes, { name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([product_attributes, { external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
 
     expect { described_class.new.perform(migration.id) }.to raise_error(PartnerMigration::RemoteFileTransfer::TemporaryError)
 
@@ -248,7 +284,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "imports tags that differ only in case once" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500, tags: ["Art", "art"] }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500, tags: ["Art", "art"] }])
 
     described_class.new.perform(migration.id)
 
@@ -256,7 +292,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "imports tags that the tags table treats as the same name once" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500, tags: ["café", "cafe"] }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500, tags: ["café", "cafe"] }])
 
     described_class.new.perform(migration.id)
 
@@ -297,7 +333,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "stops, and deletes the downloaded files, when the account closes during a download" do
-    migration = create_claimed_migration([product_attributes, product_attributes.merge(name: "Brush Set")])
+    migration = create_claimed_migration([product_attributes, product_attributes.merge(external_product_id: "Brush Set", name: "Brush Set")])
     allow_any_instance_of(PartnerMigration::ProductImporter).to receive(:download_files).and_wrap_original do |original, *args|
       original.call(*args).tap { seller.update_columns(user_risk_state: "suspended_for_fraud") }
     end
@@ -336,7 +372,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "keeps the results that an overlapping run recorded" do
-    migration = create_claimed_migration([product_attributes, product_attributes.merge(name: "Brush Set")])
+    migration = create_claimed_migration([product_attributes, product_attributes.merge(external_product_id: "Brush Set", name: "Brush Set")])
     other_result = { "product_id" => "saved-by-another-run" }
     allow_any_instance_of(PartnerMigration::ProductImporter).to receive(:attach_media).and_wrap_original do |original, *args|
       PartnerMigration.where(id: migration.id).update_all(results: PartnerMigration.find(migration.id).results.merge("1" => other_result))
@@ -411,7 +447,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "skips products that a previous attempt imported" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }, { name: "Texture Pack", price: 1500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }, { external_product_id: "Texture Pack", name: "Texture Pack", price: 1500 }])
     migration.update!(results: { "0" => { "product_id" => "already-imported" } })
 
     described_class.new.perform(migration.id)
@@ -421,7 +457,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "does nothing for a migration that is not claimed" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration.update!(status: PartnerMigration::STATUS_PENDING)
 
     described_class.new.perform(migration.id)
@@ -430,7 +466,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "marks the migration as failed when retries run out" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
 
     described_class.sidekiq_retries_exhausted_block.call({ "args" => [migration.id] }, StandardError.new("Network down"))
 
@@ -439,7 +475,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "retries a failed notification enqueue without importing products again" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     allow(PartnerMigrationNotificationJob).to receive(:perform_async).and_raise(Redis::BaseError, "Redis unavailable")
 
     expect { described_class.new.perform(migration.id) }.to raise_error(Redis::BaseError)
@@ -451,7 +487,7 @@ describe PartnerMigrationImportJob do
   end
 
   it "keeps a completed import when notification enqueues exhaust their retries" do
-    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current)
 
     described_class.sidekiq_retries_exhausted_block.call({ "args" => [migration.id] }, StandardError.new("Redis unavailable"))

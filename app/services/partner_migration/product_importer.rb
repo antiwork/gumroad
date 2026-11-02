@@ -21,10 +21,10 @@ class PartnerMigration::ProductImporter
     @heartbeat = heartbeat
   end
 
-  # Returns the S3 URLs of the product files, in order. On an error, deletes the files it uploaded.
+  # Returns the S3 URLs of unique_files, in order. On an error, deletes the files it uploaded.
   def download_files
     @uploaded_urls = []
-    attributes["files"].each do |file|
+    unique_files.each do |file|
       heartbeat.call
       @uploaded_urls << PartnerMigration::RemoteFileTransfer.new(seller:, url: file["url"]).perform
       heartbeat.call
@@ -56,8 +56,9 @@ class PartnerMigration::ProductImporter
       draft: true,
       purchase_disabled_at: Time.current,
       display_product_reviews: true,
-      # Every variant (for example, each license) gets the same files.
-      has_same_rich_content_for_all_variants: true,
+      is_adult: attributes["is_adult"],
+      # Without variant files, every variant (for example, each license) gets the same files.
+      has_same_rich_content_for_all_variants: !variant_files?,
       taxonomy: Taxonomy.find_by(id: attributes["taxonomy_id"]) || Taxonomy.find_by(slug: "other"),
     )
 
@@ -66,8 +67,8 @@ class PartnerMigration::ProductImporter
       Link.bypass_product_creation_limit { product.save! }
       product.set_template_properties_if_needed
       product.save_tags!(attributes["tags"]) if attributes["tags"].present?
-      create_variant_categories!(product)
-      save_files!(product, file_urls) if file_urls.any?
+      variants = create_variant_categories!(product)
+      save_files!(product, file_urls, variants) if file_urls.any?
     end
 
     product
@@ -81,28 +82,53 @@ class PartnerMigration::ProductImporter
   private
     attr_reader :seller, :attributes, :heartbeat
 
+    def variant_attributes_list = attributes["variant_categories"].flat_map { _1["variants"] }
+
+    def variant_files? = variant_attributes_list.any? { _1["files"] }
+
+    # The files of the product and its variants, each URL once, so a file that several licenses share
+    # downloads once.
+    def unique_files
+      @unique_files ||= (attributes["files"] + variant_attributes_list.flat_map { _1["files"].to_a }).uniq { _1["url"] }
+    end
+
+    # Returns [variant, its attributes] pairs.
     def create_variant_categories!(product)
-      attributes["variant_categories"].each do |category_attributes|
+      attributes["variant_categories"].flat_map do |category_attributes|
         category = VariantCategory.create!(link: product, title: category_attributes["title"])
-        category_attributes["variants"].each do |variant_attributes|
-          Variant.create!(variant_category: category, name: variant_attributes["name"], price_difference_cents: variant_attributes["price_difference_cents"])
+        category_attributes["variants"].map do |variant_attributes|
+          variant = Variant.create!(variant_category: category, name: variant_attributes["name"], description: variant_attributes["description"], price_difference_cents: variant_attributes["price_difference_cents"])
+          [variant, variant_attributes]
         end
       end
     end
 
-    # Buyers see the files that the content page embeds, so add one page with every file.
-    def save_files!(product, file_urls)
+    # Buyers see the files that the content pages embed. Without variant files, one product page embeds
+    # every file. With them, each variant gets a page with its own files, or with the product's files.
+    def save_files!(product, file_urls, variants)
       files = file_urls.each_with_index.map do |url, position|
-        { url:, display_name: attributes["files"][position]["display_name"].presence, position: }.compact
+        { url:, display_name: unique_files[position]["display_name"].presence, position: }.compact
       end
       SaveFilesService.perform(product, { files: })
       product.save!
 
-      file_embeds = product.alive_product_files.sort_by(&:position).map do |product_file|
-        { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => product_file.external_id, "uid" => SecureRandom.uuid } }
+      product_files = unique_files.map { _1["url"] }.zip(product.alive_product_files.sort_by(&:position)).to_h
+      if variant_files?
+        variants.each do |variant, variant_attributes|
+          variant_product_files = (variant_attributes["files"] || attributes["files"]).map { product_files.fetch(_1["url"]) }
+          next if variant_product_files.empty?
+
+          variant.product_files = variant_product_files
+          variant.alive_rich_contents.create!(title: nil, description: file_embeds(variant_product_files), position: 0)
+        end
+      else
+        product.alive_rich_contents.create!(title: nil, description: file_embeds(product_files.values), position: 0)
       end
-      product.alive_rich_contents.create!(title: nil, description: file_embeds, position: 0)
       product.generate_product_files_archives!
+    end
+
+    def file_embeds(product_files)
+      product_files.map { { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => _1.external_id, "uid" => SecureRandom.uuid } } }
     end
 
     # AssetPreview#url= reads the whole response into memory, so covers use the bounded download.

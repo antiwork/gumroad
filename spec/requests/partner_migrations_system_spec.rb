@@ -11,7 +11,7 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
   let(:file_url) { "https://files.example.com/texture.png" }
   let(:product_attributes) do
     {
-      name: "Texture Pack", price: 1500,
+      external_product_id: "Texture Pack", name: "Texture Pack", price: 1500,
       files: [{ url: file_url, display_name: "Texture" }],
       variant_categories: [{ title: "License", variants: [{ name: "Standard" }, { name: "Commercial", price_difference_cents: 3000 }] }],
     }
@@ -48,7 +48,7 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
   end
 
   it "keeps the export through a failed login and imports more than the editor's daily quota" do
-    catalog = [product_attributes] + Array.new(10) { |index| { name: "Asset #{index + 2}", price: 500 } }
+    catalog = [product_attributes] + Array.new(10) { |index| { external_product_id: "Asset #{index + 2}", name: "Asset #{index + 2}", price: 500 } }
     visit export_catalog(catalog)
     expect(page).to have_content("Log in to import your products")
     expect(page).to have_content("Your 11 products from Example App arrive on Gumroad as drafts. Next, you confirm the import.")
@@ -119,7 +119,7 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
 
   it "retries a failed file by itself when the partner refreshes its URL, without duplicating successful products" do
     stub_request(:get, file_url).to_return(status: 403)
-    catalog = [product_attributes, { name: "Brush Set", price: 500 }]
+    catalog = [product_attributes, { external_product_id: "Brush Set", name: "Brush Set", price: 500 }]
     visit export_catalog(catalog)
     log_in
     click_on "Import 2 products"

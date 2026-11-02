@@ -8,7 +8,7 @@ describe "Partner migration onboarding", type: :request do
   let(:partner_application) { create(:oauth_application, owner: create(:user), name: "Example App", is_partner: true, confidential: true, scopes: "partner_api") }
   let(:seller) { create(:named_user) }
   let!(:migration_and_code) do
-    products, _error = PartnerMigration.normalize_products([{ name: "Texture Pack", price: 1500 }, { name: "Brush Set", price: 500 }])
+    products, _error = PartnerMigration.normalize_products([{ external_product_id: "Texture Pack", name: "Texture Pack", price: 1500 }, { external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
   end
   let(:migration) { migration_and_code.first }
@@ -131,7 +131,7 @@ describe "Partner migration onboarding", type: :request do
   end
 
   it "rejects a form for a different link than the one in the session" do
-    products, _error = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
+    products, _error = PartnerMigration.normalize_products([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     other_migration, other_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-2", products:)
     sign_in seller
     get partner_migration_path(migration_code: code)
@@ -167,7 +167,7 @@ describe "Partner migration onboarding", type: :request do
     get partner_migration_path
     form = Nokogiri::HTML(response.body).at_css("form[action='#{partner_migration_path}']")
     old_params = form.css("input").to_h { [_1["name"], _1["value"]] }
-    products, = PartnerMigration.normalize_products([{ name: "Updated catalog", price: 500 }])
+    products, = PartnerMigration.normalize_products([{ external_product_id: "Updated catalog", name: "Updated catalog", price: 500 }])
     _migration, refreshed_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: migration.external_user_id, products:)
     get partner_migration_path(migration_code: refreshed_code)
 
@@ -182,7 +182,7 @@ describe "Partner migration onboarding", type: :request do
     sign_in seller
     get partner_migration_path(migration_code: code)
     allow_any_instance_of(PartnerMigration).to receive(:claim!).and_wrap_original do |original, claimer, **kwargs|
-      products, = PartnerMigration.normalize_products([{ name: "Updated catalog", price: 500 }])
+      products, = PartnerMigration.normalize_products([{ external_product_id: "Updated catalog", name: "Updated catalog", price: 500 }])
       PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: migration.external_user_id, products:)
       original.call(claimer, **kwargs)
     end
@@ -197,7 +197,7 @@ describe "Partner migration onboarding", type: :request do
   end
 
   it "lets two partner users whose IDs differ only in case each claim their own link" do
-    products, _error = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
+    products, _error = PartnerMigration.normalize_products([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     other_migration, other_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "EXT-1", products:)
     other_seller = create(:named_user)
 
