@@ -941,15 +941,6 @@ describe("copied example bank codes", () => {
       ],
       "Enter the 5-digit branch code of your own bank branch.",
     ],
-    [
-      "JM",
-      "jmd",
-      [
-        ["Bank code", "123"],
-        ["Branch code", "12345"],
-      ],
-      "Enter the 3-digit code of your own bank.",
-    ],
   ] as const)("%s refuses the old example before the request is sent", (country, currency, fields, message) => {
     renderSeller(
       country,
@@ -959,6 +950,18 @@ describe("copied example bank codes", () => {
 
     expect(mocks.put).not.toHaveBeenCalled();
     expect(screen.getAllByText(message).length).toBeGreaterThan(0);
+  });
+
+  it("JM names the bank code when both old examples are copied", () => {
+    renderSeller("JM", "jmd", [
+      ["Bank code", "123"],
+      ["Branch code", "12345"],
+    ]);
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Enter the 3-digit code of your own bank.").length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Bank code").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByLabelText("Branch code").getAttribute("aria-invalid")).toBe("true");
   });
 
   it("AZ refuses the old branch example before the request is sent", () => {

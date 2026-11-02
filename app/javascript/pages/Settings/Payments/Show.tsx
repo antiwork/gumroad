@@ -784,7 +784,7 @@ export default function PaymentsPage() {
     for (const { field, example, message } of (account.type && COPIED_EXAMPLE_ERRORS[account.type]) || []) {
       if (Object.entries<unknown>(account).some(([key, value]) => key === field && value === example)) {
         markFieldInvalid(field);
-        // Jamaica can match both fields: keep the first one's reason, where the scroll lands.
+        // Jamaica can match both fields: keep the first one's reason.
         setClientErrorMessage((current: ErrorMessageInfo | null) => current ?? { message });
       }
     }
