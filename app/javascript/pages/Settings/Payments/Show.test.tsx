@@ -889,10 +889,13 @@ describe("Bangladesh bank code validation", () => {
 });
 
 describe("copied example bank codes", () => {
-  const renderSeller = (country: string, currency: string, fields: [string, string][]) => {
+  const renderSeller = (country: string, currency: string, fields: [string, string][], supportsIban = false) => {
     mocks.usePage.mockReturnValue({
       props: {
-        ...pageProps({ country_code: country, payout_currency: currency }, { country }),
+        ...pageProps(
+          { country_code: country, payout_currency: currency, country_supports_iban: supportsIban },
+          { country },
+        ),
         countries: { [country]: country },
         bank_account_details: {
           show_bank_account: true,
@@ -909,8 +912,11 @@ describe("copied example bank codes", () => {
     render(<PaymentsPage />);
     for (const [label, value] of fields) fireEvent.change(screen.getByLabelText(label), { target: { value } });
     fireEvent.change(screen.getByLabelText("Pay to the order of"), { target: { value: "Test Seller" } });
-    fireEvent.change(screen.getByLabelText("Account #"), { target: { value: "0000123456789" } });
-    fireEvent.change(screen.getByLabelText("Confirm account #"), { target: { value: "0000123456789" } });
+    const accountNumber = supportsIban ? "AZ21NABZ00000000137010001944" : "0000123456789";
+    fireEvent.change(screen.getByLabelText(supportsIban ? "IBAN" : "Account #"), { target: { value: accountNumber } });
+    fireEvent.change(screen.getByLabelText(supportsIban ? "Confirm IBAN" : "Confirm account #"), {
+      target: { value: accountNumber },
+    });
     save();
   };
 
@@ -935,6 +941,15 @@ describe("copied example bank codes", () => {
       ],
       "Enter the 5-digit branch code of your own bank branch.",
     ],
+    [
+      "JM",
+      "jmd",
+      [
+        ["Bank code", "123"],
+        ["Branch code", "12345"],
+      ],
+      "Enter the 3-digit code of your own bank.",
+    ],
   ] as const)("%s refuses the old example before the request is sent", (country, currency, fields, message) => {
     renderSeller(
       country,
@@ -946,7 +961,22 @@ describe("copied example bank codes", () => {
     expect(screen.getAllByText(message).length).toBeGreaterThan(0);
   });
 
-  it("saves a real Vietnam bank code", () => {
+  it("AZ refuses the old branch example before the request is sent", () => {
+    renderSeller(
+      "AZ",
+      "azn",
+      [
+        ["Bank code", "200004"],
+        ["Branch code", "234567"],
+      ],
+      true,
+    );
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Enter the 6-digit branch code of your own bank branch.").length).toBeGreaterThan(0);
+  });
+
+  it("saves an 8-digit Vietnam bank code", () => {
     renderSeller("VN", "vnd", [["Bank code", "01101100"]]);
 
     expect(mocks.put).toHaveBeenCalled();

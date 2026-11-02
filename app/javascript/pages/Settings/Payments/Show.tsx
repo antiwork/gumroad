@@ -70,9 +70,8 @@ const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const BANGLADESH_BANK_CODE_REGEX = /^[0-9]{9}$/u;
 
 // Placeholders these fields used to show: not real codes, so a copied one saves a payout row that can never link.
-const COPIED_EXAMPLE_ERRORS: Record<
-  string,
-  { field: "bank_code" | "branch_code"; example: string; message: string }[]
+const COPIED_EXAMPLE_ERRORS: Partial<
+  Record<BankAccount["type"], { field: "bank_code" | "branch_code"; example: string; message: string }[]>
 > = {
   BangladeshBankAccount: [
     { field: "bank_code", example: "123456789", message: "Enter your own bank's 9-digit BEFTN routing number." },
@@ -782,10 +781,11 @@ export default function PaymentsPage() {
       markFieldInvalid("branch_code");
     }
     const account = form.data.bank_account;
-    for (const { field, example, message } of (account.type ? COPIED_EXAMPLE_ERRORS[account.type] : undefined) ?? []) {
-      if (new Map<string, unknown>(Object.entries(account)).get(field) === example) {
+    for (const { field, example, message } of (account.type && COPIED_EXAMPLE_ERRORS[account.type]) || []) {
+      if (Object.entries<unknown>(account).some(([key, value]) => key === field && value === example)) {
         markFieldInvalid(field);
-        setClientErrorMessage({ message });
+        // Jamaica can match both fields: keep the first one's reason, where the scroll lands.
+        setClientErrorMessage((current: ErrorMessageInfo | null) => current ?? { message });
       }
     }
     if (form.data.bank_account.type === "BangladeshBankAccount") {
