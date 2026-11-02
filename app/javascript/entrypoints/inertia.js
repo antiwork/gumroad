@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 import { isUnredirectedDownloadPagePollResponse, warnAboutDroppedPollResponse } from "../utils/inertia_partial_reload";
+import { installPopstateClaims } from "../utils/popstateClaims";
 import { installFileDropNavigationGuard } from "../utils/preventFileDropNavigation";
 import { defaults as requestDefaults } from "../utils/request";
 
@@ -157,6 +158,9 @@ async function resolvePageComponent(name) {
 
   throw new Error(`Page component not found: ${name}`);
 }
+
+// Before createInertiaApp, so pages can claim a Back or Forward ahead of Inertia's own listener.
+installPopstateClaims();
 
 createInertiaApp({
   // Show Inertia's top-of-page progress bar on client-side navigations. This used to be `false`,
