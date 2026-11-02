@@ -788,7 +788,7 @@ module Mcp
         names = tags.map do |tag|
           raise Error.new("each tag must be text", code: -32602) unless tag.is_a?(String)
 
-          tag.downcase.strip
+          tag.downcase.strip.gsub(/[[:space:]]+/, " ")
         end.uniq
         raise Error.new("each tag must be #{MIN_TAG_LENGTH}-#{MAX_TAG_LENGTH} characters", code: -32602) if names.any? { !_1.length.between?(MIN_TAG_LENGTH, MAX_TAG_LENGTH) }
         raise Error.new("a product can have up to #{MAX_TAGS} tags", code: -32602) if names.length > MAX_TAGS && names.length >= product.tags.length

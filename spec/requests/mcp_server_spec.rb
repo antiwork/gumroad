@@ -1625,7 +1625,9 @@ describe "MCP server" do
 
       call_tool("update_product", { id: @product.external_id, name: "Field notes, vol. 2" })
 
-      expect(@product.reload.tags.pluck(:name)).to eq(["field-notes"])
+      expect(response).to be_successful
+      expect(@product.reload.name).to eq("Field notes, vol. 2")
+      expect(@product.tags.pluck(:name)).to eq(["field-notes"])
     end
 
     it "reads the tags back with the product" do
@@ -1683,6 +1685,15 @@ describe "MCP server" do
     it "saves the name and the tags together or not at all" do
       expect { call_tool("update_product", { id: @product.external_id, name: "Field notes, vol. 2", tags: ["a"] }) }
         .not_to change { @product.reload.name }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "each tag must be 2-20 characters")
+    end
+
+    it "saves one tag when two spellings differ only in inner spacing" do
+      call_tool("update_product", { id: @product.external_id, tags: ["field  notes", "field notes"] })
+
+      expect(response).to be_successful
+      expect(@product.reload.tags.pluck(:name)).to eq(["field notes"])
     end
 
     it "changes the URL and keeps the old one pointing at the product" do
