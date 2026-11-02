@@ -10,7 +10,7 @@ describe LinksController, type: :controller do
   let(:variant_category) { create(:variant_category, link: product, title: "Version") }
   let!(:variant) { create(:variant, variant_category: variant_category, name: "Pro") }
 
-  # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+  # Devise builds its mappings when routes are drawn; reload them so this spec also passes when run on its own.
   before do
     Rails.application.reload_routes!
     sign_in seller

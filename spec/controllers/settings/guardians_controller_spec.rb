@@ -32,7 +32,7 @@ describe Settings::GuardiansController, type: :controller do
     }
   end
 
-  # Devise builds its mappings when routes are drawn; this spec also runs alone in test-confidence.
+  # Devise builds its mappings when routes are drawn; reload them so this spec also passes when run on its own.
   before { Rails.application.reload_routes! }
 
   include_context "with user signed in as admin for seller"
