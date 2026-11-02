@@ -67,4 +67,23 @@ describe "Web build demo page", type: :system, js: true do
       expect(page).to have_text("Clicks: 0")
     end
   end
+
+  it "plays the build the seller chose as the demo of a paid product, not the one buyers get" do
+    product.update!(price_cents: 500)
+    zip = Zip::OutputStream.write_buffer do |out|
+      out.put_next_entry("index.html")
+      out.write("<!doctype html><html><head><title>Clicker demo</title></head><body><p>Demo: try 3 clicks</p></body></html>")
+    end.string
+    demo = create(:product_build, product:, number: 2, byte_size: zip.bytesize)
+    s3.put_object(bucket: S3_BUCKET, key: demo.storage_key, body: zip)
+    demo.select_as_demo!
+    ProductBuildUnpackJob.drain
+
+    visit("/demo/#{product.external_id}")
+
+    within_frame(find("iframe[title='Clicker']")) do
+      expect(page).to have_text("Demo: try 3 clicks")
+    end
+    expect(product.product_builds.live.sole.number).to eq(1)
+  end
 end

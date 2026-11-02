@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# The public demo of a free product's web build: the page an X player card shows, and the link from it
+# A product's public demo build (ProductBuild.demo_for): the page an X player card shows, and the link from it
 # to the product page. Each logs one line, so plays and click-throughs to the product can be counted.
 class ProductBuildDemosController < ApplicationController
   layout "inertia", only: :show
@@ -28,8 +28,8 @@ class ProductBuildDemosController < ApplicationController
   private
     def set_build
       @product = Link.find_by_external_id(params[:id])
-      @build = @product&.product_builds&.live&.first
-      e404 unless @build&.demo?
+      @build = @product && ProductBuild.demo_for(@product)
+      e404 unless @build
     end
 
     # `framed` tells a card on X web (an iframe) from the X app's in-app browser (a top-level page).

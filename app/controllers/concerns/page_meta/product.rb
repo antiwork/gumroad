@@ -107,10 +107,10 @@ module PageMeta::Product
 
     # The X player card tags that play the product's public demo, or nil when it has none. X shows the
     # image until the card plays, so a product without one keeps its usual card. The flag goes first so
-    # most product pages skip the build query.
+    # a seller without it skips the build query.
     def demo_player_card_meta(product, image:)
       return if image.blank? || !Feature.active?(ProductBuild::DEMO_FEATURE, product.user)
-      return unless product.product_builds.live.first&.demo?
+      return unless ProductBuild.demo_for(product)
 
       {
         "twitter:card" => "player",
