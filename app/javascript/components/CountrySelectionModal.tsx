@@ -24,7 +24,7 @@ export const CountrySelectionModal = ({ country: initialCountry, countries }: Pr
   // Every seller must be able to truthfully check every item; residence and business registration
   // are alternate ties to the selected country.
   const checkboxes = [
-    "I have a valid, government-issued photo ID",
+    "I can provide a valid, government-issued photo ID when my payouts are due",
     "I can provide proof of residence in the country above, or my business is registered there",
   ];
   const [checked, setChecked] = React.useState<number[]>([]);

@@ -11,7 +11,9 @@ describe("CountrySelectionModal", () => {
   it("makes each requirement a full-width interactive row", () => {
     render(<CountrySelectionModal country="US" countries={{ US: "United States" }} />);
 
-    const requirement = screen.getByLabelText<HTMLInputElement>("I have a valid, government-issued photo ID");
+    const requirement = screen.getByLabelText<HTMLInputElement>(
+      "I can provide a valid, government-issued photo ID when my payouts are due",
+    );
     const row = requirement.closest("label");
 
     expect(row?.className).toContain("w-full");
