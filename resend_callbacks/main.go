@@ -1,9 +1,10 @@
-// Command resend_callbacks receives Resend webhooks on the callback fleet and enqueues
-// HandleResendEventJob exactly as ForeignWebhooksController#resend does, without Rails.
+// Command resend_callbacks receives webhooks on the callback fleet and enqueues their
+// jobs exactly as ForeignWebhooksController does, without Rails.
 package main
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -31,6 +32,8 @@ const (
 	// fails the request, so Resend retries it.
 	redisTimeout  = 2 * time.Second
 	redisPoolSize = 64
+	// The flag is read only when a SendGrid signature check fails, at most every flagCacheTTL.
+	flagPoolSize = 4
 
 	readHeaderTimeout = 10 * time.Second
 	requestTimeout    = 30 * time.Second
@@ -38,6 +41,18 @@ const (
 	// this server is closing.
 	idleTimeout = 20 * time.Second
 )
+
+func newRedisClient(host string, poolSize int, timeout time.Duration) (*redis.Client, error) {
+	options, err := redis.ParseURL("redis://" + host)
+	if err != nil {
+		return nil, err
+	}
+	options.DialTimeout = timeout
+	options.ReadTimeout = timeout
+	options.WriteTimeout = timeout
+	options.PoolSize = poolSize
+	return redis.NewClient(options), nil
+}
 
 func pingRedis(client *redis.Client, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
@@ -75,6 +90,49 @@ func main() {
 	}
 }
 
+// configureOptionalRoutes turns on each route whose secrets are set; the rest 404 until
+// Vault has them. It returns the flag Redis client for the caller to close.
+func configureOptionalRoutes(s *server, logger *slog.Logger) *redis.Client {
+	s.stripe = newStripeVerifier(getenv("STRIPE__ENDPOINT_SECRET"))
+	if s.stripe == nil {
+		logger.Warn("STRIPE__ENDPOINT_SECRET is not set, so /stripe-webhook is off")
+	}
+	s.stripeConnect = newStripeVerifier(getenv("STRIPE_CONNECT__ENDPOINT_SECRET"))
+	if s.stripeConnect == nil {
+		logger.Warn("STRIPE_CONNECT__ENDPOINT_SECRET is not set, so /stripe-connect-webhook is off")
+	}
+
+	var keys, names []string
+	for _, name := range sendgridPublicKeyEnvVars {
+		if key := getenv(name); !blank(key) {
+			keys, names = append(keys, key), append(names, name)
+		}
+	}
+	if len(keys) == 0 {
+		logger.Warn("no SENDGRID_*_WEBHOOK_PUBLIC_KEY is set, so /sendgrid-webhook is off")
+		return nil
+	}
+	// An unknown flag must not waive verification, so SendGrid needs the flag's Redis.
+	redisHost := getenv("REDIS_HOST")
+	if redisHost == "" {
+		logger.Warn("REDIS_HOST is not set, so " + sendgridFlag + " can't be read and /sendgrid-webhook is off")
+		return nil
+	}
+	client, err := newRedisClient(redisHost, flagPoolSize, flagTimeout)
+	if err != nil {
+		logger.Error("REDIS_HOST does not parse, so /sendgrid-webhook is off", "error", err.Error())
+		return nil
+	}
+	s.sendgrid = newSendgridVerifier(keys)
+	for i, key := range s.sendgrid.keys {
+		if key.err != nil {
+			logger.Warn(names[i]+" does not parse, so SendGrid verification fails once it reaches that key", "error", key.err.Error())
+		}
+	}
+	s.sendgridFlag = newFlipperFlag(client, sendgridFlag)
+	return client
+}
+
 func run(logger *slog.Logger) error {
 	verifier, err := newSignatureVerifier(getenv("RESEND_WEBHOOK_SECRET"))
 	if err != nil {
@@ -84,15 +142,10 @@ func run(logger *slog.Logger) error {
 	if redisHost == "" {
 		return errors.New("SIDEKIQ_REDIS_HOST is not set")
 	}
-	redisOptions, err := redis.ParseURL("redis://" + redisHost)
+	client, err := newRedisClient(redisHost, redisPoolSize, redisTimeout)
 	if err != nil {
 		return err
 	}
-	redisOptions.DialTimeout = redisTimeout
-	redisOptions.ReadTimeout = redisTimeout
-	redisOptions.WriteTimeout = redisTimeout
-	redisOptions.PoolSize = redisPoolSize
-	client := redis.NewClient(redisOptions)
 	defer client.Close()
 	// A wrong host must fail the task, so the zone roll restores the previous job,
 	// instead of passing readiness and answering every webhook with a 500.
@@ -110,11 +163,18 @@ func run(logger *slog.Logger) error {
 		port = defaultPort
 	}
 	s := &server{
-		verifier: verifier,
-		filter:   newEventFilter(headerKey),
-		queue:    &sidekiqQueue{client: client},
-		logger:   logger,
-		now:      time.Now,
+		resend: verifier,
+		filter: newEventFilter(headerKey),
+		sns:    newSNSVerifier(newCertGetter()),
+		queue:  &sidekiqQueue{client: client},
+		logger: logger,
+		now:    time.Now,
+	}
+	if roots, err := x509.SystemCertPool(); err != nil || roots.Equal(x509.NewCertPool()) {
+		logger.Warn("no CA certificates are installed, so no SNS signing certificate can be fetched and every SNS message is rejected")
+	}
+	if flagClient := configureOptionalRoutes(s, logger); flagClient != nil {
+		defer flagClient.Close()
 	}
 	httpServer := &http.Server{
 		Addr:              ":" + port,

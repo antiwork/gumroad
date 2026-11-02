@@ -10,8 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf16"
 	"unicode/utf8"
 )
 
@@ -32,17 +30,21 @@ var jsonMediaTypes = map[string]bool{
 // Ruby's JSON max_nesting, for both JSON.parse and JSON.generate.
 const maxNesting = 100
 
-// buildEvent rebuilds `params.to_unsafe_hash` as ForeignWebhooksController#resend
-// passes it to HandleResendEventJob: the JSON body (non-object bodies under "_json"),
-// query parameters over it, the route's controller and action, and ParamsWrapper's
-// copy of the body under "foreign_webhook", which Rails only adds to JSON requests.
-// A non-JSON body is ignored; Rails would parse a form body, which Resend never sends.
-func buildEvent(body []byte, query url.Values, contentType string) (map[string]any, error) {
-	isJSON := jsonMediaTypes[railsMediaType(contentType)]
+// The action names buildEvent stores, boxed once.
+var (
+	resendAction   any = "resend"
+	sendgridAction any = "sendgrid"
+)
+
+// buildEvent rebuilds the action's `params.to_unsafe_hash`: the JSON body (non-objects
+// under "_json"), query parameters over it, controller and action, and ParamsWrapper's
+// "foreign_webhook" copy for JSON requests. Form bodies, which no sender posts, are ignored.
+func buildEvent(body *requestBody, query url.Values, contentType string, action any) (map[string]any, error) {
+	isJSON := isJSONContentType(contentType)
 
 	request := map[string]any{}
-	if isJSON && len(body) > 0 {
-		parsed, err := parseJSONLikeRails(body)
+	if isJSON && len(body.raw) > 0 {
+		parsed, err := body.parseRails()
 		if err != nil {
 			return nil, err
 		}
@@ -58,7 +60,7 @@ func buildEvent(body []byte, query url.Values, contentType string) (map[string]a
 		event[key] = values[len(values)-1]
 	}
 	event["controller"] = "foreign_webhooks"
-	event["action"] = "resend"
+	event["action"] = action
 
 	if _, taken := event[wrapperKey]; isJSON && !taken {
 		wrapped := maps.Clone(request)
@@ -66,6 +68,10 @@ func buildEvent(body []byte, query url.Values, contentType string) (map[string]a
 		event[wrapperKey] = wrapped
 	}
 	return event, nil
+}
+
+func isJSONContentType(contentType string) bool {
+	return jsonMediaTypes[railsMediaType(contentType)]
 }
 
 // railsMediaType mirrors Request#content_mime_type: everything before the first ',' or
@@ -77,55 +83,108 @@ func railsMediaType(contentType string) string {
 	return strings.ToLower(strings.TrimSpace(contentType))
 }
 
-// parseJSONLikeRails decodes a body as ActiveSupport::JSON.decode and Rails' param
-// builder do, rejecting what they reject and dropping nils from arrays. Ruby also
-// accepts JSON comments and unknown escapes; Go rejects those, and Resend sends neither.
-func parseJSONLikeRails(body []byte) (any, error) {
-	if !utf8.Valid(body) {
+// requestBody is a request body whose encoding scan the parsers and ActionDispatch's
+// check share.
+type requestBody struct {
+	raw               []byte
+	scanned           bool
+	loneHigh, loneLow bool
+	validUTF8         bool
+}
+
+func (b *requestBody) scan() {
+	if !b.scanned {
+		b.loneHigh, b.loneLow = unpairedSurrogates(b.raw)
+		b.validUTF8 = utf8.Valid(b.raw)
+		b.scanned = true
+	}
+}
+
+// unencodable reports a string Ruby's parser keeps but JSON.generate refuses: invalid
+// UTF-8 or an unpaired low surrogate.
+func (b *requestBody) unencodable() bool {
+	b.scan()
+	return b.loneLow || !b.validUTF8
+}
+
+// parseRuby decodes as JSON.parse (json 2.13.2) does. Ruby also accepts comments and
+// unknown escapes, which Go rejects and no sender sends.
+func (b *requestBody) parseRuby() (any, error) {
+	return b.parse(false)
+}
+
+// parseRails decodes as ActiveSupport::JSON.decode and Rails' param builder do: anything
+// that isn't UTF-8 is rejected, and deep munge drops nils from arrays.
+func (b *requestBody) parseRails() (any, error) {
+	if b.unencodable() {
 		return nil, errors.New("invalid UTF-8 in the JSON body")
 	}
-	if hasLoneSurrogate(body) {
-		return nil, errors.New("unpaired surrogate escape in the JSON body")
+	return b.parse(true)
+}
+
+func (b *requestBody) parse(munge bool) (any, error) {
+	if b.scan(); b.loneHigh {
+		return nil, errors.New("unpaired high surrogate escape in the JSON body")
 	}
-	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder := json.NewDecoder(bytes.NewReader(b.raw))
 	decoder.UseNumber()
-	var parsed any
-	if err := decoder.Decode(&parsed); err != nil {
+	var value any
+	if err := decoder.Decode(&value); err != nil {
 		return nil, err
 	}
 	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
 		return nil, errors.New("unexpected data after the JSON body")
 	}
-	return normalizeParams(parsed, 1)
+	return normalizeJSON(value, 1, munge)
 }
 
-// normalizeParams mirrors Ruby's parser limit and Rails' deep munge: a non-empty array
-// or object nested deeper than max_nesting is an error, and nils are dropped from arrays.
-func normalizeParams(value any, depth int) (any, error) {
+// railsRejects reports a JSON request body ActionDispatch answers with a 400 before any
+// controller callback runs: one that parses but isn't UTF-8. A body that doesn't parse
+// is left to the action, as Rails leaves it.
+func (b *requestBody) railsRejects(contentType string) bool {
+	if len(b.raw) == 0 || !b.unencodable() || !isJSONContentType(contentType) {
+		return false
+	}
+	_, err := b.parseRuby()
+	return err == nil
+}
+
+// normalizeJSON mirrors Ruby's parser limit, a non-empty array or object nested deeper
+// than max_nesting is an error, and with munge Rails' deep munge, which drops nils from
+// arrays.
+func normalizeJSON(value any, depth int, munge bool) (any, error) {
 	switch v := value.(type) {
 	case map[string]any:
 		if len(v) > 0 && depth > maxNesting {
 			return nil, errors.New("JSON body nested too deeply")
 		}
 		for key, item := range v {
-			normalized, err := normalizeParams(item, depth+1)
-			if err != nil {
-				return nil, err
+			switch item.(type) {
+			case map[string]any, []any:
+				normalized, err := normalizeJSON(item, depth+1, munge)
+				if err != nil {
+					return nil, err
+				}
+				v[key] = normalized
 			}
-			v[key] = normalized
 		}
 		return v, nil
 	case []any:
 		if len(v) > 0 && depth > maxNesting {
 			return nil, errors.New("JSON body nested too deeply")
 		}
-		v = slices.DeleteFunc(v, func(item any) bool { return item == nil })
+		if munge {
+			v = slices.DeleteFunc(v, func(item any) bool { return item == nil })
+		}
 		for i, item := range v {
-			normalized, err := normalizeParams(item, depth+1)
-			if err != nil {
-				return nil, err
+			switch item.(type) {
+			case map[string]any, []any:
+				normalized, err := normalizeJSON(item, depth+1, munge)
+				if err != nil {
+					return nil, err
+				}
+				v[i] = normalized
 			}
-			v[i] = normalized
 		}
 		return v, nil
 	default:
@@ -133,11 +192,10 @@ func normalizeParams(value any, depth int) (any, error) {
 	}
 }
 
-// hasLoneSurrogate reports a \uD800-\uDFFF escape that isn't part of a high-low pair.
-// Ruby's parser rejects an unpaired high surrogate, and Rails rejects the invalid
-// UTF-8 an unpaired low one decodes to; Go would substitute U+FFFD for either. Valid
-// JSON only has backslashes inside strings, so there's no need to track quotes.
-func hasLoneSurrogate(body []byte) bool {
+// unpairedSurrogates reports \u escapes of surrogates outside a high-low pair, which Go
+// would decode to U+FFFD. Ruby rejects a lone high one and keeps a lone low one as
+// invalid UTF-8. Backslashes only occur inside strings, so quotes needn't be tracked.
+func unpairedSurrogates(body []byte) (high, low bool) {
 	for i := 0; i < len(body); i++ {
 		if body[i] != '\\' {
 			continue
@@ -147,16 +205,19 @@ func hasLoneSurrogate(body []byte) bool {
 			i++ // skip the escaped character, which may itself be a backslash
 			continue
 		}
-		if utf16.IsSurrogate(code) {
-			low, _ := hexEscape(body, i+6)
-			if utf16.DecodeRune(code, low) == unicode.ReplacementChar {
-				return true
+		switch {
+		case code >= 0xD800 && code <= 0xDBFF:
+			if next, _ := hexEscape(body, i+6); next >= 0xDC00 && next <= 0xDFFF {
+				i += 6
+			} else {
+				high = true
 			}
-			i += 6
+		case code >= 0xDC00 && code <= 0xDFFF:
+			low = true
 		}
 		i += 5
 	}
-	return false
+	return high, low
 }
 
 // hexEscape reads the \uXXXX escape starting at body[i].

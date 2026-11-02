@@ -8,6 +8,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /resend_callbacks .
 
 FROM scratch
 
+# The SNS routes fetch AWS's signing certificates over TLS.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /resend_callbacks /resend_callbacks
 USER 65534:65534
 EXPOSE 3000
