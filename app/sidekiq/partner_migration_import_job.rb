@@ -10,10 +10,13 @@ class PartnerMigrationImportJob
 
   AVATAR_DOWNLOAD_DURATION = 1.minute
 
-  # Releases the lock that a killed worker left, then queues the import. Only for a stalled import,
-  # which has no live worker.
-  def self.enqueue_releasing_lock(partner_migration_id)
+  # Releases the lock that a killed worker left. Only for a stalled import, which has no live worker.
+  def self.release_lock(partner_migration_id)
     SidekiqUniqueJobs::Unlockable.delete!("class" => name, "queue" => get_sidekiq_options["queue"].to_s, "lock" => get_sidekiq_options["lock"].to_s, "args" => [partner_migration_id])
+  end
+
+  def self.enqueue_releasing_lock(partner_migration_id)
+    release_lock(partner_migration_id)
     perform_async(partner_migration_id)
   end
 
