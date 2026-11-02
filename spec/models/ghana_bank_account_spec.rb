@@ -25,6 +25,29 @@ describe GhanaBankAccount do
     end
   end
 
+  describe "#validate_bank_code" do
+    it "refuses the sequence 123456, which is not a real sort code" do
+      account = build(:ghana_bank_account, bank_code: "123456")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("Enter the 6-digit sort code of your own bank branch.")
+    end
+
+    it "does not block saving an already stored 123456 row whose bank code is unchanged" do
+      account = create(:ghana_bank_account)
+      account.update_column(:bank_number, "123456")
+
+      expect(account.reload.update(account_holder_full_name: "Renamed Creator")).to be(true)
+    end
+
+    it "still reports malformed codes as invalid" do
+      account = build(:ghana_bank_account, bank_code: "12345")
+
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("The bank code is invalid.")
+    end
+  end
+
   describe "#account_number_visual" do
     it "returns the visual account number" do
       expect(create(:ghana_bank_account, account_number_last_four: "6789").account_number_visual).to eq("******6789")

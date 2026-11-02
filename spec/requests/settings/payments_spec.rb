@@ -4534,6 +4534,30 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
       end
 
+      it "refuses the bank code 123456 before saving" do
+        visit settings_payments_path
+
+        fill_in("First name", with: "ghanaian")
+        fill_in("Last name", with: "creator")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Accra")
+        fill_in("Phone number", with: "302213850")
+        fill_in("Postal code", with: "00233")
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+        fill_in("Pay to the order of", with: "ghanaian creator")
+        expect(find_field("Bank code")[:placeholder]).to be_blank
+        fill_in("Bank code", with: "123456")
+        fill_in("Account #", with: "000123456789")
+        fill_in("Confirm account #", with: "000123456789")
+
+        click_on("Update settings")
+
+        expect(page).to have_status(text: "Enter the 6-digit sort code of your own bank branch.")
+        expect(@user.reload.active_bank_account).to be_nil
+      end
+
       it "allows saving unrelated changes when a legacy individual P.O. Box address is unchanged" do
         allow_any_instance_of(User).to receive(:can_setup_paypal_payouts?).and_return(true)
         @user.update!(payment_address: "ghanaian@example.com")
