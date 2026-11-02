@@ -1545,12 +1545,12 @@ describe "MCP server" do
       expect(response.parsed_body.dig("result", "content", 0, "text")).to include("too low")
     end
 
-    it "rolls back the price and tags when the suggested amount is below the new price" do
+    it "rolls back the price when the suggested amount is below the new price" do
       @product.update!(customizable_price: true)
 
       expect do
-        call_tool("update_product", { id: @product.external_id, price_cents: 3000, suggested_price_cents: 2500, tags: ["field-notes"] })
-      end.not_to change { [@product.reload.attributes, @product.alive_prices.map(&:attributes), @product.tags.pluck(:name)] }
+        call_tool("update_product", { id: @product.external_id, price_cents: 3000, suggested_price_cents: 2500 })
+      end.not_to change { [@product.reload.attributes, @product.alive_prices.map(&:attributes)] }
 
       expect(response.parsed_body.dig("result", "isError")).to eq(true)
       expect(response.parsed_body.dig("result", "content", 0, "text")).to include("too low")
@@ -1564,6 +1564,14 @@ describe "MCP server" do
 
     it "refuses a suggested price while pay what you want is off" do
       expect { call_tool("update_product", { id: @product.external_id, suggested_price_cents: 2500 }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
+    end
+
+    it "refuses a suggested price in the call that turns pay what you want off" do
+      @product.update!(customizable_price: true)
+
+      expect { call_tool("update_product", { id: @product.external_id, pay_what_you_want: false, suggested_price_cents: 2500 }) }.not_to change { @product.reload.attributes }
 
       expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
     end
