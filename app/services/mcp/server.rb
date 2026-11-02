@@ -57,6 +57,8 @@ module Mcp
     CUSTOMER_REFUNDED = "COALESCE(purchases.stripe_refunded, 0) = 1"
     CUSTOMER_FREE = "COALESCE(purchases.price_cents, 0) = 0"
     TOTALS_BREAKDOWNS = %w[product country day week month].freeze
+    # An unknown category answers with the likeliest few; the whole tree is too long for an error.
+    MAX_CATEGORY_SUGGESTIONS = 10
     TOTALS_DEFAULT_DAYS = 30
     TOTALS_MAX_DAYS = 366
     # A store can have thousands of products, and there are ~250 countries; period rows are bounded by the range.
@@ -338,9 +340,10 @@ module Mcp
                  "limit" => { type: "integer", description: "Max products to return (1-50, default 25)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("get_product", "Fetch one product by id or permalink, with its description, summary, additional details and covers, and the products a bundle sells. The first cover is the main one.", {
+          tool("get_product", "Fetch one product by id or permalink, with its category, description, summary, additional details and covers, and the products a bundle sells. The first cover is the main one.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
+          tool("list_categories", "Every product category, as a slug path joined by / with the name the product editor shows. update_product takes one of these paths as its category; the category decides where the product appears in Discover.", {}, read_only: true),
           tool("create_draft_product", "Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.", {
                  "name" => { type: "string", description: "Product name." },
                  "price_cents" => { type: "integer", description: "Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers." },
@@ -362,9 +365,10 @@ module Mcp
                    }
                  }
                }, required: %w[name]),
-          tool("update_product", "Change the name, description, summary, additional details, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
+          tool("update_product", "Change the name, description, summary, additional details, category, price, or URL of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "name" => { type: "string", description: "New product name." },
+                 "category" => { type: "string", description: "Category slug path from the list_categories result, e.g. 3d/3d-assets/blender. \"other\" means not categorised." },
                  "description" => { type: "string", description: "New HTML or plain-text description." },
                  "summary" => { type: "string", description: "New summary: the short plain-text line under the buy button on the product page. Send an empty string to remove it." },
                  "additional_details" => {
@@ -542,7 +546,7 @@ module Mcp
       def tool_get_product(args)
         require_scopes!(:view_profile, :view_public, :edit_products, :account)
         product = find_product!(args["id"])
-        details = { description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), covers: covers_payload(product) }
+        details = { category: category_payload(product), description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product), covers: covers_payload(product) }
         # A caller editing a bundle needs the members it has now, before replacing them.
         details[:bundle_products] = bundle_products_payload(product) if product.is_bundle?
         # The same rule as the public API: sales figures need a sales scope.
@@ -648,8 +652,11 @@ module Mcp
       def tool_update_product(args)
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
-        changes = args.slice("name", "description", "summary", "additional_details", "price_cents", "permalink")
-        raise Error.new("Pass at least one of name, description, summary, additional_details, price_cents, or permalink", code: -32602) if changes.empty?
+        changes = args.slice("name", "description", "summary", "additional_details", "category", "price_cents", "permalink")
+        raise Error.new("Pass at least one of name, description, summary, additional_details, category, price_cents, or permalink", code: -32602) if changes.empty?
+
+        # Resolved before the transaction: an unknown category is an argument error, not a rollback.
+        taxonomy = resolve_category!(changes["category"]) if changes.key?("category")
 
         # An empty permalink is how the editor clears a custom URL, so it must stay distinct from "unchanged".
         # Whitespace-only is neither: allowing it through would store a value the model treats as blank
@@ -697,9 +704,13 @@ module Mcp
           product.json_data = product.json_data.to_h.merge("custom_attributes" => normalized_additional_details(changes["additional_details"])) if changes.key?("additional_details")
           # Link's validations enforce the editor's permalink rules, and its after_commit redirects the outgoing slug.
           product.custom_permalink = permalink if changes.key?("permalink")
+          product.taxonomy = taxonomy if taxonomy
           product.save!
+          # The editor re-normalizes the seller's attribute answers on a taxonomy switch; without
+          # this, values answered for the old category stay in json_data.
+          product.save_taxonomy_attribute_values(nil) if taxonomy && product.saved_change_to_taxonomy_id?
         end
-        result = { product: product_payload(product.reload).merge(description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product)) }
+        result = { product: product_payload(product.reload).merge(category: category_payload(product), description: product.description, summary: product.custom_summary, additional_details: additional_details_payload(product)) }
         # A lower price can push an existing discount below the minimum; the editor warns rather than refuses.
         if changes.key?("price_cents")
           invalid_codes = product.product_and_universal_offer_codes.reject { _1.is_amount_valid?(product) }.map(&:code)
@@ -1515,6 +1526,72 @@ module Mcp
         offered = tier_records.reject(&:closed_to_new_buyers?).presence || tier_records
         # The product-level price is a $0 placeholder that would read as free.
         { price_cents: nil, pay_what_you_want: offered.any?(&:customizable_price?), suggested_price_cents: nil, tiers: }
+      end
+
+      # What the product is filed under in Discover: the slug path update_product accepts back, and
+      # the name the product editor shows for it.
+      def category_payload(product)
+        taxonomy = product.taxonomy
+        return if taxonomy.nil?
+
+        { path: category_path(taxonomy), label: category_label(taxonomy) }
+      end
+
+      def category_label(taxonomy)
+        Discover::TaxonomyPresenter::TAXONOMY_LABELS[taxonomy.slug].presence || taxonomy.slug
+      end
+
+      # Walked from parent_id like taxonomy_paths, not from ancestry_path: the closure table can lag a
+      # moved node, and the path we return has to be one update_product accepts back.
+      def category_path(taxonomy)
+        @category_paths ||= taxonomy_paths.each_with_object({}) { |(path, record), paths| paths[record.id] = path }
+        @category_paths[taxonomy.id] || taxonomy.slug
+      end
+
+      def tool_list_categories(_args)
+        require_scopes!(:view_profile, :view_public, :edit_products, :account)
+        { categories: taxonomy_paths.sort_by { |path, _| path }.map { |path, taxonomy| { path:, label: category_label(taxonomy) } } }
+      end
+
+      # A category is written the way Discover reads it: slug segments from the root down, joined by
+      # "/". A bare leaf slug is accepted when the tree holds exactly one, so "blender" works too.
+      def resolve_category!(value)
+        raise Error.new("category must be a non-blank string", code: -32602) unless value.is_a?(String) && value.strip.present?
+
+        wanted = value.strip.downcase
+        paths = taxonomy_paths
+        return paths[wanted] if paths.key?(wanted)
+
+        matches = paths.select { |path, _| path.split("/").last == wanted }
+        return matches.values.first if matches.size == 1
+        raise ToolError, "The category \"#{value}\" matches more than one: #{matches.keys.sort.join(', ')}. Pass the full path." if matches.any?
+
+        # Answering with what the caller probably meant is the difference between one retry and a
+        # dead end, because the whole tree is too long to repeat in an error.
+        closest = paths.keys.select { |path| path.split("/").last.start_with?(wanted) || path.include?(wanted) }.first(MAX_CATEGORY_SUGGESTIONS)
+        message = if closest.any?
+          "The category \"#{value}\" was not found. Closest categories: #{closest.join(', ')}."
+        else
+          "The category \"#{value}\" was not found. A category is a slug path such as \"design/ui-and-web/figma\"."
+        end
+        raise ToolError, "#{message} Call list_categories for every category."
+      end
+
+      # Slug path -> Taxonomy for the whole tree, walked in memory: a few hundred rows, one query,
+      # however deep the path the caller sent.
+      def taxonomy_paths
+        @taxonomy_paths ||= begin
+          taxonomies = Taxonomy.all.to_a
+          by_id = taxonomies.index_by(&:id)
+          paths = {}
+          resolve = lambda do |taxonomy|
+            paths[taxonomy.id] ||= begin
+              parent = by_id[taxonomy.parent_id]
+              parent ? "#{resolve.call(parent)}/#{taxonomy.slug}" : taxonomy.slug
+            end
+          end
+          taxonomies.index_by { |taxonomy| resolve.call(taxonomy).downcase }
+        end
       end
 
       def find_product!(id)
