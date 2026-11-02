@@ -27,11 +27,15 @@ module Mcp
     def perform
       href = normalized_href
       label = @label || href
+      owners = page_owners
+      # Read before anything is written, so a version that opens with a copy gets the pages as buyers
+      # read them now rather than a sibling's button.
+      seeds = owners.map { |owner| [owner, page_seed(owner)] }
       added = []
       # The lock serializes concurrent adds: appending to a page is read-modify-write.
       ActiveRecord::Base.transaction do
         product.lock!
-        page_owners.each { |owner| added.concat(append_button(owner, href, label)) }
+        seeds.each { |owner, seed| added.concat(append_button(owner, seed, href, label)) }
       end
       added
     end
@@ -51,23 +55,30 @@ module Mcp
         # only when its pages already hold content: a product-level page created here would take
         # the version content those buyers read today and leave them the button alone.
         owners << product if product.alive_rich_contents.any?(&:has_editor_content?)
-        owners = version_owners_that_keep_the_fallback(owners) if product.recoverable_hidden_variant_rich_content?
         owners
       end
 
       # In the state the July 21, 2026 restore left behind (the shared-content flag on, the product
-      # level blank, the real pages on a version) a buyer without a version reads the cheapest
-      # version that has content (UrlRedirect#product_or_cheapest_variant_as_rich_content_provider).
-      # A page created here on a version with none counts as its content, so one cheaper than every
-      # version that already has some would take those buyers off the pages they read today; a
-      # version that is not cheaper leaves the fallback where it is, and its own buyers (who read its
-      # pages when they selected it) get the button too.
-      def version_owners_that_keep_the_fallback(owners)
-        with_content, without_content = owners.partition { _1.alive_rich_contents.any?(&:has_editor_content?) }
-        return owners if with_content.empty?
+      # level blank, the real pages on a version) a buyer without a version reads the cheapest version
+      # that has content (UrlRedirect#product_or_cheapest_variant_as_rich_content_provider). A version
+      # with none gets a page of its own here, which puts it in that list unless it is pricier than the
+      # version holding the pages: such a version would be served to buyers without one instead, so its
+      # own buyers (who read its pages when they selected it) must not miss the button and the
+      # versionless ones must not lose what they read. Its page therefore opens as a copy of the
+      # holder's, and a pricier version gets a page of its own without moving that fallback.
+      def page_seed(owner)
+        return unless owner.is_a?(BaseVariant) && product.recoverable_hidden_variant_rich_content?
+        return if owner.alive_rich_contents.any?(&:has_editor_content?)
 
-        cheapest_content_order = with_content.map { price_order(_1) }.min
-        with_content + without_content.select { (price_order(_1) <=> cheapest_content_order).positive? }
+        with_content = product.alive_variants.select { _1.alive_rich_contents.any?(&:has_editor_content?) }
+        return if with_content.empty?
+
+        holder = with_content.min_by { price_order(_1) }
+        return unless (price_order(owner) <=> price_order(holder)) <= 0
+
+        holder.alive_rich_contents.order(:position).map do |page|
+          { title: page.title, description: page.description.deep_dup, position: page.position }
+        end
       end
 
       # UrlRedirect orders versions by `price_difference_cents` ascending, and a version with no price
@@ -81,12 +92,18 @@ module Mcp
       # exist the download page shows those pages instead of the file list, so a first page created
       # for an owner that delivers files has to embed them or buyers lose their download rows.
       # Mcp::ProductFileIngest#append_embeds faces the same choice for the first file it adds.
-      def append_button(owner, href, label)
-        page = owner.alive_rich_contents.min_by(&:position)
-        nodes = page ? [] : file_embed_nodes(owner)
-        page ||= owner.alive_rich_contents.create!(description: [], position: 0)
-        page.update!(description: page.description.to_a + nodes + [button_node(href, label)])
+      def append_button(owner, seed, href, label)
+        page = first_page(owner, seed)
+        page.update!(description: page.description.to_a + [button_node(href, label)])
         [{ page_id: page.external_id, label:, url: href }]
+      end
+
+      def first_page(owner, seed)
+        existing = owner.alive_rich_contents.min_by(&:position)
+        return existing if existing
+        return seed.map { |attrs| owner.alive_rich_contents.create!(**attrs) }.first if seed
+
+        owner.alive_rich_contents.create!(description: file_embed_nodes(owner), position: 0)
       end
 
       def file_embed_nodes(owner)

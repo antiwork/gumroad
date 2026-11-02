@@ -193,14 +193,18 @@ describe "MCP server content links" do
         @versioned.update!(has_same_rich_content_for_all_variants: true)
       end
 
-      it "leaves a version with no content alone and writes to the one buyers read" do
+      it "writes to the version buyers read and copies its page onto the version that would replace it" do
         result = call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
 
-        expect(@empty_version.reload.alive_rich_contents).to be_empty
-        page = @content_version.reload.alive_rich_contents.sole
-        expect(page.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
+        holder = @content_version.reload.alive_rich_contents.sole
+        expect(holder.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
+        # The version a buyer without one would be sent to opens with the same page, so it takes
+        # nobody off it.
+        copy = @empty_version.reload.alive_rich_contents.sole
+        expect(copy.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
         expect(result.dig("structuredContent", "links")).to eq([
-                                                                 { "page_id" => page.external_id, "label" => "Duplicate", "url" => "https://notion.so/template" }
+                                                                 { "page_id" => copy.external_id, "label" => "Duplicate", "url" => "https://notion.so/template" },
+                                                                 { "page_id" => holder.external_id, "label" => "Duplicate", "url" => "https://notion.so/template" }
                                                                ])
       end
 
@@ -210,11 +214,11 @@ describe "MCP server content links" do
         result = call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
 
         expect(result["isError"]).to be_falsey
-        expect(free.reload.alive_rich_contents).to be_empty
+        expect(free.reload.alive_rich_contents.sole.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
         expect(@content_version.reload.alive_rich_contents.sole.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
       end
 
-      it "gives a version with no content a page of its own when that leaves the versionless fallback alone" do
+      it "gives a version that is pricier than the one holding the pages a page of its own" do
         host! DOMAIN
         pricier = create(:variant, variant_category: @content_version.variant_category, name: "Team", price_difference_cents: 5000)
         purchase = create(:purchase, link: @versioned, ip_address: "127.0.0.1")
@@ -223,7 +227,7 @@ describe "MCP server content links" do
 
         call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
 
-        expect(@empty_version.reload.alive_rich_contents).to be_empty
+        expect(@empty_version.reload.alive_rich_contents.sole.description).to eq([text("Watch the lessons"), button("https://notion.so/template", "Duplicate")])
         expect(pricier.reload.alive_rich_contents.sole.description).to eq([button("https://notion.so/template", "Duplicate")])
 
         # The buyer who selected that version reads its page, with the button on it.
@@ -241,6 +245,23 @@ describe "MCP server content links" do
         page = response.parsed_body.dig("props", "content", "rich_content_pages").sole
         expect(page.dig("description", "content").map { _1["type"] }).to eq(%w[paragraph button])
         expect(page.dig("description", "content", 0, "content", 0, "text")).to eq("Watch the lessons")
+      end
+
+      it "serves the version a buyer selected, which is cheaper than the one holding the pages" do
+        host! DOMAIN
+        purchase = create(:purchase, link: @versioned, ip_address: "127.0.0.1")
+        purchase.variant_attributes = [@empty_version]
+        purchase.create_url_redirect!
+
+        call_tool("add_content_link", { id: @versioned.external_id, url: "https://notion.so/template", label: "Duplicate" })
+
+        get "/d/#{purchase.url_redirect.token}", headers: { "X-Inertia" => "true" }
+
+        expect(response).to have_http_status(:ok)
+        page = response.parsed_body.dig("props", "content", "rich_content_pages").sole
+        expect(page.dig("description", "content").map { _1["type"] }).to eq(%w[paragraph button])
+        expect(page.dig("description", "content", 0, "content", 0, "text")).to eq("Watch the lessons")
+        expect(page.dig("description", "content", 1, "attrs", "href")).to eq("https://notion.so/template")
       end
 
       it "keeps serving versionless buyers the pages they read, now with the button on them" do
