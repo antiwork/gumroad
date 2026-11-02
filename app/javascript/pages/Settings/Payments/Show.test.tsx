@@ -888,6 +888,51 @@ describe("Bangladesh bank code validation", () => {
   });
 });
 
+describe("Ghana bank code validation", () => {
+  const sortCodeError = "Enter the 6-digit sort code of your own bank branch.";
+
+  const renderGhanaSeller = (bank_code: string) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "GH", payout_currency: "ghs" }, { country: "GH" }),
+        countries: { GH: "Ghana" },
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: false,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+    fireEvent.change(screen.getByLabelText("Bank code"), { target: { value: bank_code } });
+    fireEvent.change(screen.getByLabelText("Pay to the order of"), { target: { value: "Test Seller" } });
+    fireEvent.change(screen.getByLabelText("Account #"), { target: { value: "1234567890" } });
+    fireEvent.change(screen.getByLabelText("Confirm account #"), { target: { value: "1234567890" } });
+    save();
+  };
+
+  // The input's `pattern` is never enforced on save — the page validates and posts through Inertia
+  // — so the refusal has to run here for the seller to see it before the request goes out.
+  it("refuses the 123456 example before the request is sent", () => {
+    renderGhanaSeller("123456");
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(sortCodeError).length).toBeGreaterThan(0);
+  });
+
+  it("saves a real 6-digit sort code", () => {
+    renderGhanaSeller("040101");
+
+    expect(mocks.put).toHaveBeenCalled();
+    expect(screen.queryByText(sortCodeError)).toBeNull();
+  });
+});
+
 describe("switching to PayPal where the bank rail cannot be re-created", () => {
   // An India seller with a live bank account: the save deletes it and Stripe refuses a new IND
   // account, so the confirmation must fire even with nothing forfeitable.
