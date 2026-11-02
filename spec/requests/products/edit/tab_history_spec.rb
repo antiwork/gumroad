@@ -32,6 +32,30 @@ describe("Product Edit tab history", type: :system, js: true) do
     expect(product.reload.name).to eq("Saved name")
   end
 
+  it "leaves Back and Forward between the editor and other pages to Inertia" do
+    visit edit_link_path(product.unique_permalink)
+    select_tab "Content"
+    click_on "Products"
+    expect(page).to have_current_path(products_path)
+    expect(page).to have_table_row({ "Name" => product.name })
+
+    page.go_back
+    expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/content")
+    expect(page).to have_tab_button("Content", open: true)
+
+    page.go_back
+    expect(page).to have_current_path(edit_link_path(product.unique_permalink))
+    expect(page).to have_tab_button("Product", open: true)
+
+    page.go_forward
+    expect(page).to have_current_path(edit_link_path(product.unique_permalink) + "/content")
+    expect(page).to have_tab_button("Content", open: true)
+
+    page.go_forward
+    expect(page).to have_current_path(products_path)
+    expect(page).to have_table_row({ "Name" => product.name })
+  end
+
   it "keeps the current tab on Back while an image is still uploading" do
     visit edit_link_path(product.unique_permalink) + "/content"
     expect(page).to have_tab_button("Content", open: true)
