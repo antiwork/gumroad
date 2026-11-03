@@ -139,7 +139,7 @@ export const Layout = ({
   // preview body), shown in the Receipt tab's email chrome. Null while the preview is loading.
   receiptSubject?: string | null;
 }) => {
-  const { product, updateProduct, uniquePermalink, saving, saveBlocked, save, receiptEmailFrom } =
+  const { product, updateProduct, uniquePermalink, saving, saveBlocked, save, receiptEmailFrom, webAppUploading } =
     useProductEditContext();
   const currentSeller = useCurrentSeller();
   const rootPath = Routes.edit_link_path(uniquePermalink);
@@ -221,14 +221,14 @@ export const Layout = ({
           : undefined;
 
   React.useEffect(() => {
-    if (!isUploadingFilesOrImages) return;
+    if (!isUploadingFilesOrImages && !webAppUploading) return;
 
     const beforeUnload = (e: BeforeUnloadEvent) => e.preventDefault();
 
     window.addEventListener("beforeunload", beforeUnload);
 
     return () => window.removeEventListener("beforeunload", beforeUnload);
-  }, [isUploadingFilesOrImages]);
+  }, [isUploadingFilesOrImages || webAppUploading]);
 
   const saveButton = (
     <WithTooltip tip={saveButtonTooltip}>
@@ -240,9 +240,11 @@ export const Layout = ({
 
   const uploadingMessage = isUploadingFiles
     ? "Some files are still uploading, please wait..."
-    : isUploadingFilesOrImages
-      ? "Some images are still uploading, please wait..."
-      : undefined;
+    : webAppUploading
+      ? "Your web app is still uploading, please wait..."
+      : isUploadingFilesOrImages
+        ? "Some images are still uploading, please wait..."
+        : undefined;
 
   // Back and Forward between tabs get the same guard as a tab click.
   const blocker = useBlocker(({ historyAction }) => historyAction === NavigationType.Pop && !!uploadingMessage);

@@ -16,6 +16,16 @@ describe McpConnectorsController do
     expect(response.body).not_to include("Submitted for review")
   end
 
+  it "points ChatGPT setup at the plugin directory" do
+    get :show, params: { client: "chatgpt" }
+
+    expect(response).to be_successful
+    expect(response.body).to include("Listed in ChatGPT’s plugin directory", "Add Gumroad to ChatGPT", "Add Gumroad from ChatGPT’s plugin directory")
+    expect(Nokogiri::HTML(response.body).css('a[href="https://chatgpt.com/plugins/plugin_asdk_app_6adf8e8e7eac8191a9af1b87fdeedb45"]').size).to be >= 2
+    expect(response.body).to include("/chatgpt/v1/mcp", "Review the requested permissions before you authorize access")
+    expect(response.body).not_to include("Submitted for review")
+  end
+
   it "shows review status and technical details without Muse setup instructions" do
     get :show, params: { client: "muse" }
 
@@ -46,7 +56,8 @@ describe McpConnectorsController do
       expect(response.body).to include("Gumroad MCP for Claude", "Available now in Claude’s connector directory", "Listed in Claude’s connector directory")
       expect(response.body).not_to include("not yet listed")
       expect(response.body).to include("Gumroad MCP for Muse", "not yet available in Muse")
-      expect(response.body).to include("ChatGPT", "Not available yet")
+      expect(response.body).to include("Gumroad MCP for ChatGPT", "Available now in ChatGPT’s plugin directory", "Listed in ChatGPT’s plugin directory")
+      expect(response.body).not_to include("Not available yet")
       expect(response.body).not_to include("Connect your store")
     end
 
@@ -61,11 +72,12 @@ describe McpConnectorsController do
       expect(html.at_css('#connect a[href="/claude"]')&.text).to eq("Gumroad MCP for Claude connector page")
     end
 
-    it "does not claim a Muse or ChatGPT connection path for creators" do
+    it "does not claim a Muse connection path and lists ChatGPT in its plugin directory" do
       get :index
 
       expect(Nokogiri::HTML(response.body).css('article a[href="/muse"]').map(&:text)).to eq(["Read the technical details"])
-      expect(response.body).not_to include("developer mode", "/chatgpt")
+      expect(Nokogiri::HTML(response.body).css('article a[href="/chatgpt"]').map(&:text)).to eq(["Set up Gumroad MCP"])
+      expect(response.body).not_to include("developer mode")
     end
   end
 
@@ -73,7 +85,8 @@ describe McpConnectorsController do
 
   {
     "muse" => "Gumroad MCP for Muse | Sell digital products",
-    "claude" => "Gumroad MCP for Claude | Sell digital products"
+    "claude" => "Gumroad MCP for Claude | Sell digital products",
+    "chatgpt" => "Gumroad MCP for ChatGPT | Sell digital products"
   }.each do |client, title|
     it "sets title, description, and canonical for #{client}" do
       get :show, params: { client: }

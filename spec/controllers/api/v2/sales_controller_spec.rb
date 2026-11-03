@@ -428,6 +428,34 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "returns a 400 error if the page number is too large for the SQL offset" do
+        @params.merge!(page: "20261020143608000000-690371289")
+        get :index, params: @params
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid page number. Page numbers start at 1."
+        }.as_json)
+      end
+
+      it "accepts the largest page within the signed 64-bit offset range" do
+        # (922337203685477581 - 1) * 10 fits the signed 64-bit range; the next page's offset does not.
+        @params.merge!(page: "922337203685477581")
+        get :index, params: @params
+
+        expect(response.code).to eq "200"
+      end
+
+      it "returns a 400 error for the first page past the signed 64-bit offset range" do
+        @params.merge!(page: "922337203685477582")
+        get :index, params: @params
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid page number. Page numbers start at 1."
+        }.as_json)
+      end
+
       it "treats a nested page param as the first deprecated page" do
         get :index, params: @params.merge(page: { size: "100" })
 

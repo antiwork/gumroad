@@ -14,6 +14,8 @@ describe "MCP server" do
     @product = create(:product, user: @seller, name: "Field notes", price_cents: 1900)
   end
 
+  let(:mcp_scopes) { %w[view_public view_profile view_sales edit_products view_payouts] }
+
   def post_mcp(payload, token: @token)
     headers = {
       "CONTENT_TYPE" => "application/json",
@@ -55,7 +57,7 @@ describe "MCP server" do
     expect(body["mcp"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(body["oauth"]["authorization_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/authorize")
     expect(body["oauth"]["registration_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/register")
-    expect(body["oauth"]["scopes"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(body["oauth"]["scopes"]).to match_array(mcp_scopes)
     expect(body["clients"]).to include(
       "muse" => "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp",
       "claude" => "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
@@ -69,13 +71,13 @@ describe "MCP server" do
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(response.parsed_body["authorization_servers"]).to eq(["#{PROTOCOL}://#{DOMAIN}"])
-    expect(response.parsed_body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body["scopes_supported"]).to match_array(mcp_scopes)
 
     get "/.well-known/oauth-protected-resource/claude/v1/mcp", headers: { "HOST" => DOMAIN }
 
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp")
-    expect(response.parsed_body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body["scopes_supported"]).to match_array(mcp_scopes)
   end
 
   it "registers a public OAuth client for MCP" do
@@ -225,7 +227,7 @@ describe "MCP server" do
     expect(body["code_challenge_methods_supported"]).to include("S256")
     expect(body["registration_endpoint"]).to end_with("/muse/v1/oauth2/register")
     expect(body["token_endpoint_auth_methods_supported"]).to include("none")
-    expect(body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(body["scopes_supported"]).to match_array(mcp_scopes)
   end
 
   it "issues a Claude token with every scope discovered from the MCP metadata" do
@@ -237,6 +239,7 @@ describe "MCP server" do
     get "/.well-known/oauth-protected-resource/claude/v1/mcp"
     resource = response.parsed_body.fetch("resource")
     scopes = response.parsed_body.fetch("scopes_supported")
+    expect(scopes).to match_array(mcp_scopes)
 
     get "/.well-known/oauth-authorization-server"
     metadata = response.parsed_body
@@ -261,6 +264,7 @@ describe "MCP server" do
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("MCP Claude")
+    expect(response.body).not_to include(OauthScopeHelper::DESCRIPTIONS.fetch("account"))
     doc = Nokogiri::HTML(response.body)
     expect(doc.at_css("input[name='scope']")["value"].split).to match_array(scopes)
 
@@ -288,10 +292,10 @@ describe "MCP server" do
     expect(issued.resource).to eq(resource)
 
     headers = { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{issued.token}" }
-    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Six scopes", price_cents: 500 } } }.to_json, headers: headers
+    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Discovered scopes", price_cents: 500 } } }.to_json, headers: headers
     expect(response).to have_http_status(:ok)
     expect(response.headers["WWW-Authenticate"]).to be_nil
-    expect(response.parsed_body.dig("result", "structuredContent", "product", "name")).to eq("Six scopes")
+    expect(response.parsed_body.dig("result", "structuredContent", "product", "name")).to eq("Discovered scopes")
 
     post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_payouts", arguments: {} } }.to_json, headers: headers
     expect(response).to have_http_status(:ok)
@@ -312,7 +316,7 @@ describe "MCP server" do
          headers: { "CONTENT_TYPE" => "application/json" }
     expect(response).to have_http_status(:created)
     client_id = response.parsed_body.fetch("client_id")
-    expect(response.parsed_body.fetch("scope").split).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body.fetch("scope").split).to match_array(mcp_scopes)
 
     authorize = lambda do |scope|
       code_verifier = SecureRandom.urlsafe_base64(48)
@@ -336,7 +340,7 @@ describe "MCP server" do
     # Omitting scope would leave the client on Doorkeeper's default (view_public only); a dynamic
     # client gets everything it registered instead.
     full_token = authorize.call(nil)
-    expect(full_token.fetch("scope").split).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(full_token.fetch("scope").split).to match_array(mcp_scopes)
     expect { call_tool.call(full_token.fetch("access_token"), "create_draft_product") }.to change(Link, :count).by(1)
     expect(response).to have_http_status(:ok)
     expect(response.headers["WWW-Authenticate"]).to be_nil
@@ -366,6 +370,56 @@ describe "MCP server" do
     expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public view_sales edit_products view_payouts"))
   end
 
+  it "lets a client registered with the account scope reconnect on the challenge's narrower scopes or keep account" do
+    host! DOMAIN
+    stub_vite_layout_helpers
+    Rails.application.reload_routes!
+    sign_in @seller
+
+    resource = "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp"
+    redirect_uri = "https://example.com/callback"
+    legacy_scopes = mcp_scopes + ["account"]
+    post "/claude/v1/oauth2/register",
+         params: { client_name: "Claude", redirect_uris: [redirect_uri], token_endpoint_auth_method: "none", scope: "#{legacy_scopes.join(' ')} edit_sales" }.to_json,
+         headers: { "CONTENT_TYPE" => "application/json" }
+    expect(response).to have_http_status(:created)
+    client_id = response.parsed_body.fetch("client_id")
+    expect(response.parsed_body.fetch("scope").split).to match_array(legacy_scopes)
+
+    authorize = lambda do |scope|
+      code_verifier = SecureRandom.urlsafe_base64(48)
+      code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(code_verifier), padding: false)
+      params = { response_type: "code", client_id:, redirect_uri:, state: "reconnect", code_challenge:, code_challenge_method: "S256", resource:, scope: }
+      get "/claude/v1/oauth2/authorize", params: params
+      expect(response).to have_http_status(:ok)
+      consent = response.body
+      post "/oauth/authorize", params: params.merge(authenticity_token: authenticity_token(Nokogiri::HTML(consent)))
+      code = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("code")
+      post "/claude/v1/oauth2/token", params: { grant_type: "authorization_code", code:, redirect_uri:, client_id:, code_verifier:, resource: }
+      expect(response).to have_http_status(:ok)
+      [Doorkeeper::AccessToken.by_token(response.parsed_body.fetch("access_token")), consent]
+    end
+    list_payouts = lambda do |token|
+      post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_payouts", arguments: {} } }.to_json,
+                             headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{token.token}" }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("result", "structuredContent")).to eq("payouts" => [])
+    end
+
+    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json, headers: { "CONTENT_TYPE" => "application/json" }
+    challenged_scope = response.headers["WWW-Authenticate"][/ scope="([^"]+)"/, 1]
+
+    narrow_token, consent = authorize.call(challenged_scope)
+    expect(narrow_token.scopes.to_a).to match_array(mcp_scopes)
+    expect(consent).not_to include(OauthScopeHelper::DESCRIPTIONS.fetch("account"))
+    list_payouts.call(narrow_token)
+
+    legacy_token, consent = authorize.call(legacy_scopes.join(" "))
+    expect(legacy_token.scopes.to_a).to match_array(legacy_scopes)
+    expect(consent).to include(OauthScopeHelper::DESCRIPTIONS.fetch("account"))
+    list_payouts.call(legacy_token)
+  end
+
   it "keeps Doorkeeper's default scope for a manually created application that omits scope" do
     host! DOMAIN
     stub_vite_layout_helpers
@@ -391,7 +445,7 @@ describe "MCP server" do
 
     expect(response).to have_http_status(:unauthorized)
     expect(response.headers["WWW-Authenticate"]).to eq(
-      %(Bearer realm="Gumroad", scope="view_public view_profile view_sales edit_products view_payouts account", ) +
+      %(Bearer realm="Gumroad", scope="view_public view_profile view_sales edit_products view_payouts", ) +
       %(resource_metadata="#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp")
     )
   end
@@ -446,6 +500,7 @@ describe "MCP server" do
         "get_account" => "Get account",
         "list_products" => "List products",
         "get_product" => "Get product",
+        "list_categories" => "List categories",
         "create_draft_product" => "Create draft product",
         "update_product" => "Update product",
         "add_cover" => "Add cover",
@@ -522,13 +577,13 @@ describe "MCP server" do
 
       annotations = response.parsed_body.dig("result", "tools").to_h { |tool| [tool["name"], tool["annotations"]] }
       expect(annotations.keys).to contain_exactly(
-        "get_account", "list_products", "get_product", "create_draft_product", "update_product", "add_cover",
+        "get_account", "list_products", "get_product", "list_categories", "create_draft_product", "update_product", "add_cover",
         "list_files", "add_file", "add_content_link", "publish_product", "unpublish_product", "list_sales", "get_analytics", "get_customers", "get_sales_totals", "get_subscriptions", "list_payouts",
         "create_bundle", "update_bundle", "create_discount_code", "update_discount_code", "expire_discount_code"
       )
       # Every tool reaches the storefront, an external publicly reachable system.
       expect(annotations.values).to all(include("openWorldHint" => true))
-      %w[get_account list_products get_product list_files list_sales get_analytics get_customers get_sales_totals get_subscriptions list_payouts].each do |name|
+      %w[get_account list_products get_product list_categories list_files list_sales get_analytics get_customers get_sales_totals get_subscriptions list_payouts].each do |name|
         expect(annotations[name]).to include("readOnlyHint" => true, "destructiveHint" => false)
       end
       %w[create_draft_product add_cover add_file add_content_link create_discount_code].each do |name|
@@ -1143,7 +1198,7 @@ describe "MCP server" do
       end
 
       it "breaks created_at ties by id for products and payouts" do
-        @token.update!(scopes: "account")
+        @token.update!(scopes: "view_public view_payouts")
         at = 1.hour.ago.change(usec: 0)
         products = Array.new(3) { create(:product, user: @seller, created_at: at) }
         payments = Array.new(3) { create(:payment, user: @seller, created_at: at) }
@@ -1272,12 +1327,52 @@ describe "MCP server" do
       expect(product.purchase_disabled_at).to be_present
     end
 
+    it "creates the draft in the currency it was asked for" do
+      call_tool("create_draft_product", { name: "Yen notes", price_cents: 500, currency: "JPY" })
+
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload["currency"]).to eq("jpy")
+      expect(payload["price_cents"]).to eq(500)
+      product = @seller.links.find_by_external_id(payload["id"])
+      expect(product.price_currency_type).to eq("jpy")
+      expect(product.alive_prices.is_buy.pluck(:currency, :price_cents)).to eq([["jpy", 500]])
+    end
+
+    it "prices a draft in the creator's own currency when no currency is asked for" do
+      expect(@seller.currency_type).to eq("usd")
+
+      call_tool("create_draft_product", { name: "Default notes", price_cents: 1900 })
+
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload["currency"]).to eq("usd")
+    end
+
+    it "rejects a currency the product editor does not offer, and creates nothing" do
+      expect do
+        call_tool("create_draft_product", { name: "Bad currency", price_cents: 1900, currency: "zzz" })
+      end.not_to change(@seller.links, :count)
+
+      expect(response.parsed_body["error"]["code"]).to eq(-32602)
+      expect(response.parsed_body["error"]["message"]).to start_with("currency must be one of: usd, gbp, eur")
+    end
+
     describe "creating a membership" do
       let(:tiers) do
         [
           { name: "Reader", price_cents: 500, recurrence: "monthly" },
           { name: "Supporter", price_cents: 1500, recurrence: "monthly" }
         ]
+      end
+
+      it "prices the draft membership and its tiers in the currency asked for" do
+        call_tool("create_draft_product", { name: "Field club", product_type: "membership", tiers:, currency: "eur" })
+
+        payload = response.parsed_body.dig("result", "structuredContent", "product")
+        expect(payload["currency"]).to eq("eur")
+        product = @seller.links.find_by_external_id(payload["id"])
+        expect(product.price_currency_type).to eq("eur")
+        expect(product.tiers.alive.order(:position_in_category).map { _1.alive_prices.is_buy.pluck(:currency, :price_cents) })
+          .to eq([[["eur", 500]], [["eur", 1500]]])
       end
 
       it "creates a draft membership with its tiers and their recurring prices" do
@@ -1327,6 +1422,29 @@ describe "MCP server" do
         expect(tiers.map { _1.slice("name", "pay_what_you_want") }).to eq([{ "name" => "Paid", "pay_what_you_want" => false }, { "name" => "Free", "pay_what_you_want" => true }])
       end
 
+      it "sets a tier's pay what you want and suggested price beside its price" do
+        tiers = [{ name: "Reader", price_cents: 500, recurrence: "monthly", pay_what_you_want: true, suggested_price_cents: 800 }, { name: "Supporter", price_cents: 1500, recurrence: "monthly" }]
+        call_tool("create_draft_product", { name: "Field club", product_type: "membership", tiers: })
+
+        payload = response.parsed_body.dig("result", "structuredContent", "product")
+        expect(payload["tiers"].map { _1.except("id") }).to eq([
+                                                                 { "name" => "Reader", "pay_what_you_want" => true, "prices" => { "monthly" => { "price_cents" => 500, "suggested_price_cents" => 800 } } },
+                                                                 { "name" => "Supporter", "pay_what_you_want" => false, "prices" => { "monthly" => { "price_cents" => 1500, "suggested_price_cents" => nil } } }
+                                                               ])
+        reader = @seller.links.find_by_external_id(payload["id"]).tiers.alive.find_by!(name: "Reader")
+        expect(reader.customizable_price).to eq(true)
+        expect(reader.alive_prices.is_buy.pluck(:price_cents, :suggested_price_cents)).to eq([[500, 800]])
+      end
+
+      it "reports a tier suggested price below the tier's price as a tool error and creates nothing" do
+        expect do
+          call_tool("create_draft_product", { name: "Field club", product_type: "membership", tiers: [{ name: "Reader", price_cents: 500, recurrence: "monthly", pay_what_you_want: true, suggested_price_cents: 300 }] })
+        end.not_to change { [Link.count, BaseVariant.count, BasePrice.count] }
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("The suggested price you entered was too low.")
+      end
+
       it "reports a tier price below the currency minimum as a tool error and creates nothing" do
         expect do
           call_tool("create_draft_product", { name: "Cheap club", product_type: "membership", tiers: [{ name: "Member", price_cents: 10, recurrence: "monthly" }] })
@@ -1357,7 +1475,9 @@ describe "MCP server" do
         "a fractional tier price" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 4.5, recurrence: "monthly" }] }, "tiers[0].price_cents must be an integer of zero or more"],
         "a blank tier name" => [{ product_type: "membership", tiers: [{ name: " ", price_cents: 500, recurrence: "monthly" }] }, "tiers[0].name must be a non-blank string"],
         "a tier missing its recurrence" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500 }] }, "tiers[0].recurrence is required"],
-        "an unknown tier argument" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly", pay_what_you_want: true }] }, "tiers[0] has unknown argument: pay_what_you_want"],
+        "an unknown tier argument" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly", description: "Notes" }] }, "tiers[0] has unknown argument: description"],
+        "a tier pay what you want that is not a boolean" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly", pay_what_you_want: "yes" }] }, "tiers[0].pay_what_you_want must be a boolean"],
+        "a tier suggested price without pay what you want" => [{ product_type: "membership", tiers: [{ name: "A", price_cents: 500, recurrence: "monthly", suggested_price_cents: 800 }] }, "tiers[0].suggested_price_cents needs pay_what_you_want: true on the same tier"],
         "a tier that is not an object" => [{ product_type: "membership", tiers: ["Reader"] }, "tiers[0] must be an object"],
         "tiers that are not a list" => [{ product_type: "membership", tiers: { name: "A" } }, "tiers must be an array"],
         "a top-level price on a membership" => [{ product_type: "membership", price_cents: 500, tiers: [{ name: "A", price_cents: 500, recurrence: "monthly" }] }, "price_cents is not accepted for a membership; set each tier's price_cents"],
@@ -1392,6 +1512,49 @@ describe "MCP server" do
         expect(payload).to include("price_cents" => 1900)
         expect(payload).not_to have_key("tiers")
       end
+    end
+
+    it "creates a draft priced 0 that suggests an amount" do
+      call_tool("create_draft_product", { name: "Free notes", price_cents: 0, pay_what_you_want: true, suggested_price_cents: 500 })
+
+      expect(response).to be_successful
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload).to include("price_cents" => 0, "pay_what_you_want" => true, "suggested_price_cents" => 500)
+      product = @seller.links.find_by_external_id(payload["id"])
+      expect(product.customizable_price).to eq(true)
+      expect(product.suggested_price_cents).to eq(500)
+    end
+
+    it "creates a pay what you want draft in the currency asked for" do
+      call_tool("create_draft_product", { name: "Euro guide", price_cents: 1000, currency: "eur", pay_what_you_want: true, suggested_price_cents: 1500 })
+
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload).to include("currency" => "eur", "price_cents" => 1000, "pay_what_you_want" => true, "suggested_price_cents" => 1500)
+      expect(@seller.links.find_by_external_id(payload["id"]).alive_prices.is_buy.pluck(:currency, :price_cents)).to eq([["eur", 1000]])
+    end
+
+    it "creates a priced draft that suggests a higher amount" do
+      call_tool("create_draft_product", { name: "Field guide", price_cents: 1000, pay_what_you_want: true, suggested_price_cents: 1500 })
+
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload).to include("price_cents" => 1000, "pay_what_you_want" => true, "suggested_price_cents" => 1500)
+      expect(@seller.links.find_by_external_id(payload["id"]).customizable_price).to eq(true)
+    end
+
+    it "refuses a suggested price without pay what you want in the same call" do
+      expect do
+        call_tool("create_draft_product", { name: "Free notes", price_cents: 0, suggested_price_cents: 500 })
+      end.not_to change(@seller.links, :count)
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay_what_you_want: true in the same call")
+    end
+
+    it "refuses pay what you want for a membership, whose tiers carry it" do
+      expect do
+        call_tool("create_draft_product", { name: "Field club", product_type: "membership", tiers: [{ name: "Reader", price_cents: 500, recurrence: "monthly" }], pay_what_you_want: true })
+      end.not_to change(@seller.links, :count)
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "pay_what_you_want and suggested_price_cents are not accepted for a membership; set them on each tier")
     end
 
     it "answers a batch with per-message errors and no challenge, so a retry cannot repeat the write" do
@@ -1455,6 +1618,105 @@ describe "MCP server" do
       expect(@product.description).to eq("Rewritten")
       expect(@product.name).to eq("Field notes")
       expect(@product.price_cents).to eq(1900)
+    end
+
+    it "turns on pay what you want with a suggested price and reads both back" do
+      call_tool("update_product", { id: @product.external_id, pay_what_you_want: true, suggested_price_cents: 2500 })
+
+      expect(response).to be_successful
+      payload = response.parsed_body.dig("result", "structuredContent", "product")
+      expect(payload).to include("pay_what_you_want" => true, "suggested_price_cents" => 2500, "price_cents" => 1900)
+      @product.reload
+      expect(@product.customizable_price).to eq(true)
+      expect(@product.suggested_price_cents).to eq(2500)
+    end
+
+    it "takes a price and a suggested amount above the new minimum in one call" do
+      call_tool("update_product", { id: @product.external_id, price_cents: 2500, pay_what_you_want: true, suggested_price_cents: 3000 })
+
+      expect(response).to be_successful
+      @product.reload
+      expect(@product.price_cents).to eq(2500)
+      expect(@product.suggested_price_cents).to eq(3000)
+    end
+
+    it "refuses a suggested price below the minimum" do
+      expect { call_tool("update_product", { id: @product.external_id, pay_what_you_want: true, suggested_price_cents: 500 }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("too low")
+    end
+
+    it "rolls back the price when the suggested amount is below the new price" do
+      @product.update!(customizable_price: true)
+
+      expect do
+        call_tool("update_product", { id: @product.external_id, price_cents: 3000, suggested_price_cents: 2500 })
+      end.not_to change { [@product.reload.attributes, @product.alive_prices.map(&:attributes)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("too low")
+    end
+
+    it "rejects a pay what you want that is not a boolean" do
+      expect { call_tool("update_product", { id: @product.external_id, pay_what_you_want: "yes" }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "pay_what_you_want must be a boolean")
+    end
+
+    it "refuses a suggested price while pay what you want is off" do
+      expect { call_tool("update_product", { id: @product.external_id, suggested_price_cents: 2500 }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
+    end
+
+    it "refuses a suggested price in the call that turns pay what you want off" do
+      @product.update!(customizable_price: true)
+
+      expect { call_tool("update_product", { id: @product.external_id, pay_what_you_want: false, suggested_price_cents: 2500 }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
+    end
+
+    it "rolls back a currency change when the suggested price it came with is refused" do
+      @product.update!(customizable_price: true)
+
+      expect do
+        call_tool("update_product", { id: @product.external_id, currency: "eur", pay_what_you_want: false, suggested_price_cents: 2500 })
+      end.not_to change { [@product.reload.price_currency_type, @product.alive_prices.pluck(:currency, :price_cents)] }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
+    end
+
+    it "refuses a suggested price when another save turns pay what you want off while it waits for the lock" do
+      @product.update!(customizable_price: true)
+      allow_any_instance_of(Link).to receive(:lock!).and_wrap_original do |original, *args|
+        Link.where(id: @product.id).update_all(customizable_price: false)
+        original.call(*args)
+      end
+
+      expect { call_tool("update_product", { id: @product.external_id, suggested_price_cents: 2500 }) }.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "suggested_price_cents needs pay what you want on: pass pay_what_you_want: true in this call")
+    end
+
+    it "turns pay what you want off and stops reporting a suggested price" do
+      @product.update!(customizable_price: true, suggested_price_cents: 2500)
+
+      call_tool("update_product", { id: @product.external_id, pay_what_you_want: false })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product")).to include("pay_what_you_want" => false, "suggested_price_cents" => nil)
+      expect(@product.reload.customizable_price).to eq(false)
+    end
+
+    it "refuses pay what you want on a membership, whose tiers carry it" do
+      membership = create(:membership_product, user: @seller)
+
+      expect { call_tool("update_product", { id: membership.external_id, pay_what_you_want: true }) }.not_to change { membership.reload.attributes }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("set on each tier")
     end
 
     it "sets the receipt message and the receipt button text" do
@@ -1592,6 +1854,135 @@ describe "MCP server" do
       call_tool("get_product", { id: @product.external_id })
 
       expect(response.parsed_body.dig("result", "structuredContent", "product", "additional_details")).to eq([{ "name" => "Pages", "value" => "40" }])
+    end
+
+    describe "categories" do
+      # The test database is seeded with the whole Discover tree (db:setup loads
+      # db/seeds/010_development_staging_test/taxonomy_create.rb), so start the block from an
+      # empty one: every path below is then the only one of its name, and `design`, `3d` and
+      # `blender` all mean the nodes this block made. delete_all, not destroy_all: destroying a
+      # node re-parents its children, and the seeded tree has the same leaf slug under two roots.
+      before do
+        TaxonomyHierarchy.delete_all
+        Taxonomy.delete_all
+      end
+
+      let!(:design) { create(:taxonomy, slug: "design") }
+      let!(:ui_and_web) { create(:taxonomy, slug: "ui-and-web", parent: design) }
+      let!(:figma) { create(:taxonomy, slug: "figma", parent: ui_and_web) }
+      let!(:three_d) { create(:taxonomy, slug: "3d") }
+      let!(:blender) { create(:taxonomy, slug: "blender", parent: three_d) }
+
+      it "files the product under the category given as a slug path" do
+        call_tool("update_product", { id: @product.external_id, category: "design/ui-and-web/figma" })
+
+        expect(response).to be_successful
+        expect(@product.reload.taxonomy).to eq(figma)
+        expect(response.parsed_body.dig("result", "structuredContent", "product", "category")).to eq("path" => "design/ui-and-web/figma", "label" => "Figma")
+      end
+
+      it "takes a leaf slug that only one category in the tree uses" do
+        call_tool("update_product", { id: @product.external_id, category: "blender" })
+
+        expect(@product.reload.taxonomy).to eq(blender)
+      end
+
+      it "refuses a leaf slug two categories share and names both paths" do
+        create(:taxonomy, slug: "blender", parent: design)
+
+        call_tool("update_product", { id: @product.external_id, category: "blender" })
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("3d/blender, design/blender", "Pass the full path")
+        expect(@product.reload.taxonomy_id).to be_nil
+      end
+
+      it "refuses an unknown category with the closest ones and the tool that lists them all" do
+        call_tool("update_product", { id: @product.external_id, category: "figm" })
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include("Closest categories: design/ui-and-web/figma", "Call list_categories")
+        expect(@product.reload.taxonomy_id).to be_nil
+      end
+
+      it "refuses a category that is not a slug path at all" do
+        call_tool("update_product", { id: @product.external_id, category: "Arts and Crafts" })
+
+        expect(response.parsed_body.dig("result", "isError")).to eq(true)
+        expect(response.parsed_body.dig("result", "content", 0, "text")).to include('A category is a slug path such as "design/ui-and-web/figma"', "Call list_categories")
+      end
+
+      it "rejects a blank category as a bad argument, without touching the product" do
+        expect { call_tool("update_product", { id: @product.external_id, category: "   " }) }.not_to change { @product.reload.taxonomy_id }
+
+        expect(response.parsed_body.dig("error", "code")).to eq(-32602)
+        expect(response.parsed_body.dig("error", "message")).to eq("category must be a non-blank string")
+      end
+
+      it "leaves the category alone when the update does not mention it" do
+        @product.update!(taxonomy: figma)
+
+        call_tool("update_product", { id: @product.external_id, name: "Field notes, vol. 2" })
+
+        expect(@product.reload.taxonomy).to eq(figma)
+        expect(response.parsed_body.dig("result", "structuredContent", "product", "category", "path")).to eq("design/ui-and-web/figma")
+      end
+
+      it "clears the seller's answers for the category the product leaves" do
+        create(:taxonomy_attribute, taxonomy: design, name: "format", label: "Format", values: %w[PSD AI])
+        @product.update!(taxonomy: design)
+        @product.save_taxonomy_attribute_values({ "format" => "PSD" })
+        expect(@product.reload.seller_taxonomy_attribute_values).to eq("format" => "PSD")
+
+        call_tool("update_product", { id: @product.external_id, category: "3d/blender" })
+
+        expect(@product.reload.seller_taxonomy_attribute_values).to eq({})
+      end
+
+      it "classifies the new category's attributes in the same request as the change" do
+        fonts = create(:taxonomy, slug: "fonts", parent: design)
+        create(:taxonomy_attribute, taxonomy: fonts, name: "format", label: "Format", values: %w[OTF TTF])
+        create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/font.otf")
+
+        call_tool("update_product", { id: @product.external_id, category: "design/fonts" })
+
+        expect(@product.reload.inferred_taxonomy_attribute_values).to eq("format" => "OTF")
+      end
+
+      it "reads the category back with the product" do
+        @product.update!(taxonomy: figma)
+
+        call_tool("get_product", { id: @product.external_id })
+
+        expect(response.parsed_body.dig("result", "structuredContent", "product", "category")).to eq("path" => "design/ui-and-web/figma", "label" => "Figma")
+      end
+
+      it "returns the full path even when the closure table is missing an ancestor row" do
+        TaxonomyHierarchy.where(ancestor: design, descendant: figma).delete_all
+        @product.update!(taxonomy: figma)
+
+        call_tool("get_product", { id: @product.external_id })
+
+        expect(response.parsed_body.dig("result", "structuredContent", "product", "category", "path")).to eq("design/ui-and-web/figma")
+      end
+
+      it "lists every category as a slug path with the name the editor shows" do
+        call_tool("list_categories", {})
+
+        categories = response.parsed_body.dig("result", "structuredContent", "categories")
+        expect(categories.map { _1["path"] }).to eq(categories.map { _1["path"] }.sort)
+        expect(categories).to include(
+          { "path" => "3d", "label" => "3D" },
+          { "path" => "3d/blender", "label" => "Blender" },
+          { "path" => "design/ui-and-web/figma", "label" => "Figma" }
+        )
+      end
+
+      it "accepts a category path in a different case" do
+        call_tool("update_product", { id: @product.external_id, category: "Design/UI-and-Web/Figma" })
+
+        expect(@product.reload.taxonomy).to eq(figma)
+      end
     end
 
     it "sets the tags Discover matches the product to shoppers by" do
@@ -1804,7 +2195,7 @@ describe "MCP server" do
     it "rejects an update with no fields to change" do
       expect { call_tool("update_product", { id: @product.external_id }) }.not_to change { @product.reload.attributes }
 
-      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, summary, additional_details, tags, price_cents, custom_receipt_text, custom_view_content_button_text, or permalink")
+      expect(response.parsed_body["error"]).to include("code" => -32602, "message" => "Pass at least one of name, description, summary, additional_details, category, tags, price_cents, currency, pay_what_you_want, suggested_price_cents, custom_receipt_text, custom_view_content_button_text, or permalink")
     end
 
     it "rejects a blank name without changing the product" do
@@ -1822,6 +2213,174 @@ describe "MCP server" do
       content = response.parsed_body.dig("result", "structuredContent")
       expect(content.dig("product", "price_cents")).to eq(1850)
       expect(content["warning"]).to include("save18")
+    end
+
+    it "re-denominates the product in the currency asked for and carries its price across" do
+      call_tool("update_product", { id: @product.external_id, currency: "EUR" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "currency")).to eq("eur")
+      expect(content.dig("product", "price_cents")).to eq(1900)
+      @product.reload
+      expect(@product.price_currency_type).to eq("eur")
+      expect(@product.default_price_cents).to eq(1900)
+      expect(@product.alive_prices.where(currency: "eur").pluck(:price_cents)).to eq([1900])
+    end
+
+    it "takes a price sent with the currency over the one carried across" do
+      call_tool("update_product", { id: @product.external_id, currency: "eur", price_cents: 2500 })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "currency")).to eq("eur")
+      expect(content.dig("product", "price_cents")).to eq(2500)
+      expect(@product.reload.default_price_cents).to eq(2500)
+    end
+
+    it "carries a rental price across with the currency" do
+      product = create(:product, user: @seller, price_cents: 1900, purchase_type: :buy_and_rent, rental_price_cents: 500)
+
+      call_tool("update_product", { id: product.external_id, currency: "eur" })
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.price_currency_type).to eq("eur")
+      expect(product.default_price_cents).to eq(1900)
+      expect(product.rental_price_cents).to eq(500)
+    end
+
+    it "refuses a currency change that would put the rental price below the new currency's minimum" do
+      product = create(:product, user: @seller, price_cents: 2000, purchase_type: :buy_and_rent, rental_price_cents: 100)
+
+      expect do
+        call_tool("update_product", { id: product.external_id, currency: "inr", price_cents: 200_000 })
+      end.not_to change { [product.reload.price_currency_type, product.alive_prices.pluck(:currency, :price_cents)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to eq("Currency cannot be changed: the $1 rental price would become ₹1, below the ₹73 minimum. Keep the current currency, or contact Gumroad support.")
+    end
+
+    it "changes the currency of a rentable product that has no rental price in its current currency" do
+      product = create(:product, user: @seller, price_cents: 2000, purchase_type: :buy_and_rent, rental_price_cents: 100)
+      product.prices.alive.is_rental.each(&:mark_deleted!)
+
+      call_tool("update_product", { id: product.external_id, currency: "eur" })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "currency")).to eq("eur")
+      expect(product.reload.default_price_cents).to eq(2000)
+    end
+
+    it "warns that a currency change strands the discount codes in the old currency" do
+      create(:offer_code, user: @seller, products: [@product], code: "usd500", amount_cents: 500)
+
+      call_tool("update_product", { id: @product.external_id, currency: "eur" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "currency")).to eq("eur")
+      expect(content["warning"]).to include("usd500")
+    end
+
+    it "warns about a universal discount code left behind in the old currency" do
+      create(:universal_offer_code, user: @seller, code: "unistale", amount_cents: 500, currency_type: "usd")
+
+      call_tool("update_product", { id: @product.external_id, currency: "eur" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "currency")).to eq("eur")
+      expect(content["warning"]).to eq("These discount codes are in a different currency than the product now uses, so they no longer apply to it: unistale. Edit them in Gumroad if they should.")
+    end
+
+    it "warns when the new currency's minimum pushes an existing percentage code below it" do
+      product = create(:product, user: @seller, name: "Cheap notes", price_cents: 100, price_currency_type: "gbp")
+      create(:percentage_offer_code, user: @seller, products: [product], code: "gbp20", amount_percentage: 20)
+
+      call_tool("update_product", { id: product.external_id, currency: "usd" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      product.reload
+      expect(product.price_currency_type).to eq("usd")
+      expect(product.default_price_cents).to eq(100)
+      expect(content["warning"]).to include("gbp20")
+    end
+
+    it "names a code stranded in the old currency once, not also as below the new minimum" do
+      product = create(:product, user: @seller, price_cents: 120, price_currency_type: "gbp")
+      create(:offer_code, user: @seller, products: [product], code: "gbp50", amount_cents: 50, currency_type: "gbp")
+
+      call_tool("update_product", { id: product.external_id, currency: "usd" })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "warning")).to eq("These discount codes are in a different currency than the product now uses, so they no longer apply to it: gbp50. Edit them in Gumroad if they should.")
+    end
+
+    it "checks discount codes against the new price only when re-pricing with the currency" do
+      product = create(:product, user: @seller, price_cents: 1000)
+      create(:percentage_offer_code, user: @seller, products: [product], code: "half", amount_percentage: 50, currency_type: nil)
+
+      call_tool("update_product", { id: product.external_id, currency: "inr", price_cents: 100_000 })
+
+      expect(response.parsed_body.dig("result", "structuredContent", "warning")).to be_nil
+      expect(product.reload.alive_prices.pluck(:currency, :price_cents)).to eq([["inr", 100_000]])
+    end
+
+    it "stays quiet when the discount codes still clear the new currency's minimum" do
+      create(:percentage_offer_code, user: @seller, products: [@product], code: "tenoff", amount_percentage: 10)
+
+      call_tool("update_product", { id: @product.external_id, currency: "eur" })
+
+      expect(response).to be_successful
+      content = response.parsed_body.dig("result", "structuredContent")
+      expect(content.dig("product", "currency")).to eq("eur")
+      expect(content["warning"]).to be_nil
+    end
+
+    it "refuses a currency change on a membership with tiers and leaves it alone" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: @seller)
+
+      expect do
+        call_tool("update_product", { id: membership.external_id, currency: "eur" })
+      end.not_to change { [membership.reload.price_currency_type, membership.alive_prices.pluck(:currency, :price_cents)] }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("membership with tiers")
+    end
+
+    it "refuses a currency change on a product sold on more than one payment option" do
+      product = create(:membership_product, user: @seller, price_currency_type: "usd")
+      product.update!(is_tiered_membership: false)
+      product.save_recurring_prices!(
+        BasePrice::Recurrence::MONTHLY => { enabled: true, price_cents: 900 },
+        BasePrice::Recurrence::YEARLY => { enabled: true, price_cents: 9_900 }
+      )
+      expect(product.reload.has_multiple_recurrences?).to be(true)
+
+      expect do
+        call_tool("update_product", { id: product.external_id, currency: "eur" })
+      end.not_to change { product.reload.price_currency_type }
+
+      expect(response.parsed_body.dig("result", "isError")).to eq(true)
+      expect(response.parsed_body.dig("result", "content", 0, "text")).to include("more than one payment option")
+    end
+
+    it "accepts a currency change on a membership with tiers that is already in that currency" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: @seller)
+
+      call_tool("update_product", { id: membership.external_id, currency: "usd", name: "Renamed tier" })
+
+      expect(response).to be_successful
+      expect(response.parsed_body.dig("result", "structuredContent", "product", "name")).to eq("Renamed tier")
+    end
+
+    it "rejects a currency the product editor does not offer without changing the product" do
+      expect do
+        call_tool("update_product", { id: @product.external_id, currency: "zzz" })
+      end.not_to change { @product.reload.attributes }
+
+      expect(response.parsed_body["error"]["code"]).to eq(-32602)
+      expect(response.parsed_body["error"]["message"]).to start_with("currency must be one of: usd, gbp, eur")
     end
 
     it "rolls back the whole update when the product fails validation" do
@@ -2254,7 +2813,7 @@ describe "MCP server" do
 
   context "protocol and tool regressions" do
     before do
-      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales edit_products")
     end
 
     def tool_call(name, arguments = {})
@@ -2878,7 +3437,7 @@ describe "MCP server" do
 
     def legacy_tools_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its description, summary, additional details, tags, covers, receipt message and button text, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers."},"description":{"type":"string","description":"HTML or plain-text description."},"product_type":{"type":"string","enum":["digital","membership"],"description":"digital (default) or membership."},"tiers":{"type":"array","minItems":1,"description":"Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.","items":{"type":"object","properties":{"name":{"type":"string","description":"Tier name."},"price_cents":{"type":"integer","description":"Price per billing period in minor units of the creator's currency. 0 makes the tier pay what you want."},"recurrence":{"type":"string","enum":["monthly","quarterly","biannually","yearly","every_two_years"],"description":"Billing period."}},"required":["name","price_cents","recurrence"],"additionalProperties":false}}},"additionalProperties":false,"required":["name"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, summary, additional details, tags, price, URL, receipt message, or receipt button text of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"description":{"type":"string","description":"New HTML or plain-text description."},"summary":{"type":"string","description":"New summary: the short plain-text line under the buy button on the product page. Send an empty string to remove it."},"additional_details":{"type":"array","description":"The name and value rows the product page shows in the card with the summary, e.g. \"Pages: 40\", in the order to show them. This replaces the whole list; send an empty array to remove every row.","items":{"type":"object","properties":{"name":{"type":"string","description":"Row label, e.g. \"Pages\"."},"value":{"type":"string","description":"Row value, e.g. \"40\"."}}}},"tags":{"type":"array","description":"The tags Discover matches the product to shoppers by, e.g. \"field-notes\". Up to ten, two to twenty characters each. This replaces the whole list; send an empty array to remove every tag.","items":{"type":"string"}},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."},"custom_receipt_text":{"type":"string","description":"The message the buyer sees on the receipt, up to 500 characters. Send an empty string to remove it."},"custom_view_content_button_text":{"type":"string","description":"The text on the receipt's button that opens the product, up to 26 characters. Send an empty string to remove it."},"permalink":{"type":"string","description":"New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"add_content_link","title":"Add content link","description":"Add a button with a link to a product's content page, which the buyer opens after purchase. Use it when the product is delivered as a link, like a Notion template's duplication link. Confirm the link and the button text with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"The link the buyer opens. https is assumed when the value has no scheme."},"label":{"type":"string","description":"Text on the button. Defaults to the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."},"email":{"type":"string","description":"Filter by buyer email."},"product_id":{"type":"string","description":"Only sales of this product (id from list_products)."},"after":{"type":"string","description":"Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01."},"before":{"type":"string","description":"Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01."},"payment":{"type":"string","enum":["paid","free"],"description":"paid = price above zero, free = zero-price sales."},"kind":{"type":"string","enum":["subscription","one_time"],"description":"subscription = membership charges, one_time = everything else."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_analytics","title":"Get analytics","description":"Product page views, sales and revenue for a date range, so conversion rate (sales / views) can be computed. breakdown=product (default) gives one row per product; breakdown=referrer gives views, sales and revenue per traffic source. Revenue is price minus refunds and chargebacks, before fees, in minor units of USD. Dates are in the creator's time zone and default to the last 30 days.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","referrer"],"description":"product (default) or referrer."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_customers","title":"Get customers","description":"Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, refunded and charged-back amounts, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who later paid, with days to convert. Amounts are price before fees in minor units of USD, with refunds and chargebacks reported on their own lines; start_date and end_date are days in the creator's time zone that bound order dates, or the purchase that converted.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["spend","conversion"],"description":"spend (default) or conversion."},"email":{"type":"string","description":"Only this buyer's email."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD, in the creator's time zone. Omit for all time."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD, inclusive. Omit for all time."},"limit":{"type":"integer","description":"Max buyers to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_sales_totals","title":"Get sales totals","description":"Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","country","day","week","month"],"description":"product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_subscriptions","title":"Get subscriptions","description":"The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["subscriptions","churn"],"description":"subscriptions (default) or churn."},"limit":{"type":"integer","description":"Max subscriptions to return (1-50, default 25). breakdown=subscriptions only."},"cursor":{"type":"string","description":"next_cursor from the previous page. breakdown=subscriptions only."},"status":{"type":"string","enum":["alive","ended"],"description":"alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"create_discount_code","title":"Create discount code","description":"Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The code buyers enter. Letters, numbers, dashes, and underscores."},"product_id":{"type":"string","description":"Product id or permalink. Omit for a code that covers all of the creator's products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_discount_code","title":"Update discount code","description":"Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"expire_discount_code","title":"Expire discount code","description":"End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
+        {"jsonrpc":"2.0","id":1,"result":{"tools":[{"name":"get_account","title":"Get account","description":"The connected creator's public profile: name, username, storefront URL, currency.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_products","title":"List products","description":"List the creator's products (newest first). Returns id, name, price, published state, whether it is a bundle, and URL.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max products to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_product","title":"Get product","description":"Fetch one product by id or permalink, with its category, description, summary, additional details, tags, covers, receipt message and button text, and the products a bundle sells. The first cover is the main one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_categories","title":"List categories","description":"Every product category, as a slug path joined by / with the name the product editor shows. update_product takes one of these paths as its category; the category decides where the product appears in Discover.","inputSchema":{"type":"object","properties":{},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_draft_product","title":"Create draft product","description":"Create a draft digital product, or a draft membership with tiers billed on a recurring period. It is not for sale until publish_product runs. Confirm the name and prices with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Product name."},"price_cents":{"type":"integer","description":"Price in minor units (cents for USD). Use 0 for a free product. Required for a digital product; not accepted for a membership, whose prices are set on its tiers."},"currency":{"type":"string","description":"Currency to price the product in, spelled as the product editor's list does it, e.g. usd, eur or jpy. Defaults to the creator's own currency. price_cents, and every tier's price_cents, are in this currency."},"pay_what_you_want":{"type":"boolean","description":"Whether buyers may pay more than price_cents, which stays the minimum. Not accepted for a membership; set it on each tier."},"suggested_price_cents":{"type":"integer","description":"The amount the price box suggests to buyers when pay what you want is on, in minor units. Must be at least price_cents. Needs pay_what_you_want true in the same call."},"description":{"type":"string","description":"HTML or plain-text description."},"product_type":{"type":"string","enum":["digital","membership"],"description":"digital (default) or membership."},"tiers":{"type":"array","minItems":1,"description":"Membership tiers, in display order. Required for a membership, not accepted otherwise. Every tier must use the same recurrence.","items":{"type":"object","properties":{"name":{"type":"string","description":"Tier name."},"price_cents":{"type":"integer","description":"Price per billing period in minor units of the product's currency. 0 makes the tier pay what you want."},"pay_what_you_want":{"type":"boolean","description":"Whether buyers may pay more than this tier's price_cents, which stays the minimum."},"suggested_price_cents":{"type":"integer","description":"The amount this tier's price box suggests to buyers, in minor units. Must be at least the tier's price_cents. Needs pay_what_you_want true on the same tier."},"recurrence":{"type":"string","enum":["monthly","quarterly","biannually","yearly","every_two_years"],"description":"Billing period."}},"required":["name","price_cents","recurrence"],"additionalProperties":false}}},"additionalProperties":false,"required":["name"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_product","title":"Update product","description":"Change the name, description, summary, additional details, category, tags, price, currency, pay-what-you-want amount, URL, receipt message, or receipt button text of an existing product. Pass only the fields to change. The new description replaces the old one. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"name":{"type":"string","description":"New product name."},"category":{"type":"string","description":"Category slug path from the list_categories result, e.g. 3d/3d-assets/blender. \"other\" means not categorised."},"description":{"type":"string","description":"New HTML or plain-text description."},"summary":{"type":"string","description":"New summary: the short plain-text line under the buy button on the product page. Send an empty string to remove it."},"additional_details":{"type":"array","description":"The name and value rows the product page shows in the card with the summary, e.g. \"Pages: 40\", in the order to show them. This replaces the whole list; send an empty array to remove every row.","items":{"type":"object","properties":{"name":{"type":"string","description":"Row label, e.g. \"Pages\"."},"value":{"type":"string","description":"Row value, e.g. \"40\"."}}}},"tags":{"type":"array","description":"The tags Discover matches the product to shoppers by, e.g. \"field-notes\". Up to ten, two to twenty characters each. This replaces the whole list; send an empty array to remove every tag.","items":{"type":"string"}},"price_cents":{"type":"integer","description":"New price in minor units of the product's currency. Not available for memberships with tiers."},"currency":{"type":"string","description":"Currency to re-denominate the product in. The current price, and the rental price of a product that has one, carry across at the same number, so pass price_cents too when the amount should change with it. Not available for a membership with tiers or a product sold on several payment options."},"pay_what_you_want":{"type":"boolean","description":"Whether buyers may pay more than the price, which stays the minimum. Not available for memberships with tiers, whose tiers carry their own switch; a product priced 0 stays pay what you want."},"suggested_price_cents":{"type":"integer","description":"The amount the price box suggests to buyers when pay what you want is on, in minor units of the product's currency. Must be at least the price. Needs pay what you want to be on, from this call or already."},"custom_receipt_text":{"type":"string","description":"The message the buyer sees on the receipt, up to 500 characters. Send an empty string to remove it."},"custom_view_content_button_text":{"type":"string","description":"The text on the receipt's button that opens the product, up to 26 characters. Send an empty string to remove it."},"permalink":{"type":"string","description":"New URL slug, the part after /l/. Letters, numbers, dashes, and underscores only. The old URL keeps working. Send an empty string to go back to the default URL."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"add_cover","title":"Add cover","description":"Add a cover image or video to a product from a public URL. The first cover is the main one on the product page.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of an image, or a YouTube or Vimeo link."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"list_files","title":"List files","description":"The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"add_file","title":"Add file","description":"Add a file that buyers receive with the product, from a public https URL. Files up to 250 MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"Public https URL of the file."},"display_name":{"type":"string","description":"Name shown to the buyer. Defaults to the name in the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"add_content_link","title":"Add content link","description":"Add a button with a link to a product's content page, which the buyer opens after purchase. Use it when the product is delivered as a link, like a Notion template's duplication link. Confirm the link and the button text with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."},"url":{"type":"string","description":"The link the buyer opens. https is assumed when the value has no scheme."},"label":{"type":"string","description":"Text on the button. Defaults to the URL."}},"additionalProperties":false,"required":["id","url"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"publish_product","title":"Publish product","description":"Make a draft product purchasable. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"unpublish_product","title":"Unpublish product","description":"Take a product off sale without deleting it.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Product id or permalink."}},"additionalProperties":false,"required":["id"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"list_sales","title":"List sales","description":"Successful sales, newest first, with net amount, fees, country, discount code, affiliate commission, referrer and UTM fields. Free downloads count as sales; use payment=paid to skip them. When next_cursor is returned, pass it as cursor for the next page.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max sales to return (1-50, default 25)."},"cursor":{"type":"string","description":"next_cursor from the previous page."},"email":{"type":"string","description":"Filter by buyer email."},"product_id":{"type":"string","description":"Only sales of this product (id from list_products)."},"after":{"type":"string","description":"Only sales on or after this date or ISO 8601 time (UTC), e.g. 2026-10-01."},"before":{"type":"string","description":"Only sales before this date or ISO 8601 time (UTC), e.g. 2026-11-01."},"payment":{"type":"string","enum":["paid","free"],"description":"paid = price above zero, free = zero-price sales."},"kind":{"type":"string","enum":["subscription","one_time"],"description":"subscription = membership charges, one_time = everything else."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_analytics","title":"Get analytics","description":"Product page views, sales and revenue for a date range, so conversion rate (sales / views) can be computed. breakdown=product (default) gives one row per product; breakdown=referrer gives views, sales and revenue per traffic source. Revenue is price minus refunds and chargebacks, before fees, in minor units of USD. Dates are in the creator's time zone and default to the last 30 days.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","referrer"],"description":"product (default) or referrer."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_customers","title":"Get customers","description":"Buyer-level sales for the creator's store, one row per buyer email. breakdown=spend (default) gives orders count, spend, refunded and charged-back amounts, and first and last order dates per buyer; breakdown=conversion gives buyers whose first purchase was free and who later paid, with days to convert. Amounts are price before fees in minor units of USD, with refunds and chargebacks reported on their own lines; start_date and end_date are days in the creator's time zone that bound order dates, or the purchase that converted.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["spend","conversion"],"description":"spend (default) or conversion."},"email":{"type":"string","description":"Only this buyer's email."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD, in the creator's time zone. Omit for all time."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD, inclusive. Omit for all time."},"limit":{"type":"integer","description":"Max buyers to return (1-50, default 25)."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_sales_totals","title":"Get sales totals","description":"Revenue, units and average order value for a date range, grouped by product, country or period. Counts sales that still stand: successful or preorder-authorized sales not refunded or charged back, free downloads included. Revenue is price before fees, in minor units of USD, and average_order_value_cents is revenue_cents divided by units. Dates are in the creator's time zone and default to the last 30 days. Product and country rows are the top 100 by revenue.","inputSchema":{"type":"object","properties":{"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to 29 days before end_date."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"breakdown":{"type":"string","enum":["product","country","day","week","month"],"description":"product (default), country, day, week or month. A period row's date is the day, the Monday of the week, or the first of the month, in the creator's time zone."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"get_subscriptions","title":"Get subscriptions","description":"The creator's memberships and their state. breakdown=subscriptions (default) gives one row per subscription, newest first, with status, start date, cancel date and failed payments; breakdown=churn gives one row per month with the subscriber base, the subscribers who left and the churn rate, from the same source as the dashboard. Test subscriptions are excluded. Subscription timestamps are in UTC; churn dates are in the creator's time zone.","inputSchema":{"type":"object","properties":{"breakdown":{"type":"string","enum":["subscriptions","churn"],"description":"subscriptions (default) or churn."},"limit":{"type":"integer","description":"Max subscriptions to return (1-50, default 25). breakdown=subscriptions only."},"cursor":{"type":"string","description":"next_cursor from the previous page. breakdown=subscriptions only."},"status":{"type":"string","enum":["alive","ended"],"description":"alive = still delivering content, including subscriptions set to cancel at the end of the period; ended = it has stopped (cancelled, failed, deactivated or its period ended). Omit for both. breakdown=subscriptions only."},"product_id":{"type":"string","description":"Only this product (id from list_products)."},"start_date":{"type":"string","description":"First day, YYYY-MM-DD. Defaults to the start of the month 11 months before end_date. breakdown=churn only."},"end_date":{"type":"string","description":"Last day, YYYY-MM-DD. Defaults to today. breakdown=churn only."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"list_payouts","title":"List payouts","description":"Recent payouts to the creator's bank or PayPal.","inputSchema":{"type":"object","properties":{"limit":{"type":"integer","description":"Max payouts to return (1-50, default 10)."},"cursor":{"type":"string","description":"next_cursor from the previous page."}},"additionalProperties":false},"annotations":{"readOnlyHint":true,"openWorldHint":true,"destructiveHint":false}},{"name":"create_bundle","title":"Create bundle","description":"Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.","inputSchema":{"type":"object","properties":{"name":{"type":"string","description":"Bundle name."},"price_cents":{"type":"integer","description":"Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle sells, in the order they should appear. A product sold in versions is added at its first version."}},"additionalProperties":false,"required":["name","price_cents","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_bundle","title":"Update bundle","description":"Replace the products a bundle sells. The bundle keeps its name, price, description, and published state; use update_product for the name, price, or description, and publish_product or unpublish_product for its state. Confirm the new list with the creator first.","inputSchema":{"type":"object","properties":{"id":{"type":"string","description":"Bundle id or permalink."},"product_ids":{"type":"array","items":{"type":"string"},"minItems":1,"description":"Ids or permalinks of the creator's products the bundle should sell, in the order they should appear. This list replaces the bundle's current products. A product the bundle already sells keeps its version and quantity."}},"additionalProperties":false,"required":["id","product_ids"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"create_discount_code","title":"Create discount code","description":"Create a discount code for all of the creator's products, or for one product. Pass exactly one of percent_off or amount_cents. Confirm the code, the amount, and which products it covers with the creator first, and call this once per confirmation: an existing code is refused, not duplicated.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The code buyers enter. Letters, numbers, dashes, and underscores."},"product_id":{"type":"string","description":"Product id or permalink. Omit for a code that covers all of the creator's products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":false}},{"name":"update_discount_code","title":"Update discount code","description":"Change the amount, dates, or usage limit of an existing discount code. Pass only the fields to change. A code that covers several products changes for all of them. Confirm the changes with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."},"percent_off":{"type":"integer","description":"Percent off, 1-100. Not with amount_cents."},"amount_cents":{"type":"integer","description":"Fixed amount off in minor units of the product's currency (the creator's currency for an all-products code). Not with percent_off."},"valid_at":{"type":"string","description":"ISO 8601 time the code starts working. If only expires_at is given, the start is now for a new code and unchanged for an existing one."},"expires_at":{"type":"string","description":"ISO 8601 time the code stops working."},"max_purchase_count":{"type":"integer","description":"How many times the code can be used in total. 0 or more."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}},{"name":"expire_discount_code","title":"Expire discount code","description":"End a discount code now so buyers can no longer use it. The code is kept and shows as expired; update_discount_code with a later expires_at reopens it. Expiring a code that has already expired changes nothing and succeeds. Confirm with the creator first.","inputSchema":{"type":"object","properties":{"code":{"type":"string","description":"The existing code."},"product_id":{"type":"string","description":"Product id or permalink, for a code made for specific products. Omit for a code that covers all products."}},"additionalProperties":false,"required":["code"]},"annotations":{"readOnlyHint":false,"openWorldHint":true,"destructiveHint":true}}]}}
       JSON
     end
 

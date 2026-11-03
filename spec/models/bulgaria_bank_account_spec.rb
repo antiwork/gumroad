@@ -28,8 +28,8 @@ describe BulgariaBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number with country code prefixed" do
-      expect(create(:bulgaria_bank_account, account_number_last_four: "2874").account_number_visual).to eq("BG******2874")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:bulgaria_bank_account, account_number_last_four: "2874").account_number_visual).to eq("******2874")
     end
   end
 

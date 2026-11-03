@@ -20,8 +20,8 @@ describe MonacoBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number" do
-      expect(create(:monaco_bank_account, account_number_last_four: "6789").account_number_visual).to eq("MC******6789")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:monaco_bank_account, account_number_last_four: "6789").account_number_visual).to eq("******6789")
     end
   end
 end
