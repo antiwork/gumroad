@@ -351,6 +351,69 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
 
+  go_web:
+    name: Test go_web
+    runs-on: ubicloud-standard-2
+    needs: ci_gate
+    if: ${{ github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name != github.repository }}
+    env:
+      RAILS_ENV: test
+      # The tests that read or write rows skip without it.
+      GO_WEB_TEST_MYSQL_DSN: root:password@tcp(127.0.0.1:3306)/gumroad_test
+    defaults:
+      run:
+        working-directory: go_web
+    steps:
+      # Before checkout, as in test_minitest, so no branch or fork code runs while the
+      # Docker Hub login exists.
+      - name: Start MySQL
+        working-directory: .
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+        run: |
+          for attempt in 1 2 3; do
+            echo "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin && break
+            [ "$attempt" = 3 ] && exit 1
+            sleep 10
+          done
+          docker run -d --name mysql -p 3306:3306 --tmpfs /var/lib/mysql:size=1G \
+            -e MYSQL_ROOT_PASSWORD=password -e MYSQL_DATABASE=gumroad_test mysql:8.4.11 \
+            --innodb-flush-log-at-trx-commit=0 --innodb-doublewrite=0 --sync-binlog=0 \
+            --innodb-flush-method=nosync --skip-log-bin
+          docker logout
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go_web/go.mod
+          # Fork PRs run here under pull_request_target, so a saved cache would be
+          # shared with main's runs.
+          cache: false
+      # Rails loads db/schema.rb, so a migration that breaks go_web's SQL fails here.
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: test -z "$(gofmt -l .)"
+      - run: go vet ./...
+      # Over TCP: during its first start, MySQL answers on the socket before it
+      # listens on the port.
+      - name: Wait for MySQL
+        run: |
+          for _ in $(seq 1 60); do
+            docker exec mysql mysql --protocol=tcp -h127.0.0.1 -uroot -ppassword -e "SELECT 1" > /dev/null 2>&1 && exit 0
+            sleep 2
+          done
+          docker logs mysql | tail -20
+          echo "MySQL did not become ready"
+          exit 1
+      - name: Load the schema
+        working-directory: .
+        run: bundle exec rake db:schema:load
+      - run: go test -race ./...
+
   migration_versions:
     name: Migration versions
     runs-on: ubicloud-standard-2

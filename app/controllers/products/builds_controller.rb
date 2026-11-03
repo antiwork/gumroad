@@ -1,12 +1,20 @@
 # frozen_string_literal: true
 
-# The editor's version history: every build of a product, and promoting one of them (rollback). Deploys
-# come from the CLI and the API, so there is no create here.
+# The editor's version history: every build of a product, a new build from a zip uploaded in the editor,
+# and promoting one of them (rollback).
 class Products::BuildsController < Sellers::BaseController
   before_action :fetch_product
 
   def index
     render json: { builds: @product.product_builds.reorder(number: :desc).map(&:as_json) }
+  end
+
+  # The editor uploads to the current seller's attachments, the same place the deploy step accepts.
+  def create
+    build = ProductBuilds::DeployService.perform(product: @product, seller: current_seller, url: params[:url])
+    render json: { build: build.as_json }
+  rescue ProductBuilds::DeployService::DeployError => e
+    render json: { error: e.message }, status: :unprocessable_entity
   end
 
   def promote
