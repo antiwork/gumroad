@@ -42,7 +42,11 @@ class Workflows::EmailsController < Sellers::BaseController
 
   private
     def set_workflow
-      @workflow = current_seller.workflows.find_by_external_id(params[:workflow_id])
+      # Everything WorkflowPresenter walks per email (its files, rule and link) is preloaded here,
+      # or the index re-queries product_files once per email.
+      @workflow = current_seller.workflows
+        .preload(:link, :base_variant, alive_installments_in_delivery_order: [:installment_rule, :ordered_alive_product_files, :link, :base_variant])
+        .find_by_external_id(params[:workflow_id])
       return e404 unless @workflow
       e404 if @workflow.product_or_variant_type? && @workflow.link.user != current_seller
     end
