@@ -20,8 +20,8 @@ describe NorthMacedoniaBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number" do
-      expect(create(:north_macedonia_bank_account, account_number_last_four: "2345").account_number_visual).to eq("MK******2345")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:north_macedonia_bank_account, account_number_last_four: "2345").account_number_visual).to eq("******2345")
     end
   end
 
@@ -84,7 +84,7 @@ describe NorthMacedoniaBankAccount do
 
       expect(bank_account.to_hash).to eq(
         routing_number: "AAAAMK2XXXX",
-        account_number: "MK******8907",
+        account_number: "******8907",
         bank_account_type: "MK"
       )
     end
