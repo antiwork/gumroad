@@ -7,6 +7,11 @@ require "digest"
 # confirms the catalog that the page showed, so every claim checks the digest that page carried.
 class PartnerMigration < ApplicationRecord
   EXPIRES_IN = 7.days
+  # The job touches the migration around each transfer, and one download stops after
+  # RemoteFileTransfer::MAX_DOWNLOAD_DURATION. A longer gap after an attempt started usually means the
+  # job was lost, so ResumeStalledPartnerMigrationsJob queues it again. Twice the download limit leaves
+  # the same time again for the upload that follows it.
+  STALLED_AFTER = PartnerMigration::RemoteFileTransfer::MAX_DOWNLOAD_DURATION * 2
   CONFIRMATION_PREVIEW_SIZE = 5
   MAX_PRODUCTS = 500
   MAX_EXTERNAL_USER_ID_LENGTH = 255
@@ -27,6 +32,8 @@ class PartnerMigration < ApplicationRecord
   ACCOUNT_SETUP_RESEND_INTERVAL = 1.minute
   # Whoever holds the onboarding link can ask for the email again, so the address gets a bounded number.
   MAX_ACCOUNT_SETUP_EMAILS = 5
+  # A job that keeps stopping, for example on a file that exhausts the worker's memory, gets a final state.
+  MAX_RESUMES = 3
   PUBLIC_ID_FORMAT = /\A[A-Za-z0-9_-]{21}\z/
 
   STATUS_PENDING = "pending"
@@ -55,6 +62,9 @@ class PartnerMigration < ApplicationRecord
   validates :expires_at, presence: true
   validates :public_id, format: { with: PUBLIC_ID_FORMAT }
 
+  # Only an attempt that started counts: a job can wait in the queue for longer than STALLED_AFTER.
+  scope :stalled, -> { where(status: STATUS_CLAIMED, updated_at: ...STALLED_AFTER.ago).where.not(import_started_at: nil) }
+
   def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil)
     attempts = 0
 
@@ -70,6 +80,7 @@ class PartnerMigration < ApplicationRecord
           # After the claim, the account is settled, so a new email or profile no longer applies.
           seller = migration.pending? ? { email:, profile: } : {}
           migration.update!(products:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now, **seller)
+          migration.retry_failed_products!
         else
           migration = create!(oauth_application:, external_user_id:, products:, email:, profile:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now)
         end
@@ -299,6 +310,7 @@ class PartnerMigration < ApplicationRecord
   def account_setup_expired? = claimed_at.nil? || claimed_at + ACCOUNT_SETUP_EXPIRES_IN <= Time.current
   # The seller can still set a password from the setup email.
   def account_setup_open? = account_setup_pending? && !account_setup_expired?
+  def stalled? = status == STATUS_CLAIMED && import_started_at.present? && updated_at < STALLED_AFTER.ago
 
   def masked_email
     local_part, domain = email.split("@", 2)
@@ -407,6 +419,52 @@ class PartnerMigration < ApplicationRecord
         PartnerMigrationImportJob.perform_async(id)
       end
     end
+  end
+
+  # Imports the failed products again and keeps the ones that imported. Runs when the partner sends
+  # the export again, for example with fresh download links, so the seller never has to retry.
+  def retry_failed_products!
+    return unless status == STATUS_FAILED
+
+    # Its own savepoint: create_for! calls this inside a transaction, and the rollback below must undo
+    # only this reset.
+    queued = with_lock(requires_new: true) do
+      next false unless status == STATUS_FAILED && user&.account_active?
+
+      update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil, notified_at: nil, notification_failed_email: nil, resumes_count: 0, import_started_at: nil)
+      # A nil enqueue means the previous job still holds its lock. Keep the failed state, so the next
+      # export tries again.
+      raise ActiveRecord::Rollback if PartnerMigrationImportJob.perform_async(id).nil?
+      true
+    end
+    # A savepoint rollback does not restore the attributes, so read the failed state back for the response.
+    reload if queued.nil?
+  end
+
+  # Queues an import again when its job stopped without finishing, up to MAX_RESUMES times.
+  def resume_stalled_import!
+    failure_reason = nil
+    with_lock do
+      next unless stalled?
+
+      if !user&.account_active?
+        failure_reason = INACTIVE_ACCOUNT_MESSAGE
+      elsif resumes_count >= MAX_RESUMES
+        failure_reason = "The import stopped #{MAX_RESUMES + 1} times before it finished."
+      # A running import touches this row at least once per STALLED_AFTER, so a stalled import has no live
+      # worker, and a rejected enqueue means a killed worker left its lock behind. The job skips products
+      # that another run saved, so a job still waiting in the queue cannot import them twice.
+      elsif PartnerMigrationImportJob.perform_async(id) || PartnerMigrationImportJob.enqueue_releasing_lock(id)
+        # The queued job has not started, so the scan does not count it again while it waits.
+        update!(resumes_count: resumes_count + 1, import_started_at: nil)
+      end
+      if failure_reason
+        update!(status: STATUS_FAILED, completed_at: Time.current, failure_reason:)
+        # A killed worker may have left its lock, which would stop the next export from retrying the products.
+        PartnerMigrationImportJob.release_lock(id)
+      end
+    end
+    PartnerMigrationNotificationJob.perform_async(id) if failure_reason
   end
 
   def progress

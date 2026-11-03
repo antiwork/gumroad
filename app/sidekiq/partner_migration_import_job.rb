@@ -10,6 +10,16 @@ class PartnerMigrationImportJob
 
   AVATAR_DOWNLOAD_DURATION = 1.minute
 
+  # Releases the lock that a killed worker left. Only for a stalled import, which has no live worker.
+  def self.release_lock(partner_migration_id)
+    SidekiqUniqueJobs::Unlockable.delete!("class" => name, "queue" => get_sidekiq_options["queue"].to_s, "lock" => get_sidekiq_options["lock"].to_s, "args" => [partner_migration_id])
+  end
+
+  def self.enqueue_releasing_lock(partner_migration_id)
+    release_lock(partner_migration_id)
+    perform_async(partner_migration_id)
+  end
+
   # Errors that a retry cannot fix. The product is recorded as failed and the import continues.
   # Other errors, such as a network error or PartnerMigration::RemoteFileTransfer::TemporaryError,
   # reach Sidekiq, which retries the job.
@@ -31,6 +41,7 @@ class PartnerMigrationImportJob
           migration.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current, failure_reason: exception.message.truncate(PartnerMigration::MAX_FAILURE_REASON_LENGTH))
         end
       end
+      PartnerMigrationNotificationJob.perform_async(migration.id) if migration.completed_at
     end
   end
 
@@ -38,8 +49,17 @@ class PartnerMigrationImportJob
     # The claim may not have replicated yet.
     ApplicationRecord.connected_to(role: :writing) do
       migration = PartnerMigration.find(partner_migration_id)
-      # The claim enqueues inside its transaction, so wait for that transaction to commit.
-      return unless migration.with_lock { migration.status == PartnerMigration::STATUS_CLAIMED }
+      # A manual retry enqueues inside its transaction, so wait for that transaction to commit.
+      started = migration.with_lock do
+        next false unless migration.status == PartnerMigration::STATUS_CLAIMED
+
+        migration.update!(import_started_at: Time.current)
+      end
+      unless started
+        # Retry a failed notification enqueue without importing the products again.
+        PartnerMigrationNotificationJob.perform_async(migration.id) if migration.completed_at
+        return
+      end
 
       # Closing an account deletes the products it has, so an import must not add more after that.
       return stop_for_inactive_account(migration) unless account_active?(migration)
@@ -71,6 +91,7 @@ class PartnerMigrationImportJob
 
       status = migration.results.to_h.values.any? { _1["error"].present? } ? PartnerMigration::STATUS_FAILED : PartnerMigration::STATUS_COMPLETED
       migration.update!(status:, completed_at: Time.current)
+      PartnerMigrationNotificationJob.perform_async(migration.id)
     end
   end
 
@@ -123,7 +144,8 @@ class PartnerMigrationImportJob
           # lock also makes a closure wait for this product, which the closure then deletes.
           raise AccountInactive unless migration.user.lock!.account_active?
 
-          # Another run may have saved this product meanwhile.
+          # Another run may have saved this product meanwhile, for example a job that waited in the queue
+          # while a stalled import was resumed.
           migration.lock!
           if product_recorded?(migration, index)
             importer.discard_uploaded_files
@@ -156,8 +178,8 @@ class PartnerMigrationImportJob
       PartnerMigration.where(id: migration.id).pick(:results)&.key?(index.to_s)
     end
 
-    # Merges into the stored results under the lock, so a run that overlaps cannot overwrite results that
-    # the other run recorded.
+    # Merges into the stored results under the lock, so a run that overlaps after a resume cannot
+    # overwrite results that the other run recorded.
     def record_result(migration, index, result, only_while_media_pending: false)
       migration.with_lock do
         # An overlapping run may have saved this product after this run checked, so keep its product.
