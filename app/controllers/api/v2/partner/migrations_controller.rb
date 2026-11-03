@@ -34,6 +34,6 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
     migration = PartnerMigration.find_by_public_id(params[:id])
     return head :not_found unless migration&.oauth_application_id == current_partner_application.id
 
-    render json: { success: true, status: migration.status, **migration.progress, results: migration.results, failure_reason: migration.failure_reason }
+    render json: { success: true, status: migration.status, **migration.progress, results: migration.results_by_external_product_id, failure_reason: migration.failure_reason }
   end
 end

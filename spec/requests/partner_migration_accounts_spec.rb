@@ -8,7 +8,7 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
   let(:partner_application) { create(:oauth_application, owner: create(:user), name: "Example App", is_partner: true, confidential: true, scopes: "partner_api") }
   let(:emailed_tokens) { [] }
   let!(:migration_and_code) do
-    products, _error = PartnerMigration.normalize_products([{ name: "Texture Pack", price: 1500 }, { name: "Brush Set", price: 500 }])
+    products, _error = PartnerMigration.normalize_products([{ external_product_id: "Texture Pack", name: "Texture Pack", price: 1500 }, { external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, email: "new-seller@example.com", profile: { "name" => "Ada" })
   end
   let(:migration) { migration_and_code.first }
@@ -178,7 +178,7 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
   end
 
   it "rejects a create-account form for a different link than the one in the session" do
-    products, _error = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
+    products, _error = PartnerMigration.normalize_products([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     _other_migration, other_code = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-2", products:, email: "other@example.com")
     open_onboarding_link
     form = Nokogiri::HTML(response.body).at_css("form[action='#{create_partner_migration_account_path}']")
@@ -197,7 +197,7 @@ describe "Partner migration onboarding for a seller without a Gumroad account", 
     get partner_migration_account_setup_path(account_setup_token: emailed_tokens.sole)
     follow_redirect!
     first_page_fields = setup_form_fields
-    products, = PartnerMigration.normalize_products([{ name: "Brush Set", price: 500 }])
+    products, = PartnerMigration.normalize_products([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     other_migration, = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-2", products:, email: "other@example.com")
     other_migration.create_account_and_claim!(ip: "203.0.113.10", expected_code_digest: other_migration.code_digest)
     get partner_migration_account_setup_path(account_setup_token: emailed_tokens.last)

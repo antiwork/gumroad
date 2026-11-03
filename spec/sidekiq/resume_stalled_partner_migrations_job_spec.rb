@@ -6,7 +6,7 @@ describe ResumeStalledPartnerMigrationsJob do
   let(:partner_application) { create(:oauth_application, owner: create(:user), is_partner: true, confidential: true, scopes: "partner_api") }
 
   def migration_with(status:, updated_at:, resumes_count: 0, user: create(:user), import_started_at: updated_at)
-    products, = PartnerMigration.normalize_products([{ name: "Texture Pack", price: 500 }])
+    products, = PartnerMigration.normalize_products([{ external_product_id: "Texture Pack", name: "Texture Pack", price: 500 }])
     migration, = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "ext-#{SecureRandom.hex(4)}", products:)
     migration.update_columns(status:, updated_at:, resumes_count:, user_id: user.id, import_started_at:)
     migration

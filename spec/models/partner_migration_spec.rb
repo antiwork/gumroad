@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe PartnerMigration do
   let(:partner_application) { create(:oauth_application, owner: create(:user), name: "Example App", is_partner: true, confidential: true, scopes: "partner_api") }
-  let(:product_attributes) { { name: "Texture Pack", price: 1500 } }
+  let(:product_attributes) { { external_product_id: "Texture Pack", name: "Texture Pack", price: 1500 } }
   let(:seller) { create(:user) }
 
   def create_migration(external_user_id: "ext-1")
@@ -18,6 +18,7 @@ describe PartnerMigration do
 
       expect(error).to be_nil
       expect(products).to eq([{
+                               "external_product_id" => "Texture Pack",
                                "name" => "Texture Pack",
                                "description" => nil,
                                "price" => 1500,
@@ -27,6 +28,7 @@ describe PartnerMigration do
                                "files" => [],
                                "covers" => [],
                                "thumbnail_url" => nil,
+                               "is_adult" => false,
                                "variant_categories" => [{ "title" => "License", "variants" => [{ "name" => "Standard", "price_difference_cents" => 0 }] }],
                              }])
     end
@@ -36,7 +38,7 @@ describe PartnerMigration do
     end
 
     it "names the product that is not valid" do
-      _products, error = described_class.normalize_products([product_attributes, { name: "No price" }])
+      _products, error = described_class.normalize_products([product_attributes, { external_product_id: "No price", name: "No price" }])
 
       expect(error).to eq("products[1]: price must be a whole number of cents, 0 or more.")
     end
@@ -44,7 +46,7 @@ describe PartnerMigration do
     it "rejects a file URL that is not https" do
       _products, error = described_class.normalize_products([product_attributes.merge(files: [{ url: "http://files.example.com/pack.zip" }])])
 
-      expect(error).to eq("products[0]: each file needs an https url and an optional display_name string.")
+      expect(error).to eq("products[0]: each file in files needs an https url and an optional display_name string.")
     end
 
     it "rejects more than one variant category" do
@@ -86,6 +88,54 @@ describe PartnerMigration do
       _products, error = described_class.normalize_products([product_attributes.merge(price: BasePrice::Shared::MAX_PRICE_CENTS + 1)])
 
       expect(error).to eq("products[0]: price must be at most #{BasePrice::Shared::MAX_PRICE_CENTS} cents.")
+    end
+
+    it "requires an external_product_id that no other product in the export uses" do
+      expect(described_class.normalize_products([product_attributes.except(:external_product_id)]).last).to start_with("products[0]: external_product_id must be a string")
+      expect(described_class.normalize_products([product_attributes.merge(external_product_id: " ")]).last).to start_with("products[0]: external_product_id must be a string")
+      expect(described_class.normalize_products([product_attributes, product_attributes.merge(name: "Copy")]).last).to eq('external_product_id "Texture Pack" appears more than once.')
+      longest = "x" * described_class::MAX_EXTERNAL_USER_ID_LENGTH
+      expect(described_class.normalize_products([product_attributes.merge(external_product_id: longest)]).last).to be_nil
+      expect(described_class.normalize_products([product_attributes.merge(external_product_id: " #{longest}")]).last).to start_with("products[0]: external_product_id must be a string")
+    end
+
+    it "keeps the adult flag, and rejects a value that is not true or false" do
+      products, = described_class.normalize_products([product_attributes.merge(is_adult: true)])
+
+      expect(products.first["is_adult"]).to be(true)
+      expect(described_class.normalize_products([product_attributes.merge(is_adult: "yes")]).last).to eq("products[0]: is_adult must be true or false.")
+    end
+
+    it "keeps a short description and its own files on each variant" do
+      variants = [
+        { name: "Standard", description: "Personal and client work." },
+        { name: "Extended", price_difference_cents: 3000, files: [{ url: "https://files.example.com/extended.zip", display_name: "Extended" }] },
+      ]
+      products, error = described_class.normalize_products([product_attributes.merge(variant_categories: [{ title: "License", variants: }])])
+
+      expect(error).to be_nil
+      expect(products.first["variant_categories"].first["variants"]).to eq([
+                                                                             { "name" => "Standard", "description" => "Personal and client work.", "price_difference_cents" => 0 },
+                                                                             { "name" => "Extended", "price_difference_cents" => 3000, "files" => [{ "url" => "https://files.example.com/extended.zip", "display_name" => "Extended" }] },
+                                                                           ])
+      long_description = [{ name: "Standard", description: "x" * (described_class::MAX_VARIANT_DESCRIPTION_LENGTH + 1) }]
+      expect(described_class.normalize_products([product_attributes.merge(variant_categories: [{ title: "License", variants: long_description }])]).last).to start_with("products[0]: variant description must be")
+      http_files = [{ name: "Extended", files: [{ url: "http://files.example.com/extended.zip" }] }]
+      expect(described_class.normalize_products([product_attributes.merge(variant_categories: [{ title: "License", variants: http_files }])]).last).to start_with("products[0]: each file in variant files needs an https url")
+    end
+
+    it "counts each file URL once across the product and its variants" do
+      files = Array.new(described_class::MAX_FILES_PER_PRODUCT) { { url: "https://files.example.com/#{_1}.zip" } }
+      shared = [{ name: "Standard", files: files.first(10) }]
+      _products, error = described_class.normalize_products([product_attributes.merge(files:, variant_categories: [{ title: "License", variants: shared }])])
+      expect(error).to be_nil
+
+      _products, error = described_class.normalize_products([product_attributes.merge(files: files + files.first(1))])
+      expect(error).to be_nil
+
+      extra = [{ name: "Extended", files: [{ url: "https://files.example.com/extra.zip" }] }]
+      _products, error = described_class.normalize_products([product_attributes.merge(files:, variant_categories: [{ title: "License", variants: extra }])])
+      expect(error).to eq("products[0]: a product can have up to #{described_class::MAX_FILES_PER_PRODUCT} different file URLs, counting its variants.")
     end
 
     it "rejects more tags than a product can have" do
@@ -401,6 +451,19 @@ describe PartnerMigration do
 
       expect { described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:) }.to raise_error(described_class::CatalogConflict)
       expect(migration.reload.products.first["name"]).to eq("Texture Pack")
+    end
+
+    it "lets the partner refresh variant file URLs after the seller confirms" do
+      variants = [{ name: "Extended", files: [{ url: "https://files.example.com/extended.zip?signature=old" }] }]
+      products, = described_class.normalize_products([product_attributes.merge(variant_categories: [{ title: "License", variants: }])])
+      migration, = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+      migration.claim!(seller, expected_code_digest: migration.code_digest)
+      variants = [{ name: "Extended", files: [{ url: "https://files.example.com/extended.zip?signature=new" }] }]
+      products, = described_class.normalize_products([product_attributes.merge(variant_categories: [{ title: "License", variants: }])])
+
+      refreshed, = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:)
+
+      expect(refreshed.products.first.dig("variant_categories", 0, "variants", 0, "files", 0, "url")).to end_with("signature=new")
     end
 
     it "gives each migration its own Nano ID and keeps it when the partner sends the export again" do

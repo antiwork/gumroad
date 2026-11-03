@@ -6,7 +6,7 @@ describe PartnerMigrationNotificationJob do
   let(:seller) { create(:user, email: "seller@example.com") }
   let(:partner_application) { create(:oauth_application, owner: create(:user), name: "Example App", is_partner: true, confidential: true, scopes: "partner_api") }
   let(:migration) do
-    products, = PartnerMigration.normalize_products([{ name: "Texture Pack", price: 500 }, { name: "Brush Set", price: 500 }])
+    products, = PartnerMigration.normalize_products([{ external_product_id: "Texture Pack", name: "Texture Pack", price: 500 }, { external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration, = PartnerMigration.create_for!(oauth_application: partner_application, external_user_id: "seller-1", products:)
     migration.claim!(seller, expected_code_digest: migration.code_digest)
     migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current, results: {
