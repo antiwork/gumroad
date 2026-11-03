@@ -53,6 +53,31 @@ describe "Partner API sellers", type: :request do
     expect(response.parsed_body["message"]).to eq("Your Gumroad account is already linked to a different Example App account.")
   end
 
+  it "rejects a partner user ID that is not valid" do
+    link_seller(seller_token, external_user_id: " ")
+    expect(response).to have_http_status(:bad_request)
+
+    link_seller(seller_token, external_user_id: "x" * (PartnerMigration::MAX_EXTERNAL_USER_ID_LENGTH + 1))
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["message"]).to start_with("external_user_id must be a string")
+  end
+
+  it "does not link a seller whose revocation commits while the request waits for the lock" do
+    revoked = false
+    allow_any_instance_of(OauthApplication).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+      unless revoked
+        revoked = true
+        partner_application.revoke_access_for(seller)
+      end
+      original.call(*args, &block)
+    end
+
+    link_seller(seller_token)
+
+    expect(response).to have_http_status(:unauthorized)
+    expect(PartnerSeller.count).to eq(0)
+  end
+
   it "does not link a suspended account" do
     seller.update!(user_risk_state: "suspended_for_fraud")
 

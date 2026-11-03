@@ -13,16 +13,20 @@ class Api::V2::Partner::SellersController < Api::V2::BaseController
     external_user_id = params[:external_user_id]
     max_length = PartnerMigration::MAX_EXTERNAL_USER_ID_LENGTH
     unless external_user_id.is_a?(String) && external_user_id.present? && external_user_id.length <= max_length
-      return render_bad_request("external_user_id must be a string with 1 to #{max_length} characters, not only spaces.")
+      return render json: { success: false, message: "external_user_id must be a string with 1 to #{max_length} characters, not only spaces." }, status: :bad_request
     end
     unless current_resource_owner.account_active?
       return render json: { success: false, message: "This account cannot be linked." }, status: :forbidden
     end
 
-    # The same lock as the claim, which links the seller too.
+    # The same lock as the claim, which links the seller too, and as revoke_access_for. A revocation
+    # that committed while this request waited for the lock must win, so the token is read again.
     partner_seller = partner_application.with_lock do
+      next unless doorkeeper_token.reload.accessible?
+
       PartnerSeller.link!(oauth_application: partner_application, user: current_resource_owner, external_user_id:)
     end
+    return render json: { success: false, message: "The seller revoked access for this application." }, status: :unauthorized if partner_seller.nil?
 
     render json: { success: true, external_user_id: partner_seller.external_user_id }, status: partner_seller.previously_new_record? ? :created : :ok
   rescue PartnerSeller::LinkConflict => e
