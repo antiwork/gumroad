@@ -24,6 +24,10 @@ func Open(t testing.TB) *sql.DB {
 	t.Helper()
 	dsn := os.Getenv("GO_WEB_TEST_MYSQL_DSN")
 	if dsn == "" {
+		// CI loads the schema and sets the DSN, so a skip there would hide these tests.
+		if os.Getenv("CI") != "" {
+			t.Fatal("GO_WEB_TEST_MYSQL_DSN is not set")
+		}
 		t.Skip("GO_WEB_TEST_MYSQL_DSN is not set")
 	}
 	cfg, err := mysql.ParseDSN(dsn)
