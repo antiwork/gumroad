@@ -35,7 +35,7 @@ describe "OAuth authorization for a brand account", type: :request do
 
   def decide_device(user_code, decision)
     get oauth_device_authorization_path, params: { user_code: }
-    post oauth_device_authorization_path, params: { user_code:, decision:, authenticity_token: csrf_token }
+    post oauth_device_authorization_path, params: { user_code:, decision:, consented_account:, authenticity_token: csrf_token }
   end
 
   def authorize_code(app, scope)
@@ -88,6 +88,38 @@ describe "OAuth authorization for a brand account", type: :request do
 
       expect(response).to have_http_status(:unprocessable_entity)
       expect(OauthDeviceAuthorization.last).to be_pending
+    end
+
+    it "asks again when the selected account changes before the code is approved" do
+      other_brand = create(:user)
+      create(:team_membership, user: member, seller: other_brand, role: TeamMembership::ROLE_ADMIN)
+      select_account(brand.id)
+      body = create_device_code(cli, "view_profile")
+
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+      approved_account = consented_account
+      select_account(other_brand.id)
+
+      post oauth_device_authorization_path, params: { user_code: body["user_code"], decision: "approve", consented_account: approved_account, authenticity_token: csrf_token }
+
+      expect(response).to redirect_to(oauth_device_authorization_path(user_code: body["user_code"]))
+      expect(OauthDeviceAuthorization.last).to be_pending
+    end
+
+    it "stops the issued token from reaching the API once the membership is removed" do
+      select_account(brand.id)
+      body = create_device_code(cli, "view_profile")
+      decide_device(body["user_code"], "approve")
+      travel_to(OauthDeviceAuthorization::POLL_INTERVAL.from_now + 1.second)
+      access_token = redeem(cli, body["device_code"])["access_token"]
+
+      get "https://#{API_DOMAIN}/v2/user", params: { access_token: }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("user", "id")).to eq(brand.external_id)
+
+      membership.update_as_deleted!
+      get "https://#{API_DOMAIN}/v2/user", params: { access_token: }
+      expect(response).to have_http_status(:unauthorized)
     end
 
     it "stops issuing once the membership is removed before the CLI redeems" do

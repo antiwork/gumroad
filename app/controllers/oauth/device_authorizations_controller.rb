@@ -38,6 +38,12 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
         return render :new, status: :unprocessable_entity
       end
     when "approve"
+      # The page names the account it authorizes; a switcher change between page load and submit
+      # must ask again rather than approve the newly selected account.
+      if params[:consented_account].to_s != selected_brand_membership&.seller&.external_id.to_s
+        return redirect_to oauth_device_authorization_path(user_code: @user_code, handoff: params[:handoff].presence)
+      end
+
       if @device_authorization.approve!(resource_owner: authorizing_account, team_membership: selected_brand_membership, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
         @decision = :approved
         clear_user_code_handoff
