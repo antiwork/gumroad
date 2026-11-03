@@ -34,7 +34,8 @@ class AddKnittingTaxonomy < ActiveRecord::Migration[7.1]
   end
 
   private
-    # taxonomies_for_nav caches for an hour; without this the nav and the picker disagree until it expires.
+    # taxonomies_for_nav caches for an hour and feeds both the nav and the picker; without this
+    # neither shows the new category until it expires.
     def bust_taxonomy_cache
       Rails.cache.delete("taxonomies_for_nav")
     end

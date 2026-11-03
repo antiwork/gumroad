@@ -63,10 +63,13 @@ describe AddKnittingTaxonomy do
       expect { migration.up }.to raise_error(ActiveRecord::RecordNotFound, /crafts-and-dyi/)
     end
 
-    it "skips quietly outside production when Crafts & DIY is missing" do
+    it "skips quietly outside production when Crafts & DIY is missing, creating nothing" do
       allow(Taxonomy).to receive(:find_by_path).with(described_class::PARENT_PATH).and_return(nil)
+      Rails.cache.write("taxonomies_for_nav", [{ slug: "stale" }])
 
-      expect { migration.up }.not_to raise_error
+      # Without the early return, find_or_create_by! with a nil parent would add a root-level Knitting.
+      expect { migration.up }.not_to change(Taxonomy, :count)
+      expect(Rails.cache.read("taxonomies_for_nav")).to eq([{ slug: "stale" }])
     end
   end
 
