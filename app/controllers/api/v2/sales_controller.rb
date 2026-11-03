@@ -12,9 +12,10 @@ class Api::V2::SalesController < Api::V2::BaseController
   before_action :set_page, only: :index
 
   RESULTS_PER_PAGE = 10
-  # The deprecated `page` becomes a SQL LIMIT/OFFSET, and MySQL rejects an offset past the
-  # signed 64-bit range with a syntax error; an absurd page must 400, not 500.
-  MAX_DEPRECATED_PAGE = (2**63 - 1) / RESULTS_PER_PAGE
+  # A deprecated `page` becomes the SQL offset `(@page - 1) * RESULTS_PER_PAGE`, and MySQL rejects
+  # an offset past its 64-bit range. The signed 64-bit ceiling holds on any server version, and the
+  # offset's `- 1` is why the page ceiling is one above this quotient.
+  MAX_DEPRECATED_PAGE = (2**63 - 1) / RESULTS_PER_PAGE + 1
   # Fallback for the Redis-tunable query timeouts in #index, matching the value both keys were
   # introduced with.
   DEFAULT_SALES_QUERY_TIMEOUT_SECONDS = 15
