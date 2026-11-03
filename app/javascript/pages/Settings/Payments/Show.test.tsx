@@ -467,6 +467,30 @@ describe("state Stripe asks for outside the listed countries", () => {
       { user: { country: "ID", state: "Jawa Barat" } },
     ]);
   });
+
+  it("saves a replacement typed after clearing a saved state", () => {
+    renderPage(
+      { country_code: "ID", payout_currency: "idr" },
+      {
+        country: "ID",
+        state: "Jawa Barat",
+        street_address: "Jl. Asia Afrika No. 8",
+        city: "Bandung",
+        zip_code: "40111",
+        phone: "+6281234567890",
+      },
+    );
+
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "Jawa Timur" } });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    expect(mocks.put.mock.lastCall).toMatchObject([
+      "/settings_payments",
+      { user: { country: "ID", state: "Jawa Timur" } },
+    ]);
+  });
 });
 
 describe("full-SSN re-entry validation", () => {

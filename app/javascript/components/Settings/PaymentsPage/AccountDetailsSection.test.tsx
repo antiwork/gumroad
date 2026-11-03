@@ -74,29 +74,53 @@ const usBusinessTypes = [
   { code: "profit", name: "Non Profit" },
 ];
 
+type SectionProps = React.ComponentProps<typeof AccountDetailsSection>;
+
+const sectionProps = (
+  user: User,
+  complianceOverrides: Partial<ComplianceInfo> = {},
+  props: Partial<SectionProps> = {},
+): SectionProps => ({
+  user,
+  complianceInfo: { ...complianceInfo, ...complianceOverrides },
+  updateComplianceInfo: () => {},
+  isFormDisabled: false,
+  minDobYear: 2008,
+  countries: { US: "United States", GB: "United Kingdom" },
+  usBusinessTypes,
+  uaeBusinessTypes: [],
+  indiaBusinessTypes: [],
+  canadaBusinessTypes: [],
+  states: { us: [{ code: "CA", name: "California" }], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] },
+  errorFieldNames: new Set(),
+  saveCounter: 0,
+  ...props,
+});
+
 const renderSection = (
   user: User,
   complianceOverrides: Partial<ComplianceInfo> = {},
-  props: Partial<React.ComponentProps<typeof AccountDetailsSection>> = {},
-) =>
-  render(
-    <AccountDetailsSection
-      user={user}
-      complianceInfo={{ ...complianceInfo, ...complianceOverrides }}
-      updateComplianceInfo={() => {}}
-      isFormDisabled={false}
-      minDobYear={2008}
-      countries={{ US: "United States", GB: "United Kingdom" }}
-      usBusinessTypes={usBusinessTypes}
-      uaeBusinessTypes={[]}
-      indiaBusinessTypes={[]}
-      canadaBusinessTypes={[]}
-      states={{ us: [{ code: "CA", name: "California" }], ca: [], au: [], mx: [], ae: [], ir: [], br: [], jp: [] }}
-      errorFieldNames={new Set()}
-      saveCounter={0}
-      {...props}
-    />,
-  );
+  props: Partial<SectionProps> = {},
+) => render(<AccountDetailsSection {...sectionProps(user, complianceOverrides, props)} />);
+
+const renderEditableSection = (user: User, complianceOverrides: Partial<ComplianceInfo>) => {
+  const updates: Partial<ComplianceInfo>[] = [];
+  const EditableSection = () => {
+    const [info, setInfo] = React.useState<ComplianceInfo>({ ...complianceInfo, ...complianceOverrides });
+    return (
+      <AccountDetailsSection
+        {...sectionProps(user)}
+        complianceInfo={info}
+        updateComplianceInfo={(update) => {
+          updates.push(update);
+          setInfo((previous) => ({ ...previous, ...update }));
+        }}
+      />
+    );
+  };
+  render(<EditableSection />);
+  return updates;
+};
 
 describe("AccountDetailsSection foreign representative tax ID", () => {
   it("renders a generic field for an unmapped representative country on a US business", () => {
@@ -606,6 +630,37 @@ describe("AccountDetailsSection state outside the listed countries", () => {
     renderSection(makeUser({ country_code: "ID" }), { ...indonesianSeller, state: "Jawa Barat" });
 
     expect(screen.getByLabelText<HTMLInputElement>("State / region").value).toBe("Jawa Barat");
+  });
+
+  it("keeps a saved state's field while the seller clears it and types a replacement", () => {
+    const updates = renderEditableSection(makeUser({ country_code: "ID" }), {
+      ...indonesianSeller,
+      state: "Jawa Barat",
+    });
+
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "" } });
+    expect(screen.getByLabelText<HTMLInputElement>("State / region").value).toBe("");
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "Jawa Timur" } });
+
+    expect(screen.getByLabelText<HTMLInputElement>("State / region").value).toBe("Jawa Timur");
+    expect(updates).toEqual([{ state: "" }, { state: "Jawa Timur" }]);
+  });
+
+  it("keeps a saved business state's field while the seller clears it and types a replacement", () => {
+    const updates = renderEditableSection(makeUser({ country_code: "ID" }), {
+      ...indonesianSeller,
+      is_business: true,
+      business_country: "ID",
+      business_city: "Bandung",
+      business_state: "Jawa Barat",
+    });
+
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "" } });
+    expect(screen.getByLabelText<HTMLInputElement>("State / region").value).toBe("");
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "Jawa Timur" } });
+
+    expect(screen.getByLabelText<HTMLInputElement>("State / region").value).toBe("Jawa Timur");
+    expect(updates).toEqual([{ business_state: "" }, { business_state: "Jawa Timur" }]);
   });
 
   it("adds no state field when Stripe is not asking and none is saved", () => {

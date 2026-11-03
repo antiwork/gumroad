@@ -3005,6 +3005,18 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         visit settings_payments_path
 
         expect(page).to have_field("State / region", with: "Jawa Barat")
+
+        find_field("State / region").set("", clear: :backspace)
+        expect(page).to have_field("State / region", with: "")
+        fill_in("State / region", with: "Jawa Tengah")
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.alive_user_compliance_info.state).to eq("Jawa Tengah")
+
+        visit settings_payments_path
+
+        expect(page).to have_field("State / region", with: "Jawa Tengah")
       end
 
       it "collects the business and representative states Stripe asks an Indonesian company for" do
@@ -3058,6 +3070,24 @@ describe("Payments Settings Scenario", type: :system, js: true) do
 
         expect(find('input[id$="business-state"]').value).to eq("Jawa Barat")
         expect(find('input[id$="creator-state"]').value).to eq("Jawa Timur")
+
+        find('input[id$="business-state"]').set("", clear: :backspace)
+        find('input[id$="creator-state"]').set("", clear: :backspace)
+        expect(find('input[id$="business-state"]').value).to eq("")
+        expect(find('input[id$="creator-state"]').value).to eq("")
+        find('input[id$="business-state"]').set("Jawa Tengah")
+        find('input[id$="creator-state"]').set("Bali")
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.business_state).to eq("Jawa Tengah")
+        expect(compliance_info.state).to eq("Bali")
+
+        visit settings_payments_path
+
+        expect(find('input[id$="business-state"]').value).to eq("Jawa Tengah")
+        expect(find('input[id$="creator-state"]').value).to eq("Bali")
       end
     end
 
