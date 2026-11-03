@@ -27,10 +27,6 @@ class MauritiusBankAccount < BankAccount
     Currency::MUR
   end
 
-  def account_number_visual
-    "#{country}******#{account_number_last_four}"
-  end
-
   def to_hash
     {
       routing_number:,

@@ -552,7 +552,7 @@ it("labels the zip a promoted web build put in the content", async () => {
   render(<FileEmbedEditor config={{ filesById: context.filesById }} />);
   await act(() => Promise.resolve());
 
-  expect(screen.getByText("Web build v3")).toBeTruthy();
+  expect(screen.getByText("Web app, version 3")).toBeTruthy();
 });
 
 it("leaves a hand-uploaded zip unlabelled", async () => {

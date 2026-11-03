@@ -4,7 +4,10 @@ module Mcp
   class OauthClientRegistration
     class Error < StandardError; end
 
-    MCP_SCOPES = %w[view_public view_profile view_sales edit_products view_payouts account].freeze
+    MCP_SCOPES = %w[view_public view_profile view_sales edit_products view_payouts].freeze
+    # Not advertised or granted by default, but kept for a client that still names it: Doorkeeper
+    # rejects an authorization request naming a scope its application was not registered with.
+    LEGACY_SCOPES = %w[account].freeze
     NAME_MAX = 80
     REDIRECT_URIS_MAX = 10
     # oauth_applications.redirect_uri (newline-joined) and oauth_access_grants.redirect_uri are
@@ -69,7 +72,7 @@ module Mcp
 
       def assigned_scopes
         requested = (@params["scope"] || @params[:scope]).to_s.split
-        chosen = requested.presence ? (requested & MCP_SCOPES) : MCP_SCOPES
+        chosen = requested.presence ? (requested & (MCP_SCOPES + LEGACY_SCOPES)) : MCP_SCOPES
         raise Error, "no supported scopes requested" if requested.present? && chosen.empty?
 
         chosen.join(" ")

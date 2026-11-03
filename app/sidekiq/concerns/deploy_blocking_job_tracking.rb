@@ -23,7 +23,19 @@
 # Each entry is scored with its start time and the readers only count entries younger than
 # the configured TTL. That is the crash safety net: a job killed without its ensure block
 # running (or a Redis outage during cleanup) can only hold deploys for the TTL, not forever.
+#
+# The TTL alone is too slow for the common crash. A Sidekiq process that is OOM-killed or
+# force-killed never runs the ensure block, so its entry used to hold deploys for the whole
+# TTL (6 hours for long-running jobs) while nothing was running. So when the job runs inside
+# a Sidekiq server, the token also carries the process identity, and readers drop entries
+# whose process has stopped sending heartbeats. Sidekiq writes each process's heartbeat hash
+# every few seconds with a 60 second expiry, so a dead process disappears within a minute.
 module DeployBlockingJobTracking
+  TOKEN_SEPARATOR = "|"
+
+  # An entry is only treated as orphaned once it is at least this old, so a brief gap in a
+  # live process's heartbeat right after the job starts can never let a deploy through.
+  DEAD_PROCESS_GRACE = 5.minutes
   # ZADD and EXPIRE run as one atomic Lua script so a transient error between them can't
   # leave the key without its expiry backstop.
   RAISE_IN_FLIGHT_FLAG_SCRIPT = <<~LUA
@@ -38,7 +50,48 @@ module DeployBlockingJobTracking
   def self.any_in_flight?(redis_key, entry_ttl)
     oldest_valid_score = entry_ttl.ago.to_i
     $redis.zremrangebyscore(redis_key, "-inf", "(#{oldest_valid_score}")
+    prune_entries_of_dead_processes(redis_key)
     $redis.zcard(redis_key) > 0
+  end
+
+  # Removes entries whose Sidekiq process is gone. Fails closed: entries without a process
+  # identity (old format, or a job run outside a Sidekiq server) and any error reading
+  # Sidekiq's process registry leave the entries in place, so the TTL still applies.
+  def self.prune_entries_of_dead_processes(redis_key)
+    newest_prunable_score = DEAD_PROCESS_GRACE.ago.to_i
+    $redis.zrangebyscore(redis_key, "-inf", newest_prunable_score).each do |token|
+      identity = process_identity_from_token(token)
+      next if identity.nil?
+      next if Sidekiq::ProcessSet[identity]
+
+      $redis.zrem(redis_key, token)
+    end
+  rescue Redis::BaseError, RedisClient::Error, JSON::ParserError => e
+    ErrorNotifier.notify(e, redis_key:)
+  end
+
+  def self.process_identity_from_token(token)
+    parts = token.split(TOKEN_SEPARATOR)
+    parts.size == 3 && parts[1].present? ? parts[1] : nil
+  end
+
+  # The identity Sidekiq uses for this process in its own process registry, or nil when the
+  # code is not running inside a Sidekiq server (console, inline perform, specs).
+  def self.current_sidekiq_process_identity
+    return nil unless Sidekiq.server?
+
+    Sidekiq::CLI.instance.launcher&.identity
+  rescue StandardError
+    nil
+  end
+
+  def self.build_token(job_class_name)
+    identity = current_sidekiq_process_identity
+    if identity.present?
+      [job_class_name, identity, SecureRandom.uuid].join(TOKEN_SEPARATOR)
+    else
+      "#{job_class_name}-#{Process.pid}-#{SecureRandom.uuid}"
+    end
   end
 
   # Runs the given block with this job counted as in flight in `redis_key`.
@@ -46,7 +99,7 @@ module DeployBlockingJobTracking
   # `entry_ttl` bounds how long this job can hold deploys if it dies without cleaning up, so
   # set it comfortably above the job's realistic worst-case runtime.
   def with_deploy_blocking_job_in_flight(redis_key:, entry_ttl:)
-    token = "#{self.class.name}-#{Process.pid}-#{SecureRandom.uuid}"
+    token = DeployBlockingJobTracking.build_token(self.class.name)
 
     begin
       $redis.eval(

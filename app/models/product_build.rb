@@ -216,6 +216,13 @@ class ProductBuild < ApplicationRecord
     # the product (or of each variant) and the superseded one is removed everywhere.
     def swap_file_embed(old_file, new_file)
       per_variant = !product.has_product_level_rich_content?
+      # A product with no page yet (a first upload from the editor) gets one holding the zip and any
+      # files it already had, as a variant without pages does below.
+      if !per_variant && product.alive_rich_contents.none?
+        existing = product.product_files.alive.where.not(id: [old_file&.id, new_file.id].compact).in_order
+        product.alive_rich_contents.create!(description: (existing.to_a + [new_file]).map { file_embed_node(_1) })
+        return
+      end
       contents = per_variant ? product.alive_variants.flat_map { _1.alive_rich_contents.to_a } : []
       # Buyers without a version still read the product's own pages while any has content (UrlRedirect).
       contents += product.alive_rich_contents.to_a if !per_variant || product.alive_rich_contents.any?(&:has_editor_content?)
