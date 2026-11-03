@@ -212,6 +212,8 @@ Rails.application.routes.draw do
       get "/partner/products", to: "partner/products#index"
       get "/partner/creators/top", to: "partner/creators#top"
       get "/partner/categories", to: "partner/categories#index"
+      post "/partner/migrations", to: "partner/migrations#create"
+      get "/partner/migrations/:id", to: "partner/migrations#show"
     end
   end
 
@@ -1111,6 +1113,7 @@ Rails.application.routes.draw do
     get "/links/:id/edit" => redirect("/products/%{id}/edit")
 
     post "/products/:id/release_preorder", to: "links#release_preorder", as: :release_preorder
+
 
 
     get "/dashboard" => "dashboard#index", as: :dashboard
