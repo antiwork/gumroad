@@ -539,6 +539,9 @@ export const scalarSettingsForSave = (
     hasPaidVariantPricing: boolean;
     installment_plan: { number_of_installments: number } | null;
     allow_installment_plan: boolean;
+    free_trial_enabled: boolean;
+    free_trial_duration_amount: Product["free_trial_duration_amount"];
+    free_trial_duration_unit: Product["free_trial_duration_unit"];
   },
   lastSaved: {
     custom_permalink: string | null;
@@ -548,6 +551,9 @@ export const scalarSettingsForSave = (
     hasPaidVariantPricing: boolean;
     installment_plan: { number_of_installments: number } | null;
     allow_installment_plan: boolean | null;
+    free_trial_enabled: boolean | null;
+    free_trial_duration_amount: Product["free_trial_duration_amount"];
+    free_trial_duration_unit: Product["free_trial_duration_unit"];
   },
 ) => {
   const settings: Record<string, unknown> = {};
@@ -591,6 +597,20 @@ export const scalarSettingsForSave = (
     settings.installment_plan = null;
     settings.installment_plan_changed = true;
   }
+  // `false` clears a live trial and a null amount/unit clears its duration, so a
+  // stale snapshot must omit the trio. A null baseline means the caller does not
+  // track it: send through unchanged.
+  const trialBaselineKnown = lastSaved.free_trial_enabled !== null;
+  const trialTouched =
+    product.free_trial_enabled !== lastSaved.free_trial_enabled ||
+    (product.free_trial_enabled &&
+      (product.free_trial_duration_amount !== lastSaved.free_trial_duration_amount ||
+        product.free_trial_duration_unit !== lastSaved.free_trial_duration_unit));
+  if (!trialBaselineKnown || trialTouched) {
+    settings.free_trial_enabled = product.free_trial_enabled;
+    settings.free_trial_duration_amount = product.free_trial_enabled ? product.free_trial_duration_amount : null;
+    settings.free_trial_duration_unit = product.free_trial_enabled ? product.free_trial_duration_unit : null;
+  }
   return settings;
 };
 
@@ -612,6 +632,9 @@ export const saveProduct = async (
     lastSavedInstallmentPlan?: { number_of_installments: number } | null;
     lastSavedAllowInstallmentPlan?: boolean | null;
     lastSavedDescription?: string | null;
+    lastSavedFreeTrialEnabled?: boolean | null;
+    lastSavedFreeTrialDurationAmount?: Product["free_trial_duration_amount"];
+    lastSavedFreeTrialDurationUnit?: Product["free_trial_duration_unit"];
   } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
@@ -646,6 +669,9 @@ export const saveProduct = async (
     description_changed,
     installment_plan,
     allow_installment_plan,
+    free_trial_enabled,
+    free_trial_duration_amount,
+    free_trial_duration_unit,
     ...productParams
   } = product;
   const response = await request({
@@ -665,6 +691,9 @@ export const saveProduct = async (
           hasPaidVariantPricing: hasPaidVariantPricing(product),
           installment_plan,
           allow_installment_plan,
+          free_trial_enabled,
+          free_trial_duration_amount,
+          free_trial_duration_unit,
         },
         {
           custom_permalink: options.lastSavedCustomPermalink ?? null,
@@ -674,6 +703,9 @@ export const saveProduct = async (
           hasPaidVariantPricing: options.lastSavedHasPaidVariantPricing ?? hasPaidVariantPricing(product),
           installment_plan: options.lastSavedInstallmentPlan ?? null,
           allow_installment_plan: options.lastSavedAllowInstallmentPlan ?? null,
+          free_trial_enabled: options.lastSavedFreeTrialEnabled ?? null,
+          free_trial_duration_amount: options.lastSavedFreeTrialDurationAmount ?? null,
+          free_trial_duration_unit: options.lastSavedFreeTrialDurationUnit ?? null,
         },
       ),
       files,
