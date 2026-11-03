@@ -272,7 +272,7 @@ describe AffiliatesController, type: :controller, inertia: true do
           }
         }
 
-        expect(response).to redirect_to(edit_affiliate_path(affiliate))
+        expect(response).to redirect_to(edit_affiliate_path(affiliate.external_id))
       end
 
       it "returns 404 for non-existent affiliate" do

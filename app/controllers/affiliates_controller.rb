@@ -101,7 +101,7 @@ class AffiliatesController < Sellers::BaseController
     if result[:success]
       redirect_to affiliates_path, notice: "Affiliate updated successfully", status: :see_other
     else
-      redirect_to edit_affiliate_path(@affiliate), inertia: { errors: { base: [result[:message]] } }
+      redirect_to edit_affiliate_path(@affiliate.external_id), inertia: { errors: { base: [result[:message]] } }
     end
   end
 
