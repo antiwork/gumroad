@@ -61,7 +61,7 @@
               <% if client[:pending_review] %>
                 <p class="text-lg">Submitted for review. The Gumroad connector is not yet available in <%= client[:label] %>.</p>
               <% else %>
-                <p class="text-lg"><%= client[:directory_url] ? "Available now in #{client[:label]}’s connector directory." : "Available now as a custom connector." %></p>
+                <p class="text-lg"><%= client[:directory_url] ? "Available now in #{client[:label]}’s #{client[:directory_name] || "connector directory"}." : "Available now as a custom connector." %></p>
                 <% if client[:listing_notice] %>
                   <p class="text-base"><%= client[:listing_notice] %></p>
                 <% end %>
@@ -70,13 +70,6 @@
             <%= link_to client[:pending_review] ? "Read the technical details" : "Set up Gumroad MCP", "/#{key}", class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
           </article>
         <% end %>
-        <article class="flex flex-col justify-between gap-6 rounded-xl border border-black p-8">
-          <div class="space-y-4">
-            <h3 class="text-2xl font-medium">ChatGPT</h3>
-            <p class="text-lg">Not available yet. We’ll announce it here when the Gumroad connector is ready in ChatGPT.</p>
-          </div>
-          <%= link_to "Setup guide", McpConnectorsController::SETUP_GUIDE_URL, class: "inline-flex min-h-11 items-center underline underline-offset-4" %>
-        </article>
       </div>
       <p class="mt-10 max-w-3xl text-lg">Every assistant connects to its own URL and asks for OAuth access to your Gumroad account. Each connector page lists the exact address to paste.</p>
     </div>
@@ -92,8 +85,10 @@
       <ol class="list-none space-y-8 pl-0">
         <li class="space-y-3">
           <h3 class="text-2xl font-medium">1. Add the connector</h3>
-          <p class="text-lg">Add Gumroad from Claude’s connector directory, or open your assistant’s connector settings and add a remote MCP server using the URL from its connector page.</p>
-          <%= link_to "Gumroad MCP for Claude connector page", "/claude", class: "block text-lg underline underline-offset-4" %>
+          <p class="text-lg">Add Gumroad from your assistant’s connector directory, or open its connector settings and add a remote MCP server using the URL from its connector page.</p>
+          <% McpConnectorsController::CLIENTS.reject { |_key, client| client[:pending_review] }.each do |key, client| %>
+            <%= link_to "Gumroad MCP for #{client[:label]} connector page", "/#{key}", class: "block text-lg underline underline-offset-4" %>
+          <% end %>
         </li>
         <li class="space-y-3">
           <h3 class="text-2xl font-medium">2. Connect your Gumroad account</h3>

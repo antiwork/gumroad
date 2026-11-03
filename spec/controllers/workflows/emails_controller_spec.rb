@@ -27,6 +27,17 @@ describe Workflows::EmailsController, type: :controller, inertia: true do
       expect(inertia.props[:context]).to be_present
     end
 
+    it "loads the emails' files in one query, not one per email" do
+      3.times { create(:workflow_installment, seller:, workflow:) }
+
+      product_file_queries = count_queries(matching: /FROM `product_files`/) do
+        get :index, params: { workflow_id: workflow.external_id }
+      end
+
+      expect(response).to be_successful
+      expect(product_file_queries).to eq(1)
+    end
+
     context "when workflow doesn't exist" do
       it "returns 404" do
         expect { get :index, params: { workflow_id: "nonexistent" } }.to raise_error(ActionController::RoutingError)

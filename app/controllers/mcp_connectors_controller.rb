@@ -17,6 +17,15 @@ class McpConnectorsController < ApplicationController
       connect_label: "Add Gumroad to Claude",
       setup: "Open Gumroad in Claude’s connector directory and connect it. Or open Settings > Connectors in Claude, choose Add custom connector, and enter the URL below. If you cannot add connectors, ask your organization administrator.",
       availability: "Add Gumroad from Claude’s connector directory. On Team and Enterprise plans, your organization’s settings control which connectors you can add."
+    },
+    "chatgpt" => {
+      label: "ChatGPT",
+      directory_url: "https://chatgpt.com/plugins/plugin_asdk_app_6adf8e8e7eac8191a9af1b87fdeedb45",
+      directory_name: "plugin directory",
+      listing_notice: "Listed in ChatGPT’s plugin directory.",
+      connect_label: "Add Gumroad to ChatGPT",
+      setup: "Open Gumroad in ChatGPT’s plugin directory and connect it. If you cannot add plugins, ask your workspace administrator.",
+      availability: "Add Gumroad from ChatGPT’s plugin directory."
     }
   }.freeze
 

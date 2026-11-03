@@ -120,14 +120,16 @@ class SendWorkflowEmailsToOpenedNonClickersJob
       raise "Sidekiq did not requeue the opened-no-click scan for the seller fanout lock" unless job_id.present?
     end
 
-    # The store's window filter only trims the response; this check stays the authority on the window.
+    # The store reads only the window off its open-time index; this check stays the authority on the window.
+    # The click exclusion here only trims the batch: each send re-reads the recipient's click
+    # (`EmailEngagementDynamoStore.clicked?`) before it goes out, and that read is the authority.
     def due_openers(post:, due_before:, opened_after:)
       due = EmailEngagementDynamoStore.purchase_open_records(post.id, opened_after:, opened_before: due_before).select do |opener|
         opener[:first_open_at] <= due_before && (opened_after.nil? || opener[:first_open_at] >= opened_after)
       end
       return due if due.empty?
 
-      clicked = EmailEngagementDynamoStore.clicked_recipient_digests(post.id).to_set
+      clicked = EmailEngagementDynamoStore.clicked_recipient_digests_among(post.id, due.map { _1[:recipient_digest] })
       due.reject { clicked.include?(_1[:recipient_digest]) }
     end
 
