@@ -692,9 +692,9 @@ const ProductEditPage = (props: Props) => {
         lastSavedInstallmentPlan: lastSavedProductRef.current.installment_plan,
         lastSavedAllowInstallmentPlan: lastSavedProductRef.current.allow_installment_plan,
         lastSavedDescription: lastSavedProductRef.current.description,
-        lastSavedFreeTrialEnabled: lastSavedProductRef.current.free_trial_enabled ?? null,
-        lastSavedFreeTrialDurationAmount: lastSavedProductRef.current.free_trial_duration_amount ?? null,
-        lastSavedFreeTrialDurationUnit: lastSavedProductRef.current.free_trial_duration_unit ?? null,
+        lastSavedFreeTrialEnabled: lastSavedProductRef.current.free_trial_enabled,
+        lastSavedFreeTrialDurationAmount: lastSavedProductRef.current.free_trial_duration_amount,
+        lastSavedFreeTrialDurationUnit: lastSavedProductRef.current.free_trial_duration_unit,
       });
       saved = true;
       setInstallmentPlanClearConflict(null);

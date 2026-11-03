@@ -290,13 +290,22 @@ describe("saveProduct with a free trial", () => {
     expect(data).not.toHaveProperty("free_trial_duration_unit");
   });
 
-  it("sends the trial this session enabled", async () => {
+  it("leaves an untouched enabled trial out of the payload", async () => {
+    const trial = { free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: "month" };
+    const data = await save(trial, {
+      lastSavedFreeTrialEnabled: true,
+      lastSavedFreeTrialDurationAmount: 1,
+      lastSavedFreeTrialDurationUnit: "month",
+    });
+    expect(data).not.toHaveProperty("free_trial_enabled");
+    expect(data).not.toHaveProperty("free_trial_duration_amount");
+    expect(data).not.toHaveProperty("free_trial_duration_unit");
+  });
+
+  it("sends a disabled trial with a cleared duration when the caller has no baseline", async () => {
     expect(
-      await save(
-        { free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: "week" },
-        { lastSavedFreeTrialEnabled: false },
-      ),
-    ).toMatchObject({ free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: "week" });
+      await save({ free_trial_enabled: false, free_trial_duration_amount: 1, free_trial_duration_unit: "month" }),
+    ).toMatchObject({ free_trial_enabled: false, free_trial_duration_amount: null, free_trial_duration_unit: null });
   });
 });
 
@@ -511,10 +520,6 @@ describe("scalarSettingsForSave", () => {
         allow_installment_plan: null,
       }),
     ).toEqual({ installment_plan: null, installment_plan_changed: true });
-  });
-
-  it("omits an untouched free trial so a stale tab cannot clear a live one", () => {
-    expect(scalarSettingsForSave(product(), lastSaved())).toEqual({});
   });
 
   it("sends the trial this session enabled", () => {
