@@ -538,6 +538,7 @@ class PartnerMigration < ApplicationRecord
   # Queues an import again when its job stopped without finishing, up to MAX_RESUMES times.
   def resume_stalled_import!
     failure_reason = nil
+    stopped_too_often = false
     with_lock do
       next unless stalled?
 
@@ -545,6 +546,7 @@ class PartnerMigration < ApplicationRecord
         failure_reason = INACTIVE_ACCOUNT_MESSAGE
       elsif resumes_count >= MAX_RESUMES
         failure_reason = "The import stopped #{MAX_RESUMES + 1} times before it finished."
+        stopped_too_often = true
       # A running import touches this row at least once per STALLED_AFTER, so a stalled import has no live
       # worker, and a rejected enqueue means a killed worker left its lock behind. The job skips products
       # that another run saved, so a job still waiting in the queue cannot import them twice.
@@ -558,6 +560,8 @@ class PartnerMigration < ApplicationRecord
         PartnerMigrationImportJob.release_lock(id)
       end
     end
+    # An inactive account is expected to stop its import, so only the repeated stops reach Sentry.
+    ErrorNotifier.notify(failure_reason, partner_migration_id: id) if stopped_too_often
     PartnerMigrationNotificationJob.perform_async(id) if failure_reason
   end
 

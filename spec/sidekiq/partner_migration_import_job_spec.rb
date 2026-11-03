@@ -465,10 +465,12 @@ describe PartnerMigrationImportJob do
     expect(seller.links).to be_empty
   end
 
-  it "marks the migration as failed when retries run out" do
+  it "marks the migration as failed and reports it to Sentry when retries run out" do
     migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
+    error = StandardError.new("Network down")
+    expect(ErrorNotifier).to receive(:notify).with(error, partner_migration_id: migration.id)
 
-    described_class.sidekiq_retries_exhausted_block.call({ "args" => [migration.id] }, StandardError.new("Network down"))
+    described_class.sidekiq_retries_exhausted_block.call({ "args" => [migration.id] }, error)
 
     expect(migration.reload).to have_attributes(status: PartnerMigration::STATUS_FAILED, completed_at: be_present, failure_reason: "Network down")
     expect(PartnerMigrationNotificationJob).to have_enqueued_sidekiq_job(migration.id)
@@ -489,6 +491,7 @@ describe PartnerMigrationImportJob do
   it "keeps a completed import when notification enqueues exhaust their retries" do
     migration = create_claimed_migration([{ external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
     migration.update!(status: PartnerMigration::STATUS_COMPLETED, completed_at: Time.current)
+    expect(ErrorNotifier).not_to receive(:notify)
 
     described_class.sidekiq_retries_exhausted_block.call({ "args" => [migration.id] }, StandardError.new("Redis unavailable"))
 
