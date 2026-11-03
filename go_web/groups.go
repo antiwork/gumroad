@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -43,13 +44,21 @@ func registerRouteGroups(app *web.App, deps *dependencies, list string) error {
 	if strings.TrimSpace(list) == "" {
 		list = defaultRouteGroups
 	}
+	// Every name is checked before any group connects to anything, so a typo fails at once.
+	var names []string
 	for name := range strings.SplitSeq(list, ",") {
 		name = strings.TrimSpace(name)
-		register, ok := routeGroups[name]
-		if !ok {
+		if _, ok := routeGroups[name]; !ok {
 			return fmt.Errorf("unknown route group %q in GO_WEB_ROUTE_GROUPS", name)
 		}
-		if err := register(app, deps); err != nil {
+		// A repeat would register the same patterns twice, which panics in the mux.
+		if slices.Contains(names, name) {
+			return fmt.Errorf("route group %q is listed twice in GO_WEB_ROUTE_GROUPS", name)
+		}
+		names = append(names, name)
+	}
+	for _, name := range names {
+		if err := routeGroups[name](app, deps); err != nil {
 			return fmt.Errorf("route group %s: %w", name, err)
 		}
 		deps.logger.Info("route group enabled", "group", name)

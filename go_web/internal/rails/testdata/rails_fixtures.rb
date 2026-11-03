@@ -205,35 +205,35 @@ end
 write("rails/testdata/rails_responses.json", responses)
 
 write("session/testdata/rails_cookies.json", {
-  secret_key_base: SECRET_KEY_BASE,
-  session_cookie:,
-  session_plaintext: session_plain,
-  current_seller_cookie: seller_cookie,
-  rotated_cookie:,
-  rotated_read_back: read_back.call(rotated_cookie),
-  expired_cookie:,
-  expired_read_back: read_back.call(expired_cookie),
-  wrong_purpose_cookie:,
-  wrong_purpose_read_back: read_back.call(wrong_purpose_cookie),
-  no_metadata_cookie:,
-  no_metadata_read_back: read_back.call(no_metadata_cookie),
-  csrf_cases:,
-  null_origin: null_origin_status,
-  redirect: { status: redirect_status, location: redirect_headers["location"], body: redirect_body },
-})
+        secret_key_base: SECRET_KEY_BASE,
+        session_cookie:,
+        session_plaintext: session_plain,
+        current_seller_cookie: seller_cookie,
+        rotated_cookie:,
+        rotated_read_back: read_back.call(rotated_cookie),
+        expired_cookie:,
+        expired_read_back: read_back.call(expired_cookie),
+        wrong_purpose_cookie:,
+        wrong_purpose_read_back: read_back.call(wrong_purpose_cookie),
+        no_metadata_cookie:,
+        no_metadata_read_back: read_back.call(no_metadata_cookie),
+        csrf_cases:,
+        null_origin: null_origin_status,
+        redirect: { status: redirect_status, location: redirect_headers["location"], body: redirect_body },
+      })
 
 # --- analytics view tokens (Link.analytics_view_verifier) ---
 
 verifier = APP.message_verifier(:product_analytics_view)
 payload = { product_id: 1_000_101, source_url: "https://example.com/landing?a=1", event_id: "11111111-2222-4333-8444-555555555555" }
 write("rails/testdata/analytics_tokens.json", {
-  secret_key_base: SECRET_KEY_BASE,
-  valid: verifier.generate(payload, purpose: :external_landing_page_view, expires_at: Time.utc(2100, 1, 1)),
-  expired: verifier.generate(payload, purpose: :external_landing_page_view, expires_at: Time.utc(2001, 1, 1)),
-  script_purpose: verifier.generate({ product_id: 1_000_101 }, purpose: :external_landing_page_script),
-  no_expiry: verifier.generate(payload, purpose: :external_landing_page_view),
-  payload:,
-})
+        secret_key_base: SECRET_KEY_BASE,
+        valid: verifier.generate(payload, purpose: :external_landing_page_view, expires_at: Time.utc(2100, 1, 1)),
+        expired: verifier.generate(payload, purpose: :external_landing_page_view, expires_at: Time.utc(2001, 1, 1)),
+        script_purpose: verifier.generate({ product_id: 1_000_101 }, purpose: :external_landing_page_script),
+        no_expiry: verifier.generate(payload, purpose: :external_landing_page_view),
+        payload:,
+      })
 
 # --- Time.zone.parse (record_media_location's consumed_at) ---
 
@@ -336,7 +336,6 @@ end)
 
 cookie_inputs = ["a=1; b=2", "a=1;b=2", "a=1; a=2", "a=%20+x", "a=%zz", "a", "a=1=2", " a=1", "a=1,b=2"]
 write("rails/testdata/rack_cookies.json", cookie_inputs.map do |input|
-  sanitized = sanitizer.send(:sanitize_cookies, { "HTTP_COOKIE" => input.dup }) && nil
   env = { "HTTP_COOKIE" => input.dup }
   sanitizer.send(:sanitize_cookies, env)
   { input:, sanitized: env["HTTP_COOKIE"], cookies: Rack::Utils.parse_cookies_header(env["HTTP_COOKIE"]) }
@@ -385,9 +384,9 @@ write("sidekiq/testdata/ruby_json.json", json_values.map { |v| { value: v, json:
 guid_line = Rack::Utils.set_cookie_header("_gumroad_guid", { value: "11111111-2222-4333-8444-555555555555", domain: "gumroad.com", path: "/", expires: Time.utc(2036, 11, 2, 10, 0, 0), httponly: true, same_site: :lax })
 cookie_config = { httponly: true, secure: true, samesite: { none: true } }
 write("rails/testdata/guid_cookie.json", {
-  rack: guid_line,
-  secure_headers: SecureHeaders::Cookie.new(guid_line.dup, SecureHeaders::Cookie::COOKIE_DEFAULTS.merge(cookie_config)).to_s,
-})
+        rack: guid_line,
+        secure_headers: SecureHeaders::Cookie.new(guid_line.dup, SecureHeaders::Cookie::COOKIE_DEFAULTS.merge(cookie_config)).to_s,
+      })
 
 bots = eval(File.read(File.join(ROOT, "config/initializers/bots.rb")).sub("# frozen_string_literal: true", "").sub(/\ABOT_MAP = /m, "").strip.sub(/\ABOT_MAP\s*=\s*/, ""))
 write("beacons/bot_map.json", bots.keys)

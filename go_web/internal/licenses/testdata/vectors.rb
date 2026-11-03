@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 # Writes params.json and time_ago.json from the real gems: RBENV_VERSION=3.4.3 ruby testdata/vectors.rb testdata
 gem "actionpack", "8.1.3.1"
 gem "actionview", "8.1.3.1"
@@ -82,11 +84,11 @@ param_cases = [
   { body: "a=%FF", ctype: "multipart/form-data" },
   { body: "a=\xFF" },
   { body: '{"license_key":"x","increment_uses_count":false,"n":[null,1,[null]],"h":{},"f":1.5,"big":123456789012345678901234567890}', ctype: "application/json" },
-  { body: '[1,2]', ctype: "application/json" },
+  { body: "[1,2]", ctype: "application/json" },
   { body: '"str"', ctype: "application/json; charset=utf-8" },
-  { body: '{bad', ctype: "application/json" },
+  { body: "{bad", ctype: "application/json" },
   { body: '{"a":1} x', ctype: "application/json" },
-  { body: '  ', ctype: "application/json" },
+  { body: "  ", ctype: "application/json" },
   { body: "\xEF\xBB\xBF{\"a\":1}", ctype: "application/json" },
   { body: "{\"a\":\"caf\xC3\xA9\xFF\"}", ctype: "application/json" },
   { body: '{"a":1}', ctype: "application/vnd.api+json" },

@@ -36,6 +36,14 @@ func TestRegisterRouteGroupsRefusesAnUnknownGroup(t *testing.T) {
 	}
 }
 
+func TestRegisterRouteGroupsRefusesARepeatedGroup(t *testing.T) {
+	app, deps := testDependencies(t)
+	err := registerRouteGroups(app, deps, "robots,robots")
+	if err == nil || !strings.Contains(err.Error(), `"robots" is listed twice`) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestAnEnabledGroupFailsStartupWithoutItsConfig(t *testing.T) {
 	t.Setenv("SIDEKIQ_REDIS_HOST", "")
 	app, deps := testDependencies(t)
