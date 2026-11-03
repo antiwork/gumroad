@@ -82,26 +82,33 @@ describe("VersionHistoryButton", () => {
     Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
   });
 
-  it("shows the live build apart from the earlier ones", async () => {
+  // Rows of the version list, top to bottom, by their first line.
+  const versionRowElements = () => [
+    ...screen.getByRole("region", { name: "Versions" }).querySelectorAll("[role=listitem]"),
+  ];
+  const versionRows = () =>
+    versionRowElements().map((row) => row.querySelector("h4")?.textContent?.replace("Live", "").trim());
+
+  it("lists the versions newest first and marks the live one", async () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
 
-    const live = await screen.findByRole("region", { name: "Live version" });
-    expect(live.textContent).toContain("Version 2");
+    const live = await screen.findByRole("listitem", { name: "Version 2" });
+    expect(live.textContent).toContain("Live");
     expect(live.textContent).toContain("Buyers get this version");
-    expect(screen.getByRole("region", { name: "Earlier versions" }).textContent).toContain("Version 1");
+    expect(versionRows()).toEqual(["Version 2", "Version 1"]);
     expect(screen.queryByRole("button", { name: "Actions for version 2" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Actions for version 1" })).toBeDefined();
   });
 
-  it("puts a version deployed after the live one first, with Make live in view", async () => {
+  it("puts a version added after the live one first, with Make live in view", async () => {
     getProductBuilds.mockResolvedValue([build(3, "uploaded"), build(2, "live"), build(1, "uploaded")]);
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
 
-    const ready = await screen.findByRole("region", { name: "Ready to go live" });
-    expect(ready.textContent).toContain("Version 3");
-    expect(ready.textContent).not.toContain("Version 1");
-    expect(screen.getByRole("region", { name: "Earlier versions" }).textContent).toContain("Version 1");
+    const ready = await screen.findByRole("listitem", { name: "Version 3" });
+    expect(ready.textContent).toContain("Not live yet");
+    expect(screen.getByRole("listitem", { name: "Version 1" }).textContent).not.toContain("Not live yet");
     fireEvent.click(screen.getByRole("button", { name: "Make live" }));
     expect(await screen.findByRole("dialog", { name: "Make version 3 live?" })).toBeDefined();
   });
@@ -109,7 +116,7 @@ describe("VersionHistoryButton", () => {
   it("offers to add the live version back when its row is not in the content", async () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
-    await screen.findByRole("region", { name: "Live version" });
+    await screen.findByRole("listitem", { name: "Version 2" });
     expect(screen.queryByRole("button", { name: "Add to content" })).toBeNull();
     cleanup();
 
@@ -126,20 +133,19 @@ describe("VersionHistoryButton", () => {
     createProductBuild.mockResolvedValue(build(2, "uploaded"));
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
-    await screen.findByRole("region", { name: "Live version" });
+    await screen.findByRole("listitem", { name: "Version 1" });
 
     fireEvent.change(screen.getByLabelText("Web app zip"), {
       target: { files: [new File(["PK"], "my game.zip", { type: "application/zip" })] },
     });
 
-    const ready = await screen.findByRole("region", { name: "Ready to go live" });
-    expect(ready.textContent).toContain("Version 2");
-    expect(screen.getByText("Version 2 is ready. Make it live below.")).toBeDefined();
+    expect((await screen.findByRole("listitem", { name: "Version 2" })).textContent).toContain("Not live yet");
+    expect(screen.getByText("Version 2 is ready to go live.")).toBeDefined();
     expect(createProductBuild).toHaveBeenCalledWith("demo", expect.stringMatching(/\/original\/my game\.zip$/u));
     expect(showAlert).not.toHaveBeenCalled();
   });
 
-  it("tells the editor a zip is uploading until the upload ends", async () => {
+  it("shows the upload as the list's first row, which becomes the new version", async () => {
     let complete = () => {};
     scheduleUpload.mockImplementationOnce((options: { onComplete: () => void }) => {
       complete = options.onComplete;
@@ -148,15 +154,19 @@ describe("VersionHistoryButton", () => {
     createProductBuild.mockResolvedValue(build(3, "uploaded"));
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
-    await screen.findByRole("region", { name: "Live version" });
+    await screen.findByRole("listitem", { name: "Version 2" });
 
     fireEvent.change(screen.getByLabelText("Web app zip"), {
       target: { files: [new File(["PK"], "game.zip", { type: "application/zip" })] },
     });
+    expect(versionRows()).toEqual(["Uploading game.zip", "Version 2", "Version 1"]);
+    expect(screen.getByText("Uploading game.zip: 0%").getAttribute("role")).toBe("status");
+    expect(screen.getByRole("button", { name: "Upload a zip" })).toHaveProperty("disabled", true);
     expect(setWebAppUploading).toHaveBeenLastCalledWith(true);
 
     act(() => complete());
-    await screen.findByText("Version 3 is ready. Make it live below.");
+    await screen.findByRole("listitem", { name: "Version 3" });
+    expect(versionRows()).toEqual(["Version 3", "Version 2", "Version 1"]);
     expect(setWebAppUploading).toHaveBeenLastCalledWith(false);
   });
 
@@ -165,7 +175,7 @@ describe("VersionHistoryButton", () => {
     getProductBuilds.mockResolvedValue([build(2, "uploaded"), build(1, "live")]);
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
-    await screen.findByRole("region", { name: "Ready to go live" });
+    await screen.findByRole("listitem", { name: "Version 2" });
 
     fireEvent.change(screen.getByLabelText("Web app zip"), {
       target: { files: [new File(["PK"], "game.zip", { type: "application/zip" })] },
@@ -178,7 +188,7 @@ describe("VersionHistoryButton", () => {
   it("refuses a file that is not a zip", async () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
-    await screen.findByRole("region", { name: "Live version" });
+    await screen.findByRole("listitem", { name: "Version 2" });
 
     fireEvent.change(screen.getByLabelText("Web app zip"), { target: { files: [new File(["x"], "game.html")] } });
 
@@ -186,14 +196,16 @@ describe("VersionHistoryButton", () => {
     expect(showAlert).toHaveBeenCalledWith("Choose a .zip file of your web app.", "error");
   });
 
-  it("puts the upload above the versions", async () => {
-    getProductBuilds.mockResolvedValue([build(1, "live")]);
+  it("puts the upload above the versions and the command line below them", async () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
 
-    const live = await screen.findByRole("region", { name: "Live version" });
+    const versions = await screen.findByRole("region", { name: "Versions" });
     const add = screen.getByRole("region", { name: "Add a new version" });
-    expect(add.compareDocumentPosition(live) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const cli = screen.getByRole("region", { name: "Deploy from the command line" });
+    expect(add.compareDocumentPosition(versions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(versions.compareDocumentPosition(cli) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cli.textContent).toContain("gumroad builds deploy ./my-web-app --product demo");
   });
 
   it("asks for a first web app when the product has no versions", async () => {
@@ -201,17 +213,10 @@ describe("VersionHistoryButton", () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
 
-    expect(await screen.findByRole("region", { name: "Add a web app" })).toBeDefined();
+    const add = await screen.findByRole("region", { name: "Add a web app" });
     expect(screen.getByRole("dialog", { name: "Add a web app" })).toBeDefined();
-    expect(screen.getByText("Buyers get it once you make it live.")).toBeDefined();
-  });
-
-  it("shows a deploy command for this product", async () => {
-    render(<VersionHistoryButton />);
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
-
-    const add = await screen.findByRole("region", { name: "Add a new version" });
-    expect(add.textContent).toContain("gumroad builds deploy ./my-web-app --product demo");
+    expect(add.textContent).toContain("Buyers get it once you make it live.");
+    expect(screen.queryByRole("region", { name: "Versions" })).toBeNull();
   });
 
   it("shows the last ten earlier builds until asked for all", async () => {
@@ -222,10 +227,10 @@ describe("VersionHistoryButton", () => {
     render(<VersionHistoryButton />);
     fireEvent.click(screen.getByRole("button", { name: "History" }));
 
-    const earlier = await screen.findByRole("region", { name: "Earlier versions" });
-    expect(earlier.querySelectorAll("[role=listitem]")).toHaveLength(10);
-    fireEvent.click(screen.getByRole("button", { name: "Show all 12 earlier versions" }));
-    expect(earlier.querySelectorAll("[role=listitem]")).toHaveLength(12);
+    await screen.findByRole("listitem", { name: "Version 13" });
+    expect(versionRowElements()).toHaveLength(11);
+    fireEvent.click(screen.getByRole("button", { name: "Show all 13 versions" }));
+    expect(versionRowElements()).toHaveLength(13);
   });
 
   it("saves, makes the build live, then reloads", async () => {

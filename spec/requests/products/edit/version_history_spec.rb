@@ -8,6 +8,8 @@ describe "Product edit version history", type: :system, js: true do
   let!(:first_build) { create(:product_build, product:, number: 1, byte_size: 2.megabytes) }
   let!(:second_build) { create(:product_build, product:, number: 2, byte_size: 3.megabytes) }
 
+  def version_row(number) = find("[role=listitem][aria-label='Version #{number}']")
+
   before do
     create(:rich_content, entity: product, description: [])
     first_build.promote!
@@ -24,7 +26,7 @@ describe "Product edit version history", type: :system, js: true do
 
     click_on "History"
     within find("[role=dialog]", text: "Version history") do
-      within("section", text: "Buyers get this version") { expect(page).to have_text("Version 2") }
+      within(version_row(2)) { expect(page).to have_text("Live").and have_text("Buyers get this version") }
       click_on "Actions for version 1"
     end
     click_on "Make live"
@@ -49,7 +51,7 @@ describe "Product edit version history", type: :system, js: true do
     expect(page).to have_text("Your web app is not in this product's content yet.")
     click_on "Open version history"
     within find("[role=dialog]", text: "Version history") do
-      within("section", text: "Ready to go live") { click_on "Make live" }
+      within(version_row(1)) { click_on "Make live" }
     end
     within_modal "Make version 1 live?" do
       click_on "Make version 1 live"
@@ -70,7 +72,7 @@ describe "Product edit version history", type: :system, js: true do
     expect(page).not_to have_text("Web app, version 2")
     click_on "Open version history"
     within find("[role=dialog]", text: "Version history") do
-      within("section", text: "Buyers get this version") { click_on "Add to content" }
+      within(version_row(2)) { click_on "Add to content" }
     end
     within_modal "Add version 2 back to the content?" do
       click_on "Add to content"
@@ -108,8 +110,8 @@ describe "Product edit version history", type: :system, js: true do
     click_on "Web app"
     within find("[role=dialog]", text: "Add a web app") do
       attach_file("Web app zip", zip_path, visible: false)
-      within("section", text: "Ready to go live") do
-        expect(page).to have_text("Version 1")
+      within(version_row(1)) do
+        expect(page).to have_text("Not live yet")
         click_on "Make live"
       end
     end
