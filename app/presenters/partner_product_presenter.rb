@@ -8,9 +8,12 @@ class PartnerProductPresenter
   include ActionView::Helpers::OutputSafetyHelper
   include CurrencyHelper
 
-  def initialize(product:, partner_seller:)
+  # `category` is the product's entry from Discover::TaxonomyPresenter#category_for_taxonomy_id, the same
+  # list that GET /v2/partner/categories returns.
+  def initialize(product:, partner_seller:, category: nil)
     @product = product
     @partner_seller = partner_seller
+    @category = category
   end
 
   def props
@@ -36,10 +39,11 @@ class PartnerProductPresenter
       is_recurring_billing: product.is_recurring_billing,
       ratings: card_props[:ratings],
       rated_as_adult: product.rated_as_adult?,
+      category: category&.slice(:id, :path, :label),
       creator: PartnerSellerPresenter.new(partner_seller:).props,
     }
   end
 
   private
-    attr_reader :product, :partner_seller
+    attr_reader :product, :partner_seller, :category
 end

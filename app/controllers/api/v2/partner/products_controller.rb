@@ -36,10 +36,14 @@ class Api::V2::Partner::ProductsController < Api::V2::Partner::BaseController
     def render_products(products, partner_sellers:, total:, page:, per_page:)
       partner_sellers_by_user_id = partner_sellers.index_by(&:user_id)
       preload_users(partner_sellers_by_user_id.values_at(*products.map(&:user_id).uniq))
+      # One presenter, so the category list is built once per response.
+      taxonomy_presenter = Discover::TaxonomyPresenter.new
 
       render json: {
         success: true,
-        products: products.map { PartnerProductPresenter.new(product: _1, partner_seller: partner_sellers_by_user_id.fetch(_1.user_id)).props },
+        products: products.map do |product|
+          PartnerProductPresenter.new(product:, partner_seller: partner_sellers_by_user_id.fetch(product.user_id), category: taxonomy_presenter.category_for_taxonomy_id(product.taxonomy_id)).props
+        end,
         total:,
         page:,
         per_page:,
