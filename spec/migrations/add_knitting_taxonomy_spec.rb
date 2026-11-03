@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
-require Rails.root.join("db/migrate/20261224000006_add_knitting_taxonomy").to_s
+require Rails.root.join("db/migrate/20261224000009_add_knitting_taxonomy").to_s
 
 describe AddKnittingTaxonomy do
   subject(:migration) { described_class.new }
