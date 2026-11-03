@@ -428,6 +428,16 @@ describe Api::V2::SalesController do
         }.as_json)
       end
 
+      it "returns a 400 error if the page number is too large for the SQL offset" do
+        @params.merge!(page: "20261020143608000000-690371289")
+        get :index, params: @params
+        expect(response.code).to eq "400"
+        expect(response.parsed_body).to eq({
+          status: 400,
+          error: "Invalid page number. Page numbers start at 1."
+        }.as_json)
+      end
+
       it "treats a nested page param as the first deprecated page" do
         get :index, params: @params.merge(page: { size: "100" })
 

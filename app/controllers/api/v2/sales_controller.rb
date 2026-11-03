@@ -12,6 +12,9 @@ class Api::V2::SalesController < Api::V2::BaseController
   before_action :set_page, only: :index
 
   RESULTS_PER_PAGE = 10
+  # The deprecated `page` becomes a SQL LIMIT/OFFSET, and MySQL rejects an offset past the
+  # signed 64-bit range with a syntax error; an absurd page must 400, not 500.
+  MAX_DEPRECATED_PAGE = (2**63 - 1) / RESULTS_PER_PAGE
   # Fallback for the Redis-tunable query timeouts in #index, matching the value both keys were
   # introduced with.
   DEFAULT_SALES_QUERY_TIMEOUT_SECONDS = 15
@@ -360,6 +363,6 @@ class Api::V2::SalesController < Api::V2::BaseController
     def set_page # DEPRECATED
       page = params[:page]
       @page = page.is_a?(Integer) || page.is_a?(String) ? page.to_i : 1
-      error_400("Invalid page number. Page numbers start at 1.") unless @page > 0
+      error_400("Invalid page number. Page numbers start at 1.") unless @page.between?(1, MAX_DEPRECATED_PAGE)
     end
 end
