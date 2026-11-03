@@ -566,7 +566,7 @@ Rails.application.routes.draw do
   constraints GumroadDomainConstraint do
     get "/about", to: "home#about"
     get "/gumclaw", to: "gumclaw#index"
-    %w[muse claude].each do |client|
+    %w[muse claude chatgpt].each do |client|
       get "/#{client}", to: "mcp_connectors#show", defaults: { client: }, as: client
     end
     get "/mcp", to: "mcp_connectors#index", as: :mcp
