@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_24_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_24_000008) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1489,6 +1489,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_24_000005) do
     t.string "code_challenge"
     t.string "code_challenge_method"
     t.string "resource"
+    t.bigint "team_membership_id"
     t.index ["application_id", "revoked_at"], name: "index_oauth_access_grants_on_application_id_and_revoked_at"
     t.index ["created_at"], name: "index_oauth_access_grants_on_created_at"
     t.index ["resource_owner_id", "application_id"], name: "idx_on_resource_owner_id_application_id_1b7397c458"
@@ -1560,6 +1561,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_24_000005) do
     t.string "last_poll_user_agent"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "team_membership_id"
     t.index ["access_token_id"], name: "index_oauth_device_authorizations_on_access_token_id"
     t.index ["device_code_digest"], name: "index_oauth_device_authorizations_on_device_code_digest", unique: true
     t.index ["oauth_application_id"], name: "index_oauth_device_authorizations_on_oauth_application_id"

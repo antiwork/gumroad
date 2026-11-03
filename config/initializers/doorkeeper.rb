@@ -59,9 +59,11 @@ Doorkeeper.configure do
 
   # A refreshed brand token keeps the team membership of the token it replaces.
   before_successful_strategy_response do |request|
-    next unless request.is_a?(Doorkeeper::OAuth::RefreshTokenRequest)
-
-    team_membership_id = MobileAccountToken.team_membership_id(request.refresh_token)
+    source = case request
+             when Doorkeeper::OAuth::RefreshTokenRequest then request.refresh_token
+             when Doorkeeper::OAuth::AuthorizationCodeRequest then request.grant
+    end
+    team_membership_id = MobileAccountToken.team_membership_id(source)
     request.access_token.update_column(:team_membership_id, team_membership_id) if team_membership_id
   end
 

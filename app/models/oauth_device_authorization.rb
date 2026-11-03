@@ -28,6 +28,7 @@ class OauthDeviceAuthorization < ApplicationRecord
   belongs_to :oauth_application, class_name: "OauthApplication"
   belongs_to :resource_owner, class_name: "User", optional: true
   belongs_to :access_token, class_name: "Doorkeeper::AccessToken", optional: true
+  belongs_to :team_membership, optional: true
 
   validates :device_code_digest, :user_code_digest, :scopes, :status, :expires_at, :poll_interval_seconds, presence: true
   validates :device_code_digest, :user_code_digest, uniqueness: true
@@ -124,7 +125,7 @@ class OauthDeviceAuthorization < ApplicationRecord
         .exists?
   end
 
-  def approve!(resource_owner:, ip_address:, user_agent:)
+  def approve!(resource_owner:, ip_address:, user_agent:, team_membership: nil)
     approved = false
 
     oauth_application.with_lock do
@@ -132,10 +133,11 @@ class OauthDeviceAuthorization < ApplicationRecord
         now = Time.current
         if approvable?(now)
           if access_revoked_after_creation_for?(resource_owner)
-            mark_denied!(resource_owner:, ip_address:, user_agent:)
+            mark_denied!(resource_owner:, ip_address:, user_agent:, team_membership:)
           else
             update!(
               resource_owner:,
+              team_membership:,
               status: STATUS_APPROVED,
               approved_at: now,
               approved_ip_address: ip_address,
@@ -150,13 +152,13 @@ class OauthDeviceAuthorization < ApplicationRecord
     approved
   end
 
-  def deny!(resource_owner:, ip_address:, user_agent:)
+  def deny!(resource_owner:, ip_address:, user_agent:, team_membership: nil)
     denied = false
 
     oauth_application.with_lock do
       with_lock do
         if approvable?
-          mark_denied!(resource_owner:, ip_address:, user_agent:)
+          mark_denied!(resource_owner:, ip_address:, user_agent:, team_membership:)
           denied = true
         end
       end
@@ -183,7 +185,7 @@ class OauthDeviceAuthorization < ApplicationRecord
           too_recent ? [POLL_SLOW_DOWN, next_poll_interval_seconds] : [POLL_AUTHORIZATION_PENDING, nil]
         else
           # An approve! racing account closure commits after closure denied the approved codes.
-          if resource_owner&.deleted? || access_revoked_after_creation_for?(resource_owner)
+          if resource_owner&.deleted? || access_revoked_after_creation_for?(resource_owner) || !MobileAccountToken.valid?(self)
             mark_denied!(resource_owner:, ip_address:, user_agent:)
             [POLL_ACCESS_DENIED, nil]
           else
@@ -225,9 +227,10 @@ class OauthDeviceAuthorization < ApplicationRecord
       last_polled_at.present? && last_polled_at > poll_interval_seconds.seconds.ago
     end
 
-    def mark_denied!(resource_owner:, ip_address:, user_agent:)
+    def mark_denied!(resource_owner:, ip_address:, user_agent:, team_membership: self.team_membership)
       update!(
         resource_owner:,
+        team_membership:,
         status: STATUS_DENIED,
         denied_at: Time.current,
         denied_ip_address: ip_address,
@@ -238,12 +241,16 @@ class OauthDeviceAuthorization < ApplicationRecord
     def issue_access_token!
       ensure_access_grant_exists!
 
+      membership = MobileAccountToken.team_membership_for(self)
+      granted_scopes = membership ? MobileAccountToken.narrow_scopes(scope_list, membership).to_s : scopes
+
       Doorkeeper.config.access_token_model.create_for(
         application: oauth_application,
         resource_owner: resource_owner_id,
-        scopes:,
+        scopes: granted_scopes,
         expires_in: Doorkeeper.config.access_token_expires_in,
-        use_refresh_token: Doorkeeper.config.refresh_token_enabled?
+        use_refresh_token: Doorkeeper.config.refresh_token_enabled?,
+        team_membership_id: membership&.id
       )
     end
 
