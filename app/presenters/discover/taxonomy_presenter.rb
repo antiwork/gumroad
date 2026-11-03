@@ -160,6 +160,7 @@ class Discover::TaxonomyPresenter
     "jewelry" => "Jewelry",
     "kids-and-family" => "Kids & Family",
     "kits" => "Kits",
+    "knitting" => "Knitting",
     "latin-music" => "Latin Music",
     "law" => "Law",
     "leggings" => "Leggings",
