@@ -779,7 +779,7 @@ describe ReceiptPresenter::ItemInfo do
 
       context "when the purchase is a membership" do
         let(:product) { create(:membership_product) }
-        let(:purchase) { create(:membership_purchase, link: product, total_transaction_cents: 1_499) }
+        let(:purchase) { create(:membership_purchase, link: product, price_cents: 1_499, total_transaction_cents: 1_499) }
 
         it "returns subscription note" do
           url = Rails.application.routes.url_helpers.manage_subscription_url(
@@ -790,6 +790,14 @@ describe ReceiptPresenter::ItemInfo do
             "You will be charged once a month. If you would like to manage your membership you can visit " \
             "<a target=\"_blank\" href=\"#{url}\">subscription settings</a>."
           )
+        end
+
+        context "when the membership is free" do
+          let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, total_transaction_cents: 0) }
+
+          it "does not say the buyer will be charged" do
+            expect(props[:manage_subscription_note]).to start_with("Your free membership renews once a month.")
+          end
         end
 
         context "when not used in an email" do

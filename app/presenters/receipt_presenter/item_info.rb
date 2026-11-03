@@ -304,9 +304,18 @@ class ReceiptPresenter::ItemInfo
       return if purchase.is_gift_receiver_purchase && subscription.credit_card_id.blank?
       return gift_subscription_renewal_note if subscription.gift? && subscription.credit_card_id.blank?
       return single_charge_membership_note if subscription.single_charge? && !purchase.is_free_trial_purchase?
+      return free_membership_note if purchase.free_purchase? && !purchase.is_free_trial_purchase?
 
       <<~HTML.squish.html_safe
         You will be charged once #{recurrence_long_indicator(subscription.recurrence)}.
+        If you would like to manage your membership you can visit
+        #{link_to("subscription settings", manage_subscription_href, target: "_blank")}.
+      HTML
+    end
+
+    def free_membership_note
+      <<~HTML.squish.html_safe
+        Your free membership renews once #{recurrence_long_indicator(subscription.recurrence)}.
         If you would like to manage your membership you can visit
         #{link_to("subscription settings", manage_subscription_href, target: "_blank")}.
       HTML

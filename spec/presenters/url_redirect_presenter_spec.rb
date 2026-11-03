@@ -883,7 +883,7 @@ describe UrlRedirectPresenter do
       @user = create(:user, name: "John Doe", disable_reviews_after_year: true)
       @product = create(:membership_product, user: @user)
       @subscription = create(:subscription, link: @product)
-      @purchase = create(:purchase, link: @product, email: @subscription.user.email, is_original_subscription_purchase: true, subscription: @subscription, created_at: 2.days.ago)
+      @purchase = create(:purchase, link: @product, price_cents: 1_499, email: @subscription.user.email, is_original_subscription_purchase: true, subscription: @subscription, created_at: 2.days.ago)
       @url_redirect = create(:url_redirect, purchase: @purchase, link: @product)
       @custom_field = create(:custom_field, products: [@product], field_type: CustomField::TYPE_TEXT, is_post_purchase: true)
       @file_custom_field = create(:custom_field, products: [@product], field_type: CustomField::TYPE_FILE, is_post_purchase: true)

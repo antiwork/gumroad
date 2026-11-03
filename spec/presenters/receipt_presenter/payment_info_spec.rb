@@ -369,6 +369,16 @@ describe ReceiptPresenter::PaymentInfo do
         end
       end
 
+      context "when the membership is free" do
+        let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
+
+        it "has no payment section" do
+          expect(payment_info.present?).to be(false)
+          expect(upcoming_payment_attributes).to eq([])
+          expect(today_payment_attributes).to eq([])
+        end
+      end
+
       context "when is not a membership purchase" do
         context "when the purchase is free" do
           let(:purchase) { create(:free_purchase) }

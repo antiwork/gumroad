@@ -99,6 +99,14 @@ describe Purchase::Receipt do
         expect(purchase.has_invoice?).to be(false)
       end
     end
+
+    context "when is a free membership" do
+      let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
+
+      it "returns false" do
+        expect(purchase.has_invoice?).to be(false)
+      end
+    end
   end
 
   describe "#send_receipt" do
@@ -164,9 +172,9 @@ describe Purchase::Receipt do
     let(:product) { create(:membership_product) }
     let(:subscription) { create(:subscription, link: product) }
     let(:email) { "buyer@example.com" }
-    let!(:may) { create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago) }
-    let!(:june) { create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago) }
-    let!(:july) { create(:membership_purchase, link: product, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago) }
+    let!(:may) { create(:membership_purchase, link: product, price_cents: 1_499, subscription:, email:, is_original_subscription_purchase: true, succeeded_at: 3.months.ago) }
+    let!(:june) { create(:membership_purchase, link: product, price_cents: 1_499, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 2.months.ago) }
+    let!(:july) { create(:membership_purchase, link: product, price_cents: 1_499, subscription:, email:, is_original_subscription_purchase: false, succeeded_at: 1.month.ago) }
 
     it "returns every charge of the subscription, newest first" do
       expect(july.invoiceable_charges).to eq([july, june, may])
@@ -177,7 +185,7 @@ describe Purchase::Receipt do
     end
 
     it "leaves out a charge that carries somebody else's email" do
-      create(:membership_purchase, link: product, subscription:, email: "previous-holder@example.com", is_original_subscription_purchase: false, succeeded_at: 2.weeks.ago)
+      create(:membership_purchase, link: product, price_cents: 1_499, subscription:, email: "previous-holder@example.com", is_original_subscription_purchase: false, succeeded_at: 2.weeks.ago)
 
       expect(july.invoiceable_charges).to eq([july, june, may])
     end
