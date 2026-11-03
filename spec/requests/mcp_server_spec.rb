@@ -14,6 +14,8 @@ describe "MCP server" do
     @product = create(:product, user: @seller, name: "Field notes", price_cents: 1900)
   end
 
+  let(:mcp_scopes) { %w[view_public view_profile view_sales edit_products view_payouts] }
+
   def post_mcp(payload, token: @token)
     headers = {
       "CONTENT_TYPE" => "application/json",
@@ -55,7 +57,7 @@ describe "MCP server" do
     expect(body["mcp"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(body["oauth"]["authorization_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/authorize")
     expect(body["oauth"]["registration_endpoint"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/oauth2/register")
-    expect(body["oauth"]["scopes"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(body["oauth"]["scopes"]).to match_array(mcp_scopes)
     expect(body["clients"]).to include(
       "muse" => "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp",
       "claude" => "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
@@ -69,13 +71,13 @@ describe "MCP server" do
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp")
     expect(response.parsed_body["authorization_servers"]).to eq(["#{PROTOCOL}://#{DOMAIN}"])
-    expect(response.parsed_body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body["scopes_supported"]).to match_array(mcp_scopes)
 
     get "/.well-known/oauth-protected-resource/claude/v1/mcp", headers: { "HOST" => DOMAIN }
 
     expect(response).to be_successful
     expect(response.parsed_body["resource"]).to eq("#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp")
-    expect(response.parsed_body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body["scopes_supported"]).to match_array(mcp_scopes)
   end
 
   it "registers a public OAuth client for MCP" do
@@ -225,7 +227,7 @@ describe "MCP server" do
     expect(body["code_challenge_methods_supported"]).to include("S256")
     expect(body["registration_endpoint"]).to end_with("/muse/v1/oauth2/register")
     expect(body["token_endpoint_auth_methods_supported"]).to include("none")
-    expect(body["scopes_supported"]).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(body["scopes_supported"]).to match_array(mcp_scopes)
   end
 
   it "issues a Claude token with every scope discovered from the MCP metadata" do
@@ -237,6 +239,7 @@ describe "MCP server" do
     get "/.well-known/oauth-protected-resource/claude/v1/mcp"
     resource = response.parsed_body.fetch("resource")
     scopes = response.parsed_body.fetch("scopes_supported")
+    expect(scopes).to match_array(mcp_scopes)
 
     get "/.well-known/oauth-authorization-server"
     metadata = response.parsed_body
@@ -261,6 +264,7 @@ describe "MCP server" do
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("MCP Claude")
+    expect(response.body).not_to include(OauthScopeHelper::DESCRIPTIONS.fetch("account"))
     doc = Nokogiri::HTML(response.body)
     expect(doc.at_css("input[name='scope']")["value"].split).to match_array(scopes)
 
@@ -288,10 +292,10 @@ describe "MCP server" do
     expect(issued.resource).to eq(resource)
 
     headers = { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{issued.token}" }
-    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Six scopes", price_cents: 500 } } }.to_json, headers: headers
+    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Discovered scopes", price_cents: 500 } } }.to_json, headers: headers
     expect(response).to have_http_status(:ok)
     expect(response.headers["WWW-Authenticate"]).to be_nil
-    expect(response.parsed_body.dig("result", "structuredContent", "product", "name")).to eq("Six scopes")
+    expect(response.parsed_body.dig("result", "structuredContent", "product", "name")).to eq("Discovered scopes")
 
     post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "list_payouts", arguments: {} } }.to_json, headers: headers
     expect(response).to have_http_status(:ok)
@@ -312,7 +316,7 @@ describe "MCP server" do
          headers: { "CONTENT_TYPE" => "application/json" }
     expect(response).to have_http_status(:created)
     client_id = response.parsed_body.fetch("client_id")
-    expect(response.parsed_body.fetch("scope").split).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(response.parsed_body.fetch("scope").split).to match_array(mcp_scopes)
 
     authorize = lambda do |scope|
       code_verifier = SecureRandom.urlsafe_base64(48)
@@ -336,7 +340,7 @@ describe "MCP server" do
     # Omitting scope would leave the client on Doorkeeper's default (view_public only); a dynamic
     # client gets everything it registered instead.
     full_token = authorize.call(nil)
-    expect(full_token.fetch("scope").split).to match_array(Mcp::OauthClientRegistration::MCP_SCOPES)
+    expect(full_token.fetch("scope").split).to match_array(mcp_scopes)
     expect { call_tool.call(full_token.fetch("access_token"), "create_draft_product") }.to change(Link, :count).by(1)
     expect(response).to have_http_status(:ok)
     expect(response.headers["WWW-Authenticate"]).to be_nil
@@ -366,6 +370,56 @@ describe "MCP server" do
     expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public view_sales edit_products view_payouts"))
   end
 
+  it "lets a client registered with the account scope reconnect on the challenge's narrower scopes or keep account" do
+    host! DOMAIN
+    stub_vite_layout_helpers
+    Rails.application.reload_routes!
+    sign_in @seller
+
+    resource = "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp"
+    redirect_uri = "https://example.com/callback"
+    legacy_scopes = mcp_scopes + ["account"]
+    post "/claude/v1/oauth2/register",
+         params: { client_name: "Claude", redirect_uris: [redirect_uri], token_endpoint_auth_method: "none", scope: "#{legacy_scopes.join(' ')} edit_sales" }.to_json,
+         headers: { "CONTENT_TYPE" => "application/json" }
+    expect(response).to have_http_status(:created)
+    client_id = response.parsed_body.fetch("client_id")
+    expect(response.parsed_body.fetch("scope").split).to match_array(legacy_scopes)
+
+    authorize = lambda do |scope|
+      code_verifier = SecureRandom.urlsafe_base64(48)
+      code_challenge = Base64.urlsafe_encode64(Digest::SHA256.digest(code_verifier), padding: false)
+      params = { response_type: "code", client_id:, redirect_uri:, state: "reconnect", code_challenge:, code_challenge_method: "S256", resource:, scope: }
+      get "/claude/v1/oauth2/authorize", params: params
+      expect(response).to have_http_status(:ok)
+      consent = response.body
+      post "/oauth/authorize", params: params.merge(authenticity_token: authenticity_token(Nokogiri::HTML(consent)))
+      code = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("code")
+      post "/claude/v1/oauth2/token", params: { grant_type: "authorization_code", code:, redirect_uri:, client_id:, code_verifier:, resource: }
+      expect(response).to have_http_status(:ok)
+      [Doorkeeper::AccessToken.by_token(response.parsed_body.fetch("access_token")), consent]
+    end
+    list_payouts = lambda do |token|
+      post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_payouts", arguments: {} } }.to_json,
+                             headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{token.token}" }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("result", "structuredContent")).to eq("payouts" => [])
+    end
+
+    post "/claude/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "ping" }.to_json, headers: { "CONTENT_TYPE" => "application/json" }
+    challenged_scope = response.headers["WWW-Authenticate"][/ scope="([^"]+)"/, 1]
+
+    narrow_token, consent = authorize.call(challenged_scope)
+    expect(narrow_token.scopes.to_a).to match_array(mcp_scopes)
+    expect(consent).not_to include(OauthScopeHelper::DESCRIPTIONS.fetch("account"))
+    list_payouts.call(narrow_token)
+
+    legacy_token, consent = authorize.call(legacy_scopes.join(" "))
+    expect(legacy_token.scopes.to_a).to match_array(legacy_scopes)
+    expect(consent).to include(OauthScopeHelper::DESCRIPTIONS.fetch("account"))
+    list_payouts.call(legacy_token)
+  end
+
   it "keeps Doorkeeper's default scope for a manually created application that omits scope" do
     host! DOMAIN
     stub_vite_layout_helpers
@@ -391,7 +445,7 @@ describe "MCP server" do
 
     expect(response).to have_http_status(:unauthorized)
     expect(response.headers["WWW-Authenticate"]).to eq(
-      %(Bearer realm="Gumroad", scope="view_public view_profile view_sales edit_products view_payouts account", ) +
+      %(Bearer realm="Gumroad", scope="view_public view_profile view_sales edit_products view_payouts", ) +
       %(resource_metadata="#{PROTOCOL}://#{DOMAIN}/.well-known/oauth-protected-resource/muse/v1/mcp")
     )
   end
@@ -1144,7 +1198,7 @@ describe "MCP server" do
       end
 
       it "breaks created_at ties by id for products and payouts" do
-        @token.update!(scopes: "account")
+        @token.update!(scopes: "view_public view_payouts")
         at = 1.hour.ago.change(usec: 0)
         products = Array.new(3) { create(:product, user: @seller, created_at: at) }
         payments = Array.new(3) { create(:payment, user: @seller, created_at: at) }
@@ -2759,7 +2813,7 @@ describe "MCP server" do
 
   context "protocol and tool regressions" do
     before do
-      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "account")
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_sales edit_products")
     end
 
     def tool_call(name, arguments = {})
