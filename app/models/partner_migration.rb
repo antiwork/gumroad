@@ -2,9 +2,9 @@
 
 require "digest"
 
-# A partner application's request to move one of its users' catalogs to Gumroad. Only a SHA-256 digest
-# of the onboarding code is stored. Nothing imports until the creator confirms the catalog that the
-# page showed, so every claim checks the digest that page carried.
+# A partner application's request to move one of its users' catalogs to Gumroad. Only SHA-256 digests
+# of the onboarding code and the account setup token are stored. Nothing imports until the creator
+# confirms the catalog that the page showed, so every claim checks the digest that page carried.
 class PartnerMigration < ApplicationRecord
   EXPIRES_IN = 7.days
   CONFIRMATION_PREVIEW_SIZE = 5
@@ -19,6 +19,14 @@ class PartnerMigration < ApplicationRecord
   MAX_VARIANT_CATEGORIES = 1
   MAX_VARIANTS_PER_CATEGORY = 20
   MAX_CODE_GENERATION_ATTEMPTS = 3
+  MAX_EMAIL_LENGTH = 255
+  MAX_BIO_LENGTH = 5_000
+  # As long as the onboarding link, so a seller who opens the email days later can still use it.
+  # Counted from the account's creation, so a resend does not extend it.
+  ACCOUNT_SETUP_EXPIRES_IN = EXPIRES_IN
+  ACCOUNT_SETUP_RESEND_INTERVAL = 1.minute
+  # Whoever holds the onboarding link can ask for the email again, so the address gets a bounded number.
+  MAX_ACCOUNT_SETUP_EMAILS = 5
   PUBLIC_ID_FORMAT = /\A[A-Za-z0-9_-]{21}\z/
 
   STATUS_PENDING = "pending"
@@ -29,6 +37,7 @@ class PartnerMigration < ApplicationRecord
 
   class ClaimError < StandardError; end
   class CatalogConflict < StandardError; end
+  class AccountSetupError < StandardError; end
 
   INVALID_LINK_MESSAGE = "This link is invalid or expired."
   OUT_OF_DATE_MESSAGE = "This page is out of date. Open the link from the application again."
@@ -46,7 +55,7 @@ class PartnerMigration < ApplicationRecord
   validates :expires_at, presence: true
   validates :public_id, format: { with: PUBLIC_ID_FORMAT }
 
-  def self.create_for!(oauth_application:, external_user_id:, products:)
+  def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil)
     attempts = 0
 
     begin
@@ -58,9 +67,11 @@ class PartnerMigration < ApplicationRecord
           if !migration.pending? && catalog_identity(migration.products) != catalog_identity(products)
             raise CatalogConflict, "This seller already has an export. Keep the same products and file order when refreshing download URLs."
           end
-          migration.update!(products:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now)
+          # After the claim, the account is settled, so a new email or profile no longer applies.
+          seller = migration.pending? ? { email:, profile: } : {}
+          migration.update!(products:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now, **seller)
         else
-          migration = create!(oauth_application:, external_user_id:, products:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now)
+          migration = create!(oauth_application:, external_user_id:, products:, email:, profile:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now)
         end
         [migration, code]
       end
@@ -103,6 +114,48 @@ class PartnerMigration < ApplicationRecord
                    .where("migrated_at IS NULL OR migrated_at > ?", product.first_published_at)
                    .update_all(migrated_at: product.first_published_at)
     end
+  end
+
+  # Returns [{ email:, profile: }, nil] with only the supported keys, or [nil, error message].
+  def self.normalize_seller(email:, profile:)
+    unless email.nil?
+      valid_email = string?(email) && email.strip.length <= MAX_EMAIL_LENGTH && EmailFormatValidator.valid?(email.strip)
+      return [nil, "email must be a valid email address with at most #{MAX_EMAIL_LENGTH} characters."] unless valid_email
+    end
+
+    unless profile.nil?
+      return [nil, "profile must be an object."] unless profile.respond_to?(:key?)
+
+      name, bio, avatar_url = profile[:name], profile[:bio], profile[:avatar_url]
+      valid_name = name.nil? || (string?(name) && name.strip.length <= User::MAX_LENGTH_NAME && !name.match?(User::INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX))
+      return [nil, "profile.name must be a string with at most #{User::MAX_LENGTH_NAME} characters and no colons."] unless valid_name
+      return [nil, "profile.bio must be a string with at most #{MAX_BIO_LENGTH} characters."] unless bio.nil? || (string?(bio) && bio.length <= MAX_BIO_LENGTH)
+      return [nil, "profile.avatar_url must be an https URL."] unless avatar_url.nil? || https_url?(avatar_url)
+    end
+
+    profile = { "name" => name&.strip.presence, "bio" => bio.presence, "avatar_url" => avatar_url }.compact.presence if profile
+    [{ email: email&.strip&.downcase, profile: }, nil]
+  end
+
+  # The setup token is a credential for the new account. The mail job carries it encrypted, so the
+  # queue and its retry and dead sets never hold it in plain text.
+  def self.encrypt_account_setup_token(token)
+    account_setup_token_encryptor.encrypt_and_sign(token, expires_in: ACCOUNT_SETUP_EXPIRES_IN)
+  end
+
+  def self.decrypt_account_setup_token(encrypted_token)
+    account_setup_token_encryptor.decrypt_and_verify(encrypted_token)
+  end
+
+  def self.account_setup_token_encryptor
+    @account_setup_token_encryptor ||= ActiveSupport::MessageEncryptor.new(Rails.application.key_generator.generate_key("partner_migration_account_setup_token", 32), cipher: "aes-256-gcm")
+  end
+
+  def self.find_by_account_setup_token(token)
+    return if token.blank?
+
+    migration = find_by(account_setup_token_digest: digest(token))
+    migration if migration&.account_setup_open?
   end
 
   # Returns [products, nil] with only the supported keys, or [nil, error message].
@@ -229,6 +282,105 @@ class PartnerMigration < ApplicationRecord
     pending? && !expired? && oauth_application.alive? && oauth_application.is_partner?
   end
 
+  # An existing account must log in and confirm, so a partner cannot add products to an account
+  # just by naming its email. The address check is the one that signup uses (User::Validations#email_almost_unique).
+  def account_creatable?
+    claimable? && email.present? && !User.by_email(email).exists?
+  end
+
+  # Setup ends once the seller gets into the account another way, by a password reset or by signing in
+  # with Google, so an older setup link cannot replace those credentials. A closed or suspended account
+  # cannot finish setup either: the setup link signs the holder in.
+  def account_setup_pending?
+    account_created && account_setup_token_digest.present? && user.present? && user.account_active? && user.sign_in_count.zero? &&
+      self.class.digest(user.encrypted_password) == account_setup_password_digest
+  end
+
+  def account_setup_expired? = claimed_at.nil? || claimed_at + ACCOUNT_SETUP_EXPIRES_IN <= Time.current
+  # The seller can still set a password from the setup email.
+  def account_setup_open? = account_setup_pending? && !account_setup_expired?
+
+  def masked_email
+    local_part, domain = email.split("@", 2)
+    "#{local_part.first}•••@#{domain}"
+  end
+
+  # Creates the seller's account, claims the import for it, and emails a link to set a password.
+  # Returns nil, or a message for the seller when the account cannot be created.
+  def create_account_and_claim!(ip:, expected_code_digest:)
+    return unless account_creatable?
+
+    user = User.new(email:, password: Devise.friendly_token(User::RANDOM_PASSWORD_LENGTH), account_created_ip: ip)
+    user.assign_attributes(profile.to_h.slice("name", "bio"))
+    # As at signup, to abide by Canadian anti-spam law.
+    user.announcement_notification_enabled = false if GeoIp.lookup(ip).try(:country_code) == Compliance::Countries::CAN.alpha2
+    # The setup email confirms the address, so Devise's confirmation email would be a second email.
+    user.skip_confirmation_notification!
+    # Validation calls the breached-password API, so it runs before the locks that partner exports wait on.
+    user.validate!
+    token = nil
+    oauth_application.with_lock do
+      with_lock do
+        next unless account_creatable? && user.email == email
+
+        user.save!(validate: false)
+        token = issue_account_setup_token!(account_created: true, account_setup_password_digest: self.class.digest(user.encrypted_password))
+        claim!(user, expected_code_digest:)
+      end
+    end
+    send_account_setup_email(token) if token
+    nil
+  rescue ClaimError => e
+    e.message
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+    Rails.logger.info("Partner migration #{id}: account not created (#{e.class})")
+    "We could not create a Gumroad account for this email. Log in or sign up with another email instead."
+  end
+
+  # Replaces the setup link and emails it again. Returns :sent, :expired, :limit, or :too_soon.
+  def resend_account_setup!
+    token = nil
+    result = with_lock do
+      next :expired unless account_setup_open?
+      next :limit if account_setup_emails_count >= MAX_ACCOUNT_SETUP_EMAILS
+      next :too_soon if account_setup_sent_at&.after?(ACCOUNT_SETUP_RESEND_INTERVAL.ago)
+
+      token = issue_account_setup_token!
+      :sent
+    end
+    send_account_setup_email(token) if token
+    result
+  end
+
+  # Sets the password from the emailed link. The link proves the address, so it also confirms it.
+  def complete_account_setup!(password:, ip:, expected_token_digest:)
+    raise AccountSetupError, INVALID_LINK_MESSAGE unless account_setup_open?
+
+    # A local, because the lock reloads this record and its user.
+    account = user
+    account.password = password
+    account.skip_confirmation! unless account.confirmed?
+    account.tos_agreements.build(ip:)
+    # Validation calls the breached-password API, so it runs before the lock that the import job waits on.
+    account.validate!
+    transaction do
+      # The seller row first, then this row, in the order that the import job takes them. The check below
+      # then reads the seller as it is now, so a password reset that committed first ends the setup.
+      User.lock.find(user_id)
+      with_lock do
+        # The page that the seller submitted showed this token; a resend since then replaced it.
+        raise AccountSetupError, INVALID_LINK_MESSAGE unless account_setup_open? && account_setup_token_digest == expected_token_digest
+
+        account.save!(validate: false)
+        update!(account_setup_token_digest: nil)
+      end
+    end
+    # skip_confirmation! skips User#after_confirmation, which attaches the address's guest purchases.
+    AttachPastPurchasesToUserWorker.perform_async(account.id, account.email)
+    # The saved account, because Devise signs in with the password hash that it holds.
+    account
+  end
+
   # The same creator can claim again while the import has not finished, so a failed enqueue can be
   # retried from the confirmation page. The job skips the products that it already imported.
   def claimable_by?(claimer)
@@ -265,6 +417,16 @@ class PartnerMigration < ApplicationRecord
   end
 
   private
+    def issue_account_setup_token!(**attributes)
+      token = SecureRandom.urlsafe_base64(32)
+      update!(account_setup_token_digest: self.class.digest(token), account_setup_sent_at: Time.current, account_setup_emails_count: account_setup_emails_count + 1, **attributes)
+      token
+    end
+
+    def send_account_setup_email(token)
+      CreatorMailer.partner_migration_account_setup(id, self.class.encrypt_account_setup_token(token)).deliver_later
+    end
+
     def assign_public_id
       self.public_id ||= Nanoid.generate
     end

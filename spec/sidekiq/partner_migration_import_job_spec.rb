@@ -146,6 +146,63 @@ describe PartnerMigrationImportJob do
     expect(touches).to eq(7)
   end
 
+  it "sets the profile picture of an account that the import created" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" })
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.reload.avatar).to be_attached
+  end
+
+  it "imports the products when the profile picture fails with an unexpected error" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" })
+    allow(ActiveStorage::Blob).to receive(:create_and_upload!).and_raise(ActiveStorage::IntegrityError)
+
+    described_class.new.perform(migration.id)
+
+    expect(migration.reload.status).to eq(PartnerMigration::STATUS_COMPLETED)
+    expect(seller.links.sole.name).to eq("Brush Set")
+    expect(seller.reload.avatar).not_to be_attached
+  end
+
+  it "tries the profile picture only on the first run, so retries do not download it again" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }, { name: "Texture Pack", price: 500 }])
+    migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" }, results: { "0" => { "product_id" => "saved" } })
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.reload.avatar).not_to be_attached
+    expect(seller.links.sole.name).to eq("Texture Pack")
+  end
+
+  it "keeps a profile picture that the seller sets while the partner's picture downloads" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration.update!(account_created: true, profile: { "avatar_url" => "https://files.example.com/wide.png" })
+    seller_picture_set = false
+    allow(Marcel::MimeType).to receive(:for).and_wrap_original do |original, *args, **kwargs|
+      unless seller_picture_set
+        seller_picture_set = true
+        User.find(seller.id).avatar.attach(io: StringIO.new(image), filename: "mine.png", content_type: "image/png")
+      end
+      original.call(*args, **kwargs)
+    end
+
+    described_class.new.perform(migration.id)
+
+    expect(ActiveStorage::Attachment.where(record: seller, name: "avatar").map { _1.blob.filename.to_s }).to eq(["mine.png"])
+  end
+
+  it "keeps the profile picture of an existing account" do
+    migration = create_claimed_migration([{ name: "Brush Set", price: 500 }])
+    migration.update!(profile: { "avatar_url" => "https://files.example.com/wide.png" })
+
+    described_class.new.perform(migration.id)
+
+    expect(seller.reload.avatar).not_to be_attached
+  end
+
   it "lets Sidekiq retry a temporary download failure" do
     remote_files["https://files.example.com/pack.zip"] = nil
     allow(SsrfFilter).to receive(:get).and_wrap_original do |original, url, &block|
