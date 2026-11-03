@@ -1864,6 +1864,13 @@ describe SettingsPresenter do
         expect(presenter.payments_props[:payouts_paused_by]).to eq(nil)
       end
     end
+
+    it "masks a cross-border SEPA IBAN without the seller's country" do
+      create(:user_compliance_info, user: seller, country: "Czechia")
+      create(:czech_republic_bank_account, user: seller, account_number: "LT121000011101001000", account_number_last_four: "1000")
+
+      expect(presenter.payments_props[:bank_account_details][:account_number_visual]).to eq("******1000")
+    end
   end
 
   describe "#payments_props :can_manage_beneficial_owners gating" do

@@ -22,8 +22,8 @@ describe IcelandBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number" do
-      expect(create(:iceland_bank_account, account_number_last_four: "0339").account_number_visual).to eq("IS******0339")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:iceland_bank_account, account_number_last_four: "0339").account_number_visual).to eq("******0339")
     end
   end
 

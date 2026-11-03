@@ -20,8 +20,8 @@ describe CostaRicaBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number" do
-      expect(create(:costa_rica_bank_account, account_number_last_four: "9123").account_number_visual).to eq("CR******9123")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:costa_rica_bank_account, account_number_last_four: "9123").account_number_visual).to eq("******9123")
     end
   end
 
