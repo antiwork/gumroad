@@ -763,6 +763,8 @@ describe SettingsPresenter do
           individual_tax_id_is_last_four: false,
           has_outstanding_full_ssn_requirement: false,
           has_outstanding_nationality_requirement: false,
+          has_outstanding_state_requirement: false,
+          has_outstanding_business_state_requirement: false,
           business_tax_id_entered: false,
           business_tax_id_last_four: nil,
           requires_credit_card: false,
@@ -1687,6 +1689,26 @@ describe SettingsPresenter do
 
       it "is false when no nationality request exists" do
         expect(presenter.payments_props[:user][:has_outstanding_nationality_requirement]).to be(false)
+      end
+    end
+
+    describe "outstanding state requirements" do
+      it "flags the individual state when Stripe's individual.address.state requirement is open" do
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::Address::STATE)
+
+        expect(presenter.payments_props[:user]).to include(has_outstanding_state_requirement: true, has_outstanding_business_state_requirement: false)
+      end
+
+      it "flags the business state when Stripe's company.address.state requirement is open" do
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::LegalEntity::Address::STATE)
+
+        expect(presenter.payments_props[:user]).to include(has_outstanding_state_requirement: false, has_outstanding_business_state_requirement: true)
+      end
+
+      it "flags neither once the state request was provided" do
+        create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::Address::STATE).mark_provided!
+
+        expect(presenter.payments_props[:user]).to include(has_outstanding_state_requirement: false, has_outstanding_business_state_requirement: false)
       end
     end
 
