@@ -16,6 +16,17 @@ module MobileAccountToken
     Doorkeeper::OAuth::Scopes.from_array((BRAND_SURFACE_SCOPES + role_scopes - ["account"]).uniq)
   end
 
+  # A brand token from the MCP/CLI consent flows keeps the requested scopes the member's role allows.
+  def narrow_scopes(requested, team_membership)
+    allowed = brand_scopes(team_membership).to_a - BRAND_SURFACE_SCOPES
+    Doorkeeper::OAuth::Scopes.from_array(requested.to_a & allowed)
+  end
+
+  # The admin membership that lets `user` act as `seller`, if any.
+  def admin_membership_for(user, seller)
+    user.user_memberships.switchable.role_admin.find_by(seller_id: seller.id)
+  end
+
   def team_membership_id(token)
     token&.attributes&.dig("team_membership_id")
   end

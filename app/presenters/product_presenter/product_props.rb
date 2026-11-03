@@ -85,6 +85,7 @@ class ProductPresenter::ProductProps
         refund_policy: refund_policy_props,
         bundle_products: product.bundle_products.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).alive.map { bundle_product_props(_1, request:, recommended_by:, layout:) },
         public_files: product.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
+        file_summaries: Product::FileSummaryService.new(product).perform,
       },
       discount_code: discount_code_result,
       sale_label: sale_label(discount_code_result),

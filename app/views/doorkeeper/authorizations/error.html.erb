@@ -1,10 +1,15 @@
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
   <header class="flex flex-col gap-4 p-4 text-center">
-    <h2>An error has occurred</h2>
+    <h2><%= local_assigns.fetch(:heading) { "An error has occurred" } %></h2>
   </header>
   <div class="flex flex-col gap-4 p-4">
     <%= local_assigns.fetch(:error_description) { @pre_auth.error_response.body[:error_description] } %>
   </div>
+  <% if (action = local_assigns[:action]).present? %>
+    <footer class="flex flex-col gap-4 p-4 text-center">
+      <%= link_to action.fetch(:label), action.fetch(:path), class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none disabled:opacity-30 disabled:hover:translate-0 disabled:hover:shadow-none bg-white text-black hover:bg-pink hover:text-black px-4 py-3 text-base leading-snug" %>
+    </footer>
+  <% end %>
 </main>
 
 <% content_for :footer do %>

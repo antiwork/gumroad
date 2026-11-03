@@ -11,8 +11,12 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   before_action :hide_layouts
   before_action :default_to_authorization_code
   before_action :hide_from_search_results
+  # Ahead of Doorkeeper's authenticate_resource_owner!, which memoizes the selected account.
+  prepend_before_action :switch_to_own_account, only: :new
+  before_action :require_admin_access_to_selected_account, only: %i[new create]
+  before_action :require_matching_consented_account, only: :create
 
-  helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?
+  helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?, :selected_brand_membership, :displayed_scopes
 
   private
     # Dynamically registered MCP clients must send an S256 challenge and a supported resource on
@@ -63,8 +67,75 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       oauth_application.with_application_lock(shared: true) do
         @pre_auth = nil
         @strategy = nil
-        super
+        bind_grant_to_selected_account(super)
       end
+    end
+
+    # The consent page authorizes the account selected in the switcher, not the signed-in user.
+    def current_resource_owner
+      @current_resource_owner ||= selected_brand_membership&.seller || super
+    end
+
+    # MCP clients and the CLI follow the switcher; the mobile app and other applications keep binding to the signed-in user.
+    def follows_account_switcher?
+      dynamic_client_request? || OauthApplication.alive.exists?(uid: params[:client_id].to_s, device_authorization_enabled: true)
+    end
+
+    def selected_brand_membership
+      return unless follows_account_switcher? && current_user && current_seller && current_seller != current_user
+
+      @selected_brand_membership ||= MobileAccountToken.admin_membership_for(current_user, current_seller)
+    end
+
+    # The 403 page tells the reader to switch to an account they administer. This is that button:
+    # it drops the switcher selection so the retry authorizes the reader's own account.
+    def switch_to_own_account
+      return if params[:switch_account].blank?
+
+      reset_current_seller
+    end
+
+    def require_admin_access_to_selected_account
+      return unless follows_account_switcher? && current_user && current_seller && current_seller != current_user
+      # The selected account is the impersonated user's, so switching to the reader's own account cannot fix it.
+      return render :error, locals: { error_description: "Stop impersonating before authorizing an OAuth application." }, status: :forbidden if impersonating?
+      return if selected_brand_membership
+
+      render :error, locals: {
+        heading: "Admin access required",
+        error_description: "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again.",
+        action: { label: "Switch to your own account", path: oauth_authorization_path(consent_redirect_params.merge(switch_account: 1)) },
+      }, status: :forbidden
+    end
+
+    # A brand grant only keeps the scopes the member's role allows, so the consent page lists those.
+    def displayed_scopes
+      membership = selected_brand_membership
+      membership ? MobileAccountToken.narrow_scopes(@pre_auth.scopes, membership) : @pre_auth.scopes
+    end
+
+    # The consent page names the account it authorizes; a switcher change between page load and submit
+    # must ask again rather than grant the newly selected account.
+    def require_matching_consented_account
+      return unless follows_account_switcher?
+      return if params[:consented_account].to_s == selected_brand_membership&.seller&.external_id.to_s
+
+      redirect_to oauth_authorization_path(consent_redirect_params)
+    end
+
+    def consent_redirect_params
+      params.permit(:client_id, :redirect_uri, :state, :response_type, :scope, :code_challenge, :code_challenge_method, :resource, :admin_scope).to_h
+    end
+
+    def bind_grant_to_selected_account(response)
+      membership = selected_brand_membership
+      grant = response.try(:auth)&.then { _1.token if _1.try(:access_grant?) }
+      return response if membership.nil? || grant.nil?
+
+      scopes = MobileAccountToken.narrow_scopes(grant.scopes, membership)
+      grant.update_columns(team_membership_id: membership.id, scopes: scopes.to_s)
+      membership.update!(last_accessed_at: Time.current)
+      response
     end
 
     # Nothing was written; the sweep that held the row commits within seconds.
