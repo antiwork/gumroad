@@ -324,6 +324,22 @@ export const FileRow = ({
           </div>
         ) : null}
 
+        {/* A game wants the whole window and the keyboard, so it gets its own tab, like Watch. Not
+            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. Saves
+            belong to a purchase, so a link without one (an imported customer's) has no Play.
+            Play leads the row and Download follows it: for a playable build, playing is what the
+            buyer came for, and the zip is the fallback. */}
+        {file.web_build?.playable && purchaseInfo.purchaseId ? (
+          <NavigationButton
+            color="primary"
+            href={Routes.url_redirect_play_path(purchaseInfo.token)}
+            target="_blank"
+            onClick={() => void trackUserActionEvent("play_click")}
+          >
+            Play
+          </NavigationButton>
+        ) : null}
+
         {downloadButton}
 
         {viewUrl ? <Button onClick={() => setIsViewingImage(true)}>View</Button> : null}
@@ -342,20 +358,6 @@ export const FileRow = ({
           <Button color="primary" onClick={() => setIsCollapsed(false)}>
             Play
           </Button>
-        ) : null}
-
-        {/* A game wants the whole window and the keyboard, so it gets its own tab, like Watch. Not
-            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. Saves
-            belong to a purchase, so a link without one (an imported customer's) has no Play. */}
-        {file.web_build?.playable && purchaseInfo.purchaseId ? (
-          <NavigationButton
-            color="primary"
-            href={Routes.url_redirect_play_path(purchaseInfo.token)}
-            target="_blank"
-            onClick={() => void trackUserActionEvent("play_click")}
-          >
-            Play
-          </NavigationButton>
         ) : null}
 
         {externalLinkUrl !== null ? (

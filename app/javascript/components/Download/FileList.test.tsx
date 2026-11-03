@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import { videoFrameIsPortrait, videoFrameStyle } from "$app/utils/videoFrame";
@@ -408,5 +408,35 @@ describe("FileRow web build label", () => {
     renderFileRow(videoFile({ extension: "ZIP", stream_url: null, file_size: 2048 }));
 
     expect(screen.queryByText(/Web build/u)).toBeNull();
+  });
+});
+
+describe("FileRow web build actions", () => {
+  // The content page defines `Routes` globally; the row reads the play path off it.
+  beforeEach(() => vi.stubGlobal("Routes", { url_redirect_play_path: (token: string) => `/d/${token}/play` }));
+  afterEach(() => vi.unstubAllGlobals());
+
+  const buildFile = (playable: boolean) =>
+    videoFile({
+      extension: "ZIP",
+      stream_url: null,
+      download_url: "/download",
+      web_build: { number: 3, status: "live", playable },
+    });
+
+  it("leads with Play and puts Download second for a playable build", () => {
+    renderFileRow(buildFile(true));
+
+    const actions = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(actions.indexOf("Play")).toBeGreaterThanOrEqual(0);
+    expect(actions.indexOf("Play")).toBeLessThan(actions.indexOf("Download"));
+    expect(screen.getByRole("link", { name: "Play" }).getAttribute("href")).toContain("/play");
+  });
+
+  it("leads with Download when the build cannot play", () => {
+    renderFileRow(buildFile(false));
+
+    expect(screen.queryByRole("link", { name: "Play" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Download" })).toBeTruthy();
   });
 });
