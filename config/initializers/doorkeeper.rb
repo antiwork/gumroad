@@ -40,7 +40,8 @@ Doorkeeper.configure do
   # access token scopes for providers
   default_scopes :view_public
   optional_scopes :edit_products, :edit_emails, :view_sales, :view_payouts, :mark_sales_as_shipped, :refund_sales, :edit_sales, :revenue_share, :ifttt, :mobile_api,
-                  :creator_api, :view_profile, :edit_profile, :unfurl, :helper_api, :view_tax_data, :account
+                  :creator_api, :view_profile, :edit_profile, :unfurl, :helper_api, :view_tax_data, :account,
+                  :partner_api
 
   use_refresh_token
 

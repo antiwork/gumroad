@@ -374,6 +374,20 @@ describe "Product::Searchable - Search scenarios" do
         aggregations = Link.search(options).aggregations
         expect(aggregations["top_creators"]).to be_nil
       end
+
+      it "limits top creators to an integer top_creators_size" do
+        options = Link.search_options({ include_top_creators: true, top_creators_size: 2 })
+        buckets = Link.search(options).aggregations.dig("top_creators", "buckets")
+
+        expect(buckets.map { _1["key"] }).to eq([product_7.user_id, product_6.user_id])
+      end
+
+      it "ignores a top_creators_size from request params" do
+        options = Link.search_options({ include_top_creators: true, top_creators_size: ["2"] })
+        buckets = Link.search(options).aggregations.dig("top_creators", "buckets")
+
+        expect(buckets.size).to eq(Link::TOP_CREATORS_SIZE)
+      end
     end
 
     describe "on indexed products with tags" do

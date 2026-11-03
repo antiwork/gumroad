@@ -49,6 +49,15 @@ describe CurrentApiUser, type: :controller do
       end
     end
 
+    context "with a client credentials token" do
+      let(:access_token) { create("doorkeeper/access_token", application: create(:oauth_application), resource_owner_id: nil, scopes: "account").token }
+
+      it "returns nil" do
+        get :action, params: { access_token: }
+        expect(controller.current_api_user).to be(nil)
+      end
+    end
+
     context "with an invalid doorkeeper token" do
       let(:access_token) { "invalid" }
 

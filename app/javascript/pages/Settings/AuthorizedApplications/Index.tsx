@@ -43,7 +43,8 @@ type Scope =
   | "revenue_share"
   | "mobile_api"
   | "helper_api"
-  | "creator_api";
+  | "creator_api"
+  | "partner_api";
 
 const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   account: "Full access to your account.",
@@ -64,6 +65,7 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   mobile_api: "Mobile API",
   helper_api: "Helper API",
   creator_api: "Creator API",
+  partner_api: "Partner API",
 };
 
 type Props = {
