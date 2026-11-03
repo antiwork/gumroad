@@ -4,6 +4,7 @@
     <li><a href="#what-it-is">What the Gumroad connector is</a></li>
     <li><a href="#availability">Which assistants you can connect</a></li>
     <li><a href="#connect-claude">Connecting Claude</a></li>
+    <li><a href="#connect-chatgpt">Connecting ChatGPT</a></li>
     <li><a href="#can-do">What your assistant can do</a></li>
     <li><a href="#cannot-do">What your assistant cannot do</a></li>
     <li><a href="#permissions">What you are granting access to</a></li>
@@ -19,7 +20,7 @@
   <ul>
     <li><strong>Claude:</strong> available now in <a href="https://claude.ai/directory/gumroad">Claude's connector directory</a>. You can also add it as a custom connector.</li>
     <li><strong>Muse:</strong> submitted for review. The Gumroad connector is not yet available in Muse.</li>
-    <li><strong>ChatGPT:</strong> not available yet. We will announce it when it is.</li>
+    <li><strong>ChatGPT:</strong> available now in <a href="https://chatgpt.com/plugins/plugin_asdk_app_6adf8e8e7eac8191a9af1b87fdeedb45">ChatGPT's plugin directory</a>.</li>
   </ul>
   <p>Setup instructions for every assistant we support are also at <a href="https://gumroad.com/mcp">gumroad.com/mcp</a>.</p>
 
@@ -31,6 +32,14 @@
   </ol>
   <p>Gumroad is listed as a community connector, so Claude shows a notice that Anthropic has not verified it. The connector is run by Gumroad.</p>
   <p>You can also add Gumroad as a custom connector: in Claude, open <strong>Settings &gt; Connectors</strong>, choose <strong>Add custom connector</strong>, and paste this URL: <code>https://gumroad.com/claude/v1/mcp</code>. Custom connectors depend on your Claude plan and your organization's settings.</p>
+  <p>Your assistant can only see the Gumroad account you signed in with. If you sell from more than one account, connect the one you want to work with.</p>
+
+  <h3 id="connect-chatgpt">Connecting ChatGPT</h3>
+  <ol>
+    <li>Open <a href="https://chatgpt.com/plugins/plugin_asdk_app_6adf8e8e7eac8191a9af1b87fdeedb45">Gumroad in ChatGPT's plugin directory</a> and connect it. You need to be signed in to ChatGPT.</li>
+    <li>When ChatGPT opens a Gumroad sign-in page, sign in and review the permissions you are asked to grant.</li>
+    <li>In a chat, with the Gumroad plugin enabled, try asking "Show my Gumroad products."</li>
+  </ol>
   <p>Your assistant can only see the Gumroad account you signed in with. If you sell from more than one account, connect the one you want to work with.</p>
 
   <h3 id="can-do">What your assistant can do</h3>
@@ -74,6 +83,7 @@
 
   <h3 id="troubleshooting">Troubleshooting</h3>
   <p><strong>I cannot add Gumroad in Claude.</strong> Start from <a href="https://claude.ai/directory/gumroad">Gumroad's directory listing</a> while signed in to Claude. On Team and Enterprise plans, your organization's settings control which connectors you can add, so an administrator may need to allow it.</p>
+  <p><strong>I cannot add Gumroad in ChatGPT.</strong> Start from <a href="https://chatgpt.com/plugins/plugin_asdk_app_6adf8e8e7eac8191a9af1b87fdeedb45">Gumroad's plugin listing</a> while signed in to ChatGPT. If you use a workspace, an administrator may need to allow the plugin.</p>
   <p><strong>The assistant says it cannot find my products.</strong> Check that you connected the Gumroad account that owns them, and that you granted product access during sign-in. If you connected the wrong account, revoke access and connect again.</p>
   <p><strong>A tool says it needs a permission.</strong> Reconnect the assistant and grant the permission it names. Nothing else changes when you do.</p>
   <p><strong>Publishing from chat fails.</strong> Publishing needs the same things it needs in your dashboard: a confirmed email address, payouts set up for your account, and shipping destinations if you sell physical products. A product that Gumroad has taken down also cannot be published. Fix that in Gumroad, then ask the assistant to publish again.</p>

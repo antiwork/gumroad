@@ -166,6 +166,17 @@ describe AccountingMailer, :vcr do
       expect(@mail.body.encoded).to include "Total Outstanding Balances for Stripe(Held by Gumroad): Active $9.0"
       expect(@mail.body.encoded).to include "Total Outstanding Balances for Stripe(Held by Stripe): Active $4.0"
     end
+
+    it "includes every seller when the users are read in several slices" do
+      stub_const("AccountingMailer::OUTSTANDING_BALANCES_SLICE_SIZE", 2)
+
+      mail = AccountingMailer.email_outstanding_balances_csv
+      rows = CSV.parse(mail.attachments["outstanding_balances.csv"].decoded)
+
+      expect(rows.size - 1).to eq(User.holding_non_zero_balance.pluck("balances.user_id").size)
+      expect(mail.body.encoded).to include "Total Outstanding Balances for PayPal: Active $2.0, Suspended $8.0"
+      expect(mail.body.encoded).to include "Total Outstanding Balances for Stripe(Held by Gumroad): Active $9.0"
+    end
   end
 
   describe "#us_states_sales_summary_report_failed" do
