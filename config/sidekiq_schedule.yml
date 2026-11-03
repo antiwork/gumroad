@@ -280,6 +280,11 @@ alert_on_stalled_post_email_blasts:
   class: AlertOnStalledPostEmailBlastsJob
   queue: low
   description: Reports email blasts that started sending hours ago and never completed and, behind a flag, auto-resumes the safe ones (gumroad-private#2106)
+sweep_closed_seller_connect_accounts:
+  cron: "15 13 * * *" # UTC 13:15
+  class: SweepClosedSellerConnectAccountsJob
+  queue: low
+  description: Reports, and behind a flag deletes, live Gumroad-managed custom Connect accounts of closed sellers once every guard passes (gumroad-private#4250)
 alert_on_stripe_dob_drift:
   cron: "30 12 * * 1" # UTC 12:30 Monday
   class: AlertOnStripeDobDriftJob
