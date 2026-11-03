@@ -15,6 +15,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/beacons"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/geoip"
+	"github.com/antiwork/gumroad/go_web/internal/licenses"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/robots"
@@ -26,8 +27,9 @@ import (
 // config it needs, so merging a new group can't crash-loop a running fleet; an enabled group
 // with missing config fails startup instead.
 var routeGroups = map[string]func(*web.App, *dependencies) error{
-	"robots":  registerRobots,
-	"beacons": registerBeacons,
+	"robots":   registerRobots,
+	"beacons":  registerBeacons,
+	"licenses": registerLicenses,
 }
 
 const (
@@ -101,6 +103,23 @@ func registerBeacons(app *web.App, d *dependencies) error {
 		CustomDomain:     getenv("CUSTOM_DOMAIN"),
 		BranchDeployment: getenv("BRANCH_DEPLOYMENT") != "",
 	})
+}
+
+func registerLicenses(app *web.App, d *dependencies) error {
+	jobs, err := d.sidekiqRedis()
+	if err != nil {
+		return err
+	}
+	conn, err := d.database()
+	if err != nil {
+		return err
+	}
+	ids, err := d.obfuscatedIDs()
+	if err != nil {
+		return err
+	}
+	licenses.Register(app, licenses.Deps{Env: d.env, Stack: d.stack, DB: conn, Redis: d.redis, SidekiqRedis: jobs, IDs: ids})
+	return nil
 }
 
 // dependencies opens each shared connection the first time an enabled group needs it.
