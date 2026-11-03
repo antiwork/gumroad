@@ -29,6 +29,7 @@ class ProductBuildPlayerFilesController < ApplicationController
 
   before_action :verify_grant, only: :show
   before_action :verify_save_grant, only: :save
+  before_action :verify_heartbeat_grant, only: :heartbeat
   before_action :set_path, only: :show
 
   def show
@@ -63,6 +64,13 @@ class ProductBuildPlayerFilesController < ApplicationController
     head :unprocessable_entity
   end
 
+  # The player page is open: extend the play session its page load started. The page stops sending
+  # these when the buyer leaves, which is what ends the session (see ProductBuildPlaySession).
+  def heartbeat
+    @play_session.heartbeat!
+    head :no_content
+  end
+
   private
     def verify_grant
       @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id], purpose: grant_purpose)
@@ -86,6 +94,14 @@ class ProductBuildPlayerFilesController < ApplicationController
     def verify_save_grant
       @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id], purpose: ProductBuild::PLAYER_SAVE_GRANT_PURPOSE)
       e404 if @grant.nil?
+    end
+
+    def verify_heartbeat_grant
+      @grant = ProductBuild.verified_player_grant(params[:grant], url_redirect_token: params[:id], purpose: ProductBuild::PLAYER_HEARTBEAT_GRANT_PURPOSE)
+      e404 if @grant.nil?
+
+      @play_session = ProductBuildPlaySession.find_by(id: @grant["session_id"], purchase_id: @grant["purchase_id"])
+      e404 if @play_session.nil?
     end
 
     def set_path

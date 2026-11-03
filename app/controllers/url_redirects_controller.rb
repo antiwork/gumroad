@@ -421,6 +421,9 @@ class UrlRedirectsController < ApplicationController
     # Playing starts a rental's viewing window, the same as streaming a video.
     @url_redirect.mark_rental_as_viewed!
     grant = build.player_grant(url_redirect_token: @url_redirect.token, purchase_id: @url_redirect.purchase_id)
+    # A seller trying their own build (the purchase carries the seller's public email) is not a play:
+    # no session starts, and the page sends no heartbeat.
+    session = ProductBuildPlaySession.start!(product_build: build, purchase: @url_redirect.purchase) unless @url_redirect.purchase.is_test_purchase?
     set_meta_tag(title: product.name)
 
     render inertia: "UrlRedirects/Play", props: {
@@ -428,10 +431,18 @@ class UrlRedirectsController < ApplicationController
       # The trailing slash makes the build's relative file paths resolve under the grant.
       frame_url: "#{request.path.chomp("/")}/#{grant}/",
       content_page_url: @url_redirect.download_page_url,
+      heartbeat_url: session && play_heartbeat_url(build, session),
+      heartbeat_interval_ms: ProductBuildPlaySession::HEARTBEAT_INTERVAL.in_milliseconds,
     }
   end
 
   private
+    # The player page's heartbeat, under a grant that names the play session its page load started.
+    def play_heartbeat_url(build, session)
+      grant = build.player_heartbeat_grant(url_redirect_token: @url_redirect.token, purchase_id: @url_redirect.purchase_id, session_id: session.id)
+      "#{request.path.chomp("/")}/#{grant}/heartbeat"
+    end
+
     def enqueue_stamp_and_notify_buyer!
       PdfStampingService.enqueue_buyer_download_stamp!(@url_redirect.purchase_id)
     end

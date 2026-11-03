@@ -5,6 +5,7 @@ import * as React from "react";
 import { Product, SortKey } from "$app/data/products";
 import { classNames } from "$app/utils/classNames";
 import { formatPriceCentsWithCurrencySymbol } from "$app/utils/currency";
+import { humanizedDuration } from "$app/utils/duration";
 
 import { Pagination, PaginationProps } from "$app/components/Pagination";
 import { Tab } from "$app/components/ProductsLayout";
@@ -172,6 +173,15 @@ export const ProductsPageProductsTable = (props: {
                 <Link href={Routes.customers_link_id_path(product.permalink)}>
                   {product.successful_sales_count.toLocaleString(locale)}
                 </Link>
+
+                {product.play_sessions_count != null ? (
+                  <small className="block">
+                    {`${product.play_sessions_count.toLocaleString(locale)} ${product.play_sessions_count === 1 ? "play" : "plays"}`}
+                    {product.average_play_session_seconds
+                      ? ` · ${humanizedDuration(product.average_play_session_seconds)} avg`
+                      : ""}
+                  </small>
+                ) : null}
 
                 {product.remaining_for_sale_count ? (
                   <small className="block">{product.remaining_for_sale_count.toLocaleString(locale)} remaining</small>

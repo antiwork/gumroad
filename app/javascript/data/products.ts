@@ -41,6 +41,10 @@ export type Product = {
   display_price_cents: number;
   successful_sales_count: number;
   remaining_for_sale_count: number | null;
+  // Present only for a product with a build: how many times its player was opened, and the average
+  // length of those plays in seconds.
+  play_sessions_count?: number;
+  average_play_session_seconds?: number | null;
   status: "preorder" | "published" | "unpublished";
   thumbnail: { url: string } | null;
   url: string;

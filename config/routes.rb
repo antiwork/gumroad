@@ -1312,6 +1312,7 @@ Rails.application.routes.draw do
     post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :url_redirect_save_last_content_page
     get "/d/:id/play", to: "url_redirects#play", as: :url_redirect_play
     post "/d/:id/play/:grant/save", to: "product_build_player_files#save", as: :product_build_player_save
+    post "/d/:id/play/:grant/heartbeat", to: "product_build_player_files#heartbeat", as: :product_build_player_heartbeat
     get "/d/:id/play/:grant(/*path)", to: "product_build_player_files#show", as: :product_build_player_file, format: false
     # A product's demo build, public for X player cards. Only on the app domain: the card must
     # never point at a seller's subdomain or custom domain.
@@ -1555,6 +1556,7 @@ Rails.application.routes.draw do
     post "/r/:id/save_last_content_page", to: "url_redirects#save_last_content_page", as: :custom_domain_url_redirect_save_last_content_page
     get "/d/:id/play", to: "url_redirects#play", as: :custom_domain_url_redirect_play
     post "/d/:id/play/:grant/save", to: "product_build_player_files#save", as: :custom_domain_product_build_player_save
+    post "/d/:id/play/:grant/heartbeat", to: "product_build_player_files#heartbeat", as: :custom_domain_product_build_player_heartbeat
     get "/d/:id/play/:grant(/*path)", to: "product_build_player_files#show", as: :custom_domain_product_build_player_file, format: false
 
     get "/library", to: "library#index"

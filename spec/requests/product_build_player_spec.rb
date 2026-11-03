@@ -92,6 +92,81 @@ describe "Web build player", type: :request, inertia: true do
 
       expect(response).to have_http_status(:not_found)
     end
+
+    it "starts a play session for the product's build" do
+      expect { get "/d/#{url_redirect.token}/play" }.to change { ProductBuildPlaySession.count }.by(1)
+
+      session = ProductBuildPlaySession.last
+      expect(session.product_id).to eq(product.id)
+      expect(session.product_build_id).to eq(build.id)
+      expect(session.purchase_id).to eq(purchase.id)
+    end
+
+    it "starts one session per page load" do
+      expect { 2.times { get "/d/#{url_redirect.token}/play" } }.to change { ProductBuildPlaySession.count }.by(2)
+    end
+
+    it "hands the page a heartbeat for the session it started, and how often to send it" do
+      get "/d/#{url_redirect.token}/play"
+      session = ProductBuildPlaySession.last
+
+      path = inertia.props[:heartbeat_url]
+      expect(path).to match(%r{\A/d/#{url_redirect.token}/play/[^/]+/heartbeat\z})
+      expect(inertia.props[:heartbeat_interval_ms]).to eq(ProductBuildPlaySession::HEARTBEAT_INTERVAL.in_milliseconds)
+      expect(ProductBuild.verified_player_grant(path.split("/")[4], url_redirect_token: url_redirect.token, purpose: ProductBuild::PLAYER_HEARTBEAT_GRANT_PURPOSE)).to include(
+        "purchase_id" => purchase.id, "session_id" => session.id,
+      )
+    end
+
+    it "starts no session when the seller plays their own build" do
+      purchase.update!(purchaser: seller)
+      sign_in seller
+
+      expect { get "/d/#{url_redirect.token}/play" }.not_to change { ProductBuildPlaySession.count }
+      expect(inertia.props[:heartbeat_url]).to be_nil
+    end
+  end
+
+  describe "the page's heartbeat" do
+    def heartbeat_path
+      get "/d/#{url_redirect.token}/play"
+      inertia.props[:heartbeat_url]
+    end
+
+    it "extends the session the page load started" do
+      path = heartbeat_path
+      ProductBuildPlaySession.last.update!(last_heartbeat_at: 1.minute.ago)
+      session = ProductBuildPlaySession.last
+
+      expect { post path }.to change { session.reload.last_heartbeat_at }.to be_within(5.seconds).of(Time.current)
+      expect(response).to have_http_status(:no_content)
+    end
+
+    it "leaves a session whose beats stopped alone" do
+      path = heartbeat_path
+      ProductBuildPlaySession.last.update!(started_at: 10.minutes.ago, last_heartbeat_at: 10.minutes.ago)
+      session = ProductBuildPlaySession.last
+
+      expect { post path }.not_to change { session.reload.last_heartbeat_at }
+      expect(response).to have_http_status(:no_content)
+    end
+
+    it "returns 404 for a grant that names no session" do
+      grant = build.player_heartbeat_grant(url_redirect_token: url_redirect.token, purchase_id: purchase.id, session_id: 0)
+
+      post "/d/#{url_redirect.token}/play/#{grant}/heartbeat"
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for a grant issued for another content page" do
+      path = heartbeat_path
+      other_redirect = create(:url_redirect, link: product)
+
+      post "/d/#{other_redirect.token}/play/#{path.split("/")[4]}/heartbeat"
+
+      expect(response).to have_http_status(:not_found)
+    end
   end
 
   describe "the frame document" do
