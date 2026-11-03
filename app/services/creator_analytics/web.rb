@@ -79,23 +79,31 @@ class CreatorAnalytics::Web
     result = result_metadata
     result[:by_referral] = { views: {}, sales: {}, totals: {} }
 
+    # The range filter and the histogram resolve the seller's time zone separately, so a
+    # bucket can be keyed to a date outside the window. Skip it rather than index with nil.
     views_data.each do |(product_id, referrer, date), count|
+      date_index = dates_strings.index(date)
+      next if date_index.nil?
+
       product_permalink = product_permalinks[product_id]
       referrer_name = referrer_domain_to_name(referrer)
       result[:by_referral][:views][product_permalink] ||= {}
       result[:by_referral][:views][product_permalink][referrer_name] ||= [0] * dates_strings.size
-      result[:by_referral][:views][product_permalink][referrer_name][dates_strings.index(date)] += count
+      result[:by_referral][:views][product_permalink][referrer_name][date_index] += count
     end
 
     sales_data.each do |(product_id, referrer, date), values|
+      date_index = dates_strings.index(date)
+      next if date_index.nil?
+
       product_permalink = product_permalinks[product_id]
       referrer_name = referrer_domain_to_name(referrer)
       result[:by_referral][:sales][product_permalink] ||= {}
       result[:by_referral][:sales][product_permalink][referrer_name] ||= [0] * dates_strings.size
-      result[:by_referral][:sales][product_permalink][referrer_name][dates_strings.index(date)] += values[:count]
+      result[:by_referral][:sales][product_permalink][referrer_name][date_index] += values[:count]
       result[:by_referral][:totals][product_permalink] ||= {}
       result[:by_referral][:totals][product_permalink][referrer_name] ||= [0] * dates_strings.size
-      result[:by_referral][:totals][product_permalink][referrer_name][dates_strings.index(date)] += values[:total]
+      result[:by_referral][:totals][product_permalink][referrer_name][date_index] += values[:total]
     end
 
     result

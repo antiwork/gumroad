@@ -181,6 +181,45 @@ describe ProductDuplicatorService do
     end
   end
 
+  describe "bundle products" do
+    let(:bundle) { create(:product, user: seller, name: "bundle", is_bundle: true, native_type: Link::NATIVE_TYPE_BUNDLE, price_cents: 10_000) }
+    let(:first_member) { create(:product, user: seller, name: "first member") }
+    let(:second_member) { create(:product, user: seller, name: "second member") }
+    let(:license_category) { create(:variant_category, link: second_member, title: "License") }
+    let(:license_variant) { create(:variant, variant_category: license_category, name: "Individual License") }
+
+    it "copies the Contents list onto the duplicate, keeping the members, pinned variants, quantities and order" do
+      create(:bundle_product, bundle:, product: first_member, quantity: 1, position: 0)
+      create(:bundle_product, bundle:, product: second_member, variant: license_variant, quantity: 2, position: 1)
+
+      duplicate_product = described_class.new(bundle.id).duplicate
+
+      expect(duplicate_product.bundle_products.alive.in_order.map { [_1.product, _1.variant, _1.quantity] })
+        .to eq([[first_member, nil, 1], [second_member, license_variant, 2]])
+    end
+
+    it "does not copy deleted contents" do
+      create(:bundle_product, bundle:, product: first_member, position: 0)
+      deleted_bundle_product = create(:bundle_product, bundle:, product: second_member, position: 1)
+      deleted_bundle_product.mark_deleted!
+
+      duplicate_product = described_class.new(bundle.id).duplicate
+
+      expect(duplicate_product.bundle_products.alive.map(&:product)).to eq([first_member])
+    end
+
+    it "copies a membership whose product gained versions after it was added" do
+      create(:bundle_product, bundle:, product: first_member, position: 0)
+      create_list(:variant, 2, variant_category: create(:variant_category, link: first_member, title: "License"))
+
+      duplicate_product = described_class.new(bundle.id).duplicate
+
+      duplicated_bundle_product = duplicate_product.bundle_products.alive.sole
+      expect(duplicated_bundle_product.product).to eq(first_member)
+      expect(duplicated_bundle_product.variant).to be_nil
+    end
+  end
+
   it "duplicates the product and marks is_duplicating as false" do
     product.update!(is_duplicating: true)
 
