@@ -238,6 +238,19 @@ describe "OAuth authorization for a brand account", type: :request do
       expect(consented_account).to be_blank
     end
 
+    it "does not skip consent for the brand after switching to the reader's own account" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/", confidential: true)
+      Doorkeeper::AccessToken.create!(application_id: cli.id, resource_owner_id: brand.id, scopes: params[:scope], team_membership_id: membership.id)
+      sign_in member
+      select_account(brand.id)
+
+      get oauth_authorization_path, params: params.merge(switch_account: 1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("to use your account?")
+      expect(cli.access_grants.count).to eq(0)
+    end
+
     it "names the selected brand in the consent scope list" do
       cli.update!(redirect_uri: "http://#{DOMAIN}/")
       sign_in member
