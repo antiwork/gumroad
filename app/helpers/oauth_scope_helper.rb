@@ -23,7 +23,12 @@ module OauthScopeHelper
     "view_tax_data" => "See your tax forms and annual earnings summary."
   }.freeze
 
-  def oauth_scope_description(scope)
-    DESCRIPTIONS[scope.to_s]
+  # The consent pages name the account they authorize, so the scope list has to name it too:
+  # "edit your existing products" reads as the signed-in user's own account otherwise.
+  def oauth_scope_description(scope, account_name: nil)
+    description = DESCRIPTIONS[scope.to_s]
+    return description if description.blank? || account_name.blank?
+
+    description.gsub(/\byour\b/, "#{account_name}'s")
   end
 end

@@ -11,6 +11,7 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   before_action :hide_layouts
   before_action :default_to_authorization_code
   before_action :hide_from_search_results
+  before_action :switch_to_own_account, only: :new
   before_action :require_admin_access_to_selected_account, only: %i[new create]
   before_action :require_matching_consented_account, only: :create
 
@@ -85,11 +86,23 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       @selected_brand_membership ||= MobileAccountToken.admin_membership_for(current_user, current_seller)
     end
 
+    # The 403 page tells the reader to switch to an account they administer. This is that button:
+    # it drops the switcher selection so the retry authorizes the reader's own account.
+    def switch_to_own_account
+      return if params[:switch_account].blank?
+
+      reset_current_seller
+    end
+
     def require_admin_access_to_selected_account
       return unless follows_account_switcher? && current_user && current_seller && current_seller != current_user
       return if selected_brand_membership
 
-      render :error, locals: { error_description: "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again." }, status: :forbidden
+      render :error, locals: {
+        heading: "Admin access required",
+        error_description: "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again.",
+        action: { label: "Switch to your own account", path: oauth_authorization_path(consent_redirect_params.merge(switch_account: 1)) },
+      }, status: :forbidden
     end
 
     # The consent page names the account it authorizes; a switcher change between page load and submit

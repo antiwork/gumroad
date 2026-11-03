@@ -90,6 +90,21 @@ describe "OAuth authorization for a brand account", type: :request do
       expect(OauthDeviceAuthorization.last).to be_pending
     end
 
+    it "offers a way to switch accounts when the selected account needs admin access" do
+      membership.update!(role: TeamMembership::ROLE_MARKETING)
+      select_account(brand.id)
+      body = create_device_code(cli, "view_profile")
+
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+      expect(response.body).to include("Switch to your own account")
+
+      get oauth_device_authorization_path, params: { user_code: body["user_code"], switch_account: 1 }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("to use your account?")
+      expect(response.body).to include("See your profile data.")
+    end
+
     it "asks again when the selected account changes before the code is approved" do
       other_brand = create(:user)
       create(:team_membership, user: member, seller: other_brand, role: TeamMembership::ROLE_ADMIN)
@@ -181,6 +196,35 @@ describe "OAuth authorization for a brand account", type: :request do
       get oauth_authorization_path, params: params.merge(redirect_uri: "http://#{DOMAIN}/")
 
       expect(response).to have_http_status(:forbidden)
+      expect(response.body).to include("Admin access required")
+    end
+
+    it "lets the reader switch to their own account from the 403 page" do
+      membership.update!(role: TeamMembership::ROLE_SUPPORT)
+      cli.update!(redirect_uri: "http://#{DOMAIN}/")
+      sign_in member
+      select_account(brand.id)
+
+      get oauth_authorization_path, params: params.merge(redirect_uri: "http://#{DOMAIN}/")
+      expect(response.body).to include("Switch to your own account")
+
+      get oauth_authorization_path, params: params.merge(switch_account: 1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("to use your account?")
+      expect(Nokogiri::HTML(response.body).css("ul li").map(&:text)).to include("Create new products and edit your existing products.")
+    end
+
+    it "names the selected brand in the consent scope list" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/")
+      sign_in member
+      select_account(brand.id)
+      brand_name = brand.display_name(prefer_email_over_default_username: true)
+
+      get oauth_authorization_path, params: params.merge(redirect_uri: "http://#{DOMAIN}/")
+
+      expect(response).to have_http_status(:ok)
+      expect(Nokogiri::HTML(response.body).css("ul li").map(&:text)).to include("Create new products and edit #{brand_name}'s existing products.")
     end
 
     it "asks again when the selected account changes before the page is approved" do

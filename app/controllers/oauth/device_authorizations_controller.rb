@@ -7,6 +7,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
   helper_method :selected_brand_membership
   before_action :hide_layouts
   before_action :hide_from_search_results
+  before_action :switch_to_own_account, only: %i[new create]
   before_action :authenticate_user!, only: :create
 
   def new
@@ -78,6 +79,10 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
         @error_message = "Stop impersonating before authorizing an OAuth application."
       elsif user_signed_in? && @device_authorization.pending? && !authorizing_account_accessible?
         @error_message = "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again."
+        # The message tells the reader to switch accounts; this is the button that does it.
+        switch_params = { user_code: @user_code, switch_account: 1 }
+        switch_params[:handoff] = @handoff if @handoff.present?
+        @account_switch_path = oauth_device_authorization_path(switch_params)
       end
     end
 
@@ -193,6 +198,14 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
 
     def authorizing_account_accessible?
       current_seller == current_user || selected_brand_membership.present?
+    end
+
+    # The error message tells the reader to switch to an account they administer. This is that
+    # button: dropping the switcher selection re-renders the page for the reader's own account.
+    def switch_to_own_account
+      return if params[:switch_account].blank?
+
+      reset_current_seller
     end
 
     def hide_layouts

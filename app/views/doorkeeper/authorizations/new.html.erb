@@ -1,3 +1,4 @@
+<% consented_account_name = selected_brand_membership&.seller&.display_name(prefer_email_over_default_username: true).presence %>
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
   <header class="flex flex-col gap-4 p-4 text-center">
     <div>
@@ -6,7 +7,7 @@
     <h2>
       Authorize
       <strong><%= @pre_auth.client.name %></strong>
-      to use <%= (account = selected_brand_membership&.seller) ? account.display_name(prefer_email_over_default_username: true) : "your account" %>?
+      to use <%= consented_account_name || "your account" %>?
     </h2>
   </header>
   <div class="flex flex-col gap-4 p-4">
@@ -19,7 +20,7 @@
     <div class="flex flex-col gap-4 p-4">
       <h4 class="font-bold">This application will be able to:</h4>
       <ul>
-        <% @pre_auth.scopes.filter_map { |scope| oauth_scope_description(scope) }.each do |description| %>
+        <% @pre_auth.scopes.filter_map { |scope| oauth_scope_description(scope, account_name: consented_account_name) }.each do |description| %>
           <li><%= description %></li>
         <% end %>
       </ul>
