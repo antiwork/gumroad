@@ -4,6 +4,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
   MAX_USER_CODE_HANDOFFS = 20
   USER_CODE_HANDOFF_SESSION_KEY = :oauth_device_authorization_user_code_handoffs
 
+  helper_method :selected_brand_membership
   before_action :hide_layouts
   before_action :hide_from_search_results
   before_action :authenticate_user!, only: :create
@@ -29,7 +30,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
 
     case params[:decision]
     when "deny"
-      if @device_authorization.deny!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
+      if @device_authorization.deny!(resource_owner: authorizing_account, team_membership: selected_brand_membership, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
         @decision = :denied
         clear_user_code_handoff
       else
@@ -37,7 +38,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
         return render :new, status: :unprocessable_entity
       end
     when "approve"
-      if @device_authorization.approve!(resource_owner: current_user, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
+      if @device_authorization.approve!(resource_owner: authorizing_account, team_membership: selected_brand_membership, ip_address: request.remote_ip, user_agent: request.user_agent.to_s.first(255))
         @decision = :approved
         clear_user_code_handoff
       else
@@ -69,6 +70,8 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
         @error_message = "This code is invalid or expired."
       elsif user_signed_in? && impersonating?
         @error_message = "Stop impersonating before authorizing an OAuth application."
+      elsif user_signed_in? && @device_authorization.pending? && !authorizing_account_accessible?
+        @error_message = "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again."
       end
     end
 
@@ -165,7 +168,25 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
     end
 
     def device_authorization_owned_by_current_user?
-      user_signed_in? && !impersonating? && @device_authorization.resource_owner_id == current_user.id
+      return false unless user_signed_in? && !impersonating?
+      return @device_authorization.resource_owner_id == current_user.id if @device_authorization.team_membership_id.nil?
+
+      TeamMembership.find_by(id: @device_authorization.team_membership_id)&.user_id == current_user.id
+    end
+
+    # The account selected in the switcher: the signed-in user's own, or a brand they administer.
+    def authorizing_account
+      selected_brand_membership&.seller || current_user
+    end
+
+    def selected_brand_membership
+      return unless current_seller && current_seller != current_user
+
+      @selected_brand_membership ||= MobileAccountToken.admin_membership_for(current_user, current_seller)
+    end
+
+    def authorizing_account_accessible?
+      current_seller == current_user || selected_brand_membership.present?
     end
 
     def hide_layouts

@@ -11,8 +11,9 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   before_action :hide_layouts
   before_action :default_to_authorization_code
   before_action :hide_from_search_results
+  before_action :require_admin_access_to_selected_account, only: %i[new create]
 
-  helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?
+  helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?, :selected_brand_membership
 
   private
     # Dynamically registered MCP clients must send an S256 challenge and a supported resource on
@@ -63,8 +64,42 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       oauth_application.with_application_lock(shared: true) do
         @pre_auth = nil
         @strategy = nil
-        super
+        bind_grant_to_selected_account(super)
       end
+    end
+
+    # The consent page authorizes the account selected in the switcher, not the signed-in user.
+    def current_resource_owner
+      @current_resource_owner ||= selected_brand_membership&.seller || super
+    end
+
+    # MCP clients and the CLI follow the switcher; the mobile app and other applications keep binding to the signed-in user.
+    def follows_account_switcher?
+      dynamic_client_request? || OauthApplication.alive.exists?(uid: params[:client_id].to_s, device_authorization_enabled: true)
+    end
+
+    def selected_brand_membership
+      return unless follows_account_switcher? && current_user && current_seller && current_seller != current_user
+
+      @selected_brand_membership ||= MobileAccountToken.admin_membership_for(current_user, current_seller)
+    end
+
+    def require_admin_access_to_selected_account
+      return unless follows_account_switcher? && current_user && current_seller && current_seller != current_user
+      return if selected_brand_membership
+
+      render :error, locals: { error_description: "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again." }, status: :forbidden
+    end
+
+    def bind_grant_to_selected_account(response)
+      membership = selected_brand_membership
+      grant = response.try(:auth)&.then { _1.token if _1.try(:access_grant?) }
+      return response if membership.nil? || grant.nil?
+
+      scopes = MobileAccountToken.narrow_scopes(grant.scopes, membership)
+      grant.update_columns(team_membership_id: membership.id, scopes: scopes.to_s)
+      membership.update!(last_accessed_at: Time.current)
+      response
     end
 
     # Nothing was written; the sweep that held the row commits within seconds.

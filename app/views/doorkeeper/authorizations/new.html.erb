@@ -6,7 +6,7 @@
     <h2>
       Authorize
       <strong><%= @pre_auth.client.name %></strong>
-      to use your account?
+      to use <%= (account = selected_brand_membership&.seller) ? account.display_name(prefer_email_over_default_username: true) : "your account" %>?
     </h2>
   </header>
   <div class="flex flex-col gap-4 p-4">

@@ -17,7 +17,7 @@
       <h2>
         Authorize
         <strong><%= @device_authorization.oauth_application.name %></strong>
-        to use your account?
+        to use <%= (account = selected_brand_membership&.seller) ? account.display_name(prefer_email_over_default_username: true) : "your account" %>?
       </h2>
       <p>Code <strong><%= @user_code %></strong></p>
     </header>
