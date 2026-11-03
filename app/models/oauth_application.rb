@@ -119,6 +119,9 @@ class OauthApplication < Doorkeeper::Application
       deny_approved_device_authorizations_for(user, denied_at: revoked_at)
       Doorkeeper::AccessToken.revoke_all_for(id, user)
       resource_subscriptions.where(user:).alive.update_all(deleted_at: revoked_at)
+      # A seller who only linked through this partner leaves its listings. A seller who migrated keeps
+      # the link, which the revenue share reads.
+      partner_sellers.where(user:).alive.update_all(deleted_at: revoked_at) unless PartnerMigration.exists?(oauth_application_id: id, user_id: user.id)
     end
   end
 

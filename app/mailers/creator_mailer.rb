@@ -6,6 +6,24 @@ class CreatorMailer < ApplicationMailer
   helper CurrencyHelper
   layout "layouts/email"
 
+  def partner_migration_finished(partner_migration_id, recipient:)
+    @migration = PartnerMigration.find(partner_migration_id)
+    @failed = @migration.catalog_status == PartnerMigration::STATUS_FAILED
+    @subject = @failed ? "Some products did not import" : "Your products are ready to review"
+
+    mail to: recipient, subject: @subject
+  end
+
+  # A positional string, so the mailer header that records the arguments keeps only its first characters.
+  def partner_migration_account_setup(partner_migration_id, encrypted_token)
+    @migration = PartnerMigration.find(partner_migration_id)
+    token = PartnerMigration.decrypt_account_setup_token(encrypted_token)
+    @setup_url = partner_migration_account_setup_url(account_setup_token: token, host: DOMAIN, protocol: PROTOCOL)
+    @subject = "Your Gumroad account is ready"
+
+    mail to: @migration.user.email, subject: @subject
+  end
+
   def gumroad_day_fee_saved(seller_id:, to_email: nil)
     @announcement = true
 

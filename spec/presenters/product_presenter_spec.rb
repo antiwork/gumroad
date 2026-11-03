@@ -181,6 +181,7 @@ describe ProductPresenter do
             },
             bundle_products: [],
             public_files: [],
+            file_summaries: { product: nil, options: {} },
           },
           discount_code: nil,
           sale_label: nil,

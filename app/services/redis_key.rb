@@ -130,6 +130,7 @@ class RedisKey
     def order_charge_outcome_repair_recent_mark = "order_charge_outcome_repair:recent_mark"
     # High-water mark for AlertOnStripeDobDriftJob: the last merchant_accounts id it compared.
     def stripe_dob_drift_sweep_cursor = "stripe_dob_drift_sweep:cursor"
+    def closed_seller_connect_sweep_cursor = "closed_seller_connect_sweep:cursor"
     # Purchases whose notice was claimed but never transmitted. The cursor is already past their
     # email_infos rows, so this set is the only thing that brings them back.
     def undelivered_receipt_pending_retry = "undelivered_receipt_sweep:pending_retry"

@@ -311,6 +311,7 @@ class Link < ApplicationRecord
                if: ->(link) { link.saved_change_to_is_licensed? && link.is_licensed? }
   after_update :delete_unused_prices, if: :saved_change_to_purchase_type?
   after_commit :submit_to_indexnow, on: :update, if: :indexnow_submission_needed?
+  after_update -> { PartnerMigration.record_first_publication(self) }, if: -> { saved_change_to_first_published_at? && first_published_at.present? }
 
   enum :subscription_duration, %i[monthly yearly quarterly biannually every_two_years]
   enum :purchase_type, %i[buy_only rent_only buy_and_rent] # Indicates whether this product can be bought or rented or both.
