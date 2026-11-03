@@ -131,6 +131,18 @@ describe "Partner API", type: :request do
       expect(listing.keys).not_to include("sales_count", "sales_usd_cents", "files", "rich_content")
     end
 
+    it "returns each product's category as GET /v2/partner/categories lists it" do
+      category = Discover::TaxonomyPresenter.new.categories_for_api.find { _1[:parent_id].present? }
+      product.update!(taxonomy_id: category[:id])
+      other_product.update!(taxonomy: nil)
+      index_model_records(Link)
+
+      get_products
+
+      categories = response.parsed_body["products"].to_h { [_1["id"], _1["category"]] }
+      expect(categories).to eq(product.external_id => category.slice(:id, :path, :label).as_json, other_product.external_id => nil)
+    end
+
     it "excludes products that a seller with profile sections does not show" do
       hidden_product = create(:product, user: seller)
       create(:seller_profile_products_section, seller:, shown_products: [product.id])
