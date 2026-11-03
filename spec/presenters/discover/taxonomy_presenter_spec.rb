@@ -79,6 +79,15 @@ describe Discover::TaxonomyPresenter do
     end
   end
 
+  describe "knitting category" do
+    it "adds Knitting under Crafts & DIY with a label" do
+      crafts = Taxonomy.find_by_path(%w[self-improvement crafts-and-dyi])
+
+      expect(Taxonomy.where(parent: crafts).pluck(:slug)).to include("knitting")
+      expect(Discover::TaxonomyPresenter::TAXONOMY_LABELS).to include("knitting" => "Knitting")
+    end
+  end
+
   describe "#taxonomies_for_category_picker" do
     it "sorts taxonomies alphabetically by breadcrumb so each root is followed by its descendants" do
       picker_taxonomies = presenter.taxonomies_for_category_picker
