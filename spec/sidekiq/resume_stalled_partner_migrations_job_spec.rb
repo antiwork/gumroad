@@ -59,6 +59,7 @@ describe ResumeStalledPartnerMigrationsJob do
     seller = create(:user, user_risk_state: "suspended_for_fraud")
     stalled = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago, user: seller)
     Sidekiq::Worker.clear_all
+    expect(ErrorNotifier).not_to receive(:notify)
 
     described_class.new.perform
 
@@ -66,10 +67,11 @@ describe ResumeStalledPartnerMigrationsJob do
     expect(PartnerMigrationImportJob.jobs.size).to eq(0)
   end
 
-  it "fails an import that keeps stopping, releases its lock, and emails the seller" do
+  it "fails an import that keeps stopping, releases its lock, reports it to Sentry, and emails the seller" do
     stalled = migration_with(status: PartnerMigration::STATUS_CLAIMED, updated_at: (PartnerMigration::STALLED_AFTER + 1.minute).ago, resumes_count: PartnerMigration::MAX_RESUMES)
     Sidekiq::Worker.clear_all
     expect(SidekiqUniqueJobs::Unlockable).to receive(:delete!).with(hash_including("class" => "PartnerMigrationImportJob", "args" => [stalled.id]))
+    expect(ErrorNotifier).to receive(:notify).with("The import stopped 4 times before it finished.", partner_migration_id: stalled.id)
 
     described_class.new.perform
 

@@ -39,11 +39,12 @@ class PartnerMigrationImportJob
       migration = PartnerMigration.find_by(id: job["args"].first)
       next unless migration
 
-      migration.with_lock do
-        if migration.status == PartnerMigration::STATUS_CLAIMED
-          migration.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current, failure_reason: exception.message.truncate(PartnerMigration::MAX_FAILURE_REASON_LENGTH))
-        end
+      failed = migration.with_lock do
+        next false unless migration.status == PartnerMigration::STATUS_CLAIMED
+
+        migration.update!(status: PartnerMigration::STATUS_FAILED, completed_at: Time.current, failure_reason: exception.message.truncate(PartnerMigration::MAX_FAILURE_REASON_LENGTH))
       end
+      ErrorNotifier.notify(exception, partner_migration_id: migration.id) if failed
       PartnerMigrationNotificationJob.perform_async(migration.id) if migration.completed_at
     end
   end
