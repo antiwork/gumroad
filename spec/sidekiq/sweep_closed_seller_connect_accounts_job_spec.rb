@@ -8,8 +8,6 @@ describe SweepClosedSellerConnectAccountsJob do
   let!(:merchant_account) { create_candidate(seller) }
   let(:stripe_id) { merchant_account.charge_processor_merchant_id }
   let(:zero_balance) { { available: [{ amount: 0, currency: "usd" }], pending: [{ amount: 0, currency: "usd" }] } }
-  let(:message) { @message }
-
   before do
     allow(InternalNotificationWorker).to receive(:perform_async) { |_room, _subject, body| @message = body }
     stub_stripe_account(stripe_id)
@@ -18,6 +16,9 @@ describe SweepClosedSellerConnectAccountsJob do
   end
 
   def run = described_class.new.perform
+
+  # Not a let: examples that run the job twice read the message in between, and a memoized let keeps the first one.
+  attr_reader :message
 
   def create_candidate(user)
     create(:merchant_account, user:, charge_processor_merchant_id: "acct_sweep_#{SecureRandom.hex(6)}")
