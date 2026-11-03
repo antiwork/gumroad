@@ -1,4 +1,4 @@
-import { PlayCircle, Trash, TwitterX, Video } from "@boxicons/react";
+import { PlayCircle, RowResize, Trash, TwitterX, Video } from "@boxicons/react";
 import { Editor, Extension, Node as TiptapNode } from "@tiptap/core";
 import { DOMOutputSpec, DOMSerializer, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
@@ -33,6 +33,72 @@ declare module "@tiptap/core" {
 
 const MEDIA_EMBED_SUPPORTING_PROVIDERS = ["YouTube", "Vimeo", "Wistia, Inc.", "Dailymotion"];
 
+// Iframely sizes a rich embed by putting a fixed pixel height on the div wrapping the frame, and
+// the frame is 100% of it: the number it picks is what clips a long form or squashes a bookshelf.
+const EMBED_HEIGHT_PX = /^(\d+(?:\.\d+)?)px$/u;
+// Videos come back as a wrapper shaped by percentage padding (usually height 0) instead. That box
+// sizes itself, so a pixel height next to it would stack on top of the ratio.
+const PERCENT_PADDING = /padding(?:-[a-z]+)?\s*:\s*[^;]*%/iu;
+
+export const DEFAULT_RAW_EMBED_HEIGHT = 800;
+export const RAW_EMBED_HEIGHT_OPTIONS = [560, 800, 1200, 1800];
+
+const embedHeightWrapper = (doc: Document): HTMLElement | null => {
+  const wrapper = doc.querySelector("iframe")?.parentElement;
+  if (!wrapper || wrapper === doc.body) return null;
+  if (PERCENT_PADDING.test(wrapper.getAttribute("style") ?? "")) return null;
+  const declared = EMBED_HEIGHT_PX.exec(wrapper.style.height.trim().toLowerCase());
+  return declared && Number(declared[1]) > 0 ? wrapper : null;
+};
+
+export const rawEmbedHeight = (html: string): number | null => {
+  const wrapper = embedHeightWrapper(new DOMParser().parseFromString(html, "text/html"));
+  const match = wrapper ? EMBED_HEIGHT_PX.exec(wrapper.style.height.trim().toLowerCase()) : null;
+  return match ? Number(match[1]) : null;
+};
+
+export const resizedRawEmbedHtml = (html: string, height: number): string => {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const wrapper = embedHeightWrapper(doc);
+  if (!wrapper) return html;
+  // Retain the provider's size in saved HTML so resizing remains reversible after reload.
+  if (!wrapper.hasAttribute("data-original-height")) {
+    wrapper.setAttribute("data-original-height", wrapper.style.height);
+  }
+  wrapper.style.height = `${height}px`;
+  return doc.body.innerHTML;
+};
+
+// Only a provider that clips its own embed gets a taller frame than iframely asked for (a Tally
+// quiz is pinned at 600px, a Heyzine bookshelf at 170px). Raising every short wrapper would
+// stretch a compact player — Spotify asks for 152px, SoundCloud 166px — into an 800px block, and
+// the Height menu's smallest preset leaves no way back. Matched on provider name, or on host for
+// the responses that omit provider_name.
+const RAW_EMBED_GROWING_PROVIDERS = ["Tally Forms", "Heyzine"];
+const RAW_EMBED_GROWING_HOSTS = ["tally.so", "heyzine.com"];
+
+const hostOf = (url: string): string | null => {
+  try {
+    return new URL(url).hostname.trim().toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
+const growsOnInsert = (data: IframelyEmbedData): boolean => {
+  if (data.provider_name !== undefined && RAW_EMBED_GROWING_PROVIDERS.includes(data.provider_name)) return true;
+  const host = hostOf(data.url);
+  return host !== null && RAW_EMBED_GROWING_HOSTS.some((known) => host === known || host.endsWith(`.${known}`));
+};
+
+// Any other provider keeps the height iframely (or the seller, from the menu) chose for it.
+const insertedRawEmbedHtml = (data: IframelyEmbedData): string => {
+  if (!growsOnInsert(data)) return data.html;
+  const declaredHeight = rawEmbedHeight(data.html);
+  if (declaredHeight === null || declaredHeight >= DEFAULT_RAW_EMBED_HEIGHT) return data.html;
+  return resizedRawEmbedHtml(data.html, DEFAULT_RAW_EMBED_HEIGHT);
+};
+
 const VideoEmbed = Extension.create({
   name: "videoEmbed",
   menuItem: (_editor, onOpen) => (
@@ -45,10 +111,58 @@ const renderRawDOM = (editor: Editor, node: ProseMirrorNode) =>
 
 const RawNodeView = ({ editor, node, getPos, selected }: NodeViewProps) => {
   const dom = React.useMemo(() => renderRawDOM(editor, node), [editor, node]);
+  const html = assertString(node.attrs.html);
+  const declaredHeight = rawEmbedHeight(html);
+  const wrapper = embedHeightWrapper(new DOMParser().parseFromString(html, "text/html"));
+  const originalHeight = EMBED_HEIGHT_PX.exec(wrapper?.getAttribute("data-original-height") ?? "");
+  const providerHeight = originalHeight && Number(originalHeight[1]) > 0 ? Number(originalHeight[1]) : null;
+  // The provider's own height stays on the menu, so growing an embed is always reversible.
+  const heightOptions =
+    declaredHeight === null
+      ? []
+      : [
+          ...new Set([
+            declaredHeight,
+            ...(providerHeight === null ? [] : [providerHeight]),
+            ...RAW_EMBED_HEIGHT_OPTIONS,
+          ]),
+        ].sort((left, right) => left - right);
+  const heightActions =
+    heightOptions.length === 0
+      ? []
+      : [
+          {
+            item: () => (
+              <>
+                <RowResize className="size-5" />
+                <span>Height</span>
+              </>
+            ),
+            menu: (close: () => void) => (
+              <>
+                {heightOptions.map((height) => (
+                  <MenuListItem
+                    key={height}
+                    onClick={() => {
+                      editor
+                        .chain()
+                        .focus()
+                        .updateAttributes("raw", { html: resizedRawEmbedHtml(html, height) })
+                        .run();
+                      close();
+                    }}
+                  >
+                    <span>{`${height} px`}</span>
+                  </MenuListItem>
+                ))}
+              </>
+            ),
+          },
+        ];
   return (
     <NodeActionsWrapper selected={selected} asChild>
       <NodeViewWrapper contentEditable={false}>
-        <NodeActionsMenu editor={editor} getPos={getPos} />
+        <NodeActionsMenu editor={editor} getPos={getPos} actions={heightActions} />
         {/* The iframe swallows clicks; without this the block can never be selected. */}
         <div
           className="tiptap__raw [&_iframe]:pointer-events-none"
@@ -124,14 +238,22 @@ export const Raw = TiptapNode.create({
   },
   addExtensions: () => [VideoEmbed],
 });
-type IframelyEmbedData = { html: string; title: string; url: string; provider_name: string; thumbnail_url?: string };
+type IframelyEmbedData = {
+  html: string;
+  title: string;
+  url: string;
+  // Iframely omits provider metadata for some rich embeds (Heyzine shelves among them); the html
+  // it returns is still the whole embed, so only the fields we actually render are required.
+  provider_name?: string;
+  thumbnail_url?: string;
+};
 
 const isIframelyEmbedData = (data: unknown): data is IframelyEmbedData =>
   isRecord(data) &&
   isString(data.html) &&
   isString(data.title) &&
   isString(data.url) &&
-  isString(data.provider_name) &&
+  (data.provider_name === undefined || isString(data.provider_name)) &&
   (data.thumbnail_url === undefined || isString(data.thumbnail_url));
 
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/u;
@@ -286,7 +408,12 @@ export const EmbedMediaForm = React.forwardRef<{ focus: () => void }, EmbedMedia
 EmbedMediaForm.displayName = "EmbedMediaForm";
 
 export const insertMediaEmbed = (editor: Editor, data: IframelyEmbedData) => {
-  if ("insertMediaEmbed" in editor.commands && MEDIA_EMBED_SUPPORTING_PROVIDERS.includes(data.provider_name)) {
+  const { provider_name } = data;
+  if (
+    "insertMediaEmbed" in editor.commands &&
+    provider_name !== undefined &&
+    MEDIA_EMBED_SUPPORTING_PROVIDERS.includes(provider_name)
+  ) {
     const responseHTML = new DOMParser().parseFromString(data.html, "text/html");
     const iframe = responseHTML.querySelector("iframe");
     const html = iframe ? iframe.outerHTML : data.html;
@@ -295,7 +422,12 @@ export const insertMediaEmbed = (editor: Editor, data: IframelyEmbedData) => {
     editor
       .chain()
       .focus()
-      .setRaw({ html: data.html, title: data.title, url: data.url, thumbnail: data.thumbnail_url })
+      .setRaw({
+        html: insertedRawEmbedHtml(data),
+        title: data.title,
+        url: data.url,
+        thumbnail: data.thumbnail_url,
+      })
       .run();
   }
 };

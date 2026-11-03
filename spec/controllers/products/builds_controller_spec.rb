@@ -68,6 +68,39 @@ describe Products::BuildsController do
     end
   end
 
+  describe "#create" do
+    let(:s3) { Aws::S3::Client.new }
+
+    def upload_zip(owner: seller, filename: "game.zip")
+      key = "attachments/#{owner.external_id}/#{SecureRandom.hex}/original/#{filename}"
+      s3.put_object(bucket: S3_BUCKET, key:, body: "PK-zip")
+      "#{S3_BASE_URL}#{key}"
+    end
+
+    it "adds the zip the editor uploaded as the next version, not live" do
+      post :create, params: { product_id: product.unique_permalink, url: upload_zip }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["build"]).to include("number" => 3, "status" => "uploaded")
+      expect(s3.get_object(bucket: S3_BUCKET, key: product.product_builds.find_by!(number: 3).storage_key).body.read).to eq("PK-zip")
+    end
+
+    it "accepts a zip whose name ends in upper case" do
+      post :create, params: { product_id: product.unique_permalink, url: upload_zip(filename: "GAME.ZIP") }, as: :json
+
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body["build"]).to include("number" => 3)
+    end
+
+    it "refuses a zip from another seller's uploads, with the reason" do
+      post :create, params: { product_id: product.unique_permalink, url: upload_zip(owner: create(:user)) }, as: :json
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      expect(response.parsed_body["error"]).to include(".zip")
+      expect(product.product_builds.count).to eq(2)
+    end
+  end
+
   describe "#promote" do
     it "makes the build live and supersedes the live one" do
       post :promote, params: { product_id: product.unique_permalink, id: second_build.public_id }, as: :json

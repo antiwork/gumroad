@@ -1,0 +1,68 @@
+[
+  {
+    "input": "a=1; b=2",
+    "sanitized": "a=1; b=2",
+    "cookies": {
+      "a": "1",
+      "b": "2"
+    }
+  },
+  {
+    "input": "a=1;b=2",
+    "sanitized": "a=1; b=2",
+    "cookies": {
+      "a": "1",
+      "b": "2"
+    }
+  },
+  {
+    "input": "a=1; a=2",
+    "sanitized": "a=1; a=2",
+    "cookies": {
+      "a": "1"
+    }
+  },
+  {
+    "input": "a=%20+x",
+    "sanitized": "a=%20+x",
+    "cookies": {
+      "a": "  x"
+    }
+  },
+  {
+    "input": "a=%zz",
+    "sanitized": "a=%zz",
+    "cookies": {
+      "a": "%zz"
+    }
+  },
+  {
+    "input": "a",
+    "sanitized": "a",
+    "cookies": {
+      "a": null
+    }
+  },
+  {
+    "input": "a=1=2",
+    "sanitized": "a=1=2",
+    "cookies": {
+      "a": "1=2"
+    }
+  },
+  {
+    "input": " a=1",
+    "sanitized": "%20a=1",
+    "cookies": {
+      "%20a": "1"
+    }
+  },
+  {
+    "input": "a=1,b=2",
+    "sanitized": "a=1; b=2",
+    "cookies": {
+      "a": "1",
+      "b": "2"
+    }
+  }
+]

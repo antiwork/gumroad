@@ -1,0 +1,302 @@
+{
+  "secret_key_base": "go-web-test-secret-key-base",
+  "session_cookie": "jJ6W2OdfWe9stDJOeCy8a+3krXNFVPLaIdNhCFVQEMltHMvoSIuOaHMjbKJMlMxrq4P8cEgqh/m5o/paWtijRMzacC8yUle3A0gso8BXJFI/AYcA1ayxy0aEdRPGs5vWw8DPnQ7TpXSZ/rZvqD8I36zGttEmSs693y1VpvmG7E2pgOijJBIA6T3WXjyBnZWLWCyrBM0rgbzX5iwEKRgRgJYxSw4xafkcHgkHjWTliefsdqDTKkMWkvWoS7wK4PQt2MeVRXqWSKmcolK0ULgRLEYf+AgXZDAYODpsZkwAefLOru+4qCPUAmuxEJomQJFAST/h9nJf7GDKX9iocv8CckoTrl+oaAk9Jx2DoMD1Y+tMo8ZhKaw1JC5UOvMJzqzbEhrB3obNKJvOelZJgHXtkm0fEiGb42pmMUqisUvN0pPeJq3P++47sMSme6HKnIbnPjy4Wc9iMpFy5LM6vEztPSQZOXkj7m6EZJt4HVv58DaPszLRP0e0KoealVVRkNyi0xS9dnpIItiaEbhBmXknSut2S+I3YQbcnYIqUjtm363LBZqPN9LiEKidrSV+hV6PavbQxeLTsDByFoPTOYJtdkboQ4o3005C8awFx7WhDkAWBrDkSvOZYSV0F0Zuqw==--EzSTh20Yos4BJKTl--FQ7hhCE0nj4DW8p4CRbI/Q==",
+  "session_plaintext": {
+    "session_id": "f519a99b94965c6e9ae4ceea2f22999e",
+    "warden.user.user.key": [
+      [
+        1000001
+      ],
+      "$2a$11$abcdefghijklmnopqrstuv"
+    ],
+    "warden.user.user.session": {
+      "last_sign_in_at": 1790000000
+    },
+    "signup_referrer": "www.google.com",
+    "mobile_param": "1",
+    "_csrf_token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0"
+  },
+  "current_seller_cookie": "WNDkFH13BuNrQ0qMvMLfBFiBpAaMkQxrNtRQ/VUa772cULmnDE6CXVjHnrOgveGToTAd0c35xWtLlpMRMx5rY8xQVvlsJXAZ70MHKNGl7cn8--5iyRR4ya6G6Hyr/S--FakQmFHjpe6Vm2RtE6EtVw==",
+  "rotated_cookie": "qfr5+tEcMCmZiqcRLpyxYCqfIZdmBLmTGEz22XYmwe1F2TaNkxKkQGqtgYwU5HImaMwZoSASOLjlt31szNcNH11a+ly1B8fD0nFY0r+7bWMO383NI7DMcqZgApKNq5yZzQsxYzVMsdAcrCn1uAgN0uJqZt3VbYr9q9SdICarhp0jGIdOjwIhGNH/r7wmMhp2Uqf4a3A06VFO96rojSu9gp3BB26FQ/qiQzDEoMPZxREETA==--Bf73/GWBEaUezbnI--431l4kHMZmg4014QDkLgLQ==",
+  "rotated_read_back": [
+    [
+      1000003
+    ],
+    "salt"
+  ],
+  "expired_cookie": "YtAH46gu42kzgUHTuUgmesxqcCAAW2OVYxtdGuNApw2bX4JPIUoylVARpguzvu0i3qZoM+pii5PYMdKBkJSDIJky7PBB7CY1L3s5+ZEbSaAq4eO3qCJt3Zi7chsYp7nM31SDDk5RVx0Qnzh3QJRAyOWxJLPKXFuXFQlaSAZCLRxZJnFEgU4Xxm6QTRlEDoWCW6pIPcpTZLxmNwNokmuGO9l9ajtay9dEUJLRW76nJB6Iug==--WfpiRdD520PvT0ma--kbTsrYXE2s/eUK78XspfFQ==",
+  "expired_read_back": null,
+  "wrong_purpose_cookie": "mXPOny3bwa+PyH52u+DaKpImXYrpwtaFe1bJ1Um2qx+jMLNdYz3y6yi9PJ0+JkOuGtics0xmee31mKE6nA5MGig+g8dovJ4ODdFJ10tmHCtzrR6vau0EsxHiYipGVtU2i1dEDjBw8hFXmHl37HN99tou/8hNU489wNy6zXkugExjYTXZRStQYX1z52l9--nk0m8eza1c4woJUh--0bdvjGbO53avry+SYR01GQ==",
+  "wrong_purpose_read_back": null,
+  "no_metadata_cookie": "m3AxAR57D76k02JY6TE695S1NLF0X9Ym2EjC47xm0dTBRsBirZeRRFQqAd2I0g5RVfwQlQMXenyl9IPRPgQ=--U9Bt+Ewn5t27nvi5--3vhHTTVAKz3rdPND0JdwhQ==",
+  "no_metadata_read_back": [
+    [
+      1000003
+    ],
+    "salt"
+  ],
+  "csrf_cases": [
+    {
+      "name": "global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "per_form",
+      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "per_form",
+      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "per_form",
+      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "per_form",
+      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "unmasked_real",
+      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "unmasked_real",
+      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "unmasked_real",
+      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "unmasked_real",
+      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "standard_base64_global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "standard_base64_global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "standard_base64_global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": true
+    },
+    {
+      "name": "standard_base64_global",
+      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "garbage",
+      "token": "not-a-token",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "garbage",
+      "token": "not-a-token",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "garbage",
+      "token": "not-a-token",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "garbage",
+      "token": "not-a-token",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "wrong_length",
+      "token": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "wrong_length",
+      "token": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "wrong_length",
+      "token": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "wrong_length",
+      "token": "eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eA",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "other_session",
+      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "other_session",
+      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "other_session",
+      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "other_session",
+      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "empty",
+      "token": "",
+      "path": "/media_locations",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "empty",
+      "token": "",
+      "path": "/check",
+      "origin": null,
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "empty",
+      "token": "",
+      "path": "/check",
+      "origin": "https://gumroad.com",
+      "status": 200,
+      "verified": false
+    },
+    {
+      "name": "empty",
+      "token": "",
+      "path": "/check",
+      "origin": "https://evil.example",
+      "status": 200,
+      "verified": false
+    }
+  ],
+  "null_origin": 422,
+  "redirect": {
+    "status": 302,
+    "location": "https://gumroad.com/login",
+    "body": ""
+  }
+}

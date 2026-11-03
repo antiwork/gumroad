@@ -17,7 +17,7 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
 
   def stub_engagement(opens, clicked: [])
     allow(EmailEngagementDynamoStore).to receive(:purchase_open_records).with(@watched_post.id, opened_after: anything, opened_before: anything).and_return(opens)
-    allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_digests).with(@watched_post.id).and_return(clicked)
+    allow(EmailEngagementDynamoStore).to receive(:clicked_recipient_digests_among).with(@watched_post.id, anything).and_return(clicked.to_set)
   end
 
   def opener(first_open_at:, digest: "digest-1", purchase_id: @purchase.id)
@@ -145,12 +145,20 @@ describe SendWorkflowEmailsToOpenedNonClickersJob, :freeze_time do
     expect(EmailEngagementDynamoStore).to have_received(:purchase_open_records).with(@watched_post.id, opened_after: 5.days.ago, opened_before: 3.days.ago)
   end
 
+  it "asks about the clicks of only the openers that are due" do
+    stub_engagement([opener(first_open_at: 4.days.ago), opener(first_open_at: 1.day.ago, digest: "not-due")])
+
+    described_class.new.perform(@installment.id)
+
+    expect(EmailEngagementDynamoStore).to have_received(:clicked_recipient_digests_among).with(@watched_post.id, ["digest-1"])
+  end
+
   it "does not read clicks when no open is due" do
     stub_engagement([opener(first_open_at: 1.day.ago)])
 
     described_class.new.perform(@installment.id)
 
-    expect(EmailEngagementDynamoStore).not_to have_received(:clicked_recipient_digests)
+    expect(EmailEngagementDynamoStore).not_to have_received(:clicked_recipient_digests_among)
   end
 
   it "claims the daily slot with the recipient count it is about to queue" do

@@ -32,10 +32,6 @@ class BosniaAndHerzegovinaBankAccount < BankAccount
     Currency::BAM
   end
 
-  def account_number_visual
-    "BA******#{account_number_last_four}"
-  end
-
   def to_hash
     {
       routing_number:,

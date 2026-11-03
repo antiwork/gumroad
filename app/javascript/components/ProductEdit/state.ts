@@ -350,6 +350,7 @@ export const ProductEditContext = React.createContext<{
   // shown in the Receipt tab's email-style preview chrome.
   receiptEmailFrom: string;
   priceCheckerEnabled: boolean;
+  webBuildPlayerEnabled: boolean;
   hasWebBuilds: boolean;
   customHtmlPagesEnabled: boolean;
   autoMarketingEnabled: boolean;
@@ -365,6 +366,9 @@ export const ProductEditContext = React.createContext<{
   customHtmlGlobalNavPaths: string[];
   contentUpdates: ContentUpdates;
   setContentUpdates: React.Dispatch<React.SetStateAction<ContentUpdates>>;
+  // A web app zip uploading from the version history, which the layout guards like the editor's own files.
+  webAppUploading: boolean;
+  setWebAppUploading: React.Dispatch<React.SetStateAction<boolean>>;
   filesById: Map<string, FileEntry>;
   aiGenerated: boolean;
   // Detail names this seller has used on their other products, offered as suggestions in the

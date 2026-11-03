@@ -401,7 +401,7 @@ describe("FileRow web build label", () => {
       }),
     });
 
-    expect(screen.getByText("Web build v3")).toBeTruthy();
+    expect(screen.getByText("Web app, version 3")).toBeTruthy();
   });
 
   it("leaves a file the seller uploaded by hand unlabelled", () => {
