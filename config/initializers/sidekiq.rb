@@ -9,6 +9,34 @@ rescue LoadError
   warn "sidekiq-pro is not installed"
 end
 
+# Partner imports run on their own threads inside the `long` process, so a migration wave cannot
+# hold back the buyer-facing PDF stamping that shares the `long` queue's nodes. Each import holds
+# its thread for hours and moves up to gigabytes, so the thread count also caps the node's load.
+module PartnerImportCapsule
+  QUEUE = "partner_import"
+  CONCURRENCY = 3
+
+  # Every job thread needs a database connection, so the capsule takes only the connections that the
+  # default capsule leaves free, less one spare, as database.yml asks. It never starves the jobs on
+  # `long`, whatever DB_POOL_SIZE is.
+  def self.configure(config, pool_size: ActiveRecord::Base.configurations.configs_for(env_name: Rails.env).filter_map(&:max_connections).min)
+    return unless config.queues.include?("long")
+
+    concurrency = [CONCURRENCY, pool_size.to_i - config.default_capsule.concurrency - 1].min
+    if concurrency < 1
+      # Raising would stop the `long` process and its buyer-facing jobs, so report it instead. App
+      # classes load after this initializer, so the report waits for startup.
+      config.on(:startup) { ErrorNotifier.notify("No free database connections for the #{QUEUE} capsule, so nothing processes #{QUEUE}. Raise DB_POOL_SIZE.") }
+      return
+    end
+
+    config.capsule(QUEUE) do |capsule|
+      capsule.concurrency = concurrency
+      capsule.queues = [QUEUE]
+    end
+  end
+end
+
 Sidekiq.configure_server do |config|
   config.redis = { url: "redis://#{ENV["SIDEKIQ_REDIS_HOST"]}" }
 
@@ -35,6 +63,8 @@ Sidekiq.configure_server do |config|
   config[:labels] << "instance:#{ENV["EC2_INSTANCE_ID"]}" if ENV["EC2_INSTANCE_ID"].present?
 
   SidekiqUniqueJobs::Server.configure(config)
+
+  PartnerImportCapsule.configure(config)
 end
 
 Sidekiq.configure_client do |config|

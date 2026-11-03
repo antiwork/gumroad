@@ -6,13 +6,16 @@
 # the product. A retry skips the products already recorded, so it does not create duplicates.
 class PartnerMigrationImportJob
   include Sidekiq::Job
-  sidekiq_options queue: :long, retry: 5, lock: :until_executed
+  # Runs on its own capsule in the long-running workers (see config/initializers/sidekiq.rb).
+  # unique_across_queues keeps the lock key independent of the queue name, so moving the job to
+  # another queue later does not split its lock.
+  sidekiq_options queue: :partner_import, retry: 5, lock: :until_executed, unique_across_queues: true
 
   AVATAR_DOWNLOAD_DURATION = 1.minute
 
   # Releases the lock that a killed worker left. Only for a stalled import, which has no live worker.
   def self.release_lock(partner_migration_id)
-    SidekiqUniqueJobs::Unlockable.delete!("class" => name, "queue" => get_sidekiq_options["queue"].to_s, "lock" => get_sidekiq_options["lock"].to_s, "args" => [partner_migration_id])
+    SidekiqUniqueJobs::Unlockable.delete!(get_sidekiq_options.transform_keys(&:to_s).merge("class" => name, "queue" => get_sidekiq_options["queue"].to_s, "args" => [partner_migration_id]))
   end
 
   def self.enqueue_releasing_lock(partner_migration_id)
