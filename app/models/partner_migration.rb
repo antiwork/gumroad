@@ -14,6 +14,8 @@ class PartnerMigration < ApplicationRecord
   STALLED_AFTER = PartnerMigration::RemoteFileTransfer::MAX_DOWNLOAD_DURATION * 2
   CONFIRMATION_PREVIEW_SIZE = 5
   MAX_PRODUCTS = 500
+  # A larger catalog comes in parts of up to MAX_PRODUCTS each. The seller confirms all parts at once.
+  MAX_PARTS = 50
   MAX_EXTERNAL_USER_ID_LENGTH = 255
   MAX_NAME_LENGTH = 255
   MAX_FAILURE_REASON_LENGTH = 255
@@ -46,6 +48,7 @@ class PartnerMigration < ApplicationRecord
 
   class ClaimError < StandardError; end
   class CatalogConflict < StandardError; end
+  class PartError < StandardError; end
   class AccountSetupError < StandardError; end
 
   INVALID_LINK_MESSAGE = "This link is invalid or expired."
@@ -67,31 +70,61 @@ class PartnerMigration < ApplicationRecord
   # Only an attempt that started counts: a job can wait in the queue for longer than STALLED_AFTER.
   scope :stalled, -> { where(status: STATUS_CLAIMED, updated_at: ...STALLED_AFTER.ago).where.not(import_started_at: nil) }
 
-  def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil, new_link: false)
+  # Part 1 holds the seller's link, email and profile. The link of part 1 opens the whole catalog.
+  def self.create_for!(oauth_application:, external_user_id:, products:, part: 1, total_parts: nil, email: nil, profile: nil, new_link: false)
     attempts = 0
 
     begin
       attempts += 1
       code = SecureRandom.urlsafe_base64(32)
       oauth_application.with_lock do
-        migration = where(oauth_application:, external_user_id:).order(:id).first
+        # Locked before any later part, in the order that the claim and the result email take them.
+        head = lock.find_by(oauth_application:, external_user_id:, part: 1)
+        raise PartError, "Send part 1 before part #{part}." if part > 1 && head.nil?
+        raise PartError, "total_parts must be at least #{part}." if total_parts && total_parts < part
+
+        siblings = where(oauth_application:, external_user_id:)
+        # A catalog that shrank drops the parts above total_parts, before the seller confirms.
+        obsolete_parts = total_parts ? siblings.where(part: (total_parts + 1)..) : none
+        # Each part imports on its own, so a product in two parts would import twice.
+        other_ids = siblings.where.not(part:).where.not(id: obsolete_parts.select(:id)).pluck(Arel.sql("JSON_EXTRACT(products, '$[*].external_product_id')"))
+        shared_id = other_ids.flat_map { Array(_1.is_a?(String) ? JSON.parse(_1) : _1) }.intersection(products.map { _1["external_product_id"] }).first
+        raise PartError, "external_product_id #{shared_id.inspect} is already in another part." if shared_id
+
+        migration = part == 1 ? head : find_by(oauth_application:, external_user_id:, part:)
+        # The seller confirms every part at once, so after that no part can change its catalog.
+        confirmed = head.present? && !head.pending?
         if migration
           same_catalog = catalog_identity(migration.products) == catalog_identity(products)
-          if !migration.pending? && !same_catalog
+          if confirmed && !same_catalog
             raise CatalogConflict, "This seller already has an export. Keep the same products and file order when refreshing download URLs."
           end
           # After the claim, the account is settled, so a new email or profile no longer applies.
-          seller = migration.pending? ? { email:, profile: } : {}
+          seller = part == 1 && !confirmed ? { email:, profile: } : {}
           # New URLs alone keep the seller's link, so the partner does not have to send it again. Any other
           # change replaces the link, so a page that showed the old catalog or email cannot confirm it.
           # `new_link` lets a partner that lost the response get a link again.
           keep_link = !new_link && same_catalog && seller.all? { |key, value| migration[key] == value }
-          migration.update!(products:, expires_at: EXPIRES_IN.from_now, **seller, **(keep_link ? {} : { code_digest: digest(code) }))
-          migration.retry_failed_products!
-          code = nil if keep_link
+          migration.update!(products:, **seller)
         else
-          migration = create!(oauth_application:, external_user_id:, products:, email:, profile:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now)
+          raise CatalogConflict, "This seller already confirmed the export, so it cannot take another part." if confirmed
+
+          # A later part gets a code that is never sent, because the link of part 1 opens it.
+          own_code = part == 1 ? code : SecureRandom.urlsafe_base64(32)
+          migration = create!(oauth_application:, external_user_id:, part:, products:, **(part == 1 ? { email:, profile: } : {}), code_digest: digest(own_code), expires_at: EXPIRES_IN.from_now)
+          keep_link = false
         end
+        if obsolete_parts.exists?
+          raise CatalogConflict, "This seller already confirmed #{obsolete_parts.maximum(:part)} parts, so total_parts cannot remove any." if confirmed
+
+          obsolete_parts.delete_all
+          keep_link = false
+        end
+        # A new part 1 already has its link. An update would also clear previously_new_record?, which the
+        # response reads.
+        head&.update!(expires_at: EXPIRES_IN.from_now, **(keep_link ? {} : { code_digest: digest(code) }))
+        migration.retry_failed_products!
+        code = nil if keep_link
         [migration, code]
       end
     rescue ActiveRecord::RecordNotUnique
@@ -103,7 +136,7 @@ class PartnerMigration < ApplicationRecord
   def self.find_by_code(code)
     return if code.blank?
 
-    find_by(code_digest: digest(code))
+    find_by(code_digest: digest(code), part: 1)
   end
 
   # Takes the Nano ID only, never the row ID.
@@ -329,6 +362,22 @@ class PartnerMigration < ApplicationRecord
   def pending? = status == STATUS_PENDING
   def expired?(at = Time.current) = expires_at <= at
 
+  def parts = self.class.where(oauth_application_id:, external_user_id:).order(:part)
+
+  def head = part == 1 ? self : self.class.find_by!(oauth_application_id:, external_user_id:, part: 1)
+
+  # The number of products across the parts, without loading their catalogs.
+  def catalog_size = parts.sum("JSON_LENGTH(products)").to_i
+
+  # The status of the whole catalog: claimed until every part finished, then failed if any part failed.
+  def catalog_status
+    statuses = parts.distinct.pluck(:status)
+    return statuses.first if statuses.one?
+    return STATUS_CLAIMED if statuses.intersect?([STATUS_PENDING, STATUS_CLAIMED])
+
+    STATUS_FAILED
+  end
+
   def claimable?
     pending? && !expired? && oauth_application.alive? && oauth_application.is_partner?
   end
@@ -452,11 +501,13 @@ class PartnerMigration < ApplicationRecord
 
         unless status == STATUS_CLAIMED
           link_partner_seller!(claimer)
-          update!(user: claimer, status: STATUS_CLAIMED, claimed_at: Time.current)
+          # The link opens the whole catalog, so the claim takes every part.
+          parts.lock.each { _1.update!(user: claimer, status: STATUS_CLAIMED, claimed_at: Time.current) }
+          reload
         end
         # Queued under the lock: if queueing fails, the claim rolls back, so a claimed import always has
-        # a job. The job locks this row first, so it waits for this transaction to commit.
-        PartnerMigrationImportJob.perform_async(id)
+        # a job. Each job locks its part first, so it waits for this transaction to commit.
+        parts.where(status: STATUS_CLAIMED).pluck(:id).each { PartnerMigrationImportJob.perform_async(_1) }
       end
     end
   end
@@ -472,6 +523,9 @@ class PartnerMigration < ApplicationRecord
       next false unless status == STATUS_FAILED && user&.account_active?
 
       update!(results: results.to_h.reject { |_index, result| result.key?("error") }, status: STATUS_CLAIMED, failure_reason: nil, completed_at: nil, notified_at: nil, notification_failed_email: nil, resumes_count: 0, import_started_at: nil)
+      # The result email reads a rejected address from part 1, so the retry clears it there too.
+      # create_for! has already locked part 1.
+      head.update!(notification_failed_email: nil) if part > 1
       # A nil enqueue means the previous job still holds its lock. Keep the failed state, so the next
       # export tries again.
       raise ActiveRecord::Rollback if PartnerMigrationImportJob.perform_async(id).nil?

@@ -8,7 +8,8 @@ class CreatorMailer < ApplicationMailer
 
   def partner_migration_finished(partner_migration_id, recipient:)
     @migration = PartnerMigration.find(partner_migration_id)
-    @subject = @migration.status == PartnerMigration::STATUS_COMPLETED ? "Your products are ready to review" : "Some products did not import"
+    @failed = @migration.catalog_status == PartnerMigration::STATUS_FAILED
+    @subject = @failed ? "Some products did not import" : "Your products are ready to review"
 
     mail to: recipient, subject: @subject
   end

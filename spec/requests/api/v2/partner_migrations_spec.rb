@@ -129,6 +129,31 @@ describe "Partner API migrations", type: :request do
     expect(response).to have_http_status(:bad_request)
   end
 
+  it "takes a catalog in parts and returns the link of the whole catalog" do
+    post_migration(external_user_id: "ext-1", products:)
+    expect(response.parsed_body).to include("part" => 1)
+
+    post_migration(external_user_id: "ext-1", part: 2, products: [{ external_product_id: "brush-set", name: "Brush Set", price: 500 }])
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body).to include("part" => 2, "status" => "pending")
+    code = Rack::Utils.parse_query(URI(response.parsed_body.fetch("onboarding_url")).query)["migration_code"]
+    expect(PartnerMigration.find_by_code(code)).to have_attributes(part: 1, catalog_size: 2)
+  end
+
+  it "rejects a part that is not valid" do
+    post_migration(external_user_id: "ext-1", part: 2, products:)
+    expect(response.parsed_body["message"]).to eq("Send part 1 before part 2.")
+
+    post_migration(external_user_id: "ext-1", part: PartnerMigration::MAX_PARTS + 1, products:)
+    expect(response.parsed_body["message"]).to start_with("part must be a whole number")
+
+    post_migration(external_user_id: "ext-1", products:)
+    post_migration(external_user_id: "ext-1", part: 2, products:, email: "seller@example.com")
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body["message"]).to eq("Send email and profile with part 1.")
+  end
+
   it "keeps the accepted catalog when a changed export conflicts with it" do
     post_migration(external_user_id: "ext-1", products:)
     migration = PartnerMigration.last

@@ -1,9 +1,11 @@
-<% product_names = migration.products.map { _1["name"] } %>
+<%# Part 1 holds the first products of the catalog, so it is the only part to load. %>
+<% shown_names = migration.products.first(PartnerMigration::CONFIRMATION_PREVIEW_SIZE).map { _1["name"] } %>
+<% hidden_count = migration.catalog_size - shown_names.size %>
 <ul class="m-0 flex list-disc flex-col gap-1 pl-6">
-  <% product_names.first(PartnerMigration::CONFIRMATION_PREVIEW_SIZE).each do |name| %>
+  <% shown_names.each do |name| %>
     <li><%= name %></li>
   <% end %>
-  <% if product_names.size > PartnerMigration::CONFIRMATION_PREVIEW_SIZE %>
-    <li>and <%= product_names.size - PartnerMigration::CONFIRMATION_PREVIEW_SIZE %> more</li>
+  <% if hidden_count.positive? %>
+    <li>and <%= hidden_count %> more</li>
   <% end %>
 </ul>

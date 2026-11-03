@@ -118,10 +118,10 @@ class PartnerMigrationsController < ApplicationController
     # The drafts appear on the products page as they import. After the password setup, the import has
     # often finished, so the notice follows its status.
     def redirect_to_products(migration)
-      count = migration.products.size
+      count = migration.catalog_size
       products = count == 1 ? "product" : "#{count} products"
       app_name = migration.oauth_application.name
-      notice = case migration.status
+      notice = case migration.catalog_status
                when PartnerMigration::STATUS_COMPLETED
                  "Your #{products} from #{app_name} #{count == 1 ? "is" : "are"} here as drafts."
                when PartnerMigration::STATUS_FAILED

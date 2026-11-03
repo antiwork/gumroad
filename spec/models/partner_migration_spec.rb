@@ -409,6 +409,122 @@ describe PartnerMigration do
     end
   end
 
+  describe "parts" do
+    def send_part(part, name, **options)
+      products, = described_class.normalize_products([{ external_product_id: name, name:, price: 500 }])
+      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part:, **options)
+    end
+
+    it "takes a large catalog in parts, under the one link of part 1" do
+      head, first_code = send_part(1, "Texture Pack")
+      second, second_code = send_part(2, "Brush Set")
+
+      expect(second).to have_attributes(part: 2, status: described_class::STATUS_PENDING)
+      expect(second_code).to be_present
+      expect(described_class.find_by_code(first_code)).to be_nil
+      expect(described_class.find_by_code(second_code)).to eq(head)
+      expect(head.catalog_size).to eq(2)
+      expect(head.reload.expires_at).to be_within(1.minute).of(described_class::EXPIRES_IN.from_now)
+    end
+
+    it "rejects a product ID that another part already has" do
+      send_part(1, "Texture Pack")
+
+      expect { send_part(2, "Texture Pack") }.to raise_error(described_class::PartError, 'external_product_id "Texture Pack" is already in another part.')
+      second, = send_part(2, "Brush Set")
+      expect(second.reload.products.first["name"]).to eq("Brush Set")
+    end
+
+    it "locks part 1 before it writes a later part, in the order that the result email takes them" do
+      send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      statements = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*, payload|
+        statements << payload[:sql] if payload[:sql].include?("partner_migrations") && payload[:sql].match?(/FOR UPDATE|\AUPDATE/)
+      end
+
+      products, = described_class.normalize_products([{ external_product_id: "Brush Set", name: "Brush Set", price: 500, files: [{ url: "https://files.example.com/new.zip" }] }])
+      described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 2)
+
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+      expect(statements.first).to include("FOR UPDATE")
+    end
+
+    it "clears a rejected address on part 1 when a later part retries, so the result email can go out" do
+      head, = send_part(1, "Texture Pack")
+      second, = send_part(2, "Brush Set")
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+      head.update!(status: described_class::STATUS_COMPLETED, completed_at: Time.current, notification_failed_email: seller.email)
+      second.update!(status: described_class::STATUS_FAILED, completed_at: Time.current, notification_failed_email: seller.email, results: { "0" => { "error" => "Missing file" } })
+
+      send_part(2, "Brush Set")
+
+      expect(second.reload.status).to eq(described_class::STATUS_CLAIMED)
+      expect(head.reload.notification_failed_email).to be_nil
+    end
+
+    it "drops the parts above total_parts when the catalog shrinks before the confirmation" do
+      head, = send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      products, = described_class.normalize_products([{ external_product_id: "Texture Pack", name: "Texture Pack", price: 500 }, { external_product_id: "Brush Set", name: "Brush Set", price: 500 }])
+
+      _head, code = described_class.create_for!(oauth_application: partner_application, external_user_id: "ext-1", products:, part: 1, total_parts: 1)
+
+      expect(head.parts.pluck(:part)).to eq([1])
+      expect(head.catalog_size).to eq(2)
+      expect(described_class.find_by_code(code)).to eq(head)
+      expect { send_part(1, "Texture Pack", total_parts: 0) }.to raise_error(described_class::PartError)
+    end
+
+    it "does not drop a part after the confirmation" do
+      head, = send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+
+      expect { send_part(1, "Texture Pack", total_parts: 1) }.to raise_error(described_class::CatalogConflict)
+      expect(head.parts.count).to eq(2)
+    end
+
+    it "rejects a later part before part 1" do
+      expect { send_part(2, "Brush Set") }.to raise_error(described_class::PartError, "Send part 1 before part 2.")
+    end
+
+    it "claims every part and queues an import for each" do
+      head, = send_part(1, "Texture Pack")
+      second, = send_part(2, "Brush Set")
+      Sidekiq::Worker.clear_all
+
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+
+      expect([head.reload, second.reload].map { [_1.status, _1.user] }).to eq([[described_class::STATUS_CLAIMED, seller]] * 2)
+      expect(PartnerMigrationImportJob.jobs.map { _1["args"] }).to contain_exactly([head.id], [second.id])
+    end
+
+    it "locks every part after the confirmation, but still lets the partner refresh a part's URLs" do
+      head, = send_part(1, "Texture Pack")
+      send_part(2, "Brush Set")
+      head.reload.claim!(seller, expected_code_digest: head.code_digest)
+
+      expect { send_part(3, "Sculpt Kit") }.to raise_error(described_class::CatalogConflict)
+      expect { send_part(2, "Another product") }.to raise_error(described_class::CatalogConflict)
+      _second, code = send_part(2, "Brush Set")
+      expect(code).to be_nil
+    end
+
+    it "reports the catalog as importing until every part finished, then failed if any part failed" do
+      head, = send_part(1, "Texture Pack")
+      second, = send_part(2, "Brush Set")
+      head.update!(status: described_class::STATUS_COMPLETED)
+      second.update!(status: described_class::STATUS_CLAIMED)
+
+      expect(head.catalog_status).to eq(described_class::STATUS_CLAIMED)
+      second.update!(status: described_class::STATUS_FAILED)
+      expect(head.catalog_status).to eq(described_class::STATUS_FAILED)
+      second.update!(status: described_class::STATUS_COMPLETED)
+      expect(head.catalog_status).to eq(described_class::STATUS_COMPLETED)
+    end
+  end
+
   describe ".create_for!" do
     it "stores only a digest of the code" do
       migration, code = create_migration
