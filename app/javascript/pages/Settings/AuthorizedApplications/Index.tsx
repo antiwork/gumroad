@@ -65,7 +65,8 @@ const SCOPE_DESCRIPTIONS: Record<Scope, string> = {
   mobile_api: "Mobile API",
   helper_api: "Helper API",
   creator_api: "Creator API",
-  partner_api: "Partner API",
+  partner_api:
+    "Link your Gumroad account to your account on this application. It can then list your published products and send you products to import, which you confirm first.",
 };
 
 type Props = {

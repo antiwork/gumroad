@@ -213,6 +213,7 @@ Rails.application.routes.draw do
       get "/partner/creators/top", to: "partner/creators#top"
       get "/partner/categories", to: "partner/categories#index"
       post "/partner/migrations", to: "partner/migrations#create"
+      post "/partner/sellers", to: "partner/sellers#create"
       get "/partner/migrations/:id", to: "partner/migrations#show"
     end
   end
