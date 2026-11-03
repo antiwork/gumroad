@@ -2971,6 +2971,94 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
       end
+
+      it "collects the state Stripe asks for, sends it to Stripe, and keeps it after a reload" do
+        state_request = create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Individual::Address::STATE)
+
+        visit settings_payments_path
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        fill_in("Address", with: "address_full_match")
+        fill_in("City", with: "Bandung")
+        fill_in("State / region", with: "Jawa Barat")
+        fill_in("Phone number", with: "98761234")
+        fill_in("Postal code", with: "40111")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "barnabas ngagy")
+        fill_in("Bank code", with: "000")
+        fill_in("Account #", with: "000123456789")
+        fill_in("Confirm account #", with: "000123456789")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        expect(@user.alive_user_compliance_info.state).to eq("Jawa Barat")
+        expect(state_request.reload).to be_provided
+        expect(Stripe::Account).to have_received(:create)
+          .with(hash_including(individual: hash_including(address: hash_including(state: "Jawa Barat", country: "ID"))), anything)
+
+        visit settings_payments_path
+
+        expect(page).to have_field("State / region", with: "Jawa Barat")
+      end
+
+      it "collects the business and representative states Stripe asks an Indonesian company for" do
+        create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::LegalEntity::Address::STATE)
+        create(:user_compliance_info_request, user: @user, field_needed: UserComplianceInfoFields::Individual::Address::STATE)
+
+        visit settings_payments_path
+
+        choose "Business"
+
+        fill_in("Legal business name", with: "PT Example")
+        select("LLC", from: "Type")
+        find_field("Address", match: :first).set("address_full_match")
+        find_field("City", match: :first).set("Bandung")
+        find('input[id$="business-state"]').set("Jawa Barat")
+        find_field("Postal code", match: :first).set("40111")
+        fill_in("Business phone number", with: "98761234")
+        fill_in("Company tax ID", with: "000000000")
+
+        fill_in("First name", with: "barnabas")
+        fill_in("Last name", with: "barnabastein")
+        all('input[id$="creator-street-address"]').last.set("address_full_match")
+        all('input[id$="creator-city"]').last.set("Surabaya")
+        find('input[id$="creator-state"]').set("Jawa Timur")
+        all('input[id$="creator-zip-code"]').last.set("60111")
+        fill_in("Phone number", with: "98761234")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "PT Example")
+        fill_in("Bank code", with: "000")
+        fill_in("Account #", with: "000123456789")
+        fill_in("Confirm account #", with: "000123456789")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.is_business).to be true
+        expect(compliance_info.business_state).to eq("Jawa Barat")
+        expect(compliance_info.state).to eq("Jawa Timur")
+        expect(@user.user_compliance_info_requests.requested.count).to eq(0)
+        expect(Stripe::Account).to have_received(:create)
+          .with(hash_including(company: hash_including(address: hash_including(state: "Jawa Barat", country: "ID"))), anything)
+        expect(Stripe::Account).to have_received(:create_person)
+          .with(anything, hash_including(address: hash_including(state: "Jawa Timur"), relationship: hash_including(representative: true)))
+
+        visit settings_payments_path
+
+        expect(find('input[id$="business-state"]').value).to eq("Jawa Barat")
+        expect(find('input[id$="creator-state"]').value).to eq("Jawa Timur")
+      end
     end
 
     describe "CR creator" do

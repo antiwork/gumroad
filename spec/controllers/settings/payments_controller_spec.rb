@@ -3725,5 +3725,102 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(flash[:alert]).to include("Stripe has paused payouts")
       end
     end
+
+    context "when the only open requirement is a future one Stripe's hosted link does not collect" do
+      let!(:stripe_connect_account_id) { create(:merchant_account, user:).charge_processor_merchant_id }
+      let(:future_currently_due) { ["individual.address.state"] }
+      let(:stripe_account) do
+        {
+          "object" => "account",
+          "id" => stripe_connect_account_id,
+          "type" => "custom",
+          "country" => "ID",
+          "business_type" => "individual",
+          "charges_enabled" => true,
+          "payouts_enabled" => true,
+          "requirements" => {
+            "current_deadline" => nil,
+            "currently_due" => [],
+            "eventually_due" => [],
+            "past_due" => [],
+            "pending_verification" => [],
+            "errors" => [],
+            "disabled_reason" => nil,
+          },
+          "future_requirements" => {
+            "current_deadline" => 20.days.from_now.to_i,
+            "currently_due" => future_currently_due,
+            "eventually_due" => future_currently_due,
+            "past_due" => [],
+            "pending_verification" => [],
+            "errors" => [],
+          },
+        }
+      end
+
+      def account_updated_event(id)
+        { "id" => id, "type" => "account.updated", "account" => stripe_connect_account_id, "data" => { "object" => stripe_account } }
+      end
+
+      before do
+        allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id) { Stripe::Account.construct_from(stripe_account) }
+      end
+
+      it "keeps an Indonesian seller's state request open and does not say 'all set'" do
+        state_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::Address::STATE)
+
+        get :verify_stripe_remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(state_request.reload.state).to eq("requested")
+        expect(flash[:notice]).to be_nil
+      end
+
+      context "for a business whose company address state is due" do
+        let(:future_currently_due) { ["company.address.state"] }
+
+        it "keeps the business state request open" do
+          state_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::LegalEntity::Address::STATE)
+
+          get :verify_stripe_remediation
+
+          expect(state_request.reload.state).to eq("requested")
+        end
+      end
+
+      it "does not let the next account.updated webhook reopen the request and email the seller again" do
+        expect do
+          StripeMerchantAccountManager.handle_stripe_event(account_updated_event("evt_state_requested"))
+        end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed).with(user.id, [UserComplianceInfoFields::Individual::Address::STATE])
+        state_request = user.user_compliance_info_requests.requested.sole
+
+        get :verify_stripe_remediation
+
+        expect do
+          StripeMerchantAccountManager.handle_stripe_event(account_updated_event("evt_state_still_requested"))
+        end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+        expect(user.user_compliance_info_requests.requested.sole).to eq(state_request)
+      end
+
+      it "still closes the request and says 'all set' once Stripe has nothing currently due" do
+        stripe_account["future_requirements"].merge!("currently_due" => [], "eventually_due" => [])
+        state_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::Address::STATE)
+
+        get :verify_stripe_remediation
+
+        expect(state_request.reload).to be_provided
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+      end
+
+      it "still closes the request when the future requirement is only eventually due" do
+        stripe_account["future_requirements"]["currently_due"] = []
+        state_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::Address::STATE)
+
+        get :verify_stripe_remediation
+
+        expect(state_request.reload).to be_provided
+        expect(flash[:notice]).to be_nil
+      end
+    end
   end
 end

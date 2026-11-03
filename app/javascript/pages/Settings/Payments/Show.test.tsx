@@ -62,6 +62,8 @@ const user = (overrides: Partial<User> = {}): User => ({
   individual_tax_id_is_last_four: false,
   has_outstanding_full_ssn_requirement: false,
   has_outstanding_nationality_requirement: false,
+  has_outstanding_state_requirement: false,
+  has_outstanding_business_state_requirement: false,
   business_tax_id_entered: false,
   business_tax_id_last_four: null,
   requires_credit_card: false,
@@ -439,6 +441,31 @@ describe("stale payout threshold below the platform minimum", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     expect(mocks.put).not.toHaveBeenCalled();
+  });
+});
+
+describe("state Stripe asks for outside the listed countries", () => {
+  it("saves the state an Indonesian seller types", () => {
+    renderPage(
+      { country_code: "ID", payout_currency: "idr", has_outstanding_state_requirement: true },
+      {
+        country: "ID",
+        state: null,
+        street_address: "Jl. Asia Afrika No. 8",
+        city: "Bandung",
+        zip_code: "40111",
+        phone: "+6281234567890",
+      },
+    );
+
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "Jawa Barat" } });
+    save();
+
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    expect(mocks.put.mock.lastCall).toMatchObject([
+      "/settings_payments",
+      { user: { country: "ID", state: "Jawa Barat" } },
+    ]);
   });
 });
 

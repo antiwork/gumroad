@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
@@ -30,6 +30,8 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   individual_tax_id_is_last_four: false,
   has_outstanding_full_ssn_requirement: false,
   has_outstanding_nationality_requirement: false,
+  has_outstanding_state_requirement: false,
+  has_outstanding_business_state_requirement: false,
   business_tax_id_entered: false,
   business_tax_id_last_four: null,
   requires_credit_card: false,
@@ -564,6 +566,59 @@ describe("AccountDetailsSection nationality field", () => {
     renderSection(makeUser({ country_code: "GR", has_outstanding_nationality_requirement: false }));
 
     expect(screen.queryByText(/Nationals of Cuba/u)).toBeNull();
+  });
+});
+
+describe("AccountDetailsSection state outside the listed countries", () => {
+  const indonesianSeller = { country: "ID", state: null, city: "Bandung", zip_code: "40111" };
+
+  it("collects the state Stripe asks an Indonesian individual for", () => {
+    const updateComplianceInfo = vi.fn();
+    renderSection(makeUser({ country_code: "ID", has_outstanding_state_requirement: true }), indonesianSeller, {
+      updateComplianceInfo,
+    });
+
+    const input = screen.getByLabelText<HTMLInputElement>("State / region");
+    expect(input.tagName).toBe("INPUT");
+    expect(input.disabled).toBe(false);
+    fireEvent.change(input, { target: { value: "Jawa Barat" } });
+    expect(updateComplianceInfo).toHaveBeenCalledWith({ state: "Jawa Barat" });
+  });
+
+  it("collects the business state Stripe asks an Indonesian business for, without a second field for the representative", () => {
+    const updateComplianceInfo = vi.fn();
+    renderSection(
+      makeUser({ country_code: "ID", has_outstanding_business_state_requirement: true }),
+      {
+        ...indonesianSeller,
+        is_business: true,
+        business_country: "ID",
+        business_city: "Bandung",
+      },
+      { updateComplianceInfo },
+    );
+
+    fireEvent.change(screen.getByLabelText("State / region"), { target: { value: "Jawa Barat" } });
+    expect(updateComplianceInfo).toHaveBeenCalledWith({ business_state: "Jawa Barat" });
+  });
+
+  it("keeps showing a saved state once the request is closed, so the seller can still correct it", () => {
+    renderSection(makeUser({ country_code: "ID" }), { ...indonesianSeller, state: "Jawa Barat" });
+
+    expect(screen.getByLabelText<HTMLInputElement>("State / region").value).toBe("Jawa Barat");
+  });
+
+  it("adds no state field when Stripe is not asking and none is saved", () => {
+    renderSection(makeUser({ country_code: "ID" }), indonesianSeller);
+
+    expect(screen.queryByLabelText("State / region")).toBeNull();
+  });
+
+  it("keeps the listed countries on their own state select, even with a requirement open", () => {
+    renderSection(makeUser({ has_outstanding_state_requirement: true }));
+
+    expect(screen.getByLabelText<HTMLSelectElement>("State").tagName).toBe("SELECT");
+    expect(screen.queryByLabelText("State / region")).toBeNull();
   });
 });
 

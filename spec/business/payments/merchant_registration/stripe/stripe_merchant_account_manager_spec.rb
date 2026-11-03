@@ -12862,6 +12862,44 @@ describe StripeMerchantAccountManager, :vcr do
             expect(user_compliance_info_request.due_at).to eq(Time.zone.at(1712086847))
             expect(user_compliance_info_request.stripe_event_id).to eq("stripe-event-id")
           end
+
+          context "when Stripe asks an Indonesian individual for the address state" do
+            before do
+              stripe_event["data"]["object"]["country"] = "ID"
+              stripe_event["data"]["object"]["future_requirements"]["currently_due"] = ["individual.address.state"]
+              stripe_event["data"]["object"]["future_requirements"]["eventually_due"] = ["individual.address.state"]
+            end
+
+            it "opens the state request the payments form answers, and keeps it open on the next event without emailing again" do
+              expect do
+                described_class.handle_stripe_event(stripe_event)
+              end.to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed).with(user.id, [UserComplianceInfoFields::Individual::Address::STATE])
+              state_request = user.user_compliance_info_requests.requested.sole
+              expect(state_request.field_needed).to eq(UserComplianceInfoFields::Individual::Address::STATE)
+
+              expect do
+                described_class.handle_stripe_event(stripe_event.merge("id" => "stripe-event-id-2"))
+              end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+              expect(user.user_compliance_info_requests.requested.sole).to eq(state_request)
+            end
+          end
+
+          context "when Stripe asks an Indonesian company for its own and its representative's address state" do
+            before do
+              stripe_event["data"]["object"].merge!("country" => "ID", "business_type" => "company")
+              stripe_event["data"]["object"]["future_requirements"].merge!("currently_due" => ["company.address.state", "person_IRWHQ2ZRlwIh1j.address.state"])
+              allow(Stripe::Account).to receive(:list_persons).and_return([{ "id" => "person_IRWHQ2ZRlwIh1j", "object" => "person" }])
+            end
+
+            it "opens the business and representative state requests the payments form answers" do
+              described_class.handle_stripe_event(stripe_event)
+
+              expect(user.user_compliance_info_requests.requested.pluck(:field_needed)).to contain_exactly(
+                UserComplianceInfoFields::LegalEntity::Address::STATE,
+                UserComplianceInfoFields::Individual::Address::STATE
+              )
+            end
+          end
         end
 
         describe "alternative fields due" do

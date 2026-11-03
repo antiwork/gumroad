@@ -279,6 +279,27 @@ const AccountDetailsSection = ({
     );
   };
 
+  const renderStateInput = (
+    value: string | null,
+    onChange: (value: string) => void,
+    fieldName: FormFieldName,
+    idSuffix: string,
+  ): React.ReactNode => (
+    <Fieldset state={errorFieldNames.has(fieldName) ? "danger" : undefined}>
+      <FieldsetTitle>
+        <Label htmlFor={`${uid}-${idSuffix}`}>State / region</Label>
+      </FieldsetTitle>
+      <Input
+        id={`${uid}-${idSuffix}`}
+        type="text"
+        value={value || ""}
+        disabled={isFormDisabled}
+        aria-invalid={errorFieldNames.has(fieldName)}
+        onChange={(evt) => onChange(evt.target.value)}
+      />
+    </Fieldset>
+  );
+
   const getMaskedValue = (placeholder: string, lastFour: string | null, showLastFour: boolean): string => {
     const fullyMasked = placeholder.replace(/[a-zA-Z0-9]/gu, "\u2022");
     if (!showLastFour || !lastFour) return fullyMasked;
@@ -306,6 +327,10 @@ const AccountDetailsSection = ({
     : "";
   const businessStateConfig = getBusinessStateConfig();
   const individualStateConfig = getIndividualStateConfig();
+  const showBusinessStateInput =
+    !businessStateConfig && (user.has_outstanding_business_state_requirement || Boolean(complianceInfo.business_state));
+  const showIndividualStateInput =
+    !individualStateConfig && (user.has_outstanding_state_requirement || Boolean(complianceInfo.state));
   const businessTaxIdConfig = getBusinessTaxIdConfig();
   const individualTaxIdConfig = getIndividualTaxIdConfig(complianceInfo, user);
 
@@ -664,7 +689,14 @@ const AccountDetailsSection = ({
                   (value) => updateComplianceInfo({ business_state: value }),
                   "business_state",
                 )
-              : null}
+              : showBusinessStateInput
+                ? renderStateInput(
+                    complianceInfo.business_state,
+                    (value) => updateComplianceInfo({ business_state: value }),
+                    "business_state",
+                    "business-state",
+                  )
+                : null}
             {countryRequiresPostalCode(complianceInfo.business_country) ? (
               <Fieldset state={errorFieldNames.has("business_zip_code") ? "danger" : undefined}>
                 <FieldsetTitle>
@@ -1105,7 +1137,14 @@ const AccountDetailsSection = ({
                 (value) => updateComplianceInfo({ state: value }),
                 "state",
               )
-            : null}
+            : showIndividualStateInput
+              ? renderStateInput(
+                  complianceInfo.state,
+                  (value) => updateComplianceInfo({ state: value }),
+                  "state",
+                  "creator-state",
+                )
+              : null}
           {countryRequiresPostalCode(complianceInfo.country) ? (
             <Fieldset state={errorFieldNames.has("zip_code") ? "danger" : undefined}>
               <FieldsetTitle>

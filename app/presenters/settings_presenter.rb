@@ -19,7 +19,12 @@ class SettingsPresenter
     advanced
   ).freeze
 
-  private_constant :ALL_PAGES
+  BUSINESS_STATE_FIELDS = [
+    UserComplianceInfoFields::LegalEntity::Address::STATE,
+    UserComplianceInfoFields::Business::Address::STATE,
+  ].freeze
+
+  private_constant :ALL_PAGES, :BUSINESS_STATE_FIELDS
 
   def initialize(pundit_user:)
     @pundit_user = pundit_user
@@ -650,6 +655,8 @@ class SettingsPresenter
         individual_tax_id_is_last_four: tax_id_is_last_four_only?(user_compliance_info.individual_tax_id),
         has_outstanding_full_ssn_requirement: outstanding_full_ssn_requirement,
         has_outstanding_nationality_requirement: has_outstanding_nationality_requirement?,
+        has_outstanding_state_requirement: has_outstanding_state_requirement?(UserComplianceInfoFields::Individual::Address::STATE),
+        has_outstanding_business_state_requirement: has_outstanding_state_requirement?(BUSINESS_STATE_FIELDS),
         business_tax_id_entered: user_compliance_info.business_tax_id.present?,
         business_tax_id_last_four: tax_id_last_four(user_compliance_info.business_tax_id),
         requires_credit_card: seller.requires_credit_card?,
@@ -688,6 +695,10 @@ class SettingsPresenter
             .requested
             .where(field_needed: UserComplianceInfoFields::Individual::NATIONALITY_FIELDS)
             .exists?
+    end
+
+    def has_outstanding_state_requirement?(field_needed)
+      seller.user_compliance_info_requests.requested.where(field_needed:).exists?
     end
 
     # Stripe can require a full 9-digit SSN (individual.id_number) after onboarding, but sellers
