@@ -9,6 +9,7 @@ class PartnerMigration < ApplicationRecord
   MAX_PRODUCTS = 500
   MAX_EXTERNAL_USER_ID_LENGTH = 255
   MAX_NAME_LENGTH = 255
+  MAX_FAILURE_REASON_LENGTH = 255
   MAX_FILES_PER_PRODUCT = 50
   # The product editor's limit (TagSelector).
   MAX_TAGS_PER_PRODUCT = 10
@@ -25,6 +26,8 @@ class PartnerMigration < ApplicationRecord
   STATUSES = [STATUS_PENDING, STATUS_CLAIMED, STATUS_COMPLETED, STATUS_FAILED].freeze
 
   class CatalogConflict < StandardError; end
+
+  INACTIVE_ACCOUNT_MESSAGE = "This account cannot import products."
 
   belongs_to :oauth_application
   belongs_to :user, optional: true
