@@ -93,6 +93,28 @@ describe SweepClosedSellerConnectAccountsJob do
       expect(message).to include("successful or in-progress purchase")
     end
 
+    it "skips a committed balance transaction not yet applied to a balance" do
+      BalanceTransaction.new.tap { |bt| bt.user = seller; bt.merchant_account = merchant_account }
+                        .save!(validate: false)
+
+      run
+
+      expect(StripeMerchantAccountManager).not_to have_received(:delete_account)
+      expect(message).to include("uncommitted balance transaction")
+    end
+
+    it "skips a seller reopened while the Stripe reads ran" do
+      allow(Stripe::Balance).to receive(:retrieve) do
+        User.where(id: seller.id).update_all(deleted_at: nil)
+        zero_balance
+      end
+
+      run
+
+      expect(StripeMerchantAccountManager).not_to have_received(:delete_account)
+      expect(message).to include("no longer a live candidate")
+    end
+
     it "skips a seller with a payment being processed" do
       create(:payment, user: seller, state: Payment::PROCESSING)
 

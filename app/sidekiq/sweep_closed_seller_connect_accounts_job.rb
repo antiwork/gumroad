@@ -12,8 +12,9 @@ class SweepClosedSellerConnectAccountsJob
   sidekiq_options retry: 2, queue: :low, lock: :until_executed
   recurring_lock_ttl max_attempt: 30.minutes
 
-  # Stripe reads per run. Skipped accounts stay candidates, so a cursor walks the population.
-  MAX_CANDIDATES_PER_RUN = 100
+  # Accounts per run, at up to 3 Stripe reads each (account, balance, and the retrieve inside
+  # charge_processor_delete!). Skipped accounts stay candidates, so a cursor walks the population.
+  MAX_ACCOUNTS_PER_RUN = 30
   MAX_REPORTED = 25
   FEATURE_FLAG = :delete_closed_seller_connect_accounts
 
@@ -24,8 +25,8 @@ class SweepClosedSellerConnectAccountsJob
       save_cursor(0)
       candidates = candidate_accounts(0)
     end
-    truncated = candidates.size > MAX_CANDIDATES_PER_RUN
-    candidates = candidates.first(MAX_CANDIDATES_PER_RUN)
+    truncated = candidates.size > MAX_ACCOUNTS_PER_RUN
+    candidates = candidates.first(MAX_ACCOUNTS_PER_RUN)
     save_cursor(candidates.last.id) if candidates.any?
 
     live = Feature.active?(FEATURE_FLAG)
@@ -40,16 +41,19 @@ class SweepClosedSellerConnectAccountsJob
 
   private
     def candidate_accounts(after_id)
+      candidate_accounts_scope.where("merchant_accounts.id > ?", after_id)
+                              .order(id: :asc)
+                              .limit(MAX_ACCOUNTS_PER_RUN + 1)
+                              .to_a
+    end
+
+    def candidate_accounts_scope
       MerchantAccount.stripe
                      .where(user_id: User.deleted.select(:id))
                      .where.not(charge_processor_merchant_id: nil)
                      .where(charge_processor_deleted_at: nil)
                      .where.not(id: MerchantAccount.stripe_connect.select(:id))
                      .not_retired_by_adoption
-                     .where("merchant_accounts.id > ?", after_id)
-                     .order(id: :asc)
-                     .limit(MAX_CANDIDATES_PER_RUN + 1)
-                     .to_a
     end
 
     def evaluate(merchant_account, live:)
@@ -64,7 +68,7 @@ class SweepClosedSellerConnectAccountsJob
       return skipped(merchant_account, "non-zero Stripe balance") unless amounts.all?(&:zero?)
 
       # Re-check after the Stripe reads: a payout or sale may have started while they ran.
-      reason = local_blocker(merchant_account)
+      reason = final_blocker(merchant_account)
       return skipped(merchant_account, reason) if reason
 
       return { outcome: :eligible, merchant_account: } unless live
@@ -86,13 +90,25 @@ class SweepClosedSellerConnectAccountsJob
       skipped(merchant_account, "#{e.class}: #{e.message}")
     end
 
+    # Reads from the primary and reloads, so a replica or a cached association cannot hide a change.
+    def final_blocker(merchant_account)
+      ApplicationRecord.connected_to(role: :writing) do
+        fresh = MerchantAccount.find_by(id: merchant_account.id)
+        return "account no longer exists" unless fresh
+        return "account is no longer a live candidate" unless candidate_accounts_scope.exists?(id: fresh.id)
+
+        local_blocker(fresh) || (fresh.unsettled_payout_obligations? ? "seller has unsettled payout obligations" : nil)
+      end
+    end
+
     # Local facts, none of which Stripe can answer.
     def local_blocker(merchant_account)
-      user = merchant_account.user
+      user = User.find(merchant_account.user_id)
       return "seller is not closed" unless user.deleted?
       return "seller has a successful or in-progress purchase" if Purchase.where(seller_id: user.id, purchase_state: Purchase::ALL_SUCCESS_STATES + ["in_progress"]).exists?
       return "seller has a payment being created or processed" if user.payments.where(state: [Payment::CREATING, Payment::PROCESSING]).exists?
       return "seller has an unsettled balance on this account" if merchant_account.balances.where(state: %w[unpaid processing]).exists?
+      return "seller has an uncommitted balance transaction" if merchant_account.balance_transactions.where(balance_id: nil).exists?
       nil
     end
 
