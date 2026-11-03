@@ -123,10 +123,11 @@ var reasonPhrases = map[int]string{
 
 // RenderException is ShowExceptions handing status to ActionDispatch::PublicExceptions:
 // JSON or XML for those formats, else public/<status>.html, else an empty page. The
-// exception also skips ActionDispatch::Cookies' write, so no cookie goes out.
+// exception also skips ActionDispatch::Cookies' write, so no cookie goes out, and drops the
+// controller's headers, debug_headers' X-Revision and X-GR among them.
 func RenderException(w http.ResponseWriter, req *Request, status int) {
 	h := w.Header()
-	for _, name := range []string{"Cache-Control", "ETag", "Vary", "Set-Cookie", "Location", "Content-Disposition", "Content-Transfer-Encoding"} {
+	for _, name := range []string{"Cache-Control", "ETag", "Vary", "Set-Cookie", "Location", "Content-Disposition", "Content-Transfer-Encoding", "X-Revision", "X-GR"} {
 		h.Del(name)
 	}
 	reason := reasonPhrases[status]

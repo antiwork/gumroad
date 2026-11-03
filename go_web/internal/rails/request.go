@@ -65,7 +65,11 @@ type Request struct {
 	Now        time.Time
 	// RawPost is request.raw_post: the body after Rack::UTF8Sanitizer rewrote it.
 	RawPost []byte
-	cors    http.Header
+	// BodyParams is request.request_parameters, before query and path params merge over it.
+	BodyParams *Hash
+	// ContentMimeType is content_mime_type's symbol, "" when absent or unregistered.
+	ContentMimeType string
+	cors            http.Header
 }
 
 // Parse runs the sanitizer and ActionDispatch's parsing. pathParams are
@@ -109,6 +113,9 @@ func (s *Stack) Parse(r *http.Request, pathParams [][2]string, now time.Time) (*
 	if err != nil {
 		return nil, err
 	}
+	// bodyParams has already rejected an invalid type.
+	req.BodyParams = bodyHash
+	req.ContentMimeType, _ = contentMimeType(contentType, hasContentType)
 	pairs, err := queryPairs(sanitizeURIEncoded(rawQuery))
 	if err != nil {
 		return nil, err

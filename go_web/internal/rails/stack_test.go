@@ -55,6 +55,25 @@ func TestParseLetsQueryBeatBodyAndPathBeatBoth(t *testing.T) {
 	}
 }
 
+// request_parameters keeps the body's own values, which ParamsWrapper copies.
+func TestParseKeepsTheBodyParamsAndContentMimeType(t *testing.T) {
+	s := testStack(t, nil, "")
+	req, err := s.Parse(post("/x?a=query", "application/json; charset=utf-8", `{"a":"body","\u0061ction":"x"}`),
+		[][2]string{{"action", "create"}}, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rubyInspect(req.BodyParams); got != `{"a" => "body", "action" => "x"}` {
+		t.Errorf("body params = %s", got)
+	}
+	if req.Param("a") != "query" || req.Param("action") != "create" || req.ContentMimeType != "json" {
+		t.Errorf("params = %s, content mime type %q", rubyInspect(req.Params), req.ContentMimeType)
+	}
+	if form, err := s.Parse(post("/x", "application/x-www-form-urlencoded", "a=1"), nil, testNow); err != nil || form.ContentMimeType != "url_encoded_form" {
+		t.Errorf("form: %v %v", form, err)
+	}
+}
+
 func TestParseFailsWhereRailsDoes(t *testing.T) {
 	s := testStack(t, nil, "")
 	deep := strings.Repeat("[a]", 32)

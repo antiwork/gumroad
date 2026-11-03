@@ -15,19 +15,23 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/beacons"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/geoip"
+	"github.com/antiwork/gumroad/go_web/internal/licenses"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/robots"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/web"
+	"github.com/antiwork/gumroad/go_web/internal/webhooks"
 )
 
 // routeGroups are the GO_WEB_ROUTE_GROUPS names. A group stays off until its fleet has the
 // config it needs, so merging a new group can't crash-loop a running fleet; an enabled group
 // with missing config fails startup instead.
 var routeGroups = map[string]func(*web.App, *dependencies) error{
-	"robots":  registerRobots,
-	"beacons": registerBeacons,
+	"robots":   registerRobots,
+	"beacons":  registerBeacons,
+	"licenses": registerLicenses,
+	"webhooks": registerWebhooks,
 }
 
 const (
@@ -100,6 +104,42 @@ func registerBeacons(app *web.App, d *dependencies) error {
 		MobileToken:      getenv("MOBILE_TOKEN"),
 		CustomDomain:     getenv("CUSTOM_DOMAIN"),
 		BranchDeployment: getenv("BRANCH_DEPLOYMENT") != "",
+	})
+}
+
+func registerLicenses(app *web.App, d *dependencies) error {
+	jobs, err := d.sidekiqRedis()
+	if err != nil {
+		return err
+	}
+	conn, err := d.database()
+	if err != nil {
+		return err
+	}
+	ids, err := d.obfuscatedIDs()
+	if err != nil {
+		return err
+	}
+	licenses.Register(app, licenses.Deps{Env: d.env, Stack: d.stack, DB: conn, Redis: d.redis, SidekiqRedis: jobs, IDs: ids})
+	return nil
+}
+
+// registerWebhooks turns each route on only when its secret is set, so the group can be enabled
+// before every provider's secret is in Vault.
+func registerWebhooks(app *web.App, d *dependencies) error {
+	jobs, err := d.sidekiqRedis()
+	if err != nil {
+		return err
+	}
+	return webhooks.Register(app, webhooks.Deps{
+		Env:                         d.env,
+		Stack:                       d.stack,
+		Redis:                       d.redis,
+		Sidekiq:                     &sidekiq.Client{Redis: jobs},
+		StripeEndpointSecret:        getenv("STRIPE__ENDPOINT_SECRET"),
+		StripeConnectEndpointSecret: getenv("STRIPE_CONNECT__ENDPOINT_SECRET"),
+		SendgridPublicKeys:          webhooks.SendgridPublicKeys(getenv),
+		Logger:                      d.logger,
 	})
 }
 
