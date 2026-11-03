@@ -24,7 +24,7 @@ describe SweepClosedSellerConnectAccountsJob do
     create(:merchant_account, user:, charge_processor_merchant_id: "acct_sweep_#{SecureRandom.hex(6)}")
   end
 
-  def stripe_url(path) = "#{Stripe.api_base}/v1/#{path}"
+  def stripe_endpoint(path) = "#{Stripe.api_base}/v1/#{path}"
 
   def stripe_response(body, status: 200) = { status:, body: body.to_json, headers: { "Content-Type" => "application/json" } }
 
@@ -33,21 +33,21 @@ describe SweepClosedSellerConnectAccountsJob do
   end
 
   def stub_stripe_account(id, type: "custom")
-    stub_request(:get, stripe_url("accounts/#{id}")).to_return(stripe_response({ id:, object: "account", type: }))
+    stub_request(:get, stripe_endpoint("accounts/#{id}")).to_return(stripe_response({ id:, object: "account", type: }))
   end
 
   def stub_stripe_balance(id, body = zero_balance, &during)
-    stub_request(:get, stripe_url("balance")).with(headers: { "Stripe-Account" => id }).to_return do
+    stub_request(:get, stripe_endpoint("balance")).with(headers: { "Stripe-Account" => id }).to_return do
       during&.call
       stripe_response({ object: "balance" }.merge(body))
     end
   end
 
   def stub_stripe_delete(id, deleted: true)
-    stub_request(:delete, stripe_url("accounts/#{id}")).to_return(stripe_response({ id:, object: "account", deleted: }))
+    stub_request(:delete, stripe_endpoint("accounts/#{id}")).to_return(stripe_response({ id:, object: "account", deleted: }))
   end
 
-  def stripe_delete_request(id = stripe_id) = a_request(:delete, stripe_url("accounts/#{id}"))
+  def stripe_delete_request(id = stripe_id) = a_request(:delete, stripe_endpoint("accounts/#{id}"))
 
   context "with the flag off" do
     it "reports an eligible account and deletes nothing" do
@@ -59,7 +59,7 @@ describe SweepClosedSellerConnectAccountsJob do
     end
 
     it "reports an account Stripe no longer has without writing to it" do
-      stub_request(:get, stripe_url("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
+      stub_request(:get, stripe_endpoint("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
 
       expect { run }.not_to change { merchant_account.reload.attributes }
       expect(message).to include("Eligible for deletion (flag off, nothing deleted): 1", "#{stripe_id} - already gone at Stripe")
@@ -83,12 +83,12 @@ describe SweepClosedSellerConnectAccountsJob do
       run
       run
 
-      expect(a_request(:get, stripe_url("accounts/#{stripe_id}"))).to have_been_made.once
+      expect(a_request(:get, stripe_endpoint("accounts/#{stripe_id}"))).to have_been_made.once
       expect(stripe_delete_request).to have_been_made.once
     end
 
     it "finishes the local record when the account lookup says Stripe no longer has it" do
-      stub_request(:get, stripe_url("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
+      stub_request(:get, stripe_endpoint("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
 
       run
 
@@ -104,9 +104,9 @@ describe SweepClosedSellerConnectAccountsJob do
       it "skips and reports #{name} instead of treating the account as gone" do
         error = stripe_error(status: 404, code: "resource_missing", message: "No such resource")
         if boundary == :balance
-          stub_request(:get, stripe_url("balance")).to_return(error)
+          stub_request(:get, stripe_endpoint("balance")).to_return(error)
         else
-          stub_request(:delete, stripe_url("accounts/#{stripe_id}")).to_return(error)
+          stub_request(:delete, stripe_endpoint("accounts/#{stripe_id}")).to_return(error)
         end
 
         run
@@ -121,7 +121,7 @@ describe SweepClosedSellerConnectAccountsJob do
       "a refused lookup that may mean the account does not exist" => { status: 403, type: "invalid_request_error", message: "The provided key does not have access to account 'acct_x' (or that account does not exist)" },
     }.each do |name, error|
       it "skips and reports #{name}" do
-        stub_request(:get, stripe_url("accounts/#{stripe_id}")).to_return(stripe_error(**error))
+        stub_request(:get, stripe_endpoint("accounts/#{stripe_id}")).to_return(stripe_error(**error))
 
         run
 
@@ -215,7 +215,7 @@ describe SweepClosedSellerConnectAccountsJob do
     end
 
     it "skips and reports an uncertain Stripe read" do
-      stub_request(:get, stripe_url("balance")).to_timeout
+      stub_request(:get, stripe_endpoint("balance")).to_timeout
 
       run
 
@@ -252,7 +252,7 @@ describe SweepClosedSellerConnectAccountsJob do
       end
 
       run
-      stub_request(:get, stripe_url("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
+      stub_request(:get, stripe_endpoint("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
       run
 
       expect(stripe_delete_request).to have_been_made.once
@@ -265,7 +265,7 @@ describe SweepClosedSellerConnectAccountsJob do
       stub_stripe_account(later.charge_processor_merchant_id)
       stub_stripe_balance(later.charge_processor_merchant_id)
       stub_stripe_delete(later.charge_processor_merchant_id)
-      stub_request(:get, stripe_url("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
+      stub_request(:get, stripe_endpoint("accounts/#{stripe_id}")).to_return(stripe_error(status: 404, code: "resource_missing"))
       allow_any_instance_of(MerchantAccount).to receive(:delete_charge_processor_account!).and_wrap_original do |original, **kwargs|
         raise ActiveRecord::Deadlocked if original.receiver.id == merchant_account.id
         original.call(**kwargs)
@@ -298,7 +298,7 @@ describe SweepClosedSellerConnectAccountsJob do
     others = Array.new(2) { create_candidate(create(:user, deleted_at: Time.current)) }
     others.each { |other| stub_stripe_account(other.charge_processor_merchant_id); stub_stripe_balance(other.charge_processor_merchant_id) }
     first, second, third = [merchant_account, *others].sort_by(&:id).map(&:charge_processor_merchant_id)
-    lookups = ->(id) { a_request(:get, stripe_url("accounts/#{id}")) }
+    lookups = ->(id) { a_request(:get, stripe_endpoint("accounts/#{id}")) }
 
     run
     expect(message).to include(first, second, "More accounts remain")
@@ -323,7 +323,7 @@ describe SweepClosedSellerConnectAccountsJob do
 
     run
 
-    expect(a_request(:get, %r{\A#{Regexp.escape(stripe_url("accounts/"))}})).not_to have_been_made
+    expect(a_request(:get, %r{\A#{Regexp.escape(stripe_endpoint("accounts/"))}})).not_to have_been_made
     expect(InternalNotificationWorker).not_to have_received(:perform_async)
   end
 end
