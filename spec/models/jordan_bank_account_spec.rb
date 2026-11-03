@@ -28,8 +28,8 @@ describe JordanBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number" do
-      expect(create(:jordan_bank_account, account_number_last_four: "5678").account_number_visual).to eq("JO******5678")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:jordan_bank_account, account_number_last_four: "5678").account_number_visual).to eq("******5678")
     end
   end
 

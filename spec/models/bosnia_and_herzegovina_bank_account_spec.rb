@@ -128,8 +128,8 @@ describe BosniaAndHerzegovinaBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number" do
-      expect(create(:bosnia_and_herzegovina_bank_account, account_number_last_four: "6000").account_number_visual).to eq("BA******6000")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:bosnia_and_herzegovina_bank_account, account_number_last_four: "6000").account_number_visual).to eq("******6000")
     end
   end
 end

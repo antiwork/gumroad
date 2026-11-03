@@ -64,6 +64,18 @@ describe IbanBankAccount do
     end
   end
 
+  describe "#account_number_visual" do
+    it "does not put the account's home country on a cross-border SEPA IBAN" do
+      bank_account = build(:czech_republic_bank_account, account_number: "LT121000011101001000", account_number_last_four: "1000")
+      expect(bank_account.account_number_visual).to eq("******1000")
+    end
+
+    it "keeps the IBAN's own country on EuropeanBankAccount, whose country derives from the IBAN prefix" do
+      bank_account = build(:european_bank_account, account_number: "LT121000011101001000", account_number_last_four: "1000")
+      expect(bank_account.account_number_visual).to eq("LT******1000")
+    end
+  end
+
   describe "#validate_account_number" do
     before { allow(Rails.env).to receive(:production?).and_return(true) }
 

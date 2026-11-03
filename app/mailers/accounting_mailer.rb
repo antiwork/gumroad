@@ -107,23 +107,19 @@ class AccountingMailer < ApplicationMailer
       stripe: { held_by_gumroad: { active: 0, suspended: 0 }, held_by_stripe: { active: 0, suspended: 0 } },
       paypal: { active: 0, suspended: 0 }
     }
+    # ~230k sellers hold a balance. Sidekiq runs jobs with the query cache on, so every
+    # per-user lookup stayed in memory for the whole run (~8 KB per user, ~2 GB in total)
+    # until the worker was OOM-killed — and a killed run holds production deploys (see
+    # LongRunningJobTracking). Walk the users in slices and clear the cache after each one
+    # so memory stays flat.
+    user_ids = User.holding_non_zero_balance.pluck("balances.user_id")
     balances_csv = CsvSafe.generate do |csv|
       csv << ["user id", "paypal balance (in dollars)", "stripe balance (in dollars)", "is_suspended", "user_risk_state", "tos_violation_reason"]
-      User.holding_non_zero_balance.each do |user|
-        stat_key = user.suspended? ? :suspended : :active
-        if (user.payment_address.present? || user.has_paypal_account_connected?) && user.active_bank_account.nil?
-          @balance_stats[:paypal][stat_key] += user.unpaid_balance_cents
-          csv << [user.id, user.unpaid_balance_cents / 100.0, 0, user.suspended?, user.user_risk_state, user.tos_violation_reason]
-        else
-          balances = user.unpaid_balances
-          balances_by_holder_of_funds = balances.group_by { |balance| balance.merchant_account.holder_of_funds }
-          balances_held_by_gumroad = balances_by_holder_of_funds[HolderOfFunds::GUMROAD] || []
-          balances_held_by_stripe = balances_by_holder_of_funds[HolderOfFunds::STRIPE] || []
-
-          @balance_stats[:stripe][:held_by_gumroad][stat_key] += balances_held_by_gumroad.sum(&:amount_cents)
-          @balance_stats[:stripe][:held_by_stripe][stat_key] += balances_held_by_stripe.sum(&:amount_cents)
-          csv << [user.id, 0, user.unpaid_balance_cents / 100.0, user.suspended?, user.user_risk_state, user.tos_violation_reason]
+      user_ids.each_slice(OUTSTANDING_BALANCES_SLICE_SIZE) do |ids|
+        User.where(id: ids).order(:id).each do |user|
+          append_outstanding_balance_row(csv, user)
         end
+        ActiveRecord::Base.connection.clear_query_cache
       end
     end
 
@@ -243,4 +239,24 @@ class AccountingMailer < ApplicationMailer
     }
     mail(to: recipient_email, subject: "Year-to-Date Sales Report by Country/State")
   end
+
+  private
+    OUTSTANDING_BALANCES_SLICE_SIZE = 1_000
+
+    def append_outstanding_balance_row(csv, user)
+      stat_key = user.suspended? ? :suspended : :active
+      if (user.payment_address.present? || user.has_paypal_account_connected?) && user.active_bank_account.nil?
+        @balance_stats[:paypal][stat_key] += user.unpaid_balance_cents
+        csv << [user.id, user.unpaid_balance_cents / 100.0, 0, user.suspended?, user.user_risk_state, user.tos_violation_reason]
+      else
+        balances = user.unpaid_balances
+        balances_by_holder_of_funds = balances.group_by { |balance| balance.merchant_account.holder_of_funds }
+        balances_held_by_gumroad = balances_by_holder_of_funds[HolderOfFunds::GUMROAD] || []
+        balances_held_by_stripe = balances_by_holder_of_funds[HolderOfFunds::STRIPE] || []
+
+        @balance_stats[:stripe][:held_by_gumroad][stat_key] += balances_held_by_gumroad.sum(&:amount_cents)
+        @balance_stats[:stripe][:held_by_stripe][stat_key] += balances_held_by_stripe.sum(&:amount_cents)
+        csv << [user.id, 0, user.unpaid_balance_cents / 100.0, user.suspended?, user.user_risk_state, user.tos_violation_reason]
+      end
+    end
 end
