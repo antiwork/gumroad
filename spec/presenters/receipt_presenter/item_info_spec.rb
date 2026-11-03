@@ -823,6 +823,23 @@ describe ReceiptPresenter::ItemInfo do
           end
         end
 
+        context "when a 100%-off discount makes every renewal free" do
+          let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, total_transaction_cents: 0) }
+
+          before do
+            purchase.create_purchase_offer_code_discount(
+              offer_code: create(:offer_code, user: purchase.seller, products: [purchase.link]),
+              offer_code_amount: 100,
+              offer_code_is_percent: true,
+              pre_discount_minimum_price_cents: 1_499,
+            )
+          end
+
+          it "does not say the buyer will be charged" do
+            expect(props[:manage_subscription_note]).to start_with("Your free membership renews once a month.")
+          end
+        end
+
         context "when not used in an email" do
           let(:for_email) { false }
 

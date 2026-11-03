@@ -237,12 +237,15 @@ class Subscription < ApplicationRecord
     original_purchase.displayed_price_cents_before_offer_code(include_deleted: true) || original_purchase.displayed_price_cents
   end
 
-  # True only when the subscription renews at $0 for good. A $0 next charge on its own is
-  # not enough: a 100%-off offer code with a finite duration in billing cycles makes the next
-  # charge $0 while later renewals go back to the pre-discount price, so the renewal price
-  # with every discount taken off also has to be $0 before a receipt may call it free.
+  # True only when the subscription renews at $0 for good: the next charge is free and the
+  # discount that makes it free has no end. A limited-duration code charges the pre-discount
+  # price once its cycles run out, so its receipt keeps the payment section.
   def renews_free?
-    current_subscription_price_cents.zero? && renewal_pre_discount_total_cents.zero?
+    return false if current_subscription_price_cents.positive?
+    return true if renewal_pre_discount_total_cents.zero?
+
+    discount = original_purchase&.purchase_offer_code_discount
+    discount.present? && discount.duration_in_billing_cycles.blank?
   end
 
   def auto_renewal_offer_code(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
