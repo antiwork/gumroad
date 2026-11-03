@@ -390,6 +390,20 @@ describe ReceiptPresenter::PaymentInfo do
         end
       end
 
+      context "when a limited discount makes the next renewal free too" do
+        let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
+
+        before do
+          allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(0)
+          allow_any_instance_of(Subscription).to receive(:renewal_pre_discount_total_cents).and_return(1_499)
+        end
+
+        it "keeps the payment section" do
+          expect(payment_info.present?).to be(true)
+          expect(upcoming_payment_attributes).not_to be_empty
+        end
+      end
+
       context "when is not a membership purchase" do
         context "when the purchase is free" do
           let(:purchase) { create(:free_purchase) }

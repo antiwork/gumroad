@@ -313,7 +313,7 @@ class ReceiptPresenter::PaymentInfo
       @_upcoming_price_attributes ||= chargeable
         .successful_purchases
         .select { _1.subscription.present? || _1.is_commission_deposit_purchase? }
-        .reject { _1.free_purchase? && !_1.is_free_trial_purchase? && _1.subscription&.current_subscription_price_cents&.zero? }
+        .reject { _1.free_purchase? && !_1.is_free_trial_purchase? && _1.subscription&.renews_free? }
         .compact
         .map { upcoming_price_attribute(_1) }
         .compact
