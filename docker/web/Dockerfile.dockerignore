@@ -16,4 +16,5 @@ docker/tmp/
 .env.*.local
 node_modules/
 resend_callbacks/
+go_web/
 spec/

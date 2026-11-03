@@ -30,8 +30,8 @@ describe SanMarinoBankAccount do
   end
 
   describe "#account_number_visual" do
-    it "returns the visual account number" do
-      expect(create(:san_marino_bank_account, account_number_last_four: "0100").account_number_visual).to eq("SM******0100")
+    it "returns the visual account number without a country prefix" do
+      expect(create(:san_marino_bank_account, account_number_last_four: "0100").account_number_visual).to eq("******0100")
     end
   end
 

@@ -19,10 +19,6 @@ class PolandBankAccount < BankAccount
     Currency::PLN
   end
 
-  def account_number_visual
-    "#{country}******#{account_number_last_four}"
-  end
-
   def to_hash
     {
       account_number: account_number_visual,
