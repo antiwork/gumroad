@@ -141,6 +141,7 @@ describe ProductPresenter::ProductProps do
               },
               bundle_products: [],
               public_files: [],
+              file_summaries: { product: nil, options: {} },
             },
             discount_code: {
               valid: true,
@@ -444,6 +445,7 @@ describe ProductPresenter::ProductProps do
               },
               bundle_products: [],
               public_files: [],
+              file_summaries: { product: nil, options: {} },
             },
             sale_label: nil,
             discount_code: nil,

@@ -29,6 +29,7 @@ import {
   formatPriceCentsWithCurrencySymbol,
 } from "$app/utils/currency";
 import { formatDate } from "$app/utils/date";
+import FileUtils from "$app/utils/file";
 import { formatOrderOfMagnitude } from "$app/utils/formatOrderOfMagnitude";
 import { variantLabel } from "$app/utils/labels";
 import { priceUnitToCents } from "$app/utils/price";
@@ -93,6 +94,22 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 import { useUserAgentInfo } from "$app/components/UserAgent";
 import { useRunOnce } from "$app/components/useRunOnce";
 
+const FileSummaryNote = ({ product, optionId }: { product: Product; optionId: string | null }) => {
+  const summaries = product.file_summaries;
+  const summary = optionId ? (summaries?.options[optionId] ?? null) : (summaries?.product ?? null);
+  if (!summary) return null;
+  const parts = [
+    `${summary.count} ${summary.count === 1 ? "file" : "files"}`,
+    ...(summary.formats.length > 0 ? [summary.formats.join(", ")] : []),
+    ...(summary.total_size !== null ? [FileUtils.getReadableFileSize(summary.total_size)] : []),
+  ];
+  return (
+    <p className="text-sm" role="note">
+      Includes: {parts.join(" · ")}
+    </p>
+  );
+};
+
 export type Seller = { id: string; name: string; avatar_url: string; profile_url: string; is_verified: boolean };
 
 type RefundPolicy = {
@@ -100,6 +117,9 @@ type RefundPolicy = {
   fine_print: string | null;
   updated_at: string;
 };
+
+export type FileSummary = { formats: string[]; total_size: number | null; count: number };
+export type FileSummaries = { product: FileSummary | null; options: Record<string, FileSummary> };
 
 export type PublicFile = {
   id: string;
@@ -179,6 +199,7 @@ export type Product = {
     variant: string | null;
   }[];
   public_files: PublicFile[];
+  file_summaries?: FileSummaries | null;
 };
 export type Purchase = {
   id: string;
@@ -827,6 +848,7 @@ export const Product = ({
                 discountPending={!!quote && quote.state !== "ready"}
                 ref={configurationSelectorRef}
               />
+              <FileSummaryNote product={product} optionId={selection.optionId} />
               {product.ppp_details && pppDiscounted ? (
                 <Alert role="status" variant="info">
                   This product supports purchasing power parity. Because you're located in{" "}
