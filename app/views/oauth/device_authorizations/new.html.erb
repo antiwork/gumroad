@@ -22,11 +22,11 @@
       </h2>
       <p>Code <strong><%= @user_code %></strong></p>
     </header>
-    <% if @device_authorization.scope_list.present? %>
+    <% if displayed_scopes.present? %>
       <div class="flex flex-col gap-4 p-4">
         <h4 class="font-bold">This application will be able to:</h4>
         <ul>
-          <% @device_authorization.scope_list.filter_map { |scope| oauth_scope_description(scope, account_name: consented_account_name) }.each do |description| %>
+          <% displayed_scopes.filter_map { |scope| oauth_scope_description(scope, account_name: consented_account_name) }.each do |description| %>
             <li><%= description %></li>
           <% end %>
         </ul>

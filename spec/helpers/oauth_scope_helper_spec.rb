@@ -28,6 +28,11 @@ describe OauthScopeHelper do
         .to eq("See Outlier Labs's profile data.")
     end
 
+    it "inserts the account name literally, even when it looks like a replacement pattern" do
+      expect(helper.oauth_scope_description("view_profile", account_name: "A\\&B \\1"))
+        .to eq("See A\\&B \\1's profile data.")
+    end
+
     it "keeps 'your' when no account is selected" do
       expect(helper.oauth_scope_description("view_profile", account_name: nil))
         .to eq("See your profile data.")

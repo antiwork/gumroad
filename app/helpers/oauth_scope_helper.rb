@@ -29,6 +29,6 @@ module OauthScopeHelper
     description = DESCRIPTIONS[scope.to_s]
     return description if description.blank? || account_name.blank?
 
-    description.gsub(/\byour\b/, "#{account_name}'s")
+    description.gsub(/\byour\b/) { "#{account_name}'s" }
   end
 end

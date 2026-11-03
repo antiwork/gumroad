@@ -4,7 +4,7 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
   MAX_USER_CODE_HANDOFFS = 20
   USER_CODE_HANDOFF_SESSION_KEY = :oauth_device_authorization_user_code_handoffs
 
-  helper_method :selected_brand_membership
+  helper_method :selected_brand_membership, :displayed_scopes
   before_action :hide_layouts
   before_action :hide_from_search_results
   before_action :switch_to_own_account, only: %i[new create]
@@ -194,6 +194,12 @@ class Oauth::DeviceAuthorizationsController < ApplicationController
       return unless current_seller && current_seller != current_user
 
       @selected_brand_membership ||= MobileAccountToken.admin_membership_for(current_user, current_seller)
+    end
+
+    # A brand token only keeps the scopes the member's role allows, so the approval page lists those.
+    def displayed_scopes
+      membership = selected_brand_membership
+      membership ? MobileAccountToken.narrow_scopes(@device_authorization.scope_list, membership).to_a : @device_authorization.scope_list
     end
 
     def authorizing_account_accessible?

@@ -11,11 +11,12 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   before_action :hide_layouts
   before_action :default_to_authorization_code
   before_action :hide_from_search_results
-  before_action :switch_to_own_account, only: :new
+  # Ahead of Doorkeeper's authenticate_resource_owner!, which memoizes the selected account.
+  prepend_before_action :switch_to_own_account, only: :new
   before_action :require_admin_access_to_selected_account, only: %i[new create]
   before_action :require_matching_consented_account, only: :create
 
-  helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?, :selected_brand_membership
+  helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?, :selected_brand_membership, :displayed_scopes
 
   private
     # Dynamically registered MCP clients must send an S256 challenge and a supported resource on
@@ -96,6 +97,8 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
 
     def require_admin_access_to_selected_account
       return unless follows_account_switcher? && current_user && current_seller && current_seller != current_user
+      # The selected account is the impersonated user's, so switching to the reader's own account cannot fix it.
+      return render :error, locals: { error_description: "Stop impersonating before authorizing an OAuth application." }, status: :forbidden if impersonating?
       return if selected_brand_membership
 
       render :error, locals: {
@@ -103,6 +106,12 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
         error_description: "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again.",
         action: { label: "Switch to your own account", path: oauth_authorization_path(consent_redirect_params.merge(switch_account: 1)) },
       }, status: :forbidden
+    end
+
+    # A brand grant only keeps the scopes the member's role allows, so the consent page lists those.
+    def displayed_scopes
+      membership = selected_brand_membership
+      membership ? MobileAccountToken.narrow_scopes(@pre_auth.scopes, membership) : @pre_auth.scopes
     end
 
     # The consent page names the account it authorizes; a switcher change between page load and submit

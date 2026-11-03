@@ -16,11 +16,11 @@
     <% end %>
     <p class="text-sm">You can revoke access any time under <%= link_to "Authorized Applications", settings_authorized_applications_path %>.</p>
   </div>
-  <% if @pre_auth.scopes.present? %>
+  <% if displayed_scopes.present? %>
     <div class="flex flex-col gap-4 p-4">
       <h4 class="font-bold">This application will be able to:</h4>
       <ul>
-        <% @pre_auth.scopes.filter_map { |scope| oauth_scope_description(scope, account_name: consented_account_name) }.each do |description| %>
+        <% displayed_scopes.filter_map { |scope| oauth_scope_description(scope, account_name: consented_account_name) }.each do |description| %>
           <li><%= description %></li>
         <% end %>
       </ul>

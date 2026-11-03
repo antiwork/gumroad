@@ -105,6 +105,17 @@ describe "OAuth authorization for a brand account", type: :request do
       expect(response.body).to include("See your profile data.")
     end
 
+    it "lists only the scopes the brand token will carry" do
+      cli.update!(scopes: "view_profile edit_products account")
+      select_account(brand.id)
+      body = create_device_code(cli, "view_profile account")
+      brand_name = brand.display_name(prefer_email_over_default_username: true)
+
+      get oauth_device_authorization_path, params: { user_code: body["user_code"] }
+
+      expect(Nokogiri::HTML(response.body).css("main ul li").map(&:text)).to eq(["See #{brand_name}'s profile data."])
+    end
+
     it "asks again when the selected account changes before the code is approved" do
       other_brand = create(:user)
       create(:team_membership, user: member, seller: other_brand, role: TeamMembership::ROLE_ADMIN)
@@ -215,6 +226,18 @@ describe "OAuth authorization for a brand account", type: :request do
       expect(Nokogiri::HTML(response.body).css("ul li").map(&:text)).to include("Create new products and edit your existing products.")
     end
 
+    it "authorizes the reader's own account after switching away from a brand they administer" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/")
+      sign_in member
+      select_account(brand.id)
+
+      get oauth_authorization_path, params: params.merge(switch_account: 1)
+
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("to use your account?")
+      expect(consented_account).to be_blank
+    end
+
     it "names the selected brand in the consent scope list" do
       cli.update!(redirect_uri: "http://#{DOMAIN}/")
       sign_in member
@@ -225,6 +248,43 @@ describe "OAuth authorization for a brand account", type: :request do
 
       expect(response).to have_http_status(:ok)
       expect(Nokogiri::HTML(response.body).css("ul li").map(&:text)).to include("Create new products and edit #{brand_name}'s existing products.")
+    end
+
+    it "lists only the scopes the brand grant will carry" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/", scopes: "view_profile edit_products account")
+      sign_in member
+      select_account(brand.id)
+      brand_name = brand.display_name(prefer_email_over_default_username: true)
+
+      get oauth_authorization_path, params: params.merge(scope: "edit_products account")
+
+      expect(Nokogiri::HTML(response.body).css("main ul li").map(&:text)).to eq(["Create new products and edit #{brand_name}'s existing products."])
+    end
+
+    it "keeps the requested scopes for the member's own account" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/", scopes: "view_profile edit_products account")
+      sign_in member
+
+      get oauth_authorization_path, params: params.merge(scope: "edit_products account")
+
+      expect(Nokogiri::HTML(response.body).css("main ul li").map(&:text)).to eq(["Create new products and edit your existing products.", "Full access to your account."])
+    end
+
+    it "asks a staff member to stop impersonating instead of offering a switch that cannot change the account" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/")
+      admin = create(:admin_user)
+      create(:team_membership, user: admin, seller: create(:user), role: TeamMembership::ROLE_ADMIN)
+      sign_in admin
+      $redis.set(RedisKey.impersonated_user(admin.id), brand.id)
+
+      get oauth_authorization_path, params: params.merge(switch_account: 1)
+
+      expect(response).to have_http_status(:forbidden)
+      expect(response.body).to include("Stop impersonating before authorizing an OAuth application.")
+      expect(response.body).not_to include("Switch to your own account")
+      expect(cli.access_grants.count).to eq(0)
+    ensure
+      $redis.del(RedisKey.impersonated_user(admin.id)) if defined?(admin) && admin&.persisted?
     end
 
     it "asks again when the selected account changes before the page is approved" do
