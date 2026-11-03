@@ -589,19 +589,8 @@ class PartnerMigration < ApplicationRecord
     end
 
     def link_partner_seller!(claimer)
-      partner_sellers = oauth_application.partner_sellers
-      by_external_user = partner_sellers.find_by(external_user_id:)
-      by_user = partner_sellers.find_by(user: claimer)
-
-      if by_external_user&.user_id.present? && by_external_user.user_id != claimer.id
-        raise ClaimError, "This #{oauth_application.name} account is already linked to a different Gumroad account."
-      end
-      if by_user.present? && by_user.external_user_id != external_user_id
-        raise ClaimError, "Your Gumroad account is already linked to a different #{oauth_application.name} account."
-      end
-
-      partner_seller = by_user || partner_sellers.build(user: claimer, external_user_id:)
-      partner_seller.deleted_at = nil
-      partner_seller.save!
+      PartnerSeller.link!(oauth_application:, user: claimer, external_user_id:)
+    rescue PartnerSeller::LinkConflict => e
+      raise ClaimError, e.message
     end
 end
