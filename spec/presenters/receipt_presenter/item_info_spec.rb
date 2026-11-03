@@ -800,6 +800,16 @@ describe ReceiptPresenter::ItemInfo do
           end
         end
 
+        context "when a free first charge is followed by paid renewals" do
+          let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, total_transaction_cents: 0) }
+
+          before { allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(1_499) }
+
+          it "still says the buyer will be charged" do
+            expect(props[:manage_subscription_note]).to start_with("You will be charged once a month.")
+          end
+        end
+
         context "when not used in an email" do
           let(:for_email) { false }
 
