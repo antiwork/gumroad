@@ -11,19 +11,17 @@ class Product::FileSummaryService
   def perform
     return { product: nil, options: {} } if product.is_physical? || product.is_bundle?
 
-    options = product.option_records.index_with { |record| summarize(provider_for(record)) }
+    shared = product.has_product_level_rich_content?
+    product_summary = summarize(product)
+    options = product.option_records.index_with { |record| shared ? product_summary : summarize(record) }
     {
-      product: summarize(product),
+      product: shared ? product_summary : nil,
       options: options.transform_keys(&:external_id).compact,
     }
   end
 
   private
     attr_reader :product
-
-    def provider_for(option)
-      product.has_product_level_rich_content? ? product : option
-    end
 
     def summarize(provider)
       files = delivered_files(provider).reject(&:external_link?)

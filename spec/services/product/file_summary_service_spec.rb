@@ -52,7 +52,8 @@ describe Product::FileSummaryService do
       large.product_files << file(filetype: "wav", size: 250_000_000)
     end
 
-    it "summarizes each option from its own files" do
+    it "summarizes each option from its own files and none for the unselected product" do
+      expect(summary[:product]).to be_nil
       expect(summary[:options]).to eq(
         small.external_id => { formats: %w[MP3], total_size: 6_600_000, count: 1 },
         large.external_id => { formats: %w[WAV], total_size: 500_000_000, count: 2 },
