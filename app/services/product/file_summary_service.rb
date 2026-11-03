@@ -12,10 +12,10 @@ class Product::FileSummaryService
     return { product: nil, options: {} } if product.is_physical? || product.is_bundle?
 
     shared = product.has_product_level_rich_content?
-    product_summary = summarize(product)
+    product_summary = summarize(product) if shared
     options = product.option_records.index_with { |record| shared ? product_summary : summarize(record) }
     {
-      product: shared ? product_summary : nil,
+      product: product_summary,
       options: options.transform_keys(&:external_id).compact,
     }
   end
@@ -38,7 +38,7 @@ class Product::FileSummaryService
     # Mirrors UrlRedirect#alive_product_files: files embedded in the pages when there are any.
     def delivered_files(provider)
       embedded_ids = provider.alive_rich_contents.flat_map(&:embedded_product_file_ids_in_order).uniq
-      files = provider.product_files.alive
+      files = provider.product_files.alive.select(:filetype, :size)
       embedded_ids.any? ? files.where(id: embedded_ids).to_a : files.to_a
     end
 end
