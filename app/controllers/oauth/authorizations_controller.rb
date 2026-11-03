@@ -12,6 +12,7 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
   before_action :default_to_authorization_code
   before_action :hide_from_search_results
   before_action :require_admin_access_to_selected_account, only: %i[new create]
+  before_action :require_matching_consented_account, only: :create
 
   helper_method :admin_scope_optional?, :show_admin_authorization_checkbox?, :selected_brand_membership
 
@@ -89,6 +90,19 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       return if selected_brand_membership
 
       render :error, locals: { error_description: "You need admin access to #{current_seller.display_name(prefer_email_over_default_username: true)} to connect it. Switch to an account you administer, then try again." }, status: :forbidden
+    end
+
+    # The consent page names the account it authorizes; a switcher change between page load and submit
+    # must ask again rather than grant the newly selected account.
+    def require_matching_consented_account
+      return unless follows_account_switcher?
+      return if params[:consented_account].to_s == selected_brand_membership&.seller&.external_id.to_s
+
+      redirect_to oauth_authorization_path(consent_redirect_params)
+    end
+
+    def consent_redirect_params
+      params.permit(:client_id, :redirect_uri, :state, :response_type, :scope, :code_challenge, :code_challenge_method, :resource, :admin_scope).to_h
     end
 
     def bind_grant_to_selected_account(response)

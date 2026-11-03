@@ -37,6 +37,7 @@
       <% if (resource = @pre_auth.custom_access_token_attributes["resource"]).present? %>
         <%= hidden_field_tag :resource, resource %>
       <% end %>
+      <%= hidden_field_tag :consented_account, selected_brand_membership&.seller&.external_id %>
       <% if admin_scope_optional? %>
         <%= hidden_field_tag :admin_scope, params[:admin_scope] %>
       <% end %>

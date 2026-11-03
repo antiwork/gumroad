@@ -42,7 +42,11 @@ describe "OAuth authorization for a brand account", type: :request do
     get oauth_authorization_path, params: { response_type: "code", client_id: app.uid, redirect_uri: app.redirect_uri, scope: }
     return unless response.ok?
 
-    post oauth_authorization_path, params: { response_type: "code", client_id: app.uid, redirect_uri: app.redirect_uri, scope:, authenticity_token: csrf_token }
+    post oauth_authorization_path, params: { response_type: "code", client_id: app.uid, redirect_uri: app.redirect_uri, scope:, consented_account: consented_account, authenticity_token: csrf_token }
+  end
+
+  def consented_account
+    Nokogiri::HTML(response.body).at_css("input[name='consented_account']")&.[]("value")
   end
 
   def redeem(app, device_code)
@@ -145,6 +149,65 @@ describe "OAuth authorization for a brand account", type: :request do
       get oauth_authorization_path, params: params.merge(redirect_uri: "http://#{DOMAIN}/")
 
       expect(response).to have_http_status(:forbidden)
+    end
+
+    it "asks again when the selected account changes before the page is approved" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/")
+      other_brand = create(:user)
+      create(:team_membership, user: member, seller: other_brand, role: TeamMembership::ROLE_ADMIN)
+      sign_in member
+      select_account(brand.id)
+
+      get oauth_authorization_path, params: params
+      approved_account = consented_account
+      select_account(other_brand.id)
+
+      post oauth_authorization_path, params: params.merge(consented_account: approved_account, authenticity_token: csrf_token)
+
+      expect(response).to redirect_to(%r{/oauth/authorize})
+      expect(cli.access_grants.count).to eq(0)
+    end
+  end
+
+  describe "revoking a connection from the settings page" do
+    let(:params) { { response_type: "code", client_id: cli.uid, redirect_uri: "http://#{DOMAIN}/", scope: "edit_products" } }
+
+    around do |example|
+      previous_forgery = ActionController::Base.allow_forgery_protection
+      ActionController::Base.allow_forgery_protection = false
+      example.run
+    ensure
+      ActionController::Base.allow_forgery_protection = previous_forgery
+    end
+
+    it "revokes the account selected in the switcher" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/")
+      sign_in member
+      select_account(brand.id)
+      token = authorized_brand_token
+
+      delete oauth_authorized_application_path(cli.external_id)
+
+      expect(response).to redirect_to(settings_authorized_applications_path)
+      expect(token.reload.revoked_at).to be_present
+    end
+
+    it "leaves a connection belonging to an account the member does not administer" do
+      cli.update!(redirect_uri: "http://#{DOMAIN}/")
+      sign_in member
+      select_account(brand.id)
+      token = authorized_brand_token
+      membership.update!(role: TeamMembership::ROLE_SUPPORT)
+
+      delete oauth_authorized_application_path(cli.external_id)
+
+      expect(token.reload.revoked_at).to be_nil
+    end
+
+    def authorized_brand_token
+      authorize_code(cli, params[:scope])
+      post oauth_token_path, params: { grant_type: "authorization_code", code: cli.access_grants.last.plaintext_token, client_id: cli.uid, redirect_uri: cli.redirect_uri }
+      Doorkeeper::AccessToken.find_by_token(response.parsed_body["access_token"])
     end
   end
 
