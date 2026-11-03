@@ -186,6 +186,19 @@ describe HealthcheckController do
       end
     end
 
+    context "when the only entry belongs to a Sidekiq process that was killed" do
+      it "returns 200 without waiting for the TTL" do
+        token = ["EmailOutstandingBalancesCsvWorker", "sidekiq_worker-abc:7:deadbeef0001", SecureRandom.uuid].join("|")
+        $redis.zadd(key, 10.minutes.ago.to_i, token)
+        allow(Sidekiq::ProcessSet).to receive(:[]).with("sidekiq_worker-abc:7:deadbeef0001").and_return(nil)
+
+        get :long_running_jobs
+
+        expect(response.status).to eq(200)
+        expect($redis.zcard(key)).to eq(0)
+      end
+    end
+
     context "when a stale entry sits alongside a fresh one" do
       it "returns 503 and prunes only the stale entry" do
         stale_score = (LongRunningJobTracking::IN_FLIGHT_ENTRY_TTL + 1.minute).ago.to_i

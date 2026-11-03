@@ -1,6 +1,6 @@
 #!/bin/bash
-# Sourced by the five main-branch scripts (build_base, build_web, compile_assets,
-# build_resend_callbacks, deploy_production)
+# Sourced by the main-branch build and deploy scripts (build_base, build_web, compile_assets,
+# build_go_image, deploy_production)
 # to skip the whole production pipeline when nothing that ships changed. Does not change the
 # caller's shell options.
 
@@ -28,7 +28,7 @@ deploy_irrelevant_path() {
 # against the parent instead would drop a change that was skipped (long-running-job skip, failed
 # deploy) out of every later diff. Prints nothing when there is no tag.
 #
-# Pinned in build meta-data on first use: the five scripts run minutes apart, and a release that
+# Pinned in build meta-data on first use: the scripts run minutes apart, and a release that
 # lands in between moves the newest tag, so a step re-deriving it compares against a different
 # commit than the steps that already ran. One build, one baseline.
 deploy_relevance_baseline() {

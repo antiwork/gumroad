@@ -356,7 +356,9 @@ describe "Product builds API" do
 
     context "when the seller deleted the live build's download" do
       def delete_files_via_api
-        put "/api/v2/products/#{product.external_id}", params: { files: [] }, headers: { "Authorization" => "Bearer #{token.token}" }, as: :json
+        pages = product.alive_rich_contents.map { { id: _1.external_id, title: _1.title, description: [] } }
+        params = pages.any? ? { files: [], rich_content: pages } : { files: [] }
+        put "/api/v2/products/#{product.external_id}", params:, headers: { "Authorization" => "Bearer #{token.token}" }, as: :json
         expect(response.parsed_body["success"]).to be true
       end
 
