@@ -1115,6 +1115,10 @@ Rails.application.routes.draw do
     post "/products/:id/release_preorder", to: "links#release_preorder", as: :release_preorder
 
 
+    # One-time links from a partner application to import a creator's products.
+    get "/partner_migration" => "partner_migrations#show", as: :partner_migration
+    post "/partner_migration" => "partner_migrations#create"
+    post "/partner_migration/switch_account" => "partner_migrations#switch_account", as: :switch_partner_migration_account
 
     get "/dashboard" => "dashboard#index", as: :dashboard
     get "/dashboard/customers_count" => "dashboard#customers_count", as: :dashboard_customers_count

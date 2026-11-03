@@ -1,0 +1,20 @@
+<%# Every onboarding step uses this frame, as the OAuth consent page does, so only the content changes from one step to the next. %>
+<% body = yield %>
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+  <header class="flex flex-col gap-4 p-4 text-center">
+    <div>
+      <%= image_tag application&.icon_url || image_path("gumroad_app.png"), size: "72", alt: "" %>
+    </div>
+    <h2><%= title %></h2>
+  </header>
+  <% if body.present? %>
+    <div class="flex flex-col gap-4 p-4">
+      <%= body %>
+    </div>
+  <% end %>
+  <% if content_for?(:partner_migration_footer) %>
+    <footer class="flex flex-col gap-4 p-4 text-center">
+      <%= yield :partner_migration_footer %>
+    </footer>
+  <% end %>
+</main>

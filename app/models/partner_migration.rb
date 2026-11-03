@@ -3,9 +3,11 @@
 require "digest"
 
 # A partner application's request to move one of its users' catalogs to Gumroad. Only a SHA-256 digest
-# of the onboarding code is stored.
+# of the onboarding code is stored. Nothing imports until the creator confirms the catalog that the
+# page showed, so every claim checks the digest that page carried.
 class PartnerMigration < ApplicationRecord
   EXPIRES_IN = 7.days
+  CONFIRMATION_PREVIEW_SIZE = 5
   MAX_PRODUCTS = 500
   MAX_EXTERNAL_USER_ID_LENGTH = 255
   MAX_NAME_LENGTH = 255
@@ -25,8 +27,11 @@ class PartnerMigration < ApplicationRecord
   STATUS_FAILED = "failed"
   STATUSES = [STATUS_PENDING, STATUS_CLAIMED, STATUS_COMPLETED, STATUS_FAILED].freeze
 
+  class ClaimError < StandardError; end
   class CatalogConflict < StandardError; end
 
+  INVALID_LINK_MESSAGE = "This link is invalid or expired."
+  OUT_OF_DATE_MESSAGE = "This page is out of date. Open the link from the application again."
   INACTIVE_ACCOUNT_MESSAGE = "This account cannot import products."
 
   belongs_to :oauth_application
@@ -87,6 +92,16 @@ class PartnerMigration < ApplicationRecord
         "covers" => product["covers"].size,
         "thumbnail" => product["thumbnail_url"].present?,
       )
+    end
+  end
+
+  def self.record_first_publication(product)
+    where(user_id: product.user_id).find_each do |migration|
+      next unless migration.results.to_h.values.any? { _1["product_id"] == product.external_id }
+
+      PartnerSeller.where(oauth_application_id: migration.oauth_application_id, user_id: product.user_id, external_user_id: migration.external_user_id)
+                   .where("migrated_at IS NULL OR migrated_at > ?", product.first_published_at)
+                   .update_all(migrated_at: product.first_published_at)
     end
   end
 
@@ -208,6 +223,39 @@ class PartnerMigration < ApplicationRecord
   private_class_method :catalog_identity, :normalize_product, :normalize_variant_categories, :string?, :unique_tag_names, :tag_error, :https_url?
 
   def pending? = status == STATUS_PENDING
+  def expired?(at = Time.current) = expires_at <= at
+
+  def claimable?
+    pending? && !expired? && oauth_application.alive? && oauth_application.is_partner?
+  end
+
+  # The same creator can claim again while the import has not finished, so a failed enqueue can be
+  # retried from the confirmation page. The job skips the products that it already imported.
+  def claimable_by?(claimer)
+    claimable? || (status == STATUS_CLAIMED && user_id == claimer.id)
+  end
+
+  # Links `claimer` to the partner's user ID, then starts the import. Raises ClaimError with a
+  # message for the creator when the link was used, expired, or belongs to a different account.
+  def claim!(claimer, expected_code_digest:)
+    raise ClaimError, INACTIVE_ACCOUNT_MESSAGE unless claimer.account_active?
+    raise ClaimError, "Add an email address to your Gumroad account before importing products." if claimer.form_email.blank?
+
+    oauth_application.with_lock do
+      with_lock do
+        raise ClaimError, OUT_OF_DATE_MESSAGE unless code_digest == expected_code_digest
+        raise ClaimError, INVALID_LINK_MESSAGE unless claimable_by?(claimer)
+
+        unless status == STATUS_CLAIMED
+          link_partner_seller!(claimer)
+          update!(user: claimer, status: STATUS_CLAIMED, claimed_at: Time.current)
+        end
+        # Queued under the lock: if queueing fails, the claim rolls back, so a claimed import always has
+        # a job. The job locks this row first, so it waits for this transaction to commit.
+        PartnerMigrationImportJob.perform_async(id)
+      end
+    end
+  end
 
   def progress
     recorded_results = results.to_h.values
@@ -219,5 +267,22 @@ class PartnerMigration < ApplicationRecord
   private
     def assign_public_id
       self.public_id ||= Nanoid.generate
+    end
+
+    def link_partner_seller!(claimer)
+      partner_sellers = oauth_application.partner_sellers
+      by_external_user = partner_sellers.find_by(external_user_id:)
+      by_user = partner_sellers.find_by(user: claimer)
+
+      if by_external_user&.user_id.present? && by_external_user.user_id != claimer.id
+        raise ClaimError, "This #{oauth_application.name} account is already linked to a different Gumroad account."
+      end
+      if by_user.present? && by_user.external_user_id != external_user_id
+        raise ClaimError, "Your Gumroad account is already linked to a different #{oauth_application.name} account."
+      end
+
+      partner_seller = by_user || partner_sellers.build(user: claimer, external_user_id:)
+      partner_seller.deleted_at = nil
+      partner_seller.save!
     end
 end

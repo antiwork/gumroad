@@ -9,6 +9,14 @@ module OauthApplicationConfig
 
   def set_oauth_application
     return if params[:next].blank?
+    if params[:next] == partner_migration_path && session[:partner_migration_code].present?
+      @partner_migration = PartnerMigration.find_by_code(session[:partner_migration_code])
+      if @partner_migration&.claimable?
+        @application = @partner_migration.oauth_application
+        return
+      end
+      @partner_migration = nil
+    end
 
     begin
       next_url = URI.parse(params[:next])

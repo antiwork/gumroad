@@ -7,16 +7,17 @@ class AuthPresenter
   # the class. A stalled read serves those instead of rendering zeros in the signup copy.
   LAST_SIGNUP_STATS = {}
 
-  def initialize(params:, application:)
+  def initialize(params:, application:, partner_migration: nil)
     @params = params
     @application = application
+    @partner_migration = partner_migration
   end
 
   def login_props
     {
       email: params[:email] || retrieve_team_invitation_email(params[:next]),
       application_name: application&.name,
-    }
+    }.merge(@partner_migration ? { migration_product_count: @partner_migration.products.size } : {})
   end
 
   def signup_props
