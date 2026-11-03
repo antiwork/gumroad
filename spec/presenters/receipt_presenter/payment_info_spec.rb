@@ -394,8 +394,13 @@ describe ReceiptPresenter::PaymentInfo do
         let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
 
         before do
-          allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(0)
-          allow_any_instance_of(Subscription).to receive(:renewal_pre_discount_total_cents).and_return(1_499)
+          purchase.create_purchase_offer_code_discount(
+            offer_code: create(:offer_code, user: purchase.seller, products: [purchase.link]),
+            offer_code_amount: 100,
+            offer_code_is_percent: true,
+            pre_discount_minimum_price_cents: 1_499,
+            duration_in_billing_cycles: 2,
+          )
         end
 
         it "keeps the payment section" do

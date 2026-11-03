@@ -28,6 +28,8 @@ class ReceiptPresenter::FooterInfo
     # charge hasn't happened yet.
     if chargeable.subscription.single_charge? && !chargeable.is_free_trial_purchase?
       "You won't be charged again for this membership."
+    elsif chargeable.free_membership_purchase?
+      "Your free membership renews once #{recurrence_long_indicator(chargeable.subscription.recurrence)}."
     else
       "You'll be charged once #{recurrence_long_indicator(chargeable.subscription.recurrence)}."
     end

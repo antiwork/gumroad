@@ -6,7 +6,7 @@ describe ReceiptPresenter::FooterInfo, :vcr do
   include ActionView::Helpers::UrlHelper
 
   let(:product) { create(:membership_product) }
-  let(:purchase) { create(:membership_purchase, email: "customer@example.com", link: product) }
+  let(:purchase) { create(:membership_purchase, email: "customer@example.com", link: product, price_cents: 1_000) }
 
   let(:for_email) { true }
   let(:presenter) { described_class.new(chargeable) }

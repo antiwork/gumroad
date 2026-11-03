@@ -244,8 +244,7 @@ class Subscription < ApplicationRecord
     return false if current_subscription_price_cents.positive?
     return true if renewal_pre_discount_total_cents.zero?
 
-    discount = original_purchase&.purchase_offer_code_discount
-    discount.present? && discount.duration_in_billing_cycles.blank?
+    reuse_original_discount_on_next_charge? && original_purchase.purchase_offer_code_discount&.duration_in_billing_cycles.blank?
   end
 
   def auto_renewal_offer_code(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
