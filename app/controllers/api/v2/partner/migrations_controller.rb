@@ -17,13 +17,16 @@ class Api::V2::Partner::MigrationsController < Api::V2::Partner::BaseController
     seller, error = PartnerMigration.normalize_seller(email: params[:email], profile: params[:profile])
     return render_bad_request(error) if error
 
-    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:, **seller)
+    return render_bad_request("new_onboarding_url must be true or false.") unless [nil, true, false].include?(params[:new_onboarding_url])
+
+    migration, code = PartnerMigration.create_for!(oauth_application: current_partner_application, external_user_id:, products:, **seller, new_link: params[:new_onboarding_url] == true)
 
     render json: {
       success: true,
       migration_id: migration.public_id,
       status: migration.status,
-      onboarding_url: partner_migration_url(migration_code: code, host: DOMAIN, protocol: PROTOCOL),
+      # Absent when the request changed only download URLs: the link that the partner has stays valid.
+      **(code ? { onboarding_url: partner_migration_url(migration_code: code, host: DOMAIN, protocol: PROTOCOL) } : {}),
       expires_at: migration.expires_at.iso8601,
     }, status: migration.previously_new_record? ? :created : :ok
   rescue PartnerMigration::CatalogConflict => e

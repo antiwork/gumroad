@@ -106,6 +106,29 @@ describe "Partner API migrations", type: :request do
     expect(response.parsed_body.fetch("migration_id")).to eq(first_id)
   end
 
+  it "keeps the onboarding link when the partner sends only new download URLs" do
+    post_migration(external_user_id: "ext-1", products:)
+    onboarding_url = response.parsed_body.fetch("onboarding_url")
+
+    post_migration(external_user_id: "ext-1", products: [products.first.merge(files: [{ url: "https://files.example.com/pack.zip?signature=new", display_name: "Pack" }])])
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body).not_to have_key("onboarding_url")
+    code = Rack::Utils.parse_query(URI(onboarding_url).query)["migration_code"]
+    expect(PartnerMigration.find_by_code(code)).to eq(PartnerMigration.last)
+  end
+
+  it "returns a new onboarding link on request, for a partner that lost the earlier response" do
+    post_migration(external_user_id: "ext-1", products:)
+    first_url = response.parsed_body.fetch("onboarding_url")
+
+    post_migration(external_user_id: "ext-1", products:, new_onboarding_url: true)
+
+    expect(response.parsed_body.fetch("onboarding_url")).not_to eq(first_url)
+    post_migration(external_user_id: "ext-1", products:, new_onboarding_url: "yes")
+    expect(response).to have_http_status(:bad_request)
+  end
+
   it "keeps the accepted catalog when a changed export conflicts with it" do
     post_migration(external_user_id: "ext-1", products:)
     migration = PartnerMigration.last

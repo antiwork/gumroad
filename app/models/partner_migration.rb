@@ -67,7 +67,7 @@ class PartnerMigration < ApplicationRecord
   # Only an attempt that started counts: a job can wait in the queue for longer than STALLED_AFTER.
   scope :stalled, -> { where(status: STATUS_CLAIMED, updated_at: ...STALLED_AFTER.ago).where.not(import_started_at: nil) }
 
-  def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil)
+  def self.create_for!(oauth_application:, external_user_id:, products:, email: nil, profile: nil, new_link: false)
     attempts = 0
 
     begin
@@ -76,13 +76,19 @@ class PartnerMigration < ApplicationRecord
       oauth_application.with_lock do
         migration = where(oauth_application:, external_user_id:).order(:id).first
         if migration
-          if !migration.pending? && catalog_identity(migration.products) != catalog_identity(products)
+          same_catalog = catalog_identity(migration.products) == catalog_identity(products)
+          if !migration.pending? && !same_catalog
             raise CatalogConflict, "This seller already has an export. Keep the same products and file order when refreshing download URLs."
           end
           # After the claim, the account is settled, so a new email or profile no longer applies.
           seller = migration.pending? ? { email:, profile: } : {}
-          migration.update!(products:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now, **seller)
+          # New URLs alone keep the seller's link, so the partner does not have to send it again. Any other
+          # change replaces the link, so a page that showed the old catalog or email cannot confirm it.
+          # `new_link` lets a partner that lost the response get a link again.
+          keep_link = !new_link && same_catalog && seller.all? { |key, value| migration[key] == value }
+          migration.update!(products:, expires_at: EXPIRES_IN.from_now, **seller, **(keep_link ? {} : { code_digest: digest(code) }))
           migration.retry_failed_products!
+          code = nil if keep_link
         else
           migration = create!(oauth_application:, external_user_id:, products:, email:, profile:, code_digest: digest(code), expires_at: EXPIRES_IN.from_now)
         end

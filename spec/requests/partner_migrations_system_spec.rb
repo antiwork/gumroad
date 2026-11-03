@@ -37,7 +37,8 @@ describe "Partner migration seller flow", type: :system, js: true, skip_ssrf_stu
     partner.post "/api/v2/partner/migrations", params: { external_user_id: "seller-1", products: }.to_json,
                                                headers: { "CONTENT_TYPE" => "application/json", "AUTHORIZATION" => "Bearer #{token}" }
     expect(partner.response).to have_http_status(:created).or have_http_status(:ok)
-    partner.response.parsed_body.fetch("onboarding_url")
+    # A request that changes only download URLs keeps the earlier link, so it returns none.
+    partner.response.parsed_body["onboarding_url"]
   end
 
   def log_in
