@@ -1,0 +1,129 @@
+[
+  {
+    "input": "a=1&b=2",
+    "params": {
+      "a": "1",
+      "b": "2"
+    }
+  },
+  {
+    "input": "a=1&a=2",
+    "params": {
+      "a": "2"
+    }
+  },
+  {
+    "input": "a[]=1&a[]=2",
+    "params": {
+      "a": [
+        "1",
+        "2"
+      ]
+    }
+  },
+  {
+    "input": "a[b]=1&a[c]=2",
+    "params": {
+      "a": {
+        "b": "1",
+        "c": "2"
+      }
+    }
+  },
+  {
+    "input": "a[b][]=1",
+    "params": {
+      "a": {
+        "b": [
+          "1"
+        ]
+      }
+    }
+  },
+  {
+    "input": "a+b=c+d",
+    "params": {
+      "a b": "c d"
+    }
+  },
+  {
+    "input": "a=%20%2B",
+    "params": {
+      "a": " +"
+    }
+  },
+  {
+    "input": "a",
+    "params": {
+      "a": null
+    }
+  },
+  {
+    "input": "a=",
+    "params": {
+      "a": ""
+    }
+  },
+  {
+    "input": "=a",
+    "params": {}
+  },
+  {
+    "input": "a[]=1&a=2",
+    "params": {
+      "a": "2"
+    }
+  },
+  {
+    "input": "a=1&a[]=2",
+    "error": "ActionDispatch::ParameterTypeError"
+  },
+  {
+    "input": "a[b]=1&a=2",
+    "params": {
+      "a": "2"
+    }
+  },
+  {
+    "input": "&&a=1&&",
+    "params": {
+      "a": "1"
+    }
+  },
+  {
+    "input": "a[=1",
+    "params": {
+      "a[": "1"
+    }
+  },
+  {
+    "input": "a]=1",
+    "params": {
+      "a]": "1"
+    }
+  },
+  {
+    "input": "a[b]c=1",
+    "params": {
+      "a": {
+        "b": {
+          "c": "1"
+        }
+      }
+    }
+  },
+  {
+    "input": "a[][b]=1&a[][c]=2&a[][b]=3",
+    "params": {
+      "a": [
+        {
+          "b": "1",
+          "c": "2"
+        },
+        {
+          "b": "3"
+        }
+      ]
+    }
+  }
+]

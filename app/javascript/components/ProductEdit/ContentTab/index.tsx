@@ -11,6 +11,7 @@ import {
   File,
   FileDetail,
   FolderPlus,
+  Globe,
   Grid,
   Images,
   Key,
@@ -72,7 +73,7 @@ import { Modal } from "$app/components/Modal";
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "$app/components/Popover";
 import { EpubNudge } from "$app/components/ProductEdit/ContentTab/EpubNudge";
 import { FileEmbedGroup } from "$app/components/ProductEdit/ContentTab/FileEmbedGroup";
-import { VersionHistoryButton } from "$app/components/ProductEdit/ContentTab/VersionHistoryButton";
+import { VersionHistory } from "$app/components/ProductEdit/ContentTab/VersionHistoryButton";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import {
   ExistingFileEntry,
@@ -114,6 +115,7 @@ import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Label } from "$app/components/ui/Label";
+import { LinkButton } from "$app/components/ui/LinkButton";
 import { Menu, MenuItem } from "$app/components/ui/Menu";
 import { Row, RowContent, Rows } from "$app/components/ui/Rows";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
@@ -174,12 +176,14 @@ const FileUploadMenu = ({
   onClickComputerFiles,
   onSelectExistingFiles,
   onUploadFromDropbox,
+  onAddWebApp,
 }: {
   existingFiles: ExistingFileEntry[];
   onEmbedMedia: () => void;
   onClickComputerFiles: () => void;
   onSelectExistingFiles: () => void;
   onUploadFromDropbox: () => void;
+  onAddWebApp: (() => void) | null;
 }) => (
   <Menu aria-label="Image and file uploader">
     <PopoverClose asChild>
@@ -208,6 +212,14 @@ const FileUploadMenu = ({
         <span>Dropbox files</span>
       </MenuItem>
     </PopoverClose>
+    {onAddWebApp ? (
+      <PopoverClose asChild>
+        <MenuItem onClick={onAddWebApp}>
+          <Globe className="size-5" />
+          <span>Web app</span>
+        </MenuItem>
+      </PopoverClose>
+    ) : null}
   </Menu>
 );
 
@@ -225,7 +237,9 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     fileIdMappings,
     richContentRemovedFileEmbedIds,
     hasWebBuilds,
+    webBuildPlayerEnabled,
   } = useProductEditContext();
+  const [webAppHistoryOpen, setWebAppHistoryOpen] = React.useState(false);
   const uid = React.useId();
   const scrollContainerRef = React.useRef<HTMLDivElement>(null);
   const isDesktop = useIsAboveBreakpoint("lg");
@@ -873,7 +887,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       />
       <div className="h-screen sm:h-full md:flex md:flex-col">
         {disableDownloadsResult ? (
-          <div className="p-4 pb-0 md:p-8 md:pb-0">
+          <div className="p-4 md:px-8">
             <Alert role="status" variant={disableDownloadsResult.status}>
               <div className="flex flex-1 items-start gap-2">
                 <span className="flex-1">{disableDownloadsResult.message}</span>
@@ -889,13 +903,12 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
             </Alert>
           </div>
         ) : null}
+        {webBuildPlayerEnabled ? <VersionHistory open={webAppHistoryOpen} onOpenChange={setWebAppHistoryOpen} /> : null}
         {hasWebBuilds && !hasLiveBuildFile(product) ? (
-          <div className="p-4 pb-0 md:p-8 md:pb-0">
+          <div className="p-4 md:px-8">
             <Alert role="status" variant="info">
-              <div className="flex flex-1 flex-wrap items-center gap-2">
-                <span className="flex-1">Your web app is not in this product's content yet.</span>
-                <VersionHistoryButton />
-              </div>
+              Your web app is not in this product's content yet.{" "}
+              <LinkButton onClick={() => setWebAppHistoryOpen(true)}>Open version history</LinkButton>
             </Alert>
           </div>
         ) : null}
@@ -918,6 +931,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                       void fetchLatestExistingFiles();
                     }}
                     onUploadFromDropbox={uploadFromDropbox}
+                    onAddWebApp={webBuildPlayerEnabled ? () => setWebAppHistoryOpen(true) : null}
                   />
                 </PopoverMenuItem>
                 <DisableDownloadsForAllFiles onResult={setDisableDownloadsResult} />
@@ -1335,6 +1349,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             void fetchLatestExistingFiles();
                           }}
                           onUploadFromDropbox={uploadFromDropbox}
+                          onAddWebApp={webBuildPlayerEnabled ? () => setWebAppHistoryOpen(true) : null}
                         />
                       </PopoverContent>
                     </Popover>

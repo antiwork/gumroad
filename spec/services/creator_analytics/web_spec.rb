@@ -235,6 +235,73 @@ describe CreatorAnalytics::Web do
       expect(@service.by_referral).to eq(expected_result)
     end
 
+    context "when Elasticsearch returns buckets dated outside the requested window" do
+      def stub_referral_buckets(views:, sales:)
+        allow(CreatorAnalytics::ProductPageViews).to receive(:new).and_return(
+          instance_double(CreatorAnalytics::ProductPageViews, by_product_and_referrer_and_date: views)
+        )
+        allow(CreatorAnalytics::Sales).to receive(:new).and_return(
+          instance_double(CreatorAnalytics::Sales, by_product_and_referrer_and_date: sales)
+        )
+      end
+
+      it "skips the stray buckets before and after the window and keeps the in-window ones" do
+        product_id = @products[0].id
+        stub_referral_buckets(
+          views: {
+            [product_id, "google.com", "2020-12-31"] => 4,
+            [product_id, "google.com", "2021-01-01"] => 2,
+            [product_id, "google.com", "2021-01-03"] => 5,
+            [product_id, "google.com", "2021-01-04"] => 6,
+            [product_id, "t.co", "2021-01-04"] => 7,
+          },
+          sales: {
+            [product_id, "google.com", "2020-12-31"] => { count: 4, total: 400 },
+            [product_id, "google.com", "2021-01-01"] => { count: 1, total: 100 },
+            [product_id, "google.com", "2021-01-03"] => { count: 3, total: 300 },
+            [product_id, "google.com", "2021-01-04"] => { count: 6, total: 600 },
+            [product_id, "t.co", "2021-01-04"] => { count: 7, total: 700 },
+          }
+        )
+
+        expect(@service.by_referral[:by_referral]).to eq(
+          views: { @products[0].unique_permalink => { "Google" => [2, 0, 5] } },
+          sales: { @products[0].unique_permalink => { "Google" => [1, 0, 3] } },
+          totals: { @products[0].unique_permalink => { "Google" => [100, 0, 300] } }
+        )
+      end
+
+      {
+        "day" => ["2021-01-01", "2021-01-02", "2021-01-03"],
+        "hour" => ["2021-01-01T23:00", "2021-01-02T00:00", "2021-01-03T00:00"],
+      }.each do |interval, (before_key, first_key, after_key)|
+        it "keeps the first #{interval} bucket of a single-day window" do
+          product_id = @products[0].id
+          stub_referral_buckets(
+            views: {
+              [product_id, nil, before_key] => 4,
+              [product_id, nil, first_key] => 2,
+              [product_id, nil, after_key] => 6,
+            },
+            sales: {
+              [product_id, nil, before_key] => { count: 4, total: 400 },
+              [product_id, nil, first_key] => { count: 1, total: 100 },
+              [product_id, nil, after_key] => { count: 6, total: 600 },
+            }
+          )
+          padding = interval == "hour" ? [0] * 23 : []
+
+          result = described_class.new(user: @user, dates: [Date.new(2021, 1, 2)], interval:).by_referral[:by_referral]
+
+          expect(result).to eq(
+            views: { @products[0].unique_permalink => { "direct" => [2] + padding } },
+            sales: { @products[0].unique_permalink => { "direct" => [1] + padding } },
+            totals: { @products[0].unique_permalink => { "direct" => [100] + padding } }
+          )
+        end
+      end
+    end
+
     it "keeps filters aligned with histogram buckets when midnight is skipped" do
       user = create(:user, timezone: "Tehran")
       product = create(:product, user: user)
