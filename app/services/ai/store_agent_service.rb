@@ -1778,7 +1778,8 @@ class Ai::StoreAgentService
     def sections_snapshot(endpoint, path_params)
       return unless endpoint.id == "update_product_sections" && (product = target_product(endpoint, path_params))
 
-      product.seller_profile_sections.to_a
+      # In page order, so the card lists them, and numbers alike ones, as the page shows them.
+      product.seller_profile_sections.sort_by { [product.sections.index(_1.id) || product.sections.size, _1.id] }
     end
 
     # A created products section with no list of its own starts from the seller's whole catalog (the
@@ -1876,20 +1877,33 @@ class Ai::StoreAgentService
     end
 
     # Existing sections by external id, labelled by header or type. Sections that would share a label
-    # (two unnamed products sections are both "Products") also name what they show, so the seller can
-    # tell which one is kept, changed or deleted.
+    # (two unnamed products sections are both "Products") also name the products they show, then, if
+    # still alike, their position on the page, so the seller can tell which one is kept or deleted.
     def distinct_section_labels(current)
-      plain = current.to_h { [_1.external_id, section_label(_1)] }
-      counts = plain.values.tally
-      current.to_h do |section|
-        label = plain[section.external_id]
-        next [section.external_id, label] if counts[label] == 1
-
-        product_ids = section.is_a?(SellerProfileFeaturedProductSection) ? [section.featured_product_id].compact : Array(section.shown_products)
-        names = Link.where(user_id: seller.id, id: product_ids).pluck(:id, :name).to_h
-        shown = product_ids.map { |id| names[id] || id.to_s }.join(", ").presence || "no products"
-        [section.external_id, "#{label} (#{shown})"]
+      labels = current.to_h { [_1.external_id, section_label(_1)] }
+      colliding_sections(current, labels).each do |section|
+        shown = section_products_summary(section)
+        labels[section.external_id] = "#{labels[section.external_id]} (#{shown})" if shown
       end
+      colliding_sections(current, labels).each do |section|
+        labels[section.external_id] = "#{labels[section.external_id]}, section #{current.index(section) + 1}"
+      end
+      labels
+    end
+
+    def colliding_sections(current, labels)
+      counts = labels.values.tally
+      current.select { counts[labels[_1.external_id]] > 1 }
+    end
+
+    def section_products_summary(section)
+      product_ids = case section
+                    when SellerProfileFeaturedProductSection then [section.featured_product_id].compact
+                    when SellerProfileProductsSection then Array(section.shown_products)
+                    else return
+      end
+      names = Link.where(user_id: seller.id, id: product_ids).pluck(:id, :name).to_h
+      product_ids.map { |id| names[id] || id.to_s }.join(", ").presence || "no products"
     end
 
     def section_entry_label(entry, names)

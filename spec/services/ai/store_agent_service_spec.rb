@@ -2361,6 +2361,22 @@ describe Ai::StoreAgentService do
           )
         end
 
+        it "numbers alike sections by their position on the page" do
+          shown_products = [product.id]
+          later = create(:seller_profile_products_section, seller:, product:, header: "", shown_products:)
+          earlier = create(:seller_profile_products_section, seller:, product:, header: "", shown_products:)
+          first_text = create(:seller_profile_rich_text_section, seller:, product:, header: "")
+          second_text = create(:seller_profile_rich_text_section, seller:, product:, header: "")
+          product.update!(sections: [earlier.id, later.id, first_text.id, second_text.id])
+
+          action = propose_sections([later.external_id, first_text.external_id])
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "Products (#{product.name}), section 2 → Rich text, section 3" },
+            { label: "Deleted", value: "2 sections will be deleted: Products (#{product.name}), section 1, Rich text, section 4" },
+          )
+        end
+
         it "does not count a section it changes or creates as deleted" do
           product.update!(sections: [kept.id, dropped.id])
 
