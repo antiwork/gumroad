@@ -26,7 +26,7 @@ class CustomerPresenter
   def customer(pundit_user:)
     offer_code = purchase.original_offer_code
     variant = purchase.variant_attributes.first
-    review = purchase.original_product_review
+    review = purchase.alive_original_product_review
     product = purchase.link
     call = purchase.call
     commission = purchase.commission

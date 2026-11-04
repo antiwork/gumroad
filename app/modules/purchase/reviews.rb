@@ -29,6 +29,11 @@ module Purchase::Reviews
     purchase&.true_original_purchase&.product_review
   end
 
+  def alive_original_product_review
+    review = original_product_review
+    review if review&.alive?
+  end
+
   def post_review(rating:, message: nil, anonymous: :unchanged, video_options: {})
     review = original_product_review || true_original_purchase.build_product_review(link:)
     ProductReview::UpdateService.new(review, rating:, message:, anonymous:, video_options:).update

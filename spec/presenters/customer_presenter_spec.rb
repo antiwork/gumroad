@@ -575,6 +575,19 @@ describe CustomerPresenter do
       end
     end
 
+    context "when the purchase's review was soft-deleted by a full refund" do
+      let(:purchase) { create(:purchase) }
+      let!(:product_review) { create(:product_review, purchase:) }
+
+      it "omits the review" do
+        purchase.update!(stripe_refunded: true)
+        expect(product_review.reload).to be_deleted
+
+        props = described_class.new(purchase: purchase.reload).customer(pundit_user:)
+        expect(props[:review]).to be_nil
+      end
+    end
+
     context "purchase has downloads" do
       let(:purchase) { create(:purchase) }
 

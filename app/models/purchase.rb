@@ -1131,7 +1131,7 @@ class Purchase < ApplicationRecord
       json[:paypal_email] = card_visual
     end
 
-    json[:product_rating] = original_product_review.try(:rating)
+    json[:product_rating] = alive_original_product_review.try(:rating)
     if display_product_reviews?
       json[:reviews_count] = link.reviews_count
       json[:average_rating] = link.average_rating
@@ -3162,7 +3162,7 @@ class Purchase < ApplicationRecord
     json_data[:currency_symbol] = symbol_for(displayed_price_currency_type)
     json_data[:amount_refundable_in_currency] = amount_refundable_in_currency
     json_data[:refund_fee_notice_shown] = seller&.refund_fee_notice_shown? || false
-    json_data[:product_rating] = original_product_review.try(:rating)
+    json_data[:product_rating] = alive_original_product_review.try(:rating)
 
     json_data[:refunded] = stripe_refunded?
     json_data[:partially_refunded] = stripe_partially_refunded
@@ -4747,7 +4747,7 @@ class Purchase < ApplicationRecord
         access_revoked: is_access_revoked,
         preorder_authorization_time: (preorder.created_at if is_preorder_charge?),
         variants_price_cents: variant_extra_cost,
-        review: original_product_review&.message,
+        review: alive_original_product_review&.message,
         cancellation_date: subscription&.user_requested_cancellation_at,
         subscription_end_date: subscription&.termination_date,
         sent_abandoned_cart_email: sent_abandoned_cart_email?
