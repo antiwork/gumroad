@@ -26,8 +26,6 @@ class ProductBuild < ApplicationRecord
   # running ones when the grant expires.
   PLAYER_GRANT_VALID_FOR = 12.hours
   PLAYER_SAVE_GRANT_PURPOSE = "product_build_player_save"
-  # The play session a player page load started, for that page's heartbeat.
-  PLAYER_HEARTBEAT_GRANT_PURPOSE = "product_build_player_heartbeat"
   # The save endpoint writes only into the buyer's own save, so its grant can outlive a play session:
   # a tab left open overnight can still save.
   PLAYER_SAVE_GRANT_VALID_FOR = 30.days
@@ -124,16 +122,6 @@ class ProductBuild < ApplicationRecord
     self.class.player_grant_encryptor.encrypt_and_sign(
       { "token" => url_redirect_token, "purchase_id" => purchase_id, "seller_id" => product.user_id, "site_prefix" => site_prefix },
       purpose: PLAYER_GRANT_PURPOSE,
-      expires_in: PLAYER_GRANT_VALID_FOR,
-    )
-  end
-
-  # A grant for the player page's heartbeat, naming the play session that page started. It carries
-  # nothing else, so a stale page cannot extend another session.
-  def player_heartbeat_grant(url_redirect_token:, purchase_id:, session_id:)
-    self.class.player_grant_encryptor.encrypt_and_sign(
-      { "token" => url_redirect_token, "purchase_id" => purchase_id, "session_id" => session_id },
-      purpose: PLAYER_HEARTBEAT_GRANT_PURPOSE,
       expires_in: PLAYER_GRANT_VALID_FOR,
     )
   end
