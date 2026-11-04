@@ -32,25 +32,33 @@ describe BeninBankAccount do
   end
 
   describe "#validate_account_number" do
-    it "allows records that match the required account number regex" do
+    let(:message) { "The account number is invalid. Enter your 28-character IBAN starting with BJ and check the two digits after BJ." }
+
+    it "accepts a 28-character IBAN with valid check digits" do
       expect(build(:benin_bank_account)).to be_valid
-      expect(build(:benin_bank_account, account_number: "BJ66AJ06101001001KR390000760")).to be_valid
+    end
 
-      bj_bank_account = build(:benin_bank_account, account_number: "FR66BJ0610100100144390000769")
-      expect(bj_bank_account).to_not be_valid
-      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    it "rejects values Stripe rejects" do
+      [
+        "BJ00BC0010100100045000000110", # 28 chars, check digits do not compute
+        "BJ66AJ06101001001KR390000760",
+        "FR66BJ0610100100144390000769",
+        "BJ66BJ061010010014439000076",
+        "BJ66BJ06101001001443900007690",
+        "9066890610100100144390000769",
+      ].each do |account_number|
+        bj_bank_account = build(:benin_bank_account, account_number:)
+        expect(bj_bank_account).to_not be_valid
+        expect(bj_bank_account.errors.full_messages.to_sentence).to eq(message)
+      end
+    end
 
-      bj_bank_account = build(:benin_bank_account, account_number: "BJ66BJ061010010014439000076")
-      expect(bj_bank_account).to_not be_valid
-      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+    it "leaves an already-persisted non-conforming number alone on an unrelated save" do
+      bj_bank_account = build(:benin_bank_account, account_number: "BJ00BC0010100100045000000110", account_number_last_four: "0110")
+      bj_bank_account.save!(validate: false)
 
-      bj_bank_account = build(:benin_bank_account, account_number: "BJ66BJ06101001001443900007690")
-      expect(bj_bank_account).to_not be_valid
-      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
-
-      bj_bank_account = build(:benin_bank_account, account_number: "9066890610100100144390000769")
-      expect(bj_bank_account).to_not be_valid
-      expect(bj_bank_account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      expect { bj_bank_account.reload.mark_deleted! }.to_not raise_error
+      expect(bj_bank_account.reload).to be_deleted
     end
   end
 end
