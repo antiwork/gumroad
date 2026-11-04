@@ -53,6 +53,9 @@ export const WebBuildPlayer = React.forwardRef<WebBuildPlayerHandle, { title: st
         src={frameUrl}
         title={title}
         sandbox={SANDBOX}
+        // The frame's URL is on this origin, so by default the build gets this page's full URL, which
+        // can hold the mobile app's access token, as document.referrer.
+        referrerPolicy="no-referrer"
         allow="fullscreen; autoplay; gamepad"
         className="block size-full border-0 bg-black"
         onLoad={() => frameRef.current?.focus()}

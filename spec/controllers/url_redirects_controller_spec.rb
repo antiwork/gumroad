@@ -2748,6 +2748,12 @@ describe UrlRedirectsController, inertia: true do
       expect(response).to redirect_to(url_redirect_play_path(@url_redirect.token))
     end
 
+    it "keeps the mobile app's display when it returns to the web build player" do
+      post :confirm, params: { id: @token, email: @url_redirect.purchase.email, destination: "play", display: "mobile_app" }
+
+      expect(response).to redirect_to(url_redirect_play_path(@url_redirect.token, display: "mobile_app"))
+    end
+
     it "redirects and reset counter if email is correct" do
       post :confirm, params: { id: @token, email: @url_redirect.purchase.email }
       expect(response).to redirect_to(url_redirect_path(@url_redirect.token))

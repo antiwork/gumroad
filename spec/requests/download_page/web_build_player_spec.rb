@@ -195,6 +195,31 @@ describe "Download page web build player", type: :system, js: true do
     end
   end
 
+  context "inside the mobile app's player" do
+    let(:oauth_application) { create(:oauth_application, owner: buyer) }
+    let(:access_token) { create("doorkeeper/access_token", application: oauth_application, resource_owner_id: buyer.id, scopes: "mobile_api") }
+    let(:game_script) do
+      <<~JS
+        document.getElementById("count").textContent = `Referrer: ${document.referrer || "none"}`;
+      JS
+    end
+
+    before { visit("/d/#{url_redirect.token}/play?display=mobile_app&access_token=#{access_token.token}&mobile_token=#{Api::Mobile::BaseController::MOBILE_TOKEN}") }
+
+    it "shows only the build, under the app's own header" do
+      expect(page).to have_selector("iframe[title='Clicker']")
+      expect(page).not_to have_link("Back to content")
+      expect(page).not_to have_selector("h1", text: "Clicker")
+      expect(page).not_to have_selector("[role='menubar']")
+    end
+
+    it "keeps the app's access token in the page's URL out of the build's reach" do
+      within_frame(find("iframe[title='Clicker']")) do
+        expect(page).to have_text("Referrer: none")
+      end
+    end
+  end
+
   it "offers no Play action while the player is off for the seller" do
     Feature.deactivate_user(:product_build_player, seller)
 

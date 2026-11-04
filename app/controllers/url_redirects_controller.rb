@@ -324,7 +324,7 @@ class UrlRedirectsController < ApplicationController
       elsif params[:destination] == "stream"
         redirect_to url_redirect_stream_page_path(@url_redirect.token, **forwardable_query_params)
       elsif params[:destination] == "play"
-        redirect_to url_redirect_play_path(@url_redirect.token)
+        redirect_to url_redirect_play_path(@url_redirect.token, **forwardable_query_params)
       else
         redirect_to url_redirect_path(@url_redirect.token, **forwardable_query_params)
       end
@@ -428,6 +428,7 @@ class UrlRedirectsController < ApplicationController
 
     render inertia: "UrlRedirects/Play", props: {
       title: product.name,
+      is_mobile_app_web_view: params[:display] == "mobile_app",
       # The trailing slash makes the build's relative file paths resolve under the grant.
       frame_url: "#{request.path.chomp("/")}/#{grant}/",
       content_page_url: @url_redirect.download_page_url,
