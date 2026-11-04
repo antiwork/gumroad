@@ -40,6 +40,18 @@ describe Api::Mobile::SalesController, :vcr do
       expect(body["emails"].length).to eq(1)
       expect(body["emails"].first).to include("type" => "receipt", "id" => @purchase.external_id)
     end
+
+    it "omits the rating of a review soft-deleted by a full refund",
+       vcr: { cassette_name: "Api_Mobile_SalesController/GET_show/returns_customer_details_charges_and_emails" } do
+      review = create(:product_review, purchase: @purchase, rating: 4)
+      @purchase.update!(stripe_refunded: true)
+      expect(review.reload).to be_deleted
+
+      get :show, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["purchase"]["product_rating"]).to be_nil
+    end
   end
 
   describe "GET index" do

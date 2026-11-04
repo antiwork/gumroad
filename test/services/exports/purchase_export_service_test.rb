@@ -159,6 +159,17 @@ class PurchaseExportServiceTest < ActiveSupport::TestCase
     assert_equal "This is a great product!", field_value(row, "Review")
   end
 
+  test "leaves rating and review blank when the review was soft-deleted by a full refund" do
+    review = create_product_review(purchase: @purchase, rating: 5, message: "This is a great product!")
+    @purchase.update!(stripe_refunded: true)
+    assert review.reload.deleted?
+
+    row = last_data_row
+    assert_exported_row_is @purchase, row
+    assert_nil field_value(row, "Rating")
+    assert_nil field_value(row, "Review")
+  end
+
   # Note: this one cannot pin the service's own gift indirection. Purchase#original_product_review
   # resolves the giftee independently, so the Rating column is correct even with
   # main_or_giftee_purchase collapsed to `purchase`. The License Key tests below do pin it.

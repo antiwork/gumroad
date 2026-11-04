@@ -594,6 +594,17 @@ describe Api::V2::SalesController do
         )
       end
 
+      it "omits the rating and message of a review soft-deleted by a full refund" do
+        review = create(:product_review, purchase: @purchase, rating: 5, message: "Worth it")
+        @purchase.update!(stripe_refunded: true)
+        expect(review.reload).to be_deleted
+
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]).to include("product_rating" => nil)
+        expect(response.parsed_body["sale"]).not_to have_key("review")
+      end
+
       it "omits buyer_presentment for canonical-currency sales" do
         get :show, params: @params
 
