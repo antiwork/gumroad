@@ -1,16 +1,10 @@
 # frozen_string_literal: true
 
-# Re-checks one seller whose payouts were paused because Stripe had payouts disabled on their
-# connected account, and resumes them if Stripe now reports payouts enabled.
+# Resumes a Stripe-source payout pause when Stripe now reports payouts enabled: the missed-webhook
+# self-heal for `account.updated`, sharing its resume writer so whichever runs second is a no-op.
 #
-# This is the missed-webhook self-heal for `account.updated`: it applies the same predicate the
-# webhook applies (`payouts_enabled` true and the pause came from Stripe) and calls the same
-# StripeMerchantAccountManager.resume_stripe_payouts_pause!, so whichever of the two runs first the
-# other is a no-op. Without it the only way out of that pause was an admin resuming payouts by hand
-# (gumroad-private#4301).
-#
-# Accounts that are suspended, flagged or deleted are left alone: those are risk decisions about the
-# account as a whole, and Stripe re-enabling payouts is not a reason to undo one.
+# Suspended, flagged and deleted accounts are skipped: Stripe re-enabling payouts is not a reason to
+# undo a risk decision.
 class ReconcileStripePayoutsPauseForSellerJob
   include Sidekiq::Job
   sidekiq_options queue: :low, lock: :until_executed, retry: 2

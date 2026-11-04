@@ -36,7 +36,7 @@ describe ReconcileStripePayoutsPausesJob do
     user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
     user.comments.create!(
       content: "Payouts paused automatically after 3 consecutive failed payouts.",
-      comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+      comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
       author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:repeated_failed_payouts]
     )
 

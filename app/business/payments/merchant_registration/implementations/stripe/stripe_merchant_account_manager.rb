@@ -3656,11 +3656,7 @@ module StripeMerchantAccountManager
 
   # Clears a Stripe-sourced payout pause and leaves the audit comment. The caller must already hold
   # `user.with_lock` (both callers do), because the resume write races the webhook's pause write.
-  #
-  # Shared on purpose: the `account.updated` webhook was the only writer of this state, so a dropped
-  # or no-op delivery left the seller paused with nothing to heal it (gumroad-private#4301).
-  # ReconcileStripePayoutsPauseForSellerJob now calls this too, and both write the identical state
-  # and comment, so whichever runs second finds the pause already gone and does nothing.
+  # Shared by the `account.updated` webhook and ReconcileStripePayoutsPauseForSellerJob.
   def self.resume_stripe_payouts_pause!(user:, merchant_account:)
     user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
     user.comments.create!(
