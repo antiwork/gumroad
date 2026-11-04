@@ -64,6 +64,20 @@ describe ProductBuildPlaySession do
     end
   end
 
+  describe "#heartbeat! with another page open on the same purchase" do
+    it "resumes into its own replacement, not a session another page started" do
+      a = described_class.start!(product_build: build, purchase:, at: start)
+      b = described_class.start!(product_build: build, purchase:, at: start + 3.minutes)
+
+      resumed = a.heartbeat!(start + 4.minutes)
+
+      expect(resumed).not_to eq(b)
+      expect(resumed.started_at).to eq(start + 4.minutes)
+      expect(b.reload.last_heartbeat_at).to eq(start + 3.minutes)
+      expect(a.reload.heartbeat!(start + 5.minutes)).to eq(resumed)
+    end
+  end
+
   describe ".stats_by_product" do
     it "counts each product's sessions and averages their length" do
       other_product = create(:product, user: seller)

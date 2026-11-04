@@ -8,6 +8,7 @@ class CreateProductBuildPlaySessions < ActiveRecord::Migration[8.1]
       t.bigint :purchase_id, null: false
       t.datetime :started_at, null: false
       t.datetime :last_heartbeat_at, null: false
+      t.bigint :replacement_id
       t.timestamps
 
       t.index [:product_id, :started_at]

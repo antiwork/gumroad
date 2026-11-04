@@ -1920,6 +1920,7 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.bigint "purchase_id", null: false
     t.datetime "started_at", null: false
     t.datetime "last_heartbeat_at", null: false
+    t.bigint "replacement_id"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["product_build_id"], name: "index_product_build_play_sessions_on_product_build_id"

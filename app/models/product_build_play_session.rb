@@ -22,7 +22,7 @@ class ProductBuildPlaySession < ApplicationRecord
   # Extends an open session and returns it. A beat after the expiry means the page woke up from a
   # sleep or an outage: it moves to a new session started at that beat, so the gap is not counted.
   # The page keeps beating the old path until it reads the answer, so a replacement already made
-  # for this one is reused rather than started again.
+  # for this one, recorded in replacement_id, is reused rather than started again.
   def heartbeat!(at = Time.current)
     return resume!(at) unless open?(at)
 
@@ -47,8 +47,11 @@ class ProductBuildPlaySession < ApplicationRecord
   private
     def resume!(at)
       with_lock do
-        replacement = self.class.where(product_build_id:, purchase_id:).where("started_at > ?", last_heartbeat_at + SESSION_EXPIRY).order(:started_at).first
-        replacement ? replacement.heartbeat!(at) : self.class.start!(product_build:, purchase:, at:)
+        if replacement_id
+          self.class.find(replacement_id).heartbeat!(at)
+        else
+          self.class.start!(product_build:, purchase:, at:).tap { |replacement| update!(replacement_id: replacement.id) }
+        end
       end
     end
 end
