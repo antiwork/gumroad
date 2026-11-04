@@ -127,9 +127,14 @@ describe Api::V2::ProductSectionsWriter do
   end
 
   describe "locking" do
-    it "takes the product row lock before the profile lock, the order the product editor's save takes them" do
+    it "takes the seller row, then the product row, then the profile lock, the order the permalink claim takes them" do
       create(:seller_profile, seller:)
       taken = []
+      allow(User).to receive(:where).and_wrap_original do |original, *args|
+        relation = original.call(*args)
+        taken << :seller if args.first == { id: seller.id }
+        relation
+      end
       allow(product).to receive(:with_lock).and_wrap_original do |original, *args, &block|
         taken << :product
         original.call(*args, &block)
@@ -140,7 +145,7 @@ describe Api::V2::ProductSectionsWriter do
       end
 
       expect(write!([{ "type" => "products" }])).to be_success
-      expect(taken).to eq([:product, :profile])
+      expect(taken.first(3)).to eq([:seller, :product, :profile])
     end
   end
 

@@ -64,10 +64,10 @@ class Api::V2::ProductSectionsWriter
 
     error = nil
     stale = false
-    # Product row, then the profile row: the order the product editor's save takes them (it locks the
-    # product, then `Link#show_in_sections!` takes the profile lock), so the two cannot deadlock. The
-    # profile lock serializes this with the other section json_data writers.
-    @product.with_lock do
+    # Seller row, product row, then the profile row: the order `Link#lock_for_permalink_claim!` and the
+    # editor's save take them, so the two cannot deadlock. The profile lock serializes this with the
+    # other section json_data writers.
+    with_seller_then_product_lock do
       @seller.with_profile_sections_lock do
         # The ownership and staleness checks run under the product lock so a concurrent writer cannot
         # add, remove or steal a section between the check and the destroy below. The dashboard's
@@ -127,6 +127,13 @@ class Api::V2::ProductSectionsWriter
   end
 
   private
+    def with_seller_then_product_lock(&block)
+      User.transaction do
+        User.where(id: @seller.id).lock.pick(:id)
+        @product.with_lock(&block)
+      end
+    end
+
     def failure(error)
       Result.new(error:)
     end
