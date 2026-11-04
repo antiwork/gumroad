@@ -186,8 +186,11 @@ module StripeMerchantAccountManager
     country_code = user.alive_user_compliance_info&.legal_entity_country_code
     return true if ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code) || ecuador_company?(user)
 
-    ASCII_ONLY_ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code) &&
-      bank_account.present? && bank_account.account_holder_full_name.to_s.ascii_only?
+    ascii_only_account_holder_name_sync?(user) && bank_account.present? && bank_account.account_holder_full_name.to_s.ascii_only?
+  end
+
+  def self.ascii_only_account_holder_name_sync?(user)
+    ASCII_ONLY_ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(user.alive_user_compliance_info&.legal_entity_country_code)
   end
 
   # EC company holder-name changes go to the existing external account in place rather than
@@ -1636,10 +1639,12 @@ module StripeMerchantAccountManager
       # A metadata match does not prove the local row is linked.
       unless skip_metadata_noop
         name_out_of_sync = false
-        if account_holder_name_synced_to_stripe?(bank_account.user, bank_account)
+        name_synced = account_holder_name_synced_to_stripe?(bank_account.user, bank_account)
+        if name_synced || ascii_only_account_holder_name_sync?(bank_account.user)
           stripe_external_account = stripe_account["external_accounts"]&.first
           stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-          name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
+          # A non-ASCII TW name is not sent, so an ASCII name Stripe kept from before has to be cleared.
+          name_out_of_sync = name_synced ? stripe_holder_name != bank_account.account_holder_full_name : stripe_holder_name.present?
         end
 
         restored = restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync

@@ -8,24 +8,38 @@ describe Onetime::SyncTaiwanBankHolderNamesToStripe do
 
     before { create(:user_compliance_info, user:, country: "Taiwan") }
 
-    it "enqueues a sync for an active Taiwan account with an ASCII name" do
-      bank_account = create(:taiwan_bank_account, user:, account_holder_full_name: "SHIE BING YUAN")
+    def create_linked_taiwan_bank_account(**attributes)
+      create(:taiwan_bank_account, user:, stripe_bank_account_id: "ba_#{SecureRandom.hex(4)}", **attributes)
+    end
+
+    it "enqueues a sync for the active, Stripe-linked Taiwan account with an ASCII name" do
+      bank_account = create_linked_taiwan_bank_account(account_holder_full_name: "SHIE BING YUAN")
 
       expect { described_class.process }.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
       expect(HandleNewBankAccountWorker.jobs.last["args"]).to eq([bank_account.id])
     end
 
-    it "strips surrounding whitespace before enqueueing" do
-      bank_account = create(:taiwan_bank_account, user:)
-      bank_account.update_column(:account_holder_full_name, " SHIE BING YUAN ")
+    it "normalizes the stored name like the model before enqueueing" do
+      bank_account = create_linked_taiwan_bank_account
+      bank_account.update_column(:account_holder_full_name, " SHIE BING YUAN\u3000")
 
       expect { described_class.process }.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
       expect(bank_account.reload.account_holder_full_name).to eq("SHIE BING YUAN")
     end
 
-    it "skips non-ASCII names and inactive accounts" do
-      create(:taiwan_bank_account, user:, account_holder_full_name: "謝秉原")
-      create(:taiwan_bank_account, user:, account_holder_full_name: "SHIE BING YUAN").mark_deleted!
+    it "skips non-ASCII names and accounts that are not the active one" do
+      create_linked_taiwan_bank_account(account_holder_full_name: "謝秉原")
+      create_linked_taiwan_bank_account(account_holder_full_name: "SHIE BING YUAN")
+
+      expect { described_class.process }.not_to change { HandleNewBankAccountWorker.jobs.size }
+    end
+
+    it "skips banks Stripe never accepted and suspended sellers" do
+      create(:taiwan_bank_account, user:, account_holder_full_name: "SHIE BING YUAN")
+      other_user = create(:user)
+      create(:user_compliance_info, user: other_user, country: "Taiwan")
+      create(:taiwan_bank_account, user: other_user, stripe_bank_account_id: "ba_suspended", account_holder_full_name: "SHIE BING YUAN")
+      other_user.update_columns(user_risk_state: "suspended_for_fraud")
 
       expect { described_class.process }.not_to change { HandleNewBankAccountWorker.jobs.size }
     end
