@@ -118,6 +118,18 @@ describe UpdatePayoutMethod do
           expect(bank_account.reload.account_holder_full_name).to eq("SHIE BING YUAN")
         end
 
+        it "enqueues HandleNewBankAccountWorker when the submitted ASCII name equals the stored one" do
+          bank_account.update!(account_holder_full_name: "SHIE BING YUAN")
+          params = ActionController::Parameters.new(
+            bank_account: { type: TaiwanBankAccount.name, account_holder_full_name: "SHIE BING YUAN" }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
+            expect(result).to eq(success: true)
+          end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
+        end
+
         it "does not enqueue HandleNewBankAccountWorker when the saved name is not ASCII" do
           params = ActionController::Parameters.new(
             bank_account: { type: TaiwanBankAccount.name, account_holder_full_name: "謝秉原" }

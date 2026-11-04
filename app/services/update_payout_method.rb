@@ -237,7 +237,8 @@ class UpdatePayoutMethod
 
       current_active.account_holder_full_name = params[:bank_account][:account_holder_full_name]
       return bank_account_error_for(current_active) unless current_active.save
-      return { success: true } if current_active.previous_changes["account_holder_full_name"].nil?
+      # TW names saved before the sync existed never reached Stripe, so an unchanged re-save must still enqueue.
+      return { success: true } if current_active.previous_changes["account_holder_full_name"].nil? && !current_active.is_a?(TaiwanBankAccount)
 
       if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user, current_active)
         after_commit do
