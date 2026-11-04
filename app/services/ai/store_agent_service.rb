@@ -1860,7 +1860,7 @@ class Ai::StoreAgentService
 
       kept_ids = entries.map { |entry| section_attributes(entry)&.dig("id") || (entry.is_a?(String) ? entry : nil) }.compact
       deleted = current - kept_ids.filter_map { |id| by_external_id[id.to_s] }
-      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map { names[_1.external_id] }.join(", ")}" } if deleted.any?
+      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map { names[_1.external_id] }.join("; ")}" } if deleted.any?
 
       content_rows = entries.flat_map { |entry| section_content_rows(entry, names) }
       # Two new products sections (or two unnamed kept ones) would share a label; number them in layout

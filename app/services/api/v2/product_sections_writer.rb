@@ -70,7 +70,9 @@ class Api::V2::ProductSectionsWriter
     @product.with_lock do
       @seller.with_profile_sections_lock do
         # The ownership and staleness checks run under the product lock so a concurrent writer cannot
-        # add, remove or steal a section between the check and the destroy below.
+        # add, remove or steal a section between the check and the destroy below. The dashboard's
+        # section editor can still add or delete a section row without it: one added after this
+        # snapshot is invisible to the destroy too, so it survives; one deleted is caught below.
         current_ids = @product.seller_profile_sections.pluck(:id)
         if (section_ids - current_ids).any?
           error = OWNERSHIP_MESSAGE
@@ -79,6 +81,16 @@ class Api::V2::ProductSectionsWriter
         if known_ids && (current_ids - section_ids - known_ids).any?
           error = "A section was added after this change was prepared. Read the product again and prepare a fresh sections list."
           stale = true
+          raise ActiveRecord::Rollback
+        end
+
+        # A locking read, before anything is written: the profile lock's own lookup fixed this
+        # transaction's snapshot before it waited, so a plain read could miss a `shown_products` change
+        # the previous holder committed, or a section it deleted.
+        changed_ids = entries.filter_map { _1[:id] unless _1[:id].nil? || _1[:attributes].empty? }
+        changed = @product.seller_profile_sections.lock.where(id: changed_ids).index_by(&:id)
+        if changed.size != changed_ids.size
+          error = OWNERSHIP_MESSAGE
           raise ActiveRecord::Rollback
         end
 
@@ -93,9 +105,7 @@ class Api::V2::ProductSectionsWriter
         entries.each do |entry|
           next if entry[:id].nil? || entry[:attributes].empty?
 
-          # A locking read: the profile lock's own lookup fixed this transaction's snapshot before it
-          # waited, so a plain read could miss a `shown_products` change the previous holder committed.
-          section = @product.seller_profile_sections.lock.find(entry[:id])
+          section = changed.fetch(entry[:id])
           attributes = entry[:attributes].dup
           # The schema only allows an integer when the key exists, so clearing removes the key.
           section.json_data = section.json_data.except("featured_product_id") if attributes.key?(:featured_product_id) && attributes[:featured_product_id].nil?

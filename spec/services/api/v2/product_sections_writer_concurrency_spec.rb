@@ -47,16 +47,15 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     end
   end
 
-  # A product created while the writer waits for the profile lock joins the section (as
-  # `Link#add_to_profile_sections` does); changing only the sort must keep it listed.
-  it "keeps a product another writer added to the section while it waited for the profile lock" do
+  # Runs `holder_work` under the seller's profile lock on one connection, starts `write!` on another,
+  # and releases the lock only once the writer is queued behind it. Returns the writer's result.
+  def write_while_profile_lock_is_held(sections, &holder_work)
     locked = Queue.new
     release = Queue.new
     holder = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
         User.find(@seller.id).with_profile_sections_lock do
-          section = SellerProfileSection.find(@section.id)
-          section.update!(shown_products: section.shown_products + [@added.id])
+          holder_work.call
           locked << true
           release.pop
         end
@@ -68,21 +67,41 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     writer = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do |connection|
         writer_connection_id << connection.select_value("SELECT CONNECTION_ID()")
-        described_class.new(Link.find(@product.id)).write!(sections: [{ "id" => @section.external_id, "default_product_sort" => "newest" }])
+        described_class.new(Link.find(@product.id)).write!(sections:)
       end
     end
     wait_until_waiting_on_profile_lock(Timeout.timeout(10) { writer_connection_id.pop })
     release << true
     holder.join(20)
-    result = Timeout.timeout(20) { writer.value }
+    Timeout.timeout(20) { writer.value }
+  ensure
+    release&.close
+    holder&.join(20)
+    writer&.join(20)
+  end
+
+  # A product created while the writer waits for the profile lock joins the section (as
+  # `Link#add_to_profile_sections` does); changing only the sort must keep it listed.
+  it "keeps a product another writer added to the section while it waited for the profile lock" do
+    result = write_while_profile_lock_is_held([{ "id" => @section.external_id, "default_product_sort" => "newest" }]) do
+      section = SellerProfileSection.find(@section.id)
+      section.update!(shown_products: section.shown_products + [@added.id])
+    end
 
     expect(result).to be_success
     @section.reload
     expect(@section.default_product_sort).to eq("newest")
     expect(@section.shown_products).to eq([@listed.id, @added.id])
-  ensure
-    release&.close
-    holder&.join(20)
-    writer&.join(20)
+  end
+
+  it "refuses, and creates nothing, when a section it changes was deleted while it waited" do
+    result = write_while_profile_lock_is_held([{ "type" => "products", "shown_products" => [@listed.external_id] }, { "id" => @section.external_id, "default_product_sort" => "newest" }]) do
+      SellerProfileSection.find(@section.id).destroy!
+    end
+
+    expect(result).not_to be_success
+    expect(result.error).to eq(described_class::OWNERSHIP_MESSAGE)
+    expect(SellerProfileSection.where(seller_id: @seller.id)).to be_empty
+    expect(@product.reload.sections).to eq([@section.id])
   end
 end

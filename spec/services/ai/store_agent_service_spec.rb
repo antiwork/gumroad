@@ -2254,7 +2254,7 @@ describe Ai::StoreAgentService do
 
           expect(action[:fields]).to include(
             { label: "Sections", value: "(none)" },
-            { label: "Deleted", value: "2 sections will be deleted: Keep me, Drop me" },
+            { label: "Deleted", value: "2 sections will be deleted: Keep me; Drop me" },
           )
         end
 
@@ -2373,7 +2373,7 @@ describe Ai::StoreAgentService do
 
           expect(action[:fields]).to include(
             { label: "Sections", value: "Products (#{product.name}), section 2 → Rich text, section 3" },
-            { label: "Deleted", value: "2 sections will be deleted: Products (#{product.name}), section 1, Rich text, section 4" },
+            { label: "Deleted", value: "2 sections will be deleted: Products (#{product.name}), section 1; Rich text, section 4" },
           )
         end
 
