@@ -2338,6 +2338,15 @@ describe Ai::StoreAgentService do
           expect(action[:fields]).to include({ label: "Section Keep me", value: "Products: First, Second, Third" })
         end
 
+        it "numbers card rows that would otherwise share a label" do
+          action = propose_sections_write("sections" => [{ "type" => "products", "shown_products" => [] }, { "type" => "products", "shown_products" => [product.external_id] }])
+
+          expect(action[:fields]).to include(
+            { label: "New products section (1)", value: "Products: (none); Sort: your page layout; Filters: Off; Add new products: On" },
+            { label: "New products section (2)", value: "Products: #{product.name}; Sort: your page layout; Filters: Off; Add new products: On" },
+          )
+        end
+
         it "does not count a section it changes or creates as deleted" do
           product.update!(sections: [kept.id, dropped.id])
 

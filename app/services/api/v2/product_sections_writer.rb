@@ -64,9 +64,11 @@ class Api::V2::ProductSectionsWriter
 
     error = nil
     stale = false
-    # Profile lock first (as `Link#add_to_profile_sections` takes it): both rewrite section json_data.
-    @seller.with_profile_sections_lock do
-      @product.with_lock do
+    # Product row, then the profile row: the order the product editor's save takes them (it locks the
+    # product, then `Link#show_in_sections!` takes the profile lock), so the two cannot deadlock. The
+    # profile lock serializes this with the other section json_data writers.
+    @product.with_lock do
+      @seller.with_profile_sections_lock do
         # The ownership and staleness checks run under the product lock so a concurrent writer cannot
         # add, remove or steal a section between the check and the destroy below.
         current_ids = @product.seller_profile_sections.pluck(:id)

@@ -126,6 +126,24 @@ describe Api::V2::ProductSectionsWriter do
     end
   end
 
+  describe "locking" do
+    it "takes the product row lock before the profile lock, the order the product editor's save takes them" do
+      create(:seller_profile, seller:)
+      taken = []
+      allow(product).to receive(:with_lock).and_wrap_original do |original, *args, &block|
+        taken << :product
+        original.call(*args, &block)
+      end
+      allow(product.user).to receive(:with_profile_sections_lock).and_wrap_original do |original, *args, **kwargs, &block|
+        taken << :profile
+        original.call(*args, **kwargs, &block)
+      end
+
+      expect(write!([{ "type" => "products" }])).to be_success
+      expect(taken).to eq([:product, :profile])
+    end
+  end
+
   describe "atomicity" do
     it "rolls back the created sections and content changes when a later step fails" do
       kept = products_section
