@@ -3,6 +3,102 @@
 require "spec_helper"
 
 describe User::PingNotification do
+  describe "Ping signing" do
+    let(:seller) { create(:user) }
+
+    it "is off until the seller enables it" do
+      expect(seller.ping_signing_enabled?).to be(false)
+      expect(seller.ping_signing_secret).to be_nil
+    end
+
+    it "enabling writes a secret and takes effect immediately" do
+      seller.enable_ping_signing!
+
+      expect(seller.ping_signing_enabled?).to be(true)
+      expect(seller.ping_signing_secret).to match(/\A[0-9a-f]{64}\z/)
+    end
+
+    it "always writes a fresh secret, so the Rotate button cannot reuse the one in force" do
+      seller.enable_ping_signing!
+      secret = seller.ping_signing_secret
+
+      seller.enable_ping_signing!
+
+      expect(seller.ping_signing_secret).to be_present
+      expect(seller.ping_signing_secret).not_to eq(secret)
+    end
+
+    it "rotating replaces the secret" do
+      seller.enable_ping_signing!
+      first_secret = seller.ping_signing_secret
+
+      seller.enable_ping_signing!
+
+      expect(seller.ping_signing_secret).to be_present
+      expect(seller.ping_signing_secret).not_to eq(first_secret)
+    end
+
+    it "turning signing off clears the secret" do
+      seller.enable_ping_signing!
+
+      seller.disable_ping_signing!
+
+      expect(seller.ping_signing_enabled?).to be(false)
+      expect(seller.ping_signing_secret).to be_nil
+    end
+
+    it "does not disturb unrelated user state" do
+      seller.update!(name: "Gum", notification_endpoint: "http://example.com/ping")
+      updated_at = seller.updated_at
+
+      seller.enable_ping_signing!
+
+      seller.reload
+      expect(seller.name).to eq("Gum")
+      expect(seller.notification_endpoint).to eq("http://example.com/ping")
+      expect(seller.updated_at).to eq(updated_at)
+    end
+  end
+
+  describe "#send_test_ping signing" do
+    let(:seller) { create(:user) }
+    let(:latest_sale) { instance_double(Purchase, url_parameters: {}) }
+
+    before do
+      allow(seller).to receive(:sales).and_return([latest_sale])
+      allow(latest_sale).to receive(:payload_for_ping_notification).and_return({ "sale_id" => "abc", "test" => true })
+    end
+
+    it "signs the bytes it posts once signing is on, so a receiver can check the button end to end" do
+      seller.enable_ping_signing!
+      posted = nil
+      allow(HTTParty).to receive(:post) { |_url, options| posted = options }
+
+      seller.send_test_ping("https://example.com")
+
+      header = posted[:headers][PingSignature::HEADER]
+      expect(header).to be_present
+      expect(
+        PingSignature.valid?(
+          secret: seller.ping_signing_secret,
+          body: HTTParty::HashConversions.to_params(posted[:body]),
+          header:
+        )
+      ).to be(true)
+    end
+
+    it "leaves the test ping unsigned, and unchanged, while signing is off" do
+      expect(HTTParty).to receive(:post).with(
+        "https://example.com",
+        body: { "sale_id" => "abc", "test" => true },
+        timeout: 5,
+        headers: { "Content-Type" => seller.notification_content_type }
+      )
+
+      seller.send_test_ping("https://example.com")
+    end
+  end
+
   describe "#send_test_ping" do
     before do
       @user = create(:user)

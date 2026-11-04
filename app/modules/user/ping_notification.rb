@@ -7,6 +7,30 @@ module User::PingNotification
   # worker needs both halves so it can tell the seller about the ones that will never fire.
   PingNotificationTargets = Struct.new(:post_urls, :deliverable_subscriptions, :undeliverable_subscriptions, keyword_init: true)
 
+  # 32 random bytes, hex-encoded. Same shape as the oauth secrets it sits beside, and long enough
+  # that the only realistic way to have it is to have read it in Settings.
+  PING_SIGNING_SECRET_BYTES = 32
+
+  def ping_signing_enabled?
+    ping_signing_secret.present?
+  end
+
+  # A secret IS the opt-in: writing one turns signing on, and every ping this seller's endpoints
+  # receive is signed from the next delivery, retries included, because the worker reads the current
+  # value at send time rather than carrying it in the job.
+  #
+  # Writing again replaces it, which is what the Rotate button does: a leaked secret stops verifying
+  # the moment the seller asks for a new one. update_column, not update: this touches one column, and
+  # the seller must not be unable to enable signing because of an unrelated validation or callback on
+  # their user record.
+  def enable_ping_signing!
+    update_column(:ping_signing_secret, SecureRandom.hex(PING_SIGNING_SECRET_BYTES))
+  end
+
+  def disable_ping_signing!
+    update_column(:ping_signing_secret, nil)
+  end
+
   def send_test_ping(url)
     latest_sale = sales.last
     # Distinct sentinel rather than nil: HTTParty::Response overrides #nil? to
@@ -25,7 +49,18 @@ module User::PingNotification
       ping_params
     end
 
-    HTTParty.post(url, body: ping_params, timeout: 5, headers: { "Content-Type" => notification_content_type })
+    # The test ping is the one delivery a seller can aim at a receiver before saving it, so a seller
+    # with signing on gets the same signature header a real ping carries. The signed string is what
+    # HTTParty puts on the wire: a Hash body is form-encoded by HashConversions (HTTParty::Request::
+    # Body#call), and a JSON payload is already the string that goes out — the same equivalence the
+    # delivery worker relies on.
+    headers = { "Content-Type" => notification_content_type }
+    if ping_signing_enabled?
+      wire_body = ping_params.is_a?(Hash) ? HTTParty::HashConversions.to_params(ping_params) : ping_params.to_s
+      headers[PingSignature::HEADER] = PingSignature.sign(secret: ping_signing_secret, body: wire_body)
+    end
+
+    HTTParty.post(url, body: ping_params, timeout: 5, headers:)
   end
 
   def urls_for_ping_notification(resource_name)

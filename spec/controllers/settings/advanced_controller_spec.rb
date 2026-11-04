@@ -30,6 +30,64 @@ describe Settings::AdvancedController, :vcr, type: :controller, inertia: true do
     end
   end
 
+  describe "POST create_ping_signing_secret" do
+    it "gives the seller a signing secret" do
+      expect do
+        post :create_ping_signing_secret
+      end.to change { seller.reload.ping_signing_secret }.from(nil)
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(response.parsed_body["ping_signing_secret"]).to eq(seller.reload.ping_signing_secret)
+      expect(seller.ping_signing_enabled?).to be(true)
+    end
+
+    it "rotates an existing secret" do
+      seller.enable_ping_signing!
+      previous_secret = seller.ping_signing_secret
+
+      post :create_ping_signing_secret
+
+      expect(response.parsed_body["ping_signing_secret"]).to be_present
+      expect(response.parsed_body["ping_signing_secret"]).not_to eq(previous_secret)
+      expect(seller.reload.ping_signing_secret).to eq(response.parsed_body["ping_signing_secret"])
+    end
+
+    it "returns an error when the write fails" do
+      allow_any_instance_of(User).to receive(:enable_ping_signing!).and_raise(StandardError)
+      allow(ErrorNotifier).to receive(:notify)
+
+      post :create_ping_signing_secret
+
+      expect(response).to have_http_status :unprocessable_entity
+      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["error_message"]).to eq(Settings::AdvancedController::PING_SIGNING_ERROR_MESSAGE)
+    end
+  end
+
+  describe "DELETE destroy_ping_signing_secret" do
+    it "turns signing off" do
+      seller.enable_ping_signing!
+
+      delete :destroy_ping_signing_secret
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to be(true)
+      expect(seller.reload.ping_signing_secret).to be_nil
+      expect(seller.ping_signing_enabled?).to be(false)
+    end
+
+    it "returns an error when the write fails" do
+      allow_any_instance_of(User).to receive(:disable_ping_signing!).and_raise(StandardError)
+      allow(ErrorNotifier).to receive(:notify)
+
+      delete :destroy_ping_signing_secret
+
+      expect(response).to have_http_status :unprocessable_entity
+      expect(response.parsed_body["success"]).to be(false)
+    end
+  end
+
   describe "PUT update" do
     it "submits the form successfully" do
       put :update, params: { user: { notification_endpoint: "https://example.com" } }

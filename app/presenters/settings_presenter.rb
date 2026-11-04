@@ -120,6 +120,10 @@ class SettingsPresenter
       settings_pages: pages,
       user_id: ObfuscateIds.encrypt(seller.id),
       notification_endpoint: seller.notification_endpoint || "",
+      # The secret itself, not a boolean: the seller has to read it to put it in their verifier, and
+      # an empty string is how the page draws signing off. Enabling/rotating writes the value in
+      # place, so a reload after the request shows the current one.
+      ping_signing_secret: seller.ping_signing_secret || "",
       blocked_customer_emails: seller.blocked_customer_objects.active.email.pluck(:object_value).join("\n"),
       custom_domain_verification_status:,
       custom_domain_name: seller.custom_domain&.domain || "",

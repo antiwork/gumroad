@@ -13,6 +13,26 @@ const Code = ({ children }: { children: React.ReactNode }) => (
   <code className="rounded border border-border bg-active-bg px-2 py-1 text-xs align-middle">{children}</code>
 );
 
+// Receivers are not all on the same stack, so the doc gives one worked example of the check rather
+// than leaving them to infer the string that gets signed.
+const VERIFICATION_EXAMPLE = `// Express, with the raw body kept for the check.
+app.post("/gumroad-ping", express.raw({ type: "*/*" }), (req, res) => {
+  const [timestamp, signature] = req.get("X-Gumroad-Signature").split(",").map((part) => part.split("=")[1]);
+
+  const expected = crypto
+    .createHmac("sha256", process.env.GUMROAD_PING_SECRET)
+    .update(\`\${timestamp}.\${req.body}\`)
+    .digest("hex");
+
+  const fresh = Math.abs(Date.now() / 1000 - Number(timestamp)) <= 300;
+  const genuine = fresh && signature.length === expected.length &&
+    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+
+  if (!genuine) return res.sendStatus(400);
+
+  res.sendStatus(200); // Acknowledge first, then do the work.
+});`;
+
 const PING_PARAMETERS: PingParameter[] = [
   { name: "sale_id", description: "The id of the sale" },
   { name: "sale_timestamp", description: "The timestamp of the sale" },
@@ -100,10 +120,47 @@ const PublicPing = () => (
             </div>
 
             <p>
-              Because the payload is unsigned and deliveries can be dropped once the retries run out, treat a ping as a trigger
-              rather than as data: take <Code>sale_id</Code>, read the sale back through the API, and reconcile periodically
-              against your own records.
+              Because deliveries can be dropped once the retries run out, treat a ping as a trigger rather than as data: take{" "}
+              <Code>sale_id</Code>, read the sale back through the API, and reconcile periodically against your own records.{" "}
+              The signature below is what stops a forged or replayed request from triggering that work at all.
             </p>
+
+            <div>
+              <p>Verifying a ping</p>
+              <p>
+                Pings are unsigned unless you turn on Ping signing in your{" "}
+                <Link href={Routes.settings_advanced_path()}>account settings</Link>. With signing on, every ping to your
+                endpoint carries a signature header over the exact body we sent:
+              </p>
+              <p>
+                <Code>X-Gumroad-Signature: t=1793819021,v1=6f2a1c...</Code>
+              </p>
+              <ul className="ml-6 mt-2 list-disc space-y-1">
+                <li>
+                  <Code>t</Code> is the Unix timestamp of that delivery, in seconds.
+                </li>
+                <li>
+                  <Code>v1</Code> is the lowercase hex HMAC-SHA256 of the string <Code>t + "." + rawBody</Code> — the
+                  timestamp, a literal dot, then the exact bytes of the request body before any parameter parsing — keyed by
+                  your signing secret.
+                </li>
+              </ul>
+              <p>
+                To verify: recompute the HMAC over the raw body you received, compare it with <Code>v1</Code> in constant
+                time, and reject the ping when <Code>t</Code> is more than five minutes from your own clock or when the two
+                do not match. The timestamp is what a replay cannot fake; the body alone is not enough. A retried delivery is
+                signed again with a fresh timestamp, so a signature never has to be accepted twice, and duplicates still need
+                deduplicating as described above.
+              </p>
+              <pre className="overflow-x-auto rounded border border-border bg-active-bg p-3 text-xs">
+                <code>{VERIFICATION_EXAMPLE}</code>
+              </pre>
+              <p>
+                Rotating the secret in settings replaces it immediately: anything still verifying the previous one starts
+                rejecting pings. Your endpoint URL, including any <Code>user:password</Code> it carries, keeps working whether
+                or not signing is on.
+              </p>
+            </div>
 
             <p>
               Testing: "Send test ping" in your account settings posts your most recent sale with <Code>test</Code> set to{" "}

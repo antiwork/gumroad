@@ -59,6 +59,101 @@ describe PostToIndividualPingEndpointWorker do
     end
   end
 
+  describe "signing" do
+    before do
+      @seller = create(:user)
+    end
+
+    it "leaves the delivery unsigned when the seller has not enabled Ping signing" do
+      expect(SsrfFilter).to receive(:post).with("http://notification.com", post_options(body: "a=1")).and_return(@ok_response)
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, @seller.id)
+    end
+
+    it "signs the exact body it sends when the seller has enabled Ping signing" do
+      @seller.enable_ping_signing!
+
+      expect(SsrfFilter).to receive(:post).with("http://notification.com", hash_including(:headers)) do |_url, options|
+        expect(options[:headers][PingSignature::HEADER]).to be_present
+        expect(
+          PingSignature.valid?(
+            secret: @seller.ping_signing_secret,
+            body: options[:body],
+            header: options[:headers][PingSignature::HEADER]
+          )
+        ).to be(true)
+        @ok_response
+      end
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, @seller.id)
+    end
+
+    it "signs a JSON delivery over the serialized body" do
+      @seller.enable_ping_signing!
+      params = { "some [thing]" => 1 }
+
+      expect(SsrfFilter).to receive(:post).with("http://notification.com", hash_including(:headers)) do |_url, options|
+        expect(options[:body]).to eq(params.to_json)
+        expect(
+          PingSignature.valid?(
+            secret: @seller.ping_signing_secret,
+            body: options[:body],
+            header: options[:headers][PingSignature::HEADER]
+          )
+        ).to be(true)
+        @ok_response
+      end
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", params, Mime[:json].to_s, @seller.id)
+    end
+
+    it "signs a retried delivery again, with a fresh timestamp" do
+      @seller.enable_ping_signing!
+      headers = []
+      allow(SsrfFilter).to receive(:post) do |_url, options|
+        headers << options[:headers][PingSignature::HEADER]
+        Net::HTTPInternalServerError.new("1.1", "500", "Internal Server Error")
+      end
+
+      travel_to(1.minute.from_now.change(usec: 0)) do
+        PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, @seller.id)
+      end
+      travel_to(10.minutes.from_now.change(usec: 0)) do
+        PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1, "retry_count" => 1 }, Mime[:url_encoded_form].to_s, @seller.id)
+      end
+
+      expect(headers.size).to eq(2)
+      expect(headers.uniq.size).to eq(2)
+      expect(PingSignature.valid?(secret: @seller.ping_signing_secret, body: "a=1", header: headers.first)).to be(true)
+    end
+
+    it "signs with the secret in force at delivery time, not the one from the enqueue" do
+      @seller.enable_ping_signing!
+      first_secret = @seller.ping_signing_secret
+      @seller.enable_ping_signing!
+
+      expect(SsrfFilter).to receive(:post).with("http://notification.com", hash_including(:headers)) do |_url, options|
+        header = options[:headers][PingSignature::HEADER]
+        expect(PingSignature.valid?(secret: first_secret, body: options[:body], header:)).to be(false)
+        expect(PingSignature.valid?(secret: @seller.ping_signing_secret, body: options[:body], header:)).to be(true)
+        @ok_response
+      end
+
+      PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, @seller.id)
+    end
+
+    it "still delivers the ping, unsigned, when the signing lookup fails" do
+      @seller.enable_ping_signing!
+      allow(User).to receive(:where).and_raise(StandardError)
+      allow(ErrorNotifier).to receive(:notify)
+      expect(SsrfFilter).to receive(:post).with("http://notification.com", post_options(body: "a=1")).and_return(@ok_response)
+
+      expect do
+        PostToIndividualPingEndpointWorker.new.perform("http://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, @seller.id)
+      end.to_not raise_error
+    end
+  end
+
   it "does not raise when it encounters a retryable internet error" do
     allow(SsrfFilter).to receive(:post).and_raise(SocketError.new("socket error message"))
     messages = []

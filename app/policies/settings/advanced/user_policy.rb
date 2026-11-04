@@ -12,4 +12,14 @@ class Settings::Advanced::UserPolicy < ApplicationPolicy
   def test_ping?
     show?
   end
+
+  # Enabling, rotating and turning signing off are all part of editing the Ping endpoint above them,
+  # so they ride on the same permission.
+  def create_ping_signing_secret?
+    show?
+  end
+
+  def destroy_ping_signing_secret?
+    show?
+  end
 end

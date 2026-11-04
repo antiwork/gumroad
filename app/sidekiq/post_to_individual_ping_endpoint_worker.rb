@@ -45,9 +45,17 @@ class PostToIndividualPingEndpointWorker
     # HTTParty's serializer keeps the form-encoded wire format identical to what it used to send.
     body = HTTParty::HashConversions.to_params(body) if body.is_a?(Hash)
 
+    headers = { "Content-Type" => content_type }
+    # Signing is opt-in per seller and the secret is read here, at delivery time, rather than carried
+    # in the job args: a rotation then covers the retries of a delivery already in flight, and the
+    # secret never sits in Redis. A Hash body is form-encoded above, so `body` holds the wire bytes.
+    if body.is_a?(String) && (signing_secret = ping_signing_secret_for(user_id))
+      headers[PingSignature::HEADER] = PingSignature.sign(secret: signing_secret, body:)
+    end
+
     options = {
       body:,
-      headers: { "Content-Type" => content_type },
+      headers:,
       # Endpoints commonly answer with trailing-slash/https normalization redirects (gp#2058:
       # refusing them silently dropped sale pings), so follow a few — SsrfFilter re-validates
       # every hop's resolved IPs, and the same POST body is re-sent on each hop. Past the limit
@@ -94,6 +102,21 @@ class PostToIndividualPingEndpointWorker
   end
 
   private
+    # A ping is never worth dropping over a signing lookup, and the payload is delivered unsigned
+    # rather than not at all: the receiver's other checks (the sale it names, the API) still apply.
+    def ping_signing_secret_for(user_id)
+      return nil if user_id.blank?
+
+      User.where(id: user_id).pick(:ping_signing_secret)
+    rescue => e
+      begin
+        ErrorNotifier.notify(e)
+      rescue
+        nil
+      end
+      nil
+    end
+
     def encode_brackets(key)
       key.to_s.gsub(/[\[\]]/) { |char| URI.encode_www_form_component(char) }
     end

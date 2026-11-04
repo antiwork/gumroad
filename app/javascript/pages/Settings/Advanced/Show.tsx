@@ -17,6 +17,7 @@ type AdvancedPageProps = {
   settings_pages: SettingPage[];
   user_id: string;
   notification_endpoint: string;
+  ping_signing_secret: string;
   recent_ping_deliveries: PingDelivery[];
   blocked_customer_emails: string;
   custom_domain_verification_status: { success: boolean; message: string } | null;
@@ -69,6 +70,7 @@ export default function AdvancedPage() {
           pingEndpoint={form.data.user.notification_endpoint}
           setPingEndpoint={(value) => form.setData("user.notification_endpoint", value)}
           userId={props.user_id}
+          pingSigningSecret={props.ping_signing_secret}
           recentDeliveries={props.recent_ping_deliveries}
         />
 

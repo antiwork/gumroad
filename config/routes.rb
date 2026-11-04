@@ -794,7 +794,12 @@ Rails.application.routes.draw do
       end
       get "profile", as: :profile, to: redirect { |_params, request| "/profile?#{request.query_string}".chomp("?") }
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
-      resource :advanced, only: %i[show update], controller: "advanced"
+      resource :advanced, only: %i[show update], controller: "advanced" do
+        # Enabling and rotating share one POST; the page labels the button. Both write the value in
+        # place, so a receiver verifying the previous secret starts rejecting pings immediately.
+        post :ping_signing_secret, action: :create_ping_signing_secret, as: :ping_signing_secret
+        delete :ping_signing_secret, action: :destroy_ping_signing_secret
+      end
       resource :billing, only: %i[show update], controller: "billing"
       resources :authorized_applications, only: :index
       resource :payments, only: %i[show update] do

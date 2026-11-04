@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
@@ -79,15 +80,102 @@ const RecentDeliveries = ({ deliveries }: { deliveries: PingDelivery[] }) => {
   );
 };
 
+const GENERIC_PING_SIGNING_ERROR = "Sorry, something went wrong. Please try again.";
+
+// The secret IS the opt-in: the server has one or it does not, so this renders one state or the
+// other rather than a checkbox that would need saving with the rest of the form. Enabling and
+// rotating are the same request; only the label differs.
+const PingSigningSecret = ({ secret: initialSecret }: { secret: string }) => {
+  const [secret, setSecret] = React.useState(initialSecret);
+  const [updating, setUpdating] = React.useState(false);
+  const enabled = secret.length > 0;
+
+  const writeSecret = asyncVoid(async (method: "POST" | "DELETE") => {
+    setUpdating(true);
+    try {
+      const response = await request({
+        url: Routes.ping_signing_secret_settings_advanced_path(),
+        method,
+        accept: "json",
+      });
+      const result = cast<{ success: boolean; ping_signing_secret?: string; error_message?: string }>(
+        await response.json(),
+      );
+      if (!response.ok || !result.success) throw new ResponseError(result.error_message ?? GENERIC_PING_SIGNING_ERROR);
+
+      setSecret(result.ping_signing_secret ?? "");
+      showAlert(
+        method === "DELETE" ? "Ping signing turned off." : enabled ? "Signing secret rotated." : "Ping signing enabled.",
+        "success",
+      );
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    } finally {
+      setUpdating(false);
+    }
+  });
+
+  return (
+    <Fieldset>
+      <FieldsetTitle>
+        <Label>Ping signing</Label>
+      </FieldsetTitle>
+      {enabled ? (
+        <>
+          <InputGroup>
+            <Input readOnly className="font-mono" value={secret} aria-label="Ping signing secret" />
+            <CopyToClipboard text={secret}>
+              <Pill asChild>
+                <Button type="button" className="rounded-full! px-3! py-2!">
+                  Copy
+                </Button>
+              </Pill>
+            </CopyToClipboard>
+          </InputGroup>
+          <FieldsetDescription>
+            Every ping to your endpoint now carries an X-Gumroad-Signature header that signs the timestamp and the exact
+            request body. Rotate the secret if it leaks: the new one takes effect on the next delivery, and anything still
+            verifying the old one starts rejecting pings.
+          </FieldsetDescription>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button type="button" disabled={updating} onClick={() => writeSecret("POST")}>
+              Rotate secret
+            </Button>
+            <Button type="button" outline color="danger" disabled={updating} onClick={() => writeSecret("DELETE")}>
+              Turn off signing
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <FieldsetDescription>
+            Pings are currently unsigned, so your endpoint cannot tell a genuine Ping from a replayed or forged one. Turn on
+            signing to get a secret only you and Gumroad hold, and a signature header on every ping that proves the body
+            came from us. Your endpoint URL, credentials included, keeps working either way.
+          </FieldsetDescription>
+          <div className="mt-3">
+            <Button type="button" disabled={updating} onClick={() => writeSecret("POST")}>
+              Enable ping signing
+            </Button>
+          </div>
+        </>
+      )}
+    </Fieldset>
+  );
+};
+
 const NotificationEndpointSection = ({
   pingEndpoint,
   setPingEndpoint,
   userId,
+  pingSigningSecret,
   recentDeliveries,
 }: {
   pingEndpoint: string;
   setPingEndpoint: (val: string) => void;
   userId: string;
+  pingSigningSecret: string;
   recentDeliveries: PingDelivery[];
 }) => {
   const [isSendingPing, setIsSendingPing] = React.useState(false);
@@ -146,6 +234,7 @@ const NotificationEndpointSection = ({
         </InputGroup>
         <FieldsetDescription>For external services, your `seller_id` is {userId}</FieldsetDescription>
       </Fieldset>
+      <PingSigningSecret secret={pingSigningSecret} />
       <Fieldset>
         <FieldsetTitle>
           <Label>Recent ping deliveries</Label>

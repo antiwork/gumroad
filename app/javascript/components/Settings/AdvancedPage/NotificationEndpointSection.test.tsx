@@ -12,6 +12,7 @@ beforeEach(() => {
     Routes: {
       ping_path: () => "/ping",
       test_pings_path: () => "/test_pings",
+      ping_signing_secret_settings_advanced_path: () => "/settings/advanced/ping_signing_secret",
     },
   });
 });
@@ -33,15 +34,36 @@ const delivery = (overrides: Partial<PingDelivery>): PingDelivery => ({
   ...overrides,
 });
 
-const renderSection = (deliveries: PingDelivery[]) =>
+const renderSection = (deliveries: PingDelivery[], pingSigningSecret = "") =>
   render(
     <NotificationEndpointSection
       pingEndpoint=""
       setPingEndpoint={() => {}}
       userId="123"
+      pingSigningSecret={pingSigningSecret}
       recentDeliveries={deliveries}
     />,
   );
+
+describe("ping signing", () => {
+  it("offers to turn signing on, and shows no secret, while it is off", () => {
+    renderSection([]);
+
+    expect(screen.getByRole("button", { name: "Enable ping signing" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Rotate secret" })).toBeNull();
+    expect(screen.queryByLabelText("Ping signing secret")).toBeNull();
+  });
+
+  it("shows the secret it holds, with rotate and turn-off, once signing is on", () => {
+    const secret = "a".repeat(64);
+    renderSection([], secret);
+
+    expect((screen.getByLabelText("Ping signing secret") as HTMLInputElement).value).toBe(secret);
+    expect(screen.getByRole("button", { name: "Rotate secret" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn off signing" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Enable ping signing" })).toBeNull();
+  });
+});
 
 describe("recent ping deliveries", () => {
   it("names a sale once, not twice", () => {

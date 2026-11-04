@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class Settings::AdvancedController < Settings::BaseController
+  PING_SIGNING_ERROR_MESSAGE = "Sorry, something went wrong. Please try again."
+
   before_action :authorize
 
   def show
@@ -50,6 +52,27 @@ class Settings::AdvancedController < Settings::BaseController
     else
       redirect_to settings_advanced_path, alert: current_seller.errors.full_messages.to_sentence
     end
+  end
+
+  # Enabling and rotating are the same write: a seller who has never had a secret gets one, a seller
+  # who has gets a new one, and both take effect on the next delivery. The page labels the button by
+  # the state it is in, rather than the server guessing which of the two the seller meant.
+  def create_ping_signing_secret
+    current_seller.enable_ping_signing!
+    render json: { success: true, ping_signing_secret: current_seller.ping_signing_secret }
+  rescue => e
+    ErrorNotifier.notify(e)
+    logger.error "Couldn't enable Ping signing: #{e.message}"
+    render json: { success: false, error_message: PING_SIGNING_ERROR_MESSAGE }, status: :unprocessable_entity
+  end
+
+  def destroy_ping_signing_secret
+    current_seller.disable_ping_signing!
+    render json: { success: true }
+  rescue => e
+    ErrorNotifier.notify(e)
+    logger.error "Couldn't turn off Ping signing: #{e.message}"
+    render json: { success: false, error_message: PING_SIGNING_ERROR_MESSAGE }, status: :unprocessable_entity
   end
 
   private
