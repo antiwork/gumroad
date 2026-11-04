@@ -540,10 +540,12 @@ module StripeMerchantAccountManager
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
       # The live-account arm keys on the structure Stripe holds, in any country: Stripe validates the merged
       # object, and hosted onboarding can set a structure our records never mapped.
-      if (last_user_compliance_info&.is_business? &&
-        last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
-        US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)) ||
-        (live_non_individual_for_individual && stripe_account["company"] && stripe_account["company"]["structure"].present?)
+      # Stripe validates against the live type, so an account already individual refuses even an empty structure.
+      if LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"]) &&
+        ((last_user_compliance_info&.is_business? &&
+          last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
+          US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)) ||
+          (live_non_individual_for_individual && stripe_account["company"] && stripe_account["company"]["structure"].present?))
         on_provider_mutation&.call
         Stripe::Account.update(stripe_account.id, { company: { structure: "" } })
       end
@@ -697,7 +699,10 @@ module StripeMerchantAccountManager
     # an unrelated accepted field (e.g. only the city changed) resolves nothing about it, and
     # clearing on any success reverts to a seller-visible note vanishing for a still-unfixed
     # rejection (Greptile finding on this PR).
-    clear_stale_payout_setup_rejection_notes(user, resolved_fields: submitted_field_names(account_update.sent_attributes))
+    resolved_fields = submitted_field_names(account_update.sent_attributes)
+    # An individual account has no structure to submit, so a structure rejection can only be retired here.
+    resolved_fields |= ["structure"] if user_compliance_info.is_individual?
+    clear_stale_payout_setup_rejection_notes(user, resolved_fields:)
     clear_unresolvable_business_tax_id_notes(user)
     # After the clear above, or the seller-visible half of the note would be retired by this same save.
     record_account_rejection_note(user, jp_address_rejection) if notify && jp_address_rejection

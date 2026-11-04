@@ -16023,7 +16023,7 @@ describe StripeMerchantAccountManager, :vcr do
         previous = create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::MULTI_MEMBER_LLC)
         previous.mark_deleted!
         create(:user_compliance_info, user:)
-        stub_stripe_account(previous)
+        stub_stripe_account(previous, business_type: "company")
 
         expect(Stripe::Account).to receive(:update).with(
           merchant_account.charge_processor_merchant_id,
@@ -16035,6 +16035,44 @@ describe StripeMerchantAccountManager, :vcr do
         ).ordered
 
         described_class.update_account(user, passphrase:)
+      end
+
+      context "when Stripe already reports individual but the marker still points at a US sole proprietorship" do
+        let(:rejection_note) do
+          user.add_payout_note(
+            content: "company[structure] can only be used with one of business types",
+            seller_visible: true,
+            json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+                         StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "structure" }
+          )
+        end
+
+        before do
+          previous = create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP)
+          previous.mark_deleted!
+          create(:user_compliance_info, user:)
+          stub_stripe_account(previous, business_type: "individual", company: { structure: nil }, country: "US")
+          rejection_note
+        end
+
+        it "does not send company[structure] and still saves" do
+          expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_including(company: { name: user.alive_user_compliance_info.first_and_last_name })
+          ).and_return(Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, business_type: "individual"))
+
+          described_class.update_account(user, passphrase:)
+        end
+
+        it "retires the structure rejection note once the individual save succeeds" do
+          allow(Stripe::Account).to receive(:update)
+            .and_return(Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, business_type: "individual"))
+
+          described_class.update_account(user, passphrase:)
+
+          expect(rejection_note.reload.deleted_at).to be_present
+        end
       end
 
       context "when Stripe holds a company but our previous record is individual" do

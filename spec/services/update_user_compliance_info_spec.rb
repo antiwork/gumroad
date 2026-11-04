@@ -2116,6 +2116,7 @@ describe UpdateUserComplianceInfo, "Stripe failure after a partial update" do
     @compliance_info = create(:user_compliance_info_business, user: @user, business_type: UserComplianceInfo::BusinessTypes::SINGLE_MEMBER_LLC)
     @merchant_account = create(:merchant_account, user: @user)
     @stripe_account = Stripe::Account.construct_from(
+      business_type: "company",
       id: @merchant_account.charge_processor_merchant_id,
       country: "US",
       capabilities: {},
@@ -2229,6 +2230,7 @@ describe UpdateUserComplianceInfo, "Stripe failure before the first provider wri
     saved, @compliance_info = @compliance_info.dup_and_save { |info| info.is_business = false }
     expect(saved).to be true
     stripe_account = Stripe::Account.construct_from(
+      business_type: "company",
       id: @merchant_account.charge_processor_merchant_id,
       country: "US",
       capabilities: {},
@@ -2273,6 +2275,7 @@ describe UpdateUserComplianceInfo, "Stripe failure before the first provider wri
       expect(Stripe::Account).not_to have_received(:update)
 
       stripe_account = Stripe::Account.construct_from(
+        business_type: "company",
         id: @merchant_account.charge_processor_merchant_id,
         country: "US",
         capabilities: {},
