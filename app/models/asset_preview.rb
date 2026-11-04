@@ -410,7 +410,7 @@ class AssetPreview < ApplicationRecord
       # Only the path names the file: a signed URL's query string is easily over a kilobyte, and it
       # rides along as the object's Content-Disposition, which S3 counts toward its metadata limit.
       filename = File.basename(new_uri.path)
-      filename = "cover" if filename.blank? || filename == "/" || filename == "/"
+      filename = "cover" if filename.blank? || filename == "/"
       blob = ActiveStorage::Blob.create_and_upload!(io: tempfile,
                                                     filename: filename,
                                                     content_type: response.content_type)
