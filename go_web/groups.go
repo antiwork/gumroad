@@ -14,6 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/antiwork/gumroad/go_web/internal/beacons"
+	"github.com/antiwork/gumroad/go_web/internal/credentials"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/geoip"
 	"github.com/antiwork/gumroad/go_web/internal/licenses"
@@ -109,8 +110,8 @@ func registerBeacons(app *web.App, d *dependencies) error {
 		Sidekiq:          &sidekiq.Client{Redis: jobs},
 		GeoIP:            geo,
 		IDs:              ids,
-		SecretKeyBase:    getenv("SECRET_KEY_BASE"),
-		MobileToken:      getenv("MOBILE_TOKEN"),
+		SecretKeyBase:    d.config("SECRET_KEY_BASE"),
+		MobileToken:      d.config("MOBILE_TOKEN"),
 		CustomDomain:     getenv("CUSTOM_DOMAIN"),
 		BranchDeployment: getenv("BRANCH_DEPLOYMENT") != "",
 	})
@@ -145,9 +146,9 @@ func registerWebhooks(app *web.App, d *dependencies) error {
 		Stack:                       d.stack,
 		Redis:                       d.redis,
 		Sidekiq:                     &sidekiq.Client{Redis: jobs},
-		StripeEndpointSecret:        getenv("STRIPE__ENDPOINT_SECRET"),
-		StripeConnectEndpointSecret: getenv("STRIPE_CONNECT__ENDPOINT_SECRET"),
-		SendgridPublicKeys:          webhooks.SendgridPublicKeys(getenv),
+		StripeEndpointSecret:        d.config("STRIPE__ENDPOINT_SECRET"),
+		StripeConnectEndpointSecret: d.config("STRIPE_CONNECT__ENDPOINT_SECRET"),
+		SendgridPublicKeys:          webhooks.SendgridPublicKeys(d.config),
 		Logger:                      d.logger,
 	})
 }
@@ -159,10 +160,25 @@ type dependencies struct {
 	redis  *redis.Client
 	stack  *rails.Stack
 
+	credentials *credentials.Credentials
+
 	jobs    *redis.Client
 	conn    *sql.DB
 	ids     *obfuscate.IDs
 	closers []func() error
+}
+
+// config reads a secret as Rails does, through GlobalConfig.get or secret_key_base: a set
+// variable wins, then the credentials file, and a blank value is nil.
+func (d *dependencies) config(name string) string {
+	value, ok := lookupenv(name)
+	if !ok {
+		value, _ = d.credentials.Lookup(name)
+	}
+	if rails.Blank(value) {
+		return ""
+	}
+	return value
 }
 
 // sidekiqRedis is SIDEKIQ_REDIS_HOST, separate from $redis.
@@ -198,7 +214,7 @@ func (d *dependencies) database() (*sql.DB, error) {
 
 func (d *dependencies) obfuscatedIDs() (*obfuscate.IDs, error) {
 	if d.ids == nil {
-		ids, err := obfuscate.New(getenv("OBFUSCATE_IDS_CIPHER_KEY"), getenv("OBFUSCATE_IDS_NUMERIC_CIPHER_KEY"))
+		ids, err := obfuscate.New(d.config("OBFUSCATE_IDS_CIPHER_KEY"), d.config("OBFUSCATE_IDS_NUMERIC_CIPHER_KEY"))
 		if err != nil {
 			return nil, err
 		}

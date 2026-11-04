@@ -11,6 +11,7 @@ require (
 	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/oschwald/maxminddb-golang/v2 v2.9.0
 	github.com/redis/go-redis/v9 v9.23.0
+	go.yaml.in/yaml/v3 v3.0.5
 	golang.org/x/net v0.62.0
 	golang.org/x/sync v0.24.0
 )

@@ -16,6 +16,8 @@ import (
 	"hash"
 	"strings"
 	"time"
+
+	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
 const (
@@ -23,12 +25,6 @@ const (
 	encryptedCookieSalt = "authenticated encrypted cookie"
 	keyIterations       = 1000
 	keyLength           = 32
-	ivLength            = 12
-	tagLength           = 16
-	separator           = "--"
-	// Base64 lengths of the IV and auth tag, padding included.
-	encodedIVLength  = 16
-	encodedTagLength = 24
 	// ActiveSupport::Messages::Metadata's dual-serialized envelope, which the cookie jar
 	// writes because its encryptor's serializer is the NullSerializer.
 	legacyEnvelopePrefix = `{"_rails":{"message":`
@@ -68,7 +64,7 @@ func NewCodec(secretKeyBase string) (*Codec, error) {
 // the jar would hand JSON.parse, or ok=false wherever Rails reads nil. Callers decode them,
 // and treat JSON that fails to decode as nil too. value is the cookie after Rack unescaped it.
 func (c *Codec) Decrypt(name, value string, now time.Time) ([]byte, bool) {
-	sealed, iv, ok := splitMessage(value)
+	sealed, iv, ok := rails.SplitEncryptedMessage(value)
 	if !ok {
 		return nil, false
 	}
@@ -83,33 +79,6 @@ func (c *Codec) Decrypt(name, value string, now time.Time) ([]byte, bool) {
 		return extractMetadata(plain, "cookie."+name, now)
 	}
 	return nil, false
-}
-
-// splitMessage is MessageEncryptor#extract_parts: the tag and IV are cut from the right
-// by their encoded lengths, and every part must be strict Base64. It returns the
-// ciphertext with the tag after it, in one buffer, as AEAD.Open takes them.
-func splitMessage(message string) (sealed, iv []byte, ok bool) {
-	tagStart := len(message) - encodedTagLength
-	ivStart := tagStart - len(separator) - encodedIVLength
-	dataEnd := ivStart - len(separator)
-	if dataEnd < 0 || message[tagStart-len(separator):tagStart] != separator || message[dataEnd:ivStart] != separator {
-		return nil, nil, false
-	}
-	strict := base64.StdEncoding.Strict()
-	sealed = make([]byte, strict.DecodedLen(dataEnd)+tagLength)
-	n, err := strict.Decode(sealed, []byte(message[:dataEnd]))
-	if err != nil {
-		return nil, nil, false
-	}
-	tag, err := strict.DecodeString(message[tagStart:])
-	if err != nil || len(tag) != tagLength {
-		return nil, nil, false
-	}
-	sealed = append(sealed[:n], tag...)
-	if iv, err = strict.DecodeString(message[ivStart : ivStart+encodedIVLength]); err != nil || len(iv) != ivLength {
-		return nil, nil, false
-	}
-	return sealed, iv, true
 }
 
 // extractMetadata is AbstractCookieJar#[]: Rails first expects the cookie's purpose, then
