@@ -114,6 +114,10 @@ const PublicPing = () => (
                 your endpoint, with a secret you can rotate there whenever you like. Until you do, the endpoint URL is
                 the only credential on a request, and it leaks through access logs, proxies and browser history.
               </p>
+              <p className="mt-2">
+                This covers the pings we send to your Ping URL, including the test ping. Notifications for API resource
+                subscriptions go to your application's own URL, and are not signed with this secret.
+              </p>
               <p className="mt-2">A signed ping carries one extra header:</p>
               <CodeSnippet caption="Signature header">X-Gumroad-Signature: t=1751472000,v1=9d0b9b0a...</CodeSnippet>
               <p className="mt-2">

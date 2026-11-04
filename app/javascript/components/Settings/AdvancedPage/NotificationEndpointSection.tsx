@@ -6,6 +6,7 @@ import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
+import { Modal } from "$app/components/Modal";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
@@ -158,21 +159,19 @@ const NotificationEndpointSection = ({
     setIsUpdatingSigning(false);
   });
 
-  const rotateSigningSecret = asyncVoid(async () => {
-    if (
-      signingSecret &&
-      !confirm(
-        "Rotate the signing secret? Pings signed with the current secret stop verifying until your endpoint uses the new one.",
-      )
-    )
-      return;
-    await updateSigningSecret("rotate");
-  });
+  // Both writes replace the secret a receiver is verifying against, so they are confirmed first.
+  const [pendingSigningChange, setPendingSigningChange] = React.useState<"rotate" | "disable" | null>(null);
 
-  const disableSigning = asyncVoid(async () => {
-    if (!confirm("Turn off ping signing? Your endpoint will receive unsigned pings again.")) return;
-    await updateSigningSecret("disable");
-  });
+  const startSigning = () => {
+    if (signingSecret) setPendingSigningChange("rotate");
+    else updateSigningSecret("rotate");
+  };
+
+  const confirmSigningChange = () => {
+    const change = pendingSigningChange;
+    setPendingSigningChange(null);
+    if (change) updateSigningSecret(change);
+  };
 
   return (
     <FormSection
@@ -210,7 +209,7 @@ const NotificationEndpointSection = ({
             <InputGroup>
               <Input id={`${uid}-signing-secret`} readOnly type="text" value={signingSecret} />
               <Pill asChild>
-                <Button className="rounded-full! px-3! py-2!" onClick={rotateSigningSecret} disabled={isUpdatingSigning}>
+                <Button className="rounded-full! px-3! py-2!" onClick={startSigning} disabled={isUpdatingSigning}>
                   Rotate
                 </Button>
               </Pill>
@@ -222,7 +221,7 @@ const NotificationEndpointSection = ({
                 How to verify it
               </a>
             </FieldsetDescription>
-            <Button color="danger" onClick={disableSigning} disabled={isUpdatingSigning}>
+            <Button color="danger" onClick={() => setPendingSigningChange("disable")} disabled={isUpdatingSigning}>
               Turn off signing
             </Button>
           </>
@@ -235,7 +234,7 @@ const NotificationEndpointSection = ({
                 How to verify it
               </a>
             </FieldsetDescription>
-            <Button onClick={rotateSigningSecret} disabled={isUpdatingSigning}>
+            <Button onClick={startSigning} disabled={isUpdatingSigning}>
               Sign my pings
             </Button>
           </>
@@ -247,6 +246,25 @@ const NotificationEndpointSection = ({
         </FieldsetTitle>
         <RecentDeliveries deliveries={recentDeliveries} />
       </Fieldset>
+      <Modal
+        open={pendingSigningChange !== null}
+        onClose={() => setPendingSigningChange(null)}
+        title={pendingSigningChange === "rotate" ? "Rotate the signing secret?" : "Turn off ping signing?"}
+        footer={
+          <>
+            <Button onClick={() => setPendingSigningChange(null)}>Cancel</Button>
+            <Button color={pendingSigningChange === "rotate" ? "primary" : "danger"} onClick={confirmSigningChange}>
+              Confirm
+            </Button>
+          </>
+        }
+      >
+        <p>
+          {pendingSigningChange === "rotate"
+            ? "Pings signed with the current secret stop verifying until your endpoint uses the new one."
+            : "Your endpoint will receive unsigned pings again."}
+        </p>
+      </Modal>
     </FormSection>
   );
 };

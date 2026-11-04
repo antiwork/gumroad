@@ -94,10 +94,9 @@ class PostToIndividualPingEndpointWorker
   end
 
   private
-    # Signs only the seller's own Ping endpoint, with the secret that seller can see and rotate in
-    # Settings. A resource subscription POSTs to the application's URL, and the application holds no
-    # seller secret to verify against. Read here rather than passed in the job, so a delivery already
-    # in the queue when the deploy lands is signed too.
+    # Signs only the seller's own Ping endpoint, with the secret that seller can rotate in Settings;
+    # an application's resource subscription holds no seller secret to verify against. Read here, not
+    # passed in the job, so a delivery queued when the deploy lands is signed too.
     def ping_signature_headers(post_url:, body:, user_id:)
       return {} if user_id.blank?
 

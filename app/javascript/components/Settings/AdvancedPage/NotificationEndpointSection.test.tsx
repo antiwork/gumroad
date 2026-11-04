@@ -87,9 +87,7 @@ describe("ping signing", () => {
   });
 
   it("turns signing on and shows the secret the server generated", async () => {
-    mocks.request.mockResolvedValue(
-      new Response(JSON.stringify({ success: true, secret: "abc123" }), { status: 200 }),
-    );
+    mocks.request.mockResolvedValue(new Response(JSON.stringify({ success: true, secret: "abc123" }), { status: 200 }));
     renderSection([]);
 
     fireEvent.click(screen.getByRole("button", { name: "Sign my pings" }));
@@ -107,14 +105,25 @@ describe("ping signing", () => {
     expect(screen.getByRole("button", { name: "Turn off signing" })).toBeTruthy();
   });
 
+  it("asks before rotating the secret", () => {
+    renderSection([], "abc123");
+
+    fireEvent.click(screen.getByRole("button", { name: "Rotate" }));
+
+    expect(
+      screen.getByText("Pings signed with the current secret stop verifying until your endpoint uses the new one."),
+    ).toBeTruthy();
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+
   it("shows the existing secret and turns signing off", async () => {
     mocks.request.mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
-    vi.stubGlobal("confirm", () => true);
     renderSection([], "abc123");
 
     expect(screen.getByDisplayValue("abc123")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Turn off signing" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() =>
       expect(mocks.request).toHaveBeenCalledWith(
@@ -132,10 +141,10 @@ describe("ping signing", () => {
     mocks.request.mockResolvedValue(
       new Response(JSON.stringify({ success: false, error_message: "Something went wrong." }), { status: 200 }),
     );
-    vi.stubGlobal("confirm", () => true);
     renderSection([], "abc123");
 
     fireEvent.click(screen.getByRole("button", { name: "Rotate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
 
     await waitFor(() => expect(mocks.showAlert).toHaveBeenCalledWith("Something went wrong.", "error"));
     expect(screen.getByDisplayValue("abc123")).toBeTruthy();
