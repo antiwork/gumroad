@@ -51,6 +51,19 @@ describe ProductBuildPlaySession do
     end
   end
 
+  describe "#heartbeat! repeated after the expiry" do
+    it "returns the replacement it already started instead of starting another" do
+      session = described_class.start!(product_build: build, purchase:, at: start)
+
+      first = session.heartbeat!(start + 1.hour)
+      second = session.reload.heartbeat!(start + 1.hour + described_class::HEARTBEAT_INTERVAL)
+
+      expect(second).to eq(first)
+      expect(second.last_heartbeat_at).to eq(start + 1.hour + described_class::HEARTBEAT_INTERVAL)
+      expect(described_class.where(purchase:).count).to eq(2)
+    end
+  end
+
   describe ".stats_by_product" do
     it "counts each product's sessions and averages their length" do
       other_product = create(:product, user: seller)

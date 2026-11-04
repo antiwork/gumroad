@@ -20,9 +20,11 @@ class ProductBuildPlaySession < ApplicationRecord
   end
 
   # Extends an open session and returns it. A beat after the expiry means the page woke up from a
-  # sleep or an outage: it starts a new session at that beat, so the gap is not counted.
+  # sleep or an outage: it moves to a new session started at that beat, so the gap is not counted.
+  # The page keeps beating the old path until it reads the answer, so a replacement already made
+  # for this one is reused rather than started again.
   def heartbeat!(at = Time.current)
-    return self.class.start!(product_build:, purchase:, at:) unless open?(at)
+    return resume!(at) unless open?(at)
 
     update!(last_heartbeat_at: at)
     self
@@ -41,4 +43,12 @@ class ProductBuildPlaySession < ApplicationRecord
       .pluck(Arel.sql("product_id, COUNT(*), AVG(TIMESTAMPDIFF(SECOND, started_at, last_heartbeat_at))"))
       .to_h { |product_id, count, average_seconds| [product_id, { count:, average_seconds: average_seconds.to_f.round }] }
   end
+
+  private
+    def resume!(at)
+      with_lock do
+        replacement = self.class.where(product_build_id:, purchase_id:).where("started_at > ?", last_heartbeat_at + SESSION_EXPIRY).order(:started_at).first
+        replacement ? replacement.heartbeat!(at) : self.class.start!(product_build:, purchase:, at:)
+      end
+    end
 end
