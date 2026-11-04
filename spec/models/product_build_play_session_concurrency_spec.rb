@@ -36,7 +36,8 @@ describe ProductBuildPlaySession, "beats from separate connections" do
         ActiveRecord::Base.connection_pool.with_connection do
           loaded_session = described_class.find(session_id)
           loaded << true
-          go.pop
+          next unless go.pop
+
           loaded_session.heartbeat!(at).id
         end
       end
@@ -46,7 +47,15 @@ describe ProductBuildPlaySession, "beats from separate connections" do
     beats.size.times { go << true }
     Timeout.timeout(20) { threads.map(&:value) }
   ensure
-    threads&.each { _1.join(20) }
+    # A failure before the release would leave the workers waiting on `go` while holding connections;
+    # closing it wakes them with nil, and they return without beating. A join re-raises a worker's
+    # error, so each one is rescued to keep waiting for the rest while the original failure propagates.
+    go&.close
+    threads&.each do |thread|
+      thread.join(20)
+    rescue StandardError
+      nil
+    end
   end
 
   # Holds each beat inside the replacement's insert long enough for the other to arrive, so without the
