@@ -30,5 +30,30 @@ describe AssetPreview do
         .and not_change { ActiveStorage::Blob.count }
       expect(preview.file).not_to be_attached
     end
+
+    it "names the stored file from the URL path, dropping the query string" do
+      response = Net::HTTPOK.new("1.1", "200", "OK")
+      response["content-type"] = "image/svg+xml"
+      allow(response).to receive(:body).and_return("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")
+      allow(SsrfFilter).to receive(:get).and_return(response)
+      preview = build(:asset_preview, link: create(:product), attach: false)
+
+      preview.url = "https://example.com/cover.svg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Signature=abc123"
+
+      expect(preview.file).to be_attached
+      expect(preview.file.filename.to_s).to eq("cover.svg")
+    end
+
+    it "falls back to a default name for a root URL" do
+      response = Net::HTTPOK.new("1.1", "200", "OK")
+      response["content-type"] = "image/svg+xml"
+      allow(response).to receive(:body).and_return("<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")
+      allow(SsrfFilter).to receive(:get).and_return(response)
+      preview = build(:asset_preview, link: create(:product), attach: false)
+
+      preview.url = "https://example.com/"
+
+      expect(preview.file.filename.to_s).to eq("cover")
+    end
   end
 end
