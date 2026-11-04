@@ -24,8 +24,16 @@ const usePlayHeartbeat = (url: string | null, intervalMs: number) => {
   React.useEffect(() => {
     if (!url) return;
 
+    let beatUrl = url;
+    // A beat that resumed a session after a long gap answers with the new session's path.
     const beat = (keepalive = false) => {
-      void request({ method: "POST", accept: "json", url, keepalive }).catch(() => undefined);
+      void request({ method: "POST", accept: "json", url: beatUrl, keepalive })
+        .then(async (response) => {
+          if (response.status !== 200) return;
+          const { heartbeat_path } = cast<{ heartbeat_path?: string }>(await response.json());
+          if (heartbeat_path) beatUrl = heartbeat_path;
+        })
+        .catch(() => undefined);
     };
     beat();
     const interval = window.setInterval(() => beat(), intervalMs);

@@ -39,13 +39,14 @@ describe ProductBuildPlaySession do
       expect(session.reload).to be_open(start + described_class::SESSION_EXPIRY)
     end
 
-    it "drops a beat that arrives after the expiry, so a page that stopped beating cannot extend it" do
-      after_the_expiry = start + described_class::SESSION_EXPIRY + 1.second
+    it "starts a new session at a beat after the expiry, leaving the expired one and its gap alone" do
+      after_the_expiry = start + 1.hour
 
-      expect(session.heartbeat!(after_the_expiry)).to be(false)
+      resumed = session.heartbeat!(after_the_expiry)
 
+      expect(resumed).not_to eq(session)
+      expect(resumed).to have_attributes(started_at: after_the_expiry, last_heartbeat_at: after_the_expiry, purchase:, product_build: build)
       expect(session.reload.last_heartbeat_at).to eq(start)
-      expect(session).not_to be_open(after_the_expiry)
       expect(session.duration_seconds).to eq(0)
     end
   end

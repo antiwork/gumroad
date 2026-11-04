@@ -144,12 +144,17 @@ describe "Web build player", type: :request, inertia: true do
       expect(response).to have_http_status(:no_content)
     end
 
-    it "leaves a session whose beats stopped alone" do
+    it "starts a new session for a page that woke up after its expiry and hands it a heartbeat path" do
       path = heartbeat_path
-      ProductBuildPlaySession.last.update!(started_at: 10.minutes.ago, last_heartbeat_at: 10.minutes.ago)
-      session = ProductBuildPlaySession.last
+      expired = ProductBuildPlaySession.last
+      expired.update!(started_at: 10.minutes.ago, last_heartbeat_at: 10.minutes.ago)
 
-      expect { post path }.not_to change { session.reload.last_heartbeat_at }
+      expect { post path }.to change { ProductBuildPlaySession.count }.by(1)
+      expect(expired.reload.last_heartbeat_at).to be_within(1.second).of(10.minutes.ago)
+      new_path = response.parsed_body["heartbeat_path"]
+      expect(new_path).to match(%r{\A/d/#{url_redirect.token}/play/[^/]+/heartbeat\z})
+
+      expect { post new_path }.not_to change { ProductBuildPlaySession.count }
       expect(response).to have_http_status(:no_content)
     end
 

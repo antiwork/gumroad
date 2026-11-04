@@ -65,10 +65,14 @@ class ProductBuildPlayerFilesController < ApplicationController
   end
 
   # The player page is open: extend the play session its page load started. The page stops sending
-  # these when the buyer leaves, which is what ends the session (see ProductBuildPlaySession).
+  # these when the buyer leaves, which is what ends the session (see ProductBuildPlaySession). A beat
+  # that resumed an expired session answers with the new session's heartbeat path.
   def heartbeat
-    @play_session.heartbeat!
-    head :no_content
+    session = @play_session.heartbeat!
+    return head :no_content if session == @play_session
+
+    grant = session.product_build.player_heartbeat_grant(url_redirect_token: params[:id], purchase_id: session.purchase_id, session_id: session.id)
+    render json: { heartbeat_path: "/d/#{params[:id]}/play/#{grant}/heartbeat" }
   end
 
   private

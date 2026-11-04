@@ -431,14 +431,14 @@ class UrlRedirectsController < ApplicationController
       # The trailing slash makes the build's relative file paths resolve under the grant.
       frame_url: "#{request.path.chomp("/")}/#{grant}/",
       content_page_url: @url_redirect.download_page_url,
-      heartbeat_url: session && play_heartbeat_url(build, session),
+      heartbeat_url: session && play_heartbeat_endpoint(build, session),
       heartbeat_interval_ms: ProductBuildPlaySession::HEARTBEAT_INTERVAL.in_milliseconds,
     }
   end
 
   private
     # The player page's heartbeat, under a grant that names the play session its page load started.
-    def play_heartbeat_url(build, session)
+    def play_heartbeat_endpoint(build, session)
       grant = build.player_heartbeat_grant(url_redirect_token: @url_redirect.token, purchase_id: @url_redirect.purchase_id, session_id: session.id)
       "#{request.path.chomp("/")}/#{grant}/heartbeat"
     end

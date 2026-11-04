@@ -19,13 +19,13 @@ class ProductBuildPlaySession < ApplicationRecord
     create!(product_id: product_build.product_id, product_build:, purchase:, started_at: at, last_heartbeat_at: at)
   end
 
-  # Extends an open session. A beat that arrives after the expiry is dropped: the session is over, and
-  # the buyer is on a page load that started a new one.
+  # Extends an open session and returns it. A beat after the expiry means the page woke up from a
+  # sleep or an outage: it starts a new session at that beat, so the gap is not counted.
   def heartbeat!(at = Time.current)
-    return false unless open?(at)
+    return self.class.start!(product_build:, purchase:, at:) unless open?(at)
 
     update!(last_heartbeat_at: at)
-    true
+    self
   end
 
   # A session is over once its last beat is older than the expiry, and its length is final.
