@@ -1025,43 +1025,22 @@ class User < ApplicationRecord
   # tell a dropped acquisition from a write behind the lock that timed out and still raises.
   ProfileSectionsLockTimeout = Class.new(StandardError)
 
-  # Serializes profile-section writes: the profile editor, product create/edit and post save all
-  # read-modify-write a section's shown_products/shown_posts and re-read inside this lock, and the
-  # editor holds the profile row via #with_locked_seller_profile. Sections are keyed by seller_id, so
-  # a seller who has never saved a profile has no profile row to serialize on and locks their own
-  # row; the profile row is looked up directly so product creation leaves no unsaved profile behind.
-  # `lock_wait_timeout_seconds` bounds only the wait for the lock, for callers inside someone else's
+  # Serializes profile-section writes on the seller_profile row: the profile editor, product
+  # create/edit and post save all read-modify-write a section's shown_products/shown_posts and
+  # re-read inside this lock, and the editor holds the same row via #with_locked_seller_profile.
+  # A seller with no saved profile has nothing to serialize against, so it just runs the block, and
+  # the row is looked up directly so product creation leaves no unsaved seller_profile behind.
+  # `lock_wait_timeout_seconds` bounds only the wait for that row, for callers inside someone else's
   # transaction; writes behind the lock keep the session's timeout, like `LinksController`'s bound.
   def with_profile_sections_lock(lock_wait_timeout_seconds: nil, &block)
     profile = SellerProfile.find_by(seller_id: id)
-    return lock_seller_row(lock_wait_timeout_seconds, &block) if profile.nil?
+    return yield if profile.nil?
     return lock_profile_row(profile, &block) if lock_wait_timeout_seconds.nil?
 
     SellerProfile.transaction do
       acquire_profile_row_lock(profile, lock_wait_timeout_seconds)
       block.call
     end
-  end
-
-  # Locked by id rather than on the instance: `with_lock` refuses a record carrying unpersisted
-  # changes, and the caller's user may have some.
-  private def lock_seller_row(seconds, &block)
-    self.class.transaction do
-      if seconds.nil?
-        lock_seller_row!
-      else
-        begin
-          with_bounded_lock_wait(seconds) { lock_seller_row! }
-        rescue ActiveRecord::LockWaitTimeout
-          raise ProfileSectionsLockTimeout
-        end
-      end
-      block.call
-    end
-  end
-
-  private def lock_seller_row!
-    self.class.where(id: id).lock.pick(:id)
   end
 
   # Locked by id rather than on the instance: `lock!`/`with_lock` refuse a record carrying

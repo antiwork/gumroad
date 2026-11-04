@@ -26,9 +26,10 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     @seller&.destroy!
   end
 
-  # Waits for this writer's own connection to queue behind the section lock (the seller_profiles row
-  # when the seller has a saved profile, the seller's own row when they do not), so an unrelated
-  # lock wait cannot release the holder early.
+  # Waits for this writer's own connection to queue behind the section lock: the seller_profiles row
+  # when the seller has a saved profile, the seller's own row when they do not (the row the writer
+  # takes before the product row, since a seller with no profile row has no section row to
+  # serialize on). An unrelated lock wait cannot release the holder early.
   def wait_until_waiting_on(connection_id, table)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
     until waiting_on?(connection_id, table)
@@ -48,14 +49,17 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     end
   end
 
-  # Runs `holder_work` under the seller's section lock on one connection, starts `write!` on another,
-  # and releases the lock only once the writer is queued behind it. Returns the writer's result.
-  def write_while_section_lock_is_held(sections, table:, &holder_work)
+  # Runs `holder_work` under a lock on one connection, starts `write!` on another, and releases the
+  # lock only once the writer is queued behind it. Returns the writer's result. `holder_lock`
+  # defaults to the sections lock the editor and the writer share; a caller that needs the seller's
+  # own row instead (the lock the writer takes when the seller has no profile row) passes it.
+  def write_while_section_lock_is_held(sections, table:, holder_lock: nil, &holder_work)
     locked = Queue.new
     release = Queue.new
+    hold = holder_lock || ->(&block) { User.find(@seller.id).with_profile_sections_lock(&block) }
     holder = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
-        User.find(@seller.id).with_profile_sections_lock do
+        hold.call do
           holder_work.call
           locked << true
           release.pop
@@ -95,13 +99,25 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     expect(@section.shown_products).to eq([@listed.id, @added.id])
   end
 
-  # Same write, but the seller has never saved a profile, so there is no seller_profiles row to
-  # serialize on: the writer has to queue on the seller's own row, which is the row
-  # `Link#add_to_profile_sections` takes in that situation.
+  # Same write, but the seller has never saved a profile: there is no seller_profiles row to
+  # serialize on, so the writer's own seller-row lock is what keeps this write from dropping the
+  # other one. `with_profile_sections_lock` deliberately takes no lock here (main's design: with no
+  # profile row there is nothing for it to serialize against, and `Link#add_to_profile_sections`
+  # runs before a save's own bounded product lock, so any lock it took would take the bound's place
+  # — see spec/controllers/links_controller_gp2583_lock_fail_fast_spec.rb).
   it "keeps a product another writer added while the seller has no saved profile" do
     SellerProfile.where(seller_id: @seller.id).delete_all
 
-    result = write_while_section_lock_is_held([{ "id" => @section.external_id, "default_product_sort" => "newest" }], table: "users") do
+    result = write_while_section_lock_is_held(
+      [{ "id" => @section.external_id, "default_product_sort" => "newest" }],
+      table: "users",
+      holder_lock: ->(&block) do
+        User.transaction do
+          User.where(id: @seller.id).lock.pick(:id)
+          block.call
+        end
+      end
+    ) do
       section = SellerProfileSection.find(@section.id)
       section.update!(shown_products: section.shown_products + [@added.id])
     end
