@@ -93,7 +93,9 @@ class Api::V2::ProductSectionsWriter
         entries.each do |entry|
           next if entry[:id].nil? || entry[:attributes].empty?
 
-          section = @product.seller_profile_sections.find(entry[:id])
+          # A locking read: the profile lock's own lookup fixed this transaction's snapshot before it
+          # waited, so a plain read could miss a `shown_products` change the previous holder committed.
+          section = @product.seller_profile_sections.lock.find(entry[:id])
           attributes = entry[:attributes].dup
           # The schema only allows an integer when the key exists, so clearing removes the key.
           section.json_data = section.json_data.except("featured_product_id") if attributes.key?(:featured_product_id) && attributes[:featured_product_id].nil?
