@@ -78,6 +78,29 @@ describe Api::V2::SalesController do
         expect(per_row_queries).to be_empty
       end
 
+      it "serializes url_params on index without per-sale url parameter queries" do
+        @purchase.url_parameters = { "gclid" => "abc123" }
+        @purchase.save!
+        @free_trial_purchase.url_parameters = { "plan" => "pro" }
+        @free_trial_purchase.save!
+
+        per_row_queries = []
+        callback = lambda do |_name, _start, _finish, _id, payload|
+          sql = payload[:sql].to_s
+          # IN-lists are the batched preload; equality probes are the N+1 shape.
+          per_row_queries << sql if sql.include?("purchase_url_parameters") && sql.match?(/purchase_id`? = /)
+        end
+
+        ActiveSupport::Notifications.subscribed(callback, "sql.active_record") do
+          get :index, params: @params
+        end
+
+        expect(response.parsed_body["success"]).to eq true
+        sales_with_params = response.parsed_body["sales"].select { |sale| sale["url_params"].present? }
+        expect(sales_with_params.size).to eq(2)
+        expect(per_row_queries).to be_empty
+      end
+
       it "reports is_following when the stored follower email uses different casing" do
         mixed = "Buyer.Case@Example.COM"
         purchase = create(:purchase, purchaser: create(:user), link: @product, email: mixed)
@@ -592,6 +615,21 @@ describe Api::V2::SalesController do
           "processor_transaction_id" => "ch_123",
           "sent_abandoned_cart_email" => true
         )
+      end
+
+      it "includes the buyer's URL parameters when the sale carries them" do
+        @purchase.url_parameters = { "gclid" => "abc123" }
+        @purchase.save!
+
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]["url_params"]).to eq("gclid" => "abc123")
+      end
+
+      it "omits url_params from a sale that carries none" do
+        get :show, params: @params
+
+        expect(response.parsed_body["sale"]).not_to have_key("url_params")
       end
 
       it "omits the rating and message of a review soft-deleted by a full refund" do

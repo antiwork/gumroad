@@ -69,4 +69,22 @@ describe PurchaseUrlParameter do
       expect(PurchaseUrlParameter.where(purchase_id: purchase.id)).to be_empty
     end
   end
+
+  describe "Purchase#as_json url_params" do
+    it "is serialized on version 2 only when the caller opts in" do
+      purchase = create(:purchase)
+      purchase.url_parameters = { "gclid" => "abc123" }
+      purchase.save!
+
+      expect(purchase.as_json(version: 2)).not_to have_key(:url_params)
+      expect(purchase.as_json(version: 1)).not_to have_key(:url_params)
+      expect(purchase.as_json(version: 2, include_url_params: true)[:url_params]).to eq("gclid" => "abc123")
+    end
+
+    it "omits the key when the purchase carries no parameters" do
+      purchase = create(:purchase)
+
+      expect(purchase.as_json(version: 2, include_url_params: true)).not_to have_key(:url_params)
+    end
+  end
 end

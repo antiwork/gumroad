@@ -1018,6 +1018,7 @@ class Purchase < ApplicationRecord
   #                   - `link_name` has been renamed to `product_name`
   #                   - `custom_fields` is no longer an array containing strings `"field: value"` and instead is now a proper hash.
   #                   - `variants` is no longer an string containing the list of variants `variant: selection, variant2: selection2` and instead is now a proper hash.
+  #                   - `url_params` carries the buyer's custom URL parameters when the caller opts in (Sales API).
   #           default - version 1
   #                   - changes made for later versions that do not change fields in previous versions may be included
   #
@@ -1114,7 +1115,10 @@ class Purchase < ApplicationRecord
       # Opt-in (Sales API only) so other version-2 serializations — like the audience
       # customers search, which renders up to 100 purchases without the Sales API
       # preloads — don't pick up per-purchase presentment/refund queries.
-      **(version == 2 && options[:include_buyer_presentment] ? { buyer_presentment: buyer_presentment_api_fields } : {})
+      **(version == 2 && options[:include_buyer_presentment] ? { buyer_presentment: buyer_presentment_api_fields } : {}),
+      # Opt-in for the same reason: url_parameters is a per-purchase association read, and the
+      # Ping already ships the same dictionary under this key.
+      **(version == 2 && options[:include_url_params] ? { url_params: url_parameters.presence } : {})
     ).delete_if { |_, v| v.nil? }
 
     json[:card] = {
