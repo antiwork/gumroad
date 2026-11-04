@@ -53,8 +53,9 @@ class Settings::AdvancedController < Settings::BaseController
   end
 
   # Whatever the receiver has been verifying against stops verifying the moment this returns, so
-  # the new secret is only ever shown to the seller who asked for it. Both actions run under the
-  # seller's lock, so a concurrent ping cannot read a half-written setting.
+  # the new secret is only ever shown to the seller who asked for it. The seller's lock serializes
+  # concurrent enable, rotate and disable calls, including two first-time enables racing to create
+  # the setting under its unique user_id index.
   def rotate_ping_signing_secret
     secret = SecureRandom.hex(PingSigningSetting::SECRET_BYTES)
     current_seller.with_lock do
