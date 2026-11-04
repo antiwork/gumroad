@@ -152,6 +152,11 @@ release_chargeback_rate_payout_pauses:
   class: ReleaseChargebackRatePayoutPausesJob
   queue: low
   description: Lifts automatic chargeback-rate payout holds for sellers whose rate is back under the limit
+reconcile_stripe_payouts_pauses:
+  cron: "15 7 * * *" # UTC 07:15 daily, ahead of the 08:00 daily and 10:00 scheduled payout runs
+  class: ReconcileStripePayoutsPausesJob
+  queue: low
+  description: Resumes Stripe-sourced payout pauses whose account.updated resume was never delivered
 record_social_score_shadow_evaluations:
   cron: "0 9 * * *" # UTC 09:00 daily, after the 07:30 chargeback-rate release so already-lifted holds aren't scored as held
   class: RecordSocialScoreShadowEvaluationsJob

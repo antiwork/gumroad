@@ -112,8 +112,9 @@ module StripeMerchantAccountManager
   SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE = /tos agreement is not supported/i
   private_constant :SERVICE_AGREEMENT_UNSUPPORTED_MESSAGE
 
+  # Read by ReconcileStripePayoutsPausesJob, which finds Stripe-paused sellers from the comments
+  # this author writes, so it is deliberately public.
   STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR = "Stripe payouts sync"
-  private_constant :STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
 
   # How long we wait before emailing a seller that Stripe paused their payouts.
   # Stripe's periodic re-verification sweeps sometimes disable payouts and
@@ -3553,16 +3554,12 @@ module StripeMerchantAccountManager
       # concurrent webhook that ran just before us (with_lock reloads the user,
       # but not merchant_account, where the marker lives).
       merchant_account.reload
+      # Every disabled report, not just the ones that write a pause comment: an unchanged reason writes none.
+      if stripe_account["payouts_enabled"] == false
+        merchant_account.update!(stripe_payouts_disabled_observation_token: SecureRandom.uuid)
+      end
       if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
-        user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
-        user.comments.create!(
-          author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
-          comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
-          content: user.payouts_paused_by_user? ?
-            "Stripe re-enabled payouts on the connected account; payouts remain paused by the creator." :
-            "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
-        )
-        merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil) if merchant_account.stripe_payouts_pause_email_sent
+        resume_stripe_payouts_pause!(user:, merchant_account:)
       elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
         user.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
         user.comments.create!(
@@ -3658,6 +3655,23 @@ module StripeMerchantAccountManager
     if email_sent
       email_sent_at = Time.current
       new_requests.each { |request| request.record_email_sent!(email_sent_at) }
+    end
+  end
+
+  # Clears a Stripe-sourced payout pause and leaves the audit comment. The caller must already hold
+  # `user.with_lock` (both callers do), because the resume write races the webhook's pause write.
+  # Shared by the `account.updated` webhook and ReconcileStripePayoutsPauseForSellerJob.
+  def self.resume_stripe_payouts_pause!(user:, merchant_account:)
+    user.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+    user.comments.create!(
+      author_name: STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR,
+      comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
+      content: user.payouts_paused_by_user? ?
+        "Stripe re-enabled payouts on the connected account; payouts remain paused by the creator." :
+        "Payouts automatically resumed: Stripe re-enabled payouts on the connected account."
+    )
+    if merchant_account.stripe_payouts_pause_email_sent
+      merchant_account.update!(stripe_payouts_pause_email_sent: nil, stripe_payouts_pause_email_claim_token: nil)
     end
   end
 
