@@ -93,6 +93,36 @@ describe ReconcileStripePayoutsPauseForSellerJob do
     end
   end
 
+  context "when an unaccounted payout hold landed under the Stripe pause" do
+    before do
+      pause_by_stripe!
+      stub_stripe_account(true)
+      payment = create(:payment_failed, user: seller, processor: PayoutProcessorType::STRIPE, stripe_internal_transfer_id: "tr_unaccounted")
+      StripePayoutProcessor.send(:hold_payouts_for_unaccounted_money!, payment, Payment::FailureReason::PAYOUT_OUTCOME_UNKNOWN)
+    end
+
+    it "leaves the pause for a human to reconcile" do
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.comments.with_type_payouts_resumed).to be_empty
+    end
+
+    it "resumes a later Stripe pause once that hold was resumed" do
+      travel 1.minute
+      seller.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+      seller.comments.create!(content: "Payouts resumed after reconciling the transfer.", comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED, author_name: "admin")
+      travel 1.minute
+      pause_by_stripe!
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally?).to be(false)
+    end
+  end
+
   context "when account.updated deliveries land while the Stripe read is in flight" do
     before { deliver_account_updated(payouts_enabled: false) }
 

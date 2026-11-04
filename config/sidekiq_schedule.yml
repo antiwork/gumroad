@@ -153,7 +153,7 @@ release_chargeback_rate_payout_pauses:
   queue: low
   description: Lifts automatic chargeback-rate payout holds for sellers whose rate is back under the limit
 reconcile_stripe_payouts_pauses:
-  cron: "15 7 * * *" # UTC 07:15 daily, before the 08:00 daily payouts job so a resumed seller is paid the same day
+  cron: "15 7 * * *" # UTC 07:15 daily, ahead of the 08:00 daily and 10:00 scheduled payout runs
   class: ReconcileStripePayoutsPausesJob
   queue: low
   description: Resumes Stripe-sourced payout pauses whose account.updated resume was never delivered
