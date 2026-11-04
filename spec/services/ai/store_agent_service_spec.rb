@@ -2180,6 +2180,10 @@ describe Ai::StoreAgentService do
         let(:dropped) { create(:seller_profile_products_section, seller:, product:, header: "Drop me") }
 
         def propose_sections(ids)
+          propose_sections_write("sections" => ids)
+        end
+
+        def propose_sections_write(params)
           expect(api_client).to receive(:get).with("/products/#{CGI.escape(product.external_id)}", {}).and_return(
             { "success" => true, "product" => { "id" => product.external_id }, "http_status" => 200 },
           )
@@ -2188,12 +2192,12 @@ describe Ai::StoreAgentService do
             tool_result("api_write", {
                           "endpoint" => "update_product_sections",
                           "path_params" => { "id" => product.external_id },
-                          "params" => { "sections" => ids },
+                          "params" => params,
                         }),
             text_result("Ready.", outcome: "proposal_ready"),
           ]
           allow(client).to receive(:messages) { replies.shift }
-          service.respond(messages: [{ role: "user", content: "Remove the section above my product" }]).fetch(:proposed_action)
+          service.respond(messages: [{ role: "user", content: "Change the sections" }]).fetch(:proposed_action)
         end
 
         it "names the sections that will be deleted" do
@@ -2252,6 +2256,67 @@ describe Ai::StoreAgentService do
             { label: "Sections", value: "(none)" },
             { label: "Deleted", value: "2 sections will be deleted: Keep me, Drop me" },
           )
+        end
+
+        it "names a section it will create and the products it will show" do
+          other = create(:product, user: seller, name: "Second product")
+
+          action = propose_sections_write(
+            "sections" => [{
+              "type" => "products",
+              "header" => "More",
+              "shown_products" => [other.external_id, product.external_id],
+              "default_product_sort" => "newest",
+              "show_filters" => true,
+            }],
+          )
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "Products “More” (new)" },
+            { label: "New products section", value: "Header: “More”; Products: Second product, #{product.name}; Sort: newest first; Filters: On" },
+          )
+        end
+
+        it "names the featured product a section it creates will show" do
+          featured = create(:product, user: seller, name: "Featured one")
+
+          action = propose_sections_write("sections" => [{ "type" => "featured_product", "featured_product" => featured.external_id }])
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "Featured product (new)" },
+            { label: "New featured product section", value: "Featured product: Featured one" },
+          )
+        end
+
+        it "shows the whole catalog for a created products section with no list of its own" do
+          action = propose_sections_write("sections" => [{ "type" => "products" }])
+
+          expect(action[:params]["params"]["sections"].sole["shown_products"]).to contain_exactly(product.external_id)
+          expect(action[:fields]).to include(
+            { label: "New products section", value: "Products: #{product.name}" },
+          )
+        end
+
+        it "names the contents a section it keeps will change" do
+          product.update!(sections: [kept.id])
+          other = create(:product, user: seller, name: "Second product")
+
+          action = propose_sections_write(
+            "sections" => [{ "id" => kept.external_id, "shown_products" => [other.external_id], "default_product_sort" => "price_asc" }],
+          )
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "Keep me (changed)" },
+            { label: "Section Keep me", value: "Products: Second product; Sort: price low to high" },
+          )
+        end
+
+        it "does not count a section it changes or creates as deleted" do
+          product.update!(sections: [kept.id, dropped.id])
+
+          action = propose_sections_write("sections" => [{ "id" => kept.external_id, "header" => "Keep me" }, { "type" => "products" }])
+
+          expect(action[:fields]).to include({ label: "Deleted", value: "1 section will be deleted: Drop me" })
         end
       end
 

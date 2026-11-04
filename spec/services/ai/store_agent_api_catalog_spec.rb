@@ -475,9 +475,18 @@ describe Ai::StoreAgentApiCatalog do
     it "tells the model that an omitted section is deleted and where main_section_index puts the product" do
       summary = described_class.find("update_product_sections").summary
 
-      expect(summary).to match(/COMPLETE ordered list/)
+      expect(summary).to match(/COMPLETE ordered layout/)
       expect(summary).to include("DELETED")
       expect(summary).to include("ABOVE the product")
+    end
+
+    it "tells the model it can create a section and change what one shows" do
+      summary = described_class.find("update_product_sections").summary
+
+      expect(summary).to include("create featured product and products sections")
+      expect(summary).to include("shown_products")
+      expect(summary).to include("featured_product")
+      expect(summary).to include("default_product_sort")
     end
 
     it "states in the product read that its sections and main_section_index are part of the payload" do
