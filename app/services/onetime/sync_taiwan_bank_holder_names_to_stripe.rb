@@ -25,12 +25,15 @@ module Onetime
     end
 
     private
-      # Same normalization as the model's stripped_fields, which only runs on validation.
+      # Same normalization as the model's stripped_fields, which only runs on validation. The row lock
+      # reloads under it, so a name the seller saves while this walks the table is never overwritten.
       def normalize_holder_name!(bank_account)
-        StrippedFields::StrippedField.before_validation(
-          bank_account, :account_holder_full_name, remove_duplicate_spaces: false, transform: nil, nilify_blanks: false
-        )
-        bank_account.update_column(:account_holder_full_name, bank_account.account_holder_full_name) if bank_account.account_holder_full_name_changed?
+        bank_account.with_lock do
+          StrippedFields::StrippedField.before_validation(
+            bank_account, :account_holder_full_name, remove_duplicate_spaces: false, transform: nil, nilify_blanks: false
+          )
+          bank_account.update_column(:account_holder_full_name, bank_account.account_holder_full_name) if bank_account.account_holder_full_name_changed?
+        end
       end
   end
 end

@@ -27,6 +27,17 @@ describe Onetime::SyncTaiwanBankHolderNamesToStripe do
       expect(bank_account.reload.account_holder_full_name).to eq("SHIE BING YUAN")
     end
 
+    it "does not overwrite a name the seller saves after the row is loaded" do
+      bank_account = create_linked_taiwan_bank_account
+      bank_account.update_column(:account_holder_full_name, " SHIE BING YUAN\u3000")
+      loaded = TaiwanBankAccount.find(bank_account.id)
+      TaiwanBankAccount.where(id: bank_account.id).update_all(account_holder_full_name: "SHIE BING YUAN JR")
+
+      described_class.new.send(:normalize_holder_name!, loaded)
+
+      expect(bank_account.reload.account_holder_full_name).to eq("SHIE BING YUAN JR")
+    end
+
     it "skips non-ASCII names and accounts that are not the active one" do
       create_linked_taiwan_bank_account(account_holder_full_name: "謝秉原")
       create_linked_taiwan_bank_account(account_holder_full_name: "SHIE BING YUAN")
