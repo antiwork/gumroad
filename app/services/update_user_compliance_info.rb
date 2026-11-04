@@ -131,6 +131,11 @@ class UpdateUserComplianceInfo
           unless old_compliance_info.nationality_resubmission_required?
             StripeMerchantAccountManager.attest_owners_provided_if_blocking(user)
             StripeMerchantAccountManager.clear_unresolvable_business_tax_id_notes(user)
+            # A structure rejection is the other note nothing here can resolve: no individual save
+            # resubmits `structure`, and this path returns before any Stripe call, so the sync that
+            # failed (and that was supposed to retire the note) would never run again on the only save
+            # such a seller still makes. Re-drive it before reporting the save as done.
+            StripeMerchantAccountManager.resync_pending_structure_rejection(user)
             return { success: true }
           end
         end

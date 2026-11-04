@@ -16037,6 +16037,75 @@ describe StripeMerchantAccountManager, :vcr do
         described_class.update_account(user, passphrase:)
       end
 
+      context "when Stripe already holds an individual but our previous record is a US sole proprietorship" do
+        let(:previous) { create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP) }
+
+        before do
+          previous.mark_deleted!
+          create(:user_compliance_info, user:)
+        end
+
+        it "skips the structure clear and still sends business_type individual" do
+          stub_stripe_account(previous, business_type: "individual")
+
+          expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_including(business_type: "individual")
+          )
+
+          described_class.update_account(user, passphrase:)
+        end
+
+        it "retires a structure rejection note" do
+          note = user.add_payout_note(content: "rejected", seller_visible: false)
+          note.update!(author_id: GUMROAD_ADMIN_ID, json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+                                                                 StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "structure" })
+          stub_stripe_account(previous, business_type: "individual")
+          allow(Stripe::Account).to receive(:update)
+
+          described_class.update_account(user, passphrase:)
+
+          expect(note.reload.deleted_at).to be_present
+        end
+
+        # The seller's next save carries the same details, so it never reaches Stripe on its own.
+        it "re-drives the pending structure sync from an unchanged save" do
+          note = user.add_payout_note(content: "rejected", seller_visible: false)
+          note.update!(author_id: GUMROAD_ADMIN_ID, json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+                                                                 StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "structure" })
+          stub_stripe_account(previous, business_type: "individual")
+
+          expect(Stripe::Account).not_to receive(:update).with(anything, { company: { structure: "" } })
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_including(business_type: "individual")
+          )
+
+          described_class.resync_pending_structure_rejection(user)
+
+          expect(note.reload.deleted_at).to be_present
+        end
+
+        it "makes no Stripe call when the individual has no structure rejection to finish" do
+          stub_stripe_account(previous, business_type: "individual")
+          expect(Stripe::Account).not_to receive(:update)
+
+          described_class.resync_pending_structure_rejection(user)
+        end
+
+        it "swallows a Stripe failure rather than failing the seller's save" do
+          note = user.add_payout_note(content: "rejected", seller_visible: false)
+          note.update!(author_id: GUMROAD_ADMIN_ID, json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+                                                                 StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "structure" })
+          stub_stripe_account(previous, business_type: "individual")
+          allow(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("boom", nil))
+          expect(ErrorNotifier).to receive(:notify)
+
+          expect { described_class.resync_pending_structure_rejection(user) }.not_to raise_error
+        end
+      end
+
       context "when Stripe holds a company but our previous record is individual" do
         let(:previous) { create(:user_compliance_info, user:) }
         let(:current_factory) { :user_compliance_info }
