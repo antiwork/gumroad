@@ -26,19 +26,24 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     @seller&.destroy!
   end
 
-  def lock_waits
-    ActiveRecord::Base.uncached do
-      ActiveRecord::Base.connection.select_value("SELECT COUNT(*) FROM information_schema.innodb_trx WHERE trx_state = 'LOCK WAIT'").to_i
+  # Waits for this writer's own connection to queue behind the seller_profiles row lock, so an
+  # unrelated lock wait cannot release the holder early.
+  def wait_until_waiting_on_profile_lock(writer_connection_id)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+    until waiting_on_profile_lock?(writer_connection_id)
+      raise "the writer never waited for the profile lock" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+      sleep 0.15
     end
   end
 
-  # Returns once the writer's transaction is queued behind the held profile lock.
-  def wait_for_lock_wait
-    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
-    until lock_waits.positive?
-      raise "the writer never waited for the profile lock" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-
-      sleep 0.1
+  def waiting_on_profile_lock?(connection_id)
+    ActiveRecord::Base.connection.uncached do
+      ActiveRecord::Base.connection.select_value(<<~SQL.squish).to_i.positive?
+        SELECT COUNT(*) FROM sys.innodb_lock_waits
+        WHERE waiting_pid = #{connection_id.to_i}
+          AND locked_table = CONCAT('`', DATABASE(), '`.`seller_profiles`')
+      SQL
     end
   end
 
@@ -59,12 +64,14 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     end
     Timeout.timeout(10) { locked.pop }
 
+    writer_connection_id = Queue.new
     writer = Thread.new do
-      ActiveRecord::Base.connection_pool.with_connection do
+      ActiveRecord::Base.connection_pool.with_connection do |connection|
+        writer_connection_id << connection.select_value("SELECT CONNECTION_ID()")
         described_class.new(Link.find(@product.id)).write!(sections: [{ "id" => @section.external_id, "default_product_sort" => "newest" }])
       end
     end
-    wait_for_lock_wait
+    wait_until_waiting_on_profile_lock(Timeout.timeout(10) { writer_connection_id.pop })
     release << true
     holder.join(20)
     result = Timeout.timeout(20) { writer.value }

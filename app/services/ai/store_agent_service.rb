@@ -1853,14 +1853,15 @@ class Ai::StoreAgentService
     # before confirming. An unresolvable id shows raw, and a created section is named by its type.
     def section_rows(current, entries)
       by_external_id = current.index_by(&:external_id)
-      labels = entries.map { |entry| section_entry_label(entry, by_external_id) }
+      names = distinct_section_labels(current)
+      labels = entries.map { |entry| section_entry_label(entry, names) }
       rows = [{ label: "Sections", value: labels.empty? ? "(none)" : labels.join(" → ") }]
 
       kept_ids = entries.map { |entry| section_attributes(entry)&.dig("id") || (entry.is_a?(String) ? entry : nil) }.compact
       deleted = current - kept_ids.filter_map { |id| by_external_id[id.to_s] }
-      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map { section_label(_1) }.join(", ")}" } if deleted.any?
+      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map { names[_1.external_id] }.join(", ")}" } if deleted.any?
 
-      content_rows = entries.flat_map { |entry| section_content_rows(entry, by_external_id) }
+      content_rows = entries.flat_map { |entry| section_content_rows(entry, names) }
       # Two new products sections (or two unnamed kept ones) would share a label; number them in layout
       # order so the seller can tell the rows apart.
       counts = content_rows.map { _1[:label] }.tally
@@ -1874,16 +1875,30 @@ class Ai::StoreAgentService
       rows.concat(content_rows)
     end
 
-    def section_entry_label(entry, by_external_id)
-      attributes = section_attributes(entry)
-      if attributes.nil?
-        section = by_external_id[entry]
-        return section ? section_label(section) : entry.to_s
+    # Existing sections by external id, labelled by header or type. Sections that would share a label
+    # (two unnamed products sections are both "Products") also name what they show, so the seller can
+    # tell which one is kept, changed or deleted.
+    def distinct_section_labels(current)
+      plain = current.to_h { [_1.external_id, section_label(_1)] }
+      counts = plain.values.tally
+      current.to_h do |section|
+        label = plain[section.external_id]
+        next [section.external_id, label] if counts[label] == 1
+
+        product_ids = section.is_a?(SellerProfileFeaturedProductSection) ? [section.featured_product_id].compact : Array(section.shown_products)
+        names = Link.where(user_id: seller.id, id: product_ids).pluck(:id, :name).to_h
+        shown = product_ids.map { |id| names[id] || id.to_s }.join(", ").presence || "no products"
+        [section.external_id, "#{label} (#{shown})"]
       end
+    end
+
+    def section_entry_label(entry, names)
+      attributes = section_attributes(entry)
+      return names[entry] || entry.to_s if attributes.nil?
 
       id = attributes["id"]
       if id.present?
-        name = by_external_id[id] ? section_label(by_external_id[id]) : id.to_s
+        name = names[id] || id.to_s
         attributes.except("id", "type").empty? ? name : "#{name} (changed)"
       else
         type = section_type_label(attributes["type"])
@@ -1893,13 +1908,13 @@ class Ai::StoreAgentService
 
     # The contents an entry changes — a new section's products, a new featured product, a sort order —
     # so the card never hides a mutation behind an id.
-    def section_content_rows(entry, by_external_id)
+    def section_content_rows(entry, names)
       attributes = section_attributes(entry)
       return [] if attributes.nil?
 
       id = attributes["id"]
       label = if id.present?
-        by_external_id[id] ? "Section #{section_label(by_external_id[id])}" : "Section #{id}"
+        "Section #{names[id] || id}"
       else
         "New #{section_type_label(attributes["type"]).downcase} section"
       end

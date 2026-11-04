@@ -2347,6 +2347,20 @@ describe Ai::StoreAgentService do
           )
         end
 
+        it "tells unnamed sections apart by the products they show" do
+          listed = %w[First Second Third].map { |name| create(:product, user: seller, name:) }
+          first_unnamed = create(:seller_profile_products_section, seller:, product:, header: "", shown_products: listed.first(2).map(&:id))
+          second_unnamed = create(:seller_profile_products_section, seller:, product:, header: "", shown_products: [listed.last.id])
+          product.update!(sections: [first_unnamed.id, second_unnamed.id])
+
+          action = propose_sections([second_unnamed.external_id])
+
+          expect(action[:fields]).to include(
+            { label: "Sections", value: "Products (Third)" },
+            { label: "Deleted", value: "1 section will be deleted: Products (First, Second)" },
+          )
+        end
+
         it "does not count a section it changes or creates as deleted" do
           product.update!(sections: [kept.id, dropped.id])
 
