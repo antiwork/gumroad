@@ -2311,6 +2311,15 @@ describe Ai::StoreAgentService do
           )
         end
 
+        it "names every product a section will show, however many there are" do
+          product.update!(sections: [kept.id])
+          listed = %w[First Second Third].map { |name| create(:product, user: seller, name:) }
+
+          action = propose_sections_write("sections" => [{ "id" => kept.external_id, "shown_products" => listed.map(&:external_id) }])
+
+          expect(action[:fields]).to include({ label: "Section Keep me", value: "Products: First, Second, Third" })
+        end
+
         it "does not count a section it changes or creates as deleted" do
           product.update!(sections: [kept.id, dropped.id])
 

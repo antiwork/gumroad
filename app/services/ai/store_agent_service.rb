@@ -1836,15 +1836,14 @@ class Ai::StoreAgentService
       (id && Link.where(user_id: seller.id, id:).pick(:name)) || external_id.to_s
     end
 
-    # Product names, in the order given, capped the way the dashboard's own summary caps them.
+    # Every product name, in the order given: the seller confirms exactly the list that is written.
     def products_summary(external_ids)
-      ids = Array(external_ids).filter_map { |id| ObfuscateIds.decrypt(id) if id.is_a?(String) }
-      return "(none)" if ids.empty?
+      external_ids = Array(external_ids)
+      return "(none)" if external_ids.empty?
 
-      names = Link.where(user_id: seller.id, id: ids).pluck(:id, :name).to_h
-      labels = ids.map { |id| names[id] || id.to_s }
-      shown = labels.first(2).join(", ")
-      labels.size > 2 ? "#{shown}, and #{labels.size - 2} #{labels.size - 2 == 1 ? "other" : "others"}" : shown
+      ids = external_ids.map { |id| ObfuscateIds.decrypt(id) if id.is_a?(String) }
+      names = Link.where(user_id: seller.id, id: ids.compact).pluck(:id, :name).to_h
+      external_ids.zip(ids).map { |external_id, id| names[id] || external_id.to_s }.join(", ")
     end
 
     # The layout a sections write keeps, changes and destroys, so the seller sees the whole change

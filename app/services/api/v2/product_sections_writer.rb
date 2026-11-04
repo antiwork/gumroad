@@ -152,7 +152,7 @@ class Api::V2::ProductSectionsWriter
         return [nil, "#{unexpected.first} is not a field of a #{section.type.delete_prefix("SellerProfile").delete_suffix("Section").underscore.humanize.downcase} section."]
       end
 
-      attrs, error = content_attributes(allowed, attributes)
+      attrs, error = content_attributes(allowed, attributes, section:)
       return [nil, error] if error
 
       [{ id:, attributes: header_attributes(attributes).merge(attrs) }, nil]
@@ -183,20 +183,22 @@ class Api::V2::ProductSectionsWriter
 
     # Translates the contents an entry carries into section attributes. `allowed` is what the
     # section's type accepts, so a model that sends a products field to a featured section is told
-    # rather than silently ignored (the v2 API drops unknown body keys).
-    def content_attributes(allowed, attributes, creating: false)
+    # rather than silently ignored (the v2 API drops unknown body keys). `section` is the existing
+    # section being changed: products it already lists stay allowed even if no longer live (new
+    # products join `add_new_products` sections as drafts), so re-sending its own list never fails.
+    def content_attributes(allowed, attributes, creating: false, section: nil)
       attrs = {}
 
       if attributes.key?("featured_product")
         return [nil, "featured_product is not a field of this section."] unless allowed.include?("featured_product")
-        id, error = resolve_featured_product(attributes["featured_product"])
+        id, error = resolve_featured_product(attributes["featured_product"], current: section.try(:featured_product_id))
         return [nil, error] if error
         attrs[:featured_product_id] = id
       end
 
       if attributes.key?("shown_products")
         return [nil, "shown_products is not a field of this section."] unless allowed.include?("shown_products")
-        ids, error = resolve_products(attributes["shown_products"])
+        ids, error = resolve_products(attributes["shown_products"], current: section.try(:shown_products))
         return [nil, error] if error
         attrs[:shown_products] = ids
       elsif creating && allowed.include?("shown_products")
@@ -227,25 +229,25 @@ class Api::V2::ProductSectionsWriter
     end
 
     # Blank clears the featured product (the dashboard's product picker clears it the same way).
-    def resolve_featured_product(value)
+    def resolve_featured_product(value, current: nil)
       return [nil, nil] if value.nil? || value == ""
       return [nil, "featured_product must be a product id."] unless value.is_a?(String)
 
       id = ObfuscateIds.decrypt(value)
       return [nil, "One or more products were not found."] if id.nil?
-      return [nil, "The featured product must be one of your own live products."] unless @seller.links.alive.not_archived.exists?(id:)
+      return [nil, "The featured product must be one of your own live products."] unless id == current || @seller.links.alive.not_archived.exists?(id:)
 
       [id, nil]
     end
 
-    def resolve_products(value)
+    def resolve_products(value, current: nil)
       return [nil, "shown_products must be an array of product ids."] unless value.is_a?(Array) && value.all? { |id| id.is_a?(String) }
 
       ids = value.map { ObfuscateIds.decrypt(_1) }
       return [nil, "One or more products were not found."] if ids.any?(&:nil?)
       return [nil, "shown_products must not list the same product twice."] if ids.uniq.length != ids.length
       owned = @seller.links.alive.not_archived.where(id: ids).pluck(:id)
-      return [nil, "Every listed product must be one of your own live products."] unless (ids - owned).empty?
+      return [nil, "Every listed product must be one of your own live products."] unless (ids - owned - Array(current)).empty?
 
       [ids, nil]
     end
