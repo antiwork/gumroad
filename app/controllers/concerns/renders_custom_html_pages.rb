@@ -1025,8 +1025,6 @@ module RendersCustomHtmlPages
         (product.alive? || can_preview_product_custom_html?(product) || product_custom_html_collects_waitlist?(product))
     end
 
-    # Visitors to an unpublished product otherwise get the native page, whose waitlist form is
-    # the only way to sign up, so the custom page has to carry its own form to replace it.
     def product_custom_html_collects_waitlist?(product)
       product.accepts_waitlist_signups? && Pages::WaitlistForm.found_in?(product.custom_html)
     end

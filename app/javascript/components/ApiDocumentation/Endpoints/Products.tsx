@@ -109,8 +109,8 @@ const CustomHtmlDocumentation = () => (
       </li>
       <li>
         Both <code>PUT</code> and preview return a top-level <code>warning</code> if the custom HTML has no{" "}
-        <code>data-gumroad-action="buy"</code> element or <code>gumroad:checkout</code> postMessage. A waitlist form
-        stands in for it while the product takes waitlist signups.
+        <code>data-gumroad-action="buy"</code> element or <code>gumroad:checkout</code> postMessage. A waitlist form or{" "}
+        <code>gumroad:waitlist</code> postMessage stands in for it while the product takes waitlist signups.
       </li>
       <li>
         A successful <code>PUT</code> also returns <code>previous_custom_html</code> (the prior value, for one-step
@@ -225,10 +225,12 @@ gumroad products page publish <permalink> ./landing.html`}
     <p>
       To collect waitlist signups before launch, add a <code>form[data-gumroad-waitlist]</code> with an email input.
       Gumroad sends the email and writes its reply into an optional <code>[data-gumroad-waitlist-message]</code>{" "}
-      element. The form only works while the product is unpublished with its waitlist turned on, and visitors see your
-      page before launch only if it has one; otherwise they get Gumroad's own waitlist page. Once the product is
-      published, <code>&lt;html&gt;</code> gets <code>data-gumroad-launched</code> and the form stops working, so hide
-      it with that attribute and keep a buy element on the page.
+      element. Your own script can instead post <code>{`{ type: "gumroad:waitlist", email, requestId }`}</code> to the
+      parent and read the <code>gumroad:waitlist:result</code> reply (<code>success</code>, <code>message</code>,{" "}
+      <code>requestId</code>). Either only works while the product is unpublished with its waitlist turned on, and
+      visitors see your page before launch only if it has the form or the hook; otherwise they get Gumroad's own
+      waitlist page. Once the product is published, <code>&lt;html&gt;</code> gets <code>data-gumroad-launched</code>{" "}
+      and the form stops working, so hide it with that attribute and keep a buy element on the page.
     </p>
     <CodeSnippet caption="Example waitlist form">
       {`<form data-gumroad-waitlist>

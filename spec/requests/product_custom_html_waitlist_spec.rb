@@ -24,7 +24,19 @@ describe "product custom HTML waitlist bridge", type: :request do
     expect(response.body).to include(seller.external_id)
   end
 
-  it "keeps the native waitlist page when the custom page has no waitlist form" do
+  it "serves a custom page whose own script posts gumroad:waitlist without a waitlist form" do
+    product.update!(custom_html: %(<input id="email"><button id="join">Join</button><script>document.getElementById("join").onclick = function () { window.parent.postMessage({ type: "gumroad:waitlist", email: document.getElementById("email").value, requestId: "1" }, "*"); };</script>))
+
+    get base
+
+    expect(response).to be_successful
+    expect(response.body).to include("data-gumroad-waitlist-wrapper")
+
+    get "#{base}/landing/embed"
+    expect(response).to be_successful
+  end
+
+  it "keeps the native waitlist page when the custom page has no waitlist form or hook" do
     product.update!(custom_html: %(<h1>Coming soon</h1>))
 
     get base, headers: { "X-Inertia" => "true" }

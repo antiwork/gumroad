@@ -54,12 +54,13 @@ For a pay-what-you-want product where the buyer should name their OWN price on t
     });
   </script>
 
-To collect waitlist signups before launch, add a waitlist form. It only works while the product is unpublished with its waitlist turned on, and visitors see your page before launch only if it has one; otherwise they get Gumroad's own waitlist page. Gumroad sends the email and writes its reply into the optional message element:
+To collect waitlist signups before launch, add a waitlist form. It only works while the product is unpublished with its waitlist turned on, and visitors see your page before launch only if it has the form or the hook below; otherwise they get Gumroad's own waitlist page. Gumroad sends the email and writes its reply into the optional message element:
   <form data-gumroad-waitlist>
     <input type="email" name="email" required placeholder="you@example.com" />
     <button type="submit">Notify me</button>
     <p data-gumroad-waitlist-message></p>
   </form>
+Or have your own script post { type: "gumroad:waitlist", email, requestId } to its parent; Gumroad replies with a "gumroad:waitlist:result" message carrying success, message, and the same requestId.
 Once the product is published, <html> gets data-gumroad-launched and the form stops working, so hide it with html[data-gumroad-launched] form[data-gumroad-waitlist] { display: none; } and keep a buy element on the page for launch day.
 
 Links to your own Gumroad pages (your storefront, your other products) work as ordinary links — write them plainly and they open in the same tab, no target="_blank" needed. Links to any other site still need target="_blank".

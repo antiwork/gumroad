@@ -868,7 +868,6 @@ class Api::V2::LinksController < Api::V2::BaseController
 
     def custom_html_buy_affordance_warning(html)
       return unless Pages::BuyAffordance.missing?(html)
-      # Until launch the page sells nothing; its waitlist form is the action that matters.
       return if @product.accepts_waitlist_signups? && Pages::WaitlistForm.found_in?(html)
 
       MISSING_BUY_AFFORDANCE_WARNING
