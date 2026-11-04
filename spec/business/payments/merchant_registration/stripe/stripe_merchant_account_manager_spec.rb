@@ -15796,6 +15796,32 @@ describe StripeMerchantAccountManager, :vcr do
         described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.id_number"]))
       end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
     end
+
+    it "creates no request and sends no email for a document that Stripe lists only under eventually_due with a near-term deadline" do
+      expect do
+        described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.verification.document"], deadline: 7.days.from_now.to_i))
+      end.not_to have_enqueued_mail(ContactingCreatorMailer, :more_kyc_needed)
+      expect(user.user_compliance_info_requests.requested.count).to eq(0)
+    end
+
+    it "closes an open document request that Stripe now lists only under eventually_due" do
+      request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+
+      described_class.handle_stripe_event(stripe_event(eventually_due: ["individual.verification.document"], deadline: 7.days.from_now.to_i))
+
+      expect(request.reload.state).to eq("provided")
+    end
+
+    it "records the document request once the document is currently_due" do
+      described_class.handle_stripe_event(stripe_event(
+                                            currently_due: ["individual.verification.document"],
+                                            eventually_due: ["individual.verification.document"],
+                                            deadline: 7.days.from_now.to_i
+                                          ))
+
+      expect(user.user_compliance_info_requests.requested.count).to eq(1)
+      expect(user.user_compliance_info_requests.requested.first.field_needed).to eq(UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+    end
   end
 
   # Stripe validates `company[structure]` against the ACCOUNT country, and create_account takes that

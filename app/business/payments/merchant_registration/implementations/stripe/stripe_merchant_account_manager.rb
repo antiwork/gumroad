@@ -3713,12 +3713,19 @@ module StripeMerchantAccountManager
 
   SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD = 30.days
 
-  def self.soft_future_stripe_fields(requirements, future_requirements, alternative_fields_due, requirements_due_at)
-    return [] unless requirements_due_at.blank? || requirements_due_at > SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD.from_now
+  # A verification document has no collector on our side: only Stripe onboarding renders a document
+  # step, and we mint that link once the document is due (Settings::PaymentsController#remediation_link_type).
+  UNCOLLECTIBLE_FUTURE_FIELD = /\.verification\.(?:additional_)?document\z/
 
+  def self.soft_future_stripe_fields(requirements, future_requirements, alternative_fields_due, requirements_due_at)
     actionable = [requirements["currently_due"], requirements["past_due"],
                   future_requirements["currently_due"], future_requirements["past_due"], alternative_fields_due].compact.reduce([], :+)
-    (requirements["eventually_due"] || []) - actionable
+    eventually_due_only = (requirements["eventually_due"] || []) - actionable
+    # A near-term deadline makes an eventually_due field worth asking about — every field but a
+    # document, which the seller can only submit once it is due.
+    beyond_grace = requirements_due_at.blank? || requirements_due_at > SOFT_FUTURE_REQUIREMENT_GRACE_PERIOD.from_now
+
+    eventually_due_only.select { |field| beyond_grace || field.to_s.match?(UNCOLLECTIBLE_FUTURE_FIELD) }
   end
   private_class_method :soft_future_stripe_fields
 
