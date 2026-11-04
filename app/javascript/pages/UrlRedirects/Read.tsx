@@ -643,9 +643,10 @@ const EpubReader = ({
       try {
         // ProductFile#size is seller-writeable and may be missing, so enforce
         // the compressed limit against the bytes received from storage.
-        const archive = await downloadEpubArchive(url, archiveDownloadController.signal);
-        if (isCancelled()) return;
-        const ePub = (await import("epubjs")).default;
+        const [archive, { default: ePub }] = await Promise.all([
+          downloadEpubArchive(url, archiveDownloadController.signal),
+          import("epubjs"),
+        ]);
         if (isCancelled()) return;
 
         // Passing the bounded buffer also avoids a second, unbounded XHR inside

@@ -238,8 +238,10 @@ export const ReviewForm = React.forwardRef<
 
       if (videoState.kind === "recorded") {
         try {
-          const fileUrl = await uploadVideo(videoState.file);
-          const thumbnailSignedId = await gracefullyGenerateAndUploadThumbnail(videoState.file);
+          const [fileUrl, thumbnailSignedId] = await Promise.all([
+            uploadVideo(videoState.file),
+            gracefullyGenerateAndUploadThumbnail(videoState.file),
+          ]);
           return { create: { url: fileUrl, thumbnail_signed_id: thumbnailSignedId } };
         } catch (error) {
           setIsLoading(false);
