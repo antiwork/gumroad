@@ -216,6 +216,8 @@ export const FileRow = ({
       <NavigationButton href={downloadUrl}>Download</NavigationButton>
     </TrackClick>
   ) : null;
+  // Saves belong to a purchase, so a link without one (an imported customer's) has no Play.
+  const canPlayWebBuild = Boolean(file.web_build?.playable && purchaseInfo.purchaseId);
   const streamUrl = file.stream_url;
   const externalLinkUrl = file.external_link_url;
   const mediaUrls = allMediaUrls[file.id] ?? [];
@@ -317,11 +319,24 @@ export const FileRow = ({
         />
       </RowContent>
 
-      <RowActions>
+      <RowActions className={cx({ "max-sm:flex-col max-sm:items-stretch": canPlayWebBuild })}>
         {file.latest_media_location && file.content_length ? (
           <div>
             <ProgressPie progress={file.latest_media_location.location / file.content_length} />
           </div>
+        ) : null}
+
+        {/* A game wants the whole window and the keyboard, so it gets its own tab, like Watch. Not
+            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. */}
+        {canPlayWebBuild ? (
+          <NavigationButton
+            color="primary"
+            href={Routes.url_redirect_play_path(purchaseInfo.token)}
+            target="_blank"
+            onClick={() => void trackUserActionEvent("play_click")}
+          >
+            Play
+          </NavigationButton>
         ) : null}
 
         {downloadButton}
@@ -342,20 +357,6 @@ export const FileRow = ({
           <Button color="primary" onClick={() => setIsCollapsed(false)}>
             Play
           </Button>
-        ) : null}
-
-        {/* A game wants the whole window and the keyboard, so it gets its own tab, like Watch. Not
-            wrapped in TrackClick: in the mobile apps that hands the tap to native file handling. Saves
-            belong to a purchase, so a link without one (an imported customer's) has no Play. */}
-        {file.web_build?.playable && purchaseInfo.purchaseId ? (
-          <NavigationButton
-            color="primary"
-            href={Routes.url_redirect_play_path(purchaseInfo.token)}
-            target="_blank"
-            onClick={() => void trackUserActionEvent("play_click")}
-          >
-            Play
-          </NavigationButton>
         ) : null}
 
         {externalLinkUrl !== null ? (

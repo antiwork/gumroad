@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { trackMediaLocationChanged } from "$app/data/media_location";
+import { trackUserActionEvent } from "$app/data/user_action_event";
 import { videoFrameIsPortrait, videoFrameStyle } from "$app/utils/videoFrame";
 
 import { FileItem, FileList, FileRow, FolderItem } from "$app/components/Download/FileList";
@@ -408,5 +409,106 @@ describe("FileRow web build label", () => {
     renderFileRow(videoFile({ extension: "ZIP", stream_url: null, file_size: 2048 }));
 
     expect(screen.queryByText(/Web build/u)).toBeNull();
+  });
+});
+
+describe("FileRow web build actions", () => {
+  const webBuildFile = (overrides: Partial<FileItem> = {}) =>
+    videoFile({
+      file_name: "Clicker build 1.zip",
+      extension: "ZIP",
+      stream_url: null,
+      download_url: "/download/build-zip",
+      web_build: { number: 1, status: "live", playable: true },
+      ...overrides,
+    });
+
+  const renderWebBuildRow = (
+    file: FileItem,
+    { purchaseId = "purchase-1", isEmbed = false }: { purchaseId?: string | null; isEmbed?: boolean } = {},
+  ) =>
+    render(
+      <PurchaseInfoProvider value={{ purchaseId, redirectId: "redirect-1", token: "token-1" }}>
+        <MediaUrlsProvider value={[{}, () => undefined]}>
+          <IsMobileAppViewProvider value={false}>
+            <FileRow file={file} playingAudioForId={null} setPlayingAudioForId={() => undefined} isEmbed={isEmbed} />
+          </IsMobileAppViewProvider>
+        </MediaUrlsProvider>
+      </PurchaseInfoProvider>,
+    );
+
+  const actionLabels = () => screen.getAllByRole("link").map((link) => link.textContent);
+  const actionsClasses = () =>
+    Array.from(screen.getByRole("link", { name: "Download" }).parentElement?.classList ?? []);
+
+  // happy-dom follows clicked links by fetching them; these tests only need the click handlers.
+  const stopNavigation = (event: Event) => event.preventDefault();
+
+  beforeEach(() => {
+    vi.stubGlobal("Routes", { url_redirect_play_path: (token: string) => `/d/${token}/play` });
+    vi.mocked(trackUserActionEvent).mockClear();
+    document.addEventListener("click", stopNavigation, true);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.removeEventListener("click", stopNavigation, true);
+  });
+
+  it.each([
+    ["file list", false],
+    ["rich content file embed", true],
+  ])("puts Play before Download in a %s row and stacks them on phones", (_, isEmbed) => {
+    renderWebBuildRow(webBuildFile(), { isEmbed });
+
+    expect(actionLabels()).toEqual(["Play", "Download"]);
+    const play = screen.getByRole("link", { name: "Play" });
+    expect(play.getAttribute("href")).toBe("/d/token-1/play");
+    expect(play.getAttribute("target")).toBe("_blank");
+    expect(actionsClasses()).toEqual(expect.arrayContaining(["max-sm:flex-col", "max-sm:items-stretch"]));
+  });
+
+  it("offers Play alone when the build cannot be downloaded", () => {
+    renderWebBuildRow(webBuildFile({ download_url: null }));
+
+    expect(actionLabels()).toEqual(["Play"]);
+  });
+
+  it.each([
+    [
+      "a build that cannot be played",
+      webBuildFile({ web_build: { number: 1, status: "live", playable: false } }),
+      "purchase-1",
+    ],
+    ["a link without a purchase", webBuildFile(), null],
+    ["a zip the seller uploaded by hand", webBuildFile({ web_build: null }), "purchase-1"],
+  ])("leaves %s with only its inline Download", (_, file, purchaseId) => {
+    renderWebBuildRow(file, { purchaseId });
+
+    expect(actionLabels()).toEqual(["Download"]);
+    expect(actionsClasses()).not.toContain("max-sm:flex-col");
+  });
+
+  it("tracks each action once", () => {
+    renderWebBuildRow(webBuildFile());
+
+    fireEvent.click(screen.getByRole("link", { name: "Play" }));
+    fireEvent.click(screen.getByRole("link", { name: "Download" }));
+
+    expect(vi.mocked(trackUserActionEvent).mock.calls).toEqual([["play_click"], ["download_click"]]);
+  });
+
+  it("keeps Play out of the native app's file handling while Download still goes to it", () => {
+    const postMessage = mockReactNativeWebView();
+    renderWebBuildRow(webBuildFile());
+
+    fireEvent.click(screen.getByRole("link", { name: "Play" }));
+    expect(postMessage).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("link", { name: "Download" }));
+    expect(JSON.parse(String(postMessage.mock.calls[0]?.[0]))).toMatchObject({
+      type: "click",
+      payload: { resourceId: "file-1", isDownload: true },
+    });
   });
 });

@@ -134,14 +134,56 @@ describe "Download page web build player", type: :system, js: true do
     wait_until_true { ProductBuildSave.find_by(purchase:)&.data == { "clicks" => "1" } }
   end
 
-  it "keeps the content page as it is, with Download next to Play" do
-    visit("/d/#{url_redirect.token}")
+  describe "the content page actions" do
+    let!(:readme) { create(:non_readable_document, link: product, display_name: "Read me") }
 
-    expect(page).to have_text("Web app, version 1")
-    expect(page).to have_link("Download")
-    expect(page).to have_link("Play", href: "/d/#{url_redirect.token}/play")
-    expect(find_link("Play")[:target]).to eq("_blank")
-    expect(page).not_to have_selector("iframe")
+    def box(element) = page.evaluate_script("arguments[0].getBoundingClientRect().toJSON()", element)
+
+    def expect_play_first_actions
+      expect(page).to have_text("Web app, version 1")
+      play = find_link("Play", href: "/d/#{url_redirect.token}/play")
+      expect(play[:target]).to eq("_blank")
+      build_actions = play.find(:xpath, "..")
+      expect(build_actions.all(:link).map(&:text)).to eq(["Play", "Download"])
+      download = build_actions.find_link("Download")
+      readme_download = all(:link, exact_text: "Download").find { _1 != download }
+      expect(page).not_to have_selector("iframe")
+
+      expect(box(play)["top"]).to eq(box(download)["top"])
+      expect(box(play)["right"]).to be <= box(download)["left"]
+      expect(box(download)["right"]).to be_within(1).of(box(build_actions)["right"])
+
+      page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width: 320, height: 900, deviceScaleFactor: 1, mobile: true)
+      actions = box(build_actions)
+      expect(box(play)["bottom"]).to be <= box(download)["top"]
+      [box(play), box(download)].each do |action|
+        expect(action["left"]).to be_within(1).of(actions["left"])
+        expect(action["width"]).to be_within(1).of(actions["width"])
+      end
+      expect(box(readme_download)["width"]).to be < actions["width"] / 2
+    ensure
+      page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
+    end
+
+    it "puts Play before Download in a rich content file embed, full width on phones" do
+      content = product.alive_rich_contents.sole
+      content.update!(description: [{ "type" => "fileEmbed", "attrs" => { "id" => readme.external_id, "uid" => SecureRandom.uuid } }] + content.description)
+
+      visit("/d/#{url_redirect.token}")
+
+      expect(page).to have_text("Read me")
+      expect(page).not_to have_selector("[role='tree'][aria-label='Files']")
+      expect_play_first_actions
+    end
+
+    it "puts Play before Download in the file list, full width on phones" do
+      product.alive_rich_contents.each(&:mark_deleted!)
+
+      visit("/d/#{url_redirect.token}")
+
+      expect(page).to have_selector("[role='tree'][aria-label='Files']", text: "Read me")
+      expect_play_first_actions
+    end
   end
 
   it "shows the game's name, Full screen, and a way back to the content on the player page" do
