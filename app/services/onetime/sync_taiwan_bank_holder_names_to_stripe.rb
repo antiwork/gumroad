@@ -9,7 +9,8 @@ module Onetime
     end
 
     def process
-      # Only banks Stripe already accepted, so a rejected bank is not resent and the seller is not emailed again.
+      # Only banks Stripe already accepted, so a bank it rejected before is not resent. If Stripe rejects
+      # the newly sent name, the seller gets the usual email, because their wires need a name the bank accepts.
       TaiwanBankAccount.alive.where.not(stripe_bank_account_id: nil).includes(:user).find_each do |bank_account|
         user = bank_account.user
         next unless user&.account_active? && user.active_bank_account == bank_account
