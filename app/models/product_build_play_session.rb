@@ -26,8 +26,7 @@ class ProductBuildPlaySession < ApplicationRecord
   def heartbeat!(at = Time.current)
     return resume!(at) unless open?(at)
 
-    update!(last_heartbeat_at: at)
-    self
+    extend_to!(at)
   end
 
   # A session is over once its last beat is older than the expiry, and its length is final.
@@ -48,10 +47,24 @@ class ProductBuildPlaySession < ApplicationRecord
     def resume!(at)
       with_lock do
         if replacement_id
-          self.class.find(replacement_id).heartbeat!(at)
+          # A plain read here would use this transaction's snapshot, which can predate a replacement
+          # another beat committed while this one waited for the lock.
+          self.class.lock.find(replacement_id).heartbeat!(at)
+        elsif open?(at)
+          # Another beat extended this session after this one loaded it.
+          extend_to!(at)
         else
           self.class.start!(product_build:, purchase:, at:).tap { |replacement| update!(replacement_id: replacement.id) }
         end
       end
+    end
+
+    # A beat's time is taken before it waits for any lock, and this copy of the row may predate a later
+    # beat, so beats can land out of order. GREATEST keeps the stored last beat from moving back.
+    def extend_to!(at)
+      self.class.where(id:).update_all(["last_heartbeat_at = GREATEST(last_heartbeat_at, ?), updated_at = ?", at, Time.current])
+      self.last_heartbeat_at = [last_heartbeat_at, at].max
+      clear_attribute_changes([:last_heartbeat_at])
+      self
     end
 end

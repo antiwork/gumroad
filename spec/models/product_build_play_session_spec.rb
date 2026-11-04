@@ -62,6 +62,48 @@ describe ProductBuildPlaySession do
       expect(second.last_heartbeat_at).to eq(start + 1.hour + described_class::HEARTBEAT_INTERVAL)
       expect(described_class.where(purchase:).count).to eq(2)
     end
+
+    it "starts the next session from the newest one when the replacement has expired too" do
+      session = described_class.start!(product_build: build, purchase:, at: start)
+      replacement = session.heartbeat!(start + 1.hour)
+      next_replacement = replacement.heartbeat!(start + 2.hours)
+
+      expect(described_class.find(session.id).heartbeat!(start + 2.hours + 5.seconds)).to eq(next_replacement)
+      expect(described_class.where(purchase:).count).to eq(3)
+    end
+  end
+
+  # A beat's time is taken before it waits for any lock, so beats can be recorded out of order.
+  describe "#heartbeat! recorded out of order" do
+    let(:session) { described_class.start!(product_build: build, purchase:, at: start) }
+
+    it "keeps the later beat when an earlier one is recorded after it" do
+      earlier_load = described_class.find(session.id)
+      described_class.find(session.id).heartbeat!(start + 60.seconds)
+
+      earlier_load.heartbeat!(start + 30.seconds)
+
+      expect(session.reload.last_heartbeat_at).to eq(start + 60.seconds)
+    end
+
+    it "keeps the later beat when a beat that found the session expired is recorded after it" do
+      stale = described_class.find(session.id)
+      fresh = described_class.find(session.id)
+      fresh.heartbeat!(start + 110.seconds)
+      fresh.heartbeat!(start + 130.seconds)
+
+      expect(stale.heartbeat!(start + 125.seconds)).to eq(session)
+      expect(session.reload.last_heartbeat_at).to eq(start + 130.seconds)
+    end
+
+    it "never ends a replacement before it started when an earlier beat follows the link into it" do
+      earlier_load = described_class.find(session.id)
+      replacement = described_class.find(session.id).heartbeat!(start + 1.hour + 1.second)
+
+      expect(earlier_load.heartbeat!(start + 1.hour)).to eq(replacement)
+      expect(replacement.reload.last_heartbeat_at).to eq(start + 1.hour + 1.second)
+      expect(replacement.duration_seconds).to eq(0)
+    end
   end
 
   describe "#heartbeat! with another page open on the same purchase" do

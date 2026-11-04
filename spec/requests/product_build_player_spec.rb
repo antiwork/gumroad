@@ -158,6 +158,56 @@ describe "Web build player", type: :request, inertia: true do
       expect(response).to have_http_status(:no_content)
     end
 
+    def session_named_by(path)
+      grant = path.split("/")[4]
+      ProductBuild.verified_player_grant(grant, url_redirect_token: url_redirect.token, purpose: ProductBuild::PLAYER_HEARTBEAT_GRANT_PURPOSE)["session_id"]
+    end
+
+    it "answers a retried beat on the expired session's path with the session the first one started" do
+      path = heartbeat_path
+      ProductBuildPlaySession.last.update!(started_at: 10.minutes.ago, last_heartbeat_at: 10.minutes.ago)
+      sessions_named = []
+
+      expect do
+        2.times do
+          post path
+          sessions_named << session_named_by(response.parsed_body["heartbeat_path"])
+        end
+      end.to change { ProductBuildPlaySession.count }.by(1)
+      expect(sessions_named).to eq([ProductBuildPlaySession.last.id] * 2)
+    end
+
+    it "resumes a page into its own new session, not one another page load of the purchase started" do
+      first_path = heartbeat_path
+      first = ProductBuildPlaySession.last
+      second_path = heartbeat_path
+      second = ProductBuildPlaySession.last
+      first.update!(started_at: 12.minutes.ago, last_heartbeat_at: 10.minutes.ago)
+      second.update!(started_at: 5.minutes.ago, last_heartbeat_at: 1.minute.ago)
+
+      expect { post first_path }.to change { ProductBuildPlaySession.count }.by(1)
+      resumed_id = session_named_by(response.parsed_body["heartbeat_path"])
+      expect(resumed_id).not_to eq(second.id)
+      expect(first.reload.replacement_id).to eq(resumed_id)
+      expect(second.reload.last_heartbeat_at).to be_within(1.second).of(1.minute.ago)
+
+      post second_path
+      expect(response).to have_http_status(:no_content)
+      expect(second.reload.replacement_id).to be_nil
+    end
+
+    it "returns 404 for a grant whose purchase does not own the session" do
+      heartbeat_path
+      other_purchase = create(:purchase, link: product)
+
+      [other_purchase.id, nil].each do |purchase_id|
+        grant = build.player_heartbeat_grant(url_redirect_token: url_redirect.token, purchase_id:, session_id: ProductBuildPlaySession.last.id)
+        post "/d/#{url_redirect.token}/play/#{grant}/heartbeat"
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+
     it "returns 404 for a grant that names no session" do
       grant = build.player_heartbeat_grant(url_redirect_token: url_redirect.token, purchase_id: purchase.id, session_id: 0)
 
