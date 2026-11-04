@@ -100,9 +100,8 @@ class PostToIndividualPingEndpointWorker
     def ping_signature_headers(post_url:, body:, user_id:)
       return {} if user_id.blank?
 
-      # The primary, not a replica: a sale can land seconds after the seller enables signing. Preloaded
-      # inside the block because a lazy load after it would be routed to the replica.
-      user = ApplicationRecord.connected_to(role: :writing) { User.preload(:ping_signing_setting).find_by(id: user_id) }
+      # The primary, not a replica: a sale can land seconds after the seller enables signing.
+      user = ApplicationRecord.connected_to(role: :writing) { User.find_by(id: user_id) }
       return {} if user.nil? || user.ping_signing_secret.blank? || user.notification_endpoint != post_url
 
       PingSignature.headers(secret: user.ping_signing_secret, body:)

@@ -128,11 +128,15 @@ const PublicPing = () => (
                 <Code>v1</Code> are the strings from the header and the raw body is the unparsed bytes.
               </p>
               <CodeSnippet caption="Node">{`const MAX_SKEW_SECONDS = 300;
-if (!/^\\d+$/.test(t) || Math.abs(Date.now() / 1000 - Number(t)) > MAX_SKEW_SECONDS) return res.status(400).send("stale");
-const expected = Buffer.from(crypto.createHmac("sha256", secret).update(t + ".").update(rawBody).digest("hex"));
+if (!/^\\d+$/.test(t) || Math.abs(Date.now() / 1000 - Number(t)) > MAX_SKEW_SECONDS)
+  return res.status(400).send("stale");
+const expected = Buffer.from(crypto.createHmac("sha256", secret)
+  .update(t + ".").update(rawBody).digest("hex"));
 const received = Buffer.from(v1);
-// timingSafeEqual throws unless both buffers have the same byte length, and a forged v1 can have any.
-if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return res.status(400).send("bad signature");`}</CodeSnippet>
+// timingSafeEqual throws unless both buffers have the same byte length,
+// and a forged v1 can have any.
+if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received))
+  return res.status(400).send("bad signature");`}</CodeSnippet>
               <CodeSnippet caption="Python">{`MAX_SKEW_SECONDS = 300
 if not (t.isascii() and t.isdigit()) or abs(time.time() - int(t)) > MAX_SKEW_SECONDS:
     abort(400, "stale")

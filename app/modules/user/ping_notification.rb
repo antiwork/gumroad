@@ -33,10 +33,10 @@ module User::PingNotification
     HTTParty.post(url, body: ping_params, timeout: 5, headers:)
   end
 
-  # The secret their endpoint verifies our signatures with. It lives in its own table (CONTRIBUTING
-  # forbids schema changes on `users`), and this reader keeps the feature's name at the call sites.
+  # On the primary: workers read from a replica, and a ping sent just after a rotation and signed with
+  # the replaced secret gets a 4xx, which is not retried.
   def ping_signing_secret
-    ping_signing_setting&.secret
+    ApplicationRecord.connected_to(role: :writing) { ping_signing_setting&.secret }
   end
 
   def urls_for_ping_notification(resource_name)
