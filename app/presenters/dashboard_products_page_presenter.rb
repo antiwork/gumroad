@@ -154,8 +154,22 @@ class DashboardProductsPagePresenter
     end
 
     def products_data(products)
+      product_ids = products.map(&:id)
+      # Both roll-ups cover the whole page, so a page of products costs two queries rather than two
+      # per row. Only a product with a build has play sessions, and it shows a zero when there are
+      # none; without a build the keys are absent and the table shows nothing.
+      play_sessions = ProductBuildPlaySession.stats_by_product(product_ids)
+      products_with_builds = ProductBuild.where(product_id: product_ids).group(:product_id).count
+
       Product::Caching.dashboard_collection_data(products, cache: true) do |product|
-        product_base_data(product, pundit_user:)
+        data = product_base_data(product, pundit_user:)
+        stats = play_sessions[product.id]
+        next data unless products_with_builds.key?(product.id)
+
+        data.merge(
+          "play_sessions_count" => stats ? stats[:count] : 0,
+          "average_play_session_seconds" => stats&.fetch(:average_seconds),
+        )
       end
     end
 

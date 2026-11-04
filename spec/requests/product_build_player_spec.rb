@@ -4,6 +4,8 @@ require "spec_helper"
 require "inertia_rails/rspec"
 
 describe "Web build player", type: :request, inertia: true do
+  include Devise::Test::IntegrationHelpers
+
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
   let(:purchase) { create(:purchase, link: product) }
@@ -89,6 +91,136 @@ describe "Web build player", type: :request, inertia: true do
       purchase.update!(stripe_refunded: true)
 
       get "/d/#{url_redirect.token}/play"
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "starts a play session for the product's build" do
+      expect { get "/d/#{url_redirect.token}/play" }.to change { ProductBuildPlaySession.count }.by(1)
+
+      session = ProductBuildPlaySession.last
+      expect(session.product_id).to eq(product.id)
+      expect(session.product_build_id).to eq(build.id)
+      expect(session.purchase_id).to eq(purchase.id)
+    end
+
+    it "starts one session per page load" do
+      expect { 2.times { get "/d/#{url_redirect.token}/play" } }.to change { ProductBuildPlaySession.count }.by(2)
+    end
+
+    it "hands the page a heartbeat for the session it started, and how often to send it" do
+      get "/d/#{url_redirect.token}/play"
+      session = ProductBuildPlaySession.last
+
+      path = inertia.props[:heartbeat_url]
+      expect(path).to match(%r{\A/d/#{url_redirect.token}/play/[^/]+/heartbeat\z})
+      expect(inertia.props[:heartbeat_interval_ms]).to eq(ProductBuildPlaySession::HEARTBEAT_INTERVAL.in_milliseconds)
+      expect(ProductBuild.verified_player_grant(path.split("/")[4], url_redirect_token: url_redirect.token, purpose: ProductBuild::PLAYER_HEARTBEAT_GRANT_PURPOSE)).to include(
+        "purchase_id" => purchase.id, "session_id" => session.id,
+      )
+    end
+
+    it "starts no session when the seller plays their own build" do
+      purchase.update!(purchaser: seller)
+      sign_in seller
+
+      expect { get "/d/#{url_redirect.token}/play" }.not_to change { ProductBuildPlaySession.count }
+      expect(inertia.props[:heartbeat_url]).to be_nil
+    end
+  end
+
+  describe "the page's heartbeat" do
+    def heartbeat_path
+      get "/d/#{url_redirect.token}/play"
+      inertia.props[:heartbeat_url]
+    end
+
+    it "extends the session the page load started" do
+      path = heartbeat_path
+      ProductBuildPlaySession.last.update!(last_heartbeat_at: 1.minute.ago)
+      session = ProductBuildPlaySession.last
+
+      expect { post path }.to change { session.reload.last_heartbeat_at }.to be_within(5.seconds).of(Time.current)
+      expect(response).to have_http_status(:no_content)
+    end
+
+    it "starts a new session for a page that woke up after its expiry and hands it a heartbeat path" do
+      path = heartbeat_path
+      expired = ProductBuildPlaySession.last
+      expired.update!(started_at: 10.minutes.ago, last_heartbeat_at: 10.minutes.ago)
+
+      expect { post path }.to change { ProductBuildPlaySession.count }.by(1)
+      expect(expired.reload.last_heartbeat_at).to be_within(1.second).of(10.minutes.ago)
+      new_path = response.parsed_body["heartbeat_path"]
+      expect(new_path).to match(%r{\A/d/#{url_redirect.token}/play/[^/]+/heartbeat\z})
+
+      expect { post new_path }.not_to change { ProductBuildPlaySession.count }
+      expect(response).to have_http_status(:no_content)
+    end
+
+    def session_named_by(path)
+      grant = path.split("/")[4]
+      ProductBuild.verified_player_grant(grant, url_redirect_token: url_redirect.token, purpose: ProductBuild::PLAYER_HEARTBEAT_GRANT_PURPOSE)["session_id"]
+    end
+
+    it "answers a retried beat on the expired session's path with the session the first one started" do
+      path = heartbeat_path
+      ProductBuildPlaySession.last.update!(started_at: 10.minutes.ago, last_heartbeat_at: 10.minutes.ago)
+      sessions_named = []
+
+      expect do
+        2.times do
+          post path
+          sessions_named << session_named_by(response.parsed_body["heartbeat_path"])
+        end
+      end.to change { ProductBuildPlaySession.count }.by(1)
+      expect(sessions_named).to eq([ProductBuildPlaySession.last.id] * 2)
+    end
+
+    it "resumes a page into its own new session, not one another page load of the purchase started" do
+      first_path = heartbeat_path
+      first = ProductBuildPlaySession.last
+      second_path = heartbeat_path
+      second = ProductBuildPlaySession.last
+      first.update!(started_at: 12.minutes.ago, last_heartbeat_at: 10.minutes.ago)
+      second.update!(started_at: 5.minutes.ago, last_heartbeat_at: 1.minute.ago)
+
+      expect { post first_path }.to change { ProductBuildPlaySession.count }.by(1)
+      resumed_id = session_named_by(response.parsed_body["heartbeat_path"])
+      expect(resumed_id).not_to eq(second.id)
+      expect(first.reload.replacement_id).to eq(resumed_id)
+      expect(second.reload.last_heartbeat_at).to be_within(1.second).of(1.minute.ago)
+
+      post second_path
+      expect(response).to have_http_status(:no_content)
+      expect(second.reload.replacement_id).to be_nil
+    end
+
+    it "returns 404 for a grant whose purchase does not own the session" do
+      heartbeat_path
+      other_purchase = create(:purchase, link: product)
+
+      [other_purchase.id, nil].each do |purchase_id|
+        grant = build.player_heartbeat_grant(url_redirect_token: url_redirect.token, purchase_id:, session_id: ProductBuildPlaySession.last.id)
+        post "/d/#{url_redirect.token}/play/#{grant}/heartbeat"
+
+        expect(response).to have_http_status(:not_found)
+      end
+    end
+
+    it "returns 404 for a grant that names no session" do
+      grant = build.player_heartbeat_grant(url_redirect_token: url_redirect.token, purchase_id: purchase.id, session_id: 0)
+
+      post "/d/#{url_redirect.token}/play/#{grant}/heartbeat"
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it "returns 404 for a grant issued for another content page" do
+      path = heartbeat_path
+      other_redirect = create(:url_redirect, link: product)
+
+      post "/d/#{other_redirect.token}/play/#{path.split("/")[4]}/heartbeat"
 
       expect(response).to have_http_status(:not_found)
     end
