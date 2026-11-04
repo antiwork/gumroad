@@ -288,6 +288,7 @@ class GdprDataErasureService
         google_analytics_domains: nil,
         facebook_pixel_id: nil,
         notification_endpoint: nil,
+        ping_signing_secret: nil,
         otp_secret_key: nil,
       }
       @user.update_columns(pii)

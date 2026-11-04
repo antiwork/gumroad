@@ -66,6 +66,29 @@ describe User::PingNotification do
           @user.send_test_ping("https://example.com")
         end.to_not raise_error
       end
+
+      context "when the seller has a signing secret" do
+        before do
+          @user.update!(ping_signing_secret: "s3cret")
+        end
+
+        # The seller's own receiver is what they are testing, so the test ping has to be verifiable
+        # with the same recipe as a real one: the header's timestamp against the bytes HTTParty sends.
+        it "signs the test ping" do
+          expect(HTTParty).to receive(:post) do |_url, options|
+            header = options[:headers]["X-Gumroad-Signature"]
+            timestamp = header[/\At=(\d+),v1=\h+\z/, 1]
+            wire_body = HTTParty::Request::Body.new(options[:body]).call
+
+            expect(timestamp.to_i).to be_within(5).of(Time.current.to_i)
+            expect(header[/,v1=(\h+)\z/, 1]).to eq(OpenSSL::HMAC.hexdigest("SHA256", "s3cret", "#{timestamp}.#{wire_body}"))
+          end
+
+          expect do
+            @user.send_test_ping("https://example.com")
+          end.to_not raise_error
+        end
+      end
     end
   end
 

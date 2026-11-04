@@ -52,6 +52,22 @@ class Settings::AdvancedController < Settings::BaseController
     end
   end
 
+  # Enabling and rotating are one write: a seller with no secret gets one, and a seller with one
+  # replaces it. Whatever the receiver has been verifying against stops verifying the moment this
+  # returns, so the new secret is only ever shown to the seller who asked for it.
+  def rotate_ping_signing_secret
+    secret = SecureRandom.hex(32)
+    current_seller.with_lock { current_seller.update!(ping_signing_secret: secret) }
+
+    render json: { success: true, secret: }
+  end
+
+  def disable_ping_signing
+    current_seller.with_lock { current_seller.update!(ping_signing_secret: nil) }
+
+    render json: { success: true }
+  end
+
   private
     def advanced_params
       params.require(:user).permit(:notification_endpoint)

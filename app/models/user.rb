@@ -1273,6 +1273,7 @@ class User < ApplicationRecord
 
     transaction do
       self.notification_endpoint = nil
+      self.ping_signing_secret = nil
       self.payment_address = ""
       self.invalidated_paypal_payout_address = nil
       self.check_merchant_account_is_linked = false

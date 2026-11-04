@@ -2,6 +2,7 @@ import { Link } from "@inertiajs/react";
 import React from "react";
 
 import { Layout } from "$app/components/Developer/Layout";
+import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "$app/components/ui/Table";
 
 type PingParameter = {
@@ -100,10 +101,56 @@ const PublicPing = () => (
             </div>
 
             <p>
-              Because the payload is unsigned and deliveries can be dropped once the retries run out, treat a ping as a trigger
-              rather than as data: take <Code>sale_id</Code>, read the sale back through the API, and reconcile periodically
-              against your own records.
+              Deliveries can be dropped once the retries run out, so treat a ping as a trigger rather than as data: take{" "}
+              <Code>sale_id</Code>, read the sale back through the API, and reconcile periodically against your own
+              records. A signature tells you the request came from us; it does not make the payload the source of truth.
             </p>
+
+            <div id="verifying-pings">
+              <h2 className="text-xl font-bold">Verifying a ping</h2>
+              <p className="mt-2">
+                Signing is off by default. Turn it on in your{" "}
+                <Link href={Routes.settings_advanced_path()}>account settings</Link> and we sign every ping we send to
+                your endpoint, with a secret you can rotate there whenever you like. Until you do, the endpoint URL is
+                the only credential on a request, and it leaks through access logs, proxies and browser history.
+              </p>
+              <p className="mt-2">A signed ping carries one extra header:</p>
+              <CodeSnippet caption="Signature header">X-Gumroad-Signature: t=1751472000,v1=9d0b9b0a...</CodeSnippet>
+              <p className="mt-2">
+                <Code>t</Code> is the Unix time, in seconds, at the moment we sent the request. <Code>v1</Code> is the
+                hex HMAC-SHA256 of <Code>t</Code>, a period, and the request body exactly as it arrived. Sign the raw
+                bytes, not a copy you re-encoded from parsed parameters: form-encoding key order and JSON whitespace both
+                change the bytes, and with them the signature.
+              </p>
+              <CodeSnippet caption="Node">{`const expected = crypto.createHmac("sha256", secret).update(t + "." + rawBody).digest("hex");
+if (t < Math.floor(Date.now() / 1000) - 300) return res.status(400).send("stale");
+if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) return res.status(400).send("bad signature");`}</CodeSnippet>
+              <CodeSnippet caption="Python">{`expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()
+if abs(time.time() - int(t)) > 300:
+    abort(400, "stale")
+if not hmac.compare_digest(expected, v1):
+    abort(400, "bad signature")`}</CodeSnippet>
+              <ul className="ml-6 mt-2 list-disc space-y-1">
+                <li>
+                  Reject a timestamp more than 5 minutes from your own clock. That is what makes a captured request
+                  useless later, and a retry always carries a fresh one.
+                </li>
+                <li>
+                  Compare the two values without short-circuiting. <Code>timingSafeEqual</Code> (Node) and{" "}
+                  <Code>compare_digest</Code> (Python) are the ones to reach for.
+                </li>
+                <li>
+                  A retried ping re-signs with a new timestamp, so its signature differs from the attempt before it while
+                  the payload stays the same. Deduplicate on <Code>sale_id</Code> and <Code>resource_name</Code>, never on
+                  the signature.
+                </li>
+                <li>
+                  Rotating the secret takes effect immediately: pings signed with the old one stop verifying. Update your
+                  endpoint's copy right after rotating, and while the two sides disagree acknowledge with a 2xx and
+                  reconcile — a 4xx is not retried, so a rejection drops the ping.
+                </li>
+              </ul>
+            </div>
 
             <p>
               Testing: "Send test ping" in your account settings posts your most recent sale with <Code>test</Code> set to{" "}

@@ -25,7 +25,12 @@ module User::PingNotification
       ping_params
     end
 
-    HTTParty.post(url, body: ping_params, timeout: 5, headers: { "Content-Type" => notification_content_type })
+    headers = { "Content-Type" => notification_content_type }
+    # A test ping is how a seller checks their receiver before going live, so it carries the same
+    # signature the real pings do.
+    headers.merge!(PingSignature.headers(secret: ping_signing_secret, body: ping_params)) if ping_signing_secret.present?
+
+    HTTParty.post(url, body: ping_params, timeout: 5, headers:)
   end
 
   def urls_for_ping_notification(resource_name)

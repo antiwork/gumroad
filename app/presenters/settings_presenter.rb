@@ -120,6 +120,7 @@ class SettingsPresenter
       settings_pages: pages,
       user_id: ObfuscateIds.encrypt(seller.id),
       notification_endpoint: seller.notification_endpoint || "",
+      ping_signing_secret: seller.ping_signing_secret,
       blocked_customer_emails: seller.blocked_customer_objects.active.email.pluck(:object_value).join("\n"),
       custom_domain_verification_status:,
       custom_domain_name: seller.custom_domain&.domain || "",

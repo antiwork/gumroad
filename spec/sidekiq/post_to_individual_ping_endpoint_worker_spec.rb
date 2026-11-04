@@ -294,4 +294,66 @@ describe PostToIndividualPingEndpointWorker do
       end.to_not raise_error
     end
   end
+
+  describe "signing" do
+    let(:seller) { create(:user, notification_endpoint: "https://notification.com", ping_signing_secret: "s3cret") }
+
+    # The receiver hashes the header's own timestamp against the body it received; asserting that
+    # pairing here is what catches a signature computed over different bytes than the ones sent.
+    def expect_signed_request(body:)
+      expect(SsrfFilter).to receive(:post) do |url, options|
+        expect(url).to eq("https://notification.com")
+        header = options[:headers]["X-Gumroad-Signature"]
+        timestamp = header[/\At=(\d+),v1=\h+\z/, 1]
+        digest = header[/,v1=(\h+)\z/, 1]
+        expect(timestamp.to_i).to be_within(5).of(Time.current.to_i)
+        expect(digest).to eq(OpenSSL::HMAC.hexdigest("SHA256", "s3cret", "#{timestamp}.#{body}"))
+      end.and_return(@ok_response)
+    end
+
+    it "signs the ping to the seller's own endpoint with that seller's secret" do
+      expect_signed_request(body: "a=1")
+
+      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+    end
+
+    it "does not sign a ping to an application's endpoint, which holds no seller secret" do
+      expect(SsrfFilter).to receive(:post).with("https://app.example.com/hook", post_options(body: "a=1")).and_return(@ok_response)
+
+      PostToIndividualPingEndpointWorker.new.perform("https://app.example.com/hook", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+    end
+
+    it "does not sign for a seller who has not opted in" do
+      unsigned_seller = create(:user, notification_endpoint: "https://notification.com")
+      expect(SsrfFilter).to receive(:post).with("https://notification.com", post_options(body: "a=1")).and_return(@ok_response)
+
+      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, unsigned_seller.id)
+    end
+
+    it "re-signs a retry with a fresh timestamp" do
+      signatures = []
+      allow(SsrfFilter).to receive(:post) do |_url, options|
+        signatures << options[:headers]["X-Gumroad-Signature"]
+        @ok_response
+      end
+
+      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+      travel 1.hour do
+        PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1, "retry_count" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+      end
+
+      expect(signatures.size).to eq(2)
+      expect(signatures.uniq.size).to eq(2)
+    end
+
+    it "does not log the signing secret" do
+      expect_signed_request(body: "a=1")
+      messages = []
+      allow(Rails.logger).to receive(:info) { |message| messages << message }
+
+      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+
+      expect(messages.join("\n")).not_to include("s3cret")
+    end
+  end
 end

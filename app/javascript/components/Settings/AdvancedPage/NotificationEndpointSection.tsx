@@ -82,15 +82,19 @@ const RecentDeliveries = ({ deliveries }: { deliveries: PingDelivery[] }) => {
 const NotificationEndpointSection = ({
   pingEndpoint,
   setPingEndpoint,
+  pingSigningSecret,
   userId,
   recentDeliveries,
 }: {
   pingEndpoint: string;
   setPingEndpoint: (val: string) => void;
+  pingSigningSecret: string | null;
   userId: string;
   recentDeliveries: PingDelivery[];
 }) => {
   const [isSendingPing, setIsSendingPing] = React.useState(false);
+  const [signingSecret, setSigningSecret] = React.useState(pingSigningSecret);
+  const [isUpdatingSigning, setIsUpdatingSigning] = React.useState(false);
   const uid = React.useId();
 
   const sendTestPing = asyncVoid(async () => {
@@ -119,6 +123,57 @@ const NotificationEndpointSection = ({
     setIsSendingPing(false);
   });
 
+  const updateSigningSecret = asyncVoid(async (action: "rotate" | "disable") => {
+    setIsUpdatingSigning(true);
+    try {
+      const response = await request({
+        url:
+          action === "rotate"
+            ? Routes.settings_rotate_ping_signing_secret_path()
+            : Routes.settings_disable_ping_signing_path(),
+        method: action === "rotate" ? "POST" : "DELETE",
+        accept: "json",
+      });
+      const responseData = cast<{ success: true; secret?: string } | { success: false; error_message: string }>(
+        await response.json(),
+      );
+      if (!responseData.success) throw new ResponseError(responseData.error_message);
+
+      if (action === "rotate") {
+        setSigningSecret(responseData.secret ?? null);
+        showAlert(
+          signingSecret
+            ? "Signing secret rotated. Your endpoint has to use the new secret to verify pings."
+            : "Ping signing is on. Copy this secret into your endpoint, it is only shown here.",
+          "success",
+        );
+      } else {
+        setSigningSecret(null);
+        showAlert("Ping signing is off. Your endpoint will receive unsigned pings again.", "success");
+      }
+    } catch (e) {
+      assertResponseError(e);
+      showAlert(e.message, "error");
+    }
+    setIsUpdatingSigning(false);
+  });
+
+  const rotateSigningSecret = asyncVoid(async () => {
+    if (
+      signingSecret &&
+      !confirm(
+        "Rotate the signing secret? Pings signed with the current secret stop verifying until your endpoint uses the new one.",
+      )
+    )
+      return;
+    await updateSigningSecret("rotate");
+  });
+
+  const disableSigning = asyncVoid(async () => {
+    if (!confirm("Turn off ping signing? Your endpoint will receive unsigned pings again.")) return;
+    await updateSigningSecret("disable");
+  });
+
   return (
     <FormSection
       header={
@@ -145,6 +200,46 @@ const NotificationEndpointSection = ({
           </WithTooltip>
         </InputGroup>
         <FieldsetDescription>For external services, your `seller_id` is {userId}</FieldsetDescription>
+      </Fieldset>
+      <Fieldset>
+        <FieldsetTitle>
+          <Label htmlFor={`${uid}-signing-secret`}>Sign pings</Label>
+        </FieldsetTitle>
+        {signingSecret ? (
+          <>
+            <InputGroup>
+              <Input id={`${uid}-signing-secret`} readOnly type="text" value={signingSecret} />
+              <Pill asChild>
+                <Button className="rounded-full! px-3! py-2!" onClick={rotateSigningSecret} disabled={isUpdatingSigning}>
+                  Rotate
+                </Button>
+              </Pill>
+            </InputGroup>
+            <FieldsetDescription>
+              Every ping carries an X-Gumroad-Signature header: a timestamp and an HMAC-SHA256 of that timestamp and the
+              request body, so your endpoint can tell a real ping from a forged or replayed one.{" "}
+              <a href={`${Routes.ping_path()}#verifying-pings`} target="_blank" rel="noreferrer">
+                How to verify it
+              </a>
+            </FieldsetDescription>
+            <Button color="danger" onClick={disableSigning} disabled={isUpdatingSigning}>
+              Turn off signing
+            </Button>
+          </>
+        ) : (
+          <>
+            <FieldsetDescription>
+              Sign each ping with a secret only you and your endpoint know, so a forged or replayed request cannot pass
+              for a real one.{" "}
+              <a href={`${Routes.ping_path()}#verifying-pings`} target="_blank" rel="noreferrer">
+                How to verify it
+              </a>
+            </FieldsetDescription>
+            <Button onClick={rotateSigningSecret} disabled={isUpdatingSigning}>
+              Sign my pings
+            </Button>
+          </>
+        )}
       </Fieldset>
       <Fieldset>
         <FieldsetTitle>
