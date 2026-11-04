@@ -374,6 +374,21 @@ describe Api::V2::LinksController do
         expect(section.reload.featured_product_id).to eq(featured.id)
       end
 
+      it "clears an existing featured section's featured product" do
+        featured = create(:product, user: @user)
+        section = create(:seller_profile_featured_product_section, seller: @user, product: @product, featured_product_id: featured.id)
+        @product.update!(sections: [section.id])
+
+        put_sections(sections: [{ id: section.external_id, featured_product: "" }])
+
+        expect(response.parsed_body["success"]).to eq(true)
+        # Cleared by dropping the key: the schema types featured_product_id as an integer, so a stored
+        # nil is refused and the whole write rolls back.
+        expect(section.reload.json_data).not_to have_key("featured_product_id")
+        expect(section.featured_product_id).to be_nil
+        expect(response.parsed_body["product"]["sections"].first["featured_product"]).to be_nil
+      end
+
       it "sets a header and derives the hidden flag from it" do
         section = create_section
         @product.update!(sections: [section.id])

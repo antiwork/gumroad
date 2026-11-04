@@ -1,19 +1,8 @@
 # frozen_string_literal: true
 
-# Writes a product's per-product profile sections: the ordered blocks a product page renders above
-# and below the product itself. The dashboard edits them one at a time (create, then reorder), so a
-# half-applied layout is only ever a reload away; the API takes the WHOLE layout in one write.
-#
-# Every entry of `sections`, in render order, is either the id of a section to keep exactly as it
-# is, or an object: `id` keeps that section and changes its contents, `type` creates a new one. A
-# section the list leaves out is destroyed, like the dashboard editor. Only featured product and
-# products sections can be created or have their contents changed here — nothing else has contents a
-# seller edits.
-#
-# The write runs under the product's row lock, and the sections it would DESTROY are re-checked there
-# against `known_section_ids` (the ids the caller — normally the agent, from the same read that
-# built the confirmation card — told the seller would go), so a section added in between is never
-# destroyed by a change the seller never saw.
+# Apply the whole layout in one transaction so failures leave no partial changes.
+# Check `known_section_ids` under the lock before deleting sections, so a confirmed
+# proposal cannot delete a section added after the seller reviewed it.
 class Api::V2::ProductSectionsWriter
   Result = Struct.new(:error, :stale, keyword_init: true) do
     def success? = error.nil?
@@ -73,38 +62,45 @@ class Api::V2::ProductSectionsWriter
 
     error = nil
     stale = false
-    @product.with_lock do
-      # The ownership and staleness checks run under the product lock so a concurrent writer cannot
-      # add, remove or steal a section between the check and the destroy below.
-      current_ids = @product.seller_profile_sections.pluck(:id)
-      if (section_ids - current_ids).any?
-        error = OWNERSHIP_MESSAGE
-        raise ActiveRecord::Rollback
+    # Profile lock first (as `Link#add_to_profile_sections` takes it): both rewrite section json_data.
+    @seller.with_profile_sections_lock do
+      @product.with_lock do
+        # The ownership and staleness checks run under the product lock so a concurrent writer cannot
+        # add, remove or steal a section between the check and the destroy below.
+        current_ids = @product.seller_profile_sections.pluck(:id)
+        if (section_ids - current_ids).any?
+          error = OWNERSHIP_MESSAGE
+          raise ActiveRecord::Rollback
+        end
+        if known_ids && (current_ids - section_ids - known_ids).any?
+          error = "A section was added after this change was prepared. Read the product again and prepare a fresh sections list."
+          stale = true
+          raise ActiveRecord::Rollback
+        end
+
+        # Created in place, so the saved order is the order the seller confirmed. The type has to be
+        # explicit: the base class defaults to a products section (the column default).
+        ordered_ids = entries.map do |entry|
+          next entry[:id] if entry[:id]
+
+          @product.seller_profile_sections.create!(entry[:attributes].merge(seller: @seller, type: entry[:type])).id
+        end
+
+        entries.each do |entry|
+          next if entry[:id].nil? || entry[:attributes].empty?
+
+          section = @product.seller_profile_sections.find(entry[:id])
+          attributes = entry[:attributes].dup
+          # The schema only allows an integer when the key exists, so clearing removes the key.
+          section.json_data = section.json_data.except("featured_product_id") if attributes.key?(:featured_product_id) && attributes[:featured_product_id].nil?
+          section.update!(attributes.except(*([:featured_product_id] if attributes[:featured_product_id].nil?)))
+        end
+
+        @product.sections = ordered_ids
+        @product.main_section_index = main_section_index if main_section_index
+        @product.save!
+        @product.seller_profile_sections.where.not(id: ordered_ids).destroy_all
       end
-      if known_ids && (current_ids - section_ids - known_ids).any?
-        error = "A section was added after this change was prepared. Read the product again and prepare a fresh sections list."
-        stale = true
-        raise ActiveRecord::Rollback
-      end
-
-      # Created in place, so the saved order is the order the seller confirmed. The type has to be
-      # explicit: the base class defaults to a products section (the column default).
-      ordered_ids = entries.map do |entry|
-        next entry[:id] if entry[:id]
-
-        @product.seller_profile_sections.create!(entry[:attributes].merge(seller: @seller, type: entry[:type])).id
-      end
-
-      entries.each do |entry|
-        next if entry[:id].nil? || entry[:attributes].empty?
-
-        @product.seller_profile_sections.find(entry[:id]).update!(entry[:attributes])
-      end
-
-      @product.sections = ordered_ids
-      @product.main_section_index = main_section_index if main_section_index
-      @product.save!
-      @product.seller_profile_sections.where.not(id: ordered_ids).destroy_all
     end
     return Result.new(error:, stale:) if error
 
