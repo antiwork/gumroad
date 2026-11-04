@@ -107,10 +107,8 @@ describe CheckoutController, type: :controller, inertia: true do
 
     it "names the requested tier when only that tier has sold out and another has inventory" do
       membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
-      sold_out, open_tier = membership.tiers.to_a
+      sold_out = membership.tiers.first
       sold_out.update!(max_purchase_count: 0)
-      open_tier.update!(closed_to_new_purchases: true)
-      Feature.activate_user(:close_membership_tier_to_new_buyers, seller)
 
       get :show, params: { product: membership.unique_permalink, option: sold_out.external_id }
 

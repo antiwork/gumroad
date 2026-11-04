@@ -191,14 +191,14 @@ describe CheckoutPresenter do
 
       it "adds nothing when the linked tier is sold out, without swapping in another open tier" do
         create(:variant, variant_category: membership.tier_category, name: "Open tier")
-        tier.update!(max_purchase_count: 0)
+        tier.update!(name: "Basic", max_purchase_count: 0)
 
         params = { product: membership.unique_permalink, option: tier.external_id }
         props = @instance.checkout_props(params:, browser_guid:)
 
         expect(props[:add_products]).to be_empty
         expect(@instance.sold_out_arrival_notice(params:)).to eq(
-          message: "#{membership.name} is sold out.",
+          message: "#{membership.name} (#{tier.name}) is sold out.",
           url: membership.long_url,
         )
       end
