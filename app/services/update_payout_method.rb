@@ -239,9 +239,11 @@ class UpdatePayoutMethod
       return bank_account_error_for(current_active) unless current_active.save
       return { success: true } if current_active.previous_changes["account_holder_full_name"].nil?
 
-      if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user)
+      # TW resubmits on every name change, so a switch to a non-ASCII name clears the old one at Stripe.
+      if StripeMerchantAccountManager.account_holder_name_synced_to_stripe?(user, current_active) ||
+         StripeMerchantAccountManager.ascii_only_account_holder_name_sync?(user)
         after_commit do
-          # JP/VN/ID keep their existing bank resubmit. Only Ecuador companies update the holder name in place.
+          # JP/VN/ID/TW resubmit the bank. Only Ecuador companies update the holder name in place.
           args = if StripeMerchantAccountManager.ecuador_company?(user)
             [current_active.id, true]
           else

@@ -2409,7 +2409,8 @@ describe StripeMerchantAccountManager, :vcr do
             country: "TW",
             currency: "twd",
             account_number: "0001234567",
-            routing_number: "AAAATWTXXXX"
+            routing_number: "AAAATWTXXXX",
+            account_holder_name: bank_account.account_holder_full_name
           },
           settings: {
             payouts: {
@@ -16258,6 +16259,28 @@ describe StripeMerchantAccountManager, :vcr do
           described_class.update_account(user, passphrase:)
         end
       end
+    end
+  end
+
+  describe ".account_holder_name_synced_to_stripe?" do
+    let(:user) { create(:user) }
+
+    before { create(:user_compliance_info, user:, country: "Taiwan") }
+
+    it "is true for a Taiwan bank account with an ASCII holder name" do
+      bank_account = create(:taiwan_bank_account, user:, account_holder_full_name: "SHIE BING YUAN")
+
+      expect(described_class.account_holder_name_synced_to_stripe?(user, bank_account)).to be(true)
+    end
+
+    it "is false for a Taiwan bank account with a non-ASCII holder name" do
+      bank_account = create(:taiwan_bank_account, user:, account_holder_full_name: "謝秉原")
+
+      expect(described_class.account_holder_name_synced_to_stripe?(user, bank_account)).to be(false)
+    end
+
+    it "is false for a Taiwan seller with no bank account" do
+      expect(described_class.account_holder_name_synced_to_stripe?(user, nil)).to be(false)
     end
   end
 end

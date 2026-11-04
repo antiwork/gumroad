@@ -13,6 +13,10 @@ module StripeMerchantAccountManager
   ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES = [Compliance::Countries::JPN.alpha2, Compliance::Countries::VNM.alpha2, Compliance::Countries::IDN.alpha2].freeze
   private_constant :ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES
 
+  # Only ASCII names are sent for TW: Stripe's acceptance of non-Latin holder names there is unverified.
+  ASCII_ONLY_ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES = [Compliance::Countries::TWN.alpha2].freeze
+  private_constant :ASCII_ONLY_ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES
+
   NEW_ACCOUNT_CREATION_BLOCKED_COUNTRIES = [Compliance::Countries::IND.alpha2].freeze
   LIVE_NON_INDIVIDUAL_BUSINESS_TYPES = %w[company non_profit government_entity].freeze
   # Stripe US `company[structure]` values, applied only to a US legal entity. Types missing here
@@ -178,9 +182,15 @@ module StripeMerchantAccountManager
   end
   private_class_method :claim_stripe_payouts_pause_email
 
-  def self.account_holder_name_synced_to_stripe?(user)
+  def self.account_holder_name_synced_to_stripe?(user, bank_account = user.active_bank_account)
     country_code = user.alive_user_compliance_info&.legal_entity_country_code
-    ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code) || ecuador_company?(user)
+    return true if ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(country_code) || ecuador_company?(user)
+
+    ascii_only_account_holder_name_sync?(user) && bank_account.present? && bank_account.account_holder_full_name.to_s.ascii_only?
+  end
+
+  def self.ascii_only_account_holder_name_sync?(user)
+    ASCII_ONLY_ACCOUNT_HOLDER_NAME_SYNC_COUNTRIES.include?(user.alive_user_compliance_info&.legal_entity_country_code)
   end
 
   # EC company holder-name changes go to the existing external account in place rather than
@@ -1629,10 +1639,12 @@ module StripeMerchantAccountManager
       # A metadata match does not prove the local row is linked.
       unless skip_metadata_noop
         name_out_of_sync = false
-        if account_holder_name_synced_to_stripe?(bank_account.user)
+        name_synced = account_holder_name_synced_to_stripe?(bank_account.user, bank_account)
+        if name_synced || ascii_only_account_holder_name_sync?(bank_account.user)
           stripe_external_account = stripe_account["external_accounts"]&.first
           stripe_holder_name = stripe_external_account && stripe_external_account["account_holder_name"]
-          name_out_of_sync = stripe_holder_name != bank_account.account_holder_full_name
+          # A non-ASCII TW name is not sent, so an ASCII name Stripe kept from before has to be cleared.
+          name_out_of_sync = name_synced ? stripe_holder_name != bank_account.account_holder_full_name : stripe_holder_name.present?
         end
 
         restored = restore_local_bank_link!(bank_account, stripe_account) unless name_out_of_sync
@@ -3017,7 +3029,7 @@ module StripeMerchantAccountManager
           bank_account_hash[:routing_number] = routing_number
         end
         bank_account_hash[:account_type] = bank_account.account_type if [Compliance::Countries::CHL.alpha2, Compliance::Countries::COL.alpha2].include?(country_code) && bank_account.account_type.present?
-        bank_account_hash[:account_holder_name] = bank_account.account_holder_full_name if account_holder_name_synced_to_stripe?(bank_account.user)
+        bank_account_hash[:account_holder_name] = bank_account.account_holder_full_name if account_holder_name_synced_to_stripe?(bank_account.user, bank_account)
         bank_account_hash
       end
 
