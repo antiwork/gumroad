@@ -18,6 +18,9 @@ class MerchantAccount < ApplicationRecord
   attr_json_data_accessor :stripe_disabled_reason
   attr_json_data_accessor :stripe_payouts_pause_email_sent
   attr_json_data_accessor :stripe_payouts_pause_email_claim_token
+  # Rotated by the account.updated handler, under the user lock, on every payouts-disabled report.
+  # ReconcileStripePayoutsPauseForSellerJob compares it across its Stripe read to detect a stale read.
+  attr_json_data_accessor :stripe_payouts_disabled_observation_token
   attr_json_data_accessor :stripe_rejection_email_sent
   # Stripe Connect (direct-charge) capabilities snapshot. Checkout must only offer methods
   # the account has activated — Stripe rejects a PaymentIntent that lists anything else.

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "timeout"
 
 describe ReconcileStripePayoutsPauseForSellerJob do
   let(:seller) { create(:user) }
@@ -17,6 +18,31 @@ describe ReconcileStripePayoutsPauseForSellerJob do
 
   def stub_stripe_account(payouts_enabled)
     allow(Stripe::Account).to receive(:retrieve).and_return({ "payouts_enabled" => payouts_enabled })
+  end
+
+  def deliver_account_updated(payouts_enabled:, account: merchant_account)
+    StripeMerchantAccountManager.handle_stripe_event(
+      "id" => "evt_reconcile_spec",
+      "type" => "account.updated",
+      "data" => {
+        "object" => {
+          "id" => account.charge_processor_merchant_id,
+          "object" => "account",
+          "type" => "custom",
+          "business_type" => "individual",
+          "charges_enabled" => true,
+          "payouts_enabled" => payouts_enabled,
+          "default_currency" => "usd",
+          "country" => "US",
+          "requirements" => {
+            "currently_due" => [], "eventually_due" => [], "past_due" => [], "errors" => [],
+            "disabled_reason" => payouts_enabled ? nil : "requirements.pending_verification"
+          },
+          "future_requirements" => { "currently_due" => [], "past_due" => [], "errors" => [] }
+        },
+        "previous_attributes" => {}
+      }
+    )
   end
 
   before { merchant_account }
@@ -53,22 +79,71 @@ describe ReconcileStripePayoutsPauseForSellerJob do
       expect(merchant_account.reload.stripe_payouts_pause_email_sent).to be_nil
     end
 
-    it "does not resume when a newer Stripe pause landed while the account was being read" do
+    it "does not resume from a read of an account that was replaced in the meantime" do
       allow(Stripe::Account).to receive(:retrieve) do
-        # A second account.updated delivery arriving while this job is on the wire.
-        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
-        seller.comments.create!(
-          content: "Payouts automatically paused by Stripe (disabled reason: rejected.other).",
-          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
-          author_name: StripeMerchantAccountManager::STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
-        )
+        merchant_account.delete_charge_processor_account!
+        create(:merchant_account, user: seller)
         { "payouts_enabled" => true }
       end
 
       described_class.new.perform(seller.id)
 
-      expect(seller.reload.payouts_paused_internally?).to be(true)
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
       expect(seller.comments.with_type_payouts_resumed).to be_empty
+    end
+  end
+
+  context "when account.updated deliveries land while the Stripe read is in flight" do
+    before { deliver_account_updated(payouts_enabled: false) }
+
+    it "keeps the pause when Stripe reports payouts disabled again for the same reason" do
+      email_claim = merchant_account.reload.stripe_payouts_pause_email_claim_token
+      allow(Stripe::Account).to receive(:retrieve) do
+        # An unchanged reason writes no new pause comment, so only the disabled report itself can tell the
+        # job its enabled read is stale.
+        deliver_account_updated(payouts_enabled: false)
+        { "payouts_enabled" => true }
+      end
+
+      expect do
+        described_class.new.perform(seller.id)
+      end.not_to change { seller.reload.comments.count }
+
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(merchant_account.reload.stripe_payouts_pause_email_claim_token).to eq(email_claim)
+    end
+
+    it "keeps a pause Stripe re-applied after an enabled delivery resumed the previous one" do
+      allow(Stripe::Account).to receive(:retrieve) do
+        deliver_account_updated(payouts_enabled: true)
+        deliver_account_updated(payouts_enabled: false)
+        { "payouts_enabled" => true }
+      end
+
+      described_class.new.perform(seller.id)
+
+      seller.reload
+      expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.comments.with_type_payouts_resumed.count).to eq(1)
+      expect(seller.comments.order(:id).last.comment_type).to eq(Comment::COMMENT_TYPE_PAYOUTS_PAUSED)
+      merchant_account.reload
+      expect(merchant_account.stripe_payouts_pause_email_sent).to eq("under_review")
+      expect(StripePayoutsPausedEmailJob).to have_enqueued_sidekiq_job(
+        seller.id, merchant_account.id, "under_review", merchant_account.stripe_payouts_pause_email_claim_token
+      )
+    end
+
+    it "lets a disabled delivery that lands after the resume pause the seller and email them again" do
+      stub_stripe_account(true)
+      described_class.new.perform(seller.id)
+      expect(seller.reload.payouts_paused_internally?).to be(false)
+      StripePayoutsPausedEmailJob.clear
+
+      deliver_account_updated(payouts_enabled: false)
+
+      expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+      expect(seller.comments.order(:id).last.comment_type).to eq(Comment::COMMENT_TYPE_PAYOUTS_PAUSED)
+      expect(StripePayoutsPausedEmailJob).to have_enqueued_sidekiq_job(seller.id, merchant_account.id, "under_review", anything)
     end
   end
 
@@ -148,6 +223,77 @@ describe ReconcileStripePayoutsPauseForSellerJob do
       expect(seller.reload.payouts_paused_internally?).to be(false)
       expect(seller.comments.with_type_payouts_resumed.last.author_name)
         .to eq(StripeMerchantAccountManager::STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR)
+    end
+  end
+
+  describe "racing a disabled account.updated delivery on another connection" do
+    # The webhook and this job only serialize through the user row lock, so this needs real separate
+    # connections rather than the fixture transaction; cleanup is explicit.
+    self.use_transactional_tests = false
+
+    def job_lock_wait_observed?(connection_id)
+      Timeout.timeout(5) do
+        sleep 0.05 until ApplicationRecord.connection.select_value(<<~SQL, nil, [connection_id]).positive?
+          SELECT COUNT(*) FROM performance_schema.data_lock_waits waits
+          JOIN performance_schema.threads threads ON threads.THREAD_ID = waits.REQUESTING_THREAD_ID
+          WHERE threads.PROCESSLIST_ID = ?
+        SQL
+        true
+      end
+    rescue Timeout::Error
+      false
+    end
+
+    after do
+      Comment.where(commentable_type: "User", commentable_id: seller.id).delete_all
+      MerchantAccount.where(user_id: seller.id).delete_all
+      RefundPolicy.where(seller_id: seller.id).delete_all
+      GlobalAffiliate.where(affiliate_user_id: seller.id).delete_all
+      User.where(id: seller.id).delete_all
+    end
+
+    it "waits for the webhook's lock and then leaves its pause in place" do
+      deliver_account_updated(payouts_enabled: false)
+      job_read_stripe = Queue.new
+      webhook_holds_lock = Queue.new
+      release_webhook = Queue.new
+      allow(Stripe::Account).to receive(:retrieve) do
+        job_read_stripe << true
+        Timeout.timeout(5) { webhook_holds_lock.pop }
+        { "payouts_enabled" => true }
+      end
+      allow(StripeMerchantAccountManager).to receive(:claim_stripe_payouts_pause_email).and_wrap_original do |method, *args|
+        webhook_holds_lock << true
+        release_webhook.pop
+        method.call(*args)
+      end
+      job_connection_id = Queue.new
+      threads = []
+
+      begin
+        threads << Thread.new do
+          ApplicationRecord.connection_pool.with_connection do |connection|
+            job_connection_id << connection.select_value("SELECT CONNECTION_ID()")
+            described_class.new.perform(seller.id)
+          end
+        end
+        Timeout.timeout(5) { job_read_stripe.pop }
+        threads << Thread.new do
+          ApplicationRecord.connection_pool.with_connection { deliver_account_updated(payouts_enabled: false) }
+        end
+        job_waited_for_webhook_lock = job_lock_wait_observed?(job_connection_id.pop)
+        release_webhook << true
+        Timeout.timeout(10) { threads.each(&:value) }
+
+        expect(job_waited_for_webhook_lock).to be(true)
+        expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        expect(seller.comments.with_type_payouts_resumed).to be_empty
+        expect(merchant_account.reload.stripe_payouts_pause_email_sent).to eq("under_review")
+      ensure
+        release_webhook << true
+        threads.each { _1.kill if _1.alive? }
+        threads.each(&:join)
+      end
     end
   end
 end

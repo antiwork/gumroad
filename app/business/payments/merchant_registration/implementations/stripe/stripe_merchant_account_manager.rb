@@ -3554,6 +3554,10 @@ module StripeMerchantAccountManager
       # concurrent webhook that ran just before us (with_lock reloads the user,
       # but not merchant_account, where the marker lives).
       merchant_account.reload
+      # Every disabled report, not just the ones that write a pause comment: an unchanged reason writes none.
+      if stripe_account["payouts_enabled"] == false
+        merchant_account.update!(stripe_payouts_disabled_observation_token: SecureRandom.uuid)
+      end
       if stripe_account["payouts_enabled"] && user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE
         resume_stripe_payouts_pause!(user:, merchant_account:)
       elsif stripe_account["payouts_enabled"] == false && !user.payouts_paused_internally?
