@@ -101,6 +101,35 @@ describe UpdatePayoutMethod do
         end
       end
 
+      context "when the seller is in Taiwan" do
+        let!(:bank_account) { create(:taiwan_bank_account, user:, account_holder_full_name: "Old Name") }
+        let!(:compliance_info) { create(:user_compliance_info, user:, country: "Taiwan") }
+
+        it "enqueues HandleNewBankAccountWorker when the saved name is ASCII" do
+          params = ActionController::Parameters.new(
+            bank_account: { type: TaiwanBankAccount.name, account_holder_full_name: "SHIE BING YUAN" }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
+            expect(result).to eq(success: true)
+          end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
+
+          expect(bank_account.reload.account_holder_full_name).to eq("SHIE BING YUAN")
+        end
+
+        it "does not enqueue HandleNewBankAccountWorker when the saved name is not ASCII" do
+          params = ActionController::Parameters.new(
+            bank_account: { type: TaiwanBankAccount.name, account_holder_full_name: "謝秉原" }
+          )
+
+          expect do
+            result = described_class.new(user_params: params, seller: user).process
+            expect(result).to eq(success: true)
+          end.not_to change { HandleNewBankAccountWorker.jobs.size }
+        end
+      end
+
       context "when the seller is an Ecuador company" do
         let!(:bank_account) { create(:ecuador_bank_account, user:, account_holder_full_name: "Old Name") }
         let!(:compliance_info) do
