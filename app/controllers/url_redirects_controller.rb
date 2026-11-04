@@ -428,6 +428,7 @@ class UrlRedirectsController < ApplicationController
 
     render inertia: "UrlRedirects/Play", props: {
       title: product.name,
+      is_mobile_app_web_view: params[:display] == "mobile_app",
       # The trailing slash makes the build's relative file paths resolve under the grant.
       frame_url: "#{request.path.chomp("/")}/#{grant}/",
       content_page_url: @url_redirect.download_page_url,

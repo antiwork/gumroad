@@ -10,6 +10,7 @@ import { useCanFullscreen, WebBuildPlayer, WebBuildPlayerHandle } from "$app/com
 
 type Props = {
   title: string;
+  is_mobile_app_web_view: boolean;
   frame_url: string;
   content_page_url: string;
   // Null for a seller trying their own build, which is not a play.
@@ -50,7 +51,8 @@ const usePlayHeartbeat = (url: string | null, intervalMs: number) => {
 };
 
 const Play = () => {
-  const { title, frame_url, content_page_url, heartbeat_url, heartbeat_interval_ms } = cast<Props>(usePage().props);
+  const { title, is_mobile_app_web_view, frame_url, content_page_url, heartbeat_url, heartbeat_interval_ms } =
+    cast<Props>(usePage().props);
   const playerRef = React.useRef<WebBuildPlayerHandle>(null);
   const canFullscreen = useCanFullscreen();
 
@@ -58,23 +60,29 @@ const Play = () => {
 
   return (
     <div className="scoped-tailwind-preflight flex h-dvh flex-col bg-black">
-      <div role="menubar" className="flex items-center bg-background text-sm md:text-base">
-        <div className="border-r">
-          {/* Labelled, not a bare icon: this tab's only exit, and a buyer could read × as "quit the game". */}
-          <a href={content_page_url} className="flex cursor-pointer items-center gap-2 p-4 whitespace-nowrap all-unset">
-            <ArrowLeft className="size-5" />
-            Back to content
-          </a>
-        </div>
-        <h1 className="flex-1 truncate p-4">{title}</h1>
-        {canFullscreen ? (
-          <div className="p-2">
-            <Button size="sm" onClick={() => playerRef.current?.enterFullscreen()}>
-              Full screen
-            </Button>
+      {/* The app's player has its own header and back control, so the page's bar would be a second one. */}
+      {is_mobile_app_web_view ? null : (
+        <div role="menubar" className="flex items-center bg-background text-sm md:text-base">
+          <div className="border-r">
+            {/* Labelled, not a bare icon: this tab's only exit, and a buyer could read × as "quit the game". */}
+            <a
+              href={content_page_url}
+              className="flex cursor-pointer items-center gap-2 p-4 whitespace-nowrap all-unset"
+            >
+              <ArrowLeft className="size-5" />
+              Back to content
+            </a>
           </div>
-        ) : null}
-      </div>
+          <h1 className="flex-1 truncate p-4">{title}</h1>
+          {canFullscreen ? (
+            <div className="p-2">
+              <Button size="sm" onClick={() => playerRef.current?.enterFullscreen()}>
+                Full screen
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         <WebBuildPlayer ref={playerRef} title={title} frameUrl={frame_url} />
       </div>
