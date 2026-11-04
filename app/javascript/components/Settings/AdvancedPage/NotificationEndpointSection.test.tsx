@@ -121,6 +121,7 @@ describe("ping signing", () => {
     renderSection([], "abc123");
 
     expect(screen.getByDisplayValue("abc123")).toBeTruthy();
+    expect(screen.getByText(/Rotating stops the old secret verifying right away/u)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Turn off signing" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));

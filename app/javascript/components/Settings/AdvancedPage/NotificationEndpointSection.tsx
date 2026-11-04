@@ -216,12 +216,19 @@ const NotificationEndpointSection = ({
             </InputGroup>
             <FieldsetDescription>
               Every ping carries an X-Gumroad-Signature header: a timestamp and an HMAC-SHA256 of that timestamp and the
-              request body, so your endpoint can tell a real ping from a forged or replayed one.{" "}
+              request body, so your endpoint can tell a real ping from a forged or replayed one. Rotating stops the old
+              secret verifying right away, so update your endpoint straight after.{" "}
               <a href={`${Routes.ping_path()}#verifying-pings`} target="_blank" rel="noreferrer">
                 How to verify it
               </a>
             </FieldsetDescription>
-            <Button color="danger" onClick={() => setPendingSigningChange("disable")} disabled={isUpdatingSigning}>
+            <Button
+              outline
+              color="danger"
+              className="self-start text-danger"
+              onClick={() => setPendingSigningChange("disable")}
+              disabled={isUpdatingSigning}
+            >
               Turn off signing
             </Button>
           </>
