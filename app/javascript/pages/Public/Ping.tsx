@@ -124,16 +124,21 @@ const PublicPing = () => (
                 <Code>t</Code> is the Unix time, in seconds, at the moment we sent the request. <Code>v1</Code> is the
                 hex HMAC-SHA256 of <Code>t</Code>, a period, and the request body exactly as it arrived. Sign the raw
                 bytes, not a copy you re-encoded from parsed parameters: form-encoding key order and JSON whitespace both
-                change the bytes, and with them the signature.
+                change the bytes, and with them the signature. In the examples below, <Code>t</Code> and{" "}
+                <Code>v1</Code> are the strings from the header and the raw body is the unparsed bytes.
               </p>
-              <CodeSnippet caption="Node">{`const expected = crypto.createHmac("sha256", secret).update(t + "." + rawBody).digest("hex");
-if (t < Math.floor(Date.now() / 1000) - 300) return res.status(400).send("stale");
-// timingSafeEqual throws on a length mismatch, and a bad signature can have any length.
-if (expected.length !== v1.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) return res.status(400).send("bad signature");`}</CodeSnippet>
-              <CodeSnippet caption="Python">{`expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()
-if abs(time.time() - int(t)) > 300:
+              <CodeSnippet caption="Node">{`const MAX_SKEW_SECONDS = 300;
+if (!/^\\d+$/.test(t) || Math.abs(Date.now() / 1000 - Number(t)) > MAX_SKEW_SECONDS) return res.status(400).send("stale");
+const expected = Buffer.from(crypto.createHmac("sha256", secret).update(t + ".").update(rawBody).digest("hex"));
+const received = Buffer.from(v1);
+// timingSafeEqual throws unless both buffers have the same byte length, and a forged v1 can have any.
+if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return res.status(400).send("bad signature");`}</CodeSnippet>
+              <CodeSnippet caption="Python">{`MAX_SKEW_SECONDS = 300
+if not (t.isascii() and t.isdigit()) or abs(time.time() - int(t)) > MAX_SKEW_SECONDS:
     abort(400, "stale")
-if not hmac.compare_digest(expected, v1):
+expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()
+# compare_digest raises on non-ASCII str, so compare bytes.
+if not hmac.compare_digest(expected.encode(), v1.encode()):
     abort(400, "bad signature")`}</CodeSnippet>
               <ul className="ml-6 mt-2 list-disc space-y-1">
                 <li>

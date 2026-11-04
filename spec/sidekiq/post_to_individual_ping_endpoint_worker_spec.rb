@@ -302,14 +302,14 @@ describe PostToIndividualPingEndpointWorker do
 
     # The receiver hashes the header's own timestamp against the body it received; asserting that
     # pairing here is what catches a signature computed over different bytes than the ones sent.
-    def expect_signed_request(body:)
+    def expect_signed_request(body:, secret: "s3cret")
       expect(SsrfFilter).to receive(:post) do |url, options|
         expect(url).to eq("https://example.com")
         header = options[:headers]["X-Gumroad-Signature"]
         timestamp = header[/\At=(\d+),v1=\h+\z/, 1]
         digest = header[/,v1=(\h+)\z/, 1]
         expect(timestamp.to_i).to be_within(5).of(Time.current.to_i)
-        expect(digest).to eq(OpenSSL::HMAC.hexdigest("SHA256", "s3cret", "#{timestamp}.#{body}"))
+        expect(digest).to eq(OpenSSL::HMAC.hexdigest("SHA256", secret, "#{timestamp}.#{body}"))
       end.and_return(@ok_response)
     end
 
@@ -346,6 +346,28 @@ describe PostToIndividualPingEndpointWorker do
 
       expect(signatures.size).to eq(2)
       expect(signatures.uniq.size).to eq(2)
+    end
+
+    def queue_retry_after_failed_attempt
+      allow(SsrfFilter).to receive(:post).and_return(Net::HTTPInternalServerError.new("1.1", "500", "Internal Server Error"))
+      PostToIndividualPingEndpointWorker.new.perform("https://example.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+      expect(PostToIndividualPingEndpointWorker.jobs.size).to eq(1)
+    end
+
+    it "signs a retry queued before a rotation with the new secret" do
+      queue_retry_after_failed_attempt
+      seller.ping_signing_setting.update!(secret: "rotated")
+      expect_signed_request(body: "a=1&retry_count=1", secret: "rotated")
+
+      PostToIndividualPingEndpointWorker.perform_one
+    end
+
+    it "does not sign a retry queued before the seller turned signing off" do
+      queue_retry_after_failed_attempt
+      seller.ping_signing_setting.destroy!
+      expect(SsrfFilter).to receive(:post).with("https://example.com", post_options(body: "a=1&retry_count=1")).and_return(@ok_response)
+
+      PostToIndividualPingEndpointWorker.perform_one
     end
 
     it "does not log the signing secret" do

@@ -295,6 +295,14 @@ describe Settings::AdvancedController, :vcr, type: :controller, inertia: true do
 
       expect(seller.reload.ping_signing_secret).not_to eq(first)
     end
+
+    it "keeps the secret out of version history", :versioning do
+      post :rotate_ping_signing_secret, format: :json
+
+      secret = response.parsed_body["secret"]
+      expect(secret).to be_present
+      expect(PaperTrail::Version.where("object LIKE :secret OR object_changes LIKE :secret", secret: "%#{secret}%")).to be_empty
+    end
   end
 
   describe "DELETE disable_ping_signing" do

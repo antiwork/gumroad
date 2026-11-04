@@ -18,7 +18,7 @@ describe Settings::Advanced::UserPolicy do
     create(:team_membership, user: support_for_seller, seller:, role: TeamMembership::ROLE_SUPPORT)
   end
 
-  permissions :show?, :update?, :test_ping? do
+  permissions :show?, :update?, :test_ping?, :rotate_ping_signing_secret?, :disable_ping_signing? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, seller)
