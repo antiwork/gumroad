@@ -277,4 +277,42 @@ describe Settings::AdvancedController, :vcr, type: :controller, inertia: true do
       end
     end
   end
+
+  describe "POST rotate_ping_signing_secret" do
+    it "gives a seller who has not opted in a secret to configure their endpoint with" do
+      post :rotate_ping_signing_secret, format: :json
+
+      expect(response).to be_successful
+      expect(seller.reload.ping_signing_secret).to match(/\A\h{64}\z/)
+      expect(response.parsed_body["secret"]).to eq(seller.ping_signing_secret)
+    end
+
+    it "replaces the secret on a second call" do
+      post :rotate_ping_signing_secret, format: :json
+      first = seller.reload.ping_signing_secret
+
+      post :rotate_ping_signing_secret, format: :json
+
+      expect(seller.reload.ping_signing_secret).not_to eq(first)
+    end
+
+    it "keeps the secret out of version history", :versioning do
+      post :rotate_ping_signing_secret, format: :json
+
+      secret = response.parsed_body["secret"]
+      expect(secret).to be_present
+      expect(PaperTrail::Version.where("object LIKE :secret OR object_changes LIKE :secret", secret: "%#{secret}%")).to be_empty
+    end
+  end
+
+  describe "DELETE disable_ping_signing" do
+    it "stops signing pings for the seller" do
+      seller.create_ping_signing_setting!(secret: "s3cret")
+
+      delete :disable_ping_signing, format: :json
+
+      expect(response).to be_successful
+      expect(seller.reload.ping_signing_secret).to be_nil
+    end
+  end
 end

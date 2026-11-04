@@ -47,7 +47,7 @@ class PostToIndividualPingEndpointWorker
 
     options = {
       body:,
-      headers: { "Content-Type" => content_type },
+      headers: { "Content-Type" => content_type }.merge(ping_signature_headers(post_url:, body:, user_id:)),
       # Endpoints commonly answer with trailing-slash/https normalization redirects (gp#2058:
       # refusing them silently dropped sale pings), so follow a few — SsrfFilter re-validates
       # every hop's resolved IPs, and the same POST body is re-sent on each hop. Past the limit
@@ -94,6 +94,19 @@ class PostToIndividualPingEndpointWorker
   end
 
   private
+    # Signs only the seller's own Ping endpoint, with the secret that seller can rotate in Settings;
+    # an application's resource subscription holds no seller secret to verify against. Read here, not
+    # passed in the job, so a delivery queued when the deploy lands is signed too.
+    def ping_signature_headers(post_url:, body:, user_id:)
+      return {} if user_id.blank?
+
+      # The primary, not a replica: a sale can land seconds after the seller enables signing.
+      user = ApplicationRecord.connected_to(role: :writing) { User.find_by(id: user_id) }
+      return {} if user.nil? || user.ping_signing_secret.blank? || user.notification_endpoint != post_url
+
+      PingSignature.headers(secret: user.ping_signing_secret, body:)
+    end
+
     def encode_brackets(key)
       key.to_s.gsub(/[\[\]]/) { |char| URI.encode_www_form_component(char) }
     end

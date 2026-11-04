@@ -12,4 +12,12 @@ class Settings::Advanced::UserPolicy < ApplicationPolicy
   def test_ping?
     show?
   end
+
+  def rotate_ping_signing_secret?
+    show?
+  end
+
+  def disable_ping_signing?
+    show?
+  end
 end

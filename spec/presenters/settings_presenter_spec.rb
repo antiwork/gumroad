@@ -247,6 +247,7 @@ describe SettingsPresenter do
       before do
         allow(CustomDomainVerificationService).to receive(:new).and_return(double(process: true))
         seller.update!(notification_endpoint: "https://example.org")
+        seller.create_ping_signing_setting!(secret: "abc123")
       end
 
       it "returns correct props" do
@@ -254,6 +255,7 @@ describe SettingsPresenter do
                                                  settings_pages: presenter.pages,
                                                  user_id: ObfuscateIds.encrypt(seller.id),
                                                  notification_endpoint: "https://example.org",
+                                                 ping_signing_secret: "abc123",
                                                  blocked_customer_emails: "",
                                                  custom_domain_name: "example.com",
                                                  custom_domain_verification_status: { message: "example.com domain is correctly configured!", success: true },
@@ -277,6 +279,7 @@ describe SettingsPresenter do
                                                  settings_pages: presenter.pages,
                                                  user_id: ObfuscateIds.encrypt(seller.id),
                                                  notification_endpoint: "",
+                                                 ping_signing_secret: nil,
                                                  blocked_customer_emails: "test1@example.com\ntest2@example.net",
                                                  custom_domain_name: "example.com",
                                                  custom_domain_verification_status: nil,
@@ -298,6 +301,7 @@ describe SettingsPresenter do
                                                  settings_pages: presenter.pages,
                                                  user_id: ObfuscateIds.encrypt(seller.id),
                                                  notification_endpoint: "",
+                                                 ping_signing_secret: nil,
                                                  blocked_customer_emails: "",
                                                  custom_domain_name: "example.com",
                                                  custom_domain_verification_status: { message: "Domain verification failed. Please make sure you have correctly configured the DNS record for example.com.", success: false },

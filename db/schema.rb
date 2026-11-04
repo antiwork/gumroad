@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_25_000002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_25_000004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1781,6 +1781,14 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.index ["created_at"], name: "index_ping_deliveries_on_created_at"
     t.index ["purchase_id", "created_at"], name: "index_ping_deliveries_on_purchase_id_and_created_at"
     t.index ["user_id", "created_at"], name: "index_ping_deliveries_on_user_id_and_created_at"
+  end
+
+  create_table "ping_signing_settings", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "secret", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_ping_signing_settings_on_user_id", unique: true
   end
 
   create_table "piracy_reports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

@@ -52,6 +52,26 @@ class Settings::AdvancedController < Settings::BaseController
     end
   end
 
+  # Whatever the receiver has been verifying against stops verifying the moment this returns, so
+  # the new secret is only ever shown to the seller who asked for it. The seller's lock serializes
+  # concurrent enable, rotate and disable calls, including two first-time enables racing to create
+  # the setting under its unique user_id index.
+  def rotate_ping_signing_secret
+    secret = SecureRandom.hex(PingSigningSetting::SECRET_BYTES)
+    current_seller.with_lock do
+      setting = current_seller.ping_signing_setting || current_seller.build_ping_signing_setting
+      setting.update!(secret:)
+    end
+
+    render json: { success: true, secret: }
+  end
+
+  def disable_ping_signing
+    current_seller.with_lock { current_seller.ping_signing_setting&.destroy }
+
+    render json: { success: true }
+  end
+
   private
     def advanced_params
       params.require(:user).permit(:notification_endpoint)

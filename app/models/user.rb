@@ -33,6 +33,8 @@ class User < ApplicationRecord
   has_many :social_connect_verifications, dependent: :destroy
   has_one :youtube_identity, class_name: "UserYoutubeIdentity", dependent: :destroy
   has_one :instagram_identity, class_name: "UserInstagramIdentity", dependent: :destroy
+  # The Ping signing secret sits in its own table: CONTRIBUTING forbids schema changes on `users`.
+  has_one :ping_signing_setting, dependent: :destroy
   has_one :tiktok_identity, class_name: "UserTiktokIdentity", dependent: :destroy
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
@@ -1273,6 +1275,7 @@ class User < ApplicationRecord
 
     transaction do
       self.notification_endpoint = nil
+      ping_signing_setting&.destroy
       self.payment_address = ""
       self.invalidated_paypal_payout_address = nil
       self.check_merchant_account_is_linked = false
