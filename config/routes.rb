@@ -795,11 +795,6 @@ Rails.application.routes.draw do
       get "profile", as: :profile, to: redirect { |_params, request| "/profile?#{request.query_string}".chomp("?") }
       resource :third_party_analytics, only: %i[show update], controller: "third_party_analytics"
       resource :advanced, only: %i[show update], controller: "advanced"
-      # Nested in the resource they belong to, but named at the namespace level so the helper reads
-      # settings_rotate_ping_signing_secret_path rather than the resource's reversed member name.
-      post "advanced/rotate_ping_signing_secret", to: "advanced#rotate_ping_signing_secret", as: :rotate_ping_signing_secret
-      delete "advanced/disable_ping_signing", to: "advanced#disable_ping_signing", as: :disable_ping_signing
-
       resource :billing, only: %i[show update], controller: "billing"
       resources :authorized_applications, only: :index
       resource :payments, only: %i[show update] do

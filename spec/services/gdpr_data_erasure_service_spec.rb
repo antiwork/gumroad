@@ -36,8 +36,6 @@ describe GdprDataErasureService do
     end
 
     it "anonymizes user PII" do
-      user.create_ping_signing_setting!(secret: "s3cret")
-
       result = described_class.new(user, performed_by: admin).perform!
 
       expect(result[:success]).to eq(true)
@@ -54,7 +52,6 @@ describe GdprDataErasureService do
       expect(user.last_sign_in_ip).to be_nil
       expect(user.account_created_ip).to be_nil
       expect(user.deleted_at).to be_present
-      expect(PingSigningSetting.where(user_id: user.id)).not_to exist
     end
 
     it "closes a piracy report that never went out, and keeps the row" do
