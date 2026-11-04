@@ -324,7 +324,7 @@ class UrlRedirectsController < ApplicationController
       elsif params[:destination] == "stream"
         redirect_to url_redirect_stream_page_path(@url_redirect.token, **forwardable_query_params)
       elsif params[:destination] == "play"
-        redirect_to url_redirect_play_path(@url_redirect.token)
+        redirect_to url_redirect_play_path(@url_redirect.token, **forwardable_query_params)
       else
         redirect_to url_redirect_path(@url_redirect.token, **forwardable_query_params)
       end
