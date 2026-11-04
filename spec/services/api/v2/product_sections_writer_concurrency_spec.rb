@@ -26,30 +26,31 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
     @seller&.destroy!
   end
 
-  # Waits for this writer's own connection to queue behind the seller_profiles row lock, so an
-  # unrelated lock wait cannot release the holder early.
-  def wait_until_waiting_on_profile_lock(writer_connection_id)
+  # Waits for this writer's own connection to queue behind the section lock (the seller_profiles row
+  # when the seller has a saved profile, the seller's own row when they do not), so an unrelated
+  # lock wait cannot release the holder early.
+  def wait_until_waiting_on(connection_id, table)
     deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
-    until waiting_on_profile_lock?(writer_connection_id)
-      raise "the writer never waited for the profile lock" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+    until waiting_on?(connection_id, table)
+      raise "the writer never waited for the #{table} lock" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
 
       sleep 0.15
     end
   end
 
-  def waiting_on_profile_lock?(connection_id)
+  def waiting_on?(connection_id, table)
     ActiveRecord::Base.connection.uncached do
       ActiveRecord::Base.connection.select_value(<<~SQL.squish).to_i.positive?
         SELECT COUNT(*) FROM sys.innodb_lock_waits
         WHERE waiting_pid = #{connection_id.to_i}
-          AND locked_table = CONCAT('`', DATABASE(), '`.`seller_profiles`')
+          AND locked_table = CONCAT('`', DATABASE(), '`.`#{table}`')
       SQL
     end
   end
 
-  # Runs `holder_work` under the seller's profile lock on one connection, starts `write!` on another,
+  # Runs `holder_work` under the seller's section lock on one connection, starts `write!` on another,
   # and releases the lock only once the writer is queued behind it. Returns the writer's result.
-  def write_while_profile_lock_is_held(sections, &holder_work)
+  def write_while_section_lock_is_held(sections, table:, &holder_work)
     locked = Queue.new
     release = Queue.new
     holder = Thread.new do
@@ -70,7 +71,7 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
         described_class.new(Link.find(@product.id)).write!(sections:)
       end
     end
-    wait_until_waiting_on_profile_lock(Timeout.timeout(10) { writer_connection_id.pop })
+    wait_until_waiting_on(Timeout.timeout(10) { writer_connection_id.pop }, table)
     release << true
     holder.join(20)
     Timeout.timeout(20) { writer.value }
@@ -83,7 +84,24 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
   # A product created while the writer waits for the profile lock joins the section (as
   # `Link#add_to_profile_sections` does); changing only the sort must keep it listed.
   it "keeps a product another writer added to the section while it waited for the profile lock" do
-    result = write_while_profile_lock_is_held([{ "id" => @section.external_id, "default_product_sort" => "newest" }]) do
+    result = write_while_section_lock_is_held([{ "id" => @section.external_id, "default_product_sort" => "newest" }], table: "seller_profiles") do
+      section = SellerProfileSection.find(@section.id)
+      section.update!(shown_products: section.shown_products + [@added.id])
+    end
+
+    expect(result).to be_success
+    @section.reload
+    expect(@section.default_product_sort).to eq("newest")
+    expect(@section.shown_products).to eq([@listed.id, @added.id])
+  end
+
+  # Same write, but the seller has never saved a profile, so there is no seller_profiles row to
+  # serialize on: the writer has to queue on the seller's own row, which is the row
+  # `Link#add_to_profile_sections` takes in that situation.
+  it "keeps a product another writer added while the seller has no saved profile" do
+    SellerProfile.where(seller_id: @seller.id).delete_all
+
+    result = write_while_section_lock_is_held([{ "id" => @section.external_id, "default_product_sort" => "newest" }], table: "users") do
       section = SellerProfileSection.find(@section.id)
       section.update!(shown_products: section.shown_products + [@added.id])
     end
@@ -95,7 +113,7 @@ describe Api::V2::ProductSectionsWriter, "against a profile sections writer on a
   end
 
   it "refuses, and creates nothing, when a section it changes was deleted while it waited" do
-    result = write_while_profile_lock_is_held([{ "type" => "products", "shown_products" => [@listed.external_id] }, { "id" => @section.external_id, "default_product_sort" => "newest" }]) do
+    result = write_while_section_lock_is_held([{ "type" => "products", "shown_products" => [@listed.external_id] }, { "id" => @section.external_id, "default_product_sort" => "newest" }], table: "seller_profiles") do
       SellerProfileSection.find(@section.id).destroy!
     end
 
