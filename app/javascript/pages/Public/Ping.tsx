@@ -128,7 +128,8 @@ const PublicPing = () => (
               </p>
               <CodeSnippet caption="Node">{`const expected = crypto.createHmac("sha256", secret).update(t + "." + rawBody).digest("hex");
 if (t < Math.floor(Date.now() / 1000) - 300) return res.status(400).send("stale");
-if (!crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) return res.status(400).send("bad signature");`}</CodeSnippet>
+// timingSafeEqual throws on a length mismatch, and a bad signature can have any length.
+if (expected.length !== v1.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) return res.status(400).send("bad signature");`}</CodeSnippet>
               <CodeSnippet caption="Python">{`expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()
 if abs(time.time() - int(t)) > 300:
     abort(400, "stale")

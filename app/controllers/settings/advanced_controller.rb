@@ -56,14 +56,17 @@ class Settings::AdvancedController < Settings::BaseController
   # replaces it. Whatever the receiver has been verifying against stops verifying the moment this
   # returns, so the new secret is only ever shown to the seller who asked for it.
   def rotate_ping_signing_secret
-    secret = SecureRandom.hex(32)
-    current_seller.with_lock { current_seller.update!(ping_signing_secret: secret) }
+    secret = SecureRandom.hex(PingSigningSetting::SECRET_BYTES)
+    current_seller.with_lock do
+      setting = current_seller.ping_signing_setting || current_seller.build_ping_signing_setting
+      setting.update!(secret:)
+    end
 
     render json: { success: true, secret: }
   end
 
   def disable_ping_signing
-    current_seller.with_lock { current_seller.update!(ping_signing_secret: nil) }
+    current_seller.with_lock { current_seller.ping_signing_setting&.destroy }
 
     render json: { success: true }
   end

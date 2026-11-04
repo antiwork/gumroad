@@ -296,13 +296,15 @@ describe PostToIndividualPingEndpointWorker do
   end
 
   describe "signing" do
-    let(:seller) { create(:user, notification_endpoint: "https://notification.com", ping_signing_secret: "s3cret") }
+    let(:seller) do
+      create(:user, notification_endpoint: "https://example.com").tap { _1.create_ping_signing_setting!(secret: "s3cret") }
+    end
 
     # The receiver hashes the header's own timestamp against the body it received; asserting that
     # pairing here is what catches a signature computed over different bytes than the ones sent.
     def expect_signed_request(body:)
       expect(SsrfFilter).to receive(:post) do |url, options|
-        expect(url).to eq("https://notification.com")
+        expect(url).to eq("https://example.com")
         header = options[:headers]["X-Gumroad-Signature"]
         timestamp = header[/\At=(\d+),v1=\h+\z/, 1]
         digest = header[/,v1=(\h+)\z/, 1]
@@ -314,7 +316,7 @@ describe PostToIndividualPingEndpointWorker do
     it "signs the ping to the seller's own endpoint with that seller's secret" do
       expect_signed_request(body: "a=1")
 
-      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+      PostToIndividualPingEndpointWorker.new.perform("https://example.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
     end
 
     it "does not sign a ping to an application's endpoint, which holds no seller secret" do
@@ -324,10 +326,10 @@ describe PostToIndividualPingEndpointWorker do
     end
 
     it "does not sign for a seller who has not opted in" do
-      unsigned_seller = create(:user, notification_endpoint: "https://notification.com")
-      expect(SsrfFilter).to receive(:post).with("https://notification.com", post_options(body: "a=1")).and_return(@ok_response)
+      unsigned_seller = create(:user, notification_endpoint: "https://example.com")
+      expect(SsrfFilter).to receive(:post).with("https://example.com", post_options(body: "a=1")).and_return(@ok_response)
 
-      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, unsigned_seller.id)
+      PostToIndividualPingEndpointWorker.new.perform("https://example.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, unsigned_seller.id)
     end
 
     it "re-signs a retry with a fresh timestamp" do
@@ -337,9 +339,9 @@ describe PostToIndividualPingEndpointWorker do
         @ok_response
       end
 
-      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+      PostToIndividualPingEndpointWorker.new.perform("https://example.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
       travel 1.hour do
-        PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1, "retry_count" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+        PostToIndividualPingEndpointWorker.new.perform("https://example.com", { "a" => 1, "retry_count" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
       end
 
       expect(signatures.size).to eq(2)
@@ -351,7 +353,7 @@ describe PostToIndividualPingEndpointWorker do
       messages = []
       allow(Rails.logger).to receive(:info) { |message| messages << message }
 
-      PostToIndividualPingEndpointWorker.new.perform("https://notification.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
+      PostToIndividualPingEndpointWorker.new.perform("https://example.com", { "a" => 1 }, Mime[:url_encoded_form].to_s, seller.id)
 
       expect(messages.join("\n")).not_to include("s3cret")
     end

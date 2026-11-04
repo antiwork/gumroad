@@ -246,7 +246,8 @@ describe SettingsPresenter do
     context "when custom domain is unverified" do
       before do
         allow(CustomDomainVerificationService).to receive(:new).and_return(double(process: true))
-        seller.update!(notification_endpoint: "https://example.org", ping_signing_secret: "abc123")
+        seller.update!(notification_endpoint: "https://example.org")
+        seller.create_ping_signing_setting!(secret: "abc123")
       end
 
       it "returns correct props" do

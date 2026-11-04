@@ -1783,6 +1783,14 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.index ["user_id", "created_at"], name: "index_ping_deliveries_on_user_id_and_created_at"
   end
 
+  create_table "ping_signing_settings", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "secret", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_ping_signing_settings_on_user_id", unique: true
+  end
+
   create_table "piracy_reports", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "external_id", limit: 21, null: false
     t.bigint "seller_id", null: false
@@ -3388,7 +3396,6 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.string "google_uid"
     t.integer "purchasing_power_parity_limit"
     t.string "twitter_handle"
-    t.string "ping_signing_secret"
     t.index ["account_created_ip"], name: "index_users_on_account_created_ip"
     t.index ["confirmation_token"], name: "index_users_on_confirmation_token", length: 191
     t.index ["created_at"], name: "index_users_on_created_at"

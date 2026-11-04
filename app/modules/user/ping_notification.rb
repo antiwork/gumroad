@@ -33,6 +33,12 @@ module User::PingNotification
     HTTParty.post(url, body: ping_params, timeout: 5, headers:)
   end
 
+  # The secret their endpoint verifies our signatures with. It lives in its own table (CONTRIBUTING
+  # forbids schema changes on `users`), and this reader keeps the feature's name at the call sites.
+  def ping_signing_secret
+    ping_signing_setting&.secret
+  end
+
   def urls_for_ping_notification(resource_name)
     ping_notification_targets(resource_name).post_urls
   end

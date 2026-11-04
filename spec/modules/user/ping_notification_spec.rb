@@ -69,7 +69,7 @@ describe User::PingNotification do
 
       context "when the seller has a signing secret" do
         before do
-          @user.update!(ping_signing_secret: "s3cret")
+          @user.create_ping_signing_setting!(secret: "s3cret")
         end
 
         # The seller's own receiver is what they are testing, so the test ping has to be verifiable

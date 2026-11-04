@@ -299,7 +299,7 @@ describe Settings::AdvancedController, :vcr, type: :controller, inertia: true do
 
   describe "DELETE disable_ping_signing" do
     it "stops signing pings for the seller" do
-      seller.update!(ping_signing_secret: "s3cret")
+      seller.create_ping_signing_setting!(secret: "s3cret")
 
       delete :disable_ping_signing, format: :json
 
