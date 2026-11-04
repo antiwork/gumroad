@@ -81,4 +81,32 @@ describe("Product page waitlist", js: true, type: :system) do
     expect(page).to have_link("I want this!")
     expect(page).not_to have_button("Notify me")
   end
+
+  context "when a coffee custom page has no waitlist form or hook" do
+    let(:seller) { create(:named_seller, :eligible_for_service_products) }
+    let(:product) do
+      create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE,
+                       waitlist_enabled: true, purchase_disabled_at: Time.current,
+                       custom_html: "<h1>Custom coffee page</h1>")
+    end
+
+    before { Feature.activate_user(:custom_html_pages, seller) }
+
+    it "lets a visitor join the waitlist on the native coffee page" do
+      visit product.long_url
+
+      expect(page).to have_current_path("/coffee")
+      expect(page).not_to have_selector("#gumroad-landing-frame")
+      expect(page).not_to have_link("Donate")
+      expect(page).not_to have_field("Name a fair price")
+
+      fill_in "Email address", with: "visitor@example.com"
+      expect do
+        click_on "Notify me"
+        expect(page).to have_selector("[role=status]", text: "You're on the list for #{seller.name_or_username}'s launch. Check your inbox to confirm.")
+      end.to change { product.waitlist_entries.count }.by(1)
+
+      expect(product.waitlist_entries.last.follower.email).to eq("visitor@example.com")
+    end
+  end
 end
