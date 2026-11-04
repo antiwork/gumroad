@@ -2672,6 +2672,23 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
+  # An unchanged individual save never reaches the Stripe sync, which is the other place a structure rejection is retired.
+  def self.clear_individual_structure_rejection_notes(user)
+    return unless user.alive_user_compliance_info&.is_individual?
+
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("json_data LIKE ?", "%#{PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTED_FIELD_KEY] == "structure" }
+        .each { |note| note.update!(deleted_at: Time.current) }
+  rescue => e
+    Rails.logger.error "Failed to clear structure rejection notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
   def self.disconnect(user:)
     return false unless user.stripe_disconnect_allowed?
 

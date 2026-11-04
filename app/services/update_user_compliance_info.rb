@@ -131,6 +131,7 @@ class UpdateUserComplianceInfo
           unless old_compliance_info.nationality_resubmission_required?
             StripeMerchantAccountManager.attest_owners_provided_if_blocking(user)
             StripeMerchantAccountManager.clear_unresolvable_business_tax_id_notes(user)
+            StripeMerchantAccountManager.clear_individual_structure_rejection_notes(user)
             return { success: true }
           end
         end

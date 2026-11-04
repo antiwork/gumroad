@@ -101,6 +101,33 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "when an unchanged save is made by an individual seller with a structure rejection note" do
+      let!(:compliance_info) { create(:user_compliance_info, user:) }
+      let(:params) { ActionController::Parameters.new(first_name: compliance_info.first_name, last_name: compliance_info.last_name) }
+
+      def add_rejection_note(field)
+        user.add_payout_note(
+          content: "Our payment partner couldn't accept the #{field} you entered.",
+          seller_visible: true,
+          json_data: {
+            StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+            StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => field,
+          }
+        )
+      end
+
+      it "retires the structure note and keeps an unrelated one" do
+        add_rejection_note("structure")
+        add_rejection_note("id_number")
+
+        expect do
+          described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(user.comments.with_type_payout_note.alive.map { |note| note.json_data[StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY] }).to eq(["id_number"])
+      end
+    end
+
     context "when an unchanged save is made by a company seller" do
       let!(:individual_info) { create(:user_compliance_info, user:) }
       let!(:compliance_info) do
