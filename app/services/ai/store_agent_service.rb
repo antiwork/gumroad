@@ -1599,6 +1599,7 @@ class Ai::StoreAgentService
       summary = write_summary(endpoint, path_params, body)
       # One read feeds both the card and the pin, so they cannot disagree about which sections exist.
       sections = sections_snapshot(endpoint, path_params)
+      body = fill_created_section_contents(body) if endpoint.id == "update_product_sections"
       fields = write_fields(endpoint, path_params, body, sections:)
       body = body.merge("known_section_ids" => sections.map(&:external_id)) if sections
       action = ProposedAction.new(
@@ -1777,19 +1778,173 @@ class Ai::StoreAgentService
     def sections_snapshot(endpoint, path_params)
       return unless endpoint.id == "update_product_sections" && (product = target_product(endpoint, path_params))
 
-      product.seller_profile_sections.to_a
+      # In page order, so the card lists them, and numbers alike ones, as the page shows them.
+      product.seller_profile_sections.sort_by { [product.sections.index(_1.id) || product.sections.size, _1.id] }
     end
 
-    # Names the sections a sections write keeps and the ones it destroys, so the seller sees the
-    # deletion before confirming. An unresolvable id shows raw.
-    def section_rows(current, external_ids)
+    # A created products section with no list of its own starts from the seller's whole catalog (the
+    # dashboard's default). Filled at proposal time, from the same read that builds the card, so the
+    # card shows the products and the confirmed write carries the list the seller saw.
+    def fill_created_section_contents(body)
+      entries = body["sections"]
+      return body unless entries.is_a?(Array)
+
+      filled = entries.map do |entry|
+        attributes = section_attributes(entry)
+        next entry unless attributes && attributes["type"] == "products"
+
+        # The writer's defaults, made explicit so the card names every setting the new section gets.
+        filled_entry = Api::V2::ProductSectionsWriter::NEW_PRODUCTS_SECTION_DEFAULTS.merge(attributes)
+        filled_entry["shown_products"] = seller.links.alive.not_archived.map(&:external_id) unless attributes.key?("shown_products")
+        filled_entry
+      end
+      body.merge("sections" => filled)
+    end
+
+    SECTION_TYPE_LABELS = { "featured_product" => "Featured product", "products" => "Products" }.freeze
+    SORT_LABELS = {
+      "page_layout" => "your page layout",
+      "newest" => "newest first",
+      "highest_rated" => "highest rated",
+      "most_reviewed" => "most reviewed",
+      "price_asc" => "price low to high",
+      "price_desc" => "price high to low",
+    }.freeze
+
+    def section_attributes(entry)
+      entry = entry.to_unsafe_h if entry.respond_to?(:to_unsafe_h)
+      entry.is_a?(Hash) ? entry : nil
+    end
+
+    def section_label(section)
+      section.header.presence || section.type.to_s.delete_prefix("SellerProfile").delete_suffix("Section").underscore.humanize
+    end
+
+    def section_type_label(type)
+      SECTION_TYPE_LABELS.fetch(type.to_s) { type.to_s.humanize }
+    end
+
+    def sort_label(value)
+      SORT_LABELS.fetch(value.to_s) { value.to_s.humanize.downcase }
+    end
+
+    def on_off(value)
+      return "On" if value == true || value.to_s == "true"
+      return "Off" if value == false || value.to_s == "false"
+
+      value.to_s
+    end
+
+    def product_name_for(external_id)
+      id = external_id.is_a?(String) ? ObfuscateIds.decrypt(external_id) : nil
+      (id && Link.where(user_id: seller.id, id:).pick(:name)) || external_id.to_s
+    end
+
+    # Every product name, in the order given: the seller confirms exactly the list that is written.
+    def products_summary(external_ids)
+      external_ids = Array(external_ids)
+      return "(none)" if external_ids.empty?
+
+      ids = external_ids.map { |id| ObfuscateIds.decrypt(id) if id.is_a?(String) }
+      names = Link.where(user_id: seller.id, id: ids.compact).pluck(:id, :name).to_h
+      external_ids.zip(ids).map { |external_id, id| names[id] || external_id.to_s }.join(", ")
+    end
+
+    # The layout a sections write keeps, changes and destroys, so the seller sees the whole change
+    # before confirming. An unresolvable id shows raw, and a created section is named by its type.
+    def section_rows(current, entries)
       by_external_id = current.index_by(&:external_id)
-      label = ->(section) { section.header.presence || section.type.to_s.delete_prefix("SellerProfile").delete_suffix("Section").underscore.humanize }
-      kept = external_ids.map { |id| by_external_id[id.to_s] }
-      rows = [{ label: "Sections", value: external_ids.empty? ? "(none)" : external_ids.each_with_index.map { |id, i| kept[i] ? label.(kept[i]) : id.to_s }.join(" → ") }]
-      deleted = current - kept.compact
-      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map(&label).join(", ")}" } if deleted.any?
-      rows
+      names = distinct_section_labels(current)
+      labels = entries.map { |entry| section_entry_label(entry, names) }
+      rows = [{ label: "Sections", value: labels.empty? ? "(none)" : labels.join(" → ") }]
+
+      kept_ids = entries.map { |entry| section_attributes(entry)&.dig("id") || (entry.is_a?(String) ? entry : nil) }.compact
+      deleted = current - kept_ids.filter_map { |id| by_external_id[id.to_s] }
+      rows << { label: "Deleted", value: "#{deleted.size} #{"section".pluralize(deleted.size)} will be deleted: #{deleted.map { names[_1.external_id] }.join("; ")}" } if deleted.any?
+
+      content_rows = entries.flat_map { |entry| section_content_rows(entry, names) }
+      # Two new products sections (or two unnamed kept ones) would share a label; number them in layout
+      # order so the seller can tell the rows apart.
+      counts = content_rows.map { _1[:label] }.tally
+      seen = Hash.new(0)
+      content_rows.each do |row|
+        next if counts[row[:label]] == 1
+
+        label = row[:label]
+        row[:label] = "#{label} (#{seen[label] += 1})"
+      end
+      rows.concat(content_rows)
+    end
+
+    # Existing sections by external id, labelled by header or type. Sections that would share a label
+    # (two unnamed products sections are both "Products") also name the products they show, then, if
+    # still alike, their position on the page, so the seller can tell which one is kept or deleted.
+    def distinct_section_labels(current)
+      labels = current.to_h { [_1.external_id, section_label(_1)] }
+      colliding_sections(current, labels).each do |section|
+        shown = section_products_summary(section)
+        labels[section.external_id] = "#{labels[section.external_id]} (#{shown})" if shown
+      end
+      colliding_sections(current, labels).each do |section|
+        labels[section.external_id] = "#{labels[section.external_id]}, section #{current.index(section) + 1}"
+      end
+      labels
+    end
+
+    def colliding_sections(current, labels)
+      counts = labels.values.tally
+      current.select { counts[labels[_1.external_id]] > 1 }
+    end
+
+    def section_products_summary(section)
+      product_ids = case section
+                    when SellerProfileFeaturedProductSection then [section.featured_product_id].compact
+                    when SellerProfileProductsSection then Array(section.shown_products)
+                    else return
+      end
+      names = Link.where(user_id: seller.id, id: product_ids).pluck(:id, :name).to_h
+      product_ids.map { |id| names[id] || id.to_s }.join(", ").presence || "no products"
+    end
+
+    def section_entry_label(entry, names)
+      attributes = section_attributes(entry)
+      return names[entry] || entry.to_s if attributes.nil?
+
+      id = attributes["id"]
+      if id.present?
+        name = names[id] || id.to_s
+        attributes.except("id", "type").empty? ? name : "#{name} (changed)"
+      else
+        type = section_type_label(attributes["type"])
+        attributes["header"].presence ? "#{type} “#{attributes["header"]}” (new)" : "#{type} (new)"
+      end
+    end
+
+    # The contents an entry changes — a new section's products, a new featured product, a sort order —
+    # so the card never hides a mutation behind an id.
+    def section_content_rows(entry, names)
+      attributes = section_attributes(entry)
+      return [] if attributes.nil?
+
+      id = attributes["id"]
+      label = if id.present?
+        "Section #{names[id] || id}"
+      else
+        "New #{section_type_label(attributes["type"]).downcase} section"
+      end
+
+      parts = []
+      parts << "Header: #{attributes["header"].present? ? "“#{attributes["header"]}”" : "(none)"}" if attributes.key?("header")
+      if attributes.key?("featured_product")
+        featured = attributes["featured_product"].presence
+        parts << "Featured product: #{featured ? product_name_for(featured) : "(none)"}"
+      end
+      parts << "Products: #{products_summary(attributes["shown_products"])}" if attributes.key?("shown_products")
+      parts << "Sort: #{sort_label(attributes["default_product_sort"])}" if attributes.key?("default_product_sort")
+      parts << "Filters: #{on_off(attributes["show_filters"])}" if attributes.key?("show_filters")
+      parts << "Add new products: #{on_off(attributes["add_new_products"])}" if attributes.key?("add_new_products")
+
+      parts.empty? ? [] : [{ label:, value: parts.join("; ") }]
     end
 
     def path_label(endpoint, key)

@@ -12,6 +12,10 @@ class Bundle::UpdateShareService
   end
 
   def perform
+    # The bundle's row before the profile lock (`show_in_sections!`), the order the product sections
+    # writer takes them, so the two cannot deadlock. Taken explicitly: `save!` writes the row only
+    # when something changed.
+    @bundle.lock!
     attributes = {
       taxonomy_id: @taxonomy_id,
       display_product_reviews: @display_product_reviews,
