@@ -136,9 +136,6 @@ describe UpdateUserComplianceInfo do
         allow(StripeGuardianManager).to receive(:sync)
       end
 
-      # Nothing the seller can do on this page changes `structure`, and an identical save returns
-      # before any Stripe call, so the sync that failed (and would have retired the note) has to be
-      # re-driven from the save itself or the seller sits behind the note forever.
       it "re-drives the sync and retires the structure rejection note" do
         expect(Stripe::Account).not_to receive(:update).with("acct_structure_retry", { company: { structure: "" } })
         expect(Stripe::Account).to receive(:update).with("acct_structure_retry", hash_including(business_type: "individual"))
@@ -163,6 +160,8 @@ describe UpdateUserComplianceInfo do
         end.not_to raise_error
 
         expect(result[:success]).to be true
+        expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Stripe::InvalidRequestError))
+        expect(note.reload.deleted_at).to be_nil
       end
 
       it "leaves the account alone when the individual has no structure rejection to finish" do

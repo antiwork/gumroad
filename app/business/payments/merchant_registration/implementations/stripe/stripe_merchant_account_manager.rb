@@ -2678,21 +2678,16 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
-  # A structure rejection is the one payout rejection an individual can never resolve: `structure` is
-  # not a field the seller can change, so the only thing that retires the note is the sync that
-  # recorded it — and that sync failed partway, leaving Stripe's metadata pointer on the previous
-  # revision. An identical save returns at UpdateUserComplianceInfo's unchanged-details check before
-  # any Stripe call, so without re-driving the sync here the seller keeps the note (and keeps diffing
-  # against the stale revision) until they happen to change some unrelated field.
+  # An individual can't resubmit `structure`, and an identical save skips Stripe, so this re-runs
+  # the sync that should have retired the note.
   def self.resync_pending_structure_rejection(user)
-    return unless user.alive_user_compliance_info&.is_individual?
+    compliance_info = user.alive_user_compliance_info
+    return unless compliance_info&.is_individual?
     return if unresolvable_structure_rejection_notes(user).empty?
 
-    handle_new_user_compliance_info(user.alive_user_compliance_info)
+    handle_new_user_compliance_info(compliance_info)
   rescue => e
-    # The seller's save has nothing left for them to correct, and the note is already the symptom of
-    # the earlier failure: a Stripe error here must not turn a save that would otherwise succeed into
-    # an error they are told to retry.
+    # The seller has nothing left to correct, so a failure here must not fail their save.
     Rails.logger.error "Failed to re-drive the pending structure rejection sync for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
   end
