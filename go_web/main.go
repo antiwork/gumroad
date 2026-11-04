@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/go-redis/v9/logging"
 
+	"github.com/antiwork/gumroad/go_web/internal/credentials"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -36,12 +37,17 @@ const (
 	idleTimeout       = 20 * time.Second
 )
 
-// getenv treats consul-template's "<no value>" as unset.
-func getenv(name string) string {
-	if value := os.Getenv(name); value != "<no value>" {
-		return value
+// lookupenv treats consul-template's "<no value>" as unset.
+func lookupenv(name string) (string, bool) {
+	if value, ok := os.LookupEnv(name); ok && value != "<no value>" {
+		return value, true
 	}
-	return ""
+	return "", false
+}
+
+func getenv(name string) string {
+	value, _ := lookupenv(name)
+	return value
 }
 
 func main() {
@@ -58,6 +64,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	secrets, err := loadCredentials()
+	if err != nil {
+		return err
+	}
 
 	// $redis in Rails, not the Sidekiq Redis.
 	redisClient, err := newRedis("REDIS_HOST")
@@ -70,7 +80,7 @@ func run(logger *slog.Logger) error {
 	stack := rails.NewStack(env, getenv("CUSTOM_DOMAIN"))
 	app.HandleNotFound(stack.NotFound())
 
-	deps := &dependencies{env: env, logger: logger, redis: redisClient, stack: stack}
+	deps := &dependencies{env: env, logger: logger, redis: redisClient, stack: stack, credentials: secrets}
 	defer deps.close()
 	if err := registerRouteGroups(app, deps, getenv("GO_WEB_ROUTE_GROUPS")); err != nil {
 		return err
@@ -104,6 +114,20 @@ func run(logger *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	return httpServer.Shutdown(shutdownCtx)
+}
+
+// loadCredentials opens RAILS_CREDENTIALS_PATH, the Rails credentials file baked into the image,
+// with RAILS_MASTER_KEY. A path that is set must open.
+func loadCredentials() (*credentials.Credentials, error) {
+	path := getenv("RAILS_CREDENTIALS_PATH")
+	if path == "" {
+		return nil, nil
+	}
+	secrets, err := credentials.Load(path, getenv("RAILS_MASTER_KEY"))
+	if err != nil {
+		return nil, fmt.Errorf("RAILS_CREDENTIALS_PATH: %w", err)
+	}
+	return secrets, nil
 }
 
 // newRedis connects to the Redis named by hostVar and fails startup if it never answers,

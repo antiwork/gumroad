@@ -57,10 +57,10 @@ var SendgridPublicKeyEnvVars = []string{
 }
 
 // SendgridPublicKeys reads SendgridPublicKeyEnvVars in order.
-func SendgridPublicKeys(getenv func(string) string) []string {
+func SendgridPublicKeys(get func(string) string) []string {
 	keys := make([]string, len(SendgridPublicKeyEnvVars))
 	for i, name := range SendgridPublicKeyEnvVars {
-		keys[i] = getenv(name)
+		keys[i] = get(name)
 	}
 	return keys
 }

@@ -31,11 +31,19 @@ if [ -z "$TAG" ]; then
   exit 1
 fi
 
-# go_web bakes in the GeoIP database copy_secrets.sh put on the agent. Its digest joins the tag
-# so a refreshed database ships without a go_web/ commit.
-if [ "$SERVICE_DIR" = "go_web" ] && [ -s lib/GeoIP2-City.mmdb ]; then
-  cp lib/GeoIP2-City.mmdb go_web/GeoIP2-City.mmdb
-  TAG="${TAG}-geoip-$(sha256sum go_web/GeoIP2-City.mmdb | cut -c1-12)"
+# go_web bakes in the GeoIP database and the encrypted Rails credentials (decrypted with
+# RAILS_MASTER_KEY) that copy_secrets.sh put on the agent. Their digests join the tag so a
+# refreshed file ships without a go_web/ commit.
+if [ "$SERVICE_DIR" = "go_web" ]; then
+  if [ -s lib/GeoIP2-City.mmdb ]; then
+    cp lib/GeoIP2-City.mmdb go_web/GeoIP2-City.mmdb
+    TAG="${TAG}-geoip-$(sha256sum go_web/GeoIP2-City.mmdb | cut -c1-12)"
+  fi
+  if [ -s config/credentials/production.yml.enc ]; then
+    mkdir -p go_web/credentials
+    cp config/credentials/production.yml.enc go_web/credentials/production.yml.enc
+    TAG="${TAG}-creds-$(sha256sum go_web/credentials/production.yml.enc | cut -c1-12)"
+  fi
 fi
 # The deploy step reads the tag from here rather than recomputing the digest.
 if command -v buildkite-agent >/dev/null 2>&1; then
