@@ -67,6 +67,63 @@ describe CheckoutController, type: :controller, inertia: true do
       )
     end
 
+    it "names the product and the real state when a membership link's only tier is closed to new buyers" do
+      membership = create(:membership_product, user: seller)
+      tier = membership.tiers.first
+      Feature.activate_user(:close_membership_tier_to_new_buyers, seller)
+      tier.update!(closed_to_new_purchases: true)
+
+      get :show, params: { product: membership.unique_permalink, option: tier.external_id }
+
+      expect(inertia.props[:sold_out_arrival]).to eq(
+        message: "#{membership.name} isn't open to new members right now.",
+        url: membership.long_url,
+      )
+      expect(inertia.props[:checkout][:add_products]).to be_empty
+    end
+
+    it "names the product and the real state when the tier a membership link names has sold out" do
+      membership = create(:membership_product, user: seller)
+      tier = membership.tiers.first
+      tier.update!(max_purchase_count: 0)
+
+      get :show, params: { product: membership.unique_permalink, option: tier.external_id }
+
+      expect(inertia.props[:sold_out_arrival]).to eq(
+        message: "#{membership.name} is sold out.",
+        url: membership.long_url,
+      )
+      expect(inertia.props[:checkout][:add_products]).to be_empty
+    end
+
+    it "says the product is sold out when no option is named and every tier is out of inventory" do
+      membership = create(:membership_product, user: seller)
+      membership.tiers.first.update!(max_purchase_count: 0)
+
+      get :show, params: { product: membership.unique_permalink }
+
+      expect(inertia.props[:sold_out_arrival]).to eq(message: "#{membership.name} is sold out.", url: membership.long_url)
+    end
+
+    it "names the requested tier when only that tier has sold out and another has inventory" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+      sold_out = membership.tiers.first
+      sold_out.update!(max_purchase_count: 0)
+
+      get :show, params: { product: membership.unique_permalink, option: sold_out.external_id }
+
+      expect(inertia.props[:sold_out_arrival][:message]).to eq("#{membership.name} (#{sold_out.name}) is sold out.")
+    end
+
+    it "says nothing about a sold-out arrival when the link adds a product" do
+      product = create(:product, user: seller)
+
+      get :show, params: { product: product.unique_permalink }
+
+      expect(inertia.props[:sold_out_arrival]).to be_nil
+      expect(inertia.props[:checkout][:add_products]).to be_present
+    end
+
     it "does not raise when checkout params contain nested values" do
       get :show, params: { product: { foo: "bar" }, username: { baz: "qux" }, wishlist: { id: "1" } }
 

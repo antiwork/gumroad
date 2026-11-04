@@ -11,8 +11,12 @@ class CheckoutController < ApplicationController
     # Keep this cache request-scoped; callers can reuse presenters across product state changes.
     arrival_props = nil
     load_arrival_props = -> { arrival_props ||= checkout_presenter.checkout_arrival_props(params: checkout_params) }
-
     render inertia: "Checkout/Show", props: {
+      # A legacy /checkout link whose tier is closed or sold out adds no line, so the page says why.
+      # In the page rather than as a flash: a toast floats over the Checkout heading on a narrow
+      # viewport. The page strips the link's params after the first render, so it shows once rather
+      # than on every cart save.
+      sold_out_arrival: -> { checkout_presenter.sold_out_arrival_notice(params: checkout_params) },
       cart: -> { cart_presenter.cart_props },
       checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart, arrival_props: load_arrival_props.call) },
       # Depends on the cart's contents, so the page re-requests just this prop after every cart

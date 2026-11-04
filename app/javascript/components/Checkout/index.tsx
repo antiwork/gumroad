@@ -260,11 +260,14 @@ export const Checkout = ({
   cart,
   updateCart,
   recommendedProducts,
+  soldOutArrival,
 }: {
   discoverUrl: string;
   cart: CartState;
   updateCart: (updated: Partial<CartState>) => void;
   recommendedProducts?: CardProduct[] | null;
+  // Set when a legacy /checkout link named a tier that is closed or sold out, so nothing was added.
+  soldOutArrival?: { message: string; url: string } | null;
 }) => {
   const [state] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
@@ -586,6 +589,18 @@ export const Checkout = ({
         }
         showTitleOnMobile
       />
+      {/* In flow, not a floating toast: on a narrow viewport a toast sits on top of the heading
+          above it, and the buyer loses the page title right when the message needs context. */}
+      {soldOutArrival ? (
+        <div className="px-4 pt-4 md:px-16 md:pt-8">
+          <Alert variant="danger">
+            {soldOutArrival.message}{" "}
+            <a href={soldOutArrival.url} className="underline">
+              View the product
+            </a>
+          </Alert>
+        </div>
+      ) : null}
       {isOpenTuple(cart.items, 1) ? (
         <div className="grid gap-8 p-4 md:p-8 md:px-16">
           <div

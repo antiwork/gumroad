@@ -89,6 +89,29 @@ class CheckoutPresenter
     }
   end
 
+  # The product link adds nothing because its tier, or every tier, is closed or sold out (see
+  # add_single_product_props), so the page has to say why. Name the product and its real state, and
+  # link to the product page: "pick another option" is a dead end on a single-tier membership, and
+  # the /checkout link carries no way back on its own.
+  def sold_out_arrival_notice(params:)
+    product = single_product(params)
+    return if product.blank?
+
+    cart_item = product.cart_item(params)
+    return unless no_selectable_tier?(product, cart_item)
+
+    tiers = product.tiers.alive.to_a
+    requested = tiers.find { _1.external_id == params[:option] }
+    message = if requested && tiers.many?
+      "#{product.name} (#{requested.name}) #{requested.closed_to_new_buyers? ? "isn't open to new members right now" : "is sold out"}."
+    elsif tiers.all?(&:closed_to_new_buyers?)
+      "#{product.name} isn't open to new members right now."
+    else
+      "#{product.name} is sold out."
+    end
+    { message:, url: product.long_url }
+  end
+
   # Gift-wishlist arrivals replace the saved cart; all other URL products extend it.
   def checkout_seller_context(arrival_props:)
     add_products = arrival_props[:add_products]
@@ -365,9 +388,17 @@ class CheckoutPresenter
     def add_single_product_props(params:, user:)
       product = single_product(params, user:)
       cart_item = product.cart_item(params) if product
+      # No selectable tier (closed or sold out): arriving would add a zero-quantity, $0 line.
+      product = nil if product && no_selectable_tier?(product, cart_item)
       {
         add_products: [checkout_product(product, cart_item, params, arrival: true)].compact
       }
+    end
+
+    # Preserve cart_item's fallback from a closed tier to an open tier.
+    # A linked tier with no inventory stays selected and reports 0 left.
+    def no_selectable_tier?(product, cart_item)
+      product.is_tiered_membership && (cart_item[:option].nil? || cart_item[:option][:quantity_left] == 0)
     end
 
     def checkout_wishlist_props(params:)
