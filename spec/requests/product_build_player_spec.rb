@@ -4,6 +4,8 @@ require "spec_helper"
 require "inertia_rails/rspec"
 
 describe "Web build player", type: :request, inertia: true do
+  include Devise::Test::IntegrationHelpers
+
   let(:seller) { create(:user) }
   let(:product) { create(:product, user: seller) }
   let(:purchase) { create(:purchase, link: product) }
