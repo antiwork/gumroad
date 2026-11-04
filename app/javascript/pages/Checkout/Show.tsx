@@ -545,19 +545,19 @@ const CheckoutIndexPage = () => {
       return;
     }
     try {
-      await trackUserActionEvent("process_payment");
-      if (user) {
-        await Promise.all(
-          cartForm.data.cart.items.map((item) =>
-            trackUserProductAction({
-              name: "process_payment",
-              permalink: item.product.permalink,
-              fromOverlay: false,
-              wasRecommended: !!item.recommended_by,
-            }),
-          ),
-        );
-      }
+      await Promise.all([
+        trackUserActionEvent("process_payment"),
+        ...(user
+          ? cartForm.data.cart.items.map((item) =>
+              trackUserProductAction({
+                name: "process_payment",
+                permalink: item.product.permalink,
+                fromOverlay: false,
+                wasRecommended: !!item.recommended_by,
+              }),
+            )
+          : []),
+      ]);
       // Analytics and CAPTCHA may outlive the quote even when Pay started with a fresh one.
       // Stop before either order endpoint; refreshing must not reuse this payment authorization.
       if (hasExpiredBuyerCurrencyQuote(state) || hasExpiredDirectListedAmountToken(state)) {

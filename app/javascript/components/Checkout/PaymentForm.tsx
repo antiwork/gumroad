@@ -1310,8 +1310,10 @@ const BraintreePayPal = ({ token }: { token: string }) => {
   useRunOnce(
     asyncVoid(async () => {
       const client = await BraintreeClient.create({ authorization: token });
-      const paypal = await BraintreePaypal.create({ client });
-      const dataCollector = await BraintreeDataCollector.create({ client, paypal: true });
+      const [paypal, dataCollector] = await Promise.all([
+        BraintreePaypal.create({ client }),
+        BraintreeDataCollector.create({ client, paypal: true }),
+      ]);
       setBraintree({ paypal, dataCollector });
     }),
   );
