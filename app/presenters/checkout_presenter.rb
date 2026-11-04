@@ -100,9 +100,8 @@ class CheckoutPresenter
     cart_item = product.cart_item(params)
     return unless no_selectable_tier?(product, cart_item)
 
-    # A closed tier is dropped by Link#cart_item, so it arrives here with no option; a sold-out one
-    # is kept and reports 0 left.
-    message = if cart_item[:option].nil?
+    # No selected option can mean closed tiers or exhausted inventory.
+    message = if product.tiers.alive.all?(&:closed_to_new_buyers?)
       "#{product.name} isn't open to new members right now."
     else
       "#{product.name} is sold out."
@@ -393,7 +392,8 @@ class CheckoutPresenter
       }
     end
 
-    # cart_item keeps a linked tier that sold out (only a closed one falls back), and checkout caps the line at its quantity_left.
+    # Preserve cart_item's fallback from a closed tier to an open tier.
+    # A linked tier with no inventory stays selected and reports 0 left.
     def no_selectable_tier?(product, cart_item)
       product.is_tiered_membership && (cart_item[:option].nil? || cart_item[:option][:quantity_left] == 0)
     end

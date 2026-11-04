@@ -209,6 +209,18 @@ describe CheckoutPresenter do
         expect(@instance.checkout_props(params:, browser_guid:)[:add_products]).to be_present
         expect(@instance.sold_out_arrival_notice(params:)).to be_nil
       end
+
+      it "reports sold-out inventory when all tiers are sold out and the link names no tier" do
+        tier.update!(max_purchase_count: 0)
+
+        params = { product: membership.unique_permalink }
+
+        expect(@instance.checkout_props(params:, browser_guid:)[:add_products]).to be_empty
+        expect(@instance.sold_out_arrival_notice(params:)).to eq(
+          message: "#{membership.name} is sold out.",
+          url: membership.long_url,
+        )
+      end
     end
 
     describe "restart intent" do
