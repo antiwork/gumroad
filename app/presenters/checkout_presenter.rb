@@ -365,6 +365,8 @@ class CheckoutPresenter
     def add_single_product_props(params:, user:)
       product = single_product(params, user:)
       cart_item = product.cart_item(params) if product
+      # No selectable tier left (all closed or sold out): arriving would add a zero-quantity, $0 line.
+      product = nil if product&.is_tiered_membership && cart_item[:option].nil?
       {
         add_products: [checkout_product(product, cart_item, params, arrival: true)].compact
       }

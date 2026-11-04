@@ -170,6 +170,27 @@ describe CheckoutPresenter do
       expect(@instance.checkout_props(params:, browser_guid:)[:add_products].first[:accepted_offer]).to be_nil
     end
 
+    describe "arriving on a tiered membership with no selectable tier" do
+      let(:seller) { create(:named_user) }
+      let(:membership) { create(:membership_product, user: seller) }
+      let(:tier) { membership.tiers.first }
+
+      it "adds nothing when the only tier is closed to new buyers" do
+        Feature.activate_user(:close_membership_tier_to_new_buyers, seller)
+        tier.update!(closed_to_new_purchases: true)
+
+        props = @instance.checkout_props(params: { product: membership.unique_permalink, option: tier.external_id }, browser_guid:)
+
+        expect(props[:add_products]).to be_empty
+      end
+
+      it "still adds an open tier" do
+        props = @instance.checkout_props(params: { product: membership.unique_permalink, option: tier.external_id }, browser_guid:)
+
+        expect(props[:add_products].sole[:option_id]).to eq tier.external_id
+      end
+    end
+
     describe "restart intent" do
       let(:membership) { create(:membership_product, user: create(:named_user)) }
 
