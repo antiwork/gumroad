@@ -101,6 +101,77 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "when an unchanged save is made by an individual whose structure rejection was never cleared" do
+      let!(:previous) { create(:user_compliance_info_business, user:, business_type: UserComplianceInfo::BusinessTypes::SOLE_PROPRIETORSHIP) }
+      let!(:compliance_info) do
+        previous.mark_deleted!
+        create(:user_compliance_info, user:)
+      end
+      let!(:merchant_account) { create(:merchant_account, user:, charge_processor_merchant_id: "acct_structure_retry") }
+      let!(:note) do
+        note = user.add_payout_note(content: "Our payment partner couldn't accept the structure you entered.", seller_visible: true)
+        note.update!(author_id: GUMROAD_ADMIN_ID, json_data: {
+                       StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
+                       StripeMerchantAccountManager::PAYOUT_SETUP_REJECTED_FIELD_KEY => "structure",
+                     })
+        note
+      end
+      let(:params) { ActionController::Parameters.new(first_name: compliance_info.first_name, last_name: compliance_info.last_name) }
+
+      before do
+        create(:tos_agreement, user:)
+        stripe_account = Stripe::Account.construct_from(
+          id: "acct_structure_retry",
+          object: "account",
+          business_type: "individual",
+          country: "US",
+          metadata: { user_compliance_info_id: previous.external_id },
+          capabilities: {},
+          requirements: { currently_due: [], eventually_due: [], past_due: [] }
+        )
+        allow(Stripe::Account).to receive(:retrieve).with("acct_structure_retry").and_return(stripe_account)
+        allow(Stripe::Account).to receive(:list_persons).and_return("data" => [])
+        allow(Stripe::Account).to receive(:update_person)
+        allow(Stripe::Account).to receive(:create_person)
+        allow(StripeGuardianManager).to receive(:sync)
+      end
+
+      it "re-drives the sync and retires the structure rejection note" do
+        expect(Stripe::Account).not_to receive(:update).with("acct_structure_retry", { company: { structure: "" } })
+        expect(Stripe::Account).to receive(:update).with("acct_structure_retry", hash_including(business_type: "individual"))
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be true
+        expect(note.reload.deleted_at).to be_present
+        expect(user.latest_payout_setup_rejection_note).to be_nil
+      end
+
+      it "still reports the save as successful when the re-driven sync fails" do
+        allow(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("boom", nil))
+        allow(ErrorNotifier).to receive(:notify)
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.not_to raise_error
+
+        expect(result[:success]).to be true
+        expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Stripe::InvalidRequestError))
+        expect(note.reload.deleted_at).to be_nil
+      end
+
+      it "leaves the account alone when the individual has no structure rejection to finish" do
+        note.mark_deleted!
+        expect(StripeMerchantAccountManager).not_to receive(:update_account)
+
+        expect(described_class.new(compliance_params: params, user:).process[:success]).to be true
+      end
+    end
+
     context "when an unchanged save is made by a company seller" do
       let!(:individual_info) { create(:user_compliance_info, user:) }
       let!(:compliance_info) do

@@ -540,7 +540,9 @@ module StripeMerchantAccountManager
       # Clear structure first - Stripe rejects company[structure] when business_type is "individual"
       # The live-account arm keys on the structure Stripe holds, in any country: Stripe validates the merged
       # object, and hosted onboarding can set a structure our records never mapped.
-      if (last_user_compliance_info&.is_business? &&
+      # Stripe rejects the clear itself once the account is already individual, so skip it then.
+      if (stripe_account["business_type"] != "individual" &&
+        last_user_compliance_info&.is_business? &&
         last_user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&
         US_COMPANY_STRUCTURES.key?(last_user_compliance_info.business_type)) ||
         (live_non_individual_for_individual && stripe_account["company"] && stripe_account["company"]["structure"].present?)
@@ -699,6 +701,7 @@ module StripeMerchantAccountManager
     # rejection (Greptile finding on this PR).
     clear_stale_payout_setup_rejection_notes(user, resolved_fields: submitted_field_names(account_update.sent_attributes))
     clear_unresolvable_business_tax_id_notes(user)
+    clear_unresolvable_structure_notes(user) if user_compliance_info.is_individual?
     # After the clear above, or the seller-visible half of the note would be retired by this same save.
     record_account_rejection_note(user, jp_address_rejection) if notify && jp_address_rejection
   rescue Stripe::InvalidRequestError => e
@@ -2665,6 +2668,38 @@ module StripeMerchantAccountManager
   rescue => e
     Rails.logger.error "Failed to clear unresolvable business-tax-ID notes for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+  end
+
+  # A saved individual has no structure to resubmit, so a structure rejection note could never clear.
+  def self.clear_unresolvable_structure_notes(user)
+    unresolvable_structure_rejection_notes(user).each { |note| note.update!(deleted_at: Time.current) }
+  rescue => e
+    Rails.logger.error "Failed to clear unresolvable structure notes for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  # An individual can't resubmit `structure`, and an identical save skips Stripe, so this re-runs
+  # the sync that should have retired the note.
+  def self.resync_pending_structure_rejection(user)
+    compliance_info = user.alive_user_compliance_info
+    return unless compliance_info&.is_individual?
+    return if unresolvable_structure_rejection_notes(user).empty?
+
+    handle_new_user_compliance_info(compliance_info)
+  rescue => e
+    # The seller has nothing left to correct, so a failure here must not fail their save.
+    Rails.logger.error "Failed to re-drive the pending structure rejection sync for user #{user&.id}: #{e.class}: #{e.message}"
+    ErrorNotifier.notify(e)
+  end
+
+  private_class_method def self.unresolvable_structure_rejection_notes(user)
+    user.comments
+        .with_type_payout_note
+        .alive
+        .where(author_id: GUMROAD_ADMIN_ID)
+        .where("json_data LIKE ?", "%#{PAYOUT_SETUP_REJECTION_NOTE_FLAG}%")
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTION_NOTE_FLAG] == true }
+        .select { |note| note.json_data[PAYOUT_SETUP_REJECTED_FIELD_KEY] == "structure" }
   end
 
   def self.disconnect(user:)
