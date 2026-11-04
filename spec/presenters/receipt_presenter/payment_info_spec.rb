@@ -369,6 +369,64 @@ describe ReceiptPresenter::PaymentInfo do
         end
       end
 
+      context "when the membership is free" do
+        let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
+
+        it "has no payment section" do
+          expect(payment_info.present?).to be(false)
+          expect(upcoming_payment_attributes).to eq([])
+          expect(today_payment_attributes).to eq([])
+        end
+      end
+
+      context "when a free first charge is followed by paid renewals" do
+        let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
+
+        before { allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(1_499) }
+
+        it "keeps the payment section" do
+          expect(payment_info.present?).to be(true)
+          expect(upcoming_payment_attributes).not_to be_empty
+        end
+      end
+
+      context "when a limited discount makes the next renewal free too" do
+        let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
+
+        before do
+          purchase.create_purchase_offer_code_discount(
+            offer_code: create(:offer_code, user: purchase.seller, products: [purchase.link]),
+            offer_code_amount: 100,
+            offer_code_is_percent: true,
+            pre_discount_minimum_price_cents: 1_499,
+            duration_in_billing_cycles: 2,
+          )
+        end
+
+        it "keeps the payment section" do
+          expect(payment_info.present?).to be(true)
+          expect(upcoming_payment_attributes).not_to be_empty
+        end
+      end
+
+      context "when a 100%-off discount makes every renewal free" do
+        let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
+
+        before do
+          purchase.create_purchase_offer_code_discount(
+            offer_code: create(:offer_code, user: purchase.seller, products: [purchase.link]),
+            offer_code_amount: 100,
+            offer_code_is_percent: true,
+            pre_discount_minimum_price_cents: 1_499,
+          )
+        end
+
+        it "has no payment section" do
+          expect(payment_info.present?).to be(false)
+          expect(upcoming_payment_attributes).to eq([])
+        end
+      end
+
       context "when is not a membership purchase" do
         context "when the purchase is free" do
           let(:purchase) { create(:free_purchase) }

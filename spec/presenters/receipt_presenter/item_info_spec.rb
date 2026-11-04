@@ -779,7 +779,7 @@ describe ReceiptPresenter::ItemInfo do
 
       context "when the purchase is a membership" do
         let(:product) { create(:membership_product) }
-        let(:purchase) { create(:membership_purchase, link: product, total_transaction_cents: 1_499) }
+        let(:purchase) { create(:membership_purchase, link: product, price_cents: 1_499, total_transaction_cents: 1_499) }
 
         it "returns subscription note" do
           url = Rails.application.routes.url_helpers.manage_subscription_url(
@@ -790,6 +790,59 @@ describe ReceiptPresenter::ItemInfo do
             "You will be charged once a month. If you would like to manage your membership you can visit " \
             "<a target=\"_blank\" href=\"#{url}\">subscription settings</a>."
           )
+        end
+
+        context "when the membership is free" do
+          let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, total_transaction_cents: 0) }
+
+          it "does not say the buyer will be charged" do
+            expect(props[:manage_subscription_note]).to start_with("Your free membership renews once a month.")
+          end
+        end
+
+        context "when a free first charge is followed by paid renewals" do
+          let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, total_transaction_cents: 0) }
+
+          before { allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(1_499) }
+
+          it "still says the buyer will be charged" do
+            expect(props[:manage_subscription_note]).to start_with("You will be charged once a month.")
+          end
+        end
+
+        context "when a limited discount makes the next renewal free too" do
+          let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, total_transaction_cents: 0) }
+
+          before do
+            purchase.create_purchase_offer_code_discount(
+              offer_code: create(:offer_code, user: purchase.seller, products: [purchase.link]),
+              offer_code_amount: 100,
+              offer_code_is_percent: true,
+              pre_discount_minimum_price_cents: 1_499,
+              duration_in_billing_cycles: 2,
+            )
+          end
+
+          it "still says the buyer will be charged" do
+            expect(props[:manage_subscription_note]).to start_with("You will be charged once a month.")
+          end
+        end
+
+        context "when a 100%-off discount makes every renewal free" do
+          let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, total_transaction_cents: 0) }
+
+          before do
+            purchase.create_purchase_offer_code_discount(
+              offer_code: create(:offer_code, user: purchase.seller, products: [purchase.link]),
+              offer_code_amount: 100,
+              offer_code_is_percent: true,
+              pre_discount_minimum_price_cents: 1_499,
+            )
+          end
+
+          it "does not say the buyer will be charged" do
+            expect(props[:manage_subscription_note]).to start_with("Your free membership renews once a month.")
+          end
         end
 
         context "when not used in an email" do

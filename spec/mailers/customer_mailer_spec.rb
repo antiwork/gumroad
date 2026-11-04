@@ -557,6 +557,64 @@ describe CustomerMailer do
         end
       end
 
+      context "with free membership purchase" do
+        let(:product) { create(:membership_product, price_cents: 0) }
+        let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, stripe_transaction_id: nil, stripe_fingerprint: nil) }
+
+        it "omits the payment details and keeps the subscription settings link" do
+          mail = CustomerMailer.receipt(purchase.id)
+
+          expect(mail.body.sanitized).to have_text("Your free membership renews once a month. If you would like to manage your membership you can visit subscription settings.")
+          expect(mail.body.encoded).to have_link("subscription settings")
+          expect(mail.body.sanitized).to have_text("Your free membership renews once a month. Manage membership")
+          expect(mail.body.sanitized).not_to have_text("Today's payment")
+          expect(mail.body.sanitized).not_to have_text("Upcoming payment")
+          expect(mail.body.sanitized).not_to have_text("All charges are processed in United States Dollars")
+          expect(mail.body.encoded).not_to have_link("Generate invoice")
+        end
+      end
+
+      context "with membership made free by a legacy uncached discount" do
+        let(:purchase) { create(:membership_purchase, link: product, price_cents: 0, offer_code: create(:offer_code, user: product.user, products: [product], amount_cents: 1_998)) }
+
+        before do
+          purchase.purchase_offer_code_discount&.destroy!
+          purchase.reload
+        end
+
+        it "treats the membership as free" do
+          expect(purchase.subscription.renewal_pre_discount_total_cents).to be_positive
+
+          mail = CustomerMailer.receipt(purchase.id)
+          expect(mail.body.sanitized).to have_text("Your free membership renews once a month. Manage membership")
+          expect(mail.body.sanitized).not_to have_text("Upcoming payment")
+          expect(mail.body.encoded).not_to have_link("Generate invoice")
+        end
+      end
+
+      context "with a renewal made free by an expiring auto-renewal discount" do
+        let(:buyer) { create(:user) }
+        let(:original_purchase) { create(:membership_purchase, link: product, purchaser: buyer, email: buyer.email, price_cents: 1_998) }
+        let(:purchase) { create(:membership_purchase, link: product, subscription: original_purchase.subscription, purchaser: buyer, email: buyer.email, price_cents: 0, is_original_subscription_purchase: false) }
+
+        before do
+          original_purchase.subscription.update!(user: buyer)
+          create(:offer_code, user: product.user, products: [product], amount_cents: nil, amount_percentage: 100, existing_customers_only: true, ownership_products: [product], valid_at: 1.day.ago, expires_at: 1.week.from_now)
+        end
+
+        it "keeps the charge note, upcoming payment and invoice" do
+          expect(purchase.subscription.reload.current_subscription_price_cents).to eq(0)
+
+          mail = CustomerMailer.receipt(purchase.id)
+          expect(mail.body.sanitized).to have_text("You will be charged once a month. If you would like to manage your membership you can visit subscription settings.")
+          expect(mail.body.sanitized).to have_text("You'll be charged once a month. Manage membership")
+          expect(mail.body.sanitized).to have_text("Upcoming payment")
+          expect(mail.body.encoded).to have_link("Generate invoice")
+
+          travel_to(2.weeks.from_now) { expect(purchase.subscription.reload.current_subscription_price_cents).to eq(1_998) }
+        end
+      end
+
       context "when the purchase has fixed length" do
         context "when there is at least one more remaining charge" do
           before do
@@ -902,6 +960,31 @@ describe CustomerMailer do
           expect(mail.body.sanitized).to have_text("The Works of Edgar Gumstein $5")
           expect(mail.body.sanitized).to have_text("Upcoming payment")
           expect(mail.body.sanitized).to have_text("The Works of Edgar Gumstein $5 on Feb 1, 2023")
+        end
+      end
+
+      context "when the discount made the first charge free" do
+        let(:purchase) { create(:membership_purchase, price_cents: 0, created_at: DateTime.parse("January 1, 2023")) }
+
+        { 1 => "$6", 2 => "$0" }.each do |cycles, next_charge|
+          context "for #{cycles} billing #{"cycle".pluralize(cycles)}" do
+            before do
+              purchase.purchase_offer_code_discount.update!(offer_code_amount: 600, duration_in_billing_cycles: cycles)
+              purchase.purchase_offer_code_discount.offer_code.update_columns(amount_cents: 600, duration_in_months: cycles)
+            end
+
+            it "keeps the upcoming payment and the charge note" do
+              mail = CustomerMailer.receipt(purchase.id)
+              expect(mail.body.sanitized).to have_text("Upcoming payment The Works of Edgar Gumstein #{next_charge} on Feb 1, 2023")
+              expect(mail.body.sanitized).to have_text("You will be charged once a month.")
+              expect(mail.body.sanitized).to have_text("You'll be charged once a month. Manage membership")
+              expect(mail.body.encoded).to have_link("Generate invoice")
+              expect(mail.body.encoded).to have_link("subscription settings")
+
+              (cycles - 1).times { create(:membership_purchase, link: purchase.link, subscription: purchase.subscription, price_cents: 0, is_original_subscription_purchase: false) }
+              expect(purchase.subscription.reload.current_subscription_price_cents).to eq(600)
+            end
+          end
         end
       end
     end

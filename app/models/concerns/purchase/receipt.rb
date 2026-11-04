@@ -116,7 +116,11 @@ module Purchase::Receipt
   end
 
   def has_invoice?
-    subscription.present? ? !is_free_trial_purchase? : !free_purchase?
+    subscription.present? ? !is_free_trial_purchase? && !free_membership_purchase? : !free_purchase?
+  end
+
+  def free_membership_purchase?
+    subscription&.original_purchase.present? && free_purchase? && !is_free_trial_purchase? && subscription.renews_free?
   end
 
   def invoice_url
