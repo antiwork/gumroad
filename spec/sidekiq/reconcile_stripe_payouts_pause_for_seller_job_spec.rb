@@ -52,6 +52,24 @@ describe ReconcileStripePayoutsPauseForSellerJob do
 
       expect(merchant_account.reload.stripe_payouts_pause_email_sent).to be_nil
     end
+
+    it "does not resume when a newer Stripe pause landed while the account was being read" do
+      allow(Stripe::Account).to receive(:retrieve) do
+        # A second account.updated delivery arriving while this job is on the wire.
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        seller.comments.create!(
+          content: "Payouts automatically paused by Stripe (disabled reason: rejected.other).",
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_PAUSED,
+          author_name: StripeMerchantAccountManager::STRIPE_PAYOUTS_SYNC_COMMENT_AUTHOR
+        )
+        { "payouts_enabled" => true }
+      end
+
+      described_class.new.perform(seller.id)
+
+      expect(seller.reload.payouts_paused_internally?).to be(true)
+      expect(seller.comments.with_type_payouts_resumed).to be_empty
+    end
   end
 
   context "when Stripe still reports payouts disabled" do
