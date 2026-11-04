@@ -96,6 +96,27 @@ describe CheckoutController, type: :controller, inertia: true do
       expect(inertia.props[:checkout][:add_products]).to be_empty
     end
 
+    it "says the product is sold out when no option is named and every tier is out of inventory" do
+      membership = create(:membership_product, user: seller)
+      membership.tiers.first.update!(max_purchase_count: 0)
+
+      get :show, params: { product: membership.unique_permalink }
+
+      expect(inertia.props[:sold_out_arrival]).to eq(message: "#{membership.name} is sold out.", url: membership.long_url)
+    end
+
+    it "names the requested tier when only that tier has sold out and another has inventory" do
+      membership = create(:membership_product_with_preset_tiered_pricing, user: seller)
+      sold_out, open_tier = membership.tiers.to_a
+      sold_out.update!(max_purchase_count: 0)
+      open_tier.update!(closed_to_new_purchases: true)
+      Feature.activate_user(:close_membership_tier_to_new_buyers, seller)
+
+      get :show, params: { product: membership.unique_permalink, option: sold_out.external_id }
+
+      expect(inertia.props[:sold_out_arrival][:message]).to eq("#{membership.name} (#{sold_out.name}) is sold out.")
+    end
+
     it "says nothing about a sold-out arrival when the link adds a product" do
       product = create(:product, user: seller)
 
