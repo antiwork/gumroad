@@ -216,8 +216,9 @@ const NotificationEndpointSection = ({
             </InputGroup>
             <FieldsetDescription>
               Every ping carries an X-Gumroad-Signature header: a timestamp and an HMAC-SHA256 of that timestamp and the
-              request body, so your endpoint can tell a real ping from a forged or replayed one. Rotating stops the old
-              secret verifying right away, so update your endpoint straight after.{" "}
+              request body, so your endpoint can tell a real ping from a forged or replayed one. Rotating replaces the
+              secret right away. Your endpoint rejects pings until it uses the new one, and rejected pings aren't
+              retried.{" "}
               <a href={`${Routes.ping_path()}#verifying-pings`} target="_blank" rel="noreferrer">
                 How to verify it
               </a>
@@ -268,7 +269,7 @@ const NotificationEndpointSection = ({
       >
         <p>
           {pendingSigningChange === "rotate"
-            ? "Pings signed with the current secret stop verifying until your endpoint uses the new one."
+            ? "Your endpoint will reject pings until it uses the new secret."
             : "Your endpoint will receive unsigned pings again."}
         </p>
       </Modal>

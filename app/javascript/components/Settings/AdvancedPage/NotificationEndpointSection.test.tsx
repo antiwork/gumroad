@@ -110,9 +110,7 @@ describe("ping signing", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Rotate" }));
 
-    expect(
-      screen.getByText("Pings signed with the current secret stop verifying until your endpoint uses the new one."),
-    ).toBeTruthy();
+    expect(screen.getByText("Your endpoint will reject pings until it uses the new secret.")).toBeTruthy();
     expect(mocks.request).not.toHaveBeenCalled();
   });
 
@@ -121,7 +119,7 @@ describe("ping signing", () => {
     renderSection([], "abc123");
 
     expect(screen.getByDisplayValue("abc123")).toBeTruthy();
-    expect(screen.getByText(/Rotating stops the old secret verifying right away/u)).toBeTruthy();
+    expect(screen.getByText(/Rotating replaces the secret right away/u)).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Turn off signing" }));
     fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
