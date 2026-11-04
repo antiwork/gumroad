@@ -67,7 +67,7 @@ describe CheckoutController, type: :controller, inertia: true do
       )
     end
 
-    it "says a membership link is sold out when its only tier is closed to new buyers" do
+    it "names the product and the real state when a membership link's only tier is closed to new buyers" do
       membership = create(:membership_product, user: seller)
       tier = membership.tiers.first
       Feature.activate_user(:close_membership_tier_to_new_buyers, seller)
@@ -75,19 +75,34 @@ describe CheckoutController, type: :controller, inertia: true do
 
       get :show, params: { product: membership.unique_permalink, option: tier.external_id }
 
-      expect(inertia.props[:flash]).to eq(message: "Sold out, please go back and pick another option.", status: "danger")
+      expect(inertia.props[:sold_out_arrival]).to eq(
+        message: "#{membership.name} isn't open to new members right now.",
+        url: membership.long_url,
+      )
       expect(inertia.props[:checkout][:add_products]).to be_empty
     end
 
-    it "says a membership link is sold out when the tier it names has sold out" do
+    it "names the product and the real state when the tier a membership link names has sold out" do
       membership = create(:membership_product, user: seller)
       tier = membership.tiers.first
       tier.update!(max_purchase_count: 0)
 
       get :show, params: { product: membership.unique_permalink, option: tier.external_id }
 
-      expect(inertia.props[:flash]).to eq(message: "Sold out, please go back and pick another option.", status: "danger")
+      expect(inertia.props[:sold_out_arrival]).to eq(
+        message: "#{membership.name} is sold out.",
+        url: membership.long_url,
+      )
       expect(inertia.props[:checkout][:add_products]).to be_empty
+    end
+
+    it "says nothing about a sold-out arrival when the link adds a product" do
+      product = create(:product, user: seller)
+
+      get :show, params: { product: product.unique_permalink }
+
+      expect(inertia.props[:sold_out_arrival]).to be_nil
+      expect(inertia.props[:checkout][:add_products]).to be_present
     end
 
     it "does not raise when checkout params contain nested values" do

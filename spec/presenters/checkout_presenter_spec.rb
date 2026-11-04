@@ -175,22 +175,39 @@ describe CheckoutPresenter do
       let(:membership) { create(:membership_product, user: seller) }
       let(:tier) { membership.tiers.first }
 
-      it "adds nothing when the only tier is closed to new buyers" do
+      it "adds nothing and names the product and the state when the only tier is closed to new buyers" do
         Feature.activate_user(:close_membership_tier_to_new_buyers, seller)
         tier.update!(closed_to_new_purchases: true)
 
-        props = @instance.checkout_props(params: { product: membership.unique_permalink, option: tier.external_id }, browser_guid:)
+        params = { product: membership.unique_permalink, option: tier.external_id }
+        props = @instance.checkout_props(params:, browser_guid:)
 
         expect(props[:add_products]).to be_empty
+        expect(@instance.sold_out_arrival_notice(params:)).to eq(
+          message: "#{membership.name} isn't open to new members right now.",
+          url: membership.long_url,
+        )
       end
 
       it "adds nothing when the linked tier is sold out, without swapping in another open tier" do
         create(:variant, variant_category: membership.tier_category, name: "Open tier")
         tier.update!(max_purchase_count: 0)
 
-        props = @instance.checkout_props(params: { product: membership.unique_permalink, option: tier.external_id }, browser_guid:)
+        params = { product: membership.unique_permalink, option: tier.external_id }
+        props = @instance.checkout_props(params:, browser_guid:)
 
         expect(props[:add_products]).to be_empty
+        expect(@instance.sold_out_arrival_notice(params:)).to eq(
+          message: "#{membership.name} is sold out.",
+          url: membership.long_url,
+        )
+      end
+
+      it "has no notice when the linked tier is selectable" do
+        params = { product: membership.unique_permalink, option: tier.external_id }
+
+        expect(@instance.checkout_props(params:, browser_guid:)[:add_products]).to be_present
+        expect(@instance.sold_out_arrival_notice(params:)).to be_nil
       end
     end
 
