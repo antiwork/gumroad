@@ -249,6 +249,29 @@ describe Api::V2::LinksController do
       expect(body).not_to have_key("warning")
     end
 
+    {
+      "a waitlist form" => %(<form data-gumroad-waitlist><input type="email" name="email"></form>),
+      "a gumroad:waitlist postMessage" => %(<script>window.parent.postMessage({ type: "gumroad:waitlist", email: "fan@example.com" }, "*");</script>),
+    }.each do |label, waitlist_html|
+      it "does not return the buy warning for #{label} while the product takes waitlist signups" do
+        @product.update!(waitlist_enabled: true, purchase_disabled_at: Time.current)
+
+        put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: waitlist_html }
+
+        body = JSON.parse(response.body)
+        expect(body["success"]).to be(true)
+        expect(body).not_to have_key("warning")
+      end
+    end
+
+    it "returns the buy warning for a waitlist form when the product does not take waitlist signups" do
+      put :update, params: { format: :json, access_token: @token.token, id: @product.external_id, custom_html: %(<form data-gumroad-waitlist><input type="email" name="email"></form>) }
+
+      body = JSON.parse(response.body)
+      expect(body["success"]).to be(true)
+      expect(body["warning"]).to include("does not include a buy element")
+    end
+
     it "joins offer-code and buy-affordance warnings in the existing warning string" do
       @product.update!(price_cents: 2_00)
       create(:offer_code, user: @user, products: [@product], code: "SAVE100", amount_cents: 1_00, currency_type: @product.price_currency_type)

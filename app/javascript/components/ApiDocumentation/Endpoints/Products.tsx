@@ -109,7 +109,8 @@ const CustomHtmlDocumentation = () => (
       </li>
       <li>
         Both <code>PUT</code> and preview return a top-level <code>warning</code> if the custom HTML has no{" "}
-        <code>data-gumroad-action="buy"</code> element or <code>gumroad:checkout</code> postMessage.
+        <code>data-gumroad-action="buy"</code> element or <code>gumroad:checkout</code> postMessage. A waitlist form or{" "}
+        <code>gumroad:waitlist</code> postMessage stands in for it while the product takes waitlist signups.
       </li>
       <li>
         A successful <code>PUT</code> also returns <code>previous_custom_html</code> (the prior value, for one-step
@@ -220,6 +221,28 @@ gumroad products page publish <permalink> ./landing.html`}
       {`<a data-gumroad-action="buy">Buy now</a>
 <a data-gumroad-action="buy" data-gumroad-option="Pro" data-gumroad-recurrence="yearly">Buy Pro – $99/year</a>
 <button data-gumroad-action="buy" data-gumroad-quantity="2">Buy 2 seats</button>`}
+    </CodeSnippet>
+    <p>
+      To collect waitlist signups before launch, add a <code>form[data-gumroad-waitlist]</code> with an email input.
+      Gumroad sends the email and writes its reply into an optional <code>[data-gumroad-waitlist-message]</code>{" "}
+      element. An inline <code>&lt;script&gt;</code> on the page can instead post{" "}
+      <code>{`{ type: "gumroad:waitlist", email, requestId }`}</code>, with a string <code>requestId</code>, to the
+      parent and read the <code>gumroad:waitlist:result</code> reply. The reply carries <code>success</code>,{" "}
+      <code>message</code>, and the same <code>requestId</code>. Either only works while the product is unpublished with
+      its waitlist turned on, and visitors see your page before launch only if it has the form or the hook; otherwise
+      they get Gumroad's own waitlist page. Once the product is published, <code>&lt;html&gt;</code> gets{" "}
+      <code>data-gumroad-launched</code> and the form stops working, so hide it with that attribute and keep a buy
+      element on the page.
+    </p>
+    <CodeSnippet caption="Example waitlist form">
+      {`<form data-gumroad-waitlist>
+  <input type="email" name="email" required placeholder="you@example.com" />
+  <button type="submit">Notify me</button>
+  <p data-gumroad-waitlist-message></p>
+</form>
+<style>
+  html[data-gumroad-launched] form[data-gumroad-waitlist] { display: none; }
+</style>`}
     </CodeSnippet>
   </div>
 );

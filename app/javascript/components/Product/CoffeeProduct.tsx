@@ -5,6 +5,7 @@ import { classNames } from "$app/utils/classNames";
 import { Product, Purchase } from "$app/components/Product";
 import { ConfigurationSelector, PriceSelection } from "$app/components/Product/ConfigurationSelector";
 import { CtaButton, getCtaName } from "$app/components/Product/CtaButton";
+import { WaitlistForm } from "$app/components/Product/WaitlistForm";
 import { Fieldset } from "$app/components/ui/Fieldset";
 
 export const CoffeeProduct = ({
@@ -62,7 +63,11 @@ export const CoffeeProduct = ({
           maxWidth: "32rem",
         }}
       >
-        {product.options.length === 1 ? (
+        {product.waitlist ? (
+          <section className="grid gap-4">
+            <WaitlistForm product={product} waitlist={product.waitlist} />
+          </section>
+        ) : product.options.length === 1 ? (
           <Fieldset
             style={{
               display: "grid",

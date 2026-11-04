@@ -66,4 +66,15 @@ describe "Coffee product custom landing page", type: :request do
     expect(response).to have_http_status(:ok)
     expect(response.body).not_to include("gumroad-landing-frame")
   end
+
+  it "serves the native coffee page with waitlist props when the custom page cannot collect signups" do
+    coffee.update!(waitlist_enabled: true, purchase_disabled_at: Time.current)
+
+    get "/coffee", headers: { "X-Inertia" => "true" }
+
+    expect(response).to have_http_status(:ok)
+    body = JSON.parse(response.body)
+    expect(body["component"]).to eq("Users/Coffee")
+    expect(body.dig("props", "product", "waitlist")).to be_present
+  end
 end
