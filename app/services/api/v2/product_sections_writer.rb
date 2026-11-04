@@ -10,6 +10,8 @@ class Api::V2::ProductSectionsWriter
 
   ENTRY_MESSAGE = "sections must be an array of section ids or objects."
   OWNERSHIP_MESSAGE = "One or more sections do not belong to this product."
+  # seller_profile_sections.header is a varchar(255); a longer one would raise instead of failing cleanly.
+  MAX_HEADER_LENGTH = 255
 
   CREATE_TYPES = {
     "featured_product" => SellerProfileFeaturedProductSection,
@@ -122,6 +124,7 @@ class Api::V2::ProductSectionsWriter
       end
 
       return [nil, "header must be a string."] if attributes.key?("header") && !attributes["header"].is_a?(String)
+      return [nil, "header must be at most #{MAX_HEADER_LENGTH} characters."] if attributes.key?("header") && attributes["header"].length > MAX_HEADER_LENGTH
 
       id = attributes["id"]
       type = attributes["type"]

@@ -1790,9 +1790,12 @@ class Ai::StoreAgentService
 
       filled = entries.map do |entry|
         attributes = section_attributes(entry)
-        next entry unless attributes && attributes["type"] == "products" && !attributes.key?("shown_products")
+        next entry unless attributes && attributes["type"] == "products"
 
-        attributes.merge("shown_products" => seller.links.alive.not_archived.map(&:external_id))
+        # The writer's defaults, made explicit so the card names every setting the new section gets.
+        filled_entry = Api::V2::ProductSectionsWriter::NEW_PRODUCTS_SECTION_DEFAULTS.merge(attributes)
+        filled_entry["shown_products"] = seller.links.alive.not_archived.map(&:external_id) unless attributes.key?("shown_products")
+        filled_entry
       end
       body.merge("sections" => filled)
     end

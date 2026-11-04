@@ -4,7 +4,7 @@ require "spec_helper"
 
 describe Api::V2::ProductSectionsWriter do
   let(:seller) { create(:user) }
-  let(:product) { create(:product, user: seller) }
+  let!(:product) { create(:product, user: seller) }
 
   def write!(sections, **options)
     described_class.new(product).write!(sections:, **options)
@@ -30,8 +30,8 @@ describe Api::V2::ProductSectionsWriter do
       expect(section).to be_a(SellerProfileProductsSection)
       expect(section.header).to eq("")
       expect(section.hide_header).to eq(true)
-      expect(section.json_data).to eq(
-        "shown_products" => [product.id, live.id],
+      expect(section.shown_products).to contain_exactly(product.id, live.id)
+      expect(section.json_data.except("shown_products")).to eq(
         "default_product_sort" => "page_layout",
         "show_filters" => false,
         "add_new_products" => true,
@@ -111,7 +111,7 @@ describe Api::V2::ProductSectionsWriter do
       product.update!(sections: [kept.id])
       added_later = nil
       # Simulates another writer adding a section after the caller's read but before this write takes
-      # the product lock: the check before the lock cannot see it, only the one under the lock can.
+      # the product lock: only a check made under the lock can see it.
       allow(product).to receive(:with_lock).and_wrap_original do |original, *args, &block|
         added_later = products_section(header: "Added later")
         original.call(*args, &block)
@@ -140,6 +140,18 @@ describe Api::V2::ProductSectionsWriter do
       expect(product.reload.seller_profile_sections).to contain_exactly(kept, dropped)
       expect(product.sections).to eq([kept.id, dropped.id])
       expect(kept.reload.header).to eq("Kept")
+    end
+  end
+
+  describe "headers" do
+    it "refuses a header longer than the column holds instead of raising" do
+      section = products_section
+
+      result = write!([{ "id" => section.external_id, "header" => "a" * 256 }])
+
+      expect(result.error).to eq("header must be at most 255 characters.")
+      expect(section.reload.header).to eq("Kept")
+      expect(write!([{ "id" => section.external_id, "header" => "a" * 255 }])).to be_success
     end
   end
 
