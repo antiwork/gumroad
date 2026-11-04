@@ -103,7 +103,9 @@ class CheckoutPresenter
     tiers = product.tiers.alive.to_a
     requested = tiers.find { _1.external_id == params[:option] }
     message = if requested && tiers.many?
-      "#{product.name} (#{requested.name}) #{requested.closed_to_new_buyers? ? "isn't open to new members right now" : "is sold out"}."
+      # The default tier is named "Untitled"; checkout shows it under the product's name.
+      tier = requested.name.blank? || requested.name == "Untitled" ? "This tier of #{product.name}" : "#{product.name} (#{requested.name})"
+      "#{tier} #{requested.closed_to_new_buyers? ? "isn't open to new members right now" : "is sold out"}."
     elsif tiers.all?(&:closed_to_new_buyers?)
       "#{product.name} isn't open to new members right now."
     else
