@@ -29,8 +29,8 @@ describe Bundle::UpdateShareService do
       expect(bundle.reload.hide_bundle_product_reviews).to eq(true)
     end
 
-    it "saves the bundle before it takes the profile sections lock, the order the product sections writer takes them" do
-      expect(bundle).to receive(:save!).ordered.and_call_original
+    it "locks the bundle's row before it takes the profile sections lock, the order the product sections writer takes them" do
+      expect(bundle).to receive(:lock!).ordered.and_call_original
       expect(bundle).to receive(:show_in_sections!).ordered.and_call_original
 
       described_class.new(bundle:, section_ids: []).perform

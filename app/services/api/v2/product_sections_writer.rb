@@ -72,7 +72,8 @@ class Api::V2::ProductSectionsWriter
         # The ownership and staleness checks run under the product lock so a concurrent writer cannot
         # add, remove or steal a section between the check and the destroy below. The dashboard's
         # section editor can still add or delete a section row without it: one added after this
-        # snapshot is invisible to the destroy too, so it survives; one deleted is caught below.
+        # snapshot is invisible to the destroy too, so it survives; one this write changes that was
+        # deleted is caught below.
         current_ids = @product.seller_profile_sections.pluck(:id)
         if (section_ids - current_ids).any?
           error = OWNERSHIP_MESSAGE
