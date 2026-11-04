@@ -89,7 +89,7 @@ class CheckoutPresenter
     }
   end
 
-  # The product link adds nothing because every tier is closed or sold out (see add_single_product_props).
+  # The product link adds nothing because its tier, or every tier, is closed or sold out (see add_single_product_props).
   def sold_out_arrival?(params:)
     product = single_product(params)
     product.present? && no_selectable_tier?(product, product.cart_item(params))
@@ -371,15 +371,16 @@ class CheckoutPresenter
     def add_single_product_props(params:, user:)
       product = single_product(params, user:)
       cart_item = product.cart_item(params) if product
-      # No selectable tier left (all closed or sold out): arriving would add a zero-quantity, $0 line.
+      # No selectable tier (closed or sold out): arriving would add a zero-quantity, $0 line.
       product = nil if product && no_selectable_tier?(product, cart_item)
       {
         add_products: [checkout_product(product, cart_item, params, arrival: true)].compact
       }
     end
 
+    # cart_item keeps a linked tier that sold out (only a closed one falls back), and checkout caps the line at its quantity_left.
     def no_selectable_tier?(product, cart_item)
-      product.is_tiered_membership && cart_item[:option].nil?
+      product.is_tiered_membership && (cart_item[:option].nil? || cart_item[:option][:quantity_left] == 0)
     end
 
     def checkout_wishlist_props(params:)

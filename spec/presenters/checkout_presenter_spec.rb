@@ -183,6 +183,15 @@ describe CheckoutPresenter do
 
         expect(props[:add_products]).to be_empty
       end
+
+      it "adds nothing when the linked tier is sold out, without swapping in another open tier" do
+        create(:variant, variant_category: membership.tier_category, name: "Open tier")
+        tier.update!(max_purchase_count: 0)
+
+        props = @instance.checkout_props(params: { product: membership.unique_permalink, option: tier.external_id }, browser_guid:)
+
+        expect(props[:add_products]).to be_empty
+      end
     end
 
     describe "restart intent" do
