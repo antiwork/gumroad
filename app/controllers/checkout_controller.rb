@@ -11,6 +11,8 @@ class CheckoutController < ApplicationController
     # Keep this cache request-scoped; callers can reuse presenters across product state changes.
     arrival_props = nil
     load_arrival_props = -> { arrival_props ||= checkout_presenter.checkout_arrival_props(params: checkout_params) }
+    # The page strips the link's params after the first render, so this shows once rather than on every cart save.
+    flash.now[:alert] = "Sold out, please go back and pick another option." if checkout_presenter.sold_out_arrival?(params: checkout_params)
 
     render inertia: "Checkout/Show", props: {
       cart: -> { cart_presenter.cart_props },

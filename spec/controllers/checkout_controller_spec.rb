@@ -67,6 +67,18 @@ describe CheckoutController, type: :controller, inertia: true do
       )
     end
 
+    it "says a membership link is sold out when its only tier is closed to new buyers" do
+      membership = create(:membership_product, user: seller)
+      tier = membership.tiers.first
+      Feature.activate_user(:close_membership_tier_to_new_buyers, seller)
+      tier.update!(closed_to_new_purchases: true)
+
+      get :show, params: { product: membership.unique_permalink, option: tier.external_id }
+
+      expect(inertia.props[:flash]).to eq(message: "Sold out, please go back and pick another option.", status: "danger")
+      expect(inertia.props[:checkout][:add_products]).to be_empty
+    end
+
     it "does not raise when checkout params contain nested values" do
       get :show, params: { product: { foo: "bar" }, username: { baz: "qux" }, wishlist: { id: "1" } }
 

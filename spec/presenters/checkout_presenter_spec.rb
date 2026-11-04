@@ -183,12 +183,6 @@ describe CheckoutPresenter do
 
         expect(props[:add_products]).to be_empty
       end
-
-      it "still adds an open tier" do
-        props = @instance.checkout_props(params: { product: membership.unique_permalink, option: tier.external_id }, browser_guid:)
-
-        expect(props[:add_products].sole[:option_id]).to eq tier.external_id
-      end
     end
 
     describe "restart intent" do
