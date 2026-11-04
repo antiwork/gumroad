@@ -35,8 +35,12 @@ module User::PingNotification
 
   # The secret their endpoint verifies our signatures with. It lives in its own table (CONTRIBUTING
   # forbids schema changes on `users`), and this reader keeps the feature's name at the call sites.
+  #
+  # Read on the primary, not a replica: workers route reads to the replica, and a ping goes out
+  # seconds after a seller enables or rotates signing. A stale read would sign with the secret the
+  # receiver has already replaced (or skip signing entirely), and a receiver's 4xx is not retried.
   def ping_signing_secret
-    ping_signing_setting&.secret
+    ApplicationRecord.connected_to(role: :writing) { ping_signing_setting&.secret }
   end
 
   def urls_for_ping_notification(resource_name)

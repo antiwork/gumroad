@@ -52,9 +52,9 @@ class Settings::AdvancedController < Settings::BaseController
     end
   end
 
-  # Enabling and rotating are one write: a seller with no secret gets one, and a seller with one
-  # replaces it. Whatever the receiver has been verifying against stops verifying the moment this
-  # returns, so the new secret is only ever shown to the seller who asked for it.
+  # Whatever the receiver has been verifying against stops verifying the moment this returns, so
+  # the new secret is only ever shown to the seller who asked for it. Both actions run under the
+  # seller's lock, so a concurrent ping cannot read a half-written setting.
   def rotate_ping_signing_secret
     secret = SecureRandom.hex(PingSigningSetting::SECRET_BYTES)
     current_seller.with_lock do

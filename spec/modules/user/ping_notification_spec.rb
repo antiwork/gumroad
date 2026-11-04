@@ -3,6 +3,17 @@
 require "spec_helper"
 
 describe User::PingNotification do
+  describe "#ping_signing_secret" do
+    it "reads the secret in the writing role, so a ping sent right after rotation is signed with the new one" do
+      user = create(:user)
+      user.create_ping_signing_setting!(secret: "s3cret")
+
+      expect(ApplicationRecord).to receive(:connected_to).with(role: :writing).and_call_original
+
+      expect(user.ping_signing_secret).to eq("s3cret")
+    end
+  end
+
   describe "#send_test_ping" do
     before do
       @user = create(:user)

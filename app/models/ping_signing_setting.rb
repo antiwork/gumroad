@@ -7,7 +7,6 @@
 # paper-trailed: a live credential must not land in `versions.object_changes`, which survives GDPR
 # erasure for weeks.
 class PingSigningSetting < ApplicationRecord
-  # Length of the generated secret, in bytes (`hex` emits two characters per byte).
   SECRET_BYTES = 32
 
   belongs_to :user

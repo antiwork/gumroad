@@ -126,10 +126,14 @@ const PublicPing = () => (
                 bytes, not a copy you re-encoded from parsed parameters: form-encoding key order and JSON whitespace both
                 change the bytes, and with them the signature.
               </p>
-              <CodeSnippet caption="Node">{`const expected = crypto.createHmac("sha256", secret).update(t + "." + rawBody).digest("hex");
+              <CodeSnippet caption="Node">{`const expected = crypto.createHmac("sha256", secret)
+  .update(t + "." + rawBody).digest("hex");
 if (t < Math.floor(Date.now() / 1000) - 300) return res.status(400).send("stale");
-// timingSafeEqual throws on a length mismatch, and a bad signature can have any length.
-if (expected.length !== v1.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1))) return res.status(400).send("bad signature");`}</CodeSnippet>
+// timingSafeEqual throws unless both buffers are the same length, and a bad
+// signature can be any length or encoding, so compare the bytes first.
+const expectedBuf = Buffer.from(expected), v1Buf = Buffer.from(v1);
+if (expectedBuf.length !== v1Buf.length) return res.status(400).send("bad signature");
+if (!crypto.timingSafeEqual(expectedBuf, v1Buf)) return res.status(400).send("bad signature");`}</CodeSnippet>
               <CodeSnippet caption="Python">{`expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()
 if abs(time.time() - int(t)) > 300:
     abort(400, "stale")
