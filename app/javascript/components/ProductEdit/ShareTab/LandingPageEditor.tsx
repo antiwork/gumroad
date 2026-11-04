@@ -60,7 +60,7 @@ To collect waitlist signups before launch, add a waitlist form. It only works wh
     <button type="submit">Notify me</button>
     <p data-gumroad-waitlist-message></p>
   </form>
-Or have your own script post { type: "gumroad:waitlist", email, requestId } to its parent; Gumroad replies with a "gumroad:waitlist:result" message carrying success, message, and the same requestId.
+Or have your own script post { type: "gumroad:waitlist", email, requestId } (requestId a string) to its parent; Gumroad replies with a "gumroad:waitlist:result" message carrying success, message, and the same requestId.
 Once the product is published, <html> gets data-gumroad-launched and the form stops working, so hide it with html[data-gumroad-launched] form[data-gumroad-waitlist] { display: none; } and keep a buy element on the page for launch day.
 
 Links to your own Gumroad pages (your storefront, your other products) work as ordinary links — write them plainly and they open in the same tab, no target="_blank" needed. Links to any other site still need target="_blank".
