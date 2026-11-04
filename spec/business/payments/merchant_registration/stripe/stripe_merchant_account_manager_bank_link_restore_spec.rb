@@ -307,4 +307,25 @@ describe StripeMerchantAccountManager do
 
     expect { described_class.update_bank_account(user, passphrase:) }.to raise_error(StandardError, "stop here")
   end
+
+  it "sends an ASCII Taiwan holder name that Stripe does not have yet" do
+    user_compliance_info.update_columns(country: "Taiwan")
+    bank_account.update!(account_holder_full_name: "SHIE BING YUAN")
+    stub_stripe_account_with([stripe_bank_account_payload(account_holder_name: nil)])
+    expect(Stripe::Account).to receive(:update).with(
+      merchant_id,
+      hash_including(bank_account: hash_including(account_holder_name: "SHIE BING YUAN"))
+    ).and_raise(StandardError, "stop here")
+
+    expect { described_class.update_bank_account(user, passphrase:) }.to raise_error(StandardError, "stop here")
+  end
+
+  it "does not resubmit a non-ASCII Taiwan holder name" do
+    user_compliance_info.update_columns(country: "Taiwan")
+    bank_account.update!(account_holder_full_name: "謝秉原")
+    stub_stripe_account_with([stripe_bank_account_payload(account_holder_name: nil)])
+    expect(Stripe::Account).not_to receive(:update)
+
+    described_class.update_bank_account(user, passphrase:)
+  end
 end

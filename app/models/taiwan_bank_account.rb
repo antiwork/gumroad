@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class TaiwanBankAccount < BankAccount
+  include StrippedFields
+
   BANK_ACCOUNT_TYPE = "TW"
 
   BANK_CODE_FORMAT_REGEX = /^([a-zA-Z]){4}([a-zA-Z]){2}([0-9a-zA-Z]){2}([0-9a-zA-Z]{3})?$/
@@ -10,6 +12,9 @@ class TaiwanBankAccount < BankAccount
   private_constant :ACCOUNT_NUMBER_FORMAT_REGEX
 
   alias_attribute :bank_code, :bank_number
+
+  # Stripe strips the holder name, so a stored space would never match and every re-save would resubmit.
+  stripped_fields :account_holder_full_name, remove_duplicate_spaces: false, nilify_blanks: false
 
   validate :validate_bank_code
   validate :validate_account_number

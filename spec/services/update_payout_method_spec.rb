@@ -130,6 +130,15 @@ describe UpdatePayoutMethod do
           end.to change { HandleNewBankAccountWorker.jobs.size }.by(1)
         end
 
+        it "stores the name without surrounding whitespace" do
+          params = ActionController::Parameters.new(
+            bank_account: { type: TaiwanBankAccount.name, account_holder_full_name: " SHIE BING YUAN " }
+          )
+
+          expect(described_class.new(user_params: params, seller: user).process).to eq(success: true)
+          expect(bank_account.reload.account_holder_full_name).to eq("SHIE BING YUAN")
+        end
+
         it "does not enqueue HandleNewBankAccountWorker when the saved name is not ASCII" do
           params = ActionController::Parameters.new(
             bank_account: { type: TaiwanBankAccount.name, account_holder_full_name: "謝秉原" }
