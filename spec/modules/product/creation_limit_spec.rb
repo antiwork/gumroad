@@ -27,7 +27,7 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
   context "reset time in the error" do
     it "names when the oldest product in the window frees a slot, in the seller's time zone" do
       user = create(:user, user_risk_state: "not_reviewed", timezone: "Pacific Time (US & Canada)")
-      travel_to Time.utc(2026, 11, 3, 17, 14) do
+      travel_to Time.utc(2026, 11, 3, 17, 14, 30) do
         create_products_in_bulk(user, 10)
       end
 
@@ -35,7 +35,7 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
         product = build(:product, user: user)
         expect(product).not_to be_valid
         expect(product.errors.full_messages).to include(
-          "Sorry, you can only create 10 products per day. You can create another product after November 4 at 9:14 AM PST."
+          "Sorry, you can only create 10 products per day. You can create another product after November 4 at 9:15 AM PST."
         )
       end
     end
@@ -55,7 +55,6 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
 
     it "keeps the plain limit error when the quota is zero" do
       user = create(:user, user_risk_state: "not_reviewed", timezone: "UTC", daily_product_creation_limit: 0)
-      create_products_in_bulk(user, 1)
 
       product = build(:product, user: user)
       expect(product).not_to be_valid

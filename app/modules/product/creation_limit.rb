@@ -51,6 +51,8 @@ module Product::CreationLimit
     end
 
     def format_next_slot(time)
+      # Round up: the message names whole minutes, and the slot is still taken until the exact second passes.
+      time = time.change(sec: 0) + 1.minute unless time == time.change(sec: 0)
       zone = ActiveSupport::TimeZone[user.timezone.to_s] || Time.zone
       time.in_time_zone(zone).strftime("%B %-d at %-l:%M %p %Z")
     end
