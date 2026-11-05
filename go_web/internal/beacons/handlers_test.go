@@ -224,7 +224,7 @@ func TestPostsWithANullOriginAreUnprocessable(t *testing.T) {
 	e := newTestEnv(t, false)
 	w := e.do(t, call{method: "POST", path: "/media_locations", csrf: true, json: map[string]any{}, headers: map[string]string{"Origin": "null"}})
 	expect(t, w, 422, `{"status":422,"error":"Unprocessable Content"}`)
-	if w.Header().Get("Content-Type") != "application/json; charset=UTF-8" {
+	if w.Header().Get("Content-Type") != "application/json; charset=utf-8" {
 		t.Errorf("Content-Type = %q", w.Header().Get("Content-Type"))
 	}
 	w = e.do(t, call{method: "POST", path: "/media_locations", csrf: true, json: map[string]any{}, headers: map[string]string{"Origin": "null", "Accept": "text/html"}})

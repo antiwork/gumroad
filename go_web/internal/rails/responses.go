@@ -134,17 +134,16 @@ func RenderException(w http.ResponseWriter, req *Request, status int) {
 	var contentType, body string
 	switch req.Format() {
 	case "json":
-		contentType = "application/json; charset=UTF-8"
+		contentType = JSONContentType
 		body = `{"status":` + strconv.Itoa(status) + `,"error":"` + reason + `"}`
 	case "xml":
-		contentType = "application/xml; charset=UTF-8"
+		contentType = "application/xml; charset=utf-8"
 		body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<hash>\n  <status type=\"integer\">" + strconv.Itoa(status) +
 			"</status>\n  <error>" + reason + "</error>\n</hash>\n"
 	default:
+		contentType = web.TextHTML
 		if page, err := publicPages.ReadFile("public/" + strconv.Itoa(status) + ".html"); err == nil {
-			contentType, body = "text/html; charset=UTF-8", string(page)
-		} else {
-			contentType = web.TextHTML
+			body = string(page)
 		}
 	}
 	writeBody(w, req, status, contentType, body, "", false, true)

@@ -74,7 +74,7 @@
   "404_json": {
     "status": 404,
     "headers": {
-      "content-type": "application/json; charset=UTF-8",
+      "content-type": "application/json; charset=utf-8",
       "content-length": "34"
     },
     "body": [
@@ -117,7 +117,7 @@
   "404_html": {
     "status": 404,
     "headers": {
-      "content-type": "text/html; charset=UTF-8",
+      "content-type": "text/html; charset=utf-8",
       "content-length": "900"
     },
     "body": [
@@ -1026,7 +1026,7 @@
   "404_xml": {
     "status": 404,
     "headers": {
-      "content-type": "application/xml; charset=UTF-8",
+      "content-type": "application/xml; charset=utf-8",
       "content-length": "119"
     },
     "body": [
@@ -1154,7 +1154,7 @@
   "422_json": {
     "status": 422,
     "headers": {
-      "content-type": "application/json; charset=UTF-8",
+      "content-type": "application/json; charset=utf-8",
       "content-length": "46"
     },
     "body": [
@@ -1209,7 +1209,7 @@
   "500_json": {
     "status": 500,
     "headers": {
-      "content-type": "application/json; charset=UTF-8",
+      "content-type": "application/json; charset=utf-8",
       "content-length": "46"
     },
     "body": [

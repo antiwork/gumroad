@@ -123,7 +123,7 @@ func TestParseErrorsRenderLikeRails(t *testing.T) {
 	}{
 		"bad query, JSON accept": {post("/x?a=%zz", "", "", "Accept", "application/json"), 400, "application/json", `{"success":false}`},
 		"bad query":              {post("/x?a=%zz", "", ""), 400, "text/html", ``},
-		"bad JSON, JSON accept":  {post("/x", "application/json", "{", "Accept", "application/json"), 400, "application/json; charset=UTF-8", `{"status":400,"error":"Bad Request"}`},
+		"bad JSON, JSON accept":  {post("/x", "application/json", "{", "Accept", "application/json"), 400, "application/json; charset=utf-8", `{"status":400,"error":"Bad Request"}`},
 		"bad JSON":               {post("/x", "application/json", "{"), 400, "text/html; charset=utf-8", ``},
 		"invalid content type":   {post("/x", "nonsense", ""), 406, "text/html; charset=utf-8", ``},
 	} {
@@ -175,6 +175,33 @@ func TestResponsesCarryRackETagAndRackCors(t *testing.T) {
 	RenderJSON(w, getReq, 200, `{"a":1}`)
 	if w.Code != 304 || w.Body.Len() != 0 {
 		t.Errorf("ConditionalGet: %d", w.Code)
+	}
+}
+
+func TestRenderExceptionMatchesPublicExceptions(t *testing.T) {
+	var responses map[string]struct {
+		Status  int
+		Headers map[string]string
+		Body    []byte
+	}
+	loadFixture(t, "rails_responses.json", &responses)
+	s := testStack(t, nil, "")
+	for name, accept := range map[string]string{
+		"404_json": "application/json, text/html",
+		"404_html": "text/html",
+		"404_xml":  "application/xml",
+		"422_json": "application/json",
+		"500_json": "application/json",
+	} {
+		want := responses[name]
+		r := httptest.NewRequest("GET", "/x", nil)
+		r.Header.Set("Accept", accept)
+		req, _ := s.Parse(r, nil, testNow)
+		w := httptest.NewRecorder()
+		RenderException(w, req, want.Status)
+		if w.Code != want.Status || w.Header().Get("Content-Type") != want.Headers["content-type"] || w.Body.String() != string(want.Body) {
+			t.Errorf("%s: %d %q %q, want %d %q %q", name, w.Code, w.Header().Get("Content-Type"), w.Body.String(), want.Status, want.Headers["content-type"], want.Body)
+		}
 	}
 }
 

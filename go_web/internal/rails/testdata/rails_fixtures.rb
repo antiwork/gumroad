@@ -31,6 +31,9 @@ SESSION_KEY = "_gumroad_app_session"
 class FixtureApp < Rails::Application
   config.root = Dir.mktmpdir
   config.load_defaults 8.1
+  # Mirrors config/application.rb. PublicExceptions uses it as the charset; the default,
+  # Encoding::UTF_8, prints "UTF-8".
+  config.encoding = "utf-8"
   config.eager_load = false
   config.secret_key_base = SECRET_KEY_BASE
   config.logger = Logger.new(nil)
