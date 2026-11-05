@@ -67,6 +67,169 @@ describe CheckoutController, type: :controller, inertia: true do
       )
     end
 
+    describe "third-party analytics opt-out" do
+      let(:browser_guid) { SecureRandom.uuid }
+      let(:other_seller) { create(:user) }
+
+      def google_analytics_enabled
+        inertia.props[:_inertia_meta].find { _1[:property] == "gr:google_analytics:enabled" }[:content]
+      end
+
+      def cart_with(*products)
+        cookies[:_gumroad_guid] = browser_guid
+        create(:cart, :guest, browser_guid:).tap { |cart| products.each { create(:cart_product, cart:, product: _1) } }
+      end
+
+      before { allow(Rails.env).to receive(:production?).and_return(true) }
+
+      it "loads no analytics when the cart's seller opted out" do
+        product = create(:product, user: seller)
+        seller.update!(disable_third_party_analytics: true)
+        cart_with(product)
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics when any seller in a multi-seller cart opted out" do
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller), create(:product, user: other_seller))
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "ignores an opted-out seller in the saved cart when a gift-wishlist arrival clears it" do
+        seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller))
+        wishlist_product = create(:wishlist_product, wishlist: create(:wishlist), product: create(:product, user: other_seller))
+
+        get :show, params: { gift_wishlist_product: wishlist_product.external_id }
+
+        expect(google_analytics_enabled).to eq("true")
+      end
+
+      it "ignores an opted-out seller's arriving product that the full cart rejects" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller))
+
+        get :show, params: { product: create(:product, user: other_seller).unique_permalink }
+
+        expect(google_analytics_enabled).to eq("true")
+      end
+
+      it "counts an arrival that fits once a membership arrival collapses the saved cart's tiers" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 2)
+        other_seller.update!(disable_third_party_analytics: true)
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller, recurrence_price_values: 3.times.map { { "monthly" => { enabled: true, price: 3 } } })
+        first_tier, second_tier, third_tier = membership.tiers
+        cart = cart_with
+        create(:cart_product, cart:, product: membership, option: first_tier)
+        create(:cart_product, cart:, product: membership, option: second_tier)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: membership, variant: third_tier, recurrence: BasePrice::Recurrence::MONTHLY)
+        create(:wishlist_product, wishlist:, product: create(:product, user: other_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "counts an arrival that fits because it replaces a saved line whose option the page re-resolves" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 2)
+        other_seller.update!(disable_third_party_analytics: true)
+        product = create(:product, user: seller)
+        category = create(:variant_category, link: product)
+        removed_variant = create(:variant, variant_category: category)
+        fallback_variant = create(:variant, variant_category: category)
+        cart = cart_with
+        create(:cart_product, cart:, product:, option: removed_variant)
+        removed_variant.update!(deleted_at: Time.current)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product:, variant: fallback_variant)
+        create(:wishlist_product, wishlist:, product: create(:product, user: other_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(cart.visible_cart_products.map(&:option)).to eq([removed_variant])
+        expect(inertia.props[:cart][:items].map { _1[:option_id] }).to eq([fallback_variant.external_id])
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "keeps analytics on when no seller in the cart opted out" do
+        cart_with(create(:product, user: seller), create(:product, user: other_seller))
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("true")
+      end
+
+      it "loads no analytics when a logged-in buyer's cart has an opted-out seller" do
+        buyer = create(:user)
+        create(:cart, user: buyer).tap { create(:cart_product, cart: _1, product: create(:product, user: other_seller)) }
+        other_seller.update!(disable_third_party_analytics: true)
+        sign_in buyer
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics when a wishlist arrival adds an opted-out seller's product" do
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller))
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: other_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics when a gift-wishlist arrival's seller opted out" do
+        seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: other_seller))
+        wishlist_product = create(:wishlist_product, wishlist: create(:wishlist), product: create(:product, user: seller))
+
+        get :show, params: { gift_wishlist_product: wishlist_product.external_id }
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics on the partial reload the frontend makes after a cart edit" do
+        # The inertia matcher captures only full renders, so inspect the partial response body.
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller), create(:product, user: other_seller))
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
+        request.headers["X-Inertia-Partial-Data"] = "cart,flash,checkout_payment,checkout_style"
+
+        get :show
+
+        meta = response.parsed_body.dig("props", "_inertia_meta").find { _1["property"] == "gr:google_analytics:enabled" }
+        expect(meta["content"]).to eq("false")
+      end
+
+      it "loads no analytics on a recommendations reload sent before the cart save that adds an opted-out seller" do
+        other_seller.update!(disable_third_party_analytics: true)
+        saved_product = create(:product, user: seller)
+        cart_with(saved_product)
+        added_product = create(:product, user: other_seller)
+        allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).and_return([])
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
+        request.headers["X-Inertia-Partial-Data"] = "recommended_products"
+
+        get :show, params: { cart_product_ids: [saved_product.external_id, added_product.external_id] }
+
+        meta = response.parsed_body.dig("props", "_inertia_meta").find { _1["property"] == "gr:google_analytics:enabled" }
+        expect(meta["content"]).to eq("false")
+      end
+    end
+
     it "names the product and the real state when a membership link's only tier is closed to new buyers" do
       membership = create(:membership_product, user: seller)
       tier = membership.tiers.first
@@ -303,6 +466,22 @@ describe CheckoutController, type: :controller, inertia: true do
         wishlist = create(:wishlist)
         create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
         create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "sends no styles when a membership arrival collapses the saved cart's tiers to fit another seller's product" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 2)
+        membership = create(:membership_product_with_preset_tiered_pricing, user: branded_seller, recurrence_price_values: 3.times.map { { "monthly" => { enabled: true, price: 3 } } })
+        first_tier, second_tier, third_tier = membership.tiers
+        cart = cart_with
+        create(:cart_product, cart:, product: membership, option: first_tier)
+        create(:cart_product, cart:, product: membership, option: second_tier)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: membership, variant: third_tier, recurrence: BasePrice::Recurrence::MONTHLY)
+        create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
 
         get :show, params: { wishlist: wishlist.external_id }
 

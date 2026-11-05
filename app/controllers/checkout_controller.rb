@@ -3,6 +3,7 @@
 class CheckoutController < ApplicationController
   layout "inertia"
 
+  skip_before_action :set_analytics_meta_tags, only: :show
   before_action :process_cart_id_param, only: [:show]
 
   def show
@@ -11,6 +12,8 @@ class CheckoutController < ApplicationController
     # Keep this cache request-scoped; callers can reuse presenters across product state changes.
     arrival_props = nil
     load_arrival_props = -> { arrival_props ||= checkout_presenter.checkout_arrival_props(params: checkout_params) }
+    rendered_products = checkout_rendered_products(cart_presenter.cart, checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call))
+    set_checkout_analytics_meta_tags(rendered_products)
     render inertia: "Checkout/Show", props: {
       # A legacy /checkout link whose tier is closed or sold out adds no line, so the page says why.
       # In the page rather than as a flash: a toast floats over the Checkout heading on a narrow
@@ -25,7 +28,7 @@ class CheckoutController < ApplicationController
       checkout_payment: -> { checkout_presenter.checkout_payment_props(params: checkout_params, cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
       stripe_fonts_css_source: SellerProfile.seller_fonts_css_source,
-      checkout_style: -> { sole_seller_checkout_style(cart_presenter.cart, checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call)) },
+      checkout_style: -> { sole_seller_checkout_style(rendered_products) },
     }
   end
 
@@ -130,22 +133,26 @@ class CheckoutController < ApplicationController
   end
 
   private
-    # Match CheckoutPresenter's product sources and precedence so the theme cannot identify a seller
-    # whose products the checkout does not render. Gift-wishlist arrivals replace the saved cart;
-    # every other arrival extends it.
-    def sole_seller_checkout_style(cart, checkout_seller_context)
-      products = checkout_seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart)
-      arriving_products = checkout_seller_context[:products]
-      existing_cart_keys = products.index_by { _1[:cart_key] }
-      new_product_count = arriving_products.count { !existing_cart_keys.key?(_1[:cart_key]) }
+    # Mirrors computeInitialCheckout in Checkout/initialCheckout.ts; keep the two in sync.
+    def checkout_rendered_products(cart, seller_context)
+      saved = seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart)
+      arrivals = seller_context[:products]
+      # Saved lines match by permalink alone: the page re-resolves a saved line's option (closed or
+      # removed tiers), so this can keep an arrival the page drops but never drops one the page shows.
+      saved_permalinks = saved.to_set { _1[:cart_key].first }
+      new_line_count = arrivals.reject { saved_permalinks.include?(_1[:cart_key].first) }
+        .map { _1[:recurring] ? _1[:cart_key].first : _1[:cart_key] }.uniq.size
+      collapsed_line_count = arrivals.filter_map { _1[:cart_key].first if _1[:recurring] }.uniq
+        .sum { |permalink| [saved.count { _1[:cart_key].first == permalink } - 1, 0].max }
 
-      # The frontend rejects every arriving product when the combined cart is over the limit.
-      products = if products.size + new_product_count > Cart::MAX_ALLOWED_CART_PRODUCTS
-        products.first(Cart::MAX_ALLOWED_CART_PRODUCTS)
+      if saved.size - collapsed_line_count + new_line_count > Cart::MAX_ALLOWED_CART_PRODUCTS
+        saved.first(Cart::MAX_ALLOWED_CART_PRODUCTS)
       else
-        products + arriving_products
+        saved + arrivals
       end
+    end
 
+    def sole_seller_checkout_style(products)
       seller_ids = products.pluck(:seller_id).uniq
       return unless seller_ids.one?
 
@@ -225,19 +232,25 @@ class CheckoutController < ApplicationController
       redirect_to(request_path_except_cart_id_param)
     end
 
-    def analytics_enabled?
-      true
+    # One opted-out seller in the cart turns every third-party tracker off for the page. A slow
+    # recommendations reload can land after the next cart save, so also count the cart it was sent with.
+    def set_checkout_analytics_meta_tags(products)
+      seller_ids = products.pluck(:seller_id) + Link.where(id: browser_cart_product_ids).pluck(:user_id)
+      disable_third_party_analytics! if User.where(id: seller_ids.uniq).any?(&:disable_third_party_analytics?)
+      set_analytics_meta_tags(seller: nil)
+    end
+
+    def browser_cart_product_ids
+      cart_product_ids = params[:cart_product_ids]
+      cart_product_ids.is_a?(Array) ? cart_product_ids.filter_map { ObfuscateIds.decrypt(_1) } : []
     end
 
     RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS = 10
 
     def recommended_products
-      cart_product_ids = params[:cart_product_ids]
-      cart_product_ids = [] unless cart_product_ids.is_a?(Array)
-
       args = {
         purchaser: logged_in_user,
-        cart_product_ids: cart_product_ids.filter_map { ObfuscateIds.decrypt(_1) },
+        cart_product_ids: browser_cart_product_ids,
         recommender_model_name: session[:recommender_model_name],
         limit: params[:limit].present? ? params[:limit].to_i : 6,
         recommendation_type: params[:recommendation_type],

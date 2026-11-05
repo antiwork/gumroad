@@ -125,7 +125,8 @@ class CheckoutPresenter
       products: add_products.filter_map do |product|
         permalink = product.dig(:product, :permalink)
         seller_id = seller_ids[permalink]
-        { seller_id:, cart_key: [permalink, product[:option_id]] } if seller_id
+        # nil-check, not presence: the frontend treats any recurrences value, even [], as recurring.
+        { seller_id:, cart_key: [permalink, product[:option_id]], recurring: !product.dig(:product, :recurrences).nil? } if seller_id
       end,
     }
   end

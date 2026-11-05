@@ -6,10 +6,11 @@ module PageMeta::Analytics
   include PageMeta::Base
 
   private
-    def set_analytics_meta_tags
-      set_meta_tag(property: "gr:google_analytics:enabled", content: analytics_enabled?.to_s)
-      set_meta_tag(property: "gr:fb_pixel:enabled", content: analytics_enabled?.to_s)
-      set_meta_tag(property: "gr:tiktok_pixel:enabled", content: analytics_enabled?.to_s)
+    def set_analytics_meta_tags(seller: @user || current_seller)
+      enabled = analytics_enabled?(seller:).to_s
+      set_meta_tag(property: "gr:google_analytics:enabled", content: enabled)
+      set_meta_tag(property: "gr:fb_pixel:enabled", content: enabled)
+      set_meta_tag(property: "gr:tiktok_pixel:enabled", content: enabled)
       set_meta_tag(property: "gr:logged_in_user:id", content: logged_in_user.present? ? logged_in_user.external_id : "")
       set_meta_tag(property: "gr:page:type", content: "")
     end
