@@ -37,6 +37,11 @@ class OfferCode < ApplicationRecord
   MAX_OWNERSHIP_DURATION_TIERS = 10
   MAX_SALE_LABEL_LENGTH = 32
   DEFAULT_SALE_LABEL = "Sale"
+  # duration_in_months is a 32-bit integer column; outside these bounds the INSERT/UPDATE bind
+  # serialization raises ActiveModel::RangeError after validation, so the save can only answer
+  # "something went wrong".
+  MIN_DURATION_IN_MONTHS = -2_147_483_648
+  MAX_DURATION_IN_MONTHS = 2_147_483_647
   # Enough for the seller to recognise the products without an unbounded message.
   NAMED_DEFAULT_DISCOUNT_PRODUCTS = 3
 
@@ -58,6 +63,7 @@ class OfferCode < ApplicationRecord
   validate :validate_option_scope
   validate :validate_auto_apply
   validate :validate_sale_label
+  validate :duration_in_billing_cycles_must_be_within_storage_range
 
 
   before_validation :normalize_sale_label
@@ -567,6 +573,13 @@ class OfferCode < ApplicationRecord
       if (valid_at.present? && expires_at.present? && expires_at <= valid_at) || (valid_at.blank? && expires_at.present?)
         errors.add(:base, "The discount code's start date must be earlier than its end date.")
       end
+    end
+
+    def duration_in_billing_cycles_must_be_within_storage_range
+      return if duration_in_months.nil?
+      return if duration_in_months.between?(MIN_DURATION_IN_MONTHS, MAX_DURATION_IN_MONTHS)
+
+      errors.add(:base, duration_in_months.positive? ? "Sorry, the duration entered is too large." : "Sorry, the duration entered is too low.")
     end
 
     def price_validation
