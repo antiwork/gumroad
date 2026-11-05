@@ -1,12 +1,12 @@
 export const purchaseConfirmationMessage = ({
   free,
-  creatorName,
+  sellerName,
   email,
 }: {
   free: boolean;
-  creatorName: string | null;
+  sellerName: string | null;
   email: string;
 }) =>
   free
-    ? `You're in! Your free signup${creatorName ? ` with ${creatorName}` : ""} is confirmed. We sent a confirmation to ${email}.`
+    ? `You're in! Your free signup${sellerName ? ` with ${sellerName}` : ""} is confirmed. We sent a confirmation to ${email}.`
     : `Your purchase was successful! We sent a receipt to ${email}.`;

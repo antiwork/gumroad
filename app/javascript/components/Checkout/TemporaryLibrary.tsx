@@ -27,13 +27,12 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
 
   useRunOnce(() => {
     const successful = results.filter(({ result }) => result.success);
-    const free =
-      successful.length > 0 && successful.every(({ result }) => result.success && result.non_formatted_price === 0);
-    const creatorNames = new Set(successful.map(({ item }) => item.product.creator.name));
+    const free = successful.length > 0 && successful.every(({ result }) => result.success && result.is_free_purchase);
+    const sellerNames = new Set(successful.map(({ item }) => item.product.creator.name));
     showAlert(
       purchaseConfirmationMessage({
         free,
-        creatorName: creatorNames.size === 1 ? ([...creatorNames][0] ?? null) : null,
+        sellerName: sellerNames.size === 1 ? ([...sellerNames][0] ?? null) : null,
         email: state.email,
       }),
       "success",

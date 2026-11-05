@@ -23,7 +23,7 @@ import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
 const allFree = (results: PurchaseResults) => {
   const successful = results.filter(({ result }) => result.success);
-  return successful.length > 0 && successful.every(({ result }) => result.success && result.non_formatted_price === 0);
+  return successful.length > 0 && successful.every(({ result }) => result.success && result.is_free_purchase);
 };
 
 export const LineItem = ({

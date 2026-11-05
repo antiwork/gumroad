@@ -233,6 +233,7 @@ export type ConfirmedPurchaseResponse = {
   has_third_party_analytics: boolean;
   currency_type: string;
   non_formatted_price: number;
+  is_free_purchase: boolean;
   subscription_has_lapsed: boolean;
   extra_purchase_notice: string | null;
   account_by_this_email_exists: boolean;

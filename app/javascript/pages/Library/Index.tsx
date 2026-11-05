@@ -352,15 +352,18 @@ export default function LibraryPage() {
     router.replace({ url: url.pathname + url.search, preserveState: true, preserveScroll: true });
 
     const firstPurchase = receipt_purchases.find((purchase) => purchase.id === purchaseIds[0]);
-    if (firstPurchase?.email)
+    if (firstPurchase?.email) {
+      const purchases = receipt_purchases.filter((purchase) => purchaseIds.includes(purchase.id));
+      const sellerNames = new Set(purchases.map((purchase) => purchase.seller_name));
       showAlert(
         purchaseConfirmationMessage({
-          free: firstPurchase.free,
-          creatorName: firstPurchase.seller_name,
+          free: purchases.every((purchase) => purchase.free),
+          sellerName: sellerNames.size === 1 ? firstPurchase.seller_name : null,
           email: firstPurchase.email,
         }),
         "success",
       );
+    }
 
     for (const purchaseId of purchaseIds) {
       const analytics = purchase_analytics[purchaseId];

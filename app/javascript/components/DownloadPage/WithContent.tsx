@@ -147,7 +147,7 @@ export const WithContent = ({
       showAlert(
         purchaseConfirmationMessage({
           free: props.purchase.free,
-          creatorName: props.purchase.seller_name,
+          sellerName: props.purchase.seller_name,
           email: props.purchase.email,
         }),
         "success",
