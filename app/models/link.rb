@@ -2377,14 +2377,13 @@ class Link < ApplicationRecord
       end
     end
 
-    # A Heyzine shelf is a library of flipbooks, which iframely cannot frame, so the editor frames the
-    # shelf page itself. Only that one page shape is allowed through: any other iframe still has to be
-    # iframely's, and a shelf on any other host does not qualify.
-    def heyzine_shelf_embed_src?(src)
-      return false if src.blank?
+    # iframely cannot frame a Heyzine shelf, so the editor frames the shelf page itself. Matched against
+    # the whole src, exactly as the editor writes it, so no port, userinfo, query, or fragment gets through.
+    HEYZINE_SHELF_EMBED_SRC = %r{\Ahttps://heyzine\.com/shelf/[\w-]+\.html\z}
+    private_constant :HEYZINE_SHELF_EMBED_SRC
 
-      uri = URI.parse(src) rescue nil
-      uri && uri.scheme == "https" && uri.host == "heyzine.com" && %r{\A/shelf/[\w-]+\.html\z}.match?(uri.path)
+    def heyzine_shelf_embed_src?(src)
+      src.present? && HEYZINE_SHELF_EMBED_SRC.match?(src)
     end
 
     def content_moderation_check

@@ -471,6 +471,7 @@ describe("insertMediaEmbed", () => {
       const html = String(insertedNode(editor)?.attrs?.html);
       expect(html).toContain("iframely.net/api/iframe");
       expect(html).not.toContain('src="https://heyzine.com/flip-book/');
+      expect(rawEmbedHeight(html)).toBe(DEFAULT_RAW_EMBED_HEIGHT);
     } finally {
       editor.destroy();
     }
@@ -479,7 +480,7 @@ describe("insertMediaEmbed", () => {
   it("stores a provider's responsive video layout without a pixel height", () => {
     const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
     try {
-      insertMediaEmbed(editor, { ...HEYZINE_SHELF, html: RESPONSIVE_VIDEO, url: "https://vimeo.com/76979871" });
+      insertMediaEmbed(editor, { ...HEYZINE_SHELF, html: RESPONSIVE_VIDEO, url: "https://tally.so/r/1" });
 
       expect(String(insertedNode(editor)?.attrs?.html)).toBe(RESPONSIVE_VIDEO);
     } finally {

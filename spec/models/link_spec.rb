@@ -624,16 +624,6 @@ describe Link do
       product.html_safe_description
     end
 
-    it "keeps an iframely frame" do
-      frame = %(<iframe src="https://cdn.iframe.ly/api/iframe?url=https%3A%2F%2Fexample.com" allowfullscreen></iframe>)
-
-      expect(scrubbed_description(frame)).to include("cdn.iframe.ly")
-    end
-
-    it "drops a frame from any other host" do
-      expect(scrubbed_description(%(<iframe src="https://example.com/embed"></iframe>))).not_to include("<iframe")
-    end
-
     it "keeps a Heyzine shelf frame, which iframely cannot serve" do
       frame = %(<iframe src="https://heyzine.com/shelf/66f3c4fc1e.html" style="width: 100%; height: 800px;" allowfullscreen></iframe>)
 
@@ -644,12 +634,18 @@ describe Link do
       expect(scrubbed_description(%(<iframe src="https://heyzine.com/flip-book/66f3c4fc1e.html"></iframe>))).not_to include("<iframe")
     end
 
-    it "drops a shelf served from another host, over plain http, or with a path that only looks like one" do
+    it "drops anything but the exact shelf URL" do
       [
         %(<iframe src="https://heyzine.com.evil.test/shelf/66f3c4fc1e.html"></iframe>),
         %(<iframe src="https://www.heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
         %(<iframe src="http://heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
         %(<iframe src="https://heyzine.com/shelf/66f3c4fc1e.html.evil"></iframe>),
+        %(<iframe src="https://heyzine.com:8443/shelf/66f3c4fc1e.html"></iframe>),
+        %(<iframe src="https://heyzine.com:443/shelf/66f3c4fc1e.html"></iframe>),
+        %(<iframe src="https://evil.test@heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
+        %(<iframe src="https://heyzine.com/shelf/66f3c4fc1e.html?x=1"></iframe>),
+        %(<iframe src="https://heyzine.com/shelf/66f3c4fc1e.html#f"></iframe>),
+        %(<iframe src="HTTPS://heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
       ].each do |frame|
         expect(scrubbed_description(frame)).not_to include("<iframe"), frame
       end
