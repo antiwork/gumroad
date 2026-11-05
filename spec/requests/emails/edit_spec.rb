@@ -523,13 +523,10 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     section1 = create(:seller_profile_posts_section, seller:, header: "Posts section 1", shown_posts: [installment.id])
     section2 = create(:seller_profile_posts_section, seller:, shown_posts: [])
-    # The channel edits above are unsaved, so the browser asks before the reload discards them,
-    # and the driver reports that open dialog instead of completing the navigation.
-    begin
-      refresh
-    rescue Selenium::WebDriver::Error::UnexpectedAlertOpenError
-      accept_browser_dialog
-    end
+    # The channel edits above are unsaved, so the browser asks before the reload discards them.
+    # The reload returns with that dialog still open, so it has to be accepted after it.
+    refresh
+    accept_browser_dialog
 
     expect(page).to_not have_field("Posts section 1")
     expect(page).to_not have_field("Unnamed section")
