@@ -1416,6 +1416,7 @@ class LinksController < ApplicationController
 
     def prepare_product_page
       @user                  = @product.user
+      set_analytics_meta_tags
       set_meta_tag(title: @product.name)
       set_product_page_meta(@product)
       set_custom_styles_meta_tag(@product.user.seller_profile)

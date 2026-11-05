@@ -22,6 +22,8 @@ module CustomDomainConfig
 
       @body_class = "custom-domain"
     end
+
+    set_analytics_meta_tags if @user.present?
   end
 
   # The custom-HTML wrapper builds its own <head>, so it can't rely on
