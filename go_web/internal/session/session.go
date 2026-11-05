@@ -1,7 +1,7 @@
 package session
 
 import (
-	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -27,10 +27,21 @@ func CookieName(railsEnv, customDomain string, branchDeployment bool) string {
 	}
 }
 
-// Session is the decoded session hash. A nil *Session reads as empty, which is also what
-// a NullSessionHash looks like after a failed CSRF check.
+// Session is the decoded session hash, in Ruby's key order so a rewrite keeps it. A nil
+// *Session reads as empty, which is also what a NullSessionHash looks like after a failed
+// CSRF check.
 type Session struct {
-	data map[string]any
+	data *rails.Hash
+}
+
+const sessionIDKey = "session_id"
+
+// New is the session Rack's cookie store starts for a request without one:
+// persistent_session_id! gives it a session_id first.
+func New() *Session {
+	s := &Session{data: rails.NewHash()}
+	s.data.Set(sessionIDKey, newSessionID())
+	return s
 }
 
 // Load decrypts the session cookie; a missing or unreadable cookie is an empty session.
@@ -45,13 +56,16 @@ func (c *Codec) Load(cookieName, value string, now time.Time) *Session {
 	return Parse(raw)
 }
 
-// Parse reads a session hash serialized as JSON.
+// Parse reads a session hash serialized as JSON. A session without a session_id gets one,
+// as load_session does.
 func Parse(raw []byte) *Session {
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.UseNumber()
-	var data map[string]any
-	if err := decoder.Decode(&data); err != nil || data == nil {
+	value, err := rails.ParseJSON(raw)
+	data, ok := value.(*rails.Hash)
+	if err != nil || !ok {
 		return nil
+	}
+	if v := data.Value(sessionIDKey); v == nil || v == false {
+		data.Set(sessionIDKey, newSessionID())
 	}
 	return &Session{data: data}
 }
@@ -60,7 +74,41 @@ func (s *Session) Get(key string) any {
 	if s == nil {
 		return nil
 	}
-	return s.data[key]
+	return s.data.Value(key)
+}
+
+// Set is session[key] = value. Values are what rails.EncodeJSON writes. A nil session is a
+// NullSessionHash, which drops writes.
+func (s *Session) Set(key string, value any) {
+	if s != nil {
+		s.data.Set(key, value)
+	}
+}
+
+// Delete is session.delete(key).
+func (s *Session) Delete(key string) {
+	if s != nil {
+		s.data.Delete(key)
+	}
+}
+
+// JSON is the session as the cookie store writes it: nil values dropped, then
+// ActiveSupport's JSON.
+func (s *Session) JSON() []byte {
+	out := rails.NewHash()
+	for _, k := range s.data.Keys() {
+		if v := s.data.Value(k); v != nil {
+			out.Set(k, v)
+		}
+	}
+	return []byte(rails.EncodeJSON(out))
+}
+
+// newSessionID is Rack's generate_sid: SecureRandom.hex(16).
+func newSessionID() string {
+	var b [16]byte
+	rand.Read(b[:])
+	return hex.EncodeToString(b[:])
 }
 
 // String returns a string value, or "" when the key is missing or not a string.
@@ -101,8 +149,11 @@ func (s *Session) WardenUser() (id int64, ok bool) {
 
 // LastSignInAt is warden.session["last_sign_in_at"].to_i, set by devise_hooks.rb.
 func (s *Session) LastSignInAt() (int64, bool) {
-	scoped, _ := s.Get("warden.user.user.session").(map[string]any)
-	switch v := scoped["last_sign_in_at"].(type) {
+	scoped, _ := s.Get("warden.user.user.session").(*rails.Hash)
+	if scoped == nil {
+		return 0, false
+	}
+	switch v := scoped.Value("last_sign_in_at").(type) {
 	case json.Number:
 		if n, err := v.Int64(); err == nil {
 			return n, true

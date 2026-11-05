@@ -41,6 +41,9 @@ func parseRubyJSON(data []byte) (any, error) {
 	return value, nil
 }
 
+// ParseJSON is JSON.parse for values Rails itself serialized, such as the session.
+func ParseJSON(data []byte) (any, error) { return parseRubyJSON(data) }
+
 type jsonParser struct {
 	data    []byte
 	pos     int

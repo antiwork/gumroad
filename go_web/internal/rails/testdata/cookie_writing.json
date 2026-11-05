@@ -1,0 +1,61 @@
+{
+  "lines": {
+    "gumroad.com": [
+      "XSRF-TOKEN=a%2Bb%2Fc%3D; path=/; samesite=lax; secure; HttpOnly",
+      "tld=v; domain=gumroad.com; path=/; samesite=lax; secure; HttpOnly",
+      "tld3=v; path=/; samesite=lax; secure; HttpOnly"
+    ],
+    "seller.gumroad.com": [
+      "XSRF-TOKEN=a%2Bb%2Fc%3D; path=/; samesite=lax; secure; HttpOnly",
+      "tld=v; domain=gumroad.com; path=/; samesite=lax; secure; HttpOnly",
+      "tld3=v; domain=seller.gumroad.com; path=/; samesite=lax; secure; HttpOnly"
+    ],
+    "a.b.gumroad.com": [
+      "XSRF-TOKEN=a%2Bb%2Fc%3D; path=/; samesite=lax; secure; HttpOnly",
+      "tld=v; domain=gumroad.com; path=/; samesite=lax; secure; HttpOnly",
+      "tld3=v; domain=b.gumroad.com; path=/; samesite=lax; secure; HttpOnly"
+    ],
+    "shop.example.co.uk": [
+      "XSRF-TOKEN=a%2Bb%2Fc%3D; path=/; samesite=lax; secure; HttpOnly",
+      "tld=v; domain=co.uk; path=/; samesite=lax; secure; HttpOnly",
+      "tld3=v; domain=example.co.uk; path=/; samesite=lax; secure; HttpOnly"
+    ],
+    "localhost": [
+      "XSRF-TOKEN=a%2Bb%2Fc%3D; path=/; samesite=lax; secure; HttpOnly",
+      "tld=v; path=/; samesite=lax; secure; HttpOnly",
+      "tld3=v; path=/; samesite=lax; secure; HttpOnly"
+    ],
+    "10.0.0.1": [
+      "XSRF-TOKEN=a%2Bb%2Fc%3D; path=/; samesite=lax; secure; HttpOnly",
+      "tld=v; path=/; samesite=lax; secure; HttpOnly",
+      "tld3=v; path=/; samesite=lax; secure; HttpOnly"
+    ]
+  },
+  "escape": {
+    "a b": "a+b",
+    "+/=": "%2B%2F%3D",
+    "ü": "%C3%BC",
+    "~*-._!'()": "%7E*-._%21%27%28%29",
+    "%": "%25",
+    "a b": "a%E2%80%A8b",
+    "--": "--"
+  },
+  "months": [
+    {
+      "from": "2026-01-31T10:00:00.123456Z",
+      "plus_month": "2026-02-28T10:00:00.123456Z"
+    },
+    {
+      "from": "2026-03-31T00:00:00.000000Z",
+      "plus_month": "2026-04-30T00:00:00.000000Z"
+    },
+    {
+      "from": "2024-01-29T00:00:00.000000Z",
+      "plus_month": "2024-02-29T00:00:00.000000Z"
+    },
+    {
+      "from": "2026-12-15T23:59:59.000000Z",
+      "plus_month": "2027-01-15T23:59:59.000000Z"
+    }
+  ]
+}

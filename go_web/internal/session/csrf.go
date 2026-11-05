@@ -2,8 +2,10 @@ package session
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"strings"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
@@ -55,4 +57,28 @@ func csrfHMAC(real []byte, identifier string) []byte {
 // fixedLengthEqual is fixed_length_secure_compare, which only compares equal lengths.
 func fixedLengthEqual(a, b []byte) bool {
 	return len(a) == len(b) && subtle.ConstantTimeCompare(a, b) == 1
+}
+
+// GenerateCSRFToken is generate_csrf_token: SecureRandom.urlsafe_base64(32), unpadded.
+func GenerateCSRFToken() string {
+	b := make([]byte, authenticityTokenLength)
+	rand.Read(b)
+	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+// MaskedGlobalToken is form_authenticity_token with per_form_csrf_tokens on: the global
+// HMAC of the real token under a fresh one-time pad. ok is false for a real token that
+// isn't urlsafe Base64, where Rails raises.
+func MaskedGlobalToken(realToken string) (string, bool) {
+	real, ok := rails.URLSafeDecode64(realToken)
+	if !ok {
+		return "", false
+	}
+	raw := csrfHMAC(real, globalCSRFTokenIdentifier)
+	masked := make([]byte, 2*len(raw))
+	rand.Read(masked[:len(raw)])
+	for i := range raw {
+		masked[len(raw)+i] = masked[i] ^ raw[i]
+	}
+	return base64.RawURLEncoding.EncodeToString(masked), true
 }

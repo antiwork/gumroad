@@ -1,6 +1,6 @@
-// Package session reads Rails' encrypted cookies and resolves the signed-in user the way
-// Devise, Warden and ApplicationController's LoggedInUser, Impersonate and CurrentSeller
-// concerns do. It never writes the session cookie; the next page Rails serves does.
+// Package session reads and writes Rails' encrypted cookies and resolves the signed-in user
+// the way Devise, Warden and ApplicationController's LoggedInUser, Impersonate and
+// CurrentSeller concerns do.
 package session
 
 import (
@@ -8,6 +8,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/pbkdf2"
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
@@ -124,4 +125,16 @@ func rubyToS(v any) string {
 		b, _ := json.Marshal(v)
 		return strings.Trim(string(b), `"`)
 	}
+}
+
+// Encrypt seals value, already JSON, as cookies.encrypted[name] does: in the legacy metadata
+// envelope with the cookie's purpose and expiry, under the primary key.
+func (c *Codec) Encrypt(name string, value []byte, expiresAt time.Time) string {
+	// Rails detects this envelope by its prefix, so the key order matters.
+	envelope := legacyEnvelopePrefix + `"` + base64.StdEncoding.EncodeToString(value) + `","exp":"` +
+		expiresAt.UTC().Format("2006-01-02T15:04:05.000Z") + `","pur":` + rails.EncodeJSON("cookie."+name) + `}}`
+	aead := c.aeads[0]
+	iv := make([]byte, aead.NonceSize())
+	rand.Read(iv)
+	return rails.JoinEncryptedMessage(aead.Seal(nil, iv, []byte(envelope), nil), iv)
 }
