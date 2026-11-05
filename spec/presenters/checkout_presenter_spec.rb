@@ -201,6 +201,12 @@ describe CheckoutPresenter do
           message: "#{membership.name} (#{tier.name}) is sold out.",
           url: membership.long_url,
         )
+
+        tier.update!(name: "Untitled")
+        expect(@instance.sold_out_arrival_notice(params:)).to eq(
+          message: "This tier of #{membership.name} is sold out.",
+          url: membership.long_url,
+        )
       end
 
       it "has no notice when the linked tier is selectable" do
