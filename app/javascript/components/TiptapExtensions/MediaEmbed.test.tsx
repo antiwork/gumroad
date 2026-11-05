@@ -11,6 +11,7 @@ import {
   DEFAULT_RAW_EMBED_HEIGHT,
   EmbedMediaForm,
   ExternalMediaFileEmbed,
+  heyzineShelfUrl,
   insertMediaEmbed,
   mediaEmbedUrlCandidates,
   Raw,
@@ -321,6 +322,39 @@ const HEYZINE_SHELF = {
   thumbnail_url: "https://cdnm.heyzine.com/files/library-thumb.jpg",
 };
 
+// What iframely actually answers for a shelf: a card wrapping a frame to its own proxy, with no live
+// page behind it (see gumroad-private#4343).
+const HEYZINE_SHELF_LOOKUP = {
+  ...HEYZINE_SHELF,
+  html: HEYZINE_SHELF.html.replace(
+    "about:blank",
+    "https://iframely.net/api/iframe?app=1&url=https%3A%2F%2Fheyzine.com%2Fshelf%2F66f3c4fc1e.html&key=abc",
+  ),
+};
+
+describe("heyzineShelfUrl", () => {
+  it("recognizes a shelf page and drops the parts of the URL that page does not use", () => {
+    expect(heyzineShelfUrl("https://heyzine.com/shelf/66f3c4fc1e.html")).toBe(
+      "https://heyzine.com/shelf/66f3c4fc1e.html",
+    );
+    expect(heyzineShelfUrl("  https://heyzine.com/shelf/66f3c4fc1e.html?utm_source=x#page-2  ")).toBe(
+      "https://heyzine.com/shelf/66f3c4fc1e.html",
+    );
+  });
+
+  it.each([
+    "https://heyzine.com/flip-book/66f3c4fc1e.html",
+    "https://heyzine.com/shelf/",
+    "https://heyzine.com/shelf/66f3c4fc1e.html.evil",
+    "https://www.heyzine.com/shelf/66f3c4fc1e.html",
+    "https://heyzine.com.evil.test/shelf/66f3c4fc1e.html",
+    "http://heyzine.com/shelf/66f3c4fc1e.html",
+    "not a url at all",
+  ])("leaves %s alone", (url) => {
+    expect(heyzineShelfUrl(url)).toBeNull();
+  });
+});
+
 describe("rich embeds with no provider metadata", () => {
   it("accepts a lookup whose response omits provider_name", async () => {
     state.bodies = [HEYZINE_SHELF];
@@ -401,7 +435,7 @@ describe("insertMediaEmbed", () => {
   it("stores a form embed as a block tall enough to hold a quiz", () => {
     const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
     try {
-      insertMediaEmbed(editor, HEYZINE_SHELF);
+      insertMediaEmbed(editor, { ...HEYZINE_SHELF, url: "https://tally.so/r/1" });
 
       const node = insertedNode(editor);
       expect(node?.type).toBe("raw");
@@ -412,10 +446,41 @@ describe("insertMediaEmbed", () => {
     }
   });
 
+  it("frames the shelf itself, since iframely only offers a preview card for it", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, HEYZINE_SHELF_LOOKUP);
+
+      const node = insertedNode(editor);
+      const html = String(node?.attrs?.html);
+      expect(html).toContain('src="https://heyzine.com/shelf/66f3c4fc1e.html"');
+      expect(html).not.toContain("iframely.net");
+      expect(rawEmbedHeight(html)).toBe(DEFAULT_RAW_EMBED_HEIGHT);
+      // The link an email falls back to still opens the seller's library.
+      expect(node?.attrs?.url).toBe("https://heyzine.com/shelf/66f3c4fc1e.html");
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("keeps iframely's html for a Heyzine page that is not a shelf", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, { ...HEYZINE_SHELF_LOOKUP, url: "https://heyzine.com/flip-book/66f3c4fc1e.html" });
+
+      const html = String(insertedNode(editor)?.attrs?.html);
+      expect(html).toContain("iframely.net/api/iframe");
+      expect(html).not.toContain('src="https://heyzine.com/flip-book/');
+      expect(rawEmbedHeight(html)).toBe(DEFAULT_RAW_EMBED_HEIGHT);
+    } finally {
+      editor.destroy();
+    }
+  });
+
   it("stores a provider's responsive video layout without a pixel height", () => {
     const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
     try {
-      insertMediaEmbed(editor, { ...HEYZINE_SHELF, html: RESPONSIVE_VIDEO });
+      insertMediaEmbed(editor, { ...HEYZINE_SHELF, html: RESPONSIVE_VIDEO, url: "https://tally.so/r/1" });
 
       expect(String(insertedNode(editor)?.attrs?.html)).toBe(RESPONSIVE_VIDEO);
     } finally {
@@ -462,7 +527,11 @@ describe("insertMediaEmbed", () => {
   it("keeps a frame the provider already sized taller than the default", () => {
     const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
     try {
-      insertMediaEmbed(editor, { ...HEYZINE_SHELF, html: resizedRawEmbedHtml(HEYZINE_SHELF.html, 1200) });
+      insertMediaEmbed(editor, {
+        ...HEYZINE_SHELF,
+        url: "https://tally.so/r/1",
+        html: resizedRawEmbedHtml(HEYZINE_SHELF.html, 1200),
+      });
 
       expect(rawEmbedHeight(String(insertedNode(editor)?.attrs?.html))).toBe(1200);
     } finally {
