@@ -139,7 +139,7 @@ func (h *handlers) incrementViews(c *actionContext) error {
 			sum := sha256.Sum256([]byte(strconv.FormatInt(product.id, 10) + "\x00" + rails.ToS(payload["event_id"])))
 			id = hex.EncodeToString(sum[:])
 		} else {
-			id = newUUID()
+			id = web.NewUUID()
 		}
 		recommended := rails.BooleanCast(req.Param("was_product_recommended"))
 		if err := h.createProductPageView(c, product, userID, referrer, recommended != nil && *recommended, viewURL, id); err != nil {

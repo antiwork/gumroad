@@ -66,3 +66,22 @@ func (st *Store) CommitLine(s *Session, host string, ssl bool, now time.Time) (s
 	return rails.SetCookie{Name: st.Name, Value: value, Domain: domain, Expires: expires, Secure: st.Secure, HTTPOnly: true}.
 		Line(st.HTTPS && ssl), nil
 }
+
+// Load is the session the request's cookie carries, nil when there is none or it doesn't
+// decrypt.
+func (st *Store) Load(req *rails.Request) *Session {
+	raw, ok := req.Cookie(st.Name)
+	if !ok {
+		return nil
+	}
+	return st.Codec.Load(st.Name, raw, req.Now)
+}
+
+// EncryptedCookie is cookies.encrypted[name] up to the JSON parse; see Codec.Decrypt.
+func (st *Store) EncryptedCookie(req *rails.Request, name string) ([]byte, bool) {
+	raw, ok := req.Cookie(name)
+	if !ok {
+		return nil, false
+	}
+	return st.Codec.Decrypt(name, raw, req.Now)
+}

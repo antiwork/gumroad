@@ -40,6 +40,59 @@
     "a b": "a%E2%80%A8b",
     "--": "--"
   },
+  "cgi_escape": {
+    "a b": "a+b",
+    "+/=": "%2B%2F%3D",
+    "ü": "%C3%BC",
+    "~*-._!'()": "~%2A-._%21%27%28%29",
+    "%": "%25",
+    "/d/x?a=1&b=2": "%2Fd%2Fx%3Fa%3D1%26b%3D2"
+  },
+  "to_query": [
+    {
+      "pairs": [
+        [
+          "id",
+          "a b/c"
+        ],
+        [
+          "destination",
+          "download_page"
+        ],
+        [
+          "display",
+          "x~*"
+        ]
+      ],
+      "query": "destination=download_page&display=x~%2A&id=a+b%2Fc"
+    },
+    {
+      "pairs": [
+        [
+          "next",
+          "/d/x?a=1&b=2"
+        ]
+      ],
+      "query": "next=%2Fd%2Fx%3Fa%3D1%26b%3D2"
+    },
+    {
+      "pairs": [
+        [
+          "b",
+          "1"
+        ],
+        [
+          "a",
+          "2"
+        ],
+        [
+          "a b",
+          "3"
+        ]
+      ],
+      "query": "a+b=3&a=2&b=1"
+    }
+  ],
   "months": [
     {
       "from": "2026-01-31T10:00:00.123456Z",

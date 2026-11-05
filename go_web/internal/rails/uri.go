@@ -2,6 +2,7 @@ package rails
 
 import (
 	"net/netip"
+	"sort"
 	"strings"
 )
 
@@ -159,3 +160,17 @@ func isUserinfoChar(c byte) bool { return isRegNameChar(c) || c == ':' }
 func isSegNCChar(c byte) bool    { return isRegNameChar(c) || c == '@' }
 func isSegChar(c byte) bool      { return isSegNCChar(c) || c == ':' || c == '/' }
 func isFragmentChar(c byte) bool { return isSegChar(c) || c == '?' }
+
+// CGIEscape is CGI.escape: everything but ASCII letters, digits, _ . - and ~ as %XX, and
+// space as +.
+func CGIEscape(s string) string { return formEscape(s, isUnreserved) }
+
+// ToQuery is Hash#to_query for string values: CGI-escaped pairs, sorted, joined by &.
+func ToQuery(pairs ...[2]string) string {
+	parts := make([]string, len(pairs))
+	for i, p := range pairs {
+		parts[i] = CGIEscape(p[0]) + "=" + CGIEscape(p[1])
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, "&")
+}

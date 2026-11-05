@@ -93,6 +93,11 @@ func requestID(r *http.Request) string {
 	if id := sanitizeRequestID(r.Header.Get("X-Request-Id")); id != "" {
 		return id
 	}
+	return NewUUID()
+}
+
+// NewUUID is SecureRandom.uuid.
+func NewUUID() string {
 	var b [16]byte
 	rand.Read(b[:])
 	b[6] = b[6]&0x0f | 0x40

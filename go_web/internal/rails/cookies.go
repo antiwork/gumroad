@@ -114,13 +114,19 @@ func CookieDomainTLD(host string, tldLength int) string {
 
 // RackEscape is Rack::Utils.escape, URI.encode_www_form_component.
 func RackEscape(s string) string {
+	return formEscape(s, func(c byte) bool {
+		return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '*' || c == '-' || c == '.' || c == '_'
+	})
+}
+
+// formEscape writes the bytes keep doesn't accept as %XX, and space as +.
+func formEscape(s string, keep func(byte) bool) string {
 	const upperHex = "0123456789ABCDEF"
 	var b strings.Builder
 	b.Grow(len(s) + len(s)/4)
 	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '*', c == '-', c == '.', c == '_':
+		switch c := s[i]; {
+		case keep(c):
 			b.WriteByte(c)
 		case c == ' ':
 			b.WriteByte('+')

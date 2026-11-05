@@ -55,7 +55,9 @@ type Request struct {
 	HTTP   *http.Request
 	Method string
 	// Path is PATH_INFO: the raw path as the sanitizer leaves it.
-	Path    string
+	Path string
+	// Query is QUERY_STRING as the sanitizer leaves it.
+	Query   string
 	Params  *Hash
 	Cookies map[string]*string
 	Host    string
@@ -116,7 +118,8 @@ func (s *Stack) Parse(r *http.Request, pathParams [][2]string, now time.Time) (*
 	// bodyParams has already rejected an invalid type.
 	req.BodyParams = bodyHash
 	req.ContentMimeType, _ = contentMimeType(contentType, hasContentType)
-	pairs, err := queryPairs(sanitizeURIEncoded(rawQuery))
+	req.Query = sanitizeURIEncoded(rawQuery)
+	pairs, err := queryPairs(req.Query)
 	if err != nil {
 		return nil, err
 	}
@@ -134,6 +137,15 @@ func (s *Stack) Parse(r *http.Request, pathParams [][2]string, now time.Time) (*
 		return nil, err
 	}
 	return req, nil
+}
+
+// FullPath is request.fullpath and original_fullpath: the path, then the query when there
+// is one.
+func (req *Request) FullPath() string {
+	if req.Query == "" {
+		return req.Path
+	}
+	return req.Path + "?" + req.Query
 }
 
 // Fallback stands in for a request whose params could not be read: Rails then takes the

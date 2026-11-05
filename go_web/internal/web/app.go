@@ -44,7 +44,16 @@ func Logger(r *http.Request) *slog.Logger {
 // Handle registers the replacement for a Rails action, named "Controller#action" so log
 // searches by controller keep working. It runs what ApplicationController and the Rack stack
 // do around the action: the custom subdomain redirect, panic recovery and one access log line.
-func (a *App) Handle(pattern, action string, h http.Handler) {
+func (a *App) Handle(pattern, action string, h http.Handler) { a.handle(pattern, action, h, true) }
+
+// HandlePage is Handle for a page action, which runs the custom subdomain redirect itself
+// (see Redirects), after the before_actions Rails runs first.
+func (a *App) HandlePage(pattern, action string, h http.Handler) { a.handle(pattern, action, h, false) }
+
+// Redirects is the custom subdomain redirect table HandlePage leaves to the action.
+func (a *App) Redirects() *SubdomainRedirects { return a.redirects }
+
+func (a *App) handle(pattern, action string, h http.Handler, redirect bool) {
 	controller, actionName, found := strings.Cut(action, "#")
 	if !found {
 		panic("action must be Controller#action, got " + action)
@@ -82,6 +91,10 @@ func (a *App) Handle(pattern, action string, h http.Handler) {
 			)
 		}()
 
+		if !redirect {
+			h.ServeHTTP(rec, r)
+			return
+		}
 		// Rails runs this redirect after verify_authenticity_token and
 		// invalidate_session_if_necessary; here it comes first, so a redirected host+path
 		// never gets their 422 or /login answers.

@@ -47,7 +47,7 @@ func (h *handlers) mediaLocation(c *actionContext) error {
 // mobileMediaLocation is Api::Mobile::BaseController#check_mobile_token, then
 // doorkeeper_authorize! :mobile_api, then the shared action.
 func (h *handlers) mobileMediaLocation(c *actionContext) error {
-	if !secureCompare(rails.ToS(c.req.Param("mobile_token")), h.deps.MobileToken) {
+	if !rails.SecureCompare(rails.ToS(c.req.Param("mobile_token")), h.deps.MobileToken) {
 		rails.RenderStaticJSON(c.w, c.req, http.StatusUnauthorized, invalidMobileReq)
 		return nil
 	}

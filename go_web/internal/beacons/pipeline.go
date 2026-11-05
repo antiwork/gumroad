@@ -2,8 +2,6 @@ package beacons
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
 	"errors"
 	"fmt"
 	"net/http"
@@ -165,7 +163,7 @@ func (h *handlers) before(c *actionContext, r *http.Request, a action) error {
 
 	// set_gumroad_guid: domain :all, httponly, ten years.
 	if _, ok := req.Cookie(guidCookie); !ok {
-		guid := newUUID()
+		guid := web.NewUUID()
 		req.Cookies[guidCookie] = &guid
 		c.guidMinted = true
 		if !c.nullSession {
@@ -286,18 +284,4 @@ func (h *handlers) now() time.Time { return h.deps.Now() }
 // bounded on its own.
 func (c *actionContext) writeContext() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(c.ctx), writeTimeout)
-}
-
-// newUUID is SecureRandom.uuid.
-func newUUID() string {
-	var b [16]byte
-	rand.Read(b[:])
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
-
-// secureCompare is ActiveSupport::SecurityUtils.secure_compare.
-func secureCompare(a, b string) bool {
-	return len(a) == len(b) && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }

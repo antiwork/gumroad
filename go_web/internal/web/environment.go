@@ -22,6 +22,9 @@ type Environment struct {
 	Revision            string
 	// GR_NUM, sent as X-GR.
 	GRNum string
+	// ASSET_DOMAIN, and PageMeta::Base#default_page_title.
+	AssetDomain string
+	PageTitle   string
 
 	requiresRevision bool
 }
@@ -35,6 +38,8 @@ var environments = map[string]Environment{
 		ValidAPIRequestHosts: []string{"api.gumroad.com"},
 		PublicStorageBucket:  "gumroad-public-storage",
 		PublicStorageHost:    "https://public-files.gumroad.com",
+		AssetDomain:          "assets.gumroad.com",
+		PageTitle:            "Gumroad",
 		requiresRevision:     true,
 	},
 	"staging": {
@@ -45,6 +50,8 @@ var environments = map[string]Environment{
 		ValidAPIRequestHosts: []string{"api.staging.gumroad.com"},
 		PublicStorageBucket:  "gumroad-dev-public-storage",
 		PublicStorageHost:    "https://staging-public-files.gumroad.com",
+		AssetDomain:          "staging-assets.gumroad.com",
+		PageTitle:            "Staging Gumroad",
 		requiresRevision:     true,
 	},
 	"development": {
@@ -52,6 +59,7 @@ var environments = map[string]Environment{
 		ValidRequestHosts:    []string{"app.localhost", "localhost"},
 		ValidAPIRequestHosts: []string{"api.localhost"},
 		PublicStorageBucket:  "gumroad-dev-public-storage",
+		PageTitle:            "Local Gumroad",
 	},
 }
 
@@ -85,11 +93,13 @@ func LoadEnvironment(getenv func(string) string) (*Environment, error) {
 
 	if name == "development" {
 		port := getenvDefault(getenv, "DEV_LANE_PORT", "3000")
+		env.AssetDomain = "app.localhost:" + port
 		env.Domain, env.RootDomain = "localhost:"+port, "localhost:"+port
 		env.ValidRequestHosts = append(env.ValidRequestHosts, "app.localhost:"+port, "localhost:"+port)
 		env.ValidAPIRequestHosts = append(env.ValidAPIRequestHosts, "api.localhost:"+port)
 		env.PublicStorageHost = getenvDefault(getenv, "AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
 	}
+	env.AssetDomain = getenvDefault(getenv, "ASSET_DOMAIN", env.AssetDomain)
 	if protocol := strings.TrimSpace(getenv("CUSTOM_PROTOCOL")); protocol != "" {
 		env.Protocol = protocol
 	}
