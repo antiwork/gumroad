@@ -3,6 +3,7 @@
 class CheckoutController < ApplicationController
   layout "inertia"
 
+  skip_before_action :set_analytics_meta_tags, only: :show
   before_action :process_cart_id_param, only: [:show]
 
   def show
@@ -11,6 +12,7 @@ class CheckoutController < ApplicationController
     # Keep this cache request-scoped; callers can reuse presenters across product state changes.
     arrival_props = nil
     load_arrival_props = -> { arrival_props ||= checkout_presenter.checkout_arrival_props(params: checkout_params) }
+    set_checkout_analytics_meta_tags(cart_presenter.cart, checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call))
     render inertia: "Checkout/Show", props: {
       # A legacy /checkout link whose tier is closed or sold out adds no line, so the page says why.
       # In the page rather than as a flash: a toast floats over the Checkout heading on a narrow
@@ -225,8 +227,12 @@ class CheckoutController < ApplicationController
       redirect_to(request_path_except_cart_id_param)
     end
 
-    def analytics_enabled?
-      true
+    # One opted-out seller in the cart turns every third-party tracker off for the page.
+    def set_checkout_analytics_meta_tags(cart, seller_context)
+      seller_ids = seller_context[:products].map { _1[:seller_id] }
+      seller_ids += cart.visible_cart_products.pluck("links.user_id") if cart
+      disable_third_party_analytics! if User.where(id: seller_ids.uniq).any?(&:disable_third_party_analytics?)
+      set_analytics_meta_tags(seller: nil)
     end
 
     RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS = 10

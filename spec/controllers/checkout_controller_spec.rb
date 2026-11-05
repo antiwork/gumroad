@@ -67,6 +67,49 @@ describe CheckoutController, type: :controller, inertia: true do
       )
     end
 
+    describe "third-party analytics opt-out" do
+      let(:browser_guid) { SecureRandom.uuid }
+      let(:other_seller) { create(:user) }
+
+      def google_analytics_enabled
+        inertia.props[:_inertia_meta].find { _1[:property] == "gr:google_analytics:enabled" }[:content]
+      end
+
+      def cart_with(*products)
+        cookies[:_gumroad_guid] = browser_guid
+        create(:cart, :guest, browser_guid:).tap { |cart| products.each { create(:cart_product, cart:, product: _1) } }
+      end
+
+      before { allow(Rails.env).to receive(:production?).and_return(true) }
+
+      it "loads no analytics when the cart's seller opted out" do
+        product = create(:product, user: seller)
+        seller.update!(disable_third_party_analytics: true)
+        cart_with(product)
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics when any seller in a multi-seller cart opted out" do
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller), create(:product, user: other_seller))
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "keeps analytics on when no seller in the cart opted out" do
+        cart_with(create(:product, user: seller), create(:product, user: other_seller))
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("true")
+      end
+    end
+
     it "names the product and the real state when a membership link's only tier is closed to new buyers" do
       membership = create(:membership_product, user: seller)
       tier = membership.tiers.first
