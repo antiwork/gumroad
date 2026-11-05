@@ -22,7 +22,9 @@ type SubtitleFile = {
 
 type Video = {
   sources: string[];
-  guid: string;
+  // Null for a file whose key is outside the attachments/<guid>/original layout: there is no guid to
+  // obfuscate, and its signed URL carries no placeholder to restore.
+  guid: string | null;
   title: string;
   tracks: SubtitleFile[];
   external_id: string;
@@ -78,7 +80,7 @@ function Stream() {
         height: "100%",
         playlist: playlist.map((video) => ({
           sources: video.sources.map((source) => ({
-            file: source.replace(FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION, video.guid),
+            file: video.guid == null ? source : source.replace(FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION, video.guid),
           })),
           tracks: video.tracks,
           title: video.title,

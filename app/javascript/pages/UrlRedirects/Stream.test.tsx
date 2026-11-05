@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { trackMediaLocationChanged } from "$app/data/media_location";
 import Stream from "$app/pages/UrlRedirects/Stream";
+import { createJWPlayer } from "$app/utils/jwPlayer";
 
 const { handlers, player, props } = vi.hoisted(() => {
   const handlers: Record<string, (event?: unknown) => void> = {};
@@ -32,6 +33,15 @@ const { handlers, player, props } = vi.hoisted(() => {
           tracks: [],
           external_id: "file-1",
           latest_media_location: { location: 3690 },
+          content_length: null,
+        },
+        {
+          sources: ["https://example.com/attachments/no-guid/original/session.mp4"],
+          guid: null,
+          title: "Outside the attachments layout",
+          tracks: [],
+          external_id: "file-2",
+          latest_media_location: null,
           content_length: null,
         },
       ],
@@ -63,4 +73,14 @@ it("uses player duration for a nullable-length initial seek and progress write",
   expect(player.seek).not.toHaveBeenCalled();
   act(() => handlers.time?.({ position: 3690, duration: 3711 }));
   expect(trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: 3711 }));
+});
+
+it("passes a source through unchanged when the file has no guid to restore", async () => {
+  render(<Stream />);
+  await waitFor(() => expect(createJWPlayer).toHaveBeenCalled());
+  const options = vi.mocked(createJWPlayer).mock.calls[0]?.[1];
+  const playlist = options?.playlist ?? [];
+  expect(playlist.map((video) => video.sources.map((source) => source.file))).toContainEqual([
+    "https://example.com/attachments/no-guid/original/session.mp4",
+  ]);
 });
