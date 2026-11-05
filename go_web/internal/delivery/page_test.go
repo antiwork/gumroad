@@ -31,7 +31,6 @@ func newPageEnv(t *testing.T) (*env, *Redirect) {
 	return e, &Redirect{ID: pageRedirect, PurchaseID: ptr(pagePurchase)}
 }
 
-
 func (e *env) items(r *Redirect, c ContentRedirect) ([]any, error) {
 	cfg := pageConfig
 	cfg.IDs = e.ids
