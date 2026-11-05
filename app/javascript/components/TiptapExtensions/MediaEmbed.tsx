@@ -287,6 +287,7 @@ const YOUTUBE_EMBED_SPELLINGS: { url: (id: string) => string; startParam: "t" | 
   { url: (id) => `https://www.youtube.com/embed/${id}`, startParam: "start" },
   { url: (id) => `https://youtu.be/${id}`, startParam: "t" },
   { url: (id) => `https://www.youtube-nocookie.com/embed/${id}`, startParam: "start" },
+  { url: (id) => `https://m.youtube.com/watch?v=${id}`, startParam: "t" },
 ];
 
 export const mediaEmbedUrlCandidates = (raw: string): string[] => {
@@ -307,13 +308,17 @@ export const mediaEmbedUrlCandidates = (raw: string): string[] => {
   if (!id || !YOUTUBE_VIDEO_ID.test(id)) return [raw];
   const start = parsed.searchParams.get("t") ?? parsed.searchParams.get("start");
   const startSeconds = youtubeStartSeconds(start);
-  return YOUTUBE_EMBED_SPELLINGS.map(({ url, startParam }) => {
+  const candidates = YOUTUBE_EMBED_SPELLINGS.map(({ url, startParam }) => {
     const candidate = new URL(url(id));
     if (start && startSeconds !== null) {
       candidate.searchParams.set(startParam, startParam === "t" ? start : String(startSeconds));
     }
     return candidate.toString();
   });
+  // The string the seller pasted is the one spelling the generated list cannot produce when it
+  // carries a parameter, and iframely keys its cached failure on the exact string: keep it last.
+  const pasted = parsed.toString();
+  return candidates.includes(pasted) ? candidates : [...candidates, pasted];
 };
 
 export type EmbedMediaFormProps = {

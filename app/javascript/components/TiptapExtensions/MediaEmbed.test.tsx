@@ -33,6 +33,7 @@ const CANONICAL = `https://www.youtube.com/watch?v=${ID}`;
 const EMBED_URL = `https://www.youtube.com/embed/${ID}`;
 const SHORT_URL = `https://youtu.be/${ID}`;
 const NOCOOKIE = `https://www.youtube-nocookie.com/embed/${ID}`;
+const MOBILE = `https://m.youtube.com/watch?v=${ID}`;
 const EMBED = {
   html: '<iframe src="about:blank"></iframe>',
   title: "Welcome",
@@ -89,17 +90,39 @@ describe("mediaEmbedUrlCandidates", () => {
       `${EMBED_URL}?start=42`,
       `${SHORT_URL}?t=42`,
       `${NOCOOKIE}?start=42`,
+      `${MOBILE}&t=42`,
     ]);
     expect(mediaEmbedUrlCandidates(`https://www.youtube.com/watch?v=${ID}&start=1m10s`)).toEqual([
       `${CANONICAL}&t=1m10s`,
       `${EMBED_URL}?start=70`,
       `${SHORT_URL}?t=1m10s`,
       `${NOCOOKIE}?start=70`,
+      `${MOBILE}&t=1m10s`,
+      `https://www.youtube.com/watch?v=${ID}&start=1m10s`,
     ]);
   });
 
   it("offers distinct spellings, so one poisoned cache key cannot kill the embed", () => {
-    expect(mediaEmbedUrlCandidates(SHORT_URL)).toEqual([CANONICAL, EMBED_URL, SHORT_URL, NOCOOKIE]);
+    expect(mediaEmbedUrlCandidates(SHORT_URL)).toEqual([CANONICAL, EMBED_URL, SHORT_URL, NOCOOKIE, MOBILE]);
+  });
+
+  it("asks the spelling the seller pasted last, since its parameters make it a fresh cache key", () => {
+    expect(mediaEmbedUrlCandidates(`https://youtu.be/${ID}?si=39y64u9WmoVVivHh`)).toEqual([
+      CANONICAL,
+      EMBED_URL,
+      SHORT_URL,
+      NOCOOKIE,
+      MOBILE,
+      `https://youtu.be/${ID}?si=39y64u9WmoVVivHh`,
+    ]);
+    expect(mediaEmbedUrlCandidates(`https://www.youtube.com/watch?v=${ID}&feature=share`)).toEqual([
+      CANONICAL,
+      EMBED_URL,
+      SHORT_URL,
+      NOCOOKIE,
+      MOBILE,
+      `https://www.youtube.com/watch?v=${ID}&feature=share`,
+    ]);
   });
 
   it("passes playlist-context and non-YouTube URLs through unchanged", () => {
@@ -152,8 +175,33 @@ describe("EmbedMediaForm", () => {
 
     const onEmbedReceived = await insertUrl(SHORT_URL);
 
-    expect(askedUrls()).toEqual([CANONICAL, EMBED_URL, SHORT_URL, NOCOOKIE]);
+    expect(askedUrls()).toEqual([CANONICAL, EMBED_URL, SHORT_URL, NOCOOKIE, MOBILE]);
     expect(onEmbedReceived).not.toHaveBeenCalled();
+  });
+
+  it("escapes on a later spelling when the pasted link is one of the poisoned ones", async () => {
+    state.bodies = [NOT_FOUND, NOT_FOUND, NOT_FOUND, NOT_FOUND, EMBED];
+
+    const onEmbedReceived = await insertUrl(SHORT_URL);
+
+    expect(askedUrls()).toEqual([CANONICAL, EMBED_URL, SHORT_URL, NOCOOKIE, MOBILE]);
+    expect(onEmbedReceived).toHaveBeenCalledWith(EMBED);
+  });
+
+  it("escapes on the pasted link when every generated spelling is poisoned", async () => {
+    state.bodies = [NOT_FOUND, NOT_FOUND, NOT_FOUND, NOT_FOUND, NOT_FOUND, EMBED];
+
+    const onEmbedReceived = await insertUrl(`https://youtu.be/${ID}?si=39y64u9WmoVVivHh`);
+
+    expect(askedUrls()).toEqual([
+      CANONICAL,
+      EMBED_URL,
+      SHORT_URL,
+      NOCOOKIE,
+      MOBILE,
+      `https://youtu.be/${ID}?si=39y64u9WmoVVivHh`,
+    ]);
+    expect(onEmbedReceived).toHaveBeenCalledWith(EMBED);
   });
 
   it("does not retry a non-YouTube URL iframely cannot embed", async () => {
