@@ -2338,8 +2338,9 @@ class Link < ApplicationRecord
         if %w[strong b em u s h1 h2 h3 h4 h5 h6 pre code ul ol li hr blockquote p a figure figcaption img div span iframe script br upsell-card public-file-embed review-card].exclude?(node.name) && !node.text?
           node.remove
         elsif node.name == "iframe"
-          iframe_host = (URI.parse(node["src"]) rescue nil)&.host if node["src"].present?
-          if %w[cdn.iframe.ly iframely.net].include?(iframe_host)
+          iframe_src = node["src"]
+          iframe_host = (URI.parse(iframe_src) rescue nil)&.host if iframe_src.present?
+          if %w[cdn.iframe.ly iframely.net].include?(iframe_host) || heyzine_shelf_embed_src?(iframe_src)
             node.attributes.each do |attr|
               node.remove_attribute(attr.first) unless %w[src frameborder allowfullscreen scrolling allow style].include?(attr.first)
             end
@@ -2374,6 +2375,16 @@ class Link < ApplicationRecord
           node.attribute("src").value = "#{PROTOCOL}:#{node["src"]}"
         end
       end
+    end
+
+    # A Heyzine shelf is a library of flipbooks, which iframely cannot frame, so the editor frames the
+    # shelf page itself. Only that one page shape is allowed through: any other iframe still has to be
+    # iframely's, and a shelf on any other host does not qualify.
+    def heyzine_shelf_embed_src?(src)
+      return false if src.blank?
+
+      uri = URI.parse(src) rescue nil
+      uri && uri.scheme == "https" && uri.host == "heyzine.com" && %r{\A/shelf/[\w-]+\.html\z}.match?(uri.path)
     end
 
     def content_moderation_check

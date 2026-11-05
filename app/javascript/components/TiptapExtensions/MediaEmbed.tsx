@@ -91,8 +91,31 @@ const growsOnInsert = (data: IframelyEmbedData): boolean => {
   return host !== null && RAW_EMBED_GROWING_HOSTS.some((known) => host === known || host.endsWith(`.${known}`));
 };
 
+// Iframely has no live frame for a Heyzine shelf — a library of flipbooks — and answers with its own
+// preview card, so the frame is built here pointing at the shelf page. That page is frameable and is
+// the seller's whole library; every other lookup keeps whatever iframely returned.
+const HEYZINE_SHELF_PATH = /^\/shelf\/[\w-]+\.html$/u;
+
+export const heyzineShelfUrl = (raw: string): string | null => {
+  try {
+    const url = new URL(raw.trim());
+    if (url.protocol !== "https:" || url.hostname.toLowerCase() !== "heyzine.com") return null;
+    return HEYZINE_SHELF_PATH.test(url.pathname) ? `https://heyzine.com${url.pathname}` : null;
+  } catch {
+    return null;
+  }
+};
+
+const shelfEmbedHtml = (shelfUrl: string): string =>
+  '<div style="left: 0; width: 100%; height: ' +
+  `${DEFAULT_RAW_EMBED_HEIGHT}px; position: relative;">` +
+  `<iframe src="${shelfUrl}" style="top: 0; left: 0; width: 100%; height: 100%; position: absolute; border: 0;" allowfullscreen></iframe>` +
+  "</div>";
+
 // Any other provider keeps the height iframely (or the seller, from the menu) chose for it.
 const insertedRawEmbedHtml = (data: IframelyEmbedData): string => {
+  const shelfUrl = heyzineShelfUrl(data.url);
+  if (shelfUrl !== null) return shelfEmbedHtml(shelfUrl);
   if (!growsOnInsert(data)) return data.html;
   const declaredHeight = rawEmbedHeight(data.html);
   if (declaredHeight === null || declaredHeight >= DEFAULT_RAW_EMBED_HEIGHT) return data.html;

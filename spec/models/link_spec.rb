@@ -615,4 +615,44 @@ describe Link do
       expect(create(:product, waitlist_enabled: true, purchase_disabled_at: Time.current, deleted_at: Time.current).accepts_waitlist_signups?).to be(false)
     end
   end
+
+  describe "#html_safe_description" do
+    let(:product) { create(:product) }
+
+    def scrubbed_description(html)
+      product.description = html
+      product.html_safe_description
+    end
+
+    it "keeps an iframely frame" do
+      frame = %(<iframe src="https://cdn.iframe.ly/api/iframe?url=https%3A%2F%2Fexample.com" allowfullscreen></iframe>)
+
+      expect(scrubbed_description(frame)).to include("cdn.iframe.ly")
+    end
+
+    it "drops a frame from any other host" do
+      expect(scrubbed_description(%(<iframe src="https://example.com/embed"></iframe>))).not_to include("<iframe")
+    end
+
+    it "keeps a Heyzine shelf frame, which iframely cannot serve" do
+      frame = %(<iframe src="https://heyzine.com/shelf/66f3c4fc1e.html" style="width: 100%; height: 800px;" allowfullscreen></iframe>)
+
+      expect(scrubbed_description(frame)).to include(%(src="https://heyzine.com/shelf/66f3c4fc1e.html"))
+    end
+
+    it "drops a Heyzine page that is not a shelf" do
+      expect(scrubbed_description(%(<iframe src="https://heyzine.com/flip-book/66f3c4fc1e.html"></iframe>))).not_to include("<iframe")
+    end
+
+    it "drops a shelf served from another host, over plain http, or with a path that only looks like one" do
+      [
+        %(<iframe src="https://heyzine.com.evil.test/shelf/66f3c4fc1e.html"></iframe>),
+        %(<iframe src="https://www.heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
+        %(<iframe src="http://heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
+        %(<iframe src="https://heyzine.com/shelf/66f3c4fc1e.html.evil"></iframe>),
+      ].each do |frame|
+        expect(scrubbed_description(frame)).not_to include("<iframe"), frame
+      end
+    end
+  end
 end
