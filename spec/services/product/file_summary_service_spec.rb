@@ -80,6 +80,11 @@ describe Product::FileSummaryService do
       large.product_files << file(filetype: "wav", size: 250_000_000)
     end
 
+    it "reads the options' pages and files without a query per option" do
+      expect(count_queries(matching: /FROM `rich_contents`/) { summary }).to eq(1)
+      expect(count_queries(matching: /FROM `product_files`/) { summary }).to eq(1)
+    end
+
     it "summarizes each option from its own files and none for the unselected product" do
       expect(product).not_to receive(:product_files)
 
