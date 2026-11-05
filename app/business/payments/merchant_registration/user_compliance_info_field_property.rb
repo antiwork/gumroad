@@ -63,6 +63,8 @@ module UserComplianceInfoFieldProperty
         "Unique Taxpayer Reference (UTR)"
       when "NO"
         "Norway VAT ID Number (MVA)"
+      when "PK"
+        "National Identity Card Number (SNIC or CNIC)"
       else
         "Individual tax ID"
       end
