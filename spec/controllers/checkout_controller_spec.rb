@@ -138,6 +138,27 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(google_analytics_enabled).to eq("false")
       end
 
+      it "counts an arrival that fits because it replaces a saved line whose option the page re-resolves" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 2)
+        other_seller.update!(disable_third_party_analytics: true)
+        product = create(:product, user: seller)
+        category = create(:variant_category, link: product)
+        removed_variant = create(:variant, variant_category: category)
+        fallback_variant = create(:variant, variant_category: category)
+        cart = cart_with
+        create(:cart_product, cart:, product:, option: removed_variant)
+        removed_variant.update!(deleted_at: Time.current)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product:, variant: fallback_variant)
+        create(:wishlist_product, wishlist:, product: create(:product, user: other_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(cart.visible_cart_products.map(&:option)).to eq([removed_variant])
+        expect(inertia.props[:cart][:items].map { _1[:option_id] }).to eq([fallback_variant.external_id])
+        expect(google_analytics_enabled).to eq("false")
+      end
+
       it "keeps analytics on when no seller in the cart opted out" do
         cart_with(create(:product, user: seller), create(:product, user: other_seller))
 
@@ -187,6 +208,22 @@ describe CheckoutController, type: :controller, inertia: true do
         request.headers["X-Inertia-Partial-Data"] = "cart,flash,checkout_payment,checkout_style"
 
         get :show
+
+        meta = response.parsed_body.dig("props", "_inertia_meta").find { _1["property"] == "gr:google_analytics:enabled" }
+        expect(meta["content"]).to eq("false")
+      end
+
+      it "loads no analytics on a recommendations reload sent before the cart save that adds an opted-out seller" do
+        other_seller.update!(disable_third_party_analytics: true)
+        saved_product = create(:product, user: seller)
+        cart_with(saved_product)
+        added_product = create(:product, user: other_seller)
+        allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).and_return([])
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
+        request.headers["X-Inertia-Partial-Data"] = "recommended_products"
+
+        get :show, params: { cart_product_ids: [saved_product.external_id, added_product.external_id] }
 
         meta = response.parsed_body.dig("props", "_inertia_meta").find { _1["property"] == "gr:google_analytics:enabled" }
         expect(meta["content"]).to eq("false")

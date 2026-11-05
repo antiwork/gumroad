@@ -137,8 +137,10 @@ class CheckoutController < ApplicationController
     def checkout_rendered_products(cart, seller_context)
       saved = seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart)
       arrivals = seller_context[:products]
-      same_line = ->(item, arrival) { arrival[:recurring] ? item[:cart_key].first == arrival[:cart_key].first : item[:cart_key] == arrival[:cart_key] }
-      new_line_count = arrivals.reject { |arrival| saved.any? { same_line.(_1, arrival) } }
+      # Saved lines match by permalink alone: the page re-resolves a saved line's option (closed or
+      # removed tiers), so this can keep an arrival the page drops but never drops one the page shows.
+      saved_permalinks = saved.to_set { _1[:cart_key].first }
+      new_line_count = arrivals.reject { saved_permalinks.include?(_1[:cart_key].first) }
         .map { _1[:recurring] ? _1[:cart_key].first : _1[:cart_key] }.uniq.size
       collapsed_line_count = arrivals.filter_map { _1[:cart_key].first if _1[:recurring] }.uniq
         .sum { |permalink| [saved.count { _1[:cart_key].first == permalink } - 1, 0].max }
@@ -230,21 +232,25 @@ class CheckoutController < ApplicationController
       redirect_to(request_path_except_cart_id_param)
     end
 
-    # One opted-out seller in the cart turns every third-party tracker off for the page.
+    # One opted-out seller in the cart turns every third-party tracker off for the page. A slow
+    # recommendations reload can land after the next cart save, so also count the cart it was sent with.
     def set_checkout_analytics_meta_tags(products)
-      disable_third_party_analytics! if User.where(id: products.pluck(:seller_id).uniq).any?(&:disable_third_party_analytics?)
+      seller_ids = products.pluck(:seller_id) + Link.where(id: browser_cart_product_ids).pluck(:user_id)
+      disable_third_party_analytics! if User.where(id: seller_ids.uniq).any?(&:disable_third_party_analytics?)
       set_analytics_meta_tags(seller: nil)
+    end
+
+    def browser_cart_product_ids
+      cart_product_ids = params[:cart_product_ids]
+      cart_product_ids.is_a?(Array) ? cart_product_ids.map { ObfuscateIds.decrypt(_1) } : []
     end
 
     RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS = 10
 
     def recommended_products
-      cart_product_ids = params[:cart_product_ids]
-      cart_product_ids = [] unless cart_product_ids.is_a?(Array)
-
       args = {
         purchaser: logged_in_user,
-        cart_product_ids: cart_product_ids.map { ObfuscateIds.decrypt(_1) },
+        cart_product_ids: browser_cart_product_ids,
         recommender_model_name: session[:recommender_model_name],
         limit: params[:limit].present? ? params[:limit].to_i : 6,
         recommendation_type: params[:recommendation_type],
