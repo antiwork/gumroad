@@ -312,6 +312,59 @@ describe("BankAccountSection copyable example hints", () => {
     expect(screen.getByLabelText<HTMLInputElement>(label).placeholder).toBe("");
   });
 });
+const IBAN_BIC_COUNTRIES = new Set(["PK", "TR", "GT", "MU", "KZ", "AL", "BH", "JO", "AO", "SM", "KW"]);
+
+describe("BankAccountSection BIC placeholders", () => {
+  it.each([
+    "TW",
+    "MA",
+    "AG",
+    "LC",
+    "TZ",
+    "NA",
+    "RW",
+    "EC",
+    "BW",
+    "OM",
+    "MG",
+    "MD",
+    "PA",
+    "NG",
+    "AM",
+    "LK",
+    "ET",
+    "BN",
+    "GY",
+    "MK",
+    "BT",
+    "LA",
+    "MZ",
+    "GA",
+    "BS",
+    "KH",
+    "MN",
+    "DZ",
+    "MO",
+    "SV",
+    "PK",
+    "TR",
+    "GT",
+    "MU",
+    "KZ",
+    "AL",
+    "BH",
+    "JO",
+    "AO",
+    "SM",
+    "KW",
+  ])("%s shows a hint that is not a well-formed BIC", (code) => {
+    renderForCountry(code, IBAN_BIC_COUNTRIES.has(code));
+    const field = screen.getByLabelText<HTMLInputElement>(/^(SWIFT \/ BIC|Bank) code$/iu);
+
+    expect(field.placeholder).toBe("Your bank's SWIFT / BIC code");
+    expect(field.placeholder).not.toMatch(/AAAA/u);
+  });
+});
 describe("BankAccountSection Ghana bank code", () => {
   it("has no copyable example and refuses 123456", () => {
     renderForCountry("GH");

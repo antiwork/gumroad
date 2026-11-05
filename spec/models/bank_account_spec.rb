@@ -3,6 +3,48 @@
 require "spec_helper"
 
 describe BankAccount do
+  describe "example bank codes" do
+    let(:message) { "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code." }
+
+    before { allow(Stripe).to receive(:api_key).and_return("sk_live_dummy") }
+
+    it "refuses every form example Stripe rejects in live mode" do
+      expect(BankAccount::EXAMPLE_BANK_CODES.size).to eq(37)
+
+      BankAccount::EXAMPLE_BANK_CODES.each do |type, code|
+        account = build(type.underscore.to_sym, bank_code: code)
+        account.valid?
+        expect(account.errors.full_messages).to include(message), type
+      end
+    end
+
+    it "refuses a lowercase example, which Stripe receives uppercased" do
+      account = build(:taiwan_bank_account, bank_code: "aaaatwtxxxx")
+      account.valid?
+      expect(account.errors.full_messages).to include(message)
+
+      account = build(:taiwan_bank_account, bank_code: " aaaatwtxxxx ")
+      account.valid?
+      expect(account.errors.full_messages).to include(message)
+    end
+
+    it "accepts the example in Stripe test mode, which takes it" do
+      allow(Stripe).to receive(:api_key).and_return("sk_test_dummy")
+      expect(build(:algeria_bank_account, bank_code: "AAAADZDZXXX")).to be_valid
+    end
+
+    it "accepts a real bank code" do
+      expect(build(:algeria_bank_account, bank_code: "EPALDZAL")).to be_valid
+    end
+
+    it "still saves a stored row that already holds the example" do
+      account = create(:algeria_bank_account, bank_code: "EPALDZAL")
+      account.update_column(:bank_number, "AAAADZDZXXX")
+      account.account_holder_full_name = "Renamed"
+      expect(account).to be_valid
+    end
+  end
+
   describe "routing_number" do
     let(:australian_bank_account) { build(:australian_bank_account) }
 

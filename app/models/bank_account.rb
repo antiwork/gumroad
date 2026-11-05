@@ -4,6 +4,48 @@ class BankAccount < ApplicationRecord
   include ExternalId
   include Deletable
 
+  # Form examples Stripe refuses in live mode ("Known test bank accounts cannot be used in live mode.").
+  # The check skips Stripe test mode, which accepts these codes and whose fixtures use them.
+  EXAMPLE_BANK_CODES = {
+    "TaiwanBankAccount" => "AAAATWTXXXX",
+    "MoroccoBankAccount" => "AAAAMAMAXXX",
+    "AntiguaAndBarbudaBankAccount" => "AAAAAGAGXYZ",
+    "SaintLuciaBankAccount" => "AAAALCLCXYZ",
+    "TanzaniaBankAccount" => "AAAATZTXXXX",
+    "NamibiaBankAccount" => "AAAANANXXYZ",
+    "RwandaBankAccount" => "AAAARWRWXXX",
+    "EcuadorBankAccount" => "AAAAECE1XXX",
+    "BotswanaBankAccount" => "AAAABWBWXXX",
+    "OmanBankAccount" => "AAAAOMOMXXX",
+    "MadagascarBankAccount" => "AAAAMGMGXXX",
+    "MoldovaBankAccount" => "AAAAMDMDXXX",
+    "PanamaBankAccount" => "AAAAPAPAXXX",
+    "NigeriaBankAccount" => "AAAANGLAXXX",
+    "ArmeniaBankAccount" => "AAAAAMNNXXX",
+    "EthiopiaBankAccount" => "AAAAETETXXX",
+    "BruneiBankAccount" => "AAAABNBBXXX",
+    "NorthMacedoniaBankAccount" => "AAAAMK2XXXX",
+    "BhutanBankAccount" => "AAAABTBTXXX",
+    "LaosBankAccount" => "AAAALALAXXX",
+    "MozambiqueBankAccount" => "AAAAMZMXXXX",
+    "GabonBankAccount" => "AAAAGAGAXXX",
+    "BahamasBankAccount" => "AAAABSNSXXX",
+    "MongoliaBankAccount" => "AAAAMNUBXXX",
+    "AlgeriaBankAccount" => "AAAADZDZXXX",
+    "MacaoBankAccount" => "AAAAMOMXXXX",
+    "ElSalvadorBankAccount" => "AAAASVS1XXX",
+    "PakistanBankAccount" => "AAAAPKKAXXX",
+    "GuatemalaBankAccount" => "AAAAGTGCXYZ",
+    "MauritiusBankAccount" => "AAAAMUMUXYZ",
+    "KazakhstanBankAccount" => "AAAAKZKZXXX",
+    "AlbaniaBankAccount" => "AAAAALTXXXX",
+    "BahrainBankAccount" => "AAAABHBMXYZ",
+    "JordanBankAccount" => "AAAAJOJOXXX",
+    "AngolaBankAccount" => "AAAAAOAOXXX",
+    "KuwaitBankAccount" => "AAAAKWKWXYZ",
+    "TurkeyBankAccount" => "AAAAPKKAXXX",
+  }.freeze
+
   belongs_to :user, optional: true
   has_many :payments
   belongs_to :credit_card, optional: true
@@ -18,6 +60,8 @@ class BankAccount < ApplicationRecord
 
   validates_presence_of :user, :account_number, :account_number_last_four, :account_holder_full_name,
                         message: "We could not save your bank account information."
+
+  validate :refuse_example_bank_code, unless: -> { Stripe.api_key.to_s.start_with?("sk_test_") }
 
   after_create_commit :handle_stripe_bank_account
   after_create_commit :handle_compliance_info_request
@@ -169,6 +213,14 @@ class BankAccount < ApplicationRecord
   end
 
   private
+    def refuse_example_bank_code
+      example = EXAMPLE_BANK_CODES[self.class.name]
+      return if example.nil? || bank_number.to_s.strip.upcase != example
+      return unless new_record? || will_save_change_to_bank_number?
+
+      errors.add :base, "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code."
+    end
+
     def handle_stripe_bank_account
       HandleNewBankAccountWorker.perform_in(5.seconds, id)
     end
