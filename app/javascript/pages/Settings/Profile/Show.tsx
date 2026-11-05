@@ -277,6 +277,9 @@ export default function SettingsPage() {
       preset.background_color === profileSettings.background_color.toLowerCase() &&
       preset.highlight_color === profileSettings.highlight_color.toLowerCase(),
   );
+  // A stored font that is no longer one of the choices matches none; the first choice then takes
+  // the group's tab stop.
+  const hasChosenFont = FONT_CHOICES.includes(profileSettings.font);
 
   const customLandingPageActive = custom_html_pages_enabled && has_custom_landing_page;
   const showPagesTab = !customLandingPageActive;
@@ -515,9 +518,7 @@ export default function SettingsPage() {
                 >
                   {FONT_CHOICES.map((font, index) => {
                     const isSelected = font === profileSettings.font;
-                    // A stored font that is no longer a choice matches none; the first one then takes
-                    // the group's tab stop.
-                    const isTabStop = profileSettings.font ? isSelected : index === 0;
+                    const isTabStop = hasChosenFont ? isSelected : index === 0;
                     return (
                       <Button
                         role="radio"
