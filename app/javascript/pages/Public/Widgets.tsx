@@ -23,6 +23,7 @@ import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { LinkButton } from "$app/components/ui/LinkButton";
+import { Select } from "$app/components/ui/Select";
 import { Switch } from "$app/components/ui/Switch";
 import { Textarea } from "$app/components/ui/Textarea";
 
@@ -31,6 +32,7 @@ type WidgetsPageProps = {
   display_product_select: boolean;
   products: Product[];
   affiliated_products: Product[];
+  waitlist_products: { id: string; name: string }[];
 };
 
 export default function PublicWidgets() {
@@ -44,6 +46,8 @@ export default function PublicWidgets() {
 
   const copyButtonUID = React.useId();
   const followFormEmbedUID = React.useId();
+  const waitlistSelectUID = React.useId();
+  const [waitlistProductId, setWaitlistProductId] = React.useState("");
   const [followFormEmbedHTML, setFollowFormEmbedHTML] = React.useState("");
   React.useEffect(
     () =>
@@ -51,12 +55,12 @@ export default function PublicWidgets() {
         currentSeller
           ? ReactDOMServer.renderToString(
               <DomainSettingsProvider value={domains}>
-                <FollowFormEmbed sellerId={currentSeller.id} />
+                <FollowFormEmbed sellerId={currentSeller.id} productId={waitlistProductId || undefined} />
               </DomainSettingsProvider>,
             )
           : "",
       ),
-    [currentSeller],
+    [currentSeller, waitlistProductId],
   );
 
   return (
@@ -114,11 +118,30 @@ export default function PublicWidgets() {
                 </Button>
               </CopyToClipboard>
             </Fieldset>
+            {props.waitlist_products.length > 0 ? (
+              <Fieldset>
+                <FieldsetTitle>
+                  <Label htmlFor={waitlistSelectUID}>Waitlist</Label>
+                </FieldsetTitle>
+                <Select
+                  id={waitlistSelectUID}
+                  value={waitlistProductId}
+                  onChange={(evt) => setWaitlistProductId(evt.target.value)}
+                >
+                  <option value="">Subscribe to your profile</option>
+                  {props.waitlist_products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      Waitlist: {product.name}
+                    </option>
+                  ))}
+                </Select>
+              </Fieldset>
+            ) : null}
             <Fieldset>
               <FieldsetTitle>
                 <Label htmlFor={FOLLOW_FORM_EMBED_INPUT_ID}>Test your subscribe form with your email</Label>
               </FieldsetTitle>
-              <FollowFormEmbed sellerId={currentSeller.id} preview />
+              <FollowFormEmbed sellerId={currentSeller.id} productId={waitlistProductId || undefined} preview />
             </Fieldset>
             <Fieldset>
               <FieldsetTitle>
@@ -136,7 +159,12 @@ export default function PublicWidgets() {
   );
 }
 
-const Widgets = ({ display_product_select, products, affiliated_products, default_product }: WidgetsPageProps) => {
+const Widgets = ({
+  display_product_select,
+  products,
+  affiliated_products,
+  default_product,
+}: Omit<WidgetsPageProps, "waitlist_products">) => {
   const [selectedProduct, setSelectedProduct] = React.useState(default_product);
   const [selectedTab, setSelectedTab] = React.useState<Tab>("overlay");
   const overlayTabpanelUID = React.useId();

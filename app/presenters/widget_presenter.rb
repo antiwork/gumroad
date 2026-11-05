@@ -16,6 +16,7 @@ class WidgetPresenter
       products: products.map { |product| product_props(product) },
       affiliated_products: affiliated_products.map { |product| affiliated_product_props(product) },
       default_product: product_props(default_product),
+      waitlist_products: waitlist_products,
     }
   end
 
@@ -35,6 +36,13 @@ class WidgetPresenter
     else
       Link.none
     end
+  end
+
+  def waitlist_products
+    return [] unless user_signed_in?
+
+    seller.links.where(deleted_at: nil).order(created_at: :desc)
+          .filter_map { |product| { id: product.external_id, name: product.name } if product.accepts_waitlist_signups? }
   end
 
   private

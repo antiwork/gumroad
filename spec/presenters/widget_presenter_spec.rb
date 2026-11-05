@@ -17,6 +17,22 @@ describe WidgetPresenter do
     }
   end
 
+  describe "#waitlist_products" do
+    let(:seller) { create(:user) }
+
+    it "lists only the seller's unpublished products that accept waitlist signups" do
+      waitlisted = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
+      create(:product, user: seller, waitlist_enabled: true)
+      create(:product, user: seller, purchase_disabled_at: Time.current)
+
+      expect(described_class.new(seller:).waitlist_products).to eq([{ id: waitlisted.external_id, name: waitlisted.name }])
+    end
+
+    it "is empty when signed out" do
+      expect(described_class.new(seller: nil).waitlist_products).to eq([])
+    end
+  end
+
   describe "#widget_props" do
     context "when user is signed in" do
       let(:user) { create(:user) }
@@ -29,6 +45,7 @@ describe WidgetPresenter do
             {
               display_product_select: true,
               default_product: widget_product_props(demo_product),
+              waitlist_products: [],
               products: [widget_product_props(demo_product)],
               affiliated_products: [],
             })
@@ -43,6 +60,7 @@ describe WidgetPresenter do
             {
               display_product_select: true,
               default_product: widget_product_props(product),
+              waitlist_products: [],
               products: [widget_product_props(product)],
               affiliated_products: [],
             })
@@ -61,6 +79,7 @@ describe WidgetPresenter do
             {
               display_product_select: true,
               default_product: widget_product_props(demo_product),
+              waitlist_products: [],
               products: [widget_product_props(demo_product)],
               affiliated_products: [
                 widget_product_props(affiliate_product, url: referral_url)
@@ -81,6 +100,7 @@ describe WidgetPresenter do
               {
                 display_product_select: false,
                 default_product: widget_product_props(old_product),
+                waitlist_products: [],
                 products: [
                   widget_product_props(new_product),
                   widget_product_props(old_product)
@@ -98,6 +118,7 @@ describe WidgetPresenter do
               {
                 display_product_select: true,
                 default_product: widget_product_props(new_product),
+                waitlist_products: [],
                 products: [
                   widget_product_props(new_product),
                   widget_product_props(old_product)
@@ -117,6 +138,7 @@ describe WidgetPresenter do
           {
             display_product_select: false,
             default_product: widget_product_props(demo_product),
+            waitlist_products: [],
             products: [widget_product_props(demo_product)],
             affiliated_products: [],
           })
