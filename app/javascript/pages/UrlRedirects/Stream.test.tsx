@@ -36,7 +36,9 @@ const { handlers, player, props } = vi.hoisted(() => {
           content_length: null,
         },
         {
-          sources: ["https://example.com/attachments/no-guid/original/session.mp4"],
+          // A null guid never arrives with the placeholder in practice; the guard is what keeps
+          // String.replace from being handed null, so the placeholder has to come back untouched.
+          sources: ["https://example.com/attachments/ef64f2fef0d6c776a337050020423fc0/original/session.mp4"],
           guid: null,
           title: "Outside the attachments layout",
           tracks: [],
@@ -75,12 +77,12 @@ it("uses player duration for a nullable-length initial seek and progress write",
   expect(trackMediaLocationChanged).toHaveBeenLastCalledWith(expect.objectContaining({ location: 3711 }));
 });
 
-it("passes a source through unchanged when the file has no guid to restore", async () => {
+it("skips the placeholder replacement when the file has no guid", async () => {
   render(<Stream />);
   await waitFor(() => expect(createJWPlayer).toHaveBeenCalled());
   const options = vi.mocked(createJWPlayer).mock.calls[0]?.[1];
   const playlist = options?.playlist ?? [];
   expect(playlist.map((video) => video.sources.map((source) => source.file))).toContainEqual([
-    "https://example.com/attachments/no-guid/original/session.mp4",
+    "https://example.com/attachments/ef64f2fef0d6c776a337050020423fc0/original/session.mp4",
   ]);
 });
