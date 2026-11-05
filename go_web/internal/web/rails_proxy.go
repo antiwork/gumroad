@@ -52,7 +52,7 @@ type upstreamList struct {
 
 func NewRailsProxy(upstreamsFile string) *RailsProxy {
 	p := &RailsProxy{path: upstreamsFile, now: time.Now, pick: rand.IntN}
-	p.snapshot.Store(&upstreamList{})
+	p.reload(&upstreamList{})
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	transport.DialContext = (&net.Dialer{Timeout: railsDialTimeout, KeepAlive: 30 * time.Second}).DialContext
@@ -117,7 +117,12 @@ var errNoUpstream = errors.New("no Rails upstream")
 // rest keep the last one.
 func (p *RailsProxy) upstream(skip string) (string, error) {
 	list := p.snapshot.Load()
-	if p.now().Sub(list.checkedAt) >= railsUpstreamsTTL && p.refreshing.TryLock() {
+	if len(list.hosts) == 0 {
+		// Nothing to keep using: wait for whoever is reading the file, then read it again.
+		p.refreshing.Lock()
+		list = p.reload(p.snapshot.Load())
+		p.refreshing.Unlock()
+	} else if p.now().Sub(list.checkedAt) >= railsUpstreamsTTL && p.refreshing.TryLock() {
 		list = p.reload(list)
 		p.refreshing.Unlock()
 	}
@@ -187,7 +192,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func retryable(req *http.Request, err error) bool {
 	var dialErr *net.OpError
-	return (req.Method == http.MethodGet || req.Method == http.MethodHead) &&
+	return (req.Method == http.MethodGet || req.Method == http.MethodHead) && (req.Body == nil || req.Body == http.NoBody) &&
 		errors.As(err, &dialErr) && dialErr.Op == "dial" && !errors.Is(err, context.Canceled)
 }
 

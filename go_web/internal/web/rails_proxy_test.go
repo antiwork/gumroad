@@ -123,6 +123,9 @@ func TestRailsProxyRetriesAGetOrHeadOnAHostThatRefuses(t *testing.T) {
 	if w := tp.forward(httptest.NewRequest("POST", "/x", strings.NewReader("a=1"))); w.Code != http.StatusInternalServerError {
 		t.Errorf("a POST must not be sent twice: %d", w.Code)
 	}
+	if w := tp.forward(httptest.NewRequest("GET", "/x", strings.NewReader("a=1"))); w.Code != http.StatusInternalServerError {
+		t.Errorf("a GET with a body must not be retried with the closed body: %d", w.Code)
+	}
 	if strings.Join(methods, ",") != "GET,HEAD" {
 		t.Errorf("Rails saw %v", methods)
 	}
@@ -150,6 +153,29 @@ func TestRailsProxyRereadsTheListWhenItChanges(t *testing.T) {
 	tp.clock = tp.clock.Add(railsUpstreamsTTL)
 	if got := body(); got != "second" {
 		t.Errorf("a failed read keeps the last good list: %s", got)
+	}
+}
+
+func TestRailsProxyLoadsTheListBeforeTheFirstRequest(t *testing.T) {
+	rails := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer rails.Close()
+	tp := newTestProxy(t, addr(rails))
+	if hosts := tp.snapshot.Load().hosts; len(hosts) != 1 {
+		t.Fatalf("hosts at start: %v", hosts)
+	}
+	// While another request holds the refresh, a request with no list waits for one.
+	tp.snapshot.Store(&upstreamList{})
+	tp.refreshing.Lock()
+	done := make(chan int)
+	go func() { done <- tp.forward(httptest.NewRequest("GET", "/x", nil)).Code }()
+	select {
+	case code := <-done:
+		t.Fatalf("answered %d without a list", code)
+	case <-time.After(50 * time.Millisecond):
+	}
+	tp.refreshing.Unlock()
+	if code := <-done; code != 200 {
+		t.Errorf("after the refresh: %d", code)
 	}
 }
 
