@@ -39,3 +39,11 @@ func SplitEncryptedMessage(message string) (sealed, iv []byte, ok bool) {
 	}
 	return sealed, iv, true
 }
+
+// JoinEncryptedMessage is MessageEncryptor's AEAD output: the ciphertext, IV and auth tag
+// in strict Base64. sealed is what AEAD.Seal returns, the tag last.
+func JoinEncryptedMessage(sealed, iv []byte) string {
+	enc := base64.StdEncoding
+	data, tag := sealed[:len(sealed)-encryptorTagLength], sealed[len(sealed)-encryptorTagLength:]
+	return enc.EncodeToString(data) + encryptorSeparator + enc.EncodeToString(iv) + encryptorSeparator + enc.EncodeToString(tag)
+}

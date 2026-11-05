@@ -21,7 +21,11 @@ type railsCookies struct {
 	WrongPurposeCookie  string         `json:"wrong_purpose_cookie"`
 	NoMetadataCookie    string         `json:"no_metadata_cookie"`
 	NoMetadataReadBack  any            `json:"no_metadata_read_back"`
-	CSRFCases           []struct {
+	WrittenSession      struct {
+		SetCookie string `json:"set_cookie"`
+		Envelope  string `json:"envelope"`
+	} `json:"written_session"`
+	CSRFCases []struct {
 		Name     string
 		Token    string
 		Path     string

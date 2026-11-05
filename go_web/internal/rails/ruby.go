@@ -41,6 +41,20 @@ func (h *Hash) Set(key string, value any) {
 	h.values[key] = value
 }
 
+// Delete is Hash#delete.
+func (h *Hash) Delete(key string) {
+	if _, ok := h.values[key]; !ok {
+		return
+	}
+	delete(h.values, key)
+	for i, k := range h.keys {
+		if k == key {
+			h.keys = append(h.keys[:i:i], h.keys[i+1:]...)
+			break
+		}
+	}
+}
+
 func (h *Hash) Keys() []string { return h.keys }
 
 func (h *Hash) Len() int { return len(h.keys) }

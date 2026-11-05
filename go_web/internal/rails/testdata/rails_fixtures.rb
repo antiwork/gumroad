@@ -34,6 +34,8 @@ class FixtureApp < Rails::Application
   # Mirrors config/application.rb. PublicExceptions uses it as the charset; the default,
   # Encoding::UTF_8, prints "UTF-8".
   config.encoding = "utf-8"
+  config.action_controller.escape_json_responses = true
+  config.active_support.escape_js_separators_in_json = true
   config.eager_load = false
   config.secret_key_base = SECRET_KEY_BASE
   config.logger = Logger.new(nil)
@@ -60,6 +62,8 @@ class FixtureApp < Rails::Application
     get "/unauthorized" => "fixtures#unauthorized"
     get "/gif" => "fixtures#gif"
     get "/json" => "fixtures#json"
+    get "/write_session" => "fixtures#write_session"
+    get "/cookie_lines" => "fixtures#cookie_lines"
   end
 end
 
@@ -103,6 +107,25 @@ class FixturesController < ActionController::Base
 
   def json
     render json: { success: true }
+  end
+
+  # A plain cookie, as inertia_rails writes XSRF-TOKEN, and domain: :all with a tld_length.
+  def cookie_lines
+    cookies["XSRF-TOKEN"] = "a+b/c="
+    cookies[:tld] = { value: "v", domain: :all, tld_length: 2 }
+    cookies[:tld3] = { value: "v", domain: :all, tld_length: 3 }
+    head :ok
+  end
+
+  # A new session, written once: keys land in the order they are set, nil values are
+  # dropped, and the CSRF token is stored last, at commit.
+  def write_session
+    session[:signup_referrer] = "<a href=\"x\">&amp;</a> /\u00fc\u2028 \u2713"
+    session[:recommender_model_name] = "sales"
+    session[:dropped] = nil
+    session[:nested] = { "a" => [1, 2.5, nil, true] }
+    form_authenticity_token
+    head :ok
   end
 end
 
@@ -207,7 +230,33 @@ public_exceptions = ActionDispatch::PublicExceptions.new(File.join(ROOT, "public
 end
 write("rails/testdata/rails_responses.json", responses)
 
+_, written_headers, = request("GET", "/write_session")
+written_line = set_cookies(written_headers).find { |l| l.start_with?("#{SESSION_KEY}=") }
+written_value = cookie_value([written_line], SESSION_KEY)
+primary_key = ActiveSupport::KeyGenerator.new(SECRET_KEY_BASE, iterations: 1000, hash_digest_class: OpenSSL::Digest::SHA256)
+  .generate_key("authenticated encrypted cookie", 32)
+data, iv, tag = written_value.split("--").map { |part| Base64.strict_decode64(part) }
+cipher = OpenSSL::Cipher.new("aes-256-gcm").decrypt
+cipher.key = primary_key
+cipher.iv = iv
+cipher.auth_tag = tag
+cipher.auth_data = ""
+written_envelope = cipher.update(data) + cipher.final
+
+cookie_hosts = ["gumroad.com", "seller.gumroad.com", "a.b.gumroad.com", "shop.example.co.uk", "localhost", "10.0.0.1"]
+write("rails/testdata/cookie_writing.json", {
+        lines: cookie_hosts.to_h do |host|
+          env = Rack::MockRequest.env_for("https://#{host}/cookie_lines")
+          _, headers, = APP.call(env)
+          [host, set_cookies(headers)]
+        end,
+        escape: ["a b", "+/=", "\u00fc", "~*-._!'()", "%", "a\u2028b", "--"].to_h { |input| [input, Rack::Utils.escape(input)] },
+        months: [Time.utc(2026, 1, 31, 10, 0, 0, 123_456), Time.utc(2026, 3, 31), Time.utc(2024, 1, 29), Time.utc(2026, 12, 15, 23, 59, 59)]
+          .map { |t| { from: t.iso8601(6), plus_month: (t + 1.month).iso8601(6) } },
+      })
+
 write("session/testdata/rails_cookies.json", {
+        written_session: { set_cookie: written_line, envelope: written_envelope },
         secret_key_base: SECRET_KEY_BASE,
         session_cookie:,
         session_plaintext: session_plain,

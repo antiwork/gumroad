@@ -1,8 +1,12 @@
 {
+  "written_session": {
+    "set_cookie": "_gumroad_app_session=RXbDtDXqg1dGpdgv%2Fv6bVQKt6OUKalxUKDZiSjK3MDFKldtIjfx9fq5ALg4SknRwh0q7y76T0WN5FRvKqFnGfw%2FsE5PzHayHXfNVY6k17X15TD6qwPOWA3VUFmQZdrXcotyeWQtU6anEfXy9VBIsohIsctO0iUy%2FJj1oa4EUa%2Fn0BYrnInEEvhs5nTWvbOL310iT%2B0R9DqFHOxGEGOHMQ89dEDEkOf7eHsomBmD76Aq8oUsQVJuXj2Unsn7V3dIVfFuZu3FqmkeEshYMi610iSI7LJtJup9iRewemihfe5A3w%2B0GuG58vsehlDSGdM0UHNLFx%2BTCgdfrODKB3hY1wG9xnjBkAkyZTLPiLsVIwHU%2B4l6Re4uJSgz1CsnAGFCvE9d%2FEIIRLTrm6cZ2EX7bcB9KW%2FVEGWGKzLuMzWdpdXg9boUu3Lcg15eyv1t4r9WdQKWoz60lEkogTPkI1vWscLkxhiNeW85zpFqh1He9swWA0ti2HpxkQzNvlIar6UaQLXoB3WZnhAudkvG1d4Zna0%2F7X8qzTUOP4SnJuRjN4oYQyMyqtd0hTKbB151Ks2t4xr8LKgv3--VSiSwjAzqbGxSZRM--yKW%2F4Ay%2Bj6lz%2B4sosz2cdQ%3D%3D; domain=gumroad.com; path=/; expires=Sat, 05 Dec 2026 06:54:31 GMT; secure; httponly; samesite=lax",
+    "envelope": "{\"_rails\":{\"message\":\"eyJzZXNzaW9uX2lkIjoiOTVjM2QyMWExYjhhZjAyNGM4MzEwNzU0NjBkOGFkOWIiLCJzaWdudXBfcmVmZXJyZXIiOiJcdTAwM2NhIGhyZWY9XCJ4XCJcdTAwM2VcdTAwMjZhbXA7XHUwMDNjL2FcdTAwM2UgL8O8XHUyMDI4IOKckyIsInJlY29tbWVuZGVyX21vZGVsX25hbWUiOiJzYWxlcyIsIm5lc3RlZCI6eyJhIjpbMSwyLjUsbnVsbCx0cnVlXX0sIl9jc3JmX3Rva2VuIjoiNl9udmlhdDBtZTdlT1dZNHoyb3BGV005RzFjRDFzYlgxTmtoWHhzT2NOOCJ9\",\"exp\":\"2026-12-05T06:54:31.752Z\",\"pur\":\"cookie._gumroad_app_session\"}}"
+  },
   "secret_key_base": "go-web-test-secret-key-base",
-  "session_cookie": "jJ6W2OdfWe9stDJOeCy8a+3krXNFVPLaIdNhCFVQEMltHMvoSIuOaHMjbKJMlMxrq4P8cEgqh/m5o/paWtijRMzacC8yUle3A0gso8BXJFI/AYcA1ayxy0aEdRPGs5vWw8DPnQ7TpXSZ/rZvqD8I36zGttEmSs693y1VpvmG7E2pgOijJBIA6T3WXjyBnZWLWCyrBM0rgbzX5iwEKRgRgJYxSw4xafkcHgkHjWTliefsdqDTKkMWkvWoS7wK4PQt2MeVRXqWSKmcolK0ULgRLEYf+AgXZDAYODpsZkwAefLOru+4qCPUAmuxEJomQJFAST/h9nJf7GDKX9iocv8CckoTrl+oaAk9Jx2DoMD1Y+tMo8ZhKaw1JC5UOvMJzqzbEhrB3obNKJvOelZJgHXtkm0fEiGb42pmMUqisUvN0pPeJq3P++47sMSme6HKnIbnPjy4Wc9iMpFy5LM6vEztPSQZOXkj7m6EZJt4HVv58DaPszLRP0e0KoealVVRkNyi0xS9dnpIItiaEbhBmXknSut2S+I3YQbcnYIqUjtm363LBZqPN9LiEKidrSV+hV6PavbQxeLTsDByFoPTOYJtdkboQ4o3005C8awFx7WhDkAWBrDkSvOZYSV0F0Zuqw==--EzSTh20Yos4BJKTl--FQ7hhCE0nj4DW8p4CRbI/Q==",
+  "session_cookie": "sHCwt5GplchbypyHBpP5ZVlqrNMmQSA00o1M7RazLmgeYwFZ1XhwfHUBBnU6Xt0b+2C3+n6fUp0hndnXeH+BfjJ9WgcrJ2zzVDHixNgZnpwiH2Zx7dmJbYb350y5JVIZq8LnhrWdONthpbEqoG5EeZiEAwSuqnm0OHUU5POLCWLGeTuazBcXTQEAd73AHK6CoGIhT1k+B5cwphQwgjIj0V2Pyzi4TppN4HIHA+JKPcB1LjUoKg+RzjLzkan9DBMn3HjzWS+1RKr5ZbtwksB+vcCA7U0kLrwGJPL1Vei6B4hkNdKvRPdZMiBoKLslf3AutvyK5mBXapieItzy/qpWlyc+22XT2A+6P96l7Dov35eS8Oz+utCuXyIP6kct5Gt/6t+/5OkjU6BB8eXfngdYSckb7eniOHl1EK4ez6y/isVNYgKZVPcyizbbbfcN3OJuQoySvOg/3fR7O5MCLLTb76ZAS+8pv11m3JfpOenAMVbADtxP4ZLMjOhCFNoDahxiEezMH6Q7NoyFxzD9TWxCzyEpqwzy6fF1wFLuIZP2kIXIBKSVDurWnO/SrMZhfi6j0GimfkDWUHRcJMCL4oth9wZBywVmIsvfdqVSj1B0Z89RCS7gvpUj+opJUytANg==--UrhkYQdznM0kVq2H--w8TU0XHY0nIuHq6r9EX27A==",
   "session_plaintext": {
-    "session_id": "f519a99b94965c6e9ae4ceea2f22999e",
+    "session_id": "fd2bebf031feb91cbb4e1fdd01cb28a6",
     "warden.user.user.key": [
       [
         1000001
@@ -14,21 +18,21 @@
     },
     "signup_referrer": "www.google.com",
     "mobile_param": "1",
-    "_csrf_token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0"
+    "_csrf_token": "-4fq-9_Arstz9gsykrTCLLYCIYaGQVRdHE-IkAR8YD0"
   },
-  "current_seller_cookie": "WNDkFH13BuNrQ0qMvMLfBFiBpAaMkQxrNtRQ/VUa772cULmnDE6CXVjHnrOgveGToTAd0c35xWtLlpMRMx5rY8xQVvlsJXAZ70MHKNGl7cn8--5iyRR4ya6G6Hyr/S--FakQmFHjpe6Vm2RtE6EtVw==",
-  "rotated_cookie": "qfr5+tEcMCmZiqcRLpyxYCqfIZdmBLmTGEz22XYmwe1F2TaNkxKkQGqtgYwU5HImaMwZoSASOLjlt31szNcNH11a+ly1B8fD0nFY0r+7bWMO383NI7DMcqZgApKNq5yZzQsxYzVMsdAcrCn1uAgN0uJqZt3VbYr9q9SdICarhp0jGIdOjwIhGNH/r7wmMhp2Uqf4a3A06VFO96rojSu9gp3BB26FQ/qiQzDEoMPZxREETA==--Bf73/GWBEaUezbnI--431l4kHMZmg4014QDkLgLQ==",
+  "current_seller_cookie": "bPIcw4LMfWLN3RDFUgRAd3++yiuicFFdp5haWI4cOudqvxgdpPlv/ime58ZVGk63lySqir6Q4Fx7Y3Gxu3aBpWtcIULF44UJr60Skx5qlDAo--oDgjqL6K75gPePJ2--we6vY7iguh2OtmNhNNM6qQ==",
+  "rotated_cookie": "vLMgtx0zzHo5zsfLehg/BPNZ19qZds7JttwkP/euHW4BvaNdsLBXuNcakEziLfqU8bebTJ7pVHVgODAxJwCcg96rYwmXpEB/zozw3FYbW8BN/sbJRxHC0C4U+OSyVxX82BpvcVU2YYySHX6tKHX7ZnIo7MLR+dPGFuW1vQ1cNN0TJLFKUKjRMNJ7qxY/BxDprJOOsW5FhVNZW9o/lg0jm/DQDZ2ANCvx6n2XiCYfFkowTg==--wouJ66BcLtUAv71C--qg3h2w1LdfCXZCgb3dzQBg==",
   "rotated_read_back": [
     [
       1000003
     ],
     "salt"
   ],
-  "expired_cookie": "YtAH46gu42kzgUHTuUgmesxqcCAAW2OVYxtdGuNApw2bX4JPIUoylVARpguzvu0i3qZoM+pii5PYMdKBkJSDIJky7PBB7CY1L3s5+ZEbSaAq4eO3qCJt3Zi7chsYp7nM31SDDk5RVx0Qnzh3QJRAyOWxJLPKXFuXFQlaSAZCLRxZJnFEgU4Xxm6QTRlEDoWCW6pIPcpTZLxmNwNokmuGO9l9ajtay9dEUJLRW76nJB6Iug==--WfpiRdD520PvT0ma--kbTsrYXE2s/eUK78XspfFQ==",
+  "expired_cookie": "5RBse5DHGm7jWQ0//lEkEFv/lE61T3r/erqe3bcmfbjeReeInGNKZ2+ABVGicngT7Enw4cntq0s1Ui1dypKLeJFmmEtlccpjdUXy3at3WGUfeBShnwHBYh/6ayy8/0x39lSzMwddeT76pW6gCDen8tWRm2iC6WP/rRSDI+MnED6vazXr/rtAad6uZo5kE5V9bY0N2bXYMwNkG/vYMy6rqLMobM9L7Axg9sUFowqPxYw58w==--5KtIOWJoMCEpEa4Q--U4xkf4Am2bGtVP9xKl4oag==",
   "expired_read_back": null,
-  "wrong_purpose_cookie": "mXPOny3bwa+PyH52u+DaKpImXYrpwtaFe1bJ1Um2qx+jMLNdYz3y6yi9PJ0+JkOuGtics0xmee31mKE6nA5MGig+g8dovJ4ODdFJ10tmHCtzrR6vau0EsxHiYipGVtU2i1dEDjBw8hFXmHl37HN99tou/8hNU489wNy6zXkugExjYTXZRStQYX1z52l9--nk0m8eza1c4woJUh--0bdvjGbO53avry+SYR01GQ==",
+  "wrong_purpose_cookie": "qo2KXjz475kIpYlL9iBKQP0gxNRj5B0n6ws9S2l295oA8FMnc/55HUZetkNEXuLUEG3cb0j+UIsVLY2qjrW6qzSzFvcZ0Z4GwIoTfXS6h3kq2X8xvaUmJGDkqY86ud5C7gyX0KM1nt4+XQ2wE0B0/YCX0TB6oOLMYd0x+qKMyyJMjWsPMAkRyeSG3iR3--T4LK/UWNGq6weUO8--5nByorUGhysh/zy8+k8eLw==",
   "wrong_purpose_read_back": null,
-  "no_metadata_cookie": "m3AxAR57D76k02JY6TE695S1NLF0X9Ym2EjC47xm0dTBRsBirZeRRFQqAd2I0g5RVfwQlQMXenyl9IPRPgQ=--U9Bt+Ewn5t27nvi5--3vhHTTVAKz3rdPND0JdwhQ==",
+  "no_metadata_cookie": "xYt9LBLh2oHoxV/XKZi8FHn6aSf6YswT0/2ppow19slCzarj3PEuUuiQLFFRZb4MQnx0XtqlLs9u3tVcZL4=--jExl8Cpr8J4DzpxM--28sk5K8FyZKu5c60d1Padw==",
   "no_metadata_read_back": [
     [
       1000003
@@ -38,7 +42,7 @@
   "csrf_cases": [
     {
       "name": "global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw",
       "path": "/media_locations",
       "origin": null,
       "status": 200,
@@ -46,7 +50,7 @@
     },
     {
       "name": "global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw",
       "path": "/check",
       "origin": null,
       "status": 200,
@@ -54,7 +58,7 @@
     },
     {
       "name": "global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw",
       "path": "/check",
       "origin": "https://gumroad.com",
       "status": 200,
@@ -62,7 +66,7 @@
     },
     {
       "name": "global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB-RKU5p-_pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b-uodg",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw",
       "path": "/check",
       "origin": "https://evil.example",
       "status": 200,
@@ -70,7 +74,7 @@
     },
     {
       "name": "per_form",
-      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "token": "V5oxSXGi4500idkqWeLcT2c1ejJDQfB40oOmDBHNoPIDEjm-xKH2TKgxjKrhXY00gXdlpHEwGLhbL8Nfe_0VQQ",
       "path": "/media_locations",
       "origin": null,
       "status": 200,
@@ -78,7 +82,7 @@
     },
     {
       "name": "per_form",
-      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "token": "V5oxSXGi4500idkqWeLcT2c1ejJDQfB40oOmDBHNoPIDEjm-xKH2TKgxjKrhXY00gXdlpHEwGLhbL8Nfe_0VQQ",
       "path": "/check",
       "origin": null,
       "status": 200,
@@ -86,7 +90,7 @@
     },
     {
       "name": "per_form",
-      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "token": "V5oxSXGi4500idkqWeLcT2c1ejJDQfB40oOmDBHNoPIDEjm-xKH2TKgxjKrhXY00gXdlpHEwGLhbL8Nfe_0VQQ",
       "path": "/check",
       "origin": "https://gumroad.com",
       "status": 200,
@@ -94,7 +98,7 @@
     },
     {
       "name": "per_form",
-      "token": "qWsq2GHUV89TPzhB0IJe1XzW8DgQz4p5m-rq4-h1okXGWbY97Zd2Qx63k4YBMg714UnH464vEtgYWAb4eEa-_Q",
+      "token": "V5oxSXGi4500idkqWeLcT2c1ejJDQfB40oOmDBHNoPIDEjm-xKH2TKgxjKrhXY00gXdlpHEwGLhbL8Nfe_0VQQ",
       "path": "/check",
       "origin": "https://evil.example",
       "status": 200,
@@ -102,7 +106,7 @@
     },
     {
       "name": "unmasked_real",
-      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "token": "-4fq-9_Arstz9gsykrTCLLYCIYaGQVRdHE-IkAR8YD0",
       "path": "/media_locations",
       "origin": null,
       "status": 200,
@@ -110,7 +114,7 @@
     },
     {
       "name": "unmasked_real",
-      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "token": "-4fq-9_Arstz9gsykrTCLLYCIYaGQVRdHE-IkAR8YD0",
       "path": "/check",
       "origin": null,
       "status": 200,
@@ -118,7 +122,7 @@
     },
     {
       "name": "unmasked_real",
-      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "token": "-4fq-9_Arstz9gsykrTCLLYCIYaGQVRdHE-IkAR8YD0",
       "path": "/check",
       "origin": "https://gumroad.com",
       "status": 200,
@@ -126,7 +130,7 @@
     },
     {
       "name": "unmasked_real",
-      "token": "6kMvibTUQQDa1N9aH4x70yCGRoXKHH77tKYqSfKv6u0",
+      "token": "-4fq-9_Arstz9gsykrTCLLYCIYaGQVRdHE-IkAR8YD0",
       "path": "/check",
       "origin": "https://evil.example",
       "status": 200,
@@ -134,7 +138,7 @@
     },
     {
       "name": "standard_base64_global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw==",
       "path": "/media_locations",
       "origin": null,
       "status": 200,
@@ -142,7 +146,7 @@
     },
     {
       "name": "standard_base64_global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw==",
       "path": "/check",
       "origin": null,
       "status": 200,
@@ -150,7 +154,7 @@
     },
     {
       "name": "standard_base64_global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw==",
       "path": "/check",
       "origin": "https://gumroad.com",
       "status": 200,
@@ -158,7 +162,7 @@
     },
     {
       "name": "standard_base64_global",
-      "token": "MILAqnfESWiQW0wM2hLYtTnKJNsWTHn41XWMXgcB+RKU5p+/pfcRdT2BmD4bH2b26RfAqQsMmfUGVhZ1b+uodg==",
+      "token": "D62lbdZZqTV8jR7qHs3kcjnAgEhPYrpucaQrBVaZFbaX54dunFi7fDFiw3RllG8dXTkaI3Kt4p21kpvI0PTMWw==",
       "path": "/check",
       "origin": "https://evil.example",
       "status": 200,
@@ -230,7 +234,7 @@
     },
     {
       "name": "other_session",
-      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "token": "q6-4NRkm2IwtwMvGaSP1WHScL7QLYEs3jgBYUpGhMuQ1dZJudwpQhRUqtoGRL93Jj4tjT2LN_E2vl1O7JPR8QA",
       "path": "/media_locations",
       "origin": null,
       "status": 200,
@@ -238,7 +242,7 @@
     },
     {
       "name": "other_session",
-      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "token": "q6-4NRkm2IwtwMvGaSP1WHScL7QLYEs3jgBYUpGhMuQ1dZJudwpQhRUqtoGRL93Jj4tjT2LN_E2vl1O7JPR8QA",
       "path": "/check",
       "origin": null,
       "status": 200,
@@ -246,7 +250,7 @@
     },
     {
       "name": "other_session",
-      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "token": "q6-4NRkm2IwtwMvGaSP1WHScL7QLYEs3jgBYUpGhMuQ1dZJudwpQhRUqtoGRL93Jj4tjT2LN_E2vl1O7JPR8QA",
       "path": "/check",
       "origin": "https://gumroad.com",
       "status": 200,
@@ -254,7 +258,7 @@
     },
     {
       "name": "other_session",
-      "token": "ocdNIpS5tz3v99tl6acG3yPGZiu-7moHnN64zyL0EIuOnSTTf3mQZ_xNx-wCvDuGahwAm32Iyucse37cFzbjog",
+      "token": "q6-4NRkm2IwtwMvGaSP1WHScL7QLYEs3jgBYUpGhMuQ1dZJudwpQhRUqtoGRL93Jj4tjT2LN_E2vl1O7JPR8QA",
       "path": "/check",
       "origin": "https://evil.example",
       "status": 200,
