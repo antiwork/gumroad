@@ -101,6 +101,16 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(google_analytics_enabled).to eq("false")
       end
 
+      it "ignores an opted-out seller in the saved cart when a gift-wishlist arrival clears it" do
+        seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller))
+        wishlist_product = create(:wishlist_product, wishlist: create(:wishlist), product: create(:product, user: other_seller))
+
+        get :show, params: { gift_wishlist_product: wishlist_product.external_id }
+
+        expect(google_analytics_enabled).to eq("true")
+      end
+
       it "keeps analytics on when no seller in the cart opted out" do
         cart_with(create(:product, user: seller), create(:product, user: other_seller))
 

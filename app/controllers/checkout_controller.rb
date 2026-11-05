@@ -230,7 +230,7 @@ class CheckoutController < ApplicationController
     # One opted-out seller in the cart turns every third-party tracker off for the page.
     def set_checkout_analytics_meta_tags(cart, seller_context)
       seller_ids = seller_context[:products].map { _1[:seller_id] }
-      seller_ids += cart.visible_cart_products.pluck("links.user_id") if cart
+      seller_ids += cart.visible_cart_products.pluck("links.user_id") if cart && !seller_context[:clear_cart]
       disable_third_party_analytics! if User.where(id: seller_ids.uniq).any?(&:disable_third_party_analytics?)
       set_analytics_meta_tags(seller: nil)
     end
