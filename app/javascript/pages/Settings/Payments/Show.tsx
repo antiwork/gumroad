@@ -1616,7 +1616,7 @@ export default function PaymentsPage() {
           }
         >
           <section className="grid gap-8">
-            <Tabs variant="buttons" className="gap-4" role="radiogroup">
+            <Tabs variant="buttons" className="gap-4" role="radiogroup" aria-label="Payout method">
               {props.bank_account_details.show_bank_account ? (
                 <>
                   <Tab key="bank" isSelected={selectedPayoutMethod === "bank"} asChild>

@@ -240,6 +240,22 @@ describe("Profile settings design tab", () => {
     expect(checkedRadio("Corners")).toEqual(["Medium"]);
   });
 
+  it("keeps the font group reachable when the stored font is no longer a choice", () => {
+    renderDesignTab(settings({ font: "Wingdings" }));
+    const fontRadios = [
+      ...screen.getByRole("radiogroup", { name: "Font" }).querySelectorAll<HTMLElement>("[role=radio]"),
+    ];
+    const [firstFont, secondFont] = fontRadios;
+    if (!firstFont || !secondFont) throw new Error("expected at least two font choices");
+
+    expect(fontRadios.filter((element) => element.tabIndex === 0)).toEqual([firstFont]);
+
+    fireEvent.keyDown(firstFont, { key: "ArrowRight" });
+
+    expect(document.activeElement).toBe(secondFont);
+    expect(secondFont.getAttribute("aria-checked")).toBe("true");
+  });
+
   it("applies a color preset from the keyboard, wrapping from the first to the last", () => {
     renderDesignTab();
     const defaultPreset = radio("Color presets", "Default");

@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -90,6 +90,28 @@ const describedByTexts = (radio: HTMLElement) => {
 };
 
 describe("version selector accessibility", () => {
+  it("names the version picker and gives the group a single tab stop", () => {
+    renderSelector();
+
+    const radios = [
+      ...screen.getByRole("radiogroup", { name: "Version" }).querySelectorAll<HTMLElement>('[role="radio"]'),
+    ];
+
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+  });
+
+  it("moves the version selection with the arrow keys", () => {
+    renderSelector();
+    const listenersEdition = screen.getByRole("radio", { name: "Listener's Edition" });
+    const collectorsEdition = screen.getByRole("radio", { name: "Collector's Edition" });
+
+    fireEvent.keyDown(listenersEdition, { key: "ArrowDown" });
+
+    expect(document.activeElement).toBe(collectorsEdition);
+    expect(collectorsEdition.getAttribute("aria-checked")).toBe("true");
+    expect(listenersEdition.getAttribute("aria-checked")).toBe("false");
+  });
+
   it("exposes price, stock, and description to screen readers via aria-describedby", () => {
     renderSelector();
 
