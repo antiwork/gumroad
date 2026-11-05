@@ -1,0 +1,3876 @@
+{
+  "s3_base_url": "https://s3.amazonaws.com/gumroad/",
+  "owner": "kA5S9YSnmvrlzyfA2sqIyA==",
+  "cases": [
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/My File.pdf",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/My File.pdf",
+      "filename": "My File.pdf",
+      "extension": ".pdf",
+      "display_extension": "PDF",
+      "display_name": "My File"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/archive.tar.gz",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/archive.tar.gz",
+      "filename": "archive.tar.gz",
+      "extension": ".gz",
+      "display_extension": "GZ",
+      "display_name": "archive.tar"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.hidden",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.hidden",
+      "filename": ".hidden",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".hidden"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/noext",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/noext",
+      "filename": "noext",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "noext"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/trailingdot.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/trailingdot.",
+      "filename": "trailingdot.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "trailingdot"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a/b/c.mp4",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a/b/c.mp4",
+      "filename": "a/b/c.mp4",
+      "extension": ".mp4",
+      "display_extension": "MP4",
+      "display_name": "a/b/c"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x..y",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x..y",
+      "filename": "x..y",
+      "extension": ".y",
+      "display_extension": "Y",
+      "display_name": "x."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/..",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/..",
+      "filename": "..",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/dir/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/dir",
+      "filename": "dir",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "dir"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/Résumé final.PDF",
+      "s3": true,
+      "key": "kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/Résumé final.PDF",
+      "filename": "Résumé final.PDF",
+      "extension": ".PDF",
+      "display_extension": "PDF",
+      "display_name": "Résumé final"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/sub/dir/name.epub",
+      "s3": true,
+      "key": "kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/sub/dir/name.epub",
+      "filename": "sub/dir/name.epub",
+      "extension": ".epub",
+      "display_extension": "EPUB",
+      "display_name": "sub/dir/name"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x.zip",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x.zip",
+      "filename": "x.zip",
+      "extension": ".zip",
+      "display_extension": "ZIP",
+      "display_name": "x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a/b.zip",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a/b.zip",
+      "filename": "a/b.zip",
+      "extension": ".zip",
+      "display_extension": "ZIP",
+      "display_name": "a/b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/short/original/a/b.zip",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/short/original/a/b.zip",
+      "filename": "a/b.zip",
+      "extension": ".zip",
+      "display_extension": "ZIP",
+      "display_name": "a/b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/other/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/k.mp3",
+      "s3": true,
+      "key": "files/other/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/k.mp3",
+      "filename": "k.mp3",
+      "extension": ".mp3",
+      "display_extension": "MP3",
+      "display_name": "k"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/other/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/k/l.mp3",
+      "s3": true,
+      "key": "files/other/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/k/l.mp3",
+      "filename": "k/l.mp3",
+      "extension": ".mp3",
+      "display_extension": "MP3",
+      "display_name": "k/l"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/x/y.wav",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/x/y.wav",
+      "filename": "y.wav",
+      "extension": ".wav",
+      "display_extension": "WAV",
+      "display_name": "y"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/a.b/c",
+      "s3": true,
+      "key": "a.b/c",
+      "filename": "c",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "c"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/a.b/c.",
+      "s3": true,
+      "key": "a.b/c.",
+      "filename": "c.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "c"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/日本語.pdf",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/日本語.pdf",
+      "filename": "日本語.pdf",
+      "extension": ".pdf",
+      "display_extension": "PDF",
+      "display_name": "日本語"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/file.日本",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/file.日本",
+      "filename": "file.日本",
+      "extension": ".日本",
+      "display_extension": "日本",
+      "display_name": "file"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/spaces .pdf ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/spaces .pdf ",
+      "filename": "spaces .pdf ",
+      "extension": ".pdf ",
+      "display_extension": "PDF ",
+      "display_name": "spaces "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.b.c.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.b.c.",
+      "filename": "a.b.c.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "a.b.c"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.a.b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.a.b",
+      "filename": ".a.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": ".a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments//aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x.pdf",
+      "s3": true,
+      "key": "attachments//aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x.pdf",
+      "filename": "original/x.pdf",
+      "extension": ".pdf",
+      "display_extension": "PDF",
+      "display_name": "original/x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x.pdf//",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x.pdf",
+      "filename": "x.pdf",
+      "extension": ".pdf",
+      "display_extension": "PDF",
+      "display_name": "x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/",
+      "s3": true,
+      "key": "",
+      "filename": "gumroad",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "gumroad"
+    },
+    {
+      "url": "https://example.com/file.pdf",
+      "s3": false,
+      "key": null,
+      "filename": null,
+      "extension": null,
+      "display_extension": null,
+      "display_name": null
+    },
+    {
+      "url": "",
+      "s3": false,
+      "key": null,
+      "filename": null,
+      "extension": null,
+      "display_extension": null,
+      "display_name": null
+    },
+    {
+      "url": null,
+      "s3": false,
+      "key": null,
+      "filename": null,
+      "extension": null,
+      "display_extension": null,
+      "display_name": null
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x //___11_ xa_a_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x //___11_ xa_a_",
+      "filename": "x //___11_ xa_a_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x //___11_ xa_a_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x //___11_ xa_a_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x //___11_ xa_a_",
+      "filename": "x //___11_ xa_a_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x //___11_ xa_a_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é11_éa",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é11_éa",
+      "filename": "/é11_éa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/é11_éa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é11_éa",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é11_éa",
+      "filename": "/é11_éa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/é11_éa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.",
+      "filename": ".",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.",
+      "filename": ".",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x_//1/aba",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x_//1/aba",
+      "filename": " x_//1/aba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " x_//1/aba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x_//1/aba",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x_//1/aba",
+      "filename": " x_//1/aba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " x_//1/aba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ __/a___aéx/b/b/x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ __/a___aéx/b/b/x",
+      "filename": " __/a___aéx/b/b/x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " __/a___aéx/b/b/x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ __/a___aéx/b/b/x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ __/a___aéx/b/b/x",
+      "filename": " __/a___aéx/b/b/x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " __/a___aéx/b/b/x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béb./..é_/a/xé/ax1 _",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béb./..é_/a/xé/ax1 _",
+      "filename": "béb./..é_/a/xé/ax1 _",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "béb./..é_/a/xé/ax1 _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béb./..é_/a/xé/ax1 _",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béb./..é_/a/xé/ax1 _",
+      "filename": "béb./..é_/a/xé/ax1 _",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "béb./..é_/a/xé/ax1 _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._/1  é é_béxx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._/1  é é_béxx",
+      "filename": "._/1  é é_béxx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._/1  é é_béxx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._/1  é é_béxx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._/1  é é_béxx",
+      "filename": "._/1  é é_béxx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._/1  é é_béxx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a . 1.xb b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a . 1.xb b",
+      "filename": "a . 1.xb b",
+      "extension": ".xb b",
+      "display_extension": "XB B",
+      "display_name": "a . 1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a . 1.xb b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a . 1.xb b",
+      "filename": "a . 1.xb b",
+      "extension": ".xb b",
+      "display_extension": "XB B",
+      "display_name": "a . 1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1 é_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1 é_",
+      "filename": "b 1 é_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b 1 é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1 é_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1 é_",
+      "filename": "b 1 é_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b 1 é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1béé1/__x_é .aé/aé_b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1béé1/__x_é .aé/aé_b",
+      "filename": "x 1béé1/__x_é .aé/aé_b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x 1béé1/__x_é .aé/aé_b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1béé1/__x_é .aé/aé_b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1béé1/__x_é .aé/aé_b",
+      "filename": "x 1béé1/__x_é .aé/aé_b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x 1béé1/__x_é .aé/aé_b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1xa.a_ .ébaabb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1xa.a_ .ébaabb",
+      "filename": "1xa.a_ .ébaabb",
+      "extension": ".ébaabb",
+      "display_extension": "ÉBAABB",
+      "display_name": "1xa.a_ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1xa.a_ .ébaabb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1xa.a_ .ébaabb",
+      "filename": "1xa.a_ .ébaabb",
+      "extension": ".ébaabb",
+      "display_extension": "ÉBAABB",
+      "display_name": "1xa.a_ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//.ax1_bx/ _ba._aa1.aéé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//.ax1_bx/ _ba._aa1.aéé",
+      "filename": "/.ax1_bx/ _ba._aa1.aéé",
+      "extension": ".aéé",
+      "display_extension": "AÉÉ",
+      "display_name": "/.ax1_bx/ _ba._aa1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//.ax1_bx/ _ba._aa1.aéé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//.ax1_bx/ _ba._aa1.aéé",
+      "filename": "/.ax1_bx/ _ba._aa1.aéé",
+      "extension": ".aéé",
+      "display_extension": "AÉÉ",
+      "display_name": "/.ax1_bx/ _ba._aa1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1xébxa_.a/1/_bab",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1xébxa_.a/1/_bab",
+      "filename": "a1xébxa_.a/1/_bab",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a1xébxa_.a/1/_bab"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1xébxa_.a/1/_bab",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1xébxa_.a/1/_bab",
+      "filename": "a1xébxa_.a/1/_bab",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a1xébxa_.a/1/_bab"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x babab1xb 1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x babab1xb 1",
+      "filename": "x babab1xb 1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x babab1xb 1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x babab1xb 1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x babab1xb 1",
+      "filename": "x babab1xb 1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x babab1xb 1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x_xb.1é. .é__éé a x .",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x_xb.1é. .é__éé a x .",
+      "filename": ".x_xb.1é. .é__éé a x .",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": ".x_xb.1é. .é__éé a x "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x_xb.1é. .é__éé a x .",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x_xb.1é. .é__éé a x .",
+      "filename": ".x_xb.1é. .é__éé a x .",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": ".x_xb.1é. .é__éé a x "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1_aé1__ .é b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1_aé1__ .é b",
+      "filename": " 1_aé1__ .é b",
+      "extension": ".é b",
+      "display_extension": "É B",
+      "display_name": " 1_aé1__ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1_aé1__ .é b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1_aé1__ .é b",
+      "filename": " 1_aé1__ .é b",
+      "extension": ".é b",
+      "display_extension": "É B",
+      "display_name": " 1_aé1__ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xa/é xaxbé.x1_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xa/é xaxbé.x1_",
+      "filename": "/xa/é xaxbé.x1_",
+      "extension": ".x1_",
+      "display_extension": "X1_",
+      "display_name": "/xa/é xaxbé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xa/é xaxbé.x1_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xa/é xaxbé.x1_",
+      "filename": "/xa/é xaxbé.x1_",
+      "extension": ".x1_",
+      "display_extension": "X1_",
+      "display_name": "/xa/é xaxbé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_é/_ ./bb1x.b_a11b./ab",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_é/_ ./bb1x.b_a11b./ab",
+      "filename": "_é/_ ./bb1x.b_a11b./ab",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_é/_ ./bb1x.b_a11b./ab"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_é/_ ./bb1x.b_a11b./ab",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_é/_ ./bb1x.b_a11b./ab",
+      "filename": "_é/_ ./bb1x.b_a11b./ab",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_é/_ ./bb1x.b_a11b./ab"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béé a/.x.1xa",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béé a/.x.1xa",
+      "filename": "béé a/.x.1xa",
+      "extension": ".1xa",
+      "display_extension": "1XA",
+      "display_name": "béé a/.x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béé a/.x.1xa",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/béé a/.x.1xa",
+      "filename": "béé a/.x.1xa",
+      "extension": ".1xa",
+      "display_extension": "1XA",
+      "display_name": "béé a/.x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. /éx x1.x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. /éx x1.x",
+      "filename": "a. /éx x1.x",
+      "extension": ".x",
+      "display_extension": "X",
+      "display_name": "a. /éx x1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. /éx x1.x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. /éx x1.x",
+      "filename": "a. /éx x1.x",
+      "extension": ".x",
+      "display_extension": "X",
+      "display_name": "a. /éx x1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/é. x/.é_é1é.a/..x/x1_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/é. x/.é_é1é.a/..x/x1_",
+      "filename": "é/é. x/.é_é1é.a/..x/x1_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é/é. x/.é_é1é.a/..x/x1_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/é. x/.é_é1é.a/..x/x1_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/é. x/.é_é1é.a/..x/x1_",
+      "filename": "é/é. x/.é_é1é.a/..x/x1_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é/é. x/.é_é1é.a/..x/x1_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._11xaxb_x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._11xaxb_x",
+      "filename": "a._11xaxb_x",
+      "extension": "._11xaxb_x",
+      "display_extension": "_11XAXB_X",
+      "display_name": "a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._11xaxb_x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._11xaxb_x",
+      "filename": "a._11xaxb_x",
+      "extension": "._11xaxb_x",
+      "display_extension": "_11XAXB_X",
+      "display_name": "a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ba .a.xxbaa./_ /é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ba .a.xxbaa./_ /é",
+      "filename": "ba .a.xxbaa./_ /é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ba .a.xxbaa./_ /é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ba .a.xxbaa./_ /é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ba .a.xxbaa./_ /é",
+      "filename": "ba .a.xxbaa./_ /é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ba .a.xxbaa./_ /é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 _/1é ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 _/1é ",
+      "filename": "1 _/1é ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1 _/1é "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 _/1é ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 _/1é ",
+      "filename": "1 _/1é ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1 _/1é "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._ 1 ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._ 1 ",
+      "filename": "._ 1 ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._ 1 "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._ 1 ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._ 1 ",
+      "filename": "._ 1 ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._ 1 "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a_ 1éx/a_xa1éa_ébé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a_ 1éx/a_xa1éa_ébé",
+      "filename": "a_ 1éx/a_xa1éa_ébé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a_ 1éx/a_xa1éa_ébé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a_ 1éx/a_xa1éa_ébé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a_ 1éx/a_xa1éa_ébé",
+      "filename": "a_ 1éx/a_xa1éa_ébé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a_ 1éx/a_xa1éa_ébé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b é 1éx a ./b _aax_a.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b é 1éx a ./b _aax_a.",
+      "filename": "b é 1éx a ./b _aax_a.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "b é 1éx a ./b _aax_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b é 1éx a ./b _aax_a.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b é 1éx a ./b _aax_a.",
+      "filename": "b é 1éx a ./b _aax_a.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "b é 1éx a ./b _aax_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b..1_.x__",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b..1_.x__",
+      "filename": " b..1_.x__",
+      "extension": ".x__",
+      "display_extension": "X__",
+      "display_name": " b..1_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b..1_.x__",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b..1_.x__",
+      "filename": " b..1_.x__",
+      "extension": ".x__",
+      "display_extension": "X__",
+      "display_name": " b..1_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1_x bx1_// xé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1_x bx1_// xé",
+      "filename": "bab1_x bx1_// xé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bab1_x bx1_// xé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1_x bx1_// xé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1_x bx1_// xé",
+      "filename": "bab1_x bx1_// xé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bab1_x bx1_// xé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ 11 ...ébxbxé/é1_a1éxax",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ 11 ...ébxbxé/é1_a1éxax",
+      "filename": "_ 11 ...ébxbxé/é1_a1éxax",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_ 11 ...ébxbxé/é1_a1éxax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ 11 ...ébxbxé/é1_a1éxax",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ 11 ...ébxbxé/é1_a1éxax",
+      "filename": "_ 11 ...ébxbxé/é1_a1éxax",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_ 11 ...ébxbxé/é1_a1éxax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a ba_ a/ _x1_ /.éxbbéb.b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a ba_ a/ _x1_ /.éxbbéb.b",
+      "filename": "a ba_ a/ _x1_ /.éxbbéb.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": "a ba_ a/ _x1_ /.éxbbéb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a ba_ a/ _x1_ /.éxbbéb.b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a ba_ a/ _x1_ /.éxbbéb.b",
+      "filename": "a ba_ a/ _x1_ /.éxbbéb.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": "a ba_ a/ _x1_ /.éxbbéb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.1 é 1/.béax/_xxaé.é  _",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.1 é 1/.béax/_xxaé.é  _",
+      "filename": "b.1 é 1/.béax/_xxaé.é  _",
+      "extension": ".é  _",
+      "display_extension": "É  _",
+      "display_name": "b.1 é 1/.béax/_xxaé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.1 é 1/.béax/_xxaé.é  _",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.1 é 1/.béax/_xxaé.é  _",
+      "filename": "b.1 é 1/.béax/_xxaé.é  _",
+      "extension": ".é  _",
+      "display_extension": "É  _",
+      "display_name": "b.1 é 1/.béax/_xxaé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x1__1//_aa _a._x.é1aé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x1__1//_aa _a._x.é1aé",
+      "filename": "_x1__1//_aa _a._x.é1aé",
+      "extension": ".é1aé",
+      "display_extension": "É1AÉ",
+      "display_name": "_x1__1//_aa _a._x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x1__1//_aa _a._x.é1aé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x1__1//_aa _a._x.é1aé",
+      "filename": "_x1__1//_aa _a._x.é1aé",
+      "extension": ".é1aé",
+      "display_extension": "É1AÉ",
+      "display_name": "_x1__1//_aa _a._x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé1a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé1a",
+      "filename": "xé1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "xé1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé1a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé1a",
+      "filename": "xé1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "xé1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éab___./ x1._é_./a.x/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éab___./ x1._é_./a.x",
+      "filename": "/éab___./ x1._é_./a.x",
+      "extension": ".x",
+      "display_extension": "X",
+      "display_name": "/éab___./ x1._é_./a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éab___./ x1._é_./a.x/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éab___./ x1._é_./a.x",
+      "filename": "/éab___./ x1._é_./a.x",
+      "extension": ".x",
+      "display_extension": "X",
+      "display_name": "/éab___./ x1._é_./a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /1x1b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /1x1b",
+      "filename": " /1x1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " /1x1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /1x1b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /1x1b",
+      "filename": " /1x1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " /1x1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1éa1bbxb. b.bé . 1b ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1éa1bbxb. b.bé . 1b ",
+      "filename": ".1éa1bbxb. b.bé . 1b ",
+      "extension": ". 1b ",
+      "display_extension": " 1B ",
+      "display_name": ".1éa1bbxb. b.bé "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1éa1bbxb. b.bé . 1b ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1éa1bbxb. b.bé . 1b ",
+      "filename": ".1éa1bbxb. b.bé . 1b ",
+      "extension": ". 1b ",
+      "display_extension": " 1B ",
+      "display_name": ".1éa1bbxb. b.bé "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéb_x. xb_/a1b aa",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéb_x. xb_/a1b aa",
+      "filename": "aéb_x. xb_/a1b aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "aéb_x. xb_/a1b aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéb_x. xb_/a1b aa",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéb_x. xb_/a1b aa",
+      "filename": "aéb_x. xb_/a1b aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "aéb_x. xb_/a1b aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original///..aéa./éa1a_aé_/ba. b1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original///..aéa./éa1a_aé_/ba. b1",
+      "filename": "//..aéa./éa1a_aé_/ba. b1",
+      "extension": ". b1",
+      "display_extension": " B1",
+      "display_name": "//..aéa./éa1a_aé_/ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original///..aéa./éa1a_aé_/ba. b1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original///..aéa./éa1a_aé_/ba. b1",
+      "filename": "//..aéa./éa1a_aé_/ba. b1",
+      "extension": ". b1",
+      "display_extension": " B1",
+      "display_name": "//..aéa./éa1a_aé_/ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/..",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/..",
+      "filename": "..",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/..",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/..",
+      "filename": "..",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_axxaéx_ba_bé 1x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_axxaéx_ba_bé 1x",
+      "filename": "_axxaéx_ba_bé 1x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_axxaéx_ba_bé 1x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_axxaéx_ba_bé 1x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_axxaéx_ba_bé 1x",
+      "filename": "_axxaéx_ba_bé 1x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_axxaéx_ba_bé 1x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "filename": " ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "filename": " ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.aba1._b x 1b_é1 ba_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.aba1._b x 1b_é1 ba_",
+      "filename": ".aba1._b x 1b_é1 ba_",
+      "extension": "._b x 1b_é1 ba_",
+      "display_extension": "_B X 1B_É1 BA_",
+      "display_name": ".aba1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.aba1._b x 1b_é1 ba_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.aba1._b x 1b_é1 ba_",
+      "filename": ".aba1._b x 1b_é1 ba_",
+      "extension": "._b x 1b_é1 ba_",
+      "display_extension": "_B X 1B_É1 BA_",
+      "display_name": ".aba1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_",
+      "filename": "_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_",
+      "filename": "_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original",
+      "filename": "original",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "original"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original",
+      "filename": "original",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "original"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xa1 . .ab xxb_ ._",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xa1 . .ab xxb_ ._",
+      "filename": "xa1 . .ab xxb_ ._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "xa1 . .ab xxb_ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xa1 . .ab xxb_ ._",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xa1 . .ab xxb_ ._",
+      "filename": "xa1 . .ab xxb_ ._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "xa1 . .ab xxb_ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab__./aaé1abxa/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab__./aaé1abxa",
+      "filename": "ab__./aaé1abxa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ab__./aaé1abxa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab__./aaé1abxa/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab__./aaé1abxa",
+      "filename": "ab__./aaé1abxa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ab__./aaé1abxa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é.",
+      "filename": "/é.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "/é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é.",
+      "filename": "/é.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "/é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1",
+      "filename": "1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1",
+      "filename": "1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aéb._/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aéb._",
+      "filename": " aéb._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": " aéb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aéb._/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aéb._",
+      "filename": " aéb._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": " aéb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b é_11111/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b é_11111",
+      "filename": ".b é_11111",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".b é_11111"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b é_11111/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b é_11111",
+      "filename": ".b é_11111",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".b é_11111"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1a1_xxaé// bb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1a1_xxaé// bb",
+      "filename": "bab1a1_xxaé// bb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bab1a1_xxaé// bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1a1_xxaé// bb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bab1a1_xxaé// bb",
+      "filename": "bab1a1_xxaé// bb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bab1a1_xxaé// bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.aéa/xb/1éx.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.aéa/xb/1éx.",
+      "filename": "é.aéa/xb/1éx.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "é.aéa/xb/1éx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.aéa/xb/1éx.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.aéa/xb/1éx.",
+      "filename": "é.aéa/xb/1éx.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "é.aéa/xb/1éx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original///",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original",
+      "filename": "original",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "original"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original///",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original",
+      "filename": "original",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "original"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  _ _bé/ xax/1.1/.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  _ _bé/ xax/1.1/.",
+      "filename": "  _ _bé/ xax/1.1/.",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "  _ _bé/ xax/1.1/."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  _ _bé/ xax/1.1/.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  _ _bé/ xax/1.1/.",
+      "filename": "  _ _bé/ xax/1.1/.",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "  _ _bé/ xax/1.1/."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x",
+      "filename": " x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ x",
+      "filename": " x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ _1 x xé_x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ _1 x xé_x",
+      "filename": " _1 x xé_x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " _1 x xé_x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ _1 x xé_x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ _1 x xé_x",
+      "filename": " _1 x xé_x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " _1 x xé_x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aé.éxéb_xxx.1_  ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aé.éxéb_xxx.1_  ",
+      "filename": "aé.éxéb_xxx.1_  ",
+      "extension": ".1_  ",
+      "display_extension": "1_  ",
+      "display_name": "aé.éxéb_xxx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aé.éxéb_xxx.1_  ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aé.éxéb_xxx.1_  ",
+      "filename": "aé.éxéb_xxx.1_  ",
+      "extension": ".1_  ",
+      "display_extension": "1_  ",
+      "display_name": "aé.éxéb_xxx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a . 1x_1//xa.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a . 1x_1//xa.",
+      "filename": "1a . 1x_1//xa.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "1a . 1x_1//xa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a . 1x_1//xa.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a . 1x_1//xa.",
+      "filename": "1a . 1x_1//xa.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "1a . 1x_1//xa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11.é 1a_/_1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11.é 1a_/_1",
+      "filename": "11.é 1a_/_1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "11.é 1a_/_1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11.é 1a_/_1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11.é 1a_/_1",
+      "filename": "11.é 1a_/_1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "11.é 1a_/_1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééa xb1/éx_/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééa xb1/éx_",
+      "filename": "ééa xb1/éx_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ééa xb1/éx_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééa xb1/éx_/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééa xb1/éx_",
+      "filename": "ééa xb1/éx_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ééa xb1/éx_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  é.__ /.a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  é.__ /.a",
+      "filename": "  é.__ /.a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "  é.__ /.a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  é.__ /.a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/  é.__ /.a",
+      "filename": "  é.__ /.a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "  é.__ /.a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/aba/.aé1/.xéb_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/aba/.aé1/.xéb_",
+      "filename": "x/aba/.aé1/.xéb_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x/aba/.aé1/.xéb_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/aba/.aé1/.xéb_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/aba/.aé1/.xéb_",
+      "filename": "x/aba/.aé1/.xéb_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x/aba/.aé1/.xéb_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /11 x_x1aa/éé_b11a_a b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /11 x_x1aa/éé_b11a_a b",
+      "filename": " /11 x_x1aa/éé_b11a_a b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " /11 x_x1aa/éé_b11a_a b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /11 x_x1aa/éé_b11a_a b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /11 x_x1aa/éé_b11a_a b",
+      "filename": " /11 x_x1aa/éé_b11a_a b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " /11 x_x1aa/éé_b11a_a b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bébb / / ba",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bébb / / ba",
+      "filename": "11bébb / / ba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "11bébb / / ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bébb / / ba",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bébb / / ba",
+      "filename": "11bébb / / ba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "11bébb / / ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a a1bb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a a1bb",
+      "filename": " a a1bb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " a a1bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a a1bb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a a1bb",
+      "filename": " a a1bb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " a a1bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/a",
+      "filename": "b/a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/a",
+      "filename": "b/a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éx/1bébb. aa1 aabéb_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éx/1bébb. aa1 aabéb_",
+      "filename": "éx/1bébb. aa1 aabéb_",
+      "extension": ". aa1 aabéb_",
+      "display_extension": " AA1 AABÉB_",
+      "display_name": "éx/1bébb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éx/1bébb. aa1 aabéb_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éx/1bébb. aa1 aabéb_",
+      "filename": "éx/1bébb. aa1 aabéb_",
+      "extension": ". aa1 aabéb_",
+      "display_extension": " AA1 AABÉB_",
+      "display_name": "éx/1bébb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éébxb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éébxb",
+      "filename": "éébxb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "éébxb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éébxb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éébxb",
+      "filename": "éébxb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "éébxb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a_aa1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a_aa1",
+      "filename": "1a_aa1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1a_aa1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a_aa1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1a_aa1",
+      "filename": "1a_aa1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1a_aa1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xx éx _ éxb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xx éx _ éxb",
+      "filename": " /xx éx _ éxb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " /xx éx _ éxb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xx éx _ éxb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xx éx _ éxb",
+      "filename": " /xx éx _ éxb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " /xx éx _ éxb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1aéb_bx/a 1aé_a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1aéb_bx/a 1aé_a",
+      "filename": "1aéb_bx/a 1aé_a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1aéb_bx/a 1aé_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1aéb_bx/a 1aé_a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1aéb_bx/a 1aé_a",
+      "filename": "1aéb_bx/a 1aé_a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1aéb_bx/a 1aé_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aa..b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aa..b",
+      "filename": "_aa..b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": "_aa."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aa..b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aa..b",
+      "filename": "_aa..b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": "_aa."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1é.b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1é.b",
+      "filename": ".1é.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": ".1é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1é.b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1é.b",
+      "filename": ".1é.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": ".1é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.11b x__/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.11b x__",
+      "filename": ".11b x__",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".11b x__"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.11b x__/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.11b x__",
+      "filename": ".11b x__",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".11b x__"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééé",
+      "filename": "ééé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ééé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ééé",
+      "filename": "ééé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ééé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1.é1/  /1 _ é_ax",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1.é1/  /1 _ é_ax",
+      "filename": "1.é1/  /1 _ é_ax",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1.é1/  /1 _ é_ax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1.é1/  /1 _ é_ax",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1.é1/  /1 _ é_ax",
+      "filename": "1.é1/  /1 _ é_ax",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1.é1/  /1 _ é_ax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.é_ 1xxa.b1éaxxaa",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.é_ 1xxa.b1éaxxaa",
+      "filename": ".é_ 1xxa.b1éaxxaa",
+      "extension": ".b1éaxxaa",
+      "display_extension": "B1ÉAXXAA",
+      "display_name": ".é_ 1xxa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.é_ 1xxa.b1éaxxaa",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.é_ 1xxa.b1éaxxaa",
+      "filename": ".é_ 1xxa.b1éaxxaa",
+      "extension": ".b1éaxxaa",
+      "display_extension": "B1ÉAXXAA",
+      "display_name": ".é_ 1xxa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.x__1_b1é ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.x__1_b1é ",
+      "filename": "b.x__1_b1é ",
+      "extension": ".x__1_b1é ",
+      "display_extension": "X__1_B1É ",
+      "display_name": "b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.x__1_b1é ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b.x__1_b1é ",
+      "filename": "b.x__1_b1é ",
+      "extension": ".x__1_b1é ",
+      "display_extension": "X__1_B1É ",
+      "display_name": "b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_. abé x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_. abé x",
+      "filename": "/_. abé x",
+      "extension": ". abé x",
+      "display_extension": " ABÉ X",
+      "display_name": "/_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_. abé x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_. abé x",
+      "filename": "/_. abé x",
+      "extension": ". abé x",
+      "display_extension": " ABÉ X",
+      "display_name": "/_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_é/1.é  bx/1x _ax_  é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_é/1.é  bx/1x _ax_  é",
+      "filename": "b_é/1.é  bx/1x _ax_  é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b_é/1.é  bx/1x _ax_  é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_é/1.é  bx/1x _ax_  é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_é/1.é  bx/1x _ax_  é",
+      "filename": "b_é/1.é  bx/1x _ax_  é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b_é/1.é  bx/1x _ax_  é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.xbx 1 aa.a/.xé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.xbx 1 aa.a/.xé",
+      "filename": "1/.xbx 1 aa.a/.xé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1/.xbx 1 aa.a/.xé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.xbx 1 aa.a/.xé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.xbx 1 aa.a/.xé",
+      "filename": "1/.xbx 1 aa.a/.xé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1/.xbx 1 aa.a/.xé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1bx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1bx",
+      "filename": " 1bx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " 1bx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1bx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1bx",
+      "filename": " 1bx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " 1bx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1axb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1axb",
+      "filename": "1axb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1axb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1axb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1axb",
+      "filename": "1axb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1axb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x/xé1b/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x/xé1b",
+      "filename": ".x/xé1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".x/xé1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x/xé1b/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.x/xé1b",
+      "filename": ".x/xé1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".x/xé1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab./a1é/ba",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab./a1é/ba",
+      "filename": "ab./a1é/ba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ab./a1é/ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab./a1é/ba",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab./a1é/ba",
+      "filename": "ab./a1é/ba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ab./a1é/ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1._.x_x/abab béx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1._.x_x/abab béx",
+      "filename": "1._.x_x/abab béx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1._.x_x/abab béx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1._.x_x/abab béx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1._.x_x/abab béx",
+      "filename": "1._.x_x/abab béx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1._.x_x/abab béx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1//__b__1.1x/x1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1//__b__1.1x/x1",
+      "filename": "1//__b__1.1x/x1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1//__b__1.1x/x1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1//__b__1.1x/x1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1//__b__1.1x/x1",
+      "filename": "1//__b__1.1x/x1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1//__b__1.1x/x1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé_ _1a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé_ _1a",
+      "filename": " aé_ _1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " aé_ _1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé_ _1a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé_ _1a",
+      "filename": " aé_ _1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " aé_ _1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é._ é1 b/éx.a.xa._",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é._ é1 b/éx.a.xa._",
+      "filename": "é._ é1 b/éx.a.xa._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "é._ é1 b/éx.a.xa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é._ é1 b/éx.a.xa._",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é._ é1 b/éx.a.xa._",
+      "filename": "é._ é1 b/éx.a.xa._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "é._ é1 b/éx.a.xa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab.éé /b1x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab.éé /b1x",
+      "filename": "ab.éé /b1x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ab.éé /b1x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab.éé /b1x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ab.éé /b1x",
+      "filename": "ab.éé /b1x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ab.éé /b1x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.xb ba/bxa1xxééé é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.xb ba/bxa1xxééé é",
+      "filename": ".xb ba/bxa1xxééé é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".xb ba/bxa1xxééé é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.xb ba/bxa1xxééé é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.xb ba/bxa1xxééé é",
+      "filename": ".xb ba/bxa1xxééé é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".xb ba/bxa1xxééé é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/abbé1./1aéxa..1/ aaaé ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/abbé1./1aéxa..1/ aaaé ",
+      "filename": "abbé1./1aéxa..1/ aaaé ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "abbé1./1aéxa..1/ aaaé "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/abbé1./1aéxa..1/ aaaé ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/abbé1./1aéxa..1/ aaaé ",
+      "filename": "abbé1./1aéxa..1/ aaaé ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "abbé1./1aéxa..1/ aaaé "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é./xéaé_é _é// x_._1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é./xéaé_é _é// x_._1",
+      "filename": "é./xéaé_é _é// x_._1",
+      "extension": "._1",
+      "display_extension": "_1",
+      "display_name": "é./xéaé_é _é// x_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é./xéaé_é _é// x_._1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é./xéaé_é _é// x_._1",
+      "filename": "é./xéaé_é _é// x_._1",
+      "extension": "._1",
+      "display_extension": "_1",
+      "display_name": "é./xéaé_é _é// x_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.1..a__/éb.b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.1..a__/éb.b",
+      "filename": "a.1..a__/éb.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": "a.1..a__/éb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.1..a__/éb.b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.1..a__/éb.b",
+      "filename": "a.1..a__/éb.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": "a.1..a__/éb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé//a._./x_1a.bb._",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé//a._./x_1a.bb._",
+      "filename": "xé//a._./x_1a.bb._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "xé//a._./x_1a.bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé//a._./x_1a.bb._",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé//a._./x_1a.bb._",
+      "filename": "xé//a._./x_1a.bb._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "xé//a._./x_1a.bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a .",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a .",
+      "filename": "a .",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "a "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a .",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a .",
+      "filename": "a .",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "a "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1.aa a/é_  / b/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1.aa a/é_  / b",
+      "filename": " a1.aa a/é_  / b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " a1.aa a/é_  / b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1.aa a/é_  / b/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1.aa a/é_  / b",
+      "filename": " a1.aa a/é_  / b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " a1.aa a/é_  / b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/   a a ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/   a a ",
+      "filename": "   a a ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "   a a "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/   a a ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/   a a ",
+      "filename": "   a a ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "   a a "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /bxéx.1a/bbéba1/b .1é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /bxéx.1a/bbéba1/b .1é",
+      "filename": " /bxéx.1a/bbéba1/b .1é",
+      "extension": ".1é",
+      "display_extension": "1É",
+      "display_name": " /bxéx.1a/bbéba1/b "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /bxéx.1a/bbéba1/b .1é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /bxéx.1a/bbéba1/b .1é",
+      "filename": " /bxéx.1a/bbéba1/b .1é",
+      "extension": ".1é",
+      "display_extension": "1É",
+      "display_name": " /bxéx.1a/bbéba1/b "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x1_aé .é11x//ébbx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x1_aé .é11x//ébbx",
+      "filename": "./x1_aé .é11x//ébbx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "./x1_aé .é11x//ébbx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x1_aé .é11x//ébbx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x1_aé .é11x//ébbx",
+      "filename": "./x1_aé .é11x//ébbx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "./x1_aé .é11x//ébbx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "filename": " ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "filename": " ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b.b1b/éx//x1b.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b.b1b/éx//x1b.",
+      "filename": " b.b1b/éx//x1b.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": " b.b1b/éx//x1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b.b1b/éx//x1b.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b.b1b/éx//x1b.",
+      "filename": " b.b1b/éx//x1b.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": " b.b1b/éx//x1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xa..axx_b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xa..axx_b",
+      "filename": "_ .xa..axx_b",
+      "extension": ".axx_b",
+      "display_extension": "AXX_B",
+      "display_name": "_ .xa."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xa..axx_b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xa..axx_b",
+      "filename": "_ .xa..axx_b",
+      "extension": ".axx_b",
+      "display_extension": "AXX_B",
+      "display_name": "_ .xa."
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//x1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//x1",
+      "filename": "/x1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/x1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//x1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//x1",
+      "filename": "/x1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/x1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/x _b1 1x/éé /1.___",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/x _b1 1x/éé /1.___",
+      "filename": "b/x _b1 1x/éé /1.___",
+      "extension": ".___",
+      "display_extension": "___",
+      "display_name": "b/x _b1 1x/éé /1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/x _b1 1x/éé /1.___",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/x _b1 1x/éé /1.___",
+      "filename": "b/x _b1 1x/éé /1.___",
+      "extension": ".___",
+      "display_extension": "___",
+      "display_name": "b/x _b1 1x/éé /1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. 1a 1éb1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. 1a 1éb1",
+      "filename": ".. 1a 1éb1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".. 1a 1éb1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. 1a 1éb1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. 1a 1éb1",
+      "filename": ".. 1a 1éb1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".. 1a 1éb1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ éa1éa. /",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ éa1éa. ",
+      "filename": " éa1éa. ",
+      "extension": ". ",
+      "display_extension": " ",
+      "display_name": " éa1éa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ éa1éa. /",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ éa1éa. ",
+      "filename": " éa1éa. ",
+      "extension": ". ",
+      "display_extension": " ",
+      "display_name": " éa1éa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a_1x_.1b.aéx/bxa/1b.aé_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a_1x_.1b.aéx/bxa/1b.aé_",
+      "filename": " a_1x_.1b.aéx/bxa/1b.aé_",
+      "extension": ".aé_",
+      "display_extension": "AÉ_",
+      "display_name": " a_1x_.1b.aéx/bxa/1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a_1x_.1b.aéx/bxa/1b.aé_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a_1x_.1b.aéx/bxa/1b.aé_",
+      "filename": " a_1x_.1b.aéx/bxa/1b.aé_",
+      "extension": ".aé_",
+      "display_extension": "AÉ_",
+      "display_name": " a_1x_.1b.aéx/bxa/1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b_ x /_. . é.x_//_ aa",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b_ x /_. . é.x_//_ aa",
+      "filename": ".b_ x /_. . é.x_//_ aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".b_ x /_. . é.x_//_ aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b_ x /_. . é.x_//_ aa",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b_ x /_. . é.x_//_ aa",
+      "filename": ".b_ x /_. . é.x_//_ aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".b_ x /_. . é.x_//_ aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/. aax_1a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/. aax_1a",
+      "filename": ". aax_1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ". aax_1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/. aax_1a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/. aax_1a",
+      "filename": ". aax_1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ". aax_1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxé",
+      "filename": "bxé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bxé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxé",
+      "filename": "bxé",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bxé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/baéa  é b1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/baéa  é b1",
+      "filename": "baéa  é b1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "baéa  é b1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/baéa  é b1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/baéa  é b1",
+      "filename": "baéa  é b1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "baéa  é b1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é_/é1_aéax",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é_/é1_aéax",
+      "filename": "é_/é1_aéax",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é_/é1_aéax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é_/é1_aéax",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é_/é1_aéax",
+      "filename": "é_/é1_aéax",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é_/é1_aéax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b1é1b.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b1é1b.",
+      "filename": "1b1é1b.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "1b1é1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b1é1b.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b1é1b.",
+      "filename": "1b1é1b.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "1b1é1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_/x11é./.a_/x/ _a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_/x11é./.a_/x/ _a",
+      "filename": "/_/x11é./.a_/x/ _a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/_/x11é./.a_/x/ _a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_/x11é./.a_/x/ _a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_/x11é./.a_/x/ _a",
+      "filename": "/_/x11é./.a_/x/ _a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/_/x11é./.a_/x/ _a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ..b//bb..b .é1.b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ..b//bb..b .é1.b",
+      "filename": " ..b//bb..b .é1.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": " ..b//bb..b .é1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ..b//bb..b .é1.b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ..b//bb..b .é1.b",
+      "filename": " ..b//bb..b .é1.b",
+      "extension": ".b",
+      "display_extension": "B",
+      "display_name": " ..b//bb..b .é1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b baé .. __é_.11",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b baé .. __é_.11",
+      "filename": "1b baé .. __é_.11",
+      "extension": ".11",
+      "display_extension": "11",
+      "display_name": "1b baé .. __é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b baé .. __é_.11",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1b baé .. __é_.11",
+      "filename": "1b baé .. __é_.11",
+      "extension": ".11",
+      "display_extension": "11",
+      "display_name": "1b baé .. __é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb_xé1_1a a1x xb1/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb_xé1_1a a1x xb1",
+      "filename": "/xb_xé1_1a a1x xb1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/xb_xé1_1a a1x xb1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb_xé1_1a a1x xb1/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb_xé1_1a a1x xb1",
+      "filename": "/xb_xé1_1a a1x xb1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/xb_xé1_1a a1x xb1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1_.11  é..x_1é ./1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1_.11  é..x_1é ./1",
+      "filename": "1_.11  é..x_1é ./1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1_.11  é..x_1é ./1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1_.11  é..x_1é ./1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1_.11  é..x_1é ./1",
+      "filename": "1_.11  é..x_1é ./1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1_.11  é..x_1é ./1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.// xba__  /1/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.// xba__  /1",
+      "filename": ".// xba__  /1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".// xba__  /1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.// xba__  /1/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.// xba__  /1",
+      "filename": ".// xba__  /1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".// xba__  /1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.",
+      "filename": "._.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "._"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.",
+      "filename": "._.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "._"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xba/x_x//_aa x/x1/1/.b ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xba/x_x//_aa x/x1/1/.b ",
+      "filename": "xba/x_x//_aa x/x1/1/.b ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "xba/x_x//_aa x/x1/1/.b "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xba/x_x//_aa x/x1/1/.b ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xba/x_x//_aa x/x1/1/.b ",
+      "filename": "xba/x_x//_aa x/x1/1/.b ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "xba/x_x//_aa x/x1/1/.b "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xbé11é1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xbé11é1",
+      "filename": "_ .xbé11é1",
+      "extension": ".xbé11é1",
+      "display_extension": "XBÉ11É1",
+      "display_name": "_ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xbé11é1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ .xbé11é1",
+      "filename": "_ .xbé11é1",
+      "extension": ".xbé11é1",
+      "display_extension": "XBÉ11É1",
+      "display_name": "_ "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x_x éxxx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x_x éxxx",
+      "filename": "./x_x éxxx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "./x_x éxxx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x_x éxxx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./x_x éxxx",
+      "filename": "./x_x éxxx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "./x_x éxxx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/é  1/ __bx.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/é  1/ __bx.",
+      "filename": "x/é  1/ __bx.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "x/é  1/ __bx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/é  1/ __bx.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/é  1/ __bx.",
+      "filename": "x/é  1/ __bx.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "x/é  1/ __bx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.abxéaéxbb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.abxéaéxbb",
+      "filename": ".abxéaéxbb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".abxéaéxbb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.abxéaéxbb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.abxéaéxbb",
+      "filename": ".abxéaéxbb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".abxéaéxbb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éaé/1é /.aaaxb/ b1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éaé/1é /.aaaxb/ b1",
+      "filename": "/éaé/1é /.aaaxb/ b1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/éaé/1é /.aaaxb/ b1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éaé/1é /.aaaxb/ b1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éaé/1é /.aaaxb/ b1",
+      "filename": "/éaé/1é /.aaaxb/ b1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/éaé/1é /.aaaxb/ b1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b",
+      "filename": "/b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b",
+      "filename": "/b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_//a111é  bb.xéx1 b/b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_//a111é  bb.xéx1 b/b",
+      "filename": "_//a111é  bb.xéx1 b/b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_//a111é  bb.xéx1 b/b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_//a111é  bb.xéx1 b/b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_//a111é  bb.xéx1 b/b",
+      "filename": "_//a111é  bb.xéx1 b/b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_//a111é  bb.xéx1 b/b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b .axb.a/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b .axb.a",
+      "filename": "b .axb.a",
+      "extension": ".a",
+      "display_extension": "A",
+      "display_name": "b .axb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b .axb.a/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b .axb.a",
+      "filename": "b .axb.a",
+      "extension": ".a",
+      "display_extension": "A",
+      "display_name": "b .axb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aé1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aé1",
+      "filename": "_aé1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_aé1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aé1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_aé1",
+      "filename": "_aé1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_aé1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xb_/ /1axéx_.abé_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xb_/ /1axéx_.abé_",
+      "filename": "xb_/ /1axéx_.abé_",
+      "extension": ".abé_",
+      "display_extension": "ABÉ_",
+      "display_name": "xb_/ /1axéx_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xb_/ /1axéx_.abé_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xb_/ /1axéx_.abé_",
+      "filename": "xb_/ /1axéx_.abé_",
+      "extension": ".abé_",
+      "display_extension": "ABÉ_",
+      "display_name": "xb_/ /1axéx_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.a_./11/_1/.aéa/bx /ba",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.a_./11/_1/.aéa/bx /ba",
+      "filename": "a.a_./11/_1/.aéa/bx /ba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a.a_./11/_1/.aéa/bx /ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.a_./11/_1/.aéa/bx /ba",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a.a_./11/_1/.aéa/bx /ba",
+      "filename": "a.a_./11/_1/.aéa/bx /ba",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a.a_./11/_1/.aéa/bx /ba"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxb./1_é_xab/1 a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxb./1_é_xab/1 a",
+      "filename": "éxb./1_é_xab/1 a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "éxb./1_é_xab/1 a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxb./1_é_xab/1 a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxb./1_é_xab/1 a",
+      "filename": "éxb./1_é_xab/1 a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "éxb./1_é_xab/1 a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxx_xb._1 é/ a a éb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxx_xb._1 é/ a a éb",
+      "filename": "éxx_xb._1 é/ a a éb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "éxx_xb._1 é/ a a éb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxx_xb._1 é/ a a éb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/éxx_xb._1 é/ a a éb",
+      "filename": "éxx_xb._1 é/ a a éb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "éxx_xb._1 é/ a a éb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxééa1é1/b __",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxééa1é1/b __",
+      "filename": "bxééa1é1/b __",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bxééa1é1/b __"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxééa1é1/b __",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bxééa1é1/b __",
+      "filename": "bxééa1é1/b __",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bxééa1é1/b __"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bbab _",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bbab _",
+      "filename": "11bbab _",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "11bbab _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bbab _",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/11bbab _",
+      "filename": "11bbab _",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "11bbab _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "filename": " ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ ",
+      "filename": " ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bbaa/x___ba/é_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bbaa/x___ba/é_",
+      "filename": "bbaa/x___ba/é_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bbaa/x___ba/é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bbaa/x___ba/é_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/bbaa/x___ba/é_",
+      "filename": "bbaa/x___ba/é_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "bbaa/x___ba/é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1é/bb_x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1é/bb_x",
+      "filename": " a1é/bb_x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " a1é/bb_x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1é/bb_x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a1é/bb_x",
+      "filename": " a1é/bb_x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " a1é/bb_x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.aa",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.aa",
+      "filename": "1/.aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1/.aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.aa",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/.aa",
+      "filename": "1/.aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1/.aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._xé_1/. .ab.//a_a _.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._xé_1/. .ab.//a_a _.",
+      "filename": "a._xé_1/. .ab.//a_a _.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "a._xé_1/. .ab.//a_a _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._xé_1/. .ab.//a_a _.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a._xé_1/. .ab.//a_a _.",
+      "filename": "a._xé_1/. .ab.//a_a _.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "a._xé_1/. .ab.//a_a _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_xxbé1x. x1éxa_é/__ééa",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_xxbé1x. x1éxa_é/__ééa",
+      "filename": "_xxbé1x. x1éxa_é/__ééa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_xxbé1x. x1éxa_é/__ééa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_xxbé1x. x1éxa_é/__ééa",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_xxbé1x. x1éxa_é/__ééa",
+      "filename": "_xxbé1x. x1éxa_é/__ééa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_xxbé1x. x1éxa_é/__ééa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original",
+      "filename": "original",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "original"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original",
+      "filename": "original",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "original"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ax.a éb x_/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ax.a éb x_",
+      "filename": "ax.a éb x_",
+      "extension": ".a éb x_",
+      "display_extension": "A ÉB X_",
+      "display_name": "ax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ax.a éb x_/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ax.a éb x_",
+      "filename": "ax.a éb x_",
+      "extension": ".a éb x_",
+      "display_extension": "A ÉB X_",
+      "display_name": "ax"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1 1b/_.1 .b/a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1 1b/_.1 .b/a",
+      "filename": "x 1 1b/_.1 .b/a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x 1 1b/_.1 .b/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1 1b/_.1 .b/a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x 1 1b/_.1 .b/a",
+      "filename": "x 1 1b/_.1 .b/a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x 1 1b/_.1 .b/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/axéa_1/ x_xé/.  . b/x ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/axéa_1/ x_xé/.  . b/x ",
+      "filename": "axéa_1/ x_xé/.  . b/x ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "axéa_1/ x_xé/.  . b/x "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/axéa_1/ x_xé/.  . b/x ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/axéa_1/ x_xé/.  . b/x ",
+      "filename": "axéa_1/ x_xé/.  . b/x ",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "axéa_1/ x_xé/.  . b/x "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é._b_a/_.é1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é._b_a/_.é1",
+      "filename": "1é._b_a/_.é1",
+      "extension": ".é1",
+      "display_extension": "É1",
+      "display_name": "1é._b_a/_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é._b_a/_.é1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é._b_a/_.é1",
+      "filename": "1é._b_a/_.é1",
+      "extension": ".é1",
+      "display_extension": "É1",
+      "display_name": "1é._b_a/_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a/.x  1_a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a/.x  1_a",
+      "filename": "/a/.x  1_a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/a/.x  1_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a/.x  1_a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a/.x  1_a",
+      "filename": "/a/.x  1_a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/a/.x  1_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/éa/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/éa",
+      "filename": "x/éa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x/éa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/éa/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x/éa",
+      "filename": "x/éa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x/éa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xébééa x b_baé_ba. _.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xébééa x b_baé_ba. _.",
+      "filename": "/xébééa x b_baé_ba. _.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "/xébééa x b_baé_ba. _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xébééa x b_baé_ba. _.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xébééa x b_baé_ba. _.",
+      "filename": "/xébééa x b_baé_ba. _.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "/xébééa x b_baé_ba. _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b éb_aéxa bb/1 _",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b éb_aéxa bb/1 _",
+      "filename": "b éb_aéxa bb/1 _",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b éb_aéxa bb/1 _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b éb_aéxa bb/1 _",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b éb_aéxa bb/1 _",
+      "filename": "b éb_aéxa bb/1 _",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b éb_aéxa bb/1 _"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé //xaxb_bab.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé //xaxb_bab.",
+      "filename": "xé //xaxb_bab.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "xé //xaxb_bab"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé //xaxb_bab.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xé //xaxb_bab.",
+      "filename": "xé //xaxb_bab.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "xé //xaxb_bab"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xbbb_é.a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xbbb_é.a",
+      "filename": " /xbbb_é.a",
+      "extension": ".a",
+      "display_extension": "A",
+      "display_name": " /xbbb_é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xbbb_é.a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ /xbbb_é.a",
+      "filename": " /xbbb_é.a",
+      "extension": ".a",
+      "display_extension": "A",
+      "display_name": " /xbbb_é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b1éa_a ./aa éé 1 a_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b1éa_a ./aa éé 1 a_",
+      "filename": ".b1éa_a ./aa éé 1 a_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".b1éa_a ./aa éé 1 a_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b1éa_a ./aa éé 1 a_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.b1éa_a ./aa éé 1 a_",
+      "filename": ".b1éa_a ./aa éé 1 a_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": ".b1éa_a ./aa éé 1 a_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x/.éé1/_a  é _é1/  1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x/.éé1/_a  é _é1/  1",
+      "filename": "_x/.éé1/_a  é _é1/  1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_x/.éé1/_a  é _é1/  1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x/.éé1/_a  é _é1/  1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_x/.éé1/_a  é _é1/  1",
+      "filename": "_x/.éé1/_a  é _é1/  1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_x/.éé1/_a  é _é1/  1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a 1é_aé.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a 1é_aé.",
+      "filename": "a 1é_aé.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "a 1é_aé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a 1é_aé.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a 1é_aé.",
+      "filename": "a 1é_aé.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "a 1é_aé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/1. x.b_b111 ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/1. x.b_b111 ",
+      "filename": "é/1. x.b_b111 ",
+      "extension": ".b_b111 ",
+      "display_extension": "B_B111 ",
+      "display_name": "é/1. x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/1. x.b_b111 ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é/1. x.b_b111 ",
+      "filename": "é/1. x.b_b111 ",
+      "extension": ".b_b111 ",
+      "display_extension": "B_B111 ",
+      "display_name": "é/1. x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.//bxb__ 11é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.//bxb__ 11é",
+      "filename": "._.//bxb__ 11é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._.//bxb__ 11é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.//bxb__ 11é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._.//bxb__ 11é",
+      "filename": "._.//bxb__ 11é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._.//bxb__ 11é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b./_xx/__.aaaé1.x. ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b./_xx/__.aaaé1.x. ",
+      "filename": "/b./_xx/__.aaaé1.x. ",
+      "extension": ". ",
+      "display_extension": " ",
+      "display_name": "/b./_xx/__.aaaé1.x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b./_xx/__.aaaé1.x. ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b./_xx/__.aaaé1.x. ",
+      "filename": "/b./_xx/__.aaaé1.x. ",
+      "extension": ". ",
+      "display_extension": " ",
+      "display_name": "/b./_xx/__.aaaé1.x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_/_é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_/_é",
+      "filename": "_/_é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_/_é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_/_é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_/_é",
+      "filename": "_/_é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_/_é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.é/é1b1a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.é/é1b1a",
+      "filename": "é.é/é1b1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é.é/é1b1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.é/é1b1a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é.é/é1b1a",
+      "filename": "é.é/é1b1a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é.é/é1b1a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._xé b 1éx __é_b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._xé b 1éx __é_b",
+      "filename": "._xé b 1éx __é_b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._xé b 1éx __é_b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._xé b 1éx __é_b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/._xé b 1éx __é_b",
+      "filename": "._xé b 1éx __é_b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "._xé b 1éx __é_b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b1_ xxxbb .a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b1_ xxxbb .a",
+      "filename": "b1_ xxxbb .a",
+      "extension": ".a",
+      "display_extension": "A",
+      "display_name": "b1_ xxxbb "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b1_ xxxbb .a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b1_ xxxbb .a",
+      "filename": "b1_ xxxbb .a",
+      "extension": ".a",
+      "display_extension": "A",
+      "display_name": "b1_ xxxbb "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é1b.é_baé_a/é/_a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é1b.é_baé_a/é/_a",
+      "filename": "é1b.é_baé_a/é/_a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é1b.é_baé_a/é/_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é1b.é_baé_a/é/_a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/é1b.é_baé_a/é/_a",
+      "filename": "é1b.é_baé_a/é/_a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "é1b.é_baé_a/é/_a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ébx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ébx",
+      "filename": "ébx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ébx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ébx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ébx",
+      "filename": "ébx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "ébx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_",
+      "filename": "b_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b_",
+      "filename": "b_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb/1é._",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb/1é._",
+      "filename": "/xb/1é._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "/xb/1é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb/1é._",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//xb/1é._",
+      "filename": "/xb/1é._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": "/xb/1é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/_é... 1béé/x//x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/_é... 1béé/x//x",
+      "filename": "b/_é... 1béé/x//x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b/_é... 1béé/x//x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/_é... 1béé/x//x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b/_é... 1béé/x//x",
+      "filename": "b/_é... 1béé/x//x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b/_é... 1béé/x//x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1x.xb xé_ ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1x.xb xé_ ",
+      "filename": ".1x.xb xé_ ",
+      "extension": ".xb xé_ ",
+      "display_extension": "XB XÉ_ ",
+      "display_name": ".1x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1x.xb xé_ ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.1x.xb xé_ ",
+      "filename": ".1x.xb xé_ ",
+      "extension": ".xb xé_ ",
+      "display_extension": "XB XÉ_ ",
+      "display_name": ".1x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é_",
+      "filename": "/é_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//é_",
+      "filename": "/é_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/é_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ _éé///x/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ _éé///x",
+      "filename": "_ _éé///x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_ _éé///x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ _éé///x/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_ _éé///x",
+      "filename": "_ _éé///x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "_ _éé///x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b _x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b _x",
+      "filename": " b _x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " b _x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b _x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ b _x",
+      "filename": " b _x",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " b _x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 xx/b.xé/.ab a/a1 1/1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 xx/b.xé/.ab a/a1 1/1",
+      "filename": "1 xx/b.xé/.ab a/a1 1/1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1 xx/b.xé/.ab a/a1 1/1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 xx/b.xé/.ab a/a1 1/1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1 xx/b.xé/.ab a/a1 1/1",
+      "filename": "1 xx/b.xé/.ab a/a1 1/1",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1 xx/b.xé/.ab a/a1 1/1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéaab__xx_ é/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéaab__xx_ é",
+      "filename": "aéaab__xx_ é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "aéaab__xx_ é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéaab__xx_ é/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/aéaab__xx_ é",
+      "filename": "aéaab__xx_ é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "aéaab__xx_ é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/é1éxé.b_11_.1é11  ",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/é1éxé.b_11_.1é11  ",
+      "filename": "1/é1éxé.b_11_.1é11  ",
+      "extension": ".1é11  ",
+      "display_extension": "1É11  ",
+      "display_name": "1/é1éxé.b_11_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/é1éxé.b_11_.1é11  ",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1/é1éxé.b_11_.1é11  ",
+      "filename": "1/é1éxé.b_11_.1é11  ",
+      "extension": ".1é11  ",
+      "display_extension": "1É11  ",
+      "display_name": "1/é1éxé.b_11_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé__1._",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé__1._",
+      "filename": " aé__1._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": " aé__1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé__1._",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ aé__1._",
+      "filename": " aé__1._",
+      "extension": "._",
+      "display_extension": "_",
+      "display_name": " aé__1"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./b_._.b. aa/ é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./b_._.b. aa/ é",
+      "filename": "./b_._.b. aa/ é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "./b_._.b. aa/ é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./b_._.b. aa/ é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/./b_._.b. aa/ é",
+      "filename": "./b_._.b. aa/ é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "./b_._.b. aa/ é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1__ ba.b1/_/xb1_b1é",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1__ ba.b1/_/xb1_b1é",
+      "filename": "1__ ba.b1/_/xb1_b1é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1__ ba.b1/_/xb1_b1é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1__ ba.b1/_/xb1_b1é",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1__ ba.b1/_/xb1_b1é",
+      "filename": "1__ ba.b1/_/xb1_b1é",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "1__ ba.b1/_/xb1_b1é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xx/xéé.  éax__ba",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xx/xéé.  éax__ba",
+      "filename": "xx/xéé.  éax__ba",
+      "extension": ".  éax__ba",
+      "display_extension": "  ÉAX__BA",
+      "display_name": "xx/xéé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xx/xéé.  éax__ba",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/xx/xéé.  éax__ba",
+      "filename": "xx/xéé.  éax__ba",
+      "extension": ".  éax__ba",
+      "display_extension": "  ÉAX__BA",
+      "display_name": "xx/xéé"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x  é/x._x1éx/1/a.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x  é/x._x1éx/1/a.",
+      "filename": "x  é/x._x1éx/1/a.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "x  é/x._x1éx/1/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x  é/x._x1éx/1/a.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x  é/x._x1éx/1/a.",
+      "filename": "x  é/x._x1éx/1/a.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "x  é/x._x1éx/1/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. 1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. 1",
+      "filename": "a. 1",
+      "extension": ". 1",
+      "display_extension": " 1",
+      "display_name": "a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. 1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a. 1",
+      "filename": "a. 1",
+      "extension": ". 1",
+      "display_extension": " 1",
+      "display_name": "a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b __éx./1éé1bb  b_",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b __éx./1éé1bb  b_",
+      "filename": "/b __éx./1éé1bb  b_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/b __éx./1éé1bb  b_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b __éx./1éé1bb  b_",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//b __éx./1éé1bb  b_",
+      "filename": "/b __éx./1éé1bb  b_",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/b __éx./1éé1bb  b_"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/____bx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/____bx",
+      "filename": "____bx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "____bx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/____bx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/____bx",
+      "filename": "____bx",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "____bx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_éaé___xaé/1 bb.é 1xaé1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_éaé___xaé/1 bb.é 1xaé1",
+      "filename": "/_éaé___xaé/1 bb.é 1xaé1",
+      "extension": ".é 1xaé1",
+      "display_extension": "É 1XAÉ1",
+      "display_name": "/_éaé___xaé/1 bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_éaé___xaé/1 bb.é 1xaé1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_éaé___xaé/1 bb.é 1xaé1",
+      "filename": "/_éaé___xaé/1 bb.é 1xaé1",
+      "extension": ".é 1xaé1",
+      "display_extension": "É 1XAÉ1",
+      "display_name": "/_éaé___xaé/1 bb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_a1.1 ééx./",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_a1.1 ééx.",
+      "filename": "_a1.1 ééx.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "_a1.1 ééx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_a1.1 ééx./",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/_a1.1 ééx.",
+      "filename": "_a1.1 ééx.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": "_a1.1 ééx"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_axa/.a.bx",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_axa/.a.bx",
+      "filename": "/_axa/.a.bx",
+      "extension": ".bx",
+      "display_extension": "BX",
+      "display_name": "/_axa/.a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_axa/.a.bx",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//_axa/.a.bx",
+      "filename": "/_axa/.a.bx",
+      "extension": ".bx",
+      "display_extension": "BX",
+      "display_name": "/_axa/.a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//1b./é_ é/__",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//1b./é_ é/__",
+      "filename": "/1b./é_ é/__",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/1b./é_ é/__"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//1b./é_ é/__",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//1b./é_ é/__",
+      "filename": "/1b./é_ é/__",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/1b./é_ é/__"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a.1/bx1./ba 1aa.éb/a.",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a.1/bx1./ba 1aa.éb/a.",
+      "filename": " a.1/bx1./ba 1aa.éb/a.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": " a.1/bx1./ba 1aa.éb/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a.1/bx1./ba 1aa.éb/a.",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ a.1/bx1./ba 1aa.éb/a.",
+      "filename": " a.1/bx1./ba 1aa.éb/a.",
+      "extension": ".",
+      "display_extension": "",
+      "display_name": " a.1/bx1./ba 1aa.éb/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. /aaéa1/ éx_11/ b .x",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. /aaéa1/ éx_11/ b .x",
+      "filename": ".. /aaéa1/ éx_11/ b .x",
+      "extension": ".x",
+      "display_extension": "X",
+      "display_name": ".. /aaéa1/ éx_11/ b "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. /aaéa1/ éx_11/ b .x",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/.. /aaéa1/ éx_11/ b .x",
+      "filename": ".. /aaéa1/ éx_11/ b .x",
+      "extension": ".x",
+      "display_extension": "X",
+      "display_name": ".. /aaéa1/ éx_11/ b "
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éba1éa/a_é.éaa_éx_xé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éba1éa/a_é.éaa_éx_xé",
+      "filename": "/éba1éa/a_é.éaa_éx_xé",
+      "extension": ".éaa_éx_xé",
+      "display_extension": "ÉAA_ÉX_XÉ",
+      "display_name": "/éba1éa/a_é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éba1éa/a_é.éaa_éx_xé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//éba1éa/a_é.éaa_éx_xé",
+      "filename": "/éba1éa/a_é.éaa_éx_xé",
+      "extension": ".éaa_éx_xé",
+      "display_extension": "ÉAA_ÉX_XÉ",
+      "display_name": "/éba1éa/a_é"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1baé_._bxa.1a/aa/",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1baé_._bxa.1a/aa",
+      "filename": " 1baé_._bxa.1a/aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " 1baé_._bxa.1a/aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1baé_._bxa.1a/aa/",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/ 1baé_._bxa.1a/aa",
+      "filename": " 1baé_._bxa.1a/aa",
+      "extension": "",
+      "display_extension": "",
+      "display_name": " 1baé_._bxa.1a/aa"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1b",
+      "filename": "b 1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b 1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/b 1b",
+      "filename": "b 1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "b 1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é/_/b/_x._./a.1",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é/_/b/_x._./a.1",
+      "filename": "1é/_/b/_x._./a.1",
+      "extension": ".1",
+      "display_extension": "1",
+      "display_name": "1é/_/b/_x._./a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é/_/b/_x._./a.1",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/1é/_/b/_x._./a.1",
+      "filename": "1é/_/b/_x._./a.1",
+      "extension": ".1",
+      "display_extension": "1",
+      "display_name": "1é/_/b/_x._./a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x_éb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x_éb",
+      "filename": "x_éb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x_éb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x_éb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x_éb",
+      "filename": "x_éb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "x_éb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1__bxéb",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1__bxéb",
+      "filename": "a1__bxéb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a1__bxéb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1__bxéb",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/a1__bxéb",
+      "filename": "a1__bxéb",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "a1__bxéb"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original// b11xx1b",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original// b11xx1b",
+      "filename": "/ b11xx1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/ b11xx1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original// b11xx1b",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original// b11xx1b",
+      "filename": "/ b11xx1b",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/ b11xx1b"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x b/ a/_a/bé /1x/.x.xé",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x b/ a/_a/bé /1x/.x.xé",
+      "filename": "x b/ a/_a/bé /1x/.x.xé",
+      "extension": ".xé",
+      "display_extension": "XÉ",
+      "display_name": "x b/ a/_a/bé /1x/.x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x b/ a/_a/bé /1x/.x.xé",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original/x b/ a/_a/bé /1x/.x.xé",
+      "filename": "x b/ a/_a/bé /1x/.x.xé",
+      "extension": ".xé",
+      "display_extension": "XÉ",
+      "display_name": "x b/ a/_a/bé /1x/.x"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a",
+      "s3": true,
+      "key": "attachments/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a",
+      "filename": "/a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/a"
+    },
+    {
+      "url": "https://s3.amazonaws.com/gumroad/files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a",
+      "s3": true,
+      "key": "files/kA5S9YSnmvrlzyfA2sqIyA==/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/original//a",
+      "filename": "/a",
+      "extension": "",
+      "display_extension": "",
+      "display_name": "/a"
+    }
+  ]
+}

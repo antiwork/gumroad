@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
@@ -14,8 +15,11 @@ import (
 // RichContent is a rich_contents row. The description is decoded on first use, since a titled
 // page answers has_editor_content? without it.
 type RichContent struct {
+	id              int64
 	Title           sql.NullString
 	DescriptionJSON []byte
+	updatedAt       time.Time
+	position        int64
 	decoded         bool
 	nodes           any
 }

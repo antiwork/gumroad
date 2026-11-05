@@ -81,26 +81,10 @@ func register(app *web.App, deps Deps, now func() time.Time) *handler {
 
 type config struct {
 	env *web.Environment
-	// "#{PROTOCOL}://#{DOMAIN}" and the parts of a "#{PROTOCOL}://<username>.#{ROOT_DOMAIN}" host,
-	// with the scheme's default port dropped as url_for drops it.
-	domainURL       string
-	subdomainPrefix string
-	subdomainSuffix string
 }
 
 func newConfig(env *web.Environment) *config {
-	withoutDefaultPort := func(host string) string {
-		if (env.Protocol == "https" && strings.HasSuffix(host, ":443")) || (env.Protocol == "http" && strings.HasSuffix(host, ":80")) {
-			return host[:strings.LastIndexByte(host, ':')]
-		}
-		return host
-	}
-	return &config{
-		env:             env,
-		domainURL:       env.Protocol + "://" + withoutDefaultPort(env.Domain),
-		subdomainPrefix: env.Protocol + "://",
-		subdomainSuffix: "." + withoutDefaultPort(env.RootDomain),
-	}
+	return &config{env: env}
 }
 
 type handler struct {

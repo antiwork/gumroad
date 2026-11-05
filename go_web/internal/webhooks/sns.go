@@ -394,7 +394,7 @@ func certFetchTarget(rawURL string) (string, error) {
 	if !u.hasHost || !snsCertHost.MatchString(u.host) {
 		return "", errors.New("signing cert is not hosted by AWS")
 	}
-	if rubyExtname(u.path) != ".pem" {
+	if rails.FileExtname(u.path) != ".pem" {
 		return "", errors.New("the SigningCertURL must link to a .pem file")
 	}
 	return certFetchURL(u), nil

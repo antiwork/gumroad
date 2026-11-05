@@ -127,6 +127,11 @@ type loader struct {
 	provider                *owner
 	providerLoaded          bool
 
+	// display reads the files as download_attributes does: every column, ordered once more
+	// by position, so ties fall as they do for its SELECT product_files.*.
+	display   bool
+	displayed []*displayFile
+
 	products         map[int64]*product // nil for a missing row
 	categories       map[int64]*category
 	categoryHasFiles map[int64]bool
@@ -265,6 +270,9 @@ func (l *loader) purchasedVariantFiles() ([]ProductFile, error) {
 }
 
 func (l *loader) files(query string, args ...any) ([]ProductFile, error) {
+	if l.display {
+		return l.displayFiles(strings.Replace(query, fileColumns, displayColumns, 1)+", `product_files`.`position` ASC", args...)
+	}
 	rows, err := l.db.QueryContext(l.ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -734,7 +742,8 @@ func (l *loader) aliveRichContents(key contentOwner) ([]*RichContent, error) {
 	if contents, ok := l.contents[key]; ok {
 		return contents, nil
 	}
-	rows, err := l.db.QueryContext(l.ctx, "SELECT `rich_contents`.`title`, `rich_contents`.`description` FROM `rich_contents`"+
+	rows, err := l.db.QueryContext(l.ctx, "SELECT `rich_contents`.`id`, `rich_contents`.`title`, `rich_contents`.`description`,"+
+		" `rich_contents`.`updated_at`, `rich_contents`.`position` FROM `rich_contents`"+
 		" WHERE `rich_contents`.`entity_id` = ? AND `rich_contents`.`entity_type` = ? AND `rich_contents`.`deleted_at` IS NULL", key.id, key.entityType)
 	if err != nil {
 		return nil, err
@@ -743,7 +752,7 @@ func (l *loader) aliveRichContents(key contentOwner) ([]*RichContent, error) {
 	contents := []*RichContent{}
 	for rows.Next() {
 		c := &RichContent{}
-		if err := rows.Scan(&c.Title, &c.DescriptionJSON); err != nil {
+		if err := rows.Scan(&c.id, &c.Title, &c.DescriptionJSON, &c.updatedAt, &c.position); err != nil {
 			return nil, err
 		}
 		contents = append(contents, c)

@@ -288,29 +288,7 @@ func (cfg *config) longURL(link *product, owner *user) (string, error) {
 	if !presentString(username) {
 		username = owner.externalID
 	}
-	host := cfg.domainURL
-	if presentString(username) {
-		host = cfg.subdomainPrefix + strings.ReplaceAll(username.String, "_", "-") + cfg.subdomainSuffix
-	}
-	return host + "/l/" + escapeSegment(permalink), nil
-}
-
-func isAlnum(c byte) bool {
-	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-}
-
-// escapeSegment is Journey::Router::Utils.escape_segment.
-func escapeSegment(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if isAlnum(c) || strings.IndexByte("-._~!$&'()*+,;=:@", c) >= 0 {
-			b.WriteByte(c)
-		} else {
-			fmt.Fprintf(&b, "%%%02X", c)
-		}
-	}
-	return b.String()
+	return cfg.env.ProductLongURL(username.String, permalink), nil
 }
 
 // importedCustomerJSON is ImportedCustomer#as_json(without_license_key: true).

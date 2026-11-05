@@ -170,3 +170,23 @@ func TestRotatedSpotsCookiesUnderTheOldKey(t *testing.T) {
 		t.Error("the primary key, and a cookie that opens under neither")
 	}
 }
+
+// The envelope Rails 8.1's cookie jar writes for cookies.encrypted[:confirmed_redirect] =
+// { value: "tok123", httponly: true }, decrypted.
+func TestEncryptWithoutExpiryMatchesRails(t *testing.T) {
+	c, err := NewCodec("probe-secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, iv, ok := rails.SplitEncryptedMessage(c.Encrypt("confirmed_redirect", []byte(`"tok123"`), time.Time{}))
+	if !ok {
+		t.Fatal("not an encrypted message")
+	}
+	plain, err := c.aeads[0].Open(nil, iv, sealed, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := `{"_rails":{"message":"InRvazEyMyI=","exp":null,"pur":"cookie.confirmed_redirect"}}`; string(plain) != want {
+		t.Errorf("got %s\nwant %s", plain, want)
+	}
+}
