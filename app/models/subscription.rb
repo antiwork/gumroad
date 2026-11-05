@@ -698,6 +698,8 @@ class Subscription < ApplicationRecord
   def reusable_pending_indian_card(billing_info: nil, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     return unless india_card_mandate_pending_restart_enabled?
     return unless renewal_disabled_due_to_indian_card_mandate? && stripe_mandate_id.present?
+    # The stored mandate was sized before the seller's price change, so the restart needs a new one.
+    return if restart_tier_price_cents.present?
 
     card = credit_card
     setup_intent_id = card&.stripe_setup_intent_id
@@ -744,15 +746,27 @@ class Subscription < ApplicationRecord
   def indian_card_mandate_terms(
     billing_info: nil,
     authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED,
-    fixed_rate: nil
+    fixed_rate: nil,
+    renewal_price_cents: nil
   )
     purchase = original_purchase
     return if purchase.nil?
 
-    renewal_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
+    price_override = renewal_price_cents.present?
+    renewal_price_cents ||= current_subscription_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
-    presentment_matches = presentment.present? &&
-      indian_card_presentment_in_force?(presentment, purchase, renewal_price_cents:) &&
+    presentment_in_force = if presentment.nil?
+      false
+    elsif price_override
+      # The restart replaces the original purchase before the updater re-checks the fixing, so hold it against the
+      # restart price: a cross-currency row against its canonical value, a listed-currency row against its listed price too.
+      displayed_currency = (purchase[:displayed_price_currency_type].presence || link.price_currency_type).to_s.downcase
+      presentment.canonical_price_cents == indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate:, price_override:) &&
+        (presentment.presentment_currency != displayed_currency || presentment.presentment_price_cents == renewal_price_cents)
+    else
+      indian_card_presentment_in_force?(presentment, purchase, renewal_price_cents:)
+    end
+    presentment_matches = presentment_in_force &&
       indian_card_renewal_presentment_supported?(presentment.presentment_currency)
     recovery_currency = indian_card_recovery_presentment_currency unless presentment_matches
     price_cap_rate = if presentment_matches
@@ -763,10 +777,19 @@ class Subscription < ApplicationRecord
     price_cap_cents = indian_card_mandate_price_cents(
       purchase,
       renewal_price_cents,
-      fixed_rate: price_cap_rate
+      fixed_rate: price_cap_rate,
+      price_override:
     )
+    # update_current_plan! gives the re-priced purchase the original purchase's VAT ID when the
+    # subscription has none, and that purchase then stores it on the subscription.
+    buyer_vat_id = price_override ? business_vat_id.presence || purchase.purchase_sales_tax_info&.business_vat_id : business_vat_id
     canonical_cap_cents = if billing_info.present?
-      indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents)
+      indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents, buyer_vat_id:)
+    elsif price_override
+      # The purchase's stored total is the old price; re-derive tax on the restart price.
+      # A free-trial re-check sizes from the reloaded purchase, which has no VAT ID in memory.
+      indian_card_mandate_amount_for_billing_info(purchase, purchase.slice(:country, :state, :zip_code), price_cap_cents,
+                                                  buyer_vat_id: (buyer_vat_id unless purchase.is_free_trial_purchase?))
     else
       purchase.mandate_maximum_amount_cents(fixed_rate: (fixed_rate if recovery_currency.present?))
     end
@@ -788,11 +811,13 @@ class Subscription < ApplicationRecord
     end
     if price_rate.present?
       variable_cap_cents = [canonical_cap_cents - price_cap_cents, 0].max
-      if recovery_currency.present? && billing_info.blank?
+      if recovery_currency.present? && billing_info.blank? && !price_override
         # The canonical cap keeps signup-rate dollars while the recovery price cap uses the
         # current rate; FX drift between the two bases must not consume the tax/shipping
         # headroom. Floor the variable part at the cap's own non-price part — the same
         # pre-discount price basis mandate_maximum_amount_cents scaled, at the same rate.
+        # A restart override's canonical cap is already on today's basis; this floor would add
+        # phantom headroom that the post-restart exact-amount validation rejects.
         price_basis_cents = if purchase.is_free_trial_purchase?
           price_cap_cents
         else
@@ -811,7 +836,7 @@ class Subscription < ApplicationRecord
         # The listed price converts to rounded USD cents and back, which can land a few
         # paise below the exact amount the recovered fixing will bill; a cap below the
         # fixed renewal amount guarantees a decline. Floor at the exact listed price.
-        listed_price_floor_cents = purchase.mandate_maximum_displayed_price_cents.to_i
+        listed_price_floor_cents = price_override ? 0 : purchase.mandate_maximum_displayed_price_cents.to_i
         listed_price_floor_cents = renewal_price_cents.to_i if listed_price_floor_cents.zero?
         price_part_cents = [price_part_cents, listed_price_floor_cents].max
       end
@@ -829,20 +854,37 @@ class Subscription < ApplicationRecord
   # mandate the buyer just approved.
   def indian_card_mandate_terms_with_rate(
     billing_info: nil,
-    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
+    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED,
+    renewal_price_cents: nil
   )
     2.times do
-      terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:)
+      terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, renewal_price_cents:)
       return [terms, nil] if terms.blank? || terms[:currency] == Currency::USD
 
       rate = get_rate(terms[:currency])
-      pinned = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate)
+      pinned = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate, renewal_price_cents:)
       # A concurrent re-fixing can flip the terms currency between the two reads; the rate
       # must belong to the currency it prices, so retry, then give up on pinning.
       return [pinned, rate] if pinned.present? && pinned[:currency] == terms[:currency]
     end
 
-    [indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:), nil]
+    [indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, renewal_price_cents:), nil]
+  end
+
+  # What restarting this ended membership will re-price it to: the tier's current price, when the
+  # seller changed it since purchase. Nil when the restart keeps the honored price.
+  def restart_tier_price_cents
+    return if alive?(include_pending_cancellation: false) || is_installment_plan
+    return if tier&.customizable_price?
+    # A discount changes the re-priced renewal total, so only the undiscounted restart has a known price.
+    return if original_purchase&.purchase_offer_code_discount.present? || auto_renewal_offer_code.present?
+
+    quantity = original_purchase&.quantity.to_i
+    tier_price_cents = tier_price&.price_cents
+    return if quantity < 1 || tier_price_cents.blank?
+
+    new_price_cents = tier_price_cents * quantity
+    new_price_cents if new_price_cents != current_subscription_price_cents
   end
 
   def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
@@ -853,22 +895,22 @@ class Subscription < ApplicationRecord
     discount&.duration_in_billing_cycles.present? && renewal_pre_discount_total_cents.positive?
   end
 
-  def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil)
+  def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil, price_override: false)
     if purchase.installment_plan_relisted_in_another_currency?
       return get_usd_cents(link.price_currency_type, renewal_price_cents, rate: fixed_rate)
     end
 
-    displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
+    displayed_price_cents = price_override ? renewal_price_cents : purchase.mandate_maximum_displayed_price_cents
     displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
     displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
     get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
   end
 
-  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cents)
+  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cents, buyer_vat_id: business_vat_id)
     purchase.indian_card_mandate_amount_for_billing_info(
       billing_info,
       price_cents,
-      buyer_vat_id: business_vat_id
+      buyer_vat_id:
     )
   end
 

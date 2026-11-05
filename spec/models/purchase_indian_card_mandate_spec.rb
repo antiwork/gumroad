@@ -1143,6 +1143,33 @@ describe "Indian card mandate reliability" do
     )
   end
 
+  it "does not inflate a restart cap with signup-rate drift when no billing info is given" do
+    registration = create_registration
+    subscription = registration.subscription
+    product.update_column(:price_currency_type, Currency::INR)
+    # The seller raised the tier after signup, so the restart re-lists at 16,000 paise, and the
+    # rupee has weakened from 100 to 80 per USD since the purchase was stored.
+    registration.update_columns(
+      displayed_price_currency_type: Currency::INR,
+      displayed_price_cents: 80_000,
+      price_cents: 10_00,
+      total_transaction_cents: 10_00,
+      rate_converted_to_usd: "100"
+    )
+    subscription.reload
+    allow(subscription).to receive(:get_rate).with(Currency::INR).and_return("80.0")
+
+    terms = subscription.indian_card_mandate_terms(renewal_price_cents: 16_000)
+
+    # The restart total already sits on today's rate, so the cap is the restart price itself.
+    # Converting it at the signup rate instead would add a phantom 4,000-paise headroom, and the
+    # post-restart validation compares the approved amount for exact equality.
+    expect(terms).to include(
+      amount: 16_000,
+      currency: Currency::INR
+    )
+  end
+
   it "keeps the scaled tax headroom for an expired limited-duration discount" do
     registration = create_registration
     subscription = registration.subscription
