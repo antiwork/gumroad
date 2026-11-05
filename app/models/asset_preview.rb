@@ -34,6 +34,7 @@ class AssetPreview < ApplicationRecord
   before_create :set_position
   serialize :oembed, coder: YAML
   validate :url_or_file
+  validate :analyzable_cover?
   validate :height_and_width_presence
   validate :duration_presence_for_video
   validate :max_preview_count, on: :create
@@ -415,17 +416,23 @@ class AssetPreview < ApplicationRecord
                                                     filename: filename,
                                                     content_type: response.content_type)
       self.file.attach(blob.signed_id)
-      self.file.analyze
+      analyze_attached_file
     end
   end
 
   def analyze_file
-    if file.attached? && !file.analyzed?
-      file.analyze
-    end
+    analyze_attached_file if file.attached? && !file.analyzed?
   end
 
   private
+    # ffprobe prints no JSON — only its complaint to stderr — for a file it cannot parse at all,
+    # so VideoAnalyzer's JSON.parse raises instead of returning empty metadata.
+    def analyze_attached_file
+      file.analyze
+    rescue JSON::ParserError
+      @analysis_failed = true
+    end
+
     def video_poster_cache_key
       "attachment_#{file.id}_poster_url"
     end
@@ -503,6 +510,12 @@ class AssetPreview < ApplicationRecord
       return true if file.video?
 
       file.image? && content_type.match?(SUPPORTED_IMAGE_CONTENT_TYPES)
+    end
+
+    def analyzable_cover?
+      return unless file.attached? && @analysis_failed
+
+      errors.add(:base, "Could not analyze cover. Please check the uploaded file.")
     end
 
     def height_and_width_presence

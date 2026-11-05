@@ -95,6 +95,23 @@ class AssetPreviewTest < ActiveSupport::TestCase
     assert_includes asset_preview.errors.full_messages, "Could not analyze cover. Please check the uploaded file."
   end
 
+  test "rejects a video the analyzer cannot read at all instead of raising" do
+    asset_preview = create_asset_preview
+    blob = ActiveStorage::Blob.create_and_upload!(
+      io: Rack::Test::UploadedFile.new(Rails.root.join("spec/support/fixtures", "invalid_asset_preview_video.MOV"), "video/quicktime"),
+      filename: "broken.MOV",
+      content_type: "video/quicktime"
+    )
+    asset_preview.file.attach(blob)
+
+    with_ffprobe_printing_nothing do
+      asset_preview.analyze_file
+    end
+
+    assert_equal false, asset_preview.save
+    assert_includes asset_preview.errors.full_messages, "Could not analyze cover. Please check the uploaded file."
+  end
+
   test "fails with a script disguised as an image" do
     asset_preview = create_asset_preview
     asset_preview.file.attach(analyzed_blob("disguised_html_script.png", "image/png"))
@@ -810,6 +827,16 @@ class AssetPreviewTest < ActiveSupport::TestCase
       )
       blob.analyze
       blob
+    end
+
+    # An ffprobe that exits having printed nothing, the way it does for a file it cannot
+    # parse at all — the analyzer's JSON.parse then raises instead of returning no metadata.
+    def with_ffprobe_printing_nothing
+      original = ActiveStorage.paths[:ffprobe]
+      ActiveStorage.paths[:ffprobe] = "/usr/bin/true"
+      yield
+    ensure
+      ActiveStorage.paths[:ffprobe] = original
     end
 
     # The RSpec suite stubs SsrfFilter.get to delegate to HTTParty (so recorded
