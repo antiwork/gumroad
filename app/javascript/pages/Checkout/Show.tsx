@@ -842,8 +842,10 @@ const CheckoutIndexPage = () => {
 
       if (redirectTo === "content-page" && firstResult.success && firstResult.content_url) {
         const contentUrl = new URL(firstResult.content_url);
-        if (firstResult.native_type === "coffee") contentUrl.searchParams.set("purchase_email", state.email);
-        else contentUrl.searchParams.set("receipt", "true");
+        if (firstResult.native_type === "coffee") {
+          contentUrl.searchParams.set("purchase_email", state.email);
+          if (firstResult.non_formatted_price === 0) contentUrl.searchParams.set("purchase_free", "true");
+        } else contentUrl.searchParams.set("receipt", "true");
         window.location.href = contentUrl.toString();
       } else if (redirectTo === "library-page") {
         const purchases = results.flatMap(({ result }) => (result.success ? result.id : []));

@@ -74,7 +74,7 @@ const defaultProps = (): {
   unarchived_count: number;
   search: SearchParams;
   purchase_analytics: Record<string, unknown>;
-  receipt_purchases: { id: string; email: string; permalink: string; has_third_party_analytics: boolean }[];
+  receipt_purchases: { id: string; email: string; free: boolean; seller_name: string; permalink: string; has_third_party_analytics: boolean }[];
 } => ({
   results: [result("p1", "Alpha"), result("p2", "Beta")],
   pagination: { page: 1, pages: 3, from: 1, to: 2, count: 6 },

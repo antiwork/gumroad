@@ -1526,10 +1526,18 @@ describe LibraryPresenter do
                                                                 {
                                                                   id: purchase.external_id,
                                                                   email: purchase.email,
+                                                                  free: true,
+                                                                  seller_name: product.user.name_or_username,
                                                                   permalink: product.unique_permalink,
                                                                   has_third_party_analytics: false,
                                                                 }
                                                               ])
+    end
+
+    it "flags a paid purchase as not free" do
+      purchase.update_columns(price_cents: 500)
+
+      expect(receipt_purchases([purchase.external_id]).first[:free]).to eq(false)
     end
 
     it "returns nothing for ids that are not the buyer's purchases" do

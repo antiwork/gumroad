@@ -8,6 +8,7 @@ import { assertDefined } from "$app/utils/assert";
 import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { asyncVoid } from "$app/utils/promise";
+import { purchaseConfirmationMessage } from "$app/utils/purchaseConfirmation";
 import { assertResponseError } from "$app/utils/request";
 import { SellerAnalyticsProps, trackSellerPurchaseEvent } from "$app/utils/user_analytics";
 
@@ -222,7 +223,14 @@ type Props = {
   unarchived_count: number;
   search: SearchParams;
   purchase_analytics: Record<string, SellerAnalyticsProps>;
-  receipt_purchases: { id: string; email: string; permalink: string; has_third_party_analytics: boolean }[];
+  receipt_purchases: {
+    id: string;
+    email: string;
+    free: boolean;
+    seller_name: string;
+    permalink: string;
+    has_third_party_analytics: boolean;
+  }[];
 };
 
 export default function LibraryPage() {
@@ -343,8 +351,16 @@ export default function LibraryPage() {
     url.searchParams.delete("purchase_id");
     router.replace({ url: url.pathname + url.search, preserveState: true, preserveScroll: true });
 
-    const email = receipt_purchases.find((purchase) => purchase.id === purchaseIds[0])?.email;
-    if (email) showAlert(`Your purchase was successful! We sent a receipt to ${email}.`, "success");
+    const firstPurchase = receipt_purchases.find((purchase) => purchase.id === purchaseIds[0]);
+    if (firstPurchase?.email)
+      showAlert(
+        purchaseConfirmationMessage({
+          free: firstPurchase.free,
+          creatorName: firstPurchase.seller_name,
+          email: firstPurchase.email,
+        }),
+        "success",
+      );
 
     for (const purchaseId of purchaseIds) {
       const analytics = purchase_analytics[purchaseId];

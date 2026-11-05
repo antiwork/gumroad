@@ -75,6 +75,8 @@ const purchaseProps = () => ({
   id: "purchase-1",
   receipt_purchase_id: null,
   email: "buyer@example.com",
+  free: false,
+  seller_name: "Seller",
   email_digest: "digest",
   is_archived: false,
   has_invoice: false,

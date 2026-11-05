@@ -21,6 +21,11 @@ import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
 
+const allFree = (results: PurchaseResults) => {
+  const successful = results.filter(({ result }) => result.success);
+  return successful.length > 0 && successful.every(({ result }) => result.success && result.non_formatted_price === 0);
+};
+
 export const LineItem = ({
   name,
   price,
@@ -326,7 +331,13 @@ export const Receipt = ({
       </CardContent>
       <CardContent asChild details>
         <header className="space-y-1">
-          <h2>{results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}</h2>
+          <h2>
+            {results.some(({ result }) => !result.success)
+              ? "Summary"
+              : allFree(results)
+                ? "Your free signup is confirmed!"
+                : "Your purchase was successful!"}
+          </h2>
 
           {results.some(({ result }) => result.success) ? (
             <p className="text-muted">
@@ -338,7 +349,9 @@ export const Receipt = ({
                   !item.product.free_trial,
               )
                 ? `We charged your card and sent a receipt to ${state.email}`
-                : `We sent a receipt to ${state.email}`}
+                : allFree(results)
+                  ? `We sent a confirmation to ${state.email}`
+                  : `We sent a receipt to ${state.email}`}
             </p>
           ) : null}
         </header>
