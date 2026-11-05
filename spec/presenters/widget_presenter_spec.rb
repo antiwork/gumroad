@@ -24,6 +24,7 @@ describe WidgetPresenter do
       waitlisted = create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
       create(:product, user: seller, waitlist_enabled: true)
       create(:product, user: seller, purchase_disabled_at: Time.current)
+      create(:product, user: create(:user), waitlist_enabled: true, purchase_disabled_at: Time.current)
 
       expect(described_class.new(seller:).waitlist_products).to eq([{ id: waitlisted.external_id, name: waitlisted.name }])
     end

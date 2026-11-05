@@ -284,6 +284,33 @@ describe "Widget Page scenario", js: true, type: :system do
       end
     end
 
+    context "with a product accepting waitlist signups" do
+      let!(:waitlist_product) { create(:product, user: seller, name: "Upcoming course", waitlist_enabled: true, purchase_disabled_at: Time.current) }
+
+      before { login_as(seller) }
+
+      it "puts the selected product in the embed code and the preview" do
+        visit widgets_path
+        within_section "Subscribe form", section_element: :section do
+          expect(page).to have_select("Waitlist", selected: "Subscribe to your profile", options: ["Subscribe to your profile", "Waitlist: Upcoming course"])
+          expect(find_field("Subscribe form embed code").value).not_to include("product_id")
+
+          select "Waitlist: Upcoming course", from: "Waitlist"
+          expect(find_field("Subscribe form embed code").value).to include(%(name="product_id" value="#{waitlist_product.external_id}"))
+
+          fill_in "Your email address", with: "waitlister@example.com"
+          click_on "Follow"
+        end
+        expect(page).to have_alert(text: "You're on the list for #{seller.name_or_username}'s launch. Check your inbox to confirm.")
+        expect(WaitlistEntry.sole.product).to eq(waitlist_product)
+
+        within_section "Subscribe form", section_element: :section do
+          select "Subscribe to your profile", from: "Waitlist"
+          expect(find_field("Subscribe form embed code").value).not_to include("product_id")
+        end
+      end
+    end
+
     context "with switching account to user as admin for seller" do
       include_context "with switching account to user as admin for seller"
 

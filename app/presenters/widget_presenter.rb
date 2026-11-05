@@ -41,7 +41,9 @@ class WidgetPresenter
   def waitlist_products
     return [] unless user_signed_in?
 
-    seller.links.where(deleted_at: nil).order(created_at: :desc)
+    seller.links.waitlist_enabled.where(deleted_at: nil, banned_at: nil)
+          .select(:id, :name, :flags, :purchase_disabled_at, :draft, :deleted_at, :banned_at)
+          .order(created_at: :desc)
           .filter_map { |product| { id: product.external_id, name: product.name } if product.accepts_waitlist_signups? }
   end
 

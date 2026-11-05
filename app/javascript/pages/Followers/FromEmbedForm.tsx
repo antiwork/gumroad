@@ -17,10 +17,11 @@ type Props = {
   // visitor has to finish it on the seller's own Gumroad page, which renders a
   // CAPTCHA. Absent on every other outcome.
   subscribe_url?: string | null;
+  waitlist_url?: string | null;
 };
 
 function FollowersFromEmbedFormPage() {
-  const { success, message, confirmed, subscribe_url } = cast<Props>(usePage().props);
+  const { success, message, confirmed, subscribe_url, waitlist_url } = cast<Props>(usePage().props);
 
   return (
     <div className="flex flex-1 flex-col justify-between p-4">
@@ -30,7 +31,11 @@ function FollowersFromEmbedFormPage() {
             <header className="text-center">
               <h2>{success ? (confirmed ? "Followed!" : "Almost there") : "Something went wrong"}</h2>
               <p>{message}</p>
-              {subscribe_url != null ? (
+              {waitlist_url != null ? (
+                <NavigationButton color="primary" href={waitlist_url}>
+                  Go to the product page
+                </NavigationButton>
+              ) : subscribe_url != null ? (
                 <NavigationButton color="primary" href={subscribe_url}>
                   Go to the subscribe page
                 </NavigationButton>

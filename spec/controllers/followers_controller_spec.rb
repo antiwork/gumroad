@@ -530,6 +530,27 @@ describe FollowersController, inertia: true do
         expect(WaitlistEntry.count).to eq 0
       end
 
+      it "takes a waitlist entry for exactly the products the widgets waitlist picker lists" do
+        other_seller = create(:user)
+        products = [
+          create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current),
+          create(:product, user: seller, waitlist_enabled: true, draft: true),
+          create(:product, user: seller, waitlist_enabled: true),
+          create(:product, user: seller, purchase_disabled_at: Time.current),
+          create(:product, user: seller, waitlist_enabled: true, purchase_disabled_at: Time.current, is_unpublished_by_admin: true),
+          create(:product, user: other_seller, waitlist_enabled: true, purchase_disabled_at: Time.current),
+        ]
+        listed_ids = WidgetPresenter.new(seller:).waitlist_products.map { _1[:id] }
+
+        accepted_ids = products.each_with_index.filter_map do |product, index|
+          post :from_embed_form, params: { email: "visitor#{index}@example.com", seller_id: seller.external_id, product_id: product.external_id }
+          product.external_id if WaitlistEntry.exists?(product:)
+        end
+
+        expect(listed_ids).to match_array(products.first(2).map(&:external_id))
+        expect(accepted_ids).to match_array(listed_ids)
+      end
+
       it "takes no new subscriber once the seller's newsletter moved to Feature announcements" do
         FeatureAnnouncementNewsletterCutover.create!(seller:, state: "retired", cutoff_at: 1.day.ago, retired_at: Time.current)
 
@@ -683,6 +704,25 @@ describe FollowersController, inertia: true do
 
           expect(response).to have_http_status(:unprocessable_entity)
           expect(response.parsed_body["message"]).to include("#{product.long_url}?native=true")
+        end
+
+        it "sends a visitor of the embedded waitlist form to the native product page" do
+          product = create(:product, user: unreviewed_seller, waitlist_enabled: true, purchase_disabled_at: Time.current)
+
+          expect do
+            post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id, product_id: product.external_id }
+          end.to_not change { Follower.count }
+
+          expect(inertia.component).to eq("Followers/FromEmbedForm")
+          expect(inertia.props[:success]).to be(false)
+          expect(inertia.props[:message]).to eq("Please join the waitlist from the product page so we can confirm you're not a bot.")
+          expect(inertia.props[:waitlist_url]).to eq("#{product.long_url}?native=true")
+
+          other_sellers_product = create(:product, user: create(:user), waitlist_enabled: true, purchase_disabled_at: Time.current)
+          post :from_embed_form, params: { email: "follower@example.com", seller_id: unreviewed_seller.external_id, product_id: other_sellers_product.external_id }
+
+          expect(inertia.props[:waitlist_url]).to be_nil
+          expect(inertia.props[:subscribe_url]).to eq(custom_domain_subscribe_url(host: unreviewed_seller.subdomain_with_protocol))
         end
 
         it "sends a coffee waitlist visitor to the native coffee page to complete the challenge" do
