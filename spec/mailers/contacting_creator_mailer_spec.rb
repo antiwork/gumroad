@@ -3292,6 +3292,29 @@ describe ContactingCreatorMailer do
     end
   end
 
+  describe "#payouts_may_be_blocked" do
+    let!(:seller) { create(:named_seller) }
+
+    it "names each outstanding field and links to the remediation endpoint" do
+      create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+      create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+      allow_any_instance_of(User).to receive(:compliance_country_code).and_return("PK")
+
+      mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
+
+      expect(mail.body.encoded).to include("National Identity Card Number (SNIC or CNIC)")
+      expect(mail.body.encoded).to include("Government-issued photo ID")
+      expect(mail.body.encoded).to have_link("Complete your account", href: remediation_settings_payments_url)
+    end
+
+    it "falls back to the generic copy when no request is outstanding" do
+      mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
+
+      expect(mail.body.encoded).to include("Please complete the necessary fields")
+      expect(mail.body.encoded).to have_link("Complete your account", href: remediation_settings_payments_url)
+    end
+  end
+
   describe "#more_kyc_needed" do
     let!(:seller) { create(:named_seller) }
 

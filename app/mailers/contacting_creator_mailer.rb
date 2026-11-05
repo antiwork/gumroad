@@ -573,6 +573,9 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = User.find(user_id)
     return do_not_send unless @seller.account_active?
     @subject = "We need more information from you."
+    country = @seller.compliance_country_code
+    @fields_needed_tags = @seller.user_compliance_info_requests.requested.pluck(:field_needed).uniq
+      .map { |field_needed| UserComplianceInfoFieldProperty.name_tag_for_field(field_needed, country:) }.compact.uniq
   end
 
   def payout_setup_retry_exhausted(user_id, marker_type)
