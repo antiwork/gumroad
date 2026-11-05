@@ -117,9 +117,12 @@ func (s *Session) String(key string) string {
 	return v
 }
 
-// CSRFToken is session[:_csrf_token], the urlsafe Base64 real token.
+// CSRFTokenKey is session[:_csrf_token], where the cookie session store keeps the
+// urlsafe Base64 real token.
+const CSRFTokenKey = "_csrf_token"
+
 func (s *Session) CSRFToken() (string, bool) {
-	v, ok := s.Get("_csrf_token").(string)
+	v, ok := s.Get(CSRFTokenKey).(string)
 	return v, ok
 }
 

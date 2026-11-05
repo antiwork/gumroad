@@ -1,6 +1,7 @@
 package rails
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"math"
@@ -257,4 +258,9 @@ func URLSafeDecode64(s string) ([]byte, bool) {
 	}
 	b, err := base64.StdEncoding.Strict().DecodeString(urlsafeReplacer.Replace(s))
 	return b, err == nil
+}
+
+// SecureCompare is ActiveSupport::SecurityUtils.secure_compare for strings.
+func SecureCompare(a, b string) bool {
+	return len(a) == len(b) && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }

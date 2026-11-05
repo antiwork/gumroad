@@ -11,6 +11,9 @@ import (
 // isTeamMemberFlag is User's has_flags 28 => :is_team_member.
 const isTeamMemberFlag = 1 << 27
 
+// disableThirdPartyAnalyticsFlag is User's has_flags 12 => :disable_third_party_analytics.
+const disableThirdPartyAnalyticsFlag = 1 << 11
+
 // User holds the users columns the ported before_actions read.
 type User struct {
 	ID                              int64
@@ -19,10 +22,14 @@ type User struct {
 	UserRiskState                   string
 	LastActiveSessionsInvalidatedAt *time.Time
 	Username                        string
+	// ExternalID is the users.external_id column, which User#external_id reads.
+	ExternalID string
 }
 
 // IsTeamMember is a Gumroad admin, not a member of a seller's team.
 func (u *User) IsTeamMember() bool { return u.Flags&isTeamMemberFlag != 0 }
+
+func (u *User) DisableThirdPartyAnalytics() bool { return u.Flags&disableThirdPartyAnalyticsFlag != 0 }
 
 func (u *User) Alive() bool { return u.DeletedAt == nil }
 
@@ -31,7 +38,7 @@ func (u *User) Suspended() bool {
 	return u.UserRiskState == "suspended_for_tos_violation" || u.UserRiskState == "suspended_for_fraud"
 }
 
-var userColumnNames = []string{"id", "flags", "deleted_at", "user_risk_state", "last_active_sessions_invalidated_at", "username"}
+var userColumnNames = []string{"id", "flags", "deleted_at", "user_risk_state", "last_active_sessions_invalidated_at", "username", "external_id"}
 
 // UserColumns lists the columns UserScan reads, qualified by a table alias, for a query
 // that joins users.
@@ -50,10 +57,11 @@ type UserScan struct {
 	riskState   sql.NullString
 	invalidated *time.Time
 	username    sql.NullString
+	externalID  sql.NullString
 }
 
 func (s *UserScan) Targets() []any {
-	return []any{&s.id, &s.flags, &s.deletedAt, &s.riskState, &s.invalidated, &s.username}
+	return []any{&s.id, &s.flags, &s.deletedAt, &s.riskState, &s.invalidated, &s.username, &s.externalID}
 }
 
 // User is the scanned user, or nil when the join found none.
@@ -62,7 +70,7 @@ func (s *UserScan) User() *User {
 		return nil
 	}
 	return &User{ID: s.id.Int64, Flags: s.flags.Int64, DeletedAt: s.deletedAt, UserRiskState: s.riskState.String,
-		LastActiveSessionsInvalidatedAt: s.invalidated, Username: s.username.String}
+		LastActiveSessionsInvalidatedAt: s.invalidated, Username: s.username.String, ExternalID: s.externalID.String}
 }
 
 // Users reads users and team_memberships from the primary.

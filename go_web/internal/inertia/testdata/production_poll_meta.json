@@ -1,0 +1,139 @@
+[
+ {
+  "tagName": "title",
+  "headKey": "title",
+  "innerContent": "Gumroad"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-name-csrf-param",
+  "name": "csrf-param",
+  "content": "authenticity_token"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-name-csrf-token",
+  "name": "csrf-token",
+  "content": "<MASKED>"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-charset",
+  "charset": "utf-8"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-fb-app_id",
+  "property": "fb:app_id",
+  "content": "149071038533330"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-fb-page_id",
+  "property": "fb:page_id",
+  "content": "http://www.facebook.com/gumroad"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-gr-environment",
+  "property": "gr:environment",
+  "content": "production"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-og-image",
+  "property": "og:image",
+  "content": "https://assets.gumroad.com/images/opengraph_image.png"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-og-image-alt",
+  "property": "og:image:alt",
+  "content": "Gumroad"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-og-title",
+  "property": "og:title",
+  "content": "Gumroad"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-og-site_name",
+  "property": "og:site_name",
+  "content": "Gumroad"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-name-viewport",
+  "name": "viewport",
+  "content": "initial-scale = 1.0, width = device-width"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-stripe-pk",
+  "property": "stripe:pk",
+  "value": "pk_live_Db80xIzLPWhKo1byPrnERmym"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-stripe-api_version",
+  "property": "stripe:api_version",
+  "value": "2023-10-16; risk_in_requirements_beta=v1; retrieve_tax_forms_beta=v1;"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-twitter-site",
+  "property": "twitter:site",
+  "content": "@gumroad"
+ },
+ {
+  "tagName": "link",
+  "headKey": "link-1644e96d",
+  "type": "application/opensearchdescription+xml",
+  "rel": "search",
+  "href": "/opensearch.xml",
+  "title": "Gumroad"
+ },
+ {
+  "tagName": "link",
+  "headKey": "shortcut-icon",
+  "rel": "shortcut icon",
+  "href": "https://assets.gumroad.com/images/pink-icon.png"
+ },
+ {
+  "tagName": "link",
+  "headKey": "apple-touch-icon",
+  "rel": "apple-touch-icon",
+  "href": "https://assets.gumroad.com/images/pink-icon.png"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-gr-google_analytics-enabled",
+  "property": "gr:google_analytics:enabled",
+  "content": "true"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-gr-fb_pixel-enabled",
+  "property": "gr:fb_pixel:enabled",
+  "content": "true"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-gr-tiktok_pixel-enabled",
+  "property": "gr:tiktok_pixel:enabled",
+  "content": "true"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-gr-logged_in_user-id",
+  "property": "gr:logged_in_user:id",
+  "content": "1234567890123"
+ },
+ {
+  "tagName": "meta",
+  "headKey": "meta-property-gr-page-type",
+  "property": "gr:page:type"
+ }
+]

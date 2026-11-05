@@ -250,6 +250,9 @@ write("rails/testdata/cookie_writing.json", {
           set_cookies(headers)
         end,
         escape: ["a b", "+/=", "\u00fc", "~*-._!'()", "%", "a\u2028b", "--"].index_with { |input| Rack::Utils.escape(input) },
+        cgi_escape: ["a b", "+/=", "\u00fc", "~*-._!'()", "%", "/d/x?a=1&b=2"].index_with { |input| CGI.escape(input) },
+        to_query: [{ id: "a b/c", destination: "download_page", display: "x~*" }, { next: "/d/x?a=1&b=2" }, { b: "1", a: "2", "a b" => "3" }]
+          .map { |h| { pairs: h.map { |k, v| [k.to_s, v] }, query: h.to_query } },
         months: [Time.utc(2026, 1, 31, 10, 0, 0, 123_456), Time.utc(2026, 3, 31), Time.utc(2024, 1, 29), Time.utc(2026, 12, 15, 23, 59, 59)]
           .map { |t| { from: t.iso8601(6), plus_month: (t + 1.month).iso8601(6) } },
       })

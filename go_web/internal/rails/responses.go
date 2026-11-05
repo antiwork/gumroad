@@ -38,6 +38,9 @@ func writeBody(w http.ResponseWriter, req *Request, status int, contentType, bod
 		}
 	}
 	var vary []string
+	if existing := h.Get("Vary"); existing != "" {
+		vary = append(vary, existing)
+	}
 	if rendered && req.VaryAccept {
 		vary = append(vary, "Accept")
 	}
@@ -230,3 +233,12 @@ func (s *Stack) corsHeaders(r *http.Request) http.Header {
 }
 
 var devOrigin = regexp.MustCompile(`\Ahttps?://(?:[a-z0-9-]+\.)*localhost(?::\d+)?\z`)
+
+// RenderInertiaJSON is inertia_rails answering an X-Inertia request: render json: with the
+// X-Inertia header the client checks for, and a Vary the renderer has set to X-Inertia, so
+// Rails adds no Accept.
+func RenderInertiaJSON(w http.ResponseWriter, req *Request, body string) {
+	w.Header().Set("X-Inertia", "true")
+	w.Header().Set("Vary", "X-Inertia")
+	writeBody(w, req, http.StatusOK, JSONContentType, body, "", false, false)
+}
