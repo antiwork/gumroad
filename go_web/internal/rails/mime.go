@@ -1,7 +1,7 @@
 package rails
 
 import (
-	"errors"
+	"fmt"
 	"math"
 	"regexp"
 	"sort"
@@ -107,7 +107,9 @@ func parseAccept(header string) ([]string, error) {
 	type item struct {
 		index int
 		name  string
-		q     int
+		// q is (q.to_f * 100).to_i, kept as a float: truncated floats order as the Integers
+		// Ruby makes of them, Bignums included.
+		q float64
 	}
 	var items []item
 	for _, raw := range acceptItems.FindAllString(header, -1) {
@@ -119,10 +121,6 @@ func parseAccept(header string) ([]string, error) {
 		var q *float64
 		if len(parts) == 2 {
 			f, _ := StringToF(parts[1])
-			if math.IsInf(f, 0) {
-				// (q.to_f * 100).to_i raises FloatDomainError.
-				return nil, errInfiniteQuality
-			}
 			q = &f
 		}
 		names := trailingStar(name)
@@ -140,7 +138,12 @@ func parseAccept(header string) ([]string, error) {
 			} else if n == AnyFormat {
 				weight = 0
 			}
-			items = append(items, item{index: len(items), name: n, q: int(weight * 100)})
+			scaled := weight * 100
+			if math.IsInf(scaled, 0) {
+				// Infinity#to_i raises FloatDomainError.
+				return nil, errInfiniteQuality
+			}
+			items = append(items, item{index: len(items), name: n, q: math.Trunc(scaled)})
 		}
 	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].q > items[j].q })
@@ -167,7 +170,9 @@ func parseAccept(header string) ([]string, error) {
 
 // trailingStar is parse_trailing_star: text/* and application/* expand to every type
 // registered under them.
-var errInfiniteQuality = errors.New("an Accept quality Rails raises FloatDomainError on")
+// errInfiniteQuality raises while Rails parses formats, and again while ShowExceptions
+// picks the error page's format, so Rails answers with its failsafe response.
+var errInfiniteQuality = fmt.Errorf("an Accept quality Rails raises FloatDomainError on: %w", ErrFailsafe)
 
 func trailingStar(name string) []string {
 	prefix := ""

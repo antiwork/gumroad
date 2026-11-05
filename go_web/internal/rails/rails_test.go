@@ -2,6 +2,7 @@ package rails
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -291,6 +292,8 @@ func TestFormatsFollowMimeNegotiation(t *testing.T) {
 		// q is String#to_f: an exponent counts, and a second dot ends the number.
 		{accept: "text/html;q=1e-1, application/json;q=0.5", want: []string{"json", "html"}, vary: true},
 		{accept: "text/html;q=0.5.1, application/json;q=0.4", want: []string{"html", "json"}, vary: true},
+		// Past int64, (q * 100).to_i is a Bignum, which still orders.
+		{accept: "text/html;q=1e19, application/json;q=1e20", want: []string{"json", "html"}, vary: true},
 	} {
 		var format any
 		if c.format != "" {
@@ -301,9 +304,12 @@ func TestFormatsFollowMimeNegotiation(t *testing.T) {
 			t.Errorf("%+v: got %v %v %v", c, got, vary, err)
 		}
 	}
-	// (q.to_f * 100).to_i raises on an infinite quality in a list; a single type drops its q.
-	if _, _, err := formats(nil, "text/html;q=1e400, application/json", "", false, ""); err == nil {
-		t.Error("an infinite quality parsed")
+	// (q.to_f * 100).to_i raises on an infinite quality in a list, including one that only
+	// the multiplication makes infinite; a single type drops its q.
+	for _, accept := range []string{"text/html;q=1e400, application/json", "text/html;q=1e307, application/json"} {
+		if _, _, err := formats(nil, accept, "", false, ""); !errors.Is(err, ErrFailsafe) {
+			t.Errorf("%s: %v", accept, err)
+		}
 	}
 	if _, _, err := formats(nil, "garbage", "", false, ""); err == nil {
 		t.Error("an Accept Mime::Type rejects is a 406")

@@ -180,10 +180,25 @@ func (s *Stack) RenderParseError(w http.ResponseWriter, r *http.Request, err err
 		RenderException(w, fallback, http.StatusBadRequest)
 	case errors.Is(err, ErrNotAcceptable):
 		RenderEmpty(w, fallback, http.StatusNotAcceptable)
+	case errors.Is(err, ErrFailsafe):
+		RenderFailsafe(w, fallback)
 	default:
 		return false
 	}
 	return true
+}
+
+// failsafeBody is ShowExceptions#render_exception's response when rendering the error page
+// raises too.
+const failsafeBody = "500 Internal Server Error\n" +
+	"If you are the administrator of this website, then please read this web " +
+	"application's log file and/or the web server's log file to find out what " +
+	"went wrong."
+
+// RenderFailsafe is that response, through the middleware outside ShowExceptions as its
+// other responses are.
+func RenderFailsafe(w http.ResponseWriter, req *Request) {
+	writeBody(w, req, http.StatusInternalServerError, "text/plain; charset=utf-8", failsafeBody, "", false, true)
 }
 
 // NotFound is the 404 Rails renders for a path no route matches: the public exceptions

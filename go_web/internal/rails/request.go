@@ -25,6 +25,9 @@ var (
 	ErrParse = errors.New("error occurred while parsing request parameters")
 	// Mime::Type::InvalidMimeType from Accept or Content-Type, an empty 406.
 	ErrNotAcceptable = errors.New("invalid mime type")
+	// ErrFailsafe is an error whose error page also raises, which ShowExceptions answers
+	// with its failsafe 500.
+	ErrFailsafe = errors.New("error Rails answers with its failsafe response")
 	// Past maxBodyBytes; nginx answers these first in practice.
 	ErrBodyTooLarge = errors.New("request body too large")
 	// ActionDispatch::RemoteIp::IpSpoofAttackError, a 500.
