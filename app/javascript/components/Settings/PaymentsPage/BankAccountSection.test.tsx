@@ -312,7 +312,7 @@ describe("BankAccountSection copyable example hints", () => {
     expect(screen.getByLabelText<HTMLInputElement>(label).placeholder).toBe("");
   });
 });
-const IBAN_BIC_COUNTRIES = new Set(["PK", "GT", "MU", "KZ", "AL", "BH", "JO", "AO", "SM", "KW"]);
+const IBAN_BIC_COUNTRIES = new Set(["PK", "TR", "GT", "MU", "KZ", "AL", "BH", "JO", "AO", "SM", "KW"]);
 
 describe("BankAccountSection BIC placeholders", () => {
   it.each([
@@ -347,6 +347,7 @@ describe("BankAccountSection BIC placeholders", () => {
     "MO",
     "SV",
     "PK",
+    "TR",
     "GT",
     "MU",
     "KZ",

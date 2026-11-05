@@ -69,10 +69,10 @@ const GAMBIA_SWIFT_BIC_REGEX = /^[0-9A-Za-z]{8,11}$/u;
 const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const BANGLADESH_BANK_CODE_REGEX = /^[0-9]{9}$/u;
 
-// Placeholders these fields used to show: not real codes, so a copied one saves a payout row that can never link.
 const BIC_EXAMPLE_MESSAGE = "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code.";
 
-// Stripe refuses these with "Known test bank accounts cannot be used in live mode."
+// Example codes these fields have shown as placeholders. None is a real bank, so a copied one saves a payout
+// row that can never link. Keep the BIC entries in sync with BankAccount::EXAMPLE_BANK_CODES.
 const COPIED_EXAMPLE_ERRORS: Partial<
   Record<BankAccount["type"], { field: "bank_code" | "branch_code"; example: string; message: string }[]>
 > = {
@@ -112,6 +112,7 @@ const COPIED_EXAMPLE_ERRORS: Partial<
   JordanBankAccount: [{ field: "bank_code", example: "AAAAJOJOXXX", message: BIC_EXAMPLE_MESSAGE }],
   AngolaBankAccount: [{ field: "bank_code", example: "AAAAAOAOXXX", message: BIC_EXAMPLE_MESSAGE }],
   KuwaitBankAccount: [{ field: "bank_code", example: "AAAAKWKWXYZ", message: BIC_EXAMPLE_MESSAGE }],
+  TurkeyBankAccount: [{ field: "bank_code", example: "AAAAPKKAXXX", message: BIC_EXAMPLE_MESSAGE }],
   BangladeshBankAccount: [
     { field: "bank_code", example: "123456789", message: "Enter your own bank's 9-digit BEFTN routing number." },
   ],
@@ -833,7 +834,7 @@ export default function PaymentsPage() {
     for (const { field, example, message } of (account.type && COPIED_EXAMPLE_ERRORS[account.type]) || []) {
       if (
         Object.entries<unknown>(account).some(
-          ([key, value]) => key === field && typeof value === "string" && value.toUpperCase() === example,
+          ([key, value]) => key === field && typeof value === "string" && value.trim().toUpperCase() === example,
         )
       ) {
         markFieldInvalid(field);

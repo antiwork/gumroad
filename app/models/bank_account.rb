@@ -5,6 +5,7 @@ class BankAccount < ApplicationRecord
   include Deletable
 
   # Form examples Stripe refuses in live mode ("Known test bank accounts cannot be used in live mode.").
+  # The check skips Stripe test mode, which accepts these codes and whose fixtures use them.
   EXAMPLE_BANK_CODES = {
     "TaiwanBankAccount" => "AAAATWTXXXX",
     "MoroccoBankAccount" => "AAAAMAMAXXX",
@@ -42,6 +43,7 @@ class BankAccount < ApplicationRecord
     "JordanBankAccount" => "AAAAJOJOXXX",
     "AngolaBankAccount" => "AAAAAOAOXXX",
     "KuwaitBankAccount" => "AAAAKWKWXYZ",
+    "TurkeyBankAccount" => "AAAAPKKAXXX",
   }.freeze
 
   belongs_to :user, optional: true
@@ -59,7 +61,7 @@ class BankAccount < ApplicationRecord
   validates_presence_of :user, :account_number, :account_number_last_four, :account_holder_full_name,
                         message: "We could not save your bank account information."
 
-  validate :refuse_example_bank_code, if: -> { Rails.env.production? }
+  validate :refuse_example_bank_code, unless: -> { Stripe.api_key.to_s.start_with?("sk_test_") }
 
   after_create_commit :handle_stripe_bank_account
   after_create_commit :handle_compliance_info_request
@@ -213,7 +215,7 @@ class BankAccount < ApplicationRecord
   private
     def refuse_example_bank_code
       example = EXAMPLE_BANK_CODES[self.class.name]
-      return if example.nil? || bank_number.to_s.upcase != example
+      return if example.nil? || bank_number.to_s.strip.upcase != example
       return unless new_record? || will_save_change_to_bank_number?
 
       errors.add :base, "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code."

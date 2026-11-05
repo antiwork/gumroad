@@ -1140,6 +1140,13 @@ describe("Algeria bank code example", () => {
     expect(screen.getAllByText(exampleError).length).toBeGreaterThan(0);
   });
 
+  it("refuses an example padded with whitespace, which Stripe receives stripped", () => {
+    renderAlgeriaSeller(" aaaadzdzxxx ");
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(exampleError).length).toBeGreaterThan(0);
+  });
+
   it("saves a real bank code", () => {
     renderAlgeriaSeller("EPALDZAL");
 
