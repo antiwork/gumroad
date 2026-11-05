@@ -24,6 +24,9 @@ export const selectAdjacentRadio = (event: ReactKeyboardEvent<HTMLElement>) => {
         ? radios.length - 1
         : (index + (step ?? 0) + radios.length) % radios.length;
   const radio = radios[indexToFocus];
-  radio?.focus();
-  radio?.click();
+  if (!radio) return;
+  radio.focus();
+  // Clicking a radio that is already checked re-runs its handler; for a custom-amount choice that
+  // clears the price the buyer typed.
+  if (radio.getAttribute("aria-checked") !== "true") radio.click();
 };

@@ -17,10 +17,12 @@ const RadioGroup = ({
   values,
   initial = null,
   disabled = [],
+  onSelect,
 }: {
   values: string[];
   initial?: string | null;
   disabled?: string[];
+  onSelect?: () => void;
 }) => {
   const [selected, setSelected] = React.useState(initial);
   return (
@@ -31,7 +33,10 @@ const RadioGroup = ({
             role="radio"
             aria-checked={selected === value}
             disabled={disabled.includes(value)}
-            onClick={() => setSelected(value)}
+            onClick={() => {
+              onSelect?.();
+              setSelected(value);
+            }}
           >
             {value}
           </Button>
@@ -138,6 +143,26 @@ describe("Tabs radiogroup", () => {
 
     expect(document.activeElement).toBe(radio("Three"));
     expect(checked("Three")).toBe("true");
+  });
+
+  it("does not re-activate the radio the buyer is already on", () => {
+    const onSelect = vi.fn();
+    render(<RadioGroup values={["One", "Two"]} initial="One" onSelect={onSelect} />);
+
+    fireEvent.keyDown(radio("One"), { key: "Home" });
+    expect(onSelect).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(radio("One"), { key: "ArrowUp" });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(radio("Two"), { key: "ArrowDown" });
+    expect(onSelect).toHaveBeenCalledTimes(2);
+
+    fireEvent.keyDown(radio("One"), { key: "End" });
+    expect(onSelect).toHaveBeenCalledTimes(3);
+
+    fireEvent.keyDown(radio("Two"), { key: "End" });
+    expect(onSelect).toHaveBeenCalledTimes(3);
   });
 
   it("leaves a tablist's tabs alone", () => {

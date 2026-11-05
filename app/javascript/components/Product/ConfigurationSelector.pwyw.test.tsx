@@ -148,6 +148,21 @@ describe("free pay-what-you-want default", () => {
     expect(selections.at(-1)).toMatchObject({ optionId: "large", price: { value: null, error: false } });
   });
 
+  it("keeps a typed amount when an arrow key lands back on the option the buyer is on", () => {
+    const product: Product = {
+      ...coffeeProduct,
+      options: [freeOption("small", "Small"), freeOption("large", "Large")],
+    };
+    const { selections } = renderPwywSelector(product, { ...initialSelection, price: { error: false, value: 500 } });
+    const other = screen.getByRole("radio", { name: /Other/u });
+    other.focus();
+
+    fireEvent.keyDown(other, { key: "End" });
+
+    expect(selections).toHaveLength(0);
+    expect(document.activeElement).toBe(other);
+  });
+
   it("clears the amount when the buyer picks an option on a product with a paid option", () => {
     const product = {
       ...freeProduct,
