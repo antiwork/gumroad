@@ -37,10 +37,24 @@ module Product::CreationLimit
       # weakened in exchange for not permanently losing a seller's work when they delete a product
       # thinking it was a "test" or duplicate). Still counts real accounts creating >daily_creation_limit
       # products currently alive in the rolling 24h window.
-      last_24h_links_count = user.links.where(created_at: 1.day.ago.., deleted_at: nil).count
-      return if last_24h_links_count < daily_creation_limit
+      created_ats = user.links.where(created_at: 1.day.ago.., deleted_at: nil).order(:created_at).pluck(:created_at)
+      limit = daily_creation_limit
+      return if created_ats.size < limit
 
-      errors.add(:base, "Sorry, you can only create #{daily_creation_limit} products per day.")
+      message = "Sorry, you can only create #{limit} products per day."
+      # A zero quota frees no slot, so there is no reset time to name.
+      if limit.positive?
+        next_slot_at = created_ats[created_ats.size - limit] + 1.day
+        message += " You can create another product after #{format_next_slot(next_slot_at)}."
+      end
+      errors.add(:base, message)
+    end
+
+    def format_next_slot(time)
+      # Round up: the message names whole minutes, and the slot is still taken until the exact second passes.
+      time = time.change(sec: 0) + 1.minute unless time == time.change(sec: 0)
+      zone = ActiveSupport::TimeZone[user.timezone.to_s] || Time.zone
+      time.in_time_zone(zone).strftime("%B %-d at %-l:%M %p %Z")
     end
 
     def skip_daily_product_creation_limit?

@@ -210,6 +210,8 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 
 	// The writes, as the after_actions run: the view event, then the uses, the seen flag and
 	// the confirmation cookie.
+	// A dry run skips only the database writes: its cookies are what a parity check compares
+	// with Rails', and it keeps none of them.
 	if !p.dryRun {
 		if err := h.recordView(p, u, d.productID); err != nil {
 			return err

@@ -145,7 +145,7 @@ func TestTheFullPageRendersAndRecordsTheView(t *testing.T) {
 	}
 	pages := content.Value("rich_content_pages").([]any)
 	if len(pages) != 1 || rails.EncodeJSON(pages[0].(*rails.Hash).Value("description")) !=
-		`{"type":"doc","content":[{"type":"paragraph","content":[{"text":"Hello <there>","type":"text"}]}]}` {
+		`{"type":"doc","content":[{"type":"paragraph","content":[{"text":"Hello \u003cthere\u003e","type":"text"}]}]}` {
 		t.Errorf("rich content %s", rails.EncodeJSON(pages))
 	}
 	purchase := props.Value("purchase").(*rails.Hash)

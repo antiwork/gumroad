@@ -748,6 +748,21 @@ describe("EPUB reader lifecycle", () => {
     expect(harness.rendition.themes.select).toHaveBeenLastCalledWith("dark");
   });
 
+  it("moves the background choice with the arrow keys from a single tab stop", async () => {
+    render(<Read />);
+    await waitFor(() => expect(harness.rendition.display).toHaveBeenCalled());
+    fireEvent.click(screen.getByLabelText("Appearance"));
+    const light = await screen.findByRole("radio", { name: "Light" });
+
+    expect(screen.getAllByRole("radio").map((radio) => radio.tabIndex)).toEqual([0, -1, -1]);
+
+    fireEvent.keyDown(light, { key: "ArrowDown" });
+
+    expect(document.activeElement).toBe(screen.getByRole("radio", { name: "Sepia" }));
+    expect(harness.rendition.themes.select).toHaveBeenLastCalledWith("sepia");
+    expect(harness.rendition.next).not.toHaveBeenCalled();
+  });
+
   it("does not turn pages when a reader control handles an arrow key", async () => {
     render(<Read />);
     await waitFor(() => expect(harness.rendition.display).toHaveBeenCalled());

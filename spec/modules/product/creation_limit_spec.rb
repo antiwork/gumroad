@@ -16,11 +16,49 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
 
       product_11 = build(:product, user: non_compliant_user)
       expect(product_11).not_to be_valid
-      expect(product_11.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
+      expect(product_11.errors.full_messages).to include(a_string_starting_with("Sorry, you can only create 10 products per day."))
 
       travel_to 25.hours.from_now
 
       expect(product_11).to be_valid
+    end
+  end
+
+  context "reset time in the error" do
+    it "names when the oldest product in the window frees a slot, in the seller's time zone" do
+      user = create(:user, user_risk_state: "not_reviewed", timezone: "Pacific Time (US & Canada)")
+      travel_to Time.utc(2026, 11, 3, 17, 14, 30) do
+        create_products_in_bulk(user, 10)
+      end
+
+      travel_to Time.utc(2026, 11, 4, 1, 0) do
+        product = build(:product, user: user)
+        expect(product).not_to be_valid
+        expect(product.errors.full_messages).to include(
+          "Sorry, you can only create 10 products per day. You can create another product after November 4 at 9:15 AM PST."
+        )
+      end
+    end
+
+    it "names the slot that brings the count back under a lowered limit" do
+      user = create(:user, user_risk_state: "not_reviewed", timezone: "UTC", daily_product_creation_limit: 2)
+      travel_to(Time.utc(2026, 11, 4, 1, 0)) { create_products_in_bulk(user, 1) }
+      travel_to(Time.utc(2026, 11, 4, 2, 0)) { create_products_in_bulk(user, 1) }
+      travel_to(Time.utc(2026, 11, 4, 3, 0)) { create_products_in_bulk(user, 1) }
+
+      travel_to Time.utc(2026, 11, 4, 4, 0) do
+        product = build(:product, user: user)
+        expect(product).not_to be_valid
+        expect(product.errors.full_messages.first).to include("after November 5 at 2:00 AM UTC")
+      end
+    end
+
+    it "keeps the plain limit error when the quota is zero" do
+      user = create(:user, user_risk_state: "not_reviewed", timezone: "UTC", daily_product_creation_limit: 0)
+
+      product = build(:product, user: user)
+      expect(product).not_to be_valid
+      expect(product.errors.full_messages).to eq(["Sorry, you can only create 0 products per day."])
     end
   end
 
@@ -34,7 +72,7 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
 
       product_101 = build(:product, user: compliant_user)
       expect(product_101).not_to be_valid
-      expect(product_101.errors.full_messages).to include("Sorry, you can only create 100 products per day.")
+      expect(product_101.errors.full_messages).to include(a_string_starting_with("Sorry, you can only create 100 products per day."))
 
       travel_to 25.hours.from_now
 
@@ -63,7 +101,7 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
 
       product_6 = build(:product, user: user_with_custom_limit)
       expect(product_6).not_to be_valid
-      expect(product_6.errors.full_messages).to include("Sorry, you can only create 5 products per day.")
+      expect(product_6.errors.full_messages).to include(a_string_starting_with("Sorry, you can only create 5 products per day."))
     end
 
     it "allows increasing the limit beyond the default for compliant users" do
@@ -78,7 +116,7 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
 
       product_151 = build(:product, user: user_with_higher_limit)
       expect(product_151).not_to be_valid
-      expect(product_151.errors.full_messages).to include("Sorry, you can only create 150 products per day.")
+      expect(product_151.errors.full_messages).to include(a_string_starting_with("Sorry, you can only create 150 products per day."))
     end
 
     it "falls back to default limit when custom limit is not set" do
@@ -87,7 +125,7 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
 
       product_11 = build(:product, user: user_without_custom_limit)
       expect(product_11).not_to be_valid
-      expect(product_11.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
+      expect(product_11.errors.full_messages).to include(a_string_starting_with("Sorry, you can only create 10 products per day."))
     end
   end
 
@@ -102,7 +140,7 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
 
       blocked_product = build(:product, user: non_compliant_user)
       expect(blocked_product).not_to be_valid
-      expect(blocked_product.errors.full_messages).to include("Sorry, you can only create 10 products per day.")
+      expect(blocked_product.errors.full_messages).to include(a_string_starting_with("Sorry, you can only create 10 products per day."))
     end
   end
 
