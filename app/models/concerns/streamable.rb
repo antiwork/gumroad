@@ -69,20 +69,20 @@ module Streamable
       resolution_specific_playlist_key = playlist_line
       resolution_specific_playlist_key.prepend(hls_key_prefix)
 
-      # Escape the user-provided portion of the URL, which is the original file
-      # name. Note that the ProductFile could have been renamed by now. That's
-      # why we get the original file name from the hls_key_prefix, which comes
-      # from the TranscodedVideo object that was created when the video was
-      # originally transcoded.
+      # The escaped portion is the original file name, taken from the transcoded key because the
+      # ProductFile may have been renamed since. A key that is neither an attachment nor an original
+      # upload carries no file name segment, and then there is nothing to escape.
       original_file_name = if hls_key_prefix.include?("/original/")
         hls_key_prefix[%r{/original/(.*?)/hls}m, 1]
       else
         hls_key_prefix[%r{attachments/.*/(.*?)/hls}m, 1]
       end
-      resolution_specific_playlist_key.gsub!(
-        original_file_name,
-        CGI.escape(original_file_name)
-      )
+      if original_file_name
+        resolution_specific_playlist_key.gsub!(
+          original_file_name,
+          CGI.escape(original_file_name)
+        )
+      end
 
       signed_resolution_specific_playlist_url = signed_cloudfront_url(
         "#{HLS_DISTRIBUTION_URL}#{resolution_specific_playlist_key}",
