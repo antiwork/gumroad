@@ -82,6 +82,20 @@ func (c *Codec) Decrypt(name, value string, now time.Time) ([]byte, bool) {
 	return nil, false
 }
 
+// Rotated is a cookie that opens only under cookie_rotator.rb's old key, which the cookie jar
+// answers by writing it again under the primary key.
+func (c *Codec) Rotated(name, value string) bool {
+	sealed, iv, ok := rails.SplitEncryptedMessage(value)
+	if !ok || len(c.aeads) < 2 {
+		return false
+	}
+	if _, err := c.aeads[0].Open(nil, iv, sealed, nil); err == nil {
+		return false
+	}
+	_, err := c.aeads[1].Open(nil, iv, sealed, nil)
+	return err == nil
+}
+
 // extractMetadata is AbstractCookieJar#[]: Rails first expects the cookie's purpose, then
 // retries with none, so a message without metadata is still accepted.
 func extractMetadata(plain []byte, purpose string, now time.Time) ([]byte, bool) {
