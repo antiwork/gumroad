@@ -574,7 +574,7 @@ class ContactingCreatorMailer < ApplicationMailer
     return do_not_send unless @seller.account_active?
     @subject = "We need more information from you."
     country = @seller.compliance_country_code
-    @fields_needed_tags = @seller.user_compliance_info_requests.requested.pluck(:field_needed).uniq
+    @fields_needed_tags = @seller.user_compliance_info_requests.requested.pluck(:field_needed).uniq.reject { |field_needed| field_needed.include?(".") }
       .map { |field_needed| UserComplianceInfoFieldProperty.name_tag_for_field(field_needed, country:) }.compact.uniq
   end
 

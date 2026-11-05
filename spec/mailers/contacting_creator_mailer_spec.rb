@@ -3307,6 +3307,15 @@ describe ContactingCreatorMailer do
       expect(mail.body.encoded).to have_link("Complete your account", href: remediation_settings_payments_url)
     end
 
+    it "omits unlabelled Stripe-named requests and falls back to the generic copy" do
+      create(:user_compliance_info_request, user: seller, field_needed: "interv_123.identity_verification.challenge")
+
+      mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
+
+      expect(mail.body.encoded).not_to include("Challenge")
+      expect(mail.body.encoded).to include("Please complete the necessary fields")
+    end
+
     it "falls back to the generic copy when no request is outstanding" do
       mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
 
