@@ -138,23 +138,6 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(next_mandate_terms[:reference]).not_to eq(mandate_terms[:reference])
       end
 
-      it "sizes the mandate for the tier price a restart will apply" do
-        subscription = create(:subscription)
-        chargeable = double(requires_mandate?: true)
-        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ subscription_id: subscription.external_id }]))
-        allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
-        allow(subscription).to receive(:restart_tier_price_cents).and_return(4900)
-        expect(subscription).to receive(:indian_card_mandate_terms_with_rate).with(
-          billing_info: nil,
-          authenticated_offer_code_buyer: nil,
-          renewal_price_cents: 4900
-        ).and_return([{ amount: 5782, currency: Currency::USD, interval: "month", interval_count: 1 }, nil])
-
-        mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
-
-        expect(mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)).to eq(5782)
-      end
-
       it "omits the interval count for a sporadic subscription mandate" do
         subscription = create(:subscription)
         chargeable = double(requires_mandate?: true)
@@ -514,6 +497,130 @@ describe Stripe::SetupIntentsController, :vcr do
           expect(response.parsed_body["error_message"]).to eq("There is a temporary problem, please try again (your card was not charged).")
         end
       end
+    end
+  end
+
+  describe "restarting an ended membership after the seller raised the tier price",
+           vcr: { cassette_name: "Stripe_SetupIntentsController/restarting_an_ended_membership_after_the_seller_raised_the_tier_price", record: :none, allow_playback_repeats: true } do
+    include ManageSubscriptionHelpers
+
+    let(:merchant_account) do
+      create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id, charge_processor_merchant_id: nil)
+    end
+    let(:replacement_card) do
+      create(:indian_stripe_credit_card, stripe_customer_id: "cus_replacement", processor_payment_method_id: "pm_replacement",
+                                         stripe_fingerprint: "fingerprint_replacement", stripe_setup_intent_id: "seti_replacement")
+    end
+
+    before do
+      allow(MerchantAccount).to receive(:gumroad).with(StripeChargeProcessor.charge_processor_id).and_return(merchant_account)
+      allow_any_instance_of(Subscription).to receive(:send_restart_notifications!)
+    end
+
+    def end_membership_and_raise_tier_price_to(new_price_cents)
+      Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      @subscription.update!(cancelled_at: @originally_subscribed_at + 3.months, cancelled_by_buyer: true, deactivated_at: @originally_subscribed_at + 3.months)
+      travel_to(@originally_subscribed_at + 4.months)
+      @original_tier_quarterly_price.update!(price_cents: new_price_cents)
+    end
+
+    # Mints the mandate with this controller, then restarts through the real updater with a SetupIntent carrying exactly those terms.
+    def restart_with_controller_mandate(new_price_cents)
+      allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ subscription_id: @subscription.external_id }]))
+      allow(controller).to receive(:logged_in_user).and_return(@user)
+      options = controller.send(:mandate_options_for_stripe, double(requires_mandate?: true), subscription: Subscription.find(@subscription.id))
+      mandate_options = options.dig(:payment_method_options, :card, :mandate_options)
+
+      allow(ChargeProcessor).to receive(:get_setup_intent).and_return(
+        instance_double(
+          StripeSetupIntent, succeeded?: true, mandate: "mandate_active", payment_method_id: "pm_replacement",
+                             customer_id: "cus_replacement", usage: "off_session", metadata: options[:metadata].transform_values(&:to_s),
+                             card_mandate_options: Stripe::StripeObject.construct_from(mandate_options.except(:start_date))
+        )
+      )
+      allow(ChargeProcessor).to receive(:get_mandate).and_return(Stripe::Mandate.construct_from(id: "mandate_active", status: "active", payment_method: "pm_replacement"))
+      allow(CreditCard).to receive(:create).and_return(replacement_card)
+      service = Subscription::UpdaterService.new(
+        subscription: Subscription.find(@subscription.id),
+        gumroad_guid: "guid",
+        params: {
+          price_id: @quarterly_product_price.external_id,
+          variants: [@original_tier.external_id],
+          quantity: 1,
+          perceived_price_cents: new_price_cents,
+          perceived_upgrade_price_cents: new_price_cents,
+        },
+        logged_in_user: @user,
+        remote_ip: "11.22.33.44"
+      )
+      stripe_chargeable = StripeChargeablePaymentMethod.new("pm_replacement", zip_code: "12345", product_permalink: @product.unique_permalink)
+      allow(service).to receive(:get_chargeable) { service.chargeable = instance_double(Chargeable, get_chargeable_for: stripe_chargeable); nil }
+      allow(service).to receive(:charge_user!).and_return(success: true)
+
+      [mandate_options, service.perform]
+    end
+
+    it "accepts a mandate sized for the raised price plus tax" do
+      setup_subscription_with_vat
+      end_membership_and_raise_tier_price_to(@original_tier_quarterly_price.price_cents + 24_00)
+
+      mandate_options, result = restart_with_controller_mandate(@original_tier_quarterly_price.price_cents)
+
+      expect(mandate_options).to include(amount: 35_99)
+      expect(result).to include(success: true)
+    end
+
+    it "leaves tax off the mandate when the VAT ID that exempts the restart is only on the original purchase" do
+      allow_any_instance_of(VatValidationService).to receive(:process).and_return(true)
+      setup_subscription_with_vat(vat_id: "FR123456789")
+      @subscription.update_column(:business_vat_id, nil)
+      end_membership_and_raise_tier_price_to(@original_tier_quarterly_price.price_cents + 24_00)
+
+      mandate_options, result = restart_with_controller_mandate(@original_tier_quarterly_price.price_cents)
+
+      expect(mandate_options).to include(amount: 29_99)
+      expect(result).to include(success: true)
+    end
+
+    it "sizes the mandate as the free-trial re-check does when the VAT ID is only on a free-trial original purchase" do
+      allow_any_instance_of(VatValidationService).to receive(:process).and_return(true)
+      setup_subscription_with_vat(vat_id: "FR123456789")
+      @original_purchase.update!(is_free_trial_purchase: true)
+      @subscription.update_columns(business_vat_id: nil, free_trial_ends_at: @originally_subscribed_at + 1.week)
+      end_membership_and_raise_tier_price_to(@original_tier_quarterly_price.price_cents + 24_00)
+
+      mandate_options, result = restart_with_controller_mandate(@original_tier_quarterly_price.price_cents)
+
+      expect(mandate_options).to include(amount: 35_99)
+      expect(result).to include(success: true)
+    end
+
+    it "accepts a rupee mandate sized at today's rate when the rate moved since signup" do
+      setup_subscription
+      @product.update_column(:price_currency_type, Currency::INR)
+      @subscription.original_purchase.update_columns(displayed_price_currency_type: Currency::INR, displayed_price_cents: 80_000,
+                                                     price_cents: 8_00, total_transaction_cents: 8_00, rate_converted_to_usd: "100")
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      end_membership_and_raise_tier_price_to(160_000)
+
+      mandate_options, result = restart_with_controller_mandate(160_000)
+
+      expect(mandate_options).to include(amount: 160_000)
+      expect(result).to include(success: true)
+    end
+
+    it "sizes a dollar mandate when the restart price outdates a stored rupee fixing" do
+      setup_subscription
+      Redis::Namespace.new(:currencies, redis: $redis).set("INR", "80")
+      old_price_cents = @original_tier_quarterly_price.price_cents
+      create(:later_charge_presentment, owner: @subscription, presentment_currency: Currency::INR, presentment_price_cents: old_price_cents * 80,
+                                        canonical_price_cents: old_price_cents, signup_currency_units_per_usd: 80, effective_from: @originally_subscribed_at)
+      end_membership_and_raise_tier_price_to(old_price_cents + 24_00)
+
+      mandate_options, result = restart_with_controller_mandate(@original_tier_quarterly_price.price_cents)
+
+      expect(mandate_options).to include(amount: 29_99, currency: Currency::USD)
+      expect(result).to include(success: true)
     end
   end
 end

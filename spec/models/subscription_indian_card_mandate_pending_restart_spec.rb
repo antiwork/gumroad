@@ -145,6 +145,12 @@ describe Subscription do
       expect(subscription.reusable_pending_indian_card).to be_nil
     end
 
+    it "returns nothing when the seller raised the price since the card was stored" do
+      allow(subscription).to receive(:restart_tier_price_cents).and_return(product.default_price_cents + 2400)
+
+      expect(subscription.reusable_pending_indian_card).to be_nil
+    end
+
     context "when the mandate terms no longer match the membership" do
       let(:terms_match) { false }
 

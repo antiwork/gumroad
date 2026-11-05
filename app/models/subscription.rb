@@ -698,6 +698,8 @@ class Subscription < ApplicationRecord
   def reusable_pending_indian_card(billing_info: nil, authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     return unless india_card_mandate_pending_restart_enabled?
     return unless renewal_disabled_due_to_indian_card_mandate? && stripe_mandate_id.present?
+    # The stored mandate was sized before the seller's price change, so the restart needs a new one.
+    return if restart_tier_price_cents.present?
 
     card = credit_card
     setup_intent_id = card&.stripe_setup_intent_id
@@ -753,8 +755,18 @@ class Subscription < ApplicationRecord
     price_override = renewal_price_cents.present?
     renewal_price_cents ||= current_subscription_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
-    presentment_matches = presentment.present? &&
-      indian_card_presentment_in_force?(presentment, purchase, renewal_price_cents:) &&
+    presentment_in_force = if presentment.nil?
+      false
+    elsif price_override
+      # The restart replaces the original purchase before the updater re-checks the fixing, so hold it against the
+      # restart price: a cross-currency row against its canonical value, a listed-currency row against its listed price too.
+      displayed_currency = (purchase[:displayed_price_currency_type].presence || link.price_currency_type).to_s.downcase
+      presentment.canonical_price_cents == indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate:, price_override:) &&
+        (presentment.presentment_currency != displayed_currency || presentment.presentment_price_cents == renewal_price_cents)
+    else
+      indian_card_presentment_in_force?(presentment, purchase, renewal_price_cents:)
+    end
+    presentment_matches = presentment_in_force &&
       indian_card_renewal_presentment_supported?(presentment.presentment_currency)
     recovery_currency = indian_card_recovery_presentment_currency unless presentment_matches
     price_cap_rate = if presentment_matches
@@ -768,11 +780,16 @@ class Subscription < ApplicationRecord
       fixed_rate: price_cap_rate,
       price_override:
     )
+    # update_current_plan! gives the re-priced purchase the original purchase's VAT ID when the
+    # subscription has none, and that purchase then stores it on the subscription.
+    buyer_vat_id = price_override ? business_vat_id.presence || purchase.purchase_sales_tax_info&.business_vat_id : business_vat_id
     canonical_cap_cents = if billing_info.present?
-      indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents)
+      indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents, buyer_vat_id:)
     elsif price_override
       # The purchase's stored total is the old price; re-derive tax on the restart price.
-      indian_card_mandate_amount_for_billing_info(purchase, purchase.slice(:country, :state, :zip_code), price_cap_cents)
+      # A free-trial re-check sizes from the reloaded purchase, which has no VAT ID in memory.
+      indian_card_mandate_amount_for_billing_info(purchase, purchase.slice(:country, :state, :zip_code), price_cap_cents,
+                                                  buyer_vat_id: (buyer_vat_id unless purchase.is_free_trial_purchase?))
     else
       purchase.mandate_maximum_amount_cents(fixed_rate: (fixed_rate if recovery_currency.present?))
     end
@@ -799,14 +816,12 @@ class Subscription < ApplicationRecord
         # current rate; FX drift between the two bases must not consume the tax/shipping
         # headroom. Floor the variable part at the cap's own non-price part — the same
         # pre-discount price basis mandate_maximum_amount_cents scaled, at the same rate.
-        # A restart override is exempt: its canonical cap is re-derived from the restart price
-        # on today's basis, so the difference above is already tax/shipping only. Converting
-        # the restart price at the signup rate here would re-add the drift as phantom headroom,
-        # which the post-restart validation (an exact amount match) then rejects.
+        # A restart override's canonical cap is already on today's basis; this floor would add
+        # phantom headroom that the post-restart exact-amount validation rejects.
         price_basis_cents = if purchase.is_free_trial_purchase?
           price_cap_cents
         else
-          indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: purchase.rate_converted_to_usd.presence, price_override:)
+          indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: purchase.rate_converted_to_usd.presence)
         end
         extras_cents = [canonical_cap_cents - price_basis_cents, 0].max
         if extras_cents.positive? && price_basis_cents.positive? && price_cap_cents.positive?
@@ -891,11 +906,11 @@ class Subscription < ApplicationRecord
     get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
   end
 
-  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cents)
+  def indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cents, buyer_vat_id: business_vat_id)
     purchase.indian_card_mandate_amount_for_billing_info(
       billing_info,
       price_cents,
-      buyer_vat_id: business_vat_id
+      buyer_vat_id:
     )
   end
 
