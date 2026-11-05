@@ -794,11 +794,15 @@ class Subscription < ApplicationRecord
     end
     if price_rate.present?
       variable_cap_cents = [canonical_cap_cents - price_cap_cents, 0].max
-      if recovery_currency.present? && billing_info.blank?
+      if recovery_currency.present? && billing_info.blank? && !price_override
         # The canonical cap keeps signup-rate dollars while the recovery price cap uses the
         # current rate; FX drift between the two bases must not consume the tax/shipping
         # headroom. Floor the variable part at the cap's own non-price part — the same
         # pre-discount price basis mandate_maximum_amount_cents scaled, at the same rate.
+        # A restart override is exempt: its canonical cap is re-derived from the restart price
+        # on today's basis, so the difference above is already tax/shipping only. Converting
+        # the restart price at the signup rate here would re-add the drift as phantom headroom,
+        # which the post-restart validation (an exact amount match) then rejects.
         price_basis_cents = if purchase.is_free_trial_purchase?
           price_cap_cents
         else
