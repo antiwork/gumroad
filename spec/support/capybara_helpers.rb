@@ -111,6 +111,15 @@ module CapybaraHelpers
     page.driver.browser.switch_to.alert.accept
   end
 
+  # Navigating away from a page with unsaved edits (a reload, a hard link) is refused by the
+  # browser's beforeunload dialog, which the navigation command reports as an open alert rather
+  # than completing. Accept it so the navigation goes through.
+  def discard_unsaved_edits
+    yield
+  rescue Selenium::WebDriver::Error::UnexpectedAlertOpenError
+    accept_browser_dialog
+  end
+
   # Reads the flash/toast alert message and immediately dismisses it.
   # Use this instead of `have_alert` when the alert overlays content
   # you need to interact with next — it prevents the 5s auto-dismiss

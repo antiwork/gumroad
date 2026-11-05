@@ -523,7 +523,8 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
 
     section1 = create(:seller_profile_posts_section, seller:, header: "Posts section 1", shown_posts: [installment.id])
     section2 = create(:seller_profile_posts_section, seller:, shown_posts: [])
-    refresh
+    # The channel edits above are unsaved, so the browser asks before the reload discards them.
+    discard_unsaved_edits { refresh }
 
     expect(page).to_not have_field("Posts section 1")
     expect(page).to_not have_field("Unnamed section")
