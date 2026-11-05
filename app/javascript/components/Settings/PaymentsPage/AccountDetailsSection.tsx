@@ -422,7 +422,12 @@ const AccountDetailsSection = ({
               </a>
             </FieldsetTitle>
           </Fieldset>
-          <Tabs variant="buttons" className="grid-cols-1 gap-4 sm:grid-cols-2" role="radiogroup">
+          <Tabs
+            variant="buttons"
+            className="grid-cols-1 gap-4 sm:grid-cols-2"
+            role="radiogroup"
+            aria-label="Account type"
+          >
             <Tab key="individual" isSelected={!complianceInfo.is_business} asChild>
               <Button
                 role="radio"

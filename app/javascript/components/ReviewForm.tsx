@@ -366,7 +366,7 @@ export const ReviewForm = React.forwardRef<
     };
 
     const reviewModeRadioButtons = (
-      <Tabs variant="buttons" className="grid-cols-2!" role="radiogroup">
+      <Tabs variant="buttons" className="grid-cols-2!" role="radiogroup" aria-label="Review type">
         <Tab isSelected={reviewMode === "text"} asChild>
           <Button
             role="radio"

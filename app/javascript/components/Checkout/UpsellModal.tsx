@@ -32,7 +32,7 @@ export const UpsellModal = ({
     <>
       <div className="flex flex-col gap-4">
         <h4 dangerouslySetInnerHTML={{ __html: upsell.description }} />
-        <Tabs variant="buttons" role="radiogroup">
+        <Tabs variant="buttons" role="radiogroup" aria-label="Upgrade option">
           <OptionRadioButton
             selected
             priceCents={offeredPriceCents * (hasOncePerCartDiscount ? item.quantity : 1)}

@@ -387,6 +387,7 @@ const WorkflowForm = ({ context, workflow }: WorkflowFormProps) => {
               variant="buttons"
               className="gap-4 sm:grid-cols-2 md:grid-flow-row md:grid-cols-3 2xl:grid-cols-5"
               role="radiogroup"
+              aria-label="Trigger"
             >
               {workflow && workflow.workflow_type === "audience" ? (
                 <Tab isSelected={formState.trigger === "legacy_audience"} asChild>

@@ -13,6 +13,7 @@ import {
 import { CreatorProfile } from "$app/parsers/profile";
 import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
+import { selectAdjacentRadio } from "$app/utils/radioGroupKeyboard";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -72,21 +73,6 @@ const COLOR_PRESETS = [
 
 // Keys are the values SellerProfile stores. "none" reads as "no corners" under a Corners title.
 const BORDER_RADIUS_LABELS: Record<string, string> = { none: "Square" };
-
-// Arrow keys move focus and selection through a group of role="radio" buttons, wrapping at the
-// ends. Pair with a roving tabIndex so the group is a single tab stop.
-const RADIO_ARROW_STEPS: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
-const selectAdjacentRadio = (event: React.KeyboardEvent<HTMLElement>) => {
-  const step = RADIO_ARROW_STEPS[event.key];
-  if (step === undefined) return;
-  const radios = [...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=radio]:not(:disabled)")];
-  const index = radios.findIndex((radio) => radio === event.target);
-  if (index === -1) return;
-  event.preventDefault();
-  const next = radios[(index + step + radios.length) % radios.length];
-  next?.focus();
-  next?.click();
-};
 
 type ProfilePageProps = {
   profile_settings: ProfileSettingsForm;
@@ -521,14 +507,23 @@ export default function SettingsPage() {
               ) : null}
               <Fieldset>
                 <FieldsetTitle>Font</FieldsetTitle>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3" role="radiogroup">
-                  {FONT_CHOICES.map((font) => {
+                <div
+                  className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3"
+                  role="radiogroup"
+                  aria-label="Font"
+                  onKeyDown={selectAdjacentRadio}
+                >
+                  {FONT_CHOICES.map((font, index) => {
                     const isSelected = font === profileSettings.font;
+                    // A stored font that is no longer a choice matches none; the first one then takes
+                    // the group's tab stop.
+                    const isTabStop = profileSettings.font ? isSelected : index === 0;
                     return (
                       <Button
                         role="radio"
                         key={font}
                         aria-checked={isSelected}
+                        tabIndex={isTabStop ? 0 : -1}
                         onClick={() => updateProfileSettings({ font })}
                         style={{ fontFamily: font === DEFAULT_PROFILE_FONT ? undefined : font }}
                         disabled={!canUpdate}

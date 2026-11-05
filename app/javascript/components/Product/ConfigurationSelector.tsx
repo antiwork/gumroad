@@ -52,6 +52,11 @@ import { Select } from "$app/components/ui/Select";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRunOnce } from "$app/components/useRunOnce";
 
+// The words the seller sees in the product editor, so a picker's group name matches the version,
+// variant or tier they built.
+const optionSetLabel = (product: Product) =>
+  product.is_tiered_membership ? "Tier" : product.native_type === "physical" ? "Variant" : "Version";
+
 const PWYWInput = React.forwardRef<
   HTMLInputElement,
   {
@@ -685,7 +690,7 @@ const PaymentOptionSelector = ({
   return (
     <section>
       <h4 className="mb-2">Payment option</h4>
-      <Tabs variant="buttons" role="radiogroup">
+      <Tabs variant="buttons" role="radiogroup" aria-label="Payment option">
         <Tab isSelected={!selection.payInInstallments} asChild>
           <Button
             role="radio"
@@ -873,6 +878,7 @@ export const ConfigurationSelector = React.forwardRef<
         <Tabs
           variant="buttons"
           role="radiogroup"
+          aria-label={optionSetLabel(product)}
           className="md:grid-flow-row"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(6rem, 100%), 1fr))" }}
         >
@@ -956,6 +962,7 @@ export const ConfigurationSelector = React.forwardRef<
         <Tabs
           variant="buttons"
           role="radiogroup"
+          aria-label="Rent or buy"
           className="md:grid-flow-row"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
           itemProp="offers"
@@ -996,6 +1003,7 @@ export const ConfigurationSelector = React.forwardRef<
           <Tabs
             variant="buttons"
             role="radiogroup"
+            aria-label={optionSetLabel(product)}
             className="md:grid-flow-row"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(15rem, 100%), 1fr))" }}
             itemProp="offers"

@@ -957,6 +957,7 @@ const TipSelector = ({
           <Tabs
             variant="buttons"
             role="radiogroup"
+            aria-label="Tip percentage"
             className="col-span-full grid-cols-1! @3xs:grid-cols-2! @sm:grid-cols-4! @[52rem]:col-span-4!"
           >
             {tipPercentages.map((percentage) => (
