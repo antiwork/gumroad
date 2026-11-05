@@ -371,14 +371,21 @@ describe("EmailForm unsaved-changes guard", () => {
   it("does not warn after saving a new publish date on a published email", async () => {
     const published: Installment = { ...savedRecord, display_type: "published", published_at: "2026-08-01T12:00:00Z" };
     const view = renderForm(published);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    fireEvent.change(screen.getByPlaceholderText("Publish date"), { target: { value: "2026-07-15" } });
+    const date = await screen.findByPlaceholderText<HTMLInputElement>("Publish date");
+    // The baseline is taken in a timeout after the editor settles, so a change fired before that is
+    // baselined as clean — and the mount is slow enough on CI to lose any fixed wait. Retype until
+    // the guard reports the edit, which cannot happen before the baseline exists.
+    for (let day = 1; day <= 28; day++) {
+      fireEvent.change(date, { target: { value: `2026-07-${String(day).padStart(2, "0")}` } });
+      if (unload()) break;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    fireEvent.change(date, { target: { value: "2026-07-15" } });
     expect(unload()).toBe(true);
 
     respond(view, await save(), saved, { ...published, published_at: "2026-07-15T12:00:00Z" });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(screen.getByPlaceholderText<HTMLInputElement>("Publish date").value).toBe("2026-07-15");
-    expect(unload()).toBe(false);
+    await waitFor(() => expect(screen.getByPlaceholderText<HTMLInputElement>("Publish date").value).toBe("2026-07-15"));
+    await waitFor(() => expect(unload()).toBe(false));
   });
 
   it("does not warn after saving a new upsell card that the server gave an id", async () => {
@@ -390,8 +397,7 @@ describe("EmailForm unsaved-changes guard", () => {
     const withId = '<upsell-card productid="product-1" id="upsell-1"></upsell-card>';
     respond(view, await save(), saved, { ...draft, message: `<p>Hi</p>${withId}` });
     await waitFor(() => expect(document.querySelector("upsell-card#upsell-1")).not.toBeNull());
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(unload()).toBe(false);
+    await waitFor(() => expect(unload()).toBe(false));
   });
 
   it("keeps warning after a rejected save, and for an edit the save did not carry", async () => {
@@ -420,13 +426,15 @@ describe("EmailForm unsaved-changes guard", () => {
 
   it("treats a changed schedule date as an unsaved edit", async () => {
     renderForm();
-    // The baseline is taken once the editor mounts, so the assertion has to wait for it.
-    await new Promise((resolve) => setTimeout(resolve, 20));
     fireEvent.click(screen.getByRole("button", { name: "Publish" }));
     const scheduleDate = await screen.findByLabelText("Schedule date");
     expect(unload()).toBe(false);
-    fireEvent.change(scheduleDate, { target: { value: "2030-01-01T10:00" } });
-    fireEvent.focusOut(scheduleDate);
+    // Same baseline race as the publish date above: retype until the guard reports the edit.
+    for (let minute = 0; minute <= 27 && !unload(); minute++) {
+      fireEvent.change(scheduleDate, { target: { value: `2030-01-01T10:${String(minute).padStart(2, "0")}` } });
+      fireEvent.focusOut(scheduleDate);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
     expect(unload()).toBe(true);
   });
 
@@ -453,9 +461,7 @@ describe("EmailForm unsaved-changes guard", () => {
     };
     renderForm(draft, { ...context, audience_types: ["customers"] }, { purchase_id: "p1", email: "buyer@example.com" });
 
-    await waitFor(() => expect(screen.getByPlaceholderText("Title")).toBeTruthy());
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Updated" } });
+    await edit();
     expect(unload()).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Send now" }));
