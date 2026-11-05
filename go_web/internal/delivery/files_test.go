@@ -61,7 +61,7 @@ func (e *env) exec(query string, args ...any) {
 	}
 }
 
-func (e *env) link(id, flags int64) {
+func (e *env) insertProduct(id, flags int64) {
 	e.insert("links", id, map[string]any{"name": "Product", "flags": flags, "created_at": stamp, "updated_at": stamp})
 }
 
@@ -74,12 +74,12 @@ func (e *env) file(id int64, columns map[string]any) {
 	e.insert("product_files", id, row)
 }
 
-func (e *env) purchase(id, linkID int64) {
-	e.insert("purchases", id, map[string]any{"link_id": linkID, "created_at": stamp})
+func (e *env) purchase(id, productID int64) {
+	e.insert("purchases", id, map[string]any{"link_id": productID, "created_at": stamp})
 }
 
-func (e *env) category(id, linkID int64) {
-	e.insert("variant_categories", id, map[string]any{"link_id": linkID, "title": "Version"})
+func (e *env) category(id, productID int64) {
+	e.insert("variant_categories", id, map[string]any{"link_id": productID, "title": "Version"})
 }
 
 // variant inserts an alive Variant in categoryID; columns override that.
@@ -167,7 +167,7 @@ func ptr(v int64) *int64 { return &v }
 func TestInstallmentFilesWinWhileItHasAliveOnes(t *testing.T) {
 	e := newEnv(t)
 	product, installment, purchase := base+1, base+50, base+20
-	e.link(product, 0)
+	e.insertProduct(product, 0)
 	e.purchase(purchase, product)
 	e.insert("installments", installment, map[string]any{"link_id": product, "created_at": stamp, "updated_at": stamp})
 	e.file(base+100, map[string]any{"link_id": product, "position": 0})
@@ -187,8 +187,8 @@ func TestInstallmentFilesWinWhileItHasAliveOnes(t *testing.T) {
 func TestEmbeddedFilesPickAndOrderTheProductsFiles(t *testing.T) {
 	e := newEnv(t)
 	product, other, purchase := base+1, base+2, base+20
-	e.link(product, 0)
-	e.link(other, 0)
+	e.insertProduct(product, 0)
+	e.insertProduct(other, 0)
 	e.purchase(purchase, product)
 	for i, position := range []any{3, 2, 1, 0} {
 		e.file(base+100+int64(i), map[string]any{"link_id": product, "position": position})
@@ -223,10 +223,10 @@ func TestEmbeddedFilesPickAndOrderTheProductsFiles(t *testing.T) {
 
 func TestRedirectsWithoutAProductDeliverNothing(t *testing.T) {
 	e := newEnv(t)
-	e.link(base+1, 0)
+	e.insertProduct(base+1, 0)
 	e.file(base+100, map[string]any{"link_id": base + 1})
 	e.expectFiles(&Redirect{})
-	e.expectFiles(&Redirect{PurchaseID: ptr(base + 20), LinkID: ptr(base + 2)})
+	e.expectFiles(&Redirect{PurchaseID: ptr(base + 20), ProductID: ptr(base + 2)})
 
 	// A purchase whose product is gone refers to nothing; referenced_link does not fall through.
 	e.purchase(base+21, base+3)
@@ -234,26 +234,26 @@ func TestRedirectsWithoutAProductDeliverNothing(t *testing.T) {
 	e.expectFiles(&Redirect{PurchaseID: ptr(base + 21), ImportedCustomerID: ptr(base + 30)})
 }
 
-func TestReferencedLinkFallsBackThroughTheRedirectsAssociations(t *testing.T) {
+func TestReferencedProductFallsBackThroughTheRedirectsAssociations(t *testing.T) {
 	e := newEnv(t)
-	e.link(base+1, 0)
-	e.link(base+2, 0)
+	e.insertProduct(base+1, 0)
+	e.insertProduct(base+2, 0)
 	e.file(base+100, map[string]any{"link_id": base + 1})
 	e.file(base+101, map[string]any{"link_id": base + 2})
 	e.insert("imported_customers", base+30, map[string]any{"link_id": base + 1, "created_at": stamp, "updated_at": stamp})
 	e.insert("installments", base+50, map[string]any{"link_id": base + 2, "created_at": stamp, "updated_at": stamp})
 
-	e.expectFiles(&Redirect{PurchaseID: ptr(base + 20), ImportedCustomerID: ptr(base + 30), LinkID: ptr(base + 2)}, base+100)
-	e.expectFiles(&Redirect{ImportedCustomerID: ptr(base + 31), LinkID: ptr(base + 2)}, base+101)
+	e.expectFiles(&Redirect{PurchaseID: ptr(base + 20), ImportedCustomerID: ptr(base + 30), ProductID: ptr(base + 2)}, base+100)
+	e.expectFiles(&Redirect{ImportedCustomerID: ptr(base + 31), ProductID: ptr(base + 2)}, base+101)
 	// An installment without files hands over to its product, after a missing link.
-	e.expectFiles(&Redirect{LinkID: ptr(base + 3), InstallmentID: ptr(base + 50)}, base+101)
+	e.expectFiles(&Redirect{ProductID: ptr(base + 3), InstallmentID: ptr(base + 50)}, base+101)
 }
 
 // variantProduct is a product with product-level file 100, a category, and variants 10 and 11
 // whose files are 101-103.
 func variantProduct(e *env, flags int64) (product, purchase int64) {
 	product, purchase = base+1, base+20
-	e.link(product, flags)
+	e.insertProduct(product, flags)
 	e.category(base+5, product)
 	e.variant(base+10, base+5, map[string]any{"price_difference_cents": 0})
 	e.variant(base+11, base+5, map[string]any{"price_difference_cents": 100})
@@ -287,7 +287,7 @@ func TestAPurchasedVariantDeliversItsOwnFiles(t *testing.T) {
 
 func TestSharedContentMakesTheProductTheProvider(t *testing.T) {
 	e := newEnv(t)
-	product, purchase := variantProduct(e, linkHasSameRichContentForAllVariants)
+	product, purchase := variantProduct(e, productHasSameRichContentForAllVariants)
 	e.buys(purchase, base+11)
 	r := &Redirect{PurchaseID: ptr(purchase)}
 	e.content(base+200, "Link", product, textPage)
@@ -309,7 +309,7 @@ func TestSharedContentMakesTheProductTheProvider(t *testing.T) {
 
 	// A physical product's shared flag is never a recoverable lie.
 	e.exec("UPDATE rich_contents SET description = ? WHERE id = ?", textPage, base+201)
-	e.exec("UPDATE links SET flags = ? WHERE id = ?", linkHasSameRichContentForAllVariants|linkIsPhysical, product)
+	e.exec("UPDATE links SET flags = ? WHERE id = ?", productHasSameRichContentForAllVariants|productIsPhysical, product)
 	e.expectFiles(r, base+100, base+102, base+101, base+103)
 }
 
@@ -341,7 +341,7 @@ func TestTheProductFallsToItsCheapestVariant(t *testing.T) {
 	e.expectFiles(r, base+104, base+100, base+102, base+101, base+103)
 	e.exec("UPDATE rich_contents SET deleted_at = ? WHERE id = ?", stamp, base+200)
 
-	e.exec("UPDATE links SET flags = ? WHERE id = ?", linkIsPhysical, product)
+	e.exec("UPDATE links SET flags = ? WHERE id = ?", productIsPhysical, product)
 	e.expectFiles(r, base+104, base+100, base+102, base+101, base+103)
 
 	e.exec("UPDATE links SET flags = 0 WHERE id = ?", product)
@@ -356,7 +356,7 @@ func TestTheProductFallsToItsCheapestVariant(t *testing.T) {
 
 func TestRecoverableHiddenContentPrefersTheCheapestVariantWithPages(t *testing.T) {
 	e := newEnv(t)
-	product, purchase := variantProduct(e, linkHasSameRichContentForAllVariants)
+	product, purchase := variantProduct(e, productHasSameRichContentForAllVariants)
 	r := &Redirect{PurchaseID: ptr(purchase)}
 	e.content(base+200, "Link", product, blankPage)
 	e.content(base+201, "BaseVariant", base+11, textPage)
@@ -439,7 +439,7 @@ func TestRowsRailsWouldRaiseOnAreErrors(t *testing.T) {
 	e.exec("UPDATE base_variants SET deleted_at = ? WHERE id = ?", stamp, base+12)
 	e.content(base+200, "BaseVariant", base+10, `"a string page"`)
 	e.expectFiles(r, base+103)
-	e.exec("UPDATE links SET flags = ? WHERE id = ?", linkHasSameRichContentForAllVariants, base+1)
+	e.exec("UPDATE links SET flags = ? WHERE id = ?", productHasSameRichContentForAllVariants, base+1)
 	e.expectError(r, "has no #any?")
 }
 

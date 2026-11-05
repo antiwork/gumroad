@@ -29,7 +29,7 @@ func (e *env) jsonFor(template string) string {
 func TestAudioDurationsAreContentLengthsOfTheAudioFilegroup(t *testing.T) {
 	e := newEnv(t)
 	product, purchase := base+1, base+20
-	e.link(product, 0)
+	e.insertProduct(product, 0)
 	e.purchase(purchase, product)
 	for i, columns := range []map[string]any{
 		{"filetype": "mp3", "filegroup": "audio", "duration": 120, "pagelength": 4},
@@ -66,7 +66,7 @@ func TestAudioDurationsAreContentLengthsOfTheAudioFilegroup(t *testing.T) {
 func TestLatestMediaLocationsForTheDownloadPage(t *testing.T) {
 	e := newEnv(t)
 	product, purchase, other := base+1, base+20, base+21
-	e.link(product, 0)
+	e.insertProduct(product, 0)
 	e.purchase(purchase, product)
 	e.purchase(other, product)
 	const earlier, latest = "2026-02-03 04:05:06", "2026-02-03 05:06:07"

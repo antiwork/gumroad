@@ -18,14 +18,14 @@ import (
 
 // Link's has_flags masks: flag n is 1 << (n-1).
 const (
-	linkIsPhysical                       = 1 << 7
-	linkHasSameRichContentForAllVariants = 1 << 24
+	productIsPhysical                       = 1 << 7
+	productHasSameRichContentForAllVariants = 1 << 24
 )
 
 // Redirect is the url_redirects columns AliveProductFiles reads.
 type Redirect struct {
-	ID                                                    int64
-	PurchaseID, LinkID, InstallmentID, ImportedCustomerID *int64
+	ID                                                       int64
+	PurchaseID, ProductID, InstallmentID, ImportedCustomerID *int64
 }
 
 // ProductFile is the product_files columns the polls read. Take it from AliveProductFiles:
@@ -49,7 +49,7 @@ func AliveProductFiles(ctx context.Context, db *sql.DB, r *Redirect, ids *obfusc
 }
 
 func newLoader(ctx context.Context, db *sql.DB, r *Redirect, ids *obfuscate.IDs) *loader {
-	return &loader{ctx: ctx, db: db, r: r, ids: ids, links: map[int64]*product{}, categories: map[int64]*category{},
+	return &loader{ctx: ctx, db: db, r: r, ids: ids, products: map[int64]*product{}, categories: map[int64]*category{},
 		categoryHasFiles: map[int64]bool{}, contents: map[contentOwner][]*RichContent{}}
 }
 
@@ -75,7 +75,7 @@ type variant struct {
 	id         int64
 	class      variantClass
 	categoryID sql.NullInt64
-	linkID     sql.NullInt64
+	productID  sql.NullInt64
 	deleted    bool
 }
 
@@ -87,18 +87,18 @@ type owner struct {
 }
 
 type installment struct {
-	id     int64
-	linkID sql.NullInt64
+	id        int64
+	productID sql.NullInt64
 }
 
 type purchase struct {
-	id     int64
-	linkID sql.NullInt64
+	id        int64
+	productID sql.NullInt64
 }
 
 type category struct {
-	id     int64
-	linkID sql.NullInt64
+	id        int64
+	productID sql.NullInt64
 }
 
 // contentOwner is rich_contents' polymorphic entity: a BaseVariant subclass is stored as BaseVariant.
@@ -122,12 +122,12 @@ type loader struct {
 	purchaseLoaded          bool
 	variantAttributes       []*variant
 	variantsLoaded          bool
-	referencedLink          *product
-	referencedLinkLoaded    bool
+	referencedProduct       *product
+	referencedProductLoaded bool
 	provider                *owner
 	providerLoaded          bool
 
-	links            map[int64]*product // nil for a missing row
+	products         map[int64]*product // nil for a missing row
 	categories       map[int64]*category
 	categoryHasFiles map[int64]bool
 	contents         map[contentOwner][]*RichContent
@@ -182,11 +182,11 @@ func (l *loader) aliveProductFiles() ([]ProductFile, error) {
 		}
 	}
 
-	link, err := l.loadReferencedLink()
-	if err != nil || link == nil {
+	prod, err := l.loadReferencedProduct()
+	if err != nil || prod == nil {
 		return nil, err
 	}
-	return l.files(fileColumns+" WHERE `product_files`.`link_id` = ? AND `product_files`.`deleted_at` IS NULL"+inPosition, link.id)
+	return l.files(fileColumns+" WHERE `product_files`.`link_id` = ? AND `product_files`.`deleted_at` IS NULL"+inPosition, prod.id)
 }
 
 // providerFiles is the rich content provider's alive files: those its alive pages embed, in
@@ -316,7 +316,7 @@ func (l *loader) resolveRichContentProvider() (*owner, error) {
 		if err != nil {
 			return nil, err
 		}
-		if product != nil && product.is(linkHasSameRichContentForAllVariants) {
+		if product != nil && product.is(productHasSameRichContentForAllVariants) {
 			recoverable, err := l.recoverableHiddenVariantRichContent(product)
 			if err != nil {
 				return nil, err
@@ -349,11 +349,11 @@ func (l *loader) withProductFiles() (*owner, error) {
 		return nil, err
 	}
 	if !purchasedVariant {
-		link, err := l.loadReferencedLink()
-		if err != nil || link == nil {
+		prod, err := l.loadReferencedProduct()
+		if err != nil || prod == nil {
 			return nil, err
 		}
-		return &owner{product: link}, nil
+		return &owner{product: prod}, nil
 	}
 	// purchase.variant_attributes.order(deleted_at: :asc).first: an alive variant first, and
 	// among several the one MySQL's sort picks for the LIMIT.
@@ -400,14 +400,14 @@ func (l *loader) productOrCheapestVariant(entity *owner) (*owner, error) {
 		return nil, err
 	}
 	effectivelyShared := false
-	if product.is(linkHasSameRichContentForAllVariants) {
+	if product.is(productHasSameRichContentForAllVariants) {
 		recoverable, err := l.recoverableHiddenVariantRichContent(product)
 		if err != nil {
 			return nil, err
 		}
 		effectivelyShared = !recoverable
 	}
-	if product.is(linkIsPhysical) || effectivelyShared || hasProductLevelContent {
+	if product.is(productIsPhysical) || effectivelyShared || hasProductLevelContent {
 		return &owner{product: product}, nil
 	}
 	none, err := l.aliveVariantsNone(product)
@@ -453,7 +453,7 @@ func (l *loader) productOrCheapestVariant(entity *owner) (*owner, error) {
 
 // recoverableHiddenVariantRichContent is Link#recoverable_hidden_variant_rich_content?.
 func (l *loader) recoverableHiddenVariantRichContent(p *product) (bool, error) {
-	if !p.is(linkHasSameRichContentForAllVariants) || p.is(linkIsPhysical) {
+	if !p.is(productHasSameRichContentForAllVariants) || p.is(productIsPhysical) {
 		return false, nil
 	}
 	has, err := l.anyEditorContent(contentOwner{"Link", p.id})
@@ -493,9 +493,9 @@ func (l *loader) owningProduct(v *variant) (*product, error) {
 		if err != nil || c == nil {
 			return nil, err
 		}
-		return l.loadLink(c.linkID)
+		return l.loadProduct(c.productID)
 	case classSku:
-		return l.loadLink(v.linkID)
+		return l.loadProduct(v.productID)
 	}
 	return nil, fmt.Errorf("delivery: base variant %d has no type, and BaseVariant has no #link", v.id)
 }
@@ -594,7 +594,7 @@ func (l *loader) loadInstallment() (*installment, error) {
 	if l.r.InstallmentID != nil {
 		i := &installment{}
 		found, err := l.queryRow("SELECT `installments`.`id`, `installments`.`link_id` FROM `installments` WHERE `installments`.`id` = ? LIMIT 1",
-			[]any{*l.r.InstallmentID}, &i.id, &i.linkID)
+			[]any{*l.r.InstallmentID}, &i.id, &i.productID)
 		if err != nil {
 			return nil, err
 		}
@@ -613,7 +613,7 @@ func (l *loader) loadPurchase() (*purchase, error) {
 	if l.r.PurchaseID != nil {
 		p := &purchase{}
 		found, err := l.queryRow("SELECT `purchases`.`id`, `purchases`.`link_id` FROM `purchases` WHERE `purchases`.`id` = ? LIMIT 1",
-			[]any{*l.r.PurchaseID}, &p.id, &p.linkID)
+			[]any{*l.r.PurchaseID}, &p.id, &p.productID)
 		if err != nil {
 			return nil, err
 		}
@@ -638,56 +638,56 @@ func (l *loader) loadVariantAttributes() ([]*variant, error) {
 	return variants, nil
 }
 
-// loadReferencedLink is UrlRedirect#referenced_link.
-func (l *loader) loadReferencedLink() (*product, error) {
-	if l.referencedLinkLoaded {
-		return l.referencedLink, nil
+// loadReferencedProduct is UrlRedirect#referenced_link.
+func (l *loader) loadReferencedProduct() (*product, error) {
+	if l.referencedProductLoaded {
+		return l.referencedProduct, nil
 	}
-	link, err := l.resolveReferencedLink()
+	prod, err := l.resolveReferencedProduct()
 	if err != nil {
 		return nil, err
 	}
-	l.referencedLink, l.referencedLinkLoaded = link, true
-	return link, nil
+	l.referencedProduct, l.referencedProductLoaded = prod, true
+	return prod, nil
 }
 
-func (l *loader) resolveReferencedLink() (*product, error) {
+func (l *loader) resolveReferencedProduct() (*product, error) {
 	p, err := l.loadPurchase()
 	if err != nil {
 		return nil, err
 	}
 	if p != nil {
-		return l.loadLink(p.linkID)
+		return l.loadProduct(p.productID)
 	}
 	if l.r.ImportedCustomerID != nil {
-		var linkID sql.NullInt64
+		var productID sql.NullInt64
 		found, err := l.queryRow("SELECT `imported_customers`.`link_id` FROM `imported_customers` WHERE `imported_customers`.`id` = ? LIMIT 1",
-			[]any{*l.r.ImportedCustomerID}, &linkID)
+			[]any{*l.r.ImportedCustomerID}, &productID)
 		if err != nil {
 			return nil, err
 		}
 		if found {
-			return l.loadLink(linkID)
+			return l.loadProduct(productID)
 		}
 	}
-	if l.r.LinkID != nil {
-		link, err := l.loadLink(sql.NullInt64{Int64: *l.r.LinkID, Valid: true})
-		if err != nil || link != nil {
-			return link, err
+	if l.r.ProductID != nil {
+		prod, err := l.loadProduct(sql.NullInt64{Int64: *l.r.ProductID, Valid: true})
+		if err != nil || prod != nil {
+			return prod, err
 		}
 	}
 	inst, err := l.loadInstallment()
 	if err != nil || inst == nil {
 		return nil, err
 	}
-	return l.loadLink(inst.linkID)
+	return l.loadProduct(inst.productID)
 }
 
-func (l *loader) loadLink(id sql.NullInt64) (*product, error) {
+func (l *loader) loadProduct(id sql.NullInt64) (*product, error) {
 	if !id.Valid {
 		return nil, nil
 	}
-	if p, ok := l.links[id.Int64]; ok {
+	if p, ok := l.products[id.Int64]; ok {
 		return p, nil
 	}
 	p := &product{}
@@ -698,7 +698,7 @@ func (l *loader) loadLink(id sql.NullInt64) (*product, error) {
 	if !found {
 		p = nil
 	}
-	l.links[id.Int64] = p
+	l.products[id.Int64] = p
 	return p, nil
 }
 
@@ -711,7 +711,7 @@ func (l *loader) loadCategory(id sql.NullInt64) (*category, error) {
 	}
 	c := &category{}
 	found, err := l.queryRow("SELECT `variant_categories`.`id`, `variant_categories`.`link_id` FROM `variant_categories` WHERE `variant_categories`.`id` = ? LIMIT 1",
-		[]any{id.Int64}, &c.id, &c.linkID)
+		[]any{id.Int64}, &c.id, &c.productID)
 	if err != nil {
 		return nil, err
 	}
@@ -792,7 +792,7 @@ func (l *loader) scanVariant(scan func(...any) error, asVariant bool) (*variant,
 	v := &variant{}
 	var typ sql.NullString
 	var deletedAt sql.NullTime
-	err := scan(&v.id, &typ, &v.categoryID, &v.linkID, &deletedAt)
+	err := scan(&v.id, &typ, &v.categoryID, &v.productID, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
