@@ -53,9 +53,15 @@ import { Tab, Tabs } from "$app/components/ui/Tabs";
 import { useRunOnce } from "$app/components/useRunOnce";
 
 // The words the seller sees in the product editor, so a picker's group name matches the version,
-// variant or tier they built.
+// variant or tier they built. A call's options are its durations.
 const optionSetLabel = (product: Product) =>
-  product.is_tiered_membership ? "Tier" : product.native_type === "physical" ? "Variant" : "Version";
+  product.is_tiered_membership
+    ? "Tier"
+    : product.native_type === "physical"
+      ? "Variant"
+      : product.native_type === "call"
+        ? "Duration"
+        : "Version";
 
 const PWYWInput = React.forwardRef<
   HTMLInputElement,
@@ -878,7 +884,7 @@ export const ConfigurationSelector = React.forwardRef<
         <Tabs
           variant="buttons"
           role="radiogroup"
-          aria-label={optionSetLabel(product)}
+          aria-label="Amount"
           className="md:grid-flow-row"
           style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(6rem, 100%), 1fr))" }}
         >

@@ -180,6 +180,46 @@ describe("Tabs radiogroup", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("leaves Alt, Ctrl and Meta arrow shortcuts to the browser", () => {
+    render(<RadioGroup values={["One", "Two"]} initial="One" />);
+    radio("One").focus();
+
+    for (const modifier of ["altKey", "ctrlKey", "metaKey"]) {
+      const notCancelled = fireEvent.keyDown(radio("One"), { key: "ArrowRight", [modifier]: true });
+
+      expect(notCancelled).toBe(true);
+      expect(document.activeElement).toBe(radio("One"));
+      expect(checked("One")).toBe("true");
+    }
+  });
+
+  it("leaves a nested radiogroup's radios to that group", () => {
+    render(
+      <Tabs role="radiogroup" aria-label="Outer">
+        <Tab isSelected asChild>
+          <Button role="radio" aria-checked>
+            One
+          </Button>
+        </Tab>
+        <div role="radiogroup" aria-label="Inner">
+          <Button role="radio" aria-checked={false}>
+            Nested
+          </Button>
+        </div>
+        <Tab isSelected={false} asChild>
+          <Button role="radio" aria-checked={false}>
+            Two
+          </Button>
+        </Tab>
+      </Tabs>,
+    );
+
+    expect(radio("Nested").hasAttribute("tabindex")).toBe(false);
+
+    fireEvent.keyDown(radio("One"), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(radio("Two"));
+  });
+
   it("leaves a tablist's tabs alone", () => {
     render(
       <Tabs>

@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
 
 import { classNames } from "$app/utils/classNames";
-import { enabledRadios, selectAdjacentRadio } from "$app/utils/radioGroupKeyboard";
+import { selectAdjacentRadio, useRadioGroupTabStop } from "$app/utils/radioGroupKeyboard";
 
 const tabsVariants = cva("", {
   variants: {
@@ -77,18 +77,7 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
     }, []);
 
     const isRadioGroup = role === "radiogroup";
-
-    // A radiogroup is one tab stop: only the checked radio, or the first one when none is checked,
-    // stays reachable with Tab. Re-applied on every render because the checked radio moves.
-    React.useEffect(() => {
-      const list = listRef.current;
-      if (!isRadioGroup || !list) return;
-      const enabled = enabledRadios(list);
-      const tabStop = enabled.find((radio) => radio.getAttribute("aria-checked") === "true") ?? enabled[0];
-      list.querySelectorAll<HTMLElement>('[role="radio"]').forEach((radio) => {
-        radio.tabIndex = radio === tabStop ? 0 : -1;
-      });
-    });
+    useRadioGroupTabStop(listRef, isRadioGroup);
 
     return (
       <TabVariantContext.Provider value={variant ?? "pills"}>
@@ -98,7 +87,7 @@ export const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
             isRadioGroup
               ? (event: React.KeyboardEvent<HTMLDivElement>) => {
                   onKeyDown?.(event);
-                  if (!event.defaultPrevented) selectAdjacentRadio(event);
+                  selectAdjacentRadio(event);
                 }
               : onKeyDown
           }
