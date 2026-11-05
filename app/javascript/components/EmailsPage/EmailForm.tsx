@@ -85,6 +85,14 @@ type SaveAction =
   | "save_and_schedule"
   | "save_and_publish";
 
+// A rejected save redirects back with an `alert` flash, which Inertia reports as a successful
+// visit, so the flash is the only signal that nothing was persisted.
+const saveRejected = (page: { props: Record<string, unknown> }) => {
+  const flash = page.props.flash;
+  if (typeof flash !== "object" || flash === null || !("status" in flash)) return false;
+  return flash.status === "danger";
+};
+
 const hasMessageContent = (message: string) => {
   const document = new DOMParser().parseFromString(message, "text/html");
   return (
@@ -748,8 +756,16 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     if (!validate(action)) return;
 
     form.transform(() => buildPayload(action));
+    // The baseline has to be what this request sent: every field stays editable while it is in
+    // flight, so the form's values when the response lands may already be newer.
+    const submitted = snapshot();
 
-    const options = { onSuccess: markClean, onFinish: () => finishPublishing() };
+    const options = {
+      onSuccess: (page: { props: Record<string, unknown> }) => {
+        if (!saveRejected(page)) markClean(submitted);
+      },
+      onFinish: () => finishPublishing(),
+    };
     if (installment?.external_id) {
       form.put(Routes.email_path(installment.external_id), options);
     } else {
@@ -759,13 +775,13 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
 
   // Same guard as the Pages editor. The baseline is taken once the editor has mounted and the
   // template prefill has run, so only seller edits count as unsaved.
-  const snapshotRef = React.useRef<() => string>(() => "");
-  snapshotRef.current = () => JSON.stringify(buildPayload("save").installment);
+  // Snapshots the whole payload, so a change a save does not carry (the Schedule date) still counts.
+  const snapshot = () => JSON.stringify({ ...buildPayload("save"), to_be_published_at: scheduleDate });
   const baselineRef = React.useRef<string | null>(null);
   const isDirtyRef = React.useRef<() => boolean>(() => false);
-  isDirtyRef.current = () => baselineRef.current !== null && snapshotRef.current() !== baselineRef.current;
-  const markClean = () => {
-    baselineRef.current = snapshotRef.current();
+  isDirtyRef.current = () => baselineRef.current !== null && snapshot() !== baselineRef.current;
+  const markClean = (value = snapshot()) => {
+    baselineRef.current = value;
   };
   React.useEffect(() => {
     if (!messageEditor) return;
@@ -840,6 +856,8 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
         })),
       });
       showAlert("Email sent", "success");
+      // Sent: the redirect must not ask about discarding what it just delivered.
+      markClean();
       router.visit(Routes.customer_sale_path(singleRecipient.purchaseId));
     } catch (error) {
       assertResponseError(error);

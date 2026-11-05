@@ -46,6 +46,12 @@ vi.mock("$app/utils/prepareImageForUpload", () => ({
   prepareImageForUpload: async (file: File) => file,
   heicDecodingLikely: () => false,
 }));
+// happy-dom's DOMSerializer drops the text out of a ProseMirror fragment, so the real helper
+// returns an empty paragraph here; the send path needs the message the editor actually holds.
+vi.mock("$app/components/RichTextEditor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$app/components/RichTextEditor")>();
+  return { ...actual, serializeEditorContentToHTML: (editor: { getHTML: () => string }) => editor.getHTML() };
+});
 type UploadCallback = (error: Error | null, blob: { key: string }) => void;
 const uploads = vi.hoisted((): { pending: UploadCallback[] } => ({ pending: [] }));
 vi.mock("@rails/activestorage", () => ({
@@ -55,7 +61,19 @@ vi.mock("@rails/activestorage", () => ({
     }
   },
 }));
-const post = vi.hoisted(() => vi.fn((_url: string, options?: { onFinish?: () => void }) => options?.onFinish?.()));
+type SaveOptions = {
+  onFinish?: () => void;
+  onSuccess?: (page: { props: Record<string, unknown> }) => void;
+};
+// The unsaved-changes guard reads the save's response, so the stubbed request hands its callbacks
+// back instead of only finishing the visit.
+const saves = vi.hoisted((): SaveOptions[] => []);
+const post = vi.hoisted(() =>
+  vi.fn((_url: string, options?: SaveOptions) => {
+    saves.push(options ?? {});
+    options?.onFinish?.();
+  }),
+);
 // The transform callback builds the payload Inertia would send; keeping it lets a test assert
 // what the form would submit.
 type SentPayload = {
@@ -150,7 +168,11 @@ const context: InstallmentFormContext = {
   from_tab: null,
 };
 
-const renderForm = (installment: Installment | null = null, formContext: InstallmentFormContext = context) =>
+const renderForm = (
+  installment: Installment | null = null,
+  formContext: InstallmentFormContext = context,
+  singleCustomerRecipient: { purchase_id: string; email: string } | null = null,
+) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -164,7 +186,7 @@ const renderForm = (installment: Installment | null = null, formContext: Install
       }}
     >
       <CurrentSellerProvider value={seller}>
-        <EmailForm context={formContext} installment={installment} />
+        <EmailForm context={formContext} installment={installment} singleCustomerRecipient={singleCustomerRecipient} />
       </CurrentSellerProvider>
     </DomainSettingsProvider>,
   );
@@ -181,7 +203,9 @@ beforeEach(() => {
   cdn.hold = false;
   cdn.release.length = 0;
   post.mockClear();
+  saves.length = 0;
   sent.payload = null;
+  window.history.replaceState({}, "", "/");
 });
 
 afterEach(cleanup);
@@ -278,6 +302,82 @@ describe("EmailForm unsaved-changes guard", () => {
     confirm.mockClear();
     expect(visit()).toBe(false);
     expect(confirm).not.toHaveBeenCalled();
+  });
+
+  // `save` resolves on a microtask, so the request's callbacks only exist after a tick.
+  const save = async () => {
+    const sent = saves.length;
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saves.length).toBe(sent + 1));
+    return assertDefined(saves.at(-1));
+  };
+  const saved = { props: { flash: { message: "Changes saved!", status: "success" } } };
+  const rejected = { props: { flash: { message: "Please provide a valid date and time.", status: "danger" } } };
+
+  it("stops warning once the server confirms the save", async () => {
+    renderForm();
+    await edit();
+    const request = await save();
+    expect(unload()).toBe(true);
+    request.onSuccess?.(saved);
+    expect(unload()).toBe(false);
+  });
+
+  it("keeps warning after a rejected save, and for an edit the save did not carry", async () => {
+    renderForm();
+    await edit();
+    (await save()).onSuccess?.(rejected);
+    expect(unload()).toBe(true);
+
+    const request = await save();
+    // Typed while the request is in flight, so it is not part of what that request saved.
+    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Edited again" } });
+    request.onSuccess?.(saved);
+    expect(unload()).toBe(true);
+  });
+
+  it("treats a changed schedule date as an unsaved edit", async () => {
+    renderForm();
+    // The baseline is taken once the editor mounts, so the assertion has to wait for it.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    const scheduleDate = await screen.findByLabelText("Schedule date");
+    expect(unload()).toBe(false);
+    fireEvent.change(scheduleDate, { target: { value: "2030-01-01T10:00" } });
+    fireEvent.focusOut(scheduleDate);
+    expect(unload()).toBe(true);
+  });
+
+  it("does not warn after the email is sent to the single customer", async () => {
+    window.history.replaceState({}, "", "/new_email_path?template=single_customer&purchase_id=p1");
+    const draft: Installment = {
+      external_id: "email-1",
+      display_type: "draft",
+      name: "August update",
+      message: "Hello",
+      published_at: null,
+      updated_at: "2026-08-01T00:00:00Z",
+      stream_only: false,
+      streamable: false,
+      send_emails: true,
+      shown_on_profile: false,
+      installment_type: "audience",
+      paid_more_than_cents: null,
+      paid_less_than_cents: null,
+      allow_comments: true,
+      full_url: "https://seller.gumroad.com/p/august-update",
+      has_been_blasted: false,
+      files: [],
+    };
+    renderForm(draft, { ...context, audience_types: ["customers"] }, { purchase_id: "p1", email: "buyer@example.com" });
+
+    await waitFor(() => expect(screen.getByPlaceholderText("Title")).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Updated" } });
+    expect(unload()).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Send now" }));
+    await waitFor(() => expect(unload()).toBe(false));
   });
 });
 
