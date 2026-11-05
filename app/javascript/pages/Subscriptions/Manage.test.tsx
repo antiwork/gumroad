@@ -282,7 +282,10 @@ describe("SubscriptionsManage saved payment method", () => {
     expect(mocks.updateSubscription).toHaveBeenCalledWith(
       expect.objectContaining({ cardParams: mocks.newCard.cardParamsResult.cardParams }),
     );
-    expect(screen.getByRole("radio", { name: "Card" })).toHaveProperty("checked", true);
+    // The saved PayPal account is gone, so the radio rows only appear once the PayPal SDK has
+    // decided whether PayPal is still available (usePayPalImplementation loads it in an effect).
+    // Asserting synchronously here races that load.
+    expect(await screen.findByRole("radio", { name: "Card" })).toHaveProperty("checked", true);
     expect(savedPayPalRadio()).toBeNull();
   });
 
