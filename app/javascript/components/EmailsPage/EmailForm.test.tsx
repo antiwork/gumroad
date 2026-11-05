@@ -66,11 +66,32 @@ type SentPayload = {
     not_bought_variants: string[] | null;
   };
 };
+const beforeListeners = vi.hoisted((): ((e: unknown) => void)[] => []);
 const sent = vi.hoisted((): { payload: SentPayload | null } => ({ payload: null }));
 vi.mock("@inertiajs/react", () => ({
-  Link: ({ href, children }: { href: string; children?: React.ReactNode }) => <a href={href}>{children}</a>,
+  Link: ({
+    href,
+    children,
+    onClick,
+  }: {
+    href: string;
+    children?: React.ReactNode;
+    onClick?: React.MouseEventHandler;
+  }) => (
+    <a href={href} onClick={onClick}>
+      {children}
+    </a>
+  ),
   usePage: () => ({ url: "/emails/new", props: {} }),
-  router: { visit: () => {}, on: () => () => {} },
+  router: {
+    visit: () => {},
+    on: (_event: string, handler: (e: unknown) => void) => {
+      beforeListeners.push(handler);
+      return () => {
+        beforeListeners.splice(beforeListeners.indexOf(handler), 1);
+      };
+    },
+  },
   useForm: (initial: { installment: { name: string; message: string } }) => {
     const [data, setDataState] = React.useState(initial);
     return {
@@ -205,6 +226,58 @@ describe("EmailForm", () => {
       expect(container.querySelector("img")?.getAttribute("src")).toBe("https://cdn.example/image.png"),
     );
     expect(saveDisabled()).toBe(false);
+  });
+});
+
+describe("EmailForm unsaved-changes guard", () => {
+  const unload = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  const visit = () => {
+    const event = { detail: { visit: { method: "get" } }, preventDefault: vi.fn() };
+    beforeListeners.forEach((listener) => listener(event));
+    return event.preventDefault.mock.calls.length > 0;
+  };
+  const edit = async () => {
+    // The baseline is taken after the editor mounts.
+    await waitFor(() => expect(screen.getByPlaceholderText("Title")).toBeTruthy());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Edited" } });
+  };
+
+  afterEach(() => vi.stubGlobal("confirm", undefined));
+
+  it("does not warn before anything is edited", async () => {
+    renderForm();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(unload()).toBe(false);
+    expect(visit()).toBe(false);
+  });
+
+  it("warns on tab close and in-app navigation once edited, and honors the confirm answer", async () => {
+    renderForm();
+    await edit();
+    expect(unload()).toBe(true);
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    expect(visit()).toBe(true);
+    confirm.mockImplementation(() => true);
+    expect(visit()).toBe(false);
+  });
+
+  it("confirms on Cancel and stays when declined, and does not double prompt when accepted", async () => {
+    renderForm();
+    await edit();
+    const confirm = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirm);
+    expect(fireEvent.click(screen.getByRole("link", { name: "Cancel" }))).toBe(false);
+    confirm.mockImplementation(() => true);
+    expect(fireEvent.click(screen.getByRole("link", { name: "Cancel" }))).toBe(true);
+    confirm.mockClear();
+    expect(visit()).toBe(false);
+    expect(confirm).not.toHaveBeenCalled();
   });
 });
 

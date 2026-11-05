@@ -749,12 +749,57 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
 
     form.transform(() => buildPayload(action));
 
+    const options = { onSuccess: markClean, onFinish: () => finishPublishing() };
     if (installment?.external_id) {
-      form.put(Routes.email_path(installment.external_id), { onFinish: () => finishPublishing() });
+      form.put(Routes.email_path(installment.external_id), options);
     } else {
-      form.post(Routes.emails_path(), { onFinish: () => finishPublishing() });
+      form.post(Routes.emails_path(), options);
     }
   });
+
+  // Same guard as the Pages editor. The baseline is taken once the editor has mounted and the
+  // template prefill has run, so only seller edits count as unsaved.
+  const snapshotRef = React.useRef<() => string>(() => "");
+  snapshotRef.current = () => JSON.stringify(buildPayload("save").installment);
+  const baselineRef = React.useRef<string | null>(null);
+  const isDirtyRef = React.useRef<() => boolean>(() => false);
+  isDirtyRef.current = () => baselineRef.current !== null && snapshotRef.current() !== baselineRef.current;
+  const markClean = () => {
+    baselineRef.current = snapshotRef.current();
+  };
+  React.useEffect(() => {
+    if (!messageEditor) return;
+    const timeout = setTimeout(markClean, 0);
+    return () => clearTimeout(timeout);
+  }, [messageEditor]);
+  React.useEffect(() => {
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirtyRef.current()) e.preventDefault();
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+
+    const removeInertiaListener = router.on("before", (event) => {
+      const visit = event.detail.visit;
+      if (!isDirtyRef.current() || visit.method !== "get") return;
+      if (visit.prefetch || visit.async || visit.preserveState === true) return;
+      // eslint-disable-next-line no-alert
+      if (!window.confirm("You have unsaved changes. Discard them and leave this page?")) event.preventDefault();
+    });
+
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      removeInertiaListener();
+    };
+  }, []);
+  const confirmCancel = (e: React.MouseEvent) => {
+    // eslint-disable-next-line no-alert
+    if (isDirtyRef.current() && !window.confirm("You have unsaved changes. Discard them and leave this page?")) {
+      e.preventDefault();
+      return;
+    }
+    // Confirmed: clear the dirty flag so the router listener doesn't prompt a second time.
+    markClean();
+  };
 
   const [isSendingSingleRecipient, setIsSendingSingleRecipient] = React.useState(false);
   const validateSingleRecipientEmail = (message: string) => {
@@ -826,6 +871,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
               <Button asChild>
                 <Link
                   href={Routes.customer_sale_path(singleRecipient.purchaseId)}
+                  onClick={confirmCancel}
                   inert={isBusy ? true : undefined}
                   className={isBusy ? "opacity-30" : undefined}
                 >
@@ -874,6 +920,7 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
               <Button asChild>
                 <Link
                   href={getCancelPath()}
+                  onClick={confirmCancel}
                   inert={isBusy ? true : undefined}
                   className={isBusy ? "opacity-30" : undefined}
                 >
