@@ -49,7 +49,7 @@ describe("Product Page - Shipping physical preoder", type: :system, js: true, sh
     add_to_cart(@product, offer_code:)
     check_out(@product, is_free: true)
 
-    expect(page).to have_text("Your purchase was successful!")
+    expect(page).to have_text("Your free signup is confirmed!")
     expect(page).to have_text("physical preorder $0", normalize_ws: true)
 
     purchase = Purchase.last

@@ -3031,6 +3031,7 @@ class PurchaseTest < ActiveSupport::TestCase
                    price: 100,
                    product_id: link.external_id,
                    has_third_party_analytics: false,
+                   is_free_purchase: false,
                    id: 1,
                    created_at: purchase.created_at,
                    email: "hi@gumroad.com",
