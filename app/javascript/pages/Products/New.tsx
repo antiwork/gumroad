@@ -402,8 +402,9 @@ const NewProductPage = () => {
               </Fieldset>
 
               <Fieldset>
-                <FieldsetTitle>Products</FieldsetTitle>
+                <FieldsetTitle id={`product-types-${formUID}`}>Products</FieldsetTitle>
                 <ProductTypeSelector
+                  labelledBy={`product-types-${formUID}`}
                   selectedType={form.data.link.native_type}
                   types={native_product_types}
                   onChange={handleProductTypeChange}
@@ -411,8 +412,9 @@ const NewProductPage = () => {
               </Fieldset>
               {service_product_types.length > 0 ? (
                 <Fieldset>
-                  <FieldsetTitle>Services</FieldsetTitle>
+                  <FieldsetTitle id={`service-types-${formUID}`}>Services</FieldsetTitle>
                   <ProductTypeSelector
+                    labelledBy={`service-types-${formUID}`}
                     selectedType={form.data.link.native_type}
                     types={service_product_types}
                     onChange={handleProductTypeChange}
@@ -562,16 +564,19 @@ const ProductTypeSelector = ({
   types,
   onChange,
   disabled,
+  labelledBy,
 }: {
   selectedType: ProductNativeType;
   types: ProductNativeType[];
   onChange: (type: ProductNativeType) => void;
   disabled?: boolean;
+  labelledBy: string;
 }) => (
   <Tabs
     variant="buttons"
     className="gap-4 sm:grid-cols-2 md:grid-flow-row md:grid-cols-3 2xl:grid-cols-5"
     role="radiogroup"
+    aria-labelledby={labelledBy}
   >
     {types.map((type) => {
       const isSelected = type === selectedType;

@@ -275,6 +275,31 @@ describe("ProductShowScenario", type: :system, js: true) do
     expect(find(:radio_button, @variant.name)[:innerHTML]).to include("Description<br>with<br>newlines")
   end
 
+  it "makes the version picker a named, single tab stop that arrow keys move through" do
+    product = create(:product)
+    variant_category = create(:variant_category, link: product)
+    %w[Red Blue Green].each { |name| create(:variant, name:, variant_category:) }
+
+    visit product.long_url
+
+    within(find("[role=radiogroup][aria-label='Version']")) do
+      find(:radio_button, "Red").click
+      expect(page).to have_css("[role=radio][tabindex='0']", count: 1)
+      expect(page).to have_css("[role=radio][aria-label='Red'][tabindex='0']")
+
+      find(:radio_button, "Red").native.send_keys(:arrow_down)
+      expect(page).to have_radio_button("Blue", checked: true)
+      expect(page).to have_css("[role=radio][aria-label='Blue']:focus")
+
+      find(:radio_button, "Blue").native.send_keys(:end)
+      expect(page).to have_radio_button("Green", checked: true)
+
+      find(:radio_button, "Green").native.send_keys(:arrow_right)
+      expect(page).to have_radio_button("Red", checked: true)
+      expect(page).to have_css("[role=radio][aria-label='Red']:focus")
+    end
+  end
+
   describe "Twitter meta tags" do
     before do
       @product = create(:product_with_pdf_file, preview_url: "https://staging-public-files.gumroad.com/happy_face.jpeg")
