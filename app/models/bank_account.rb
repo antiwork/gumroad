@@ -213,7 +213,7 @@ class BankAccount < ApplicationRecord
   private
     def refuse_example_bank_code
       example = EXAMPLE_BANK_CODES[self.class.name]
-      return if example.nil? || bank_number != example
+      return if example.nil? || bank_number.to_s.upcase != example
       return unless new_record? || will_save_change_to_bank_number?
 
       errors.add :base, "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code."

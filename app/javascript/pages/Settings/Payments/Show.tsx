@@ -831,7 +831,7 @@ export default function PaymentsPage() {
     }
     const account = form.data.bank_account;
     for (const { field, example, message } of (account.type && COPIED_EXAMPLE_ERRORS[account.type]) || []) {
-      if (Object.entries<unknown>(account).some(([key, value]) => key === field && value === example)) {
+      if (Object.entries<unknown>(account).some(([key, value]) => key === field && typeof value === "string" && value.toUpperCase() === example)) {
         markFieldInvalid(field);
         // A country can match both fields: keep the first one's reason.
         setClientErrorMessage((current: ErrorMessageInfo | null) => current ?? { message });

@@ -1133,6 +1133,13 @@ describe("Algeria bank code example", () => {
     expect(screen.getAllByText(exampleError).length).toBeGreaterThan(0);
   });
 
+  it("refuses a lowercase example, which Stripe receives uppercased", () => {
+    renderAlgeriaSeller("aaaadzdzxxx");
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(exampleError).length).toBeGreaterThan(0);
+  });
+
   it("saves a real bank code", () => {
     renderAlgeriaSeller("EPALDZAL");
 

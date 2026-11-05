@@ -4,17 +4,24 @@ require "spec_helper"
 
 describe BankAccount do
   describe "example bank codes" do
+    let(:message) { "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code." }
+
     before { allow(Rails.env).to receive(:production?).and_return(true) }
 
     it "refuses every form example Stripe rejects in live mode" do
       expect(BankAccount::EXAMPLE_BANK_CODES.size).to eq(36)
 
       BankAccount::EXAMPLE_BANK_CODES.each do |type, code|
-        account = type.constantize.new(user: create(:user), account_number: "00001234567890123456", account_number_last_four: "3456",
-                                       account_holder_full_name: "Test Seller", bank_number: code)
+        account = build(type.underscore.to_sym, bank_code: code)
         account.valid?
-        expect(account.errors.full_messages).to include("That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code."), type
+        expect(account.errors.full_messages).to include(message), type
       end
+    end
+
+    it "refuses a lowercase example, which Stripe receives uppercased" do
+      account = build(:taiwan_bank_account, bank_code: "aaaatwtxxxx")
+      account.valid?
+      expect(account.errors.full_messages).to include(message)
     end
 
     it "accepts a real bank code" do
