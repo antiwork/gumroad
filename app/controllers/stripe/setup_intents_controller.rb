@@ -143,7 +143,8 @@ class Stripe::SetupIntentsController < ApplicationController
         if subscription&.india_card_mandate_reliability_enabled?
           terms, mandate_rate = subscription.indian_card_mandate_terms_with_rate(
             billing_info: billing_info_params,
-            authenticated_offer_code_buyer: logged_in_user
+            authenticated_offer_code_buyer: logged_in_user,
+            renewal_price_cents: subscription.restart_tier_price_cents
           )
           return if terms.blank?
 

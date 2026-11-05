@@ -744,12 +744,13 @@ class Subscription < ApplicationRecord
   def indian_card_mandate_terms(
     billing_info: nil,
     authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED,
-    fixed_rate: nil
+    fixed_rate: nil,
+    renewal_price_cents: nil
   )
     purchase = original_purchase
     return if purchase.nil?
 
-    renewal_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
+    renewal_price_cents ||= current_subscription_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
     presentment_matches = presentment.present? &&
       indian_card_presentment_in_force?(presentment, purchase, renewal_price_cents:) &&
@@ -829,20 +830,37 @@ class Subscription < ApplicationRecord
   # mandate the buyer just approved.
   def indian_card_mandate_terms_with_rate(
     billing_info: nil,
-    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED
+    authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED,
+    renewal_price_cents: nil
   )
     2.times do
-      terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:)
+      terms = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, renewal_price_cents:)
       return [terms, nil] if terms.blank? || terms[:currency] == Currency::USD
 
       rate = get_rate(terms[:currency])
-      pinned = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate)
+      pinned = indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, fixed_rate: rate, renewal_price_cents:)
       # A concurrent re-fixing can flip the terms currency between the two reads; the rate
       # must belong to the currency it prices, so retry, then give up on pinning.
       return [pinned, rate] if pinned.present? && pinned[:currency] == terms[:currency]
     end
 
-    [indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:), nil]
+    [indian_card_mandate_terms(billing_info:, authenticated_offer_code_buyer:, renewal_price_cents:), nil]
+  end
+
+  # What restarting this ended membership will re-price it to: the tier's current price, when the
+  # seller changed it since purchase. Nil when the restart keeps the honored price.
+  def restart_tier_price_cents
+    return if alive?(include_pending_cancellation: false) || is_installment_plan
+    return if tier&.customizable_price?
+    # A discount changes the re-priced renewal total, so only the undiscounted restart has a known price.
+    return if original_purchase&.purchase_offer_code_discount.present? || auto_renewal_offer_code.present?
+
+    quantity = original_purchase&.quantity.to_i
+    tier_price_cents = tier_price&.price_cents
+    return if quantity < 1 || tier_price_cents.blank?
+
+    new_price_cents = tier_price_cents * quantity
+    new_price_cents if new_price_cents != current_subscription_price_cents
   end
 
   def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)

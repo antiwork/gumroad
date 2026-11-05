@@ -105,7 +105,8 @@ describe Stripe::SetupIntentsController, :vcr do
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
         expect(subscription).to receive(:indian_card_mandate_terms_with_rate).twice.with(
           billing_info: nil,
-          authenticated_offer_code_buyer: nil
+          authenticated_offer_code_buyer: nil,
+          renewal_price_cents: nil
         ).and_return(
           [
             {
@@ -135,6 +136,23 @@ describe Stripe::SetupIntentsController, :vcr do
         )
         expect(mandate_terms[:reference]).to start_with("#{StripeChargeProcessor::MANDATE_PREFIX}#{subscription.external_id}-")
         expect(next_mandate_terms[:reference]).not_to eq(mandate_terms[:reference])
+      end
+
+      it "sizes the mandate for the tier price a restart will apply" do
+        subscription = create(:subscription)
+        chargeable = double(requires_mandate?: true)
+        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ subscription_id: subscription.external_id }]))
+        allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
+        allow(subscription).to receive(:restart_tier_price_cents).and_return(4900)
+        expect(subscription).to receive(:indian_card_mandate_terms_with_rate).with(
+          billing_info: nil,
+          authenticated_offer_code_buyer: nil,
+          renewal_price_cents: 4900
+        ).and_return([{ amount: 5782, currency: Currency::USD, interval: "month", interval_count: 1 }, nil])
+
+        mandate_options = controller.send(:mandate_options_for_stripe, chargeable, subscription:)
+
+        expect(mandate_options.dig(:payment_method_options, :card, :mandate_options, :amount)).to eq(5782)
       end
 
       it "omits the interval count for a sporadic subscription mandate" do
@@ -175,7 +193,8 @@ describe Stripe::SetupIntentsController, :vcr do
         allow(subscription).to receive(:india_card_mandate_reliability_enabled?).and_return(true)
         expect(subscription).to receive(:indian_card_mandate_terms_with_rate).with(
           billing_info:,
-          authenticated_offer_code_buyer: nil
+          authenticated_offer_code_buyer: nil,
+          renewal_price_cents: nil
         ).and_return(
           [
             {
