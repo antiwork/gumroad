@@ -1,0 +1,254 @@
+{
+  "entrypoints/base.ts": {
+    "file": "assets/entrypoints/base.ts-Ckth7Qha.js",
+    "name": "entrypoints/base.ts",
+    "src": "entrypoints/base.ts",
+    "isEntry": true,
+    "imports": [
+      "_base_page-DsR_b-XR.js",
+      "entrypoints/inertia.js",
+      "entrypoints/inertia.js"
+    ]
+  },
+  "_base_page-DsR_b-XR.js": {
+    "file": "assets/base_page-DsR_b-XR.js",
+    "name": "base_page",
+    "imports": [
+      "_third_party_tracking-CQJM_coa.js",
+      "_cast-DOc6skV4.js",
+      "_preventFileDropNavigation-BrLv4Aa3.js",
+      "_request-X8vIkuew.js"
+    ]
+  },
+  "_third_party_tracking-CQJM_coa.js": {
+    "file": "assets/third_party_tracking-CQJM_coa.js",
+    "name": "google_analytics",
+    "imports": [
+      "_cast-DOc6skV4.js",
+      "_currency-CFXcUWiU.js"
+    ]
+  },
+  "_cast-DOc6skV4.js": {
+    "file": "assets/cast-DOc6skV4.js",
+    "name": "cast"
+  },
+  "_currency-CFXcUWiU.js": {
+    "file": "assets/currency-CFXcUWiU.js",
+    "name": "currency"
+  },
+  "_preventFileDropNavigation-BrLv4Aa3.js": {
+    "file": "assets/preventFileDropNavigation-BrLv4Aa3.js",
+    "name": "preventFileDropNavigation"
+  },
+  "_request-X8vIkuew.js": {
+    "file": "assets/request-X8vIkuew.js",
+    "name": "request",
+    "imports": [
+      "_cast-DOc6skV4.js"
+    ]
+  },
+  "entrypoints/inertia.js": {
+    "file": "assets/entrypoints/inertia.js-Cm6L0bFN.js",
+    "name": "entrypoints/inertia.js",
+    "src": "entrypoints/inertia.js",
+    "isEntry": true,
+    "imports": [
+      "_rolldown-runtime-C0FnF6B9.js",
+      "_cast-DOc6skV4.js",
+      "_preventFileDropNavigation-BrLv4Aa3.js",
+      "_request-X8vIkuew.js",
+      "_vendor-BP-SB3nY.js",
+      "_DomainSettings-BmLo6Q9t.js",
+      "_useOriginalLocation-D9Dph6pi.js",
+      "_guards-CqVVrPah.js",
+      "_Alert-C1LaPMPX.js",
+      "_useRefToLatest-D3nSYh5X.js",
+      "_Fieldset-U_4MW6J_.js"
+    ],
+    "dynamicImports": [
+      "pages/AffiliateRequests/New.tsx",
+      "pages/Affiliates/Edit.tsx",
+      "pages/Affiliates/Form.tsx",
+      "pages/Affiliates/Index.tsx",
+      "pages/Affiliates/New.tsx",
+      "pages/Affiliates/Onboarding.tsx",
+      "pages/Agent/Index.tsx",
+      "pages/Analytics/Index.tsx",
+      "pages/Audience/Index.tsx",
+      "pages/Bundles/Content/Edit.tsx",
+      "pages/Bundles/Product/Edit.tsx",
+      "pages/Bundles/Share/Edit.tsx",
+      "pages/Checkout/Discounts/Index.tsx",
+      "pages/Checkout/Form/Show.tsx",
+      "pages/Checkout/Returns/Pending.tsx",
+      "pages/Checkout/Show.tsx",
+      "pages/Checkout/Upsells/Index.tsx",
+      "pages/Churn/Show.tsx",
+      "pages/Collaborators/Edit.tsx",
+      "pages/Collaborators/Incomings/Index.tsx",
+      "pages/Collaborators/Index.tsx",
+      "pages/Collaborators/New.tsx",
+      "pages/Communities/Index.tsx",
+      "pages/Customers/Index.tsx",
+      "pages/Customers/Show.tsx",
+      "pages/Dashboard/Index.tsx",
+      "pages/Discover/Index.tsx",
+      "pages/Emails/Drafts.tsx",
+      "pages/Emails/Edit.tsx",
+      "pages/Emails/New.tsx",
+      "pages/Emails/Published.tsx",
+      "pages/Emails/Scheduled.tsx",
+      "pages/Followers/Cancel.tsx",
+      "pages/Followers/FromEmbedForm.tsx",
+      "pages/Followers/Index.tsx",
+      "pages/GumroadBlog/Posts/Index.tsx",
+      "pages/GumroadBlog/Posts/Show.tsx",
+      "pages/HelpCenter/Articles/Index.tsx",
+      "pages/HelpCenter/Articles/Show.tsx",
+      "pages/HelpCenter/Categories/Show.tsx",
+      "pages/HelpCenter/Layout.tsx",
+      "pages/Library/Index.tsx",
+      "pages/Logins/New.tsx",
+      "pages/Oauth/Applications/Edit.tsx",
+      "pages/Pages/Edit.tsx",
+      "pages/Pages/Index.tsx",
+      "pages/Payouts/Index.tsx",
+      "pages/PiracyReports/Index.tsx",
+      "pages/PiracyReports/New.tsx",
+      "pages/PiracyReports/Show.tsx",
+      "pages/Posts/Show.tsx",
+      "pages/ProductBuildDemos/Show.tsx",
+      "pages/Products/Affiliated/Index.tsx",
+      "pages/Products/Archived/Index.tsx",
+      "pages/Products/CartItemsCount.tsx",
+      "pages/Products/Collabs/Index.tsx",
+      "pages/Products/Discover/Show.tsx",
+      "pages/Products/Edit.tsx",
+      "pages/Products/Iframe/Show.tsx",
+      "pages/Products/Index.tsx",
+      "pages/Products/New.tsx",
+      "pages/Products/Profile/Show.tsx",
+      "pages/Products/Show.tsx",
+      "pages/Public/Api.tsx",
+      "pages/Public/Charge.tsx",
+      "pages/Public/LicenseKeyLookup.tsx",
+      "pages/Public/Ping.tsx",
+      "pages/Public/Widgets.tsx",
+      "pages/Purchases/DisputeEvidence/Show.tsx",
+      "pages/Purchases/DisputeEvidence/Success.tsx",
+      "pages/Purchases/Invoices/Confirm.tsx",
+      "pages/Purchases/Invoices/New.tsx",
+      "pages/Purchases/Product/Show.tsx",
+      "pages/Reviews/Index.tsx",
+      "pages/SecureRedirect/New.tsx",
+      "pages/Settings/Advanced/Show.tsx",
+      "pages/Settings/AuthorizedApplications/Index.tsx",
+      "pages/Settings/Billing/Show.tsx",
+      "pages/Settings/Main/Show.tsx",
+      "pages/Settings/Password/Show.tsx",
+      "pages/Settings/Payments/Show.tsx",
+      "pages/Settings/Profile/Show.tsx",
+      "pages/Settings/SocialConnections/Show.tsx",
+      "pages/Settings/Team/Show.tsx",
+      "pages/Settings/ThirdPartyAnalytics/Show.tsx",
+      "pages/Signup/New.tsx",
+      "pages/Subscriptions/MagicLinks/New.tsx",
+      "pages/Subscriptions/Manage.tsx",
+      "pages/TaxCenter/Index.tsx",
+      "pages/TwoFactorAuthentication/Show.tsx",
+      "pages/UrlRedirects/ConfirmPage.tsx",
+      "pages/UrlRedirects/DownloadPage.tsx",
+      "pages/UrlRedirects/Expired.tsx",
+      "pages/UrlRedirects/MembershipInactive.tsx",
+      "pages/UrlRedirects/Play.tsx",
+      "pages/UrlRedirects/Read.tsx",
+      "pages/UrlRedirects/RentalExpired.tsx",
+      "pages/UrlRedirects/Stream.tsx",
+      "pages/UrlRedirects/UnavailablePageLayout.tsx",
+      "pages/User/Passwords/Edit.tsx",
+      "pages/User/Passwords/New.tsx",
+      "pages/Users/Coffee.tsx",
+      "pages/Users/FeatureAnnouncements/Unsubscribe.tsx",
+      "pages/Users/ReviewReminders/Subscribe.tsx",
+      "pages/Users/ReviewReminders/Unsubscribe.tsx",
+      "pages/Users/Show.tsx",
+      "pages/Users/Subscribe.tsx",
+      "pages/Users/SubscribePreview.tsx",
+      "pages/UtmLinks/Edit.tsx",
+      "pages/UtmLinks/Index.tsx",
+      "pages/UtmLinks/New.tsx",
+      "pages/Wishlists/Following/Index.tsx",
+      "pages/Wishlists/Index.tsx",
+      "pages/Wishlists/Show.tsx",
+      "pages/Workflows/Edit.tsx",
+      "pages/Workflows/Emails/Index.tsx",
+      "pages/Workflows/Index.tsx",
+      "pages/Workflows/New.tsx"
+    ]
+  },
+  "_rolldown-runtime-C0FnF6B9.js": {
+    "file": "assets/rolldown-runtime-C0FnF6B9.js",
+    "name": "rolldown-runtime"
+  },
+  "_vendor-BP-SB3nY.js": {
+    "file": "assets/vendor-BP-SB3nY.js",
+    "name": "vendor",
+    "imports": [
+      "_rolldown-runtime-C0FnF6B9.js"
+    ]
+  },
+  "_DomainSettings-BmLo6Q9t.js": {
+    "file": "assets/DomainSettings-BmLo6Q9t.js",
+    "name": "DomainSettings",
+    "imports": [
+      "_rolldown-runtime-C0FnF6B9.js",
+      "_vendor-BP-SB3nY.js"
+    ]
+  },
+  "_useOriginalLocation-D9Dph6pi.js": {
+    "file": "assets/useOriginalLocation-D9Dph6pi.js",
+    "name": "useOriginalLocation",
+    "imports": [
+      "_rolldown-runtime-C0FnF6B9.js",
+      "_vendor-BP-SB3nY.js",
+      "_DomainSettings-BmLo6Q9t.js"
+    ]
+  },
+  "_guards-CqVVrPah.js": {
+    "file": "assets/guards-CqVVrPah.js",
+    "name": "guards"
+  },
+  "_Alert-C1LaPMPX.js": {
+    "file": "assets/Alert-C1LaPMPX.js",
+    "name": "Alert",
+    "imports": [
+      "_rolldown-runtime-C0FnF6B9.js",
+      "_vendor-BP-SB3nY.js"
+    ]
+  },
+  "_useRefToLatest-D3nSYh5X.js": {
+    "file": "assets/useRefToLatest-D3nSYh5X.js",
+    "name": "useRefToLatest",
+    "imports": [
+      "_rolldown-runtime-C0FnF6B9.js",
+      "_vendor-BP-SB3nY.js"
+    ]
+  },
+  "_Fieldset-U_4MW6J_.js": {
+    "file": "assets/Fieldset-U_4MW6J_.js",
+    "name": "Fieldset",
+    "imports": [
+      "_rolldown-runtime-C0FnF6B9.js",
+      "_vendor-BP-SB3nY.js"
+    ]
+  },
+  "entrypoints/design.ts": {
+    "file": "assets/entrypoints/design.ts-B8cBE6AU.js",
+    "name": "entrypoints/design.ts",
+    "src": "entrypoints/design.ts",
+    "isEntry": true,
+    "css": [
+      "assets/entrypoints/design-BydcFuOC.css"
+    ]
+  }
+}

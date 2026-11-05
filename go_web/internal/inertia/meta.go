@@ -22,8 +22,12 @@ type MetaTag struct {
 }
 
 // NewMetaTag is MetaTag.new(tag_name:, head_key:, type:, **data). tagName "" is :meta; a
-// meta with only a title is the title tag.
+// meta with only a title is the title tag. Script tags, whose type and content MetaTag
+// rewrites, are left out of this port.
 func NewMetaTag(tagName, headKey, typ string, data ...Attr) MetaTag {
+	if tagName == "script" {
+		panic("inertia: script meta tags are not ported")
+	}
 	t := MetaTag{tagName: tagName, typ: typ, data: data}
 	if tagName == "" && len(data) == 1 && data[0].Key == "title" {
 		t.tagName, t.data = "title", []Attr{{"inner_content", data[0].Value}}

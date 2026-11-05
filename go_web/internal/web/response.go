@@ -42,10 +42,16 @@ func InternalServerError(w http.ResponseWriter) {
 	io.WriteString(w, "We're sorry, but something went wrong.\n")
 }
 
-// HTMLEscape is ERB::Util.html_escape. Rails applies it to robots/index.erb because the
-// template name carries no format; an index.text.erb would not be escaped.
+// HTMLEscape is ERB::Util.html_escape, which <%= %> output and tag attributes go through.
+// Rails applies it to robots/index.erb because the template name carries no format; an
+// index.text.erb would not be escaped.
 func HTMLEscape(s string) string {
 	return htmlEscaper.Replace(s)
+}
+
+// WriteHTMLEscaped writes HTMLEscape(s) without building the escaped copy.
+func WriteHTMLEscaped(b *strings.Builder, s string) {
+	htmlEscaper.WriteString(b, s)
 }
 
 var htmlEscaper = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;", "'", "&#39;")
