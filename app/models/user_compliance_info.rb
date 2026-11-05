@@ -249,6 +249,19 @@ class UserComplianceInfo < ApplicationRecord
     (business_country_code if is_business?) || country_code
   end
 
+  # The country whose label applies to a requested field: the representative's own tax ID follows
+  # their country, business tax IDs follow the business country, everything else the legal entity.
+  def country_code_for_field(field)
+    case field
+    when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
+      business_country_code
+    when UserComplianceInfoFields::Individual::TAX_ID
+      country_code
+    else
+      legal_entity_country_code
+    end
+  end
+
   def legal_entity_tax_id
     is_business? ? business_tax_id : individual_tax_id
   end

@@ -3296,18 +3296,41 @@ describe ContactingCreatorMailer do
     let!(:seller) { create(:named_seller) }
 
     it "names each outstanding field and links to the remediation endpoint" do
+      create(:merchant_account, user: seller)
+      create(:user_compliance_info, user: seller, country: "Pakistan")
       create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
       create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
-      allow_any_instance_of(User).to receive(:compliance_country_code).and_return("PK")
+      create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::FIRST_NAME).mark_provided!
 
       mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
 
       expect(mail.body.encoded).to include("National Identity Card Number (SNIC or CNIC)")
       expect(mail.body.encoded).to include("Government-issued photo ID")
+      expect(mail.body.encoded).not_to include("First name")
       expect(mail.body.encoded).to have_link("Complete your account", href: remediation_settings_payments_url)
     end
 
-    it "omits unlabelled Stripe-named requests and falls back to the generic copy" do
+    it "labels the representative's tax ID by the representative's country" do
+      create(:user_compliance_info_business, user: seller, business_country: "Pakistan", country: "United Kingdom")
+      create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+      mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
+
+      expect(mail.body.encoded).to include("Unique Taxpayer Reference (UTR)")
+      expect(mail.body.encoded).not_to include("National Identity Card Number (SNIC or CNIC)")
+    end
+
+    it "lists unmapped Stripe requirements alongside labelled ones" do
+      create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::DATE_OF_BIRTH)
+      create(:user_compliance_info_request, user: seller, field_needed: "company.directors_provided")
+
+      mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
+
+      expect(mail.body.encoded).to include("Date of birth")
+      expect(mail.body.encoded).to include("Directors provided")
+    end
+
+    it "omits Stripe intervention requests and falls back to the generic copy" do
       create(:user_compliance_info_request, user: seller, field_needed: "interv_123.identity_verification.challenge")
 
       mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
@@ -3317,10 +3340,22 @@ describe ContactingCreatorMailer do
     end
 
     it "falls back to the generic copy when no request is outstanding" do
+      create(:merchant_account, user: seller)
+
       mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
 
       expect(mail.body.encoded).to include("Please complete the necessary fields")
       expect(mail.body.encoded).to have_link("Complete your account", href: remediation_settings_payments_url)
+    end
+
+    it "links to the payments page when the seller has no Stripe account" do
+      create(:user_compliance_info_request, user: seller, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
+
+      mail = ContactingCreatorMailer.payouts_may_be_blocked(seller.id)
+
+      expect(mail.body.encoded).to have_link("Complete your account", href: settings_payments_url)
+      expect(mail.body.encoded).to have_link(settings_payments_url, href: settings_payments_url)
+      expect(mail.body.encoded).not_to include(remediation_settings_payments_url)
     end
   end
 
@@ -3333,6 +3368,15 @@ describe ContactingCreatorMailer do
       expect(mail.to).to eq([seller.email])
       expect(mail.body.encoded).to have_link("Provide your information", href: remediation_settings_payments_url)
       expect(mail.body.encoded).not_to have_link("Provide your information", href: settings_payments_url)
+    end
+
+    it "labels the representative's tax ID by the representative's country" do
+      create(:user_compliance_info_business, user: seller, business_country: "Pakistan", country: "United Kingdom")
+
+      mail = ContactingCreatorMailer.more_kyc_needed(seller.id, %w[individual_tax_id])
+
+      expect(mail.body.encoded).to include("Unique Taxpayer Reference (UTR)")
+      expect(mail.body.encoded).not_to include("National Identity Card Number (SNIC or CNIC)")
     end
   end
 

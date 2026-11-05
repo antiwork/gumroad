@@ -440,17 +440,6 @@ class SettingsPresenter
         end
     end
 
-    def country_code_for_compliance_field(field, user_compliance_info)
-      case field
-      when UserComplianceInfoFields::Business::TAX_ID, UserComplianceInfoFields::Business::VAT_NUMBER
-        user_compliance_info.business_country_code
-      when UserComplianceInfoFields::Individual::TAX_ID
-        user_compliance_info.country_code
-      else
-        user_compliance_info.legal_entity_country_code
-      end
-    end
-
     def account_status_details(payments_policy)
       pending_compliance = seller.user_compliance_info_requests.requested.exists?
       is_suspended = seller.suspended?
@@ -532,7 +521,7 @@ class SettingsPresenter
           if request.verification_error_message.present?
             compliance_actions << { message: "#{request.verification_error_message.strip.sub(/[.!?]+\z/, "")}.", href: nil }
           else
-            country_code = country_code_for_compliance_field(request.field_needed, user_compliance_info)
+            country_code = user_compliance_info.country_code_for_field(request.field_needed)
             missing_fields << UserComplianceInfoFieldProperty.name_tag_for_field(request.field_needed, country: country_code)
           end
         end

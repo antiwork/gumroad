@@ -573,9 +573,11 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = User.find(user_id)
     return do_not_send unless @seller.account_active?
     @subject = "We need more information from you."
-    country = @seller.compliance_country_code
-    @fields_needed_tags = @seller.user_compliance_info_requests.requested.pluck(:field_needed).uniq.reject { |field_needed| field_needed.include?(".") }
-      .map { |field_needed| UserComplianceInfoFieldProperty.name_tag_for_field(field_needed, country:) }.compact.uniq
+    compliance_info = @seller.alive_user_compliance_info
+    @fields_needed_tags = @seller.user_compliance_info_requests.requested.where.not("field_needed like 'interv_%'").pluck(:field_needed).uniq
+      .map { |field_needed| UserComplianceInfoFieldProperty.name_tag_for_field(field_needed, country: compliance_info&.country_code_for_field(field_needed)) }.compact.uniq
+    # The remediation endpoint tells sellers without a Stripe account that they're all set.
+    @complete_account_url = @seller.stripe_account.present? ? remediation_settings_payments_url : settings_payments_url
   end
 
   def payout_setup_retry_exhausted(user_id, marker_type)
@@ -589,8 +591,8 @@ class ContactingCreatorMailer < ApplicationMailer
     @seller = User.find(user_id)
     return do_not_send unless @seller.account_active?
     @subject = "We need more information from you."
-    country = @seller.compliance_country_code
-    @fields_needed_tags = fields_needed.map { |field_needed| UserComplianceInfoFieldProperty.name_tag_for_field(field_needed, country:) }.compact
+    compliance_info = @seller.alive_user_compliance_info
+    @fields_needed_tags = fields_needed.map { |field_needed| UserComplianceInfoFieldProperty.name_tag_for_field(field_needed, country: compliance_info&.country_code_for_field(field_needed)) }.compact
   end
 
   def stripe_document_verification_failed(user_id, error_message)
