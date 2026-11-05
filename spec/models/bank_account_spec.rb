@@ -3,6 +3,32 @@
 require "spec_helper"
 
 describe BankAccount do
+  describe "example bank codes" do
+    before { allow(Rails.env).to receive(:production?).and_return(true) }
+
+    it "refuses every form example Stripe rejects in live mode" do
+      expect(BankAccount::EXAMPLE_BANK_CODES.size).to eq(36)
+
+      BankAccount::EXAMPLE_BANK_CODES.each do |type, code|
+        account = type.constantize.new(user: create(:user), account_number: "00001234567890123456", account_number_last_four: "3456",
+                                       account_holder_full_name: "Test Seller", bank_number: code)
+        account.valid?
+        expect(account.errors.full_messages).to include("That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code."), type
+      end
+    end
+
+    it "accepts a real bank code" do
+      expect(build(:algeria_bank_account, bank_code: "EPALDZAL")).to be_valid
+    end
+
+    it "still saves a stored row that already holds the example" do
+      account = create(:algeria_bank_account)
+      account.update_column(:bank_number, "AAAADZDZXXX")
+      account.account_holder_full_name = "Renamed"
+      expect(account).to be_valid
+    end
+  end
+
   describe "routing_number" do
     let(:australian_bank_account) { build(:australian_bank_account) }
 

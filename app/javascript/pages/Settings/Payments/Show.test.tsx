@@ -1098,6 +1098,49 @@ describe("Ghana bank code validation", () => {
   });
 });
 
+describe("Algeria bank code example", () => {
+  const exampleError = "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code.";
+
+  const renderAlgeriaSeller = (bank_code: string) => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...pageProps({ country_code: "DZ", payout_currency: "dzd" }, { country: "DZ" }),
+        countries: { DZ: "Algeria" },
+        bank_account_details: {
+          show_bank_account: true,
+          show_paypal: false,
+          is_a_card: false,
+          routing_number: null,
+          account_number_visual: null,
+          card: null,
+          card_data_handling_mode: null,
+          bank_account: null,
+        },
+      },
+    });
+    render(<PaymentsPage />);
+    fireEvent.change(screen.getByLabelText("SWIFT / BIC Code"), { target: { value: bank_code } });
+    fireEvent.change(screen.getByLabelText("Pay to the order of"), { target: { value: "Test Seller" } });
+    fireEvent.change(screen.getByLabelText("Account #"), { target: { value: "12345678901234567890" } });
+    fireEvent.change(screen.getByLabelText("Confirm account #"), { target: { value: "12345678901234567890" } });
+    save();
+  };
+
+  it("refuses the old AAAADZDZXXX example before the request is sent", () => {
+    renderAlgeriaSeller("AAAADZDZXXX");
+
+    expect(mocks.put).not.toHaveBeenCalled();
+    expect(screen.getAllByText(exampleError).length).toBeGreaterThan(0);
+  });
+
+  it("saves a real bank code", () => {
+    renderAlgeriaSeller("EPALDZAL");
+
+    expect(mocks.put).toHaveBeenCalled();
+    expect(screen.queryByText(exampleError)).toBeNull();
+  });
+});
+
 describe("switching to PayPal where the bank rail cannot be re-created", () => {
   // An India seller with a live bank account: the save deletes it and Stripe refuses a new IND
   // account, so the confirmation must fire even with nothing forfeitable.

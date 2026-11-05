@@ -23,7 +23,7 @@ describe AlgeriaBankAccount do
     it "returns valid for 11 characters" do
       ba = create(:algeria_bank_account)
       expect(ba).to be_valid
-      expect(ba.routing_number).to eq("AAAADZDZXXX")
+      expect(ba.routing_number).to eq("EPALDZAL")
     end
   end
 

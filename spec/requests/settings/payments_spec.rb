@@ -6776,7 +6776,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         fill_in("Pay to the order of", with: "Algeria Creator")
         fill_in("Account #", with: "00001234567890123456")
         fill_in("Confirm account #", with: "00001234567890123456")
-        fill_in("SWIFT / BIC Code", with: "AAAADZDZXXX")
+        fill_in("SWIFT / BIC Code", with: "EPALDZAL")
 
         expect(page).to have_content("Must exactly match the name on your bank account")
         expect(page).to have_content("Payouts will be made in DZD.")
@@ -6794,7 +6794,7 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(compliance_info.phone).to eq("+213555123456")
         expect(compliance_info.birthday).to eq(Date.new(1980, 1, 1))
         expect(@user.reload.active_bank_account.send(:account_number_decrypted)).to eq("00001234567890123456")
-        expect(@user.reload.active_bank_account.routing_number).to eq("AAAADZDZXXX")
+        expect(@user.reload.active_bank_account.routing_number).to eq("EPALDZAL")
       end
     end
 

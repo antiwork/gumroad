@@ -70,9 +70,48 @@ const INDONESIA_BANK_CODE_REGEX = /^[0-9]{3}$/u;
 const BANGLADESH_BANK_CODE_REGEX = /^[0-9]{9}$/u;
 
 // Placeholders these fields used to show: not real codes, so a copied one saves a payout row that can never link.
+const BIC_EXAMPLE_MESSAGE = "That is the form's example, not a real code. Enter your own bank's SWIFT / BIC code.";
+
+// Stripe refuses these with "Known test bank accounts cannot be used in live mode."
 const COPIED_EXAMPLE_ERRORS: Partial<
   Record<BankAccount["type"], { field: "bank_code" | "branch_code"; example: string; message: string }[]>
 > = {
+  TaiwanBankAccount: [{ field: "bank_code", example: "AAAATWTXXXX", message: BIC_EXAMPLE_MESSAGE }],
+  MoroccoBankAccount: [{ field: "bank_code", example: "AAAAMAMAXXX", message: BIC_EXAMPLE_MESSAGE }],
+  AntiguaAndBarbudaBankAccount: [{ field: "bank_code", example: "AAAAAGAGXYZ", message: BIC_EXAMPLE_MESSAGE }],
+  SaintLuciaBankAccount: [{ field: "bank_code", example: "AAAALCLCXYZ", message: BIC_EXAMPLE_MESSAGE }],
+  TanzaniaBankAccount: [{ field: "bank_code", example: "AAAATZTXXXX", message: BIC_EXAMPLE_MESSAGE }],
+  NamibiaBankAccount: [{ field: "bank_code", example: "AAAANANXXYZ", message: BIC_EXAMPLE_MESSAGE }],
+  RwandaBankAccount: [{ field: "bank_code", example: "AAAARWRWXXX", message: BIC_EXAMPLE_MESSAGE }],
+  EcuadorBankAccount: [{ field: "bank_code", example: "AAAAECE1XXX", message: BIC_EXAMPLE_MESSAGE }],
+  BotswanaBankAccount: [{ field: "bank_code", example: "AAAABWBWXXX", message: BIC_EXAMPLE_MESSAGE }],
+  OmanBankAccount: [{ field: "bank_code", example: "AAAAOMOMXXX", message: BIC_EXAMPLE_MESSAGE }],
+  MadagascarBankAccount: [{ field: "bank_code", example: "AAAAMGMGXXX", message: BIC_EXAMPLE_MESSAGE }],
+  MoldovaBankAccount: [{ field: "bank_code", example: "AAAAMDMDXXX", message: BIC_EXAMPLE_MESSAGE }],
+  PanamaBankAccount: [{ field: "bank_code", example: "AAAAPAPAXXX", message: BIC_EXAMPLE_MESSAGE }],
+  NigeriaBankAccount: [{ field: "bank_code", example: "AAAANGLAXXX", message: BIC_EXAMPLE_MESSAGE }],
+  ArmeniaBankAccount: [{ field: "bank_code", example: "AAAAAMNNXXX", message: BIC_EXAMPLE_MESSAGE }],
+  EthiopiaBankAccount: [{ field: "bank_code", example: "AAAAETETXXX", message: BIC_EXAMPLE_MESSAGE }],
+  BruneiBankAccount: [{ field: "bank_code", example: "AAAABNBBXXX", message: BIC_EXAMPLE_MESSAGE }],
+  NorthMacedoniaBankAccount: [{ field: "bank_code", example: "AAAAMK2XXXX", message: BIC_EXAMPLE_MESSAGE }],
+  BhutanBankAccount: [{ field: "bank_code", example: "AAAABTBTXXX", message: BIC_EXAMPLE_MESSAGE }],
+  LaosBankAccount: [{ field: "bank_code", example: "AAAALALAXXX", message: BIC_EXAMPLE_MESSAGE }],
+  MozambiqueBankAccount: [{ field: "bank_code", example: "AAAAMZMXXXX", message: BIC_EXAMPLE_MESSAGE }],
+  GabonBankAccount: [{ field: "bank_code", example: "AAAAGAGAXXX", message: BIC_EXAMPLE_MESSAGE }],
+  BahamasBankAccount: [{ field: "bank_code", example: "AAAABSNSXXX", message: BIC_EXAMPLE_MESSAGE }],
+  MongoliaBankAccount: [{ field: "bank_code", example: "AAAAMNUBXXX", message: BIC_EXAMPLE_MESSAGE }],
+  AlgeriaBankAccount: [{ field: "bank_code", example: "AAAADZDZXXX", message: BIC_EXAMPLE_MESSAGE }],
+  MacaoBankAccount: [{ field: "bank_code", example: "AAAAMOMXXXX", message: BIC_EXAMPLE_MESSAGE }],
+  ElSalvadorBankAccount: [{ field: "bank_code", example: "AAAASVS1XXX", message: BIC_EXAMPLE_MESSAGE }],
+  PakistanBankAccount: [{ field: "bank_code", example: "AAAAPKKAXXX", message: BIC_EXAMPLE_MESSAGE }],
+  GuatemalaBankAccount: [{ field: "bank_code", example: "AAAAGTGCXYZ", message: BIC_EXAMPLE_MESSAGE }],
+  MauritiusBankAccount: [{ field: "bank_code", example: "AAAAMUMUXYZ", message: BIC_EXAMPLE_MESSAGE }],
+  KazakhstanBankAccount: [{ field: "bank_code", example: "AAAAKZKZXXX", message: BIC_EXAMPLE_MESSAGE }],
+  AlbaniaBankAccount: [{ field: "bank_code", example: "AAAAALTXXXX", message: BIC_EXAMPLE_MESSAGE }],
+  BahrainBankAccount: [{ field: "bank_code", example: "AAAABHBMXYZ", message: BIC_EXAMPLE_MESSAGE }],
+  JordanBankAccount: [{ field: "bank_code", example: "AAAAJOJOXXX", message: BIC_EXAMPLE_MESSAGE }],
+  AngolaBankAccount: [{ field: "bank_code", example: "AAAAAOAOXXX", message: BIC_EXAMPLE_MESSAGE }],
+  KuwaitBankAccount: [{ field: "bank_code", example: "AAAAKWKWXYZ", message: BIC_EXAMPLE_MESSAGE }],
   BangladeshBankAccount: [
     { field: "bank_code", example: "123456789", message: "Enter your own bank's 9-digit BEFTN routing number." },
   ],

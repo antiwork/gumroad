@@ -5,7 +5,7 @@ http_interactions:
     uri: https://api.stripe.com/v1/accounts
     body:
       encoding: UTF-8
-      string: type=custom&requested_capabilities[0]=transfers&country=DZ&default_currency=dzd&metadata[user_id]=164759031713&metadata[tos_agreement_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&metadata[user_compliance_info_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&metadata[bank_account_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&tos_acceptance[service_agreement]=recipient&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Algiers&individual[address][postal_code]=16000&individual[address][country]=DZ&bank_account[country]=DZ&bank_account[currency]=dzd&bank_account[account_number]=00001234567890123456&bank_account[routing_number]=AAAADZDZXXX&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=false
+      string: type=custom&requested_capabilities[0]=transfers&country=DZ&default_currency=dzd&metadata[user_id]=164759031713&metadata[tos_agreement_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&metadata[user_compliance_info_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&metadata[bank_account_id]=3X1LPBvu3iVKxQRODqFmzA%3D%3D&tos_acceptance[date]=1427846400&tos_acceptance[ip]=54.234.242.13&tos_acceptance[service_agreement]=recipient&business_type=individual&business_profile[name]=Chuck+Bartowski&business_profile[url]=https%3A%2F%2Fvipul.gumroad.com%2F&business_profile[product_description]=Chuck+Bartowski&individual[first_name]=Chuck&individual[last_name]=Bartowski&individual[email]=chuck%40gum.com&individual[phone]=0000000000&individual[dob][day]=1&individual[dob][month]=1&individual[dob][year]=1901&individual[address][line1]=address_full_match&individual[address][city]=Algiers&individual[address][postal_code]=16000&individual[address][country]=DZ&bank_account[country]=DZ&bank_account[currency]=dzd&bank_account[account_number]=00001234567890123456&bank_account[routing_number]=EPALDZAL&settings[payouts][schedule][interval]=manual&settings[payouts][debit_negative_balances]=false
     headers:
       User-Agent:
       - Stripe/v1 RubyBindings/12.5.0
@@ -189,7 +189,7 @@ http_interactions:
                   "past_due": [],
                   "pending_verification": []
                 },
-                "routing_number": "AAAADZDZXXX",
+                "routing_number": "EPALDZAL",
                 "status": "new"
               }
             ],

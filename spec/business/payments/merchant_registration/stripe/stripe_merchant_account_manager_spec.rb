@@ -8704,7 +8704,7 @@ describe StripeMerchantAccountManager, :vcr do
             country: "DZ",
             currency: "dzd",
             account_number: "00001234567890123456",
-            routing_number: "AAAADZDZXXX"
+            routing_number: "EPALDZAL"
           },
           settings: {
             payouts: {
