@@ -405,6 +405,10 @@ class UrlRedirect < ApplicationRecord
     # On the client-side we do the opposite replacement and generate the real URL in js and pass that to JWPlayer.
     # This way we won't have the signed URL for the video file in the DOM. This simply makes it somewhat harder to download the video file.
     guid = video_url[GUID_GETTER_FROM_S3_URL_REGEX, 1]
+    # A key outside the attachments/<guid>/original layout leaves nothing to obfuscate, and
+    # sub(nil, …) raises — which would cost the whole playlist, not just this file's guid.
+    return [video_url, guid] if guid.blank?
+
     [video_url.sub(guid, FAKE_VIDEO_URL_GUID_FOR_OBFUSCATION), guid]
   end
 

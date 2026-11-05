@@ -878,6 +878,25 @@ describe UrlRedirect do
         expect(guid).to eq(expected_guid)
       end
     end
+
+    context "when the file's key is not under the attachments/<guid>/original layout" do
+      let(:odd_file) { create(:product_file, url: "#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/i170probe/variant.mp4") }
+
+      before { @multifile_product.product_files << odd_file }
+
+      it "returns the signed URL unchanged with no guid" do
+        freeze_time do
+          video_url, guid = @multifile_url_redirect.send(:html5_video_url_and_guid_for_product_file, odd_file)
+          expect(guid).to be_nil
+          expect(video_url).to eq(@multifile_url_redirect.signed_video_url(odd_file))
+        end
+      end
+
+      it "still builds the playlist for every video file" do
+        playlist = @multifile_url_redirect.video_files_playlist(odd_file)[:playlist]
+        expect(playlist.map { |video| video[:external_id] }).to contain_exactly(@file_1.external_id, @file_2.external_id, odd_file.external_id)
+      end
+    end
   end
 
   describe "#update_rental_expired" do
