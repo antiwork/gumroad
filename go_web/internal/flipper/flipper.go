@@ -1,4 +1,5 @@
-package webhooks
+// Package flipper reads Flipper flags as Feature.active? does without an actor.
+package flipper
 
 import (
 	"context"
@@ -23,19 +24,16 @@ const (
 	flagTimeout = time.Second
 )
 
-type featureFlag interface {
-	active(ctx context.Context) (bool, error)
-}
-
-type hashReader interface {
+// HashReader is the Redis call a flag makes.
+type HashReader interface {
 	HGetAll(ctx context.Context, key string) *redis.MapStringStringCmd
 }
 
-// flipperFlag reads one flag as Feature.active?(name) does without an actor, through
+// Flag reads one flag as Feature.active?(name) does without an actor, through
 // flipper-redis 1.3.0 (a hash at the flag's own name) and RedisFailOpen: a failed read
 // falls back to this process's last successful one, or raises when there was none.
-type flipperFlag struct {
-	client hashReader
+type Flag struct {
+	client HashReader
 	name   string
 	now    func() time.Time
 	random func() float64
@@ -53,18 +51,21 @@ type flagState struct {
 	readAt, failedAt time.Time
 }
 
-var errUnevaluableFlag = errors.New("an expression gate is set, which only Flipper can evaluate")
+// ErrUnevaluable is a flag whose expression gate only Flipper can evaluate.
+var ErrUnevaluable = errors.New("an expression gate is set, which only Flipper can evaluate")
 
 type flagRead struct {
 	done chan struct{}
 	err  error
 }
 
-func newFlipperFlag(client hashReader, name string) *flipperFlag {
-	return &flipperFlag{client: client, name: name, now: time.Now, random: rand.Float64}
+// New is the flag name, read through client.
+func New(client HashReader, name string) *Flag {
+	return &Flag{client: client, name: name, now: time.Now, random: rand.Float64}
 }
 
-func (f *flipperFlag) active(ctx context.Context) (bool, error) {
+// Active is Feature.active?(name).
+func (f *Flag) Active(ctx context.Context) (bool, error) {
 	for {
 		state := f.state.Load()
 		if now := f.now(); state != nil && (now.Sub(state.readAt) < flagCacheTTL || now.Sub(state.failedAt) < flagRetryBackoff) {
@@ -93,7 +94,7 @@ func (f *flipperFlag) active(ctx context.Context) (bool, error) {
 	}
 }
 
-func (f *flipperFlag) refresh(ctx context.Context, last *flagState) error {
+func (f *Flag) refresh(ctx context.Context, last *flagState) error {
 	ctx, cancel := context.WithTimeout(ctx, flagTimeout)
 	defer cancel()
 	gates, err := f.client.HGetAll(ctx, f.name).Result()
@@ -116,12 +117,12 @@ func (f *flipperFlag) refresh(ctx context.Context, last *flagState) error {
 	return nil
 }
 
-func (f *flipperFlag) open(state *flagState) (bool, error) {
+func (f *Flag) open(state *flagState) (bool, error) {
 	switch {
 	case state.boolean:
 		return true, nil
 	case state.expression:
-		return false, errUnevaluableFlag
+		return false, ErrUnevaluable
 	}
 	return f.random() < state.percentageOfTime/100, nil
 }
@@ -149,12 +150,13 @@ func expressionSet(raw string) bool {
 // flipperNumber mirrors Flipper::Typecast.to_number on a stored string.
 func flipperNumber(s string) float64 {
 	if strings.Contains(s, ".") {
-		return rubyToF(s)
+		f, _ := rails.StringToF(s)
+		return f
 	}
 	n, ok := rails.StringToI(s)
 	if !ok {
 		// A Bignum percentage opens the gate whenever it's positive, whatever follows its digits.
-		if strings.HasPrefix(strings.TrimLeft(s, rubySpace), "-") {
+		if strings.HasPrefix(strings.TrimLeft(s, rails.RubySpace), "-") {
 			return math.Inf(-1)
 		}
 		return math.Inf(1)

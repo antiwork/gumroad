@@ -129,7 +129,7 @@ func parseStripeHeader(header string) (int64, []*string, bool) {
 	var signatures []*string
 	for i, item := range strings.Split(header, ",") {
 		if i > 0 {
-			item = strings.TrimLeft(item, rubySpace)
+			item = strings.TrimLeft(item, rails.RubySpace)
 		}
 		// String#split drops trailing empty fields, and "".split("=", 2) is [].
 		if item == "" {

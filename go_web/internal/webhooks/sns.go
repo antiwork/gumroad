@@ -50,7 +50,7 @@ var snsSignableKeys = []string{"Message", "MessageId", "Subject", "SubscribeURL"
 var (
 	snsCertHost = regexp.MustCompile(`^sns\.[a-zA-Z0-9\-]{3,}\.amazonaws\.com(\.cn)?$`)
 	// verify_pem_format!'s pattern; Ruby's \s includes \v, and [\s]*\Z is [\s]*\z.
-	snsPEMFormat = regexp.MustCompile(`\A[` + rubySpace + `]*-----BEGIN [A-Z]+-----\n[A-Za-z0-9+/\n]+={0,2}\n-----END [A-Z]+-----[` + rubySpace + `]*\z`)
+	snsPEMFormat = regexp.MustCompile(`\A[` + rails.RubySpace + `]*-----BEGIN [A-Z]+-----\n[A-Za-z0-9+/\n]+={0,2}\n-----END [A-Z]+-----[` + rails.RubySpace + `]*\z`)
 
 	errNoDownloadSlot = errors.New("too many signing cert downloads in flight")
 )

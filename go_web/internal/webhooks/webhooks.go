@@ -15,6 +15,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -136,7 +137,7 @@ func register(app *web.App, deps Deps, getCert certGetter) (*handlers, error) {
 				logger.Warn(names[i]+" does not parse, so SendGrid verification fails once it reaches that key", "error", key.err.Error())
 			}
 		}
-		handle("/sendgrid-webhook", "sendgrid", h.sendgrid(v, newFlipperFlag(deps.Redis, sendgridFlag)))
+		handle("/sendgrid-webhook", "sendgrid", h.sendgrid(v, flipper.New(deps.Redis, sendgridFlag)))
 	}
 
 	sns := newSNSVerifier(getCert)

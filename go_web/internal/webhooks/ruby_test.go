@@ -97,12 +97,3 @@ func deref(s *string) string {
 	}
 	return strconv.Quote(*s)
 }
-
-func TestRubyToF(t *testing.T) {
-	cases := map[string]float64{"12.5": 12.5, " -3.25x": -3.25, ".5": 0.5, "1_000.5": 1000.5, "1.e5": 1, "abc": 0, "": 0}
-	for input, want := range cases {
-		if got := rubyToF(input); got != want {
-			t.Errorf("rubyToF(%q) = %v, want %v", input, got, want)
-		}
-	}
-}
