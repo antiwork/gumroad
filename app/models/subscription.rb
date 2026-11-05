@@ -750,6 +750,7 @@ class Subscription < ApplicationRecord
     purchase = original_purchase
     return if purchase.nil?
 
+    price_override = renewal_price_cents.present?
     renewal_price_cents ||= current_subscription_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
     presentment_matches = presentment.present? &&
@@ -764,10 +765,14 @@ class Subscription < ApplicationRecord
     price_cap_cents = indian_card_mandate_price_cents(
       purchase,
       renewal_price_cents,
-      fixed_rate: price_cap_rate
+      fixed_rate: price_cap_rate,
+      price_override:
     )
     canonical_cap_cents = if billing_info.present?
       indian_card_mandate_amount_for_billing_info(purchase, billing_info, price_cap_cents)
+    elsif price_override
+      # The purchase's stored total is the old price; re-derive tax on the restart price.
+      indian_card_mandate_amount_for_billing_info(purchase, purchase.slice(:country, :state, :zip_code), price_cap_cents)
     else
       purchase.mandate_maximum_amount_cents(fixed_rate: (fixed_rate if recovery_currency.present?))
     end
@@ -797,7 +802,7 @@ class Subscription < ApplicationRecord
         price_basis_cents = if purchase.is_free_trial_purchase?
           price_cap_cents
         else
-          indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: purchase.rate_converted_to_usd.presence)
+          indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: purchase.rate_converted_to_usd.presence, price_override:)
         end
         extras_cents = [canonical_cap_cents - price_basis_cents, 0].max
         if extras_cents.positive? && price_basis_cents.positive? && price_cap_cents.positive?
@@ -812,7 +817,7 @@ class Subscription < ApplicationRecord
         # The listed price converts to rounded USD cents and back, which can land a few
         # paise below the exact amount the recovered fixing will bill; a cap below the
         # fixed renewal amount guarantees a decline. Floor at the exact listed price.
-        listed_price_floor_cents = purchase.mandate_maximum_displayed_price_cents.to_i
+        listed_price_floor_cents = price_override ? 0 : purchase.mandate_maximum_displayed_price_cents.to_i
         listed_price_floor_cents = renewal_price_cents.to_i if listed_price_floor_cents.zero?
         price_part_cents = [price_part_cents, listed_price_floor_cents].max
       end
@@ -871,12 +876,12 @@ class Subscription < ApplicationRecord
     discount&.duration_in_billing_cycles.present? && renewal_pre_discount_total_cents.positive?
   end
 
-  def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil)
+  def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil, price_override: false)
     if purchase.installment_plan_relisted_in_another_currency?
       return get_usd_cents(link.price_currency_type, renewal_price_cents, rate: fixed_rate)
     end
 
-    displayed_price_cents = purchase.mandate_maximum_displayed_price_cents
+    displayed_price_cents = price_override ? renewal_price_cents : purchase.mandate_maximum_displayed_price_cents
     displayed_price_cents = renewal_price_cents if displayed_price_cents.zero?
     displayed_currency = purchase[:displayed_price_currency_type].presence || link.price_currency_type
     get_usd_cents(displayed_currency, displayed_price_cents, rate: fixed_rate)
