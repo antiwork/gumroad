@@ -28,5 +28,6 @@ export const selectAdjacentRadio = (event: ReactKeyboardEvent<HTMLElement>) => {
   radio.focus();
   // Clicking a radio that is already checked re-runs its handler; for a custom-amount choice that
   // clears the price the buyer typed.
-  if (radio.getAttribute("aria-checked") !== "true") radio.click();
+  const checked = radio.getAttribute("aria-checked") === "true" || (radio instanceof HTMLInputElement && radio.checked);
+  if (!checked) radio.click();
 };

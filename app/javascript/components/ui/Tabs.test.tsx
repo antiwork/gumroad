@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { selectAdjacentRadio } from "$app/utils/radioGroupKeyboard";
+
 import { Button } from "$app/components/Button";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -163,6 +165,19 @@ describe("Tabs radiogroup", () => {
 
     fireEvent.keyDown(radio("Two"), { key: "End" });
     expect(onSelect).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not re-activate a native radio input that is already checked", () => {
+    const onClick = vi.fn();
+    render(
+      <div role="radiogroup" onKeyDown={selectAdjacentRadio}>
+        <input type="radio" role="radio" name="size" aria-label="Small" defaultChecked onClick={onClick} />
+        <input type="radio" role="radio" name="size" aria-label="Large" />
+      </div>,
+    );
+
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Small" }), { key: "Home" });
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it("leaves a tablist's tabs alone", () => {
