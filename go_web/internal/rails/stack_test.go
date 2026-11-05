@@ -268,3 +268,14 @@ func reflectEqual(a, b []string) bool {
 	}
 	return true
 }
+
+func TestRenderInertiaJSONMarksTheResponse(t *testing.T) {
+	s := testStack(t, nil, "")
+	r := httptest.NewRequest("GET", "/x", nil)
+	req, _ := s.Parse(r, nil, testNow)
+	w := httptest.NewRecorder()
+	RenderInertiaJSON(w, req, `{"component":"X"}`)
+	if h := w.Header(); h.Get("X-Inertia") != "true" || h.Get("Vary") != "X-Inertia, Origin" || h.Get("Content-Type") != JSONContentType || h.Get("ETag") == "" {
+		t.Errorf("headers %v", h)
+	}
+}
