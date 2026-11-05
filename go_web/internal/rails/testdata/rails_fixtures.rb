@@ -245,12 +245,11 @@ written_envelope = cipher.update(data) + cipher.final
 
 cookie_hosts = ["gumroad.com", "seller.gumroad.com", "a.b.gumroad.com", "shop.example.co.uk", "localhost", "10.0.0.1"]
 write("rails/testdata/cookie_writing.json", {
-        lines: cookie_hosts.to_h do |host|
-          env = Rack::MockRequest.env_for("https://#{host}/cookie_lines")
-          _, headers, = APP.call(env)
-          [host, set_cookies(headers)]
+        lines: cookie_hosts.index_with do |host|
+          _, headers, = APP.call(Rack::MockRequest.env_for("https://#{host}/cookie_lines"))
+          set_cookies(headers)
         end,
-        escape: ["a b", "+/=", "\u00fc", "~*-._!'()", "%", "a\u2028b", "--"].to_h { |input| [input, Rack::Utils.escape(input)] },
+        escape: ["a b", "+/=", "\u00fc", "~*-._!'()", "%", "a\u2028b", "--"].index_with { |input| Rack::Utils.escape(input) },
         months: [Time.utc(2026, 1, 31, 10, 0, 0, 123_456), Time.utc(2026, 3, 31), Time.utc(2024, 1, 29), Time.utc(2026, 12, 15, 23, 59, 59)]
           .map { |t| { from: t.iso8601(6), plus_month: (t + 1.month).iso8601(6) } },
       })
