@@ -3098,6 +3098,36 @@ class LinksControllerUpdateTest < ActionController::TestCase
     }, "Expected Product::SaveCancellationDiscountService to be built with the product and the cancellation discount params"
   end
 
+  test "PUT update rolls back the rest of the save when the cancellation discount duration overflows the column" do
+    setup_recurring_prices!
+    @params[:cancellation_discount] = ActionController::Parameters.new(
+      discount: ActionController::Parameters.new(type: "percent", percents: "1").permit!,
+      duration_in_billing_cycles: "111111111111"
+    ).permit!
+    @params[:custom_summary] = "changed-during-failed-save"
+    Feature.activate_user(:cancellation_discounts, @product.user)
+
+    post :update, params: @params, format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "Sorry, the duration entered is too large.", response.parsed_body["error_message"]
+    assert_not_equal "changed-during-failed-save", @product.reload.custom_summary
+  end
+
+  test "PUT update returns a validation error instead of raising when the cancellation discount duration overflows the column" do
+    setup_recurring_prices!
+    @params[:cancellation_discount] = ActionController::Parameters.new(
+      discount: ActionController::Parameters.new(type: "percent", percents: "1").permit!,
+      duration_in_billing_cycles: "111111111111"
+    ).permit!
+    Feature.activate_user(:cancellation_discounts, @product.user)
+
+    post :update, params: @params, format: :json
+
+    assert_response :unprocessable_entity
+    assert_equal "Sorry, the duration entered is too large.", response.parsed_body["error_message"]
+  end
+
   # --- default discount code --------------------------------------------------
 
   test "PUT update sets the default offer code when a valid product offer code is provided" do

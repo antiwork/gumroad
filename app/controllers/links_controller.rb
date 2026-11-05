@@ -611,7 +611,11 @@ class LinksController < ApplicationController
           begin
             Product::SaveCancellationDiscountService.new(@product, product_permitted_params[:cancellation_discount]).perform
           rescue ActiveRecord::RecordInvalid => e
-            return render json: { error_message: e.record.errors.full_messages.first }, status: :unprocessable_entity
+            # A `return` here would COMMIT the writes already made in this transaction
+            # (Rails 7+ non-local return), leaving a half-applied save behind the error.
+            # Roll back, then render once the transaction has unwound.
+            @cancellation_discount_error = e.record.errors.full_messages.first
+            raise ActiveRecord::Rollback
           end
         end
 
@@ -700,6 +704,10 @@ class LinksController < ApplicationController
         # Same lock and commit as the content change: a ready archive must not
         # outlive the content it was built from. Rebuilding is the job's work, below.
         @product.invalidate_stale_product_files_archives!
+      end
+
+      if @cancellation_discount_error
+        return render json: { error_message: @cancellation_discount_error }, status: :unprocessable_entity
       end
 
       # Stale archives were invalidated inside the save transaction above; the
