@@ -190,7 +190,7 @@ module CheckoutHelpers
         if gift.present? || product.is_in_preorder_state
           # Specific cases where we show the receipt instead of the product content
           expect(page).to have_text(is_free ? "You signed up with #{product.user.name_or_username} for free" : "Your purchase was successful!", wait: 60)
-          expect(page).to have_text(buyer_email)
+          expect(page).to have_text(is_free ? "We emailed the details to #{buyer_email}" : buyer_email)
         elsif is_free
           expect(page).to have_alert(text: "You signed up with #{product.user.name_or_username} for free. We emailed the details to #{buyer_email}", visible: :all, wait: 60)
         else

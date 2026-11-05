@@ -19,7 +19,7 @@ describe "Affiliates", type: :system, js: true do
     click_on "I want this!"
     fill_in("Email address", with: "test@gumroad.com")
     click_on "Get"
-    expect(page).to have_alert(text: "You signed up with #{user.name_or_username} for free.")
+    expect(page).to have_alert(text: "You signed up with #{user.name_or_username} for free. We emailed the details to test@gumroad.com.")
   end
 
   it "displays affiliates based on initial page load query parameters" do
