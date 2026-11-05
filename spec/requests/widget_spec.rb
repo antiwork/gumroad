@@ -287,16 +287,18 @@ describe "Widget Page scenario", js: true, type: :system do
     context "with a product accepting waitlist signups" do
       let!(:waitlist_product) { create(:product, user: seller, name: "Upcoming course", waitlist_enabled: true, purchase_disabled_at: Time.current) }
 
+      let(:profile_embed_code) { /\A(?!.*name="product_id").*name="seller_id" value="#{seller.external_id}"/m }
+
       before { login_as(seller) }
 
       it "puts the selected product in the embed code and the preview" do
         visit widgets_path
         within_section "Subscribe form", section_element: :section do
           expect(page).to have_select("Waitlist", selected: "Subscribe to your profile", options: ["Subscribe to your profile", "Waitlist: Upcoming course"])
-          expect(find_field("Subscribe form embed code").value).not_to include("product_id")
+          expect(page).to have_field("Subscribe form embed code", with: profile_embed_code)
 
           select "Waitlist: Upcoming course", from: "Waitlist"
-          expect(find_field("Subscribe form embed code").value).to include(%(name="product_id" value="#{waitlist_product.external_id}"))
+          expect(page).to have_field("Subscribe form embed code", with: /name="product_id" value="#{Regexp.escape(waitlist_product.external_id)}"/)
 
           fill_in "Your email address", with: "waitlister@example.com"
           click_on "Follow"
@@ -306,7 +308,7 @@ describe "Widget Page scenario", js: true, type: :system do
 
         within_section "Subscribe form", section_element: :section do
           select "Subscribe to your profile", from: "Waitlist"
-          expect(find_field("Subscribe form embed code").value).not_to include("product_id")
+          expect(page).to have_field("Subscribe form embed code", with: profile_embed_code)
         end
       end
     end
