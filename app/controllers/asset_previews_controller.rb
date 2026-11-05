@@ -34,7 +34,9 @@ class AssetPreviewsController < ApplicationController
       asset_preview.file&.blob&.purge
       render(json: { success: false, error: asset_preview.errors.any? ? asset_preview.errors.full_messages.to_sentence : "Could not process your preview, please try again." })
     end
-  rescue *INTERNET_EXCEPTIONS
+  # attach() identifies the blob by reading its object, so a blob row whose object is gone raises
+  # FileNotFoundError (a purged one raises InvalidForeignKey) before the save below.
+  rescue ActiveRecord::InvalidForeignKey, ActiveStorage::FileNotFoundError, *INTERNET_EXCEPTIONS
     render(json: { success: false, error: "Could not process your preview, please try again." })
   end
 

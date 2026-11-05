@@ -44,6 +44,24 @@ if [ "$SERVICE_DIR" = "go_web" ]; then
     cp config/credentials/production.yml.enc go_web/credentials/production.yml.enc
     TAG="${TAG}-creds-$(sha256sum go_web/credentials/production.yml.enc | cut -c1-12)"
   fi
+  # The Vite manifests of the web image this build deploys, so go_web's pages load the
+  # assets Rails' do. compile_assets.sh left that image here; without it go_web's pages go
+  # to Rails. The whole .vite directory, so go_web loads exactly the manifests Rails does.
+  WEB_IMAGE="${ECR_REGISTRY}/gumroad/web:production-$(echo "$BUILDKITE_COMMIT" | cut -c1-12)"
+  rm -rf go_web/vite
+  if ! docker image inspect "$WEB_IMAGE" > /dev/null 2>&1; then
+    logger "No $WEB_IMAGE on this agent, so go_web has no Vite manifests"
+  elif ! CONTAINER=$(docker create "$WEB_IMAGE"); then
+    logger "Could not create a container from $WEB_IMAGE, so go_web has no Vite manifests"
+  else
+    if docker cp "$CONTAINER:/app/public/vite/.vite" go_web/vite && [ -s go_web/vite/manifest.json ]; then
+      TAG="${TAG}-vite-$(cat go_web/vite/*.json | sha256sum | cut -c1-12)"
+    else
+      rm -rf go_web/vite
+      logger "Could not copy the Vite manifests out of $WEB_IMAGE, so go_web has none"
+    fi
+    docker rm "$CONTAINER" > /dev/null || true
+  fi
 fi
 # The deploy step reads the tag from here rather than recomputing the digest.
 if command -v buildkite-agent >/dev/null 2>&1; then

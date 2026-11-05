@@ -5,20 +5,34 @@ import (
 	"database/sql"
 	"errors"
 	"time"
+
+	"github.com/antiwork/gumroad/go_web/internal/delivery"
 )
 
 // Flag bits from each model's has_flags.
 const (
 	urlRedirectHasBeenSeen = 1 << 0 // UrlRedirect 1 => :has_been_seen
+	urlRedirectIsRental    = 1 << 2 // UrlRedirect 3 => :is_rental
 
-	purchaseIsGiftReceiver = 1 << 5  // Purchase 6 => :is_gift_receiver_purchase
-	purchaseChargebackBack = 1 << 9  // Purchase 10 => :chargeback_reversed
-	purchaseAccessRevoked  = 1 << 24 // Purchase 25 => :is_access_revoked
-	purchaseIsBundle       = 1 << 25 // Purchase 26 => :is_bundle_purchase
+	purchaseIsGiftReceiver         = 1 << 5  // Purchase 6 => :is_gift_receiver_purchase
+	purchaseIsGiftSender           = 1 << 6  // Purchase 7 => :is_gift_sender_purchase
+	purchaseChargebackBack         = 1 << 9  // Purchase 10 => :chargeback_reversed
+	purchaseIsArchived             = 1 << 16 // Purchase 17 => :is_archived
+	purchaseIsFreeTrial            = 1 << 18 // Purchase 19 => :is_free_trial_purchase
+	purchaseExcludesProductReview  = 1 << 22 // Purchase 23 => :should_exclude_product_review
+	purchaseAccessRevoked          = 1 << 24 // Purchase 25 => :is_access_revoked
+	purchaseIsBundle               = 1 << 25 // Purchase 26 => :is_bundle_purchase
+	purchaseIsBundleProduct        = 1 << 26 // Purchase 27 => :is_bundle_product_purchase
+	purchaseIsCommissionDeposit    = 1 << 28 // Purchase 29 => :is_commission_deposit_purchase
+	purchaseIsCommissionCompletion = 1 << 29 // Purchase 30 => :is_commission_completion_purchase
 
 	subscriptionInstallmentPlan = 1 << 6 // Subscription 7 => :is_installment_plan
 
-	productBlockAccessAfterCancellation = 1 << 9 // Link 10 => :block_access_after_membership_cancellation
+	productIsLicensed                   = 1 << 6  // Link 7 => :is_licensed
+	productBlockAccessAfterCancellation = 1 << 9  // Link 10 => :block_access_after_membership_cancellation
+	productCommunityChatEnabled         = 1 << 29 // Link 30 => :community_chat_enabled
+
+	userDisablesReviewsAfterYear = 1 << 5 // User 6 => :disable_reviews_after_year
 
 	coffeeNativeType = "coffee"
 )
@@ -32,6 +46,10 @@ type urlRedirect struct {
 }
 
 func (u *urlRedirect) hasBeenSeen() bool { return u.flags&urlRedirectHasBeenSeen != 0 }
+
+func (u *urlRedirect) delivery() *delivery.Redirect {
+	return &delivery.Redirect{ID: u.id, PurchaseID: u.purchaseID, ProductID: u.productID, InstallmentID: u.installmentID, ImportedCustomerID: u.importedCustomerID}
+}
 
 // findURLRedirect is UrlRedirect.find_by(token:), under the column's case-insensitive collation.
 func findURLRedirect(ctx context.Context, db *sql.DB, token string) (*urlRedirect, error) {

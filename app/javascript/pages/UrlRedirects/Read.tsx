@@ -17,6 +17,7 @@ import {
 } from "$app/pages/UrlRedirects/epub";
 import { cast } from "$app/utils/cast";
 import { isBoolean, isNumber, isOneOf, isRecord, isString } from "$app/utils/guards";
+import { selectAdjacentRadio } from "$app/utils/radioGroupKeyboard";
 
 import { Button } from "$app/components/Button";
 import { Popover, PopoverContent, PopoverTrigger } from "$app/components/Popover";
@@ -867,12 +868,13 @@ const EpubReader = ({
               </Fieldset>
               <Fieldset>
                 <FieldsetTitle>Background</FieldsetTitle>
-                <div role="radiogroup" aria-label="Background" className="flex gap-2">
+                <div role="radiogroup" aria-label="Background" className="flex gap-2" onKeyDown={selectAdjacentRadio}>
                   {Object.entries(epubThemes).map(([name, { label, background, color }]) => (
                     <button
                       key={name}
                       role="radio"
                       aria-checked={theme === name}
+                      tabIndex={theme === name ? 0 : -1}
                       aria-label={label}
                       onClick={() => updateTheme(cast<EpubThemeName>(name))}
                       className="cursor-pointer rounded border p-2 all-unset"

@@ -242,7 +242,7 @@ class CheckoutController < ApplicationController
 
     def browser_cart_product_ids
       cart_product_ids = params[:cart_product_ids]
-      cart_product_ids.is_a?(Array) ? cart_product_ids.map { ObfuscateIds.decrypt(_1) } : []
+      cart_product_ids.is_a?(Array) ? cart_product_ids.filter_map { ObfuscateIds.decrypt(_1) } : []
     end
 
     RECOMMENDED_PRODUCTS_TIMEOUT_SECONDS = 10

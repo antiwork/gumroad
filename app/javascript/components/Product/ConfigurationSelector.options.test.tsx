@@ -68,16 +68,11 @@ const versionedOption = (index: number): Product["options"][number] => {
   return option;
 };
 
-const renderSelector = () => {
+const renderSelector = (product: Product = versionedProduct) => {
   const Harness = () => {
     const [selection, setSelection] = React.useState(initialSelection);
     return (
-      <ConfigurationSelector
-        product={versionedProduct}
-        selection={selection}
-        setSelection={setSelection}
-        discount={null}
-      />
+      <ConfigurationSelector product={product} selection={selection} setSelection={setSelection} discount={null} />
     );
   };
   render(<Harness />);
@@ -98,6 +93,11 @@ describe("version selector accessibility", () => {
     ];
 
     expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+  });
+
+  it("names the coffee amount picker", () => {
+    renderSelector({ ...versionedProduct, native_type: "coffee" });
+    expect(screen.getByRole("radiogroup", { name: "Amount" })).toBeTruthy();
   });
 
   it("moves the version selection with the arrow keys", () => {

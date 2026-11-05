@@ -50,6 +50,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		}
 		return h.redirect(w, p, path)
 	}
+	if !p.poll {
+		return h.renderPage(w, p, u)
+	}
 	return h.render(w, p, u)
 }
 
@@ -74,9 +77,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, u *urlRedirect) error {
 	// and reading them anyway could raise where Rails doesn't.
 	if audio || (locations && p.purchase != nil) {
 		var err error
-		files, err = delivery.AliveProductFiles(p.ctx, h.c.DB, &delivery.Redirect{
-			ID: u.id, PurchaseID: u.purchaseID, ProductID: u.productID, InstallmentID: u.installmentID, ImportedCustomerID: u.importedCustomerID,
-		}, h.c.IDs)
+		files, err = delivery.AliveProductFiles(p.ctx, h.c.DB, u.delivery(), h.c.IDs)
 		if err != nil {
 			return err
 		}
@@ -99,7 +100,16 @@ func (h *handler) render(w http.ResponseWriter, p *page, u *urlRedirect) error {
 	}
 	props.Sym("_inertia_meta", h.metaTags(p).JSON())
 	body := inertia.Page(component, p.req.FullPath(), props)
+	if err := h.finish(w, p); err != nil {
+		return err
+	}
+	rails.RenderInertiaJSON(w, p.req, body)
+	return nil
+}
 
+// finish is what follows a render: inertia_rails' XSRF-TOKEN cookie, the flash sweep, the
+// session commit and set_noindex_header's header.
+func (h *handler) finish(w http.ResponseWriter, p *page) error {
 	// prepare has checked the token decodes.
 	masked, _ := session.MaskedGlobalToken(p.csrf)
 	p.cookies = append(p.cookies, rails.SetCookie{Name: xsrfCookie, Value: masked}.Line(p.secure))
@@ -109,7 +119,6 @@ func (h *handler) render(w http.ResponseWriter, p *page, u *urlRedirect) error {
 		return err
 	}
 	w.Header().Set("X-Robots-Tag", "noindex")
-	rails.RenderInertiaJSON(w, p.req, body)
 	return nil
 }
 

@@ -49,7 +49,11 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 
 	token := u.token
 	if purchase != nil && purchase.refundedOrChargedBack() {
-		// withdrawn_content_response answers a poll with the expired page.
+		// withdrawn_content_response moves a poll to the expired page, and raises e404 for
+		// the page itself.
+		if !p.poll {
+			return nil, "", errNotFound
+		}
 		return nil, "/r/" + token + "/expired", nil
 	}
 

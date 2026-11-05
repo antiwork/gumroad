@@ -48,6 +48,10 @@ type Config struct {
 	Proxy    *web.RailsProxy
 	Meta     inertia.DefaultMeta
 	Now      func() time.Time
+	// Pages is the full page's config, nil to leave every full page to Rails.
+	Pages *PageConfig
+	// DryRunKey signs dry-run requests; empty turns them off.
+	DryRunKey []byte
 }
 
 func Register(app *web.App, c *Config) {
@@ -70,6 +74,10 @@ type page struct {
 	csrfFresh bool
 	// purchase is url_redirect.purchase once checkPermissions has loaded it.
 	purchase *purchase
+	// poll is a background poll; anything else is the full page.
+	poll bool
+	// dryRun renders without writing, for a parity check.
+	dryRun bool
 	// cookies are the Set-Cookie lines the cookie jar writes, in the order they were set.
 	cookies []string
 	secure  bool
@@ -85,13 +93,17 @@ var errNotFound = errors.New("not found")
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), readTimeout)
 	defer cancel()
+	dryRun := h.dryRun(r)
 	p, err := h.prepare(ctx, r)
 	if err == nil {
+		p.dryRun = dryRun
 		err = h.serve(w, p)
 	}
 	var reason fallback
 	switch {
 	case err == nil:
+	case errors.As(err, &reason) && dryRun:
+		answerDryRunFallback(w, string(reason))
 	case errors.As(err, &reason):
 		h.c.Proxy.Forward(w, r, string(reason))
 	case errors.Is(err, errNotFound):
@@ -110,7 +122,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // prepare parses the request and decides whether this port serves it. Nothing it does is
 // visible outside the process, so any fallback it returns is safe.
 func (h *handler) prepare(ctx context.Context, r *http.Request) (*page, error) {
-	if reason := declined(r, h.c.Env); reason != "" {
+	if reason := declined(r, h.c.Env, h.c.Pages != nil); reason != "" {
 		return nil, fallback(reason)
 	}
 	req, err := h.c.Stack.Parse(r, [][2]string{{"controller", "url_redirects"}, {"action", "download_page"}, {"id", r.PathValue("id")}}, h.c.Now())
@@ -135,7 +147,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request) (*page, error) {
 		}
 	}
 
-	p := &page{ctx: ctx, req: req, secure: rails.SecureCookies(h.c.Env.Protocol, r)}
+	p := &page{ctx: ctx, req: req, secure: rails.SecureCookies(h.c.Env.Protocol, r), poll: pollRequest(r)}
 	if p.session = h.c.Store.Load(req); p.session == nil {
 		p.session = session.New()
 	}
@@ -186,8 +198,9 @@ func (h *handler) prepare(ctx context.Context, r *http.Request) (*page, error) {
 	return p, nil
 }
 
-// declined is everything decided by the request line and headers alone.
-func declined(r *http.Request, env *web.Environment) string {
+// declined is everything decided by the request line and headers alone. pages is whether
+// this port renders the full page, which an Inertia visit to it still leaves to Rails.
+func declined(r *http.Request, env *web.Environment, pages bool) string {
 	host := web.Host(r)
 	switch {
 	case r.Method != http.MethodGet:
@@ -199,7 +212,9 @@ func declined(r *http.Request, env *web.Environment) string {
 	case !rails.SecureCookies(env.Protocol, r):
 		// Rack::SSL redirects plain HTTP, and the session only commits over SSL.
 		return "not ssl"
-	case !pollRequest(r):
+	case !pollRequest(r) && (!pages || r.Header.Get("X-Inertia") != "" || hasPartialHeaders(r)):
+		// inertia_rails reads the partial headers without X-Inertia, so Rails would render
+		// a partial page here.
 		return "not a poll"
 	case r.ContentLength != 0 || len(r.TransferEncoding) > 0:
 		// Parsing reads the body, which a fallback after it could no longer send.
@@ -254,4 +269,15 @@ func pollRequest(r *http.Request) bool {
 func hasCookie(req *rails.Request, name string) bool {
 	_, ok := req.Cookie(name)
 	return ok
+}
+
+// hasPartialHeaders is a request inertia_rails would answer as a partial reload, which it
+// reads without checking X-Inertia.
+func hasPartialHeaders(r *http.Request) bool {
+	for _, h := range []string{"X-Inertia-Partial-Component", "X-Inertia-Partial-Data", "X-Inertia-Partial-Except", "X-Inertia-Reset"} {
+		if _, ok := r.Header[h]; ok {
+			return true
+		}
+	}
+	return false
 }

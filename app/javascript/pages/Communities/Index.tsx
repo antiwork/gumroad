@@ -16,6 +16,7 @@ import {
 } from "$app/data/communities";
 import { assertDefined } from "$app/utils/assert";
 import { cast } from "$app/utils/cast";
+import { selectAdjacentRadio } from "$app/utils/radioGroupKeyboard";
 
 import { Button, NavigationButton } from "$app/components/Button";
 import { ChatMessageInput } from "$app/components/Communities/ChatMessageInput";
@@ -727,10 +728,16 @@ const NotificationsSettingsModal = ({
         value={form.data.recap_frequency !== null}
         onChange={(newValue) => form.setData("recap_frequency", newValue ? "weekly" : null)}
         dropdown={
-          <div className="radio-buttons flex! flex-col! gap-2" role="radiogroup">
+          <div
+            className="radio-buttons flex! flex-col! gap-2"
+            role="radiogroup"
+            aria-label="Recap frequency"
+            onKeyDown={selectAdjacentRadio}
+          >
             <Button
               role="radio"
               aria-checked={form.data.recap_frequency === "daily"}
+              tabIndex={form.data.recap_frequency === "daily" ? 0 : -1}
               onClick={() => form.setData("recap_frequency", "daily")}
             >
               <div>
@@ -741,6 +748,7 @@ const NotificationsSettingsModal = ({
             <Button
               role="radio"
               aria-checked={form.data.recap_frequency === "weekly"}
+              tabIndex={form.data.recap_frequency === "weekly" ? 0 : -1}
               onClick={() => form.setData("recap_frequency", "weekly")}
             >
               <div>

@@ -94,6 +94,7 @@ describe("CallDateAndTimeSelector", () => {
     vi.mocked(getRemainingCallAvailabilities).mockResolvedValue([octoberFirstAfternoon, octoberSecondAfternoon]);
 
     const { selections } = renderCallSelector();
+    expect(screen.getByRole("radiogroup", { name: "Duration" })).toBeTruthy();
 
     const dateSelect = await screen.findByLabelText("Select a date");
     if (!(dateSelect instanceof HTMLSelectElement)) throw new Error("expected a native date <select>");

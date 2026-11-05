@@ -72,5 +72,14 @@ describe RecommendedProductsController do
 
       expect(response.parsed_body.map { _1["id"] }).to eq([free_product.external_id])
     end
+
+    it "ignores a cart product id that cannot be decrypted" do
+      expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart)
+        .with(hash_including(cart_product_ids: [cart_product.id])).and_call_original
+
+      get :index, params: { cart_product_ids: ["bogus", cart_product.external_id], limit: "5" }, session: { recommender_model_name: }
+
+      expect(response).to have_http_status(:ok)
+    end
   end
 end

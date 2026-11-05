@@ -1,7 +1,28 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment happy-dom
+import { render, screen } from "@testing-library/react";
+import * as React from "react";
+import { describe, expect, it, vi } from "vitest";
 
-import { isAiProductDetails } from "$app/pages/Products/New";
+import NewProductPage, { isAiProductDetails } from "$app/pages/Products/New";
 import { isProductNativeType } from "$app/parsers/product";
+
+vi.mock("@inertiajs/react", () => ({
+  Link: () => null,
+  usePage: () => ({
+    props: {
+      current_seller_currency_code: "usd",
+      native_product_types: ["digital", "course"],
+      service_product_types: ["call", "coffee"],
+      release_at_date: "",
+      show_orientation_text: false,
+      eligible_for_service_products: true,
+      ai_generation_enabled: false,
+      ai_promo_dismissed: true,
+      is_mobile_app_web_view: true,
+    },
+  }),
+  useForm: <T,>(_key: string, data: T) => ({ data, errors: {}, processing: false, setData: vi.fn() }),
+}));
 
 const details = {
   name: "Watercolor brushes",
@@ -33,5 +54,14 @@ describe("isProductNativeType", () => {
     expect(isProductNativeType("bundle")).toBe(true);
     expect(isProductNativeType("coffee")).toBe(true);
     expect(isProductNativeType("software")).toBe(false);
+  });
+});
+
+describe("NewProductPage", () => {
+  it("names each product type picker after its heading", () => {
+    render(<NewProductPage />);
+
+    expect(screen.getByRole("radiogroup", { name: "Products" })).toBeDefined();
+    expect(screen.getByRole("radiogroup", { name: "Services" })).toBeDefined();
   });
 });

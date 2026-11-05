@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/redis/go-redis/v9"
@@ -72,7 +74,7 @@ func registerRouteGroups(app *web.App, deps *dependencies, list string) error {
 }
 
 func registerRobots(app *web.App, d *dependencies) error {
-	awsCfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithDefaultRegion("us-east-1"))
+	awsCfg, err := d.awsConfig()
 	if err != nil {
 		return err
 	}
@@ -161,13 +163,19 @@ func registerDownloads(app *web.App, d *dependencies) error {
 		return err
 	}
 	// 003_stripe.rb's GlobalConfig.get with its default.
-	stripeKey, fallbackKey := "STRIPE_PUBLIC_KEY_PROD", "pk_live_Db80xIzLPWhKo1byPrnERmym"
+	stripePublicKey := d.globalConfig("STRIPE_PUBLIC_KEY_PROD", "pk_live_Db80xIzLPWhKo1byPrnERmym")
 	if d.env.Name != "production" {
-		stripeKey, fallbackKey = "STRIPE_PUBLIC_KEY_TEST", "pk_test_ehGPKw3JPRHYiqEEjgJ02ULC"
+		stripePublicKey = d.globalConfig("STRIPE_PUBLIC_KEY_TEST", "pk_test_ehGPKw3JPRHYiqEEjgJ02ULC")
 	}
-	stripePublicKey := d.config(stripeKey)
-	if stripePublicKey == "" {
-		stripePublicKey = fallbackKey
+	awsCfg, err := d.awsConfig()
+	if err != nil {
+		return err
+	}
+	pageConfig, err := d.pageConfig(s3.NewFromConfig(awsCfg), ids)
+	if errors.Is(err, errPagesOff) {
+		d.logger.Info("download pages left to Rails", "reason", err.Error())
+	} else if err != nil {
+		return err
 	}
 	downloads.Register(app, &downloads.Config{
 		Env:      d.env,
@@ -186,7 +194,9 @@ func registerDownloads(app *web.App, d *dependencies) error {
 			AssetHost:              d.env.AssetHost(),
 			AnalyticsByEnvironment: d.env.Name == "production" || d.env.Name == "staging",
 		},
-		Now: time.Now,
+		Now:       time.Now,
+		Pages:     pageConfig,
+		DryRunKey: downloads.DryRunKey(d.config("SECRET_KEY_BASE")),
 	})
 	return nil
 }
@@ -218,6 +228,7 @@ type dependencies struct {
 	stack  *rails.Stack
 
 	credentials *credentials.Credentials
+	aws         *aws.Config
 
 	jobs    *redis.Client
 	conn    *sql.DB
@@ -236,6 +247,18 @@ func (d *dependencies) config(name string) string {
 		return ""
 	}
 	return value
+}
+
+// awsConfig is the AWS SDK's default config, loaded once.
+func (d *dependencies) awsConfig() (aws.Config, error) {
+	if d.aws == nil {
+		cfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithDefaultRegion("us-east-1"))
+		if err != nil {
+			return aws.Config{}, err
+		}
+		d.aws = &cfg
+	}
+	return *d.aws, nil
 }
 
 // sidekiqRedis is SIDEKIQ_REDIS_HOST, separate from $redis.

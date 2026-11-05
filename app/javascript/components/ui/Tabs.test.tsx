@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { selectAdjacentRadio } from "$app/utils/radioGroupKeyboard";
+
 import { Button } from "$app/components/Button";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
 
@@ -163,6 +165,59 @@ describe("Tabs radiogroup", () => {
 
     fireEvent.keyDown(radio("Two"), { key: "End" });
     expect(onSelect).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not re-activate a native radio input that is already checked", () => {
+    const onClick = vi.fn();
+    render(
+      <div role="radiogroup" onKeyDown={selectAdjacentRadio}>
+        <input type="radio" role="radio" name="size" aria-label="Small" defaultChecked onClick={onClick} />
+        <input type="radio" role="radio" name="size" aria-label="Large" />
+      </div>,
+    );
+
+    fireEvent.keyDown(screen.getByRole("radio", { name: "Small" }), { key: "Home" });
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("leaves Alt, Ctrl and Meta arrow shortcuts to the browser", () => {
+    render(<RadioGroup values={["One", "Two"]} initial="One" />);
+    radio("One").focus();
+
+    for (const modifier of ["altKey", "ctrlKey", "metaKey"]) {
+      const notCancelled = fireEvent.keyDown(radio("One"), { key: "ArrowRight", [modifier]: true });
+
+      expect(notCancelled).toBe(true);
+      expect(document.activeElement).toBe(radio("One"));
+      expect(checked("One")).toBe("true");
+    }
+  });
+
+  it("leaves a nested radiogroup's radios to that group", () => {
+    render(
+      <Tabs role="radiogroup" aria-label="Outer">
+        <Tab isSelected asChild>
+          <Button role="radio" aria-checked>
+            One
+          </Button>
+        </Tab>
+        <div role="radiogroup" aria-label="Inner">
+          <Button role="radio" aria-checked={false}>
+            Nested
+          </Button>
+        </div>
+        <Tab isSelected={false} asChild>
+          <Button role="radio" aria-checked={false}>
+            Two
+          </Button>
+        </Tab>
+      </Tabs>,
+    );
+
+    expect(radio("Nested").hasAttribute("tabindex")).toBe(false);
+
+    fireEvent.keyDown(radio("One"), { key: "ArrowDown" });
+    expect(document.activeElement).toBe(radio("Two"));
   });
 
   it("leaves a tablist's tabs alone", () => {
