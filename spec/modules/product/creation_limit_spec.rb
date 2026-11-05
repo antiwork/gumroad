@@ -52,6 +52,15 @@ describe Product::CreationLimit, :enforce_product_creation_limit do
         expect(product.errors.full_messages.first).to include("after November 5 at 2:00 AM UTC")
       end
     end
+
+    it "keeps the plain limit error when the quota is zero" do
+      user = create(:user, user_risk_state: "not_reviewed", timezone: "UTC", daily_product_creation_limit: 0)
+      create_products_in_bulk(user, 1)
+
+      product = build(:product, user: user)
+      expect(product).not_to be_valid
+      expect(product.errors.full_messages).to eq(["Sorry, you can only create 0 products per day."])
+    end
   end
 
   context "for compliant users" do

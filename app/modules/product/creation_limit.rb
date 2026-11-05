@@ -41,8 +41,13 @@ module Product::CreationLimit
       limit = daily_creation_limit
       return if created_ats.size < limit
 
-      next_slot_at = created_ats[created_ats.size - limit] + 1.day
-      errors.add(:base, "Sorry, you can only create #{limit} products per day. You can create another product after #{format_next_slot(next_slot_at)}.")
+      message = "Sorry, you can only create #{limit} products per day."
+      # A zero quota frees no slot, so there is no reset time to name.
+      if limit.positive?
+        next_slot_at = created_ats[created_ats.size - limit] + 1.day
+        message += " You can create another product after #{format_next_slot(next_slot_at)}."
+      end
+      errors.add(:base, message)
     end
 
     def format_next_slot(time)
