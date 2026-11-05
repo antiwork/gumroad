@@ -9,7 +9,8 @@ class Payouts::ExportablesController < Sellers::BaseController
   def index
     authorize :balance, :export?
 
-    selected_year = params[:year]&.to_i
+    selected_year = params[:year]
+    selected_year = selected_year.to_i if selected_year.is_a?(String) || selected_year.is_a?(Integer)
     selected_year = @years_with_payouts.include?(selected_year) ? selected_year : @years_with_payouts.first
 
     payouts_in_selected_year = scoped_payments

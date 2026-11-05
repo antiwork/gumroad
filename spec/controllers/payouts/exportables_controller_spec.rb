@@ -72,6 +72,14 @@ RSpec.describe Payouts::ExportablesController, type: :controller do
           }
         )
       end
+
+      it "falls back to the most recent year when the year param is an array" do
+        get :index, params: { year: ["2021"] }
+
+        expect(response).to be_successful
+        expect(response.parsed_body["selected_year"]).to eq(2022)
+        expect(response.parsed_body["payouts_in_selected_year"].length).to eq(3)
+      end
     end
 
     context "when the seller has no payouts" do
