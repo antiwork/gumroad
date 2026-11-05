@@ -11,7 +11,6 @@ import (
 	"errors"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
@@ -239,7 +238,7 @@ func pollRequest(r *http.Request) bool {
 	if r.Header.Get("X-Inertia") != "true" || r.Header.Get("X-Inertia-Partial-Component") != component {
 		return false
 	}
-	props := rubySplit(r.Header.Get("X-Inertia-Partial-Data"))
+	props := rails.Split(r.Header.Get("X-Inertia-Partial-Data"), ",")
 	if len(props) == 0 {
 		// download_page_polling_request? accepts it, but inertia_rails then renders every prop.
 		return false
@@ -250,14 +249,6 @@ func pollRequest(r *http.Request) bool {
 		}
 	}
 	return true
-}
-
-func rubySplit(s string) []string {
-	parts := strings.Split(s, ",")
-	for len(parts) > 0 && parts[len(parts)-1] == "" {
-		parts = parts[:len(parts)-1]
-	}
-	return parts
 }
 
 func hasCookie(req *rails.Request, name string) bool {

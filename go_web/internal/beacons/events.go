@@ -28,10 +28,7 @@ const (
 	flagFromSEO               = 1 << 6
 )
 
-var (
-	seoReferrer = regexp.MustCompile(`(?i)(google|bing|yahoo|yandex|duckduckgo)(\.[a-z]{2,3})(\.[a-z]{2})?$`)
-	mobileAgent = regexp.MustCompile(`Mobile|webOS`)
-)
+var seoReferrer = regexp.MustCompile(`(?i)(google|bing|yahoo|yandex|duckduckgo)(\.[a-z]{2,3})(\.[a-z]{2})?$`)
 
 // trackUserAction is LinksController#track_user_action.
 func (h *handlers) trackUserAction(c *actionContext) error {
@@ -148,18 +145,17 @@ func (h *handlers) createUserEvent(c *actionContext, product *product) error {
 		ip_longitude, ip_latitude, is_modal, browser_fingerprint, browser_guid, referrer_domain, ip_state)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?)`,
 		flags, ip, eventName, userID, linkID, now, now, referrer, parentReferrer,
-		stringOrNil(req.UserAgent()), h.isMobile(c), priceCents, viewURLColumn, country,
+		stringOrNil(req.UserAgent()), isMobile(c), priceCents, viewURLColumn, country,
 		rails.BooleanCast(req.Param("is_modal")), fingerprint, cookieOrNil(req), domain, state)
 	return err
 }
 
-// isMobile is ApplicationController#is_mobile?.
-func (h *handlers) isMobile(c *actionContext) bool {
-	if c.session != nil && rails.Truthy(c.session.Get("mobile_param")) {
-		return c.session.Get("mobile_param") == "1"
+func isMobile(c *actionContext) bool {
+	ua := ""
+	if v := c.req.UserAgent(); v != nil {
+		ua = *v
 	}
-	ua := c.req.UserAgent()
-	return ua != nil && *ua != "" && mobileAgent.MatchString(*ua)
+	return c.session.IsMobile(ua)
 }
 
 // seoReferrerPresent is Events#seo_referrer?(session[:signup_referrer]).

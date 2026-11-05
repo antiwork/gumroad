@@ -90,6 +90,7 @@ func TestParseFailsWhereRailsDoes(t *testing.T) {
 		"problem+json is JSON":       {post("/x", "application/problem+json", `{`), ErrParse},
 		"invalid content type":       {post("/x", "nonsense", ""), ErrNotAcceptable},
 		"invalid accept":             {post("/x", "", "", "Accept", "nonsense"), ErrNotAcceptable},
+		"infinite accept quality":    {post("/x", "", "", "Accept", "text/html;q=1e400, application/json"), errInfiniteQuality},
 		"too large":                  {post("/x", "text/plain", strings.Repeat("x", maxBodyBytes+1)), ErrBodyTooLarge},
 	} {
 		if _, err := s.Parse(c.r, nil, testNow); err != c.want {
@@ -126,6 +127,8 @@ func TestParseErrorsRenderLikeRails(t *testing.T) {
 		"bad JSON, JSON accept":  {post("/x", "application/json", "{", "Accept", "application/json"), 400, "application/json; charset=utf-8", `{"status":400,"error":"Bad Request"}`},
 		"bad JSON":               {post("/x", "application/json", "{"), 400, "text/html; charset=utf-8", ``},
 		"invalid content type":   {post("/x", "nonsense", ""), 406, "text/html; charset=utf-8", ``},
+		// The error page reads formats again, so ShowExceptions falls back to its failsafe.
+		"infinite Accept quality": {post("/x", "", "", "Accept", "application/json;q=1e307, text/html"), 500, "text/plain; charset=utf-8", failsafeBody},
 	} {
 		_, err := s.Parse(c.r, nil, testNow)
 		w := httptest.NewRecorder()

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
@@ -172,4 +173,13 @@ func (s *Session) LastSignInAt() (int64, bool) {
 func sha256Hex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])
+}
+
+// IsMobile is ApplicationController#is_mobile?: session[:mobile_param] when it's set, else
+// whether the user agent says Mobile or webOS.
+func (s *Session) IsMobile(userAgent string) bool {
+	if param := s.Get("mobile_param"); rails.Truthy(param) {
+		return param == "1"
+	}
+	return strings.Contains(userAgent, "Mobile") || strings.Contains(userAgent, "webOS")
 }

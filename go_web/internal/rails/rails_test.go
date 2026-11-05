@@ -2,7 +2,9 @@ package rails
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"os"
 	"reflect"
 	"strings"
@@ -287,6 +289,11 @@ func TestFormatsFollowMimeNegotiation(t *testing.T) {
 		{format: "nope", accept: "application/json", want: nil},
 		{accept: "application/vnd.custom+json", want: nil, vary: true},
 		{accept: "", xhr: true, want: []string{"js"}},
+		// q is String#to_f: an exponent counts, and a second dot ends the number.
+		{accept: "text/html;q=1e-1, application/json;q=0.5", want: []string{"json", "html"}, vary: true},
+		{accept: "text/html;q=0.5.1, application/json;q=0.4", want: []string{"html", "json"}, vary: true},
+		// Past int64, (q * 100).to_i is a Bignum, which still orders.
+		{accept: "text/html;q=1e19, application/json;q=1e20", want: []string{"json", "html"}, vary: true},
 	} {
 		var format any
 		if c.format != "" {
@@ -295,6 +302,13 @@ func TestFormatsFollowMimeNegotiation(t *testing.T) {
 		got, vary, err := formats(format, c.accept, "", c.xhr, c.path)
 		if err != nil || !reflect.DeepEqual(got, c.want) || vary != c.vary {
 			t.Errorf("%+v: got %v %v %v", c, got, vary, err)
+		}
+	}
+	// (q.to_f * 100).to_i raises on an infinite quality in a list, including one that only
+	// the multiplication makes infinite; a single type drops its q.
+	for _, accept := range []string{"text/html;q=1e400, application/json", "text/html;q=1e307, application/json"} {
+		if _, _, err := formats(nil, accept, "", false, ""); !errors.Is(err, ErrFailsafe) {
+			t.Errorf("%s: %v", accept, err)
 		}
 	}
 	if _, _, err := formats(nil, "garbage", "", false, ""); err == nil {
@@ -424,4 +438,22 @@ func rubyInspect(v any) string {
 		return "{" + strings.Join(parts, ", ") + "}"
 	}
 	return fmt.Sprint(v)
+}
+
+func TestStringToF(t *testing.T) {
+	cases := map[string]struct {
+		want  float64
+		exact bool
+	}{
+		"12.5": {12.5, true}, " -3.25x": {-3.25, true}, ".5": {0.5, true}, "abc": {0, true}, "": {0, true},
+		"0.8;x=1": {0.8, true}, "1e-1": {0.1, true},
+		// Ruby 3.4 reads these differently from a plain decimal parse, or keeps fewer digits.
+		"1_000.5": {1000.5, false}, "1.e5": {1, false}, "1e1_0": {10, false}, "-0x1p3": {0, false},
+		"e5": {0, true}, "1" + strings.Repeat("0", 70) + "x": {1e70, false}, "1e400": {math.Inf(1), false}, "0x1A": {0, false},
+	}
+	for input, want := range cases {
+		if got, exact := StringToF(input); got != want.want || exact != want.exact {
+			t.Errorf("StringToF(%q) = %v %v, want %v %v", input, got, exact, want.want, want.exact)
+		}
+	}
 }

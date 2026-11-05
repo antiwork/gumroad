@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode"
@@ -206,6 +207,55 @@ func numberToS(n json.Number) string {
 	}
 	out, _ := sidekiq.RubyFloat(f)
 	return out
+}
+
+// Split is String#split with a separator other than " ", which splits on whitespace runs:
+// trailing empty fields are dropped, and an empty string has none.
+func Split(s, sep string) []string {
+	parts := strings.Split(s, sep)
+	for len(parts) > 0 && parts[len(parts)-1] == "" {
+		parts = parts[:len(parts)-1]
+	}
+	return parts
+}
+
+// RubySpace is Ruby's ISSPACE and the \s of its regexps, which unlike Go's \s include \v.
+const RubySpace = " \t\n\v\f\r"
+
+var (
+	floatPrefix = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:_[0-9]+)*)?(?:\.[0-9]+(?:_[0-9]+)*)?(?:[eE][+-]?[0-9]+)?`)
+	// plainFloat is the input whose to_f this port is sure of: no underscores, hex, or a dot
+	// before an exponent, which Ruby 3.4 reads differently, and short enough that Ruby keeps
+	// every digit.
+	plainFloat = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?`)
+)
+
+// maxPlainFloat is well under the length past which Ruby drops digits.
+const maxPlainFloat = 40
+
+// StringToF is String#to_f for decimal input: the longest leading float after Ruby's
+// whitespace, else 0. exact is false where Ruby may read it differently or the result is
+// infinite.
+func StringToF(s string) (f float64, exact bool) {
+	s = strings.TrimLeft(s, RubySpace)
+	match := floatPrefix.FindString(s)
+	f, _ = strconv.ParseFloat(strings.ReplaceAll(match, "_", ""), 64)
+	plain := plainFloat.FindString(s)
+	if plain == "" {
+		// No number at all, which Ruby also reads as 0, unless it starts like one.
+		return f, s == "" || !strings.ContainsRune("+-._0123456789", rune(s[0]))
+	}
+	exact = len(plain) <= maxPlainFloat && !math.IsInf(f, 0)
+	if rest := s[len(plain):]; rest != "" {
+		switch c := rest[0]; {
+		case c == '_' || c == '.' || c == 'e' || c == 'E':
+			exact = false
+		case c == 'x' || c == 'X':
+			// strtod reads hex after a signed zero.
+			exact = exact && strings.TrimLeft(plain, "+-") != "0"
+		}
+	}
+	return f, exact
 }
 
 // StringToI is String#to_i. ok is false where Ruby's result is a Bignum outside int64;

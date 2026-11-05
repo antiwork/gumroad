@@ -540,3 +540,14 @@ func TestSNSWebhookAnswers503WhenNoDownloadSlotIsFree(t *testing.T) {
 		}
 	}
 }
+
+func waitFor(t *testing.T, condition func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !condition() {
+		if time.Now().After(deadline) {
+			t.Fatal("timed out")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}

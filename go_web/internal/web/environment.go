@@ -12,10 +12,15 @@ type Environment struct {
 	Name     string
 	Protocol string
 	// DOMAIN and ROOT_DOMAIN.
-	Domain               string
-	RootDomain           string
-	ValidRequestHosts    []string
-	ValidAPIRequestHosts []string
+	Domain     string
+	RootDomain string
+	// SHORT_DOMAIN, DISCOVER_DOMAIN, API_DOMAIN and THIRD_PARTY_ANALYTICS_DOMAIN.
+	ShortDomain               string
+	DiscoverDomain            string
+	APIDomain                 string
+	ThirdPartyAnalyticsDomain string
+	ValidRequestHosts         []string
+	ValidAPIRequestHosts      []string
 	// PUBLIC_STORAGE_S3_BUCKET and PUBLIC_STORAGE_CDN_S3_PROXY_HOST.
 	PublicStorageBucket string
 	PublicStorageHost   string
@@ -31,28 +36,36 @@ type Environment struct {
 
 var environments = map[string]Environment{
 	"production": {
-		Protocol:             "https",
-		Domain:               "gumroad.com",
-		RootDomain:           "gumroad.com",
-		ValidRequestHosts:    []string{"gumroad.com", "app.gumroad.com"},
-		ValidAPIRequestHosts: []string{"api.gumroad.com"},
-		PublicStorageBucket:  "gumroad-public-storage",
-		PublicStorageHost:    "https://public-files.gumroad.com",
-		AssetDomain:          "assets.gumroad.com",
-		PageTitle:            "Gumroad",
-		requiresRevision:     true,
+		Protocol:                  "https",
+		Domain:                    "gumroad.com",
+		RootDomain:                "gumroad.com",
+		ShortDomain:               "gum.co",
+		DiscoverDomain:            "gumroad.com",
+		APIDomain:                 "api.gumroad.com",
+		ThirdPartyAnalyticsDomain: "gumroad-analytics.com",
+		ValidRequestHosts:         []string{"gumroad.com", "app.gumroad.com"},
+		ValidAPIRequestHosts:      []string{"api.gumroad.com"},
+		PublicStorageBucket:       "gumroad-public-storage",
+		PublicStorageHost:         "https://public-files.gumroad.com",
+		AssetDomain:               "assets.gumroad.com",
+		PageTitle:                 "Gumroad",
+		requiresRevision:          true,
 	},
 	"staging": {
-		Protocol:             "https",
-		Domain:               "staging.gumroad.com",
-		RootDomain:           "staging.gumroad.com",
-		ValidRequestHosts:    []string{"staging.gumroad.com", "app.staging.gumroad.com"},
-		ValidAPIRequestHosts: []string{"api.staging.gumroad.com"},
-		PublicStorageBucket:  "gumroad-dev-public-storage",
-		PublicStorageHost:    "https://staging-public-files.gumroad.com",
-		AssetDomain:          "staging-assets.gumroad.com",
-		PageTitle:            "Staging Gumroad",
-		requiresRevision:     true,
+		Protocol:                  "https",
+		Domain:                    "staging.gumroad.com",
+		RootDomain:                "staging.gumroad.com",
+		ShortDomain:               "staging.gum.co",
+		DiscoverDomain:            "staging.gumroad.com",
+		APIDomain:                 "api.staging.gumroad.com",
+		ThirdPartyAnalyticsDomain: "staging.gumroad-analytics.com",
+		ValidRequestHosts:         []string{"staging.gumroad.com", "app.staging.gumroad.com"},
+		ValidAPIRequestHosts:      []string{"api.staging.gumroad.com"},
+		PublicStorageBucket:       "gumroad-dev-public-storage",
+		PublicStorageHost:         "https://staging-public-files.gumroad.com",
+		AssetDomain:               "staging-assets.gumroad.com",
+		PageTitle:                 "Staging Gumroad",
+		requiresRevision:          true,
 	},
 	"development": {
 		Protocol:             "http",
@@ -95,6 +108,8 @@ func LoadEnvironment(getenv func(string) string) (*Environment, error) {
 		port := getenvDefault(getenv, "DEV_LANE_PORT", "3000")
 		env.AssetDomain = "app.localhost:" + port
 		env.Domain, env.RootDomain = "localhost:"+port, "localhost:"+port
+		env.ShortDomain, env.DiscoverDomain = "s.localhost:"+port, "localhost:"+port
+		env.APIDomain, env.ThirdPartyAnalyticsDomain = "api.localhost:"+port, "analytics.localhost:"+port
 		env.ValidRequestHosts = append(env.ValidRequestHosts, "app.localhost:"+port, "localhost:"+port)
 		env.ValidAPIRequestHosts = append(env.ValidAPIRequestHosts, "api.localhost:"+port)
 		env.PublicStorageHost = getenvDefault(getenv, "AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
@@ -103,8 +118,11 @@ func LoadEnvironment(getenv func(string) string) (*Environment, error) {
 	if protocol := strings.TrimSpace(getenv("CUSTOM_PROTOCOL")); protocol != "" {
 		env.Protocol = protocol
 	}
+	if short := getenv("CUSTOM_SHORT_DOMAIN"); short != "" {
+		env.ShortDomain = short
+	}
 	if domain := getenv("CUSTOM_DOMAIN"); domain != "" {
-		env.Domain, env.RootDomain = domain, domain
+		env.Domain, env.RootDomain, env.DiscoverDomain = domain, domain, domain
 		env.ValidRequestHosts = append(env.ValidRequestHosts, domain)
 		env.ValidAPIRequestHosts = append(env.ValidAPIRequestHosts, "api."+domain)
 		if getenv("BRANCH_DEPLOYMENT") != "" {

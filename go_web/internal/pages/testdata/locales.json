@@ -1,0 +1,146 @@
+[
+  {
+    "header": null,
+    "locale": "en-US"
+  },
+  {
+    "header": "",
+    "locale": "en-US"
+  },
+  {
+    "header": "en-US,en;q=0.9",
+    "locale": "en-US"
+  },
+  {
+    "header": "fr-CA,fr;q=0.8,en;q=0.6",
+    "locale": "fr-CA"
+  },
+  {
+    "header": "en",
+    "locale": "en"
+  },
+  {
+    "header": "*",
+    "locale": "en-US"
+  },
+  {
+    "header": "*,fr;q=0.5",
+    "locale": "fr"
+  },
+  {
+    "header": "de;q=0.5,es;q=0.9",
+    "locale": "es"
+  },
+  {
+    "header": "EN-us",
+    "locale": "en-US"
+  },
+  {
+    "header": "zh-hant-TW,zh;q=0.9",
+    "locale": "zh-hant-TW"
+  },
+  {
+    "header": "en-US, en ; q=0.9 ,fr",
+    "locale": "en-US"
+  },
+  {
+    "header": "en;q=0.8;x=1",
+    "locale": "en"
+  },
+  {
+    "header": "en;q=",
+    "locale": "en"
+  },
+  {
+    "header": "en;q=abc",
+    "locale": "en"
+  },
+  {
+    "header": "fr;q=.5,de;q=0.4",
+    "locale": "fr"
+  },
+  {
+    "header": "es-419,es;q=0.9",
+    "locale": "es-419"
+  },
+  {
+    "header": "en,,fr",
+    "locale": "en-US"
+  },
+  {
+    "header": ",en",
+    "locale": "en-US"
+  },
+  {
+    "header": "en,",
+    "locale": "en"
+  },
+  {
+    "header": "!!,en",
+    "locale": "en-US"
+  },
+  {
+    "header": "en;level=1",
+    "locale": "en;level=1"
+  },
+  {
+    "header": "q=0.5",
+    "locale": "q=0.5"
+  },
+  {
+    "header": "en-gb-oed",
+    "locale": "en-gb-OED"
+  },
+  {
+    "header": "x-pig-latin",
+    "locale": "x-pig-LATIN"
+  },
+  {
+    "header": "fr;q=1,en",
+    "locale": "fr"
+  },
+  {
+    "header": "en,fr",
+    "locale": "en"
+  },
+  {
+    "header": "a,b,c,d,e,f",
+    "locale": "a"
+  },
+  {
+    "header": "da, en-gb;q=0.8, en;q=0.7",
+    "locale": "da"
+  },
+  {
+    "header": "en-US\n,fr",
+    "locale": "en-US"
+  },
+  {
+    "header": "fr;q=0",
+    "locale": "fr"
+  },
+  {
+    "header": "fr;q=-1,de",
+    "locale": "de"
+  },
+  {
+    "header": "en;q=1e-1,de;q=0.05",
+    "locale": "en"
+  },
+  {
+    "header": "en;q=1_0,de",
+    "locale": "en"
+  },
+  {
+    "header": "it;q=0.9,*;q=1",
+    "locale": "it"
+  },
+  {
+    "header": "*;q=0.9",
+    "locale": "en-US"
+  },
+  {
+    "header": "ja-JP;q=0.9,ko;q=0.9,zh;q=0.9",
+    "locale": "ja-JP"
+  }
+]

@@ -7,22 +7,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
 // Helpers that reproduce the Ruby semantics these actions rely on and internal/rails
 // doesn't cover.
-
-// Ruby's ISSPACE and the \s of its regexps, which unlike Go's \s include \v.
-const rubySpace = " \t\n\v\f\r"
-
-var rubyFloatPrefix = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:_[0-9]+)*)?(?:\.[0-9]+(?:_[0-9]+)*)?(?:[eE][+-]?[0-9]+)?`)
-
-// rubyToF is String#to_f for decimal input: the longest leading float, else 0.
-func rubyToF(s string) float64 {
-	match := rubyFloatPrefix.FindString(strings.TrimLeft(s, rubySpace))
-	f, _ := strconv.ParseFloat(strings.ReplaceAll(match, "_", ""), 64)
-	return f
-}
 
 // rubyInteger mirrors Kernel#Integer on a String: surrounding whitespace, one sign, a
 // 0x/0b/0o/0d prefix or a leading 0 for octal, and single underscores between digits.
@@ -31,7 +21,7 @@ func rubyInteger(s string) (int64, bool) {
 	if strings.IndexByte(s, 0) >= 0 {
 		return 0, false
 	}
-	s = strings.Trim(s, rubySpace)
+	s = strings.Trim(s, rails.RubySpace)
 	sign := ""
 	if s != "" && (s[0] == '+' || s[0] == '-') {
 		sign, s = s[:1], s[1:]

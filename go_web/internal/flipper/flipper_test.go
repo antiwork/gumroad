@@ -1,4 +1,4 @@
-package webhooks
+package flipper
 
 import (
 	"context"
@@ -39,8 +39,8 @@ func (h *fakeHash) reads() int {
 	return len(h.keys)
 }
 
-func newTestFlag(hash *fakeHash, now *time.Time) *flipperFlag {
-	f := newFlipperFlag(hash, sendgridFlag)
+func newTestFlag(hash *fakeHash, now *time.Time) *Flag {
+	f := New(hash, "a_flag")
 	f.now = func() time.Time { return *now }
 	f.random = func() float64 { return 0.5 }
 	return f
@@ -63,11 +63,11 @@ func TestFlipperFlagReadsTheGatesFlipperRedisStores(t *testing.T) {
 	for name, tc := range cases {
 		now := time.Unix(1792001956, 0)
 		hash := &fakeHash{fields: tc.fields}
-		got, err := newTestFlag(hash, &now).active(context.Background())
+		got, err := newTestFlag(hash, &now).Active(context.Background())
 		if err != nil || got != tc.want {
 			t.Errorf("%s: active() = %v, %v; want %v", name, got, err, tc.want)
 		}
-		if len(hash.keys) != 1 || hash.keys[0] != "verify_sendgrid_webhook_signatures" {
+		if len(hash.keys) != 1 || hash.keys[0] != "a_flag" {
 			t.Errorf("%s: read %v", name, hash.keys)
 		}
 	}
@@ -79,32 +79,32 @@ func TestFlipperFlagCachesBrieflyAndFallsBackToItsLastRead(t *testing.T) {
 	flag := newTestFlag(hash, &now)
 	ctx := context.Background()
 
-	flag.active(ctx)
+	flag.Active(ctx)
 	now = now.Add(flagCacheTTL - time.Millisecond)
-	if on, _ := flag.active(ctx); !on || len(hash.keys) != 1 {
+	if on, _ := flag.Active(ctx); !on || len(hash.keys) != 1 {
 		t.Fatalf("a fresh read went to Redis again: %v, %d reads", on, len(hash.keys))
 	}
 
 	now = now.Add(time.Second)
 	hash.err = errors.New("i/o timeout")
-	if on, err := flag.active(ctx); !on || err != nil || len(hash.keys) != 2 {
+	if on, err := flag.Active(ctx); !on || err != nil || len(hash.keys) != 2 {
 		t.Fatalf("a failed read must use the last good one: %v, %v, %d reads", on, err, len(hash.keys))
 	}
 
-	if on, _ := flag.active(ctx); !on || len(hash.keys) != 2 {
+	if on, _ := flag.Active(ctx); !on || len(hash.keys) != 2 {
 		t.Fatalf("Redis was retried within the backoff: %d reads", len(hash.keys))
 	}
 
 	now = now.Add(flagRetryBackoff)
 	hash.err, hash.fields = nil, map[string]string{}
-	if on, _ := flag.active(ctx); on || len(hash.keys) != 3 {
+	if on, _ := flag.Active(ctx); on || len(hash.keys) != 3 {
 		t.Fatalf("a stale value outlived the next successful read: %d reads", len(hash.keys))
 	}
 }
 
 func TestFlipperFlagRaisesWithoutAnyGoodRead(t *testing.T) {
 	now := time.Unix(1792001956, 0)
-	_, err := newTestFlag(&fakeHash{err: errors.New("connection refused")}, &now).active(context.Background())
+	_, err := newTestFlag(&fakeHash{err: errors.New("connection refused")}, &now).Active(context.Background())
 	if err == nil {
 		t.Fatal("an unknown flag read as known")
 	}
@@ -121,7 +121,7 @@ func TestFlipperFlagHasOneReadInFlight(t *testing.T) {
 	results := make(chan bool, 8)
 	for range 8 {
 		wg.Go(func() {
-			on, err := flag.active(ctx)
+			on, err := flag.Active(ctx)
 			results <- on && err == nil
 		})
 	}
@@ -145,12 +145,12 @@ func TestFlipperFlagHasOneReadInFlight(t *testing.T) {
 	hash.mu.Unlock()
 	refreshed := make(chan struct{})
 	go func() {
-		flag.active(ctx)
+		flag.Active(ctx)
 		close(refreshed)
 	}()
 	waitFor(t, func() bool { return hash.reads() == 2 })
 	for range 4 {
-		if on, err := flag.active(ctx); !on || err != nil {
+		if on, err := flag.Active(ctx); !on || err != nil {
 			t.Fatalf("active() during a refresh = %v, %v", on, err)
 		}
 	}
@@ -183,7 +183,7 @@ func TestFlipperNumberIsTypecastToNumber(t *testing.T) {
 	}
 	for s, opens := range map[string]bool{"99999999999999999999": true, "99999999999999999999e-30": true, "-99999999999999999999": false} {
 		state := &flagState{percentageOfTime: flipperNumber(s)}
-		f := &flipperFlag{random: func() float64 { return 0.999999 }}
+		f := &Flag{random: func() float64 { return 0.999999 }}
 		if got, _ := f.open(state); got != opens {
 			t.Errorf("%q opens = %v, want %v", s, got, opens)
 		}
@@ -196,12 +196,12 @@ func TestFlipperFlagOutlivesTheReaderThatStartedIt(t *testing.T) {
 	hash := &fakeHash{fields: map[string]string{"boolean": "true"}, block: make(chan struct{})}
 	flag := newTestFlag(hash, &now)
 	first, leave := context.WithCancel(context.Background())
-	go flag.active(first)
+	go flag.Active(first)
 	waitFor(t, func() bool { return hash.reads() == 1 })
 
 	waiter := make(chan error, 1)
 	go func() {
-		on, err := flag.active(context.Background())
+		on, err := flag.Active(context.Background())
 		if err == nil && !on {
 			err = errors.New("read as off")
 		}
@@ -236,8 +236,8 @@ func TestFlipperFlagFailsClosedOnAnExpressionGate(t *testing.T) {
 	}
 	for name, tc := range cases {
 		now := time.Unix(1792001956, 0)
-		on, err := newTestFlag(&fakeHash{fields: tc.fields}, &now).active(context.Background())
-		if on != tc.on || errors.Is(err, errUnevaluableFlag) != tc.unknown || (err != nil) != tc.unknown {
+		on, err := newTestFlag(&fakeHash{fields: tc.fields}, &now).Active(context.Background())
+		if on != tc.on || errors.Is(err, ErrUnevaluable) != tc.unknown || (err != nil) != tc.unknown {
 			t.Errorf("%s: active() = %v, %v", name, on, err)
 		}
 	}

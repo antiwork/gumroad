@@ -67,7 +67,7 @@ func (h *handler) redirect(w http.ResponseWriter, p *page, location string) erro
 // inertia_rails' XSRF-TOKEN cookie, then the flash sweep and the session commit.
 func (h *handler) render(w http.ResponseWriter, p *page, u *urlRedirect) error {
 	props := rails.NewRHash().Sym("errors", rails.NewRHash())
-	requested := rubySplit(p.req.HTTP.Header.Get("X-Inertia-Partial-Data"))
+	requested := rails.Split(p.req.HTTP.Header.Get("X-Inertia-Partial-Data"), ",")
 	audio, locations := slices.Contains(requested, "audio_durations"), slices.Contains(requested, "latest_media_locations")
 	var files []delivery.ProductFile
 	// latest_media_locations_data returns {} before reading files when there's no purchase,

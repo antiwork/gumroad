@@ -25,6 +25,11 @@ const (
 // ParamsWrapper::EXCLUDE_PARAMETERS.
 var unwrappedParams = map[string]bool{"authenticity_token": true, "_method": true, "utf8": true}
 
+// featureFlag is a flipper.Flag, or a test's stand-in.
+type featureFlag interface {
+	Active(ctx context.Context) (bool, error)
+}
+
 // sendgrid is #sendgrid: validate_sendgrid_webhook, then the action.
 func (h *handlers) sendgrid(v *sendgridVerifier, flag featureFlag) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -38,7 +43,7 @@ func (h *handlers) sendgrid(v *sendgridVerifier, flag featureFlag) http.HandlerF
 			logger := web.Logger(r)
 			logger.Warn("SendGrid webhook verification failed: " + reason)
 			ctx, cancel := context.WithTimeout(r.Context(), enqueueTimeout)
-			enforced, err := flag.active(ctx)
+			enforced, err := flag.Active(ctx)
 			cancel()
 			switch {
 			case err != nil:
