@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,9 @@ type Avatars struct {
 	// service's object URL prefix into.
 	AssetHost, PublicCDN string
 	Now                  func() time.Time
+	// Logger hears of a failed lookup, which avatar_variant_file_present? logs and counts as
+	// present.
+	Logger *slog.Logger
 
 	lookups   singleflight.Group
 	mu        sync.Mutex
@@ -125,6 +129,9 @@ func (a *Avatars) variantPresent(ctx context.Context, key string) bool {
 	v, _, _ := a.lookups.Do(key, func() (any, error) {
 		exists, err := a.Exists.Exists(ctx, key)
 		if err != nil {
+			if a.Logger != nil {
+				a.Logger.Warn("avatar variant lookup failed", "key", key, "error", err.Error())
+			}
 			return true, nil
 		}
 		a.remember(key, exists, now)
