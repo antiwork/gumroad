@@ -100,7 +100,7 @@ class UsersController < ApplicationController
   def coffee
     if params[:purchase_email].present?
       flash[:notice] = if params[:purchase_free] == "true"
-        "You're in! Your free signup with #{@user.name_or_username} is confirmed. We sent a confirmation to #{params[:purchase_email]}."
+        "You signed up with #{@user.name_or_username} for free. We emailed the details to #{params[:purchase_email]}."
       else
         "Your purchase was successful! We sent a receipt to #{params[:purchase_email]}."
       end

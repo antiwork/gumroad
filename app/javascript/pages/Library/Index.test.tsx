@@ -558,7 +558,7 @@ describe("receipt alert", () => {
     renderPage({ ...defaultProps(), receipt_purchases: [receiptPurchase("r1", true), receiptPurchase("r2", true)] });
 
     expect(showAlert).toHaveBeenCalledWith(
-      "You're in! Your free signup with Ana is confirmed. We sent a confirmation to buyer@example.com.",
+      "You signed up with Ana for free. We emailed the details to buyer@example.com.",
       "success",
     );
   });

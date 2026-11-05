@@ -499,7 +499,7 @@ describe "Checkout cart", :js, type: :system do
       fill_checkout_form(free_product, is_free: true)
       click_on "Get", exact: true
 
-      expect(page).to have_alert(text: "You're in! Your free signup with #{seller.name_or_username} is confirmed. We sent a confirmation to test@gumroad.com.", visible: :all, wait: 60)
+      expect(page).to have_alert(text: "You signed up with #{seller.name_or_username} for free. We emailed the details to test@gumroad.com.", visible: :all, wait: 60)
     end
 
     it "keeps the purchase sentence when a free item is bought with a paid one" do

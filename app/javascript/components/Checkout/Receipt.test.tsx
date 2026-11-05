@@ -201,8 +201,8 @@ describe("Receipt header", () => {
       { item: item("Bonus Pack"), result: succeeded({ id: "purchase-2" }) },
     ]);
 
-    expect(screen.getByRole("heading", { name: "Your free signup with Ana is confirmed!" })).toBeTruthy();
-    expect(screen.getByText("We sent a confirmation to repeat.buyer@example.com")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "You signed up with Ana for free" })).toBeTruthy();
+    expect(screen.getByText("We emailed the details to repeat.buyer@example.com")).toBeTruthy();
   });
 
   it("keeps the purchase heading when the checkout includes a paid item", () => {
