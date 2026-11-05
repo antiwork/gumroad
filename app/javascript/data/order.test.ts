@@ -157,6 +157,7 @@ const confirmedPurchase = (permalink: string): ConfirmedPurchaseResponse => ({
   currency_type: "usd",
   non_formatted_price: 10,
   is_free_purchase: false,
+  seller_name: "Seller",
   subscription_has_lapsed: false,
   extra_purchase_notice: null,
   account_by_this_email_exists: false,

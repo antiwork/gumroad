@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { ProductNativeType } from "$app/parsers/product";
-import { purchaseConfirmationMessage } from "$app/utils/purchaseConfirmation";
+import { freeSignupSummary, purchaseConfirmationMessage } from "$app/utils/purchaseConfirmation";
 
 import type { Creator, Result } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
@@ -26,17 +26,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
   const [state] = useState();
 
   useRunOnce(() => {
-    const successful = results.filter(({ result }) => result.success);
-    const free = successful.length > 0 && successful.every(({ result }) => result.success && result.is_free_purchase);
-    const sellerNames = new Set(successful.map(({ item }) => item.product.creator.name));
-    showAlert(
-      purchaseConfirmationMessage({
-        free,
-        sellerName: sellerNames.size === 1 ? ([...sellerNames][0] ?? null) : null,
-        email: state.email,
-      }),
-      "success",
-    );
+    showAlert(purchaseConfirmationMessage({ ...freeSignupSummary(results), email: state.email }), "success");
   });
 
   if (state.status.type !== "finished") return null;

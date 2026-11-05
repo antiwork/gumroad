@@ -227,6 +227,7 @@ type Props = {
     id: string;
     email: string;
     free: boolean;
+    seller_id: string;
     seller_name: string;
     permalink: string;
     has_third_party_analytics: boolean;
@@ -354,11 +355,11 @@ export default function LibraryPage() {
     const firstPurchase = receipt_purchases.find((purchase) => purchase.id === purchaseIds[0]);
     if (firstPurchase?.email) {
       const purchases = receipt_purchases.filter((purchase) => purchaseIds.includes(purchase.id));
-      const sellerNames = new Set(purchases.map((purchase) => purchase.seller_name));
+      const sellerIds = new Set(purchases.map((purchase) => purchase.seller_id));
       showAlert(
         purchaseConfirmationMessage({
           free: purchases.every((purchase) => purchase.free),
-          sellerName: sellerNames.size === 1 ? firstPurchase.seller_name : null,
+          sellerName: sellerIds.size === 1 ? firstPurchase.seller_name : null,
           email: firstPurchase.email,
         }),
         "success",

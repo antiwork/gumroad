@@ -1527,6 +1527,7 @@ describe LibraryPresenter do
                                                                   id: purchase.external_id,
                                                                   email: purchase.email,
                                                                   free: true,
+                                                                  seller_id: product.user.external_id,
                                                                   seller_name: product.user.name_or_username,
                                                                   permalink: product.unique_permalink,
                                                                   has_third_party_analytics: false,

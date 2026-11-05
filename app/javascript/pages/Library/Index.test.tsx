@@ -5,6 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
+import { showAlert } from "$app/components/server-components/Alert";
 import { UserAgentProvider } from "$app/components/UserAgent";
 
 import LibraryPage, { Result, SearchParams } from "./Index";
@@ -78,6 +79,7 @@ const defaultProps = (): {
     id: string;
     email: string;
     free: boolean;
+    seller_id: string;
     seller_name: string;
     permalink: string;
     has_third_party_analytics: boolean;
@@ -532,5 +534,41 @@ describe("removal copy", () => {
     // (gumroad-private#1762).
     expect(screen.queryByText(/permanently/iu)).toBeNull();
     expect(screen.queryByText(/cannot be undone/iu)).toBeNull();
+  });
+});
+
+describe("receipt alert", () => {
+  const receiptPurchase = (id: string, free: boolean) => ({
+    id,
+    email: "buyer@example.com",
+    free,
+    seller_id: "seller-1",
+    seller_name: "Ana",
+    permalink: id,
+    has_third_party_analytics: false,
+  });
+
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/library?purchase_id[]=r1&purchase_id[]=r2");
+    vi.mocked(showAlert).mockClear();
+  });
+  afterEach(() => window.history.replaceState(null, "", "/"));
+
+  it("confirms a free signup with the seller when every purchase is free", () => {
+    renderPage({ ...defaultProps(), receipt_purchases: [receiptPurchase("r1", true), receiptPurchase("r2", true)] });
+
+    expect(showAlert).toHaveBeenCalledWith(
+      "You're in! Your free signup with Ana is confirmed. We sent a confirmation to buyer@example.com.",
+      "success",
+    );
+  });
+
+  it("keeps the receipt sentence when any purchase is paid", () => {
+    renderPage({ ...defaultProps(), receipt_purchases: [receiptPurchase("r1", true), receiptPurchase("r2", false)] });
+
+    expect(showAlert).toHaveBeenCalledWith(
+      "Your purchase was successful! We sent a receipt to buyer@example.com.",
+      "success",
+    );
   });
 });

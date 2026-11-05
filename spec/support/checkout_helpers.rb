@@ -189,18 +189,13 @@ module CheckoutHelpers
         buyer_email = logged_in_user&.email&.downcase || email&.downcase
         if gift.present? || product.is_in_preorder_state
           # Specific cases where we show the receipt instead of the product content
-          expect(page).to have_text(is_free ? "Your free signup is confirmed!" : "Your purchase was successful!", wait: 60)
+          expect(page).to have_text(is_free ? "Your free signup with #{product.user.name_or_username} is confirmed!" : "Your purchase was successful!", wait: 60)
           expect(page).to have_text(buyer_email)
+        elsif is_free
+          expect(page).to have_alert(text: "You're in! Your free signup with #{product.user.name_or_username} is confirmed. We sent a confirmation to #{buyer_email}", visible: :all, wait: 60)
         else
-          # The alert show/hide timing can cause specs to be flaky.
-          # A $0 checkout confirms a free signup instead, and that copy names the creator,
-          # so match around the name rather than pinning it.
-          expected_alert = if is_free
-            /You're in! Your free signup(?: with .+?)? is confirmed\. We sent a confirmation to #{Regexp.escape(buyer_email)}/
-          else
-            "Your purchase was successful! We sent a receipt to #{buyer_email}"
-          end
-          expect(page).to have_alert(text: expected_alert, visible: :all, wait: 60)
+          # The alert show/hide timing can cause specs to be flaky
+          expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{buyer_email}", visible: :all, wait: 60)
         end
 
         expect(page).to have_text("You bought this for #{gift[:email] || gift[:name]}") if gift&.dig(:email).present? || gift&.dig(:name).present?

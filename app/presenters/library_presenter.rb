@@ -117,6 +117,7 @@ class LibraryPresenter
         id: purchase.external_id,
         email: purchase.email,
         free: purchase.free_purchase?,
+        seller_id: purchase.seller.external_id,
         seller_name: purchase.seller.name_or_username,
         permalink: purchase.link.unique_permalink,
         has_third_party_analytics: third_party_analytics?(purchase.link, universal_analytics_user_ids),

@@ -5,6 +5,7 @@ import { createAccount, CreateAccountPayload } from "$app/data/account";
 import type { ErrorLineItemResult, LineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { classNames } from "$app/utils/classNames";
+import { freeSignupSummary } from "$app/utils/purchaseConfirmation";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -20,11 +21,6 @@ import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
 import { useOriginalLocation } from "$app/components/useOriginalLocation";
-
-const allFree = (results: PurchaseResults) => {
-  const successful = results.filter(({ result }) => result.success);
-  return successful.length > 0 && successful.every(({ result }) => result.success && result.is_free_purchase);
-};
 
 export const LineItem = ({
   name,
@@ -317,6 +313,7 @@ export const Receipt = ({
   const user = useLoggedInUser();
   const [state] = useState();
   if (state.status.type !== "finished") return null;
+  const freeSignup = freeSignupSummary(results);
   return (
     <Card className="mx-auto my-8 max-w-2xl">
       <CardContent asChild>
@@ -334,8 +331,8 @@ export const Receipt = ({
           <h2>
             {results.some(({ result }) => !result.success)
               ? "Summary"
-              : allFree(results)
-                ? "Your free signup is confirmed!"
+              : freeSignup.free
+                ? `Your free signup${freeSignup.sellerName ? ` with ${freeSignup.sellerName}` : ""} is confirmed!`
                 : "Your purchase was successful!"}
           </h2>
 
@@ -349,7 +346,7 @@ export const Receipt = ({
                   !item.product.free_trial,
               )
                 ? `We charged your card and sent a receipt to ${state.email}`
-                : allFree(results)
+                : freeSignup.free
                   ? `We sent a confirmation to ${state.email}`
                   : `We sent a receipt to ${state.email}`}
             </p>

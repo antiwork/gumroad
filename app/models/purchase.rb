@@ -1483,6 +1483,7 @@ class Purchase < ApplicationRecord
       currency_type: link.price_currency_type,
       has_third_party_analytics: link.has_third_party_analytics?("receipt"),
       is_free_purchase: purchase.free_purchase?,
+      seller_name: purchase.seller.name_or_username,
       non_formatted_price: purchase.buyer_presentment? ? purchase.buyer_presentment_price_cents : Money.new(purchase.displayed_price_cents, purchase.displayed_price_currency_type).cents,
       subscription_has_lapsed: link.is_recurring_billing? && !purchase.subscription&.alive?,
       domain: DOMAIN,
