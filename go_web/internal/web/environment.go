@@ -114,6 +114,9 @@ func LoadEnvironment(getenv func(string) string) (*Environment, error) {
 	return &env, nil
 }
 
+// AssetHost is config.asset_host.
+func (e *Environment) AssetHost() string { return e.Protocol + "://" + e.AssetDomain }
+
 // IsGumroadHost is GumroadDomainConstraint.matches?.
 func (e *Environment) IsGumroadHost(host string) bool {
 	return slices.Contains(e.ValidRequestHosts, host)

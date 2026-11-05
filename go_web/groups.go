@@ -183,7 +183,7 @@ func registerDownloads(app *web.App, d *dependencies) error {
 			FacebookAppID:          d.config("FACEBOOK_APP_ID"),
 			StripePublicKey:        stripePublicKey,
 			StripeAPIVersion:       stripeAPIVersion,
-			AssetHost:              d.env.Protocol + "://" + d.env.AssetDomain,
+			AssetHost:              d.env.AssetHost(),
 			AnalyticsByEnvironment: d.env.Name == "production" || d.env.Name == "staging",
 		},
 		Now: time.Now,
