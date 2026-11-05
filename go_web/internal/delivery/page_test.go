@@ -99,8 +99,10 @@ func TestContentItemsLeaveToRailsWhatTheyDoNotMap(t *testing.T) {
 			e.insert("subtitle_files", base+8_701, map[string]any{"product_file_id": pageFile, "created_at": stamp, "updated_at": stamp})
 		},
 		"thumbnail": func(e *env) {
+			e.insert("active_storage_blobs", base+8_703, map[string]any{"key": "gowebthumb", "filename": "t.png", "byte_size": 1,
+				"service_name": "test", "created_at": stamp})
 			e.insert("active_storage_attachments", base+8_702, map[string]any{"name": "thumbnail", "record_type": "ProductFile",
-				"record_id": pageFile, "blob_id": 1, "created_at": stamp})
+				"record_id": pageFile, "blob_id": base + 8_703, "created_at": stamp})
 		},
 		"stamped PDF": func(e *env) { e.exec("UPDATE product_files SET flags = ? WHERE id = ?", filePDFStampEnabled, pageFile) },
 		"non-ASCII type": func(e *env) {
