@@ -64,10 +64,15 @@ type testEnv struct {
 	railsBody []byte
 }
 
-func newTestEnv(t *testing.T) *testEnv { return newTestEnvWithRedis(t, nil) }
+func newTestEnv(t *testing.T) *testEnv { return newConfiguredTestEnv(t, nil, nil) }
 
 // newTestEnvWithRedis seeds Redis before the app reads it.
 func newTestEnvWithRedis(t *testing.T, seed func(*miniredis.Miniredis)) *testEnv {
+	return newConfiguredTestEnv(t, seed, nil)
+}
+
+// newConfiguredTestEnv lets configure change the Config before the handler is registered.
+func newConfiguredTestEnv(t *testing.T, seed func(*miniredis.Miniredis), configure func(*testEnv, *Config)) *testEnv {
 	t.Helper()
 	db := testdb.Open(t)
 	e := &testEnv{t: t, db: db}
@@ -95,7 +100,7 @@ func newTestEnvWithRedis(t *testing.T, seed func(*miniredis.Miniredis)) *testEnv
 	}
 	redisClient := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	app := web.NewApp(env, slog.New(slog.NewTextHandler(io.Discard, nil)), redisClient)
-	Register(app, &Config{
+	c := &Config{
 		Env:      env,
 		DB:       db,
 		Stack:    rails.NewStack(env, ""),
@@ -105,7 +110,11 @@ func newTestEnvWithRedis(t *testing.T, seed func(*miniredis.Miniredis)) *testEnv
 		Proxy:    web.NewRailsProxy(upstreams),
 		Meta:     inertia.DefaultMeta{Title: "Gumroad", Environment: "production", AssetHost: "https://assets.gumroad.com", AnalyticsByEnvironment: true},
 		Now:      func() time.Time { return testNow },
-	})
+	}
+	if configure != nil {
+		configure(e, c)
+	}
+	Register(app, c)
 	e.handler = app
 	e.seed()
 	return e
