@@ -52,6 +52,11 @@ vi.mock("$app/components/RichTextEditor", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$app/components/RichTextEditor")>();
   return { ...actual, serializeEditorContentToHTML: (editor: { getHTML: () => string }) => editor.getHTML() };
 });
+// The upsell card's node view fetches its product; the guard only reads the card's serialized HTML.
+vi.mock("$app/components/TiptapExtensions/UpsellCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$app/components/TiptapExtensions/UpsellCard")>();
+  return { UpsellCard: actual.UpsellCard.extend({ addNodeView: null }) };
+});
 type UploadCallback = (error: Error | null, blob: { key: string }) => void;
 const uploads = vi.hoisted((): { pending: UploadCallback[] } => ({ pending: [] }));
 vi.mock("@rails/activestorage", () => ({
@@ -63,6 +68,7 @@ vi.mock("@rails/activestorage", () => ({
 }));
 type SaveOptions = {
   onFinish?: () => void;
+  onBeforeUpdate?: (page: { props: Record<string, unknown> }) => void;
   onSuccess?: (page: { props: Record<string, unknown> }) => void;
 };
 // The unsaved-changes guard reads the save's response, so the stubbed request hands its callbacks
@@ -122,7 +128,7 @@ vi.mock("@inertiajs/react", () => ({
         sent.payload = build();
       },
       post,
-      put: () => {},
+      put: post,
     };
   },
 }));
@@ -168,28 +174,28 @@ const context: InstallmentFormContext = {
   from_tab: null,
 };
 
-const renderForm = (
+const formTree = (
   installment: Installment | null = null,
   formContext: InstallmentFormContext = context,
   singleCustomerRecipient: { purchase_id: string; email: string } | null = null,
-) =>
-  render(
-    <DomainSettingsProvider
-      value={{
-        scheme: "https",
-        appDomain: "app.gumroad.com",
-        rootDomain: "gumroad.com",
-        shortDomain: "gum.co",
-        discoverDomain: "discover.gumroad.com",
-        thirdPartyAnalyticsDomain: "gumroad.com",
-        apiDomain: "api.gumroad.com",
-      }}
-    >
-      <CurrentSellerProvider value={seller}>
-        <EmailForm context={formContext} installment={installment} singleCustomerRecipient={singleCustomerRecipient} />
-      </CurrentSellerProvider>
-    </DomainSettingsProvider>,
-  );
+) => (
+  <DomainSettingsProvider
+    value={{
+      scheme: "https",
+      appDomain: "app.gumroad.com",
+      rootDomain: "gumroad.com",
+      shortDomain: "gum.co",
+      discoverDomain: "discover.gumroad.com",
+      thirdPartyAnalyticsDomain: "gumroad.com",
+      apiDomain: "api.gumroad.com",
+    }}
+  >
+    <CurrentSellerProvider value={seller}>
+      <EmailForm context={formContext} installment={installment} singleCustomerRecipient={singleCustomerRecipient} />
+    </CurrentSellerProvider>
+  </DomainSettingsProvider>
+);
+const renderForm = (...args: Parameters<typeof formTree>) => render(formTree(...args));
 
 const pasteImage = (container: HTMLElement) =>
   fireEvent.paste(assertDefined(container.querySelector('[aria-label="Email message"]')), {
@@ -314,25 +320,95 @@ describe("EmailForm unsaved-changes guard", () => {
   const saved = { props: { flash: { message: "Changes saved!", status: "success" } } };
   const rejected = { props: { flash: { message: "Please provide a valid date and time.", status: "danger" } } };
 
-  it("stops warning once the server confirms the save", async () => {
-    renderForm();
+  // What the server sends back after a save, which can differ from what was sent.
+  const savedRecord: Installment = {
+    external_id: "email-1",
+    display_type: "draft",
+    name: "Edited",
+    message: "<p>Saved by the server</p>",
+    published_at: null,
+    updated_at: "2026-08-01T00:00:00Z",
+    stream_only: false,
+    streamable: false,
+    send_emails: true,
+    shown_on_profile: false,
+    installment_type: "audience",
+    paid_more_than_cents: null,
+    paid_less_than_cents: null,
+    allow_comments: true,
+    full_url: "https://seller.gumroad.com/p/edited",
+    has_been_blasted: false,
+    files: [],
+  };
+  // The order Inertia runs a preserveState response in: onBeforeUpdate, the props swap, onSuccess.
+  const respond = (
+    view: ReturnType<typeof renderForm>,
+    request: SaveOptions,
+    page: typeof saved,
+    record: Installment | null,
+  ) => {
+    request.onBeforeUpdate?.(page);
+    view.rerender(formTree(record));
+    request.onSuccess?.(page);
+  };
+
+  it("stops warning once the saved record arrives, even when the server changed it", async () => {
+    const view = renderForm();
     await edit();
     const request = await save();
     expect(unload()).toBe(true);
-    request.onSuccess?.(saved);
+    respond(view, request, saved, savedRecord);
+    await waitFor(() => expect(screen.getByLabelText("Email message").textContent).toBe("Saved by the server"));
+    await waitFor(() => expect(unload()).toBe(false));
+  });
+
+  it("does not warn after saving a new publish date on a published email", async () => {
+    const published: Installment = { ...savedRecord, display_type: "published", published_at: "2026-08-01T12:00:00Z" };
+    const view = renderForm(published);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fireEvent.change(screen.getByPlaceholderText("Publish date"), { target: { value: "2026-07-15" } });
+    expect(unload()).toBe(true);
+
+    respond(view, await save(), saved, { ...published, published_at: "2026-07-15T12:00:00Z" });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByPlaceholderText<HTMLInputElement>("Publish date").value).toBe("2026-07-15");
+    expect(unload()).toBe(false);
+  });
+
+  it("does not warn after saving a new upsell card that the server gave an id", async () => {
+    const card = '<upsell-card productid="product-1"></upsell-card>';
+    const draft = { ...savedRecord, message: `<p>Hi</p>${card}` };
+    const view = renderForm(draft);
+    await edit();
+
+    const withId = '<upsell-card productid="product-1" id="upsell-1"></upsell-card>';
+    respond(view, await save(), saved, { ...draft, message: `<p>Hi</p>${withId}` });
+    await waitFor(() => expect(document.querySelector("upsell-card#upsell-1")).not.toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(unload()).toBe(false);
   });
 
   it("keeps warning after a rejected save, and for an edit the save did not carry", async () => {
-    renderForm();
+    const view = renderForm();
     await edit();
-    (await save()).onSuccess?.(rejected);
+    respond(view, await save(), rejected, null);
     expect(unload()).toBe(true);
 
     const request = await save();
     // Typed while the request is in flight, so it is not part of what that request saved.
     fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Edited again" } });
-    request.onSuccess?.(saved);
+    respond(view, request, saved, savedRecord);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(unload()).toBe(true);
+  });
+
+  it("does not ask on a modified click of Cancel, which opens a new tab", async () => {
+    renderForm();
+    await edit();
+    const confirm = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirm);
+    fireEvent.click(screen.getByRole("link", { name: "Cancel" }), { metaKey: true });
+    expect(confirm).not.toHaveBeenCalled();
     expect(unload()).toBe(true);
   });
 

@@ -761,8 +761,11 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     const submitted = snapshot();
 
     const options = {
-      onSuccess: (page: { props: Record<string, unknown> }) => {
-        if (!saveRejected(page)) markClean(submitted);
+      // Before the saved props land, while an edit typed during the request is still distinguishable.
+      onBeforeUpdate: (page: { props: Record<string, unknown> }) => {
+        if (saveRejected(page)) return;
+        if (snapshotRef.current() === submitted) rebaselinePendingRef.current = true;
+        else markClean(submitted);
       },
       onFinish: () => finishPublishing(),
     };
@@ -776,11 +779,19 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
   // Same guard as the Pages editor. The baseline is taken once the editor has mounted and the
   // template prefill has run, so only seller edits count as unsaved.
   // Snapshots the whole payload, so a change a save does not carry (the Schedule date) still counts.
-  const snapshot = () => JSON.stringify({ ...buildPayload("save"), to_be_published_at: scheduleDate });
+  // The payload's published_at is relative to the saved date, so it would flip to null once a save lands.
+  const snapshot = () => {
+    const payload = buildPayload("save");
+    const fields = { ...payload.installment, published_at: publishDate };
+    return JSON.stringify({ ...payload, installment: fields, to_be_published_at: scheduleDate });
+  };
+  // Save callbacks and timeouts outlive their render, so they read the latest one's state through this.
+  const snapshotRef = React.useRef(snapshot);
+  snapshotRef.current = snapshot;
   const baselineRef = React.useRef<string | null>(null);
   const isDirtyRef = React.useRef<() => boolean>(() => false);
   isDirtyRef.current = () => baselineRef.current !== null && snapshot() !== baselineRef.current;
-  const markClean = (value = snapshot()) => {
+  const markClean = (value = snapshotRef.current()) => {
     baselineRef.current = value;
   };
   React.useEffect(() => {
@@ -788,6 +799,21 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     const timeout = setTimeout(markClean, 0);
     return () => clearTimeout(timeout);
   }, [messageEditor]);
+  // A save with no edits in flight is re-baselined from the saved record, which can differ from what
+  // was sent (ids the server gives new upsell cards).
+  const rebaselinePendingRef = React.useRef(false);
+  const [savedRecordsSettled, setSavedRecordsSettled] = React.useState(0);
+  React.useEffect(() => {
+    if (!rebaselinePendingRef.current) return;
+    rebaselinePendingRef.current = false;
+    setSavedRecordsSettled((count) => count + 1);
+  }, [installment]);
+  React.useEffect(() => {
+    if (!savedRecordsSettled) return;
+    // One render after the publish date reset; the timeout also waits out the editor's content reset.
+    const timeout = setTimeout(markClean, 0);
+    return () => clearTimeout(timeout);
+  }, [savedRecordsSettled]);
   React.useEffect(() => {
     const beforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirtyRef.current()) e.preventDefault();
@@ -808,6 +834,8 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     };
   }, []);
   const confirmCancel = (e: React.MouseEvent) => {
+    // Inertia leaves these to the browser, which opens the list in a new tab and keeps this one open.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
     // eslint-disable-next-line no-alert
     if (isDirtyRef.current() && !window.confirm("You have unsaved changes. Discard them and leave this page?")) {
       e.preventDefault();

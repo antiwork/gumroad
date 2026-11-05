@@ -366,6 +366,20 @@ describe("Email Editing Flow", :js, :elasticsearch_wait_for_refresh, type: :syst
     expect(SendPostBlastEmailsJob).to have_enqueued_sidekiq_job(PostEmailBlast.last!.id)
   end
 
+  it "leaves without an unsaved-changes prompt after saving a new publish date" do
+    published_installment = create(:published_installment, name: "Hello", seller:, published_at: "2024-01-01 12:00", installment_type: "audience")
+    visit "#{emails_path}/#{published_installment.external_id}/edit"
+
+    fill_in "Publish date", with: "01/01/2021"
+    click_on "Save"
+    wait_for_ajax
+    expect(page).to have_alert(text: "Changes saved!")
+    expect(published_installment.reload.published_at.to_date.to_s).to eq "2021-01-01"
+
+    click_on "Cancel"
+    expect(page).to have_current_path("#{emails_path}/published")
+  end
+
   it "allows editing and previewing an email" do
     allow_any_instance_of(Installment).to receive(:send_preview_email).with(user_with_role_for_seller)
 
