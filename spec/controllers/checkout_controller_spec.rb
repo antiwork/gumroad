@@ -552,6 +552,23 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(inertia.component).to eq("Checkout/Show")
         expect(inertia.props.deep_symbolize_keys[:recommended_products]).to eq([])
       end
+
+      it "ignores a cart product id that cannot be decrypted" do
+        expect(RecommendedProducts::CheckoutService).to receive(:fetch_for_cart).with(
+          purchaser:,
+          cart_product_ids: [cart_product.id],
+          recommender_model_name:,
+          limit: 5,
+          recommendation_type: nil,
+          prefer_paid_products: true,
+        ).and_return([])
+
+        get :show, params: { cart_product_ids: ["bogus", cart_product.external_id], on_discover_page: "false", limit: "5" }, session: { recommender_model_name: }
+
+        expect(response).to be_successful
+        expect(inertia.component).to eq("Checkout/Show")
+        expect(inertia.props.deep_symbolize_keys[:recommended_products]).to eq([])
+      end
     end
   end
 

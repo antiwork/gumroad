@@ -18,7 +18,8 @@ class RecommendedProductsController < ApplicationController
 
   private
     def cart_product_ids
-      params.fetch(:cart_product_ids, []).map { ObfuscateIds.decrypt(_1) }
+      # An id that fails to decrypt decrypts to nil, and the recommendation service needs integers.
+      Array(params[:cart_product_ids]).filter_map { ObfuscateIds.decrypt(_1) }
     end
 
     def limit
