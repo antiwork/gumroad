@@ -35,8 +35,8 @@ func TestRubyDecode64MatchesBase64Decode64(t *testing.T) {
 
 func TestRubyExtnameMatchesFileExtname(t *testing.T) {
 	for input, want := range rubyExtnameResults {
-		if got := rubyExtname(input); got != want {
-			t.Errorf("rubyExtname(%q) = %q, want %q", input, got, want)
+		if got := rails.FileExtname(input); got != want {
+			t.Errorf("FileExtname(%q) = %q, want %q", input, got, want)
 		}
 	}
 }

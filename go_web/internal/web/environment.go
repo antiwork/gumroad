@@ -21,9 +21,10 @@ type Environment struct {
 	ThirdPartyAnalyticsDomain string
 	ValidRequestHosts         []string
 	ValidAPIRequestHosts      []string
-	// PUBLIC_STORAGE_S3_BUCKET and PUBLIC_STORAGE_CDN_S3_PROXY_HOST.
+	// PUBLIC_STORAGE_S3_BUCKET, PUBLIC_STORAGE_CDN_S3_PROXY_HOST and CDN_S3_PROXY_HOST.
 	PublicStorageBucket string
 	PublicStorageHost   string
+	S3ProxyHost         string
 	Revision            string
 	// GR_NUM, sent as X-GR.
 	GRNum string
@@ -47,6 +48,7 @@ var environments = map[string]Environment{
 		ValidAPIRequestHosts:      []string{"api.gumroad.com"},
 		PublicStorageBucket:       "gumroad-public-storage",
 		PublicStorageHost:         "https://public-files.gumroad.com",
+		S3ProxyHost:               "https://static-2.gumroad.com",
 		AssetDomain:               "assets.gumroad.com",
 		PageTitle:                 "Gumroad",
 		requiresRevision:          true,
@@ -63,6 +65,7 @@ var environments = map[string]Environment{
 		ValidAPIRequestHosts:      []string{"api.staging.gumroad.com"},
 		PublicStorageBucket:       "gumroad-dev-public-storage",
 		PublicStorageHost:         "https://staging-public-files.gumroad.com",
+		S3ProxyHost:               "https://staging-static-2.gumroad.com",
 		AssetDomain:               "staging-assets.gumroad.com",
 		PageTitle:                 "Staging Gumroad",
 		requiresRevision:          true,
@@ -72,6 +75,7 @@ var environments = map[string]Environment{
 		ValidRequestHosts:    []string{"app.localhost", "localhost"},
 		ValidAPIRequestHosts: []string{"api.localhost"},
 		PublicStorageBucket:  "gumroad-dev-public-storage",
+		S3ProxyHost:          "https://staging-static-2.gumroad.com",
 		PageTitle:            "Local Gumroad",
 	},
 }

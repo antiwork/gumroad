@@ -133,6 +133,19 @@ func (m *MetaTags) Set(t MetaTag) {
 	m.tags[t.headKey] = t
 }
 
+// Title is the title tag's inner content, or its content, as page_title reads them.
+func (m *MetaTags) Title() string {
+	t, ok := m.tags["title"]
+	if !ok {
+		return ""
+	}
+	if v, _ := t.value("inner_content"); rails.Present(v) {
+		return v
+	}
+	v, _ := t.value("content")
+	return v
+}
+
 // JSON is the _inertia_meta prop.
 func (m *MetaTags) JSON() []any {
 	out := make([]any, len(m.keys))

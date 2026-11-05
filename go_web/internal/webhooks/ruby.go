@@ -73,20 +73,6 @@ func rubyDecode64(s string) []byte {
 	return out[:n]
 }
 
-// rubyExtname mirrors File.extname: trailing slashes are ignored, leading dots of the
-// last component don't start an extension, and a final dot alone is ".".
-func rubyExtname(path string) string {
-	name := strings.TrimRight(path, "/")
-	if i := strings.LastIndexByte(name, '/'); i >= 0 {
-		name = name[i+1:]
-	}
-	name = strings.TrimLeft(name, ".")
-	if i := strings.LastIndexByte(name, '.'); i >= 0 {
-		return name[i:]
-	}
-	return ""
-}
-
 // URI::RFC3986_Parser's grammar (uri 1.1.1), with its subroutine calls expanded. Its
 // possessive quantifiers never change what matches here, because each one is followed
 // by a character its class excludes.

@@ -314,3 +314,43 @@ func URLSafeDecode64(s string) ([]byte, bool) {
 func SecureCompare(a, b string) bool {
 	return len(a) == len(b) && subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
+
+// FileExtname is File.extname without NTFS's rules: the last dot of the last component,
+// ignoring the component's leading dots and any trailing slashes; "." when the dot ends it.
+func FileExtname(path string) string {
+	// strrdirsep: the last separator that something other than separators follows.
+	start := 0
+	for i := 0; i < len(path); i++ {
+		if path[i] != '/' {
+			continue
+		}
+		j := i
+		for j < len(path) && path[j] == '/' {
+			j++
+		}
+		if j >= len(path) {
+			break
+		}
+		start = j
+		i = j - 1
+	}
+	p := start
+	for p < len(path) && path[p] == '.' {
+		p++
+	}
+	dot := -1
+	for ; p < len(path) && path[p] != 0; p++ {
+		if path[p] == '.' {
+			dot = p
+		} else if path[p] == '/' {
+			break
+		}
+	}
+	switch {
+	case dot < 0 || dot == start:
+		return ""
+	case dot+1 == p:
+		return "."
+	}
+	return path[dot:p]
+}

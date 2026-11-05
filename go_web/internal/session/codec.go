@@ -142,11 +142,16 @@ func rubyToS(v any) string {
 }
 
 // Encrypt seals value, already JSON, as cookies.encrypted[name] does: in the legacy metadata
-// envelope with the cookie's purpose and expiry, under the primary key.
+// envelope with the cookie's purpose and expiry, under the primary key. A zero expiresAt is a
+// cookie without one, whose envelope carries "exp":null.
 func (c *Codec) Encrypt(name string, value []byte, expiresAt time.Time) string {
+	exp := "null"
+	if !expiresAt.IsZero() {
+		exp = `"` + expiresAt.UTC().Format("2006-01-02T15:04:05.000Z") + `"`
+	}
 	// Rails detects this envelope by its prefix, so the key order matters.
-	envelope := legacyEnvelopePrefix + `"` + base64.StdEncoding.EncodeToString(value) + `","exp":"` +
-		expiresAt.UTC().Format("2006-01-02T15:04:05.000Z") + `","pur":` + rails.EncodeJSON("cookie."+name) + `}}`
+	envelope := legacyEnvelopePrefix + `"` + base64.StdEncoding.EncodeToString(value) + `","exp":` + exp +
+		`,"pur":` + rails.EncodeJSON("cookie."+name) + `}}`
 	aead := c.aeads[0]
 	iv := make([]byte, aead.NonceSize())
 	rand.Read(iv)
