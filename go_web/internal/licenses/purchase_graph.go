@@ -486,7 +486,7 @@ func (s *store) richContents(ctx context.Context, query string, args ...any) ([]
 	var contents []*richContent
 	for rows.Next() {
 		c := &richContent{}
-		if err := rows.Scan(&c.set, &c.title, &c.raw); err != nil {
+		if err := rows.Scan(&c.set, &c.Title, &c.DescriptionJSON); err != nil {
 			return nil, err
 		}
 		contents = append(contents, c)

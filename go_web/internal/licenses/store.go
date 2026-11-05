@@ -352,23 +352,6 @@ func nullTime(t sql.NullTime) any {
 	return t.Time
 }
 
-// jsonPresent is Object#present? for a decoded JSON value.
-func jsonPresent(v any) bool {
-	switch v := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return v
-	case string:
-		return rails.Present(v)
-	case []any:
-		return len(v) > 0
-	case map[string]any:
-		return len(v) > 0
-	}
-	return true
-}
-
 func decodeJSON(data []byte) (any, error) {
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return nil, nil
