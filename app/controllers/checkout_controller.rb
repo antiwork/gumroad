@@ -12,7 +12,12 @@ class CheckoutController < ApplicationController
     # Keep this cache request-scoped; callers can reuse presenters across product state changes.
     arrival_props = nil
     load_arrival_props = -> { arrival_props ||= checkout_presenter.checkout_arrival_props(params: checkout_params) }
-    set_checkout_analytics_meta_tags(cart_presenter.cart, checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call))
+    seller_context = checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call)
+    # A gift-wishlist arrival replaces the saved cart, so the saved cart's sellers are not on the page.
+    saved_products = seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart_presenter.cart)
+    # Count arrivals even if the cart limit may reject them: this server count differs from the
+    # frontend's for membership tiers, and an extra opt-out is safer than a missed one.
+    set_checkout_analytics_meta_tags(saved_products + seller_context[:products])
     render inertia: "Checkout/Show", props: {
       # A legacy /checkout link whose tier is closed or sold out adds no line, so the page says why.
       # In the page rather than as a flash: a toast floats over the Checkout heading on a narrow
@@ -27,7 +32,7 @@ class CheckoutController < ApplicationController
       checkout_payment: -> { checkout_presenter.checkout_payment_props(params: checkout_params, cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
       stripe_fonts_css_source: SellerProfile.seller_fonts_css_source,
-      checkout_style: -> { sole_seller_checkout_style(cart_presenter.cart, checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call)) },
+      checkout_style: -> { sole_seller_checkout_style(saved_products, seller_context[:products]) },
     }
   end
 
@@ -133,11 +138,8 @@ class CheckoutController < ApplicationController
 
   private
     # Match CheckoutPresenter's product sources and precedence so the theme cannot identify a seller
-    # whose products the checkout does not render. Gift-wishlist arrivals replace the saved cart;
-    # every other arrival extends it.
-    def sole_seller_checkout_style(cart, checkout_seller_context)
-      products = checkout_seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart)
-      arriving_products = checkout_seller_context[:products]
+    # whose products the checkout does not render.
+    def sole_seller_checkout_style(products, arriving_products)
       existing_cart_keys = products.index_by { _1[:cart_key] }
       new_product_count = arriving_products.count { !existing_cart_keys.key?(_1[:cart_key]) }
 
@@ -228,10 +230,8 @@ class CheckoutController < ApplicationController
     end
 
     # One opted-out seller in the cart turns every third-party tracker off for the page.
-    def set_checkout_analytics_meta_tags(cart, seller_context)
-      seller_ids = seller_context[:products].map { _1[:seller_id] }
-      seller_ids += cart.visible_cart_products.pluck("links.user_id") if cart && !seller_context[:clear_cart]
-      disable_third_party_analytics! if User.where(id: seller_ids.uniq).any?(&:disable_third_party_analytics?)
+    def set_checkout_analytics_meta_tags(products)
+      disable_third_party_analytics! if User.where(id: products.pluck(:seller_id).uniq).any?(&:disable_third_party_analytics?)
       set_analytics_meta_tags(seller: nil)
     end
 

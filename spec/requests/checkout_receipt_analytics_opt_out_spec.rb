@@ -30,6 +30,11 @@ describe "Third-party analytics opt-out on checkout and receipt pages", type: :r
   describe "receipt pages" do
     let(:purchase) { create(:purchase, link: product) }
 
+    it "keeps analytics on the receipt email-confirmation page when the seller did not opt out" do
+      get confirm_receipt_email_purchase_url(purchase.external_id, host: DOMAIN, protocol: PROTOCOL)
+      expect(meta_enabled("gr:google_analytics:enabled")).to eq("true")
+    end
+
     it "loads no analytics on the receipt email-confirmation page for an opted-out seller" do
       seller.update!(disable_third_party_analytics: true)
       get confirm_receipt_email_purchase_url(purchase.external_id, host: DOMAIN, protocol: PROTOCOL)

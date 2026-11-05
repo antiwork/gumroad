@@ -118,6 +118,62 @@ describe CheckoutController, type: :controller, inertia: true do
 
         expect(google_analytics_enabled).to eq("true")
       end
+
+      it "loads no analytics when a logged-in buyer's cart has an opted-out seller" do
+        buyer = create(:user)
+        create(:cart, user: buyer).tap { create(:cart_product, cart: _1, product: create(:product, user: other_seller)) }
+        other_seller.update!(disable_third_party_analytics: true)
+        sign_in buyer
+
+        get :show
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics when a wishlist arrival adds an opted-out seller's product" do
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller))
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: create(:product, user: other_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics when a gift-wishlist arrival's seller opted out" do
+        seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: other_seller))
+        wishlist_product = create(:wishlist_product, wishlist: create(:wishlist), product: create(:product, user: seller))
+
+        get :show, params: { gift_wishlist_product: wishlist_product.external_id }
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
+      it "loads no analytics on the partial reload the frontend makes after a cart edit" do
+        # The inertia matcher captures only full renders, so inspect the partial response body.
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller), create(:product, user: other_seller))
+        request.headers["X-Inertia"] = "true"
+        request.headers["X-Inertia-Partial-Component"] = "Checkout/Show"
+        request.headers["X-Inertia-Partial-Data"] = "cart,flash,checkout_payment,checkout_style"
+
+        get :show
+
+        meta = response.parsed_body.dig("props", "_inertia_meta").find { _1["property"] == "gr:google_analytics:enabled" }
+        expect(meta["content"]).to eq("false")
+      end
+
+      it "loads no analytics for an opted-out seller's arriving product even when the cart looks full" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller))
+
+        get :show, params: { product: create(:product, user: other_seller).unique_permalink }
+
+        expect(google_analytics_enabled).to eq("false")
+      end
     end
 
     it "names the product and the real state when a membership link's only tier is closed to new buyers" do
