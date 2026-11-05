@@ -160,3 +160,13 @@ func TestMaskedGlobalTokenVerifiesAndVaries(t *testing.T) {
 		t.Error("a real token that isn't Base64 is refused")
 	}
 }
+
+func TestRotatedSpotsCookiesUnderTheOldKey(t *testing.T) {
+	fixtures, codec := loadRailsCookies(t)
+	if !codec.Rotated("_gumroad_app_session", fixtures.RotatedCookie) {
+		t.Error("cookie_rotator's SHA1 key")
+	}
+	if codec.Rotated("_gumroad_app_session", fixtures.SessionCookie) || codec.Rotated("_gumroad_app_session", "garbage") {
+		t.Error("the primary key, and a cookie that opens under neither")
+	}
+}

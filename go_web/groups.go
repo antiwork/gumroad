@@ -16,11 +16,14 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/beacons"
 	"github.com/antiwork/gumroad/go_web/internal/credentials"
 	"github.com/antiwork/gumroad/go_web/internal/db"
+	"github.com/antiwork/gumroad/go_web/internal/downloads"
 	"github.com/antiwork/gumroad/go_web/internal/geoip"
+	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/licenses"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/robots"
+	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 	"github.com/antiwork/gumroad/go_web/internal/webhooks"
@@ -30,10 +33,11 @@ import (
 // config it needs, so merging a new group can't crash-loop a running fleet; an enabled group
 // with missing config fails startup instead.
 var routeGroups = map[string]func(*web.App, *dependencies) error{
-	"robots":   registerRobots,
-	"beacons":  registerBeacons,
-	"licenses": registerLicenses,
-	"webhooks": registerWebhooks,
+	"robots":    registerRobots,
+	"beacons":   registerBeacons,
+	"licenses":  registerLicenses,
+	"webhooks":  registerWebhooks,
+	"downloads": registerDownloads,
 }
 
 const (
@@ -131,6 +135,59 @@ func registerLicenses(app *web.App, d *dependencies) error {
 		return err
 	}
 	licenses.Register(app, licenses.Deps{Env: d.env, Stack: d.stack, DB: conn, Redis: d.redis, SidekiqRedis: jobs, IDs: ids})
+	return nil
+}
+
+// stripeAPIVersion is config/initializers/003_stripe.rb's Stripe.api_version outside test.
+const stripeAPIVersion = "2023-10-16; risk_in_requirements_beta=v1; retrieve_tax_forms_beta=v1;"
+
+// registerDownloads serves the download page's polls and hands the rest to Rails, so it
+// needs a Rails upstream list.
+func registerDownloads(app *web.App, d *dependencies) error {
+	upstreams := getenv("RAILS_UPSTREAMS_FILE")
+	if upstreams == "" {
+		return fmt.Errorf("RAILS_UPSTREAMS_FILE is not set")
+	}
+	conn, err := d.database()
+	if err != nil {
+		return err
+	}
+	ids, err := d.obfuscatedIDs()
+	if err != nil {
+		return err
+	}
+	codec, err := session.NewCodec(d.config("SECRET_KEY_BASE"))
+	if err != nil {
+		return err
+	}
+	// 003_stripe.rb's GlobalConfig.get with its default.
+	stripeKey, fallbackKey := "STRIPE_PUBLIC_KEY_PROD", "pk_live_Db80xIzLPWhKo1byPrnERmym"
+	if d.env.Name != "production" {
+		stripeKey, fallbackKey = "STRIPE_PUBLIC_KEY_TEST", "pk_test_ehGPKw3JPRHYiqEEjgJ02ULC"
+	}
+	stripePublicKey := d.config(stripeKey)
+	if stripePublicKey == "" {
+		stripePublicKey = fallbackKey
+	}
+	downloads.Register(app, &downloads.Config{
+		Env:      d.env,
+		DB:       conn,
+		Stack:    d.stack,
+		Store:    session.NewStore(codec, d.env.Name, d.env.Protocol, getenv("CUSTOM_DOMAIN"), getenv("BRANCH_DEPLOYMENT") != ""),
+		Resolver: &session.Resolver{Users: &session.Users{DB: conn}, Redis: d.redis, Codec: codec},
+		IDs:      ids,
+		Proxy:    web.NewRailsProxy(upstreams),
+		Meta: inertia.DefaultMeta{
+			Title:                  d.env.PageTitle,
+			Environment:            d.env.Name,
+			FacebookAppID:          d.config("FACEBOOK_APP_ID"),
+			StripePublicKey:        stripePublicKey,
+			StripeAPIVersion:       stripeAPIVersion,
+			AssetHost:              d.env.Protocol + "://" + d.env.AssetDomain,
+			AnalyticsByEnvironment: d.env.Name == "production" || d.env.Name == "staging",
+		},
+		Now: time.Now,
+	})
 	return nil
 }
 
