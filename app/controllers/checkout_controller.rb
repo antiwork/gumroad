@@ -12,12 +12,8 @@ class CheckoutController < ApplicationController
     # Keep this cache request-scoped; callers can reuse presenters across product state changes.
     arrival_props = nil
     load_arrival_props = -> { arrival_props ||= checkout_presenter.checkout_arrival_props(params: checkout_params) }
-    seller_context = checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call)
-    # A gift-wishlist arrival replaces the saved cart, so the saved cart's sellers are not on the page.
-    saved_products = seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart_presenter.cart)
-    # Count arrivals even if the cart limit may reject them: this server count differs from the
-    # frontend's for membership tiers, and an extra opt-out is safer than a missed one.
-    set_checkout_analytics_meta_tags(saved_products + seller_context[:products])
+    rendered_products = checkout_rendered_products(cart_presenter.cart, checkout_presenter.checkout_seller_context(arrival_props: load_arrival_props.call))
+    set_checkout_analytics_meta_tags(rendered_products)
     render inertia: "Checkout/Show", props: {
       # A legacy /checkout link whose tier is closed or sold out adds no line, so the page says why.
       # In the page rather than as a flash: a toast floats over the Checkout heading on a narrow
@@ -32,7 +28,7 @@ class CheckoutController < ApplicationController
       checkout_payment: -> { checkout_presenter.checkout_payment_props(params: checkout_params, cart: cart_presenter.cart) },
       recommended_products: InertiaRails.optional { recommended_products },
       stripe_fonts_css_source: SellerProfile.seller_fonts_css_source,
-      checkout_style: -> { sole_seller_checkout_style(saved_products, seller_context[:products]) },
+      checkout_style: -> { sole_seller_checkout_style(rendered_products) },
     }
   end
 
@@ -137,19 +133,24 @@ class CheckoutController < ApplicationController
   end
 
   private
-    # Match CheckoutPresenter's product sources and precedence so the theme cannot identify a seller
-    # whose products the checkout does not render.
-    def sole_seller_checkout_style(products, arriving_products)
-      existing_cart_keys = products.index_by { _1[:cart_key] }
-      new_product_count = arriving_products.count { !existing_cart_keys.key?(_1[:cart_key]) }
+    # Mirrors computeInitialCheckout in Checkout/initialCheckout.ts; keep the two in sync.
+    def checkout_rendered_products(cart, seller_context)
+      saved = seller_context[:clear_cart] ? [] : checkout_style_cart_products(cart)
+      arrivals = seller_context[:products]
+      same_line = ->(item, arrival) { arrival[:recurring] ? item[:cart_key].first == arrival[:cart_key].first : item[:cart_key] == arrival[:cart_key] }
+      new_line_count = arrivals.reject { |arrival| saved.any? { same_line.(_1, arrival) } }
+        .map { _1[:recurring] ? _1[:cart_key].first : _1[:cart_key] }.uniq.size
+      collapsed_line_count = arrivals.filter_map { _1[:cart_key].first if _1[:recurring] }.uniq
+        .sum { |permalink| [saved.count { _1[:cart_key].first == permalink } - 1, 0].max }
 
-      # The frontend rejects every arriving product when the combined cart is over the limit.
-      products = if products.size + new_product_count > Cart::MAX_ALLOWED_CART_PRODUCTS
-        products.first(Cart::MAX_ALLOWED_CART_PRODUCTS)
+      if saved.size - collapsed_line_count + new_line_count > Cart::MAX_ALLOWED_CART_PRODUCTS
+        saved.first(Cart::MAX_ALLOWED_CART_PRODUCTS)
       else
-        products + arriving_products
+        saved + arrivals
       end
+    end
 
+    def sole_seller_checkout_style(products)
       seller_ids = products.pluck(:seller_id).uniq
       return unless seller_ids.one?
 

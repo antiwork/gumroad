@@ -111,6 +111,33 @@ describe CheckoutController, type: :controller, inertia: true do
         expect(google_analytics_enabled).to eq("true")
       end
 
+      it "ignores an opted-out seller's arriving product that the full cart rejects" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
+        other_seller.update!(disable_third_party_analytics: true)
+        cart_with(create(:product, user: seller))
+
+        get :show, params: { product: create(:product, user: other_seller).unique_permalink }
+
+        expect(google_analytics_enabled).to eq("true")
+      end
+
+      it "counts an arrival that fits once a membership arrival collapses the saved cart's tiers" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 2)
+        other_seller.update!(disable_third_party_analytics: true)
+        membership = create(:membership_product_with_preset_tiered_pricing, user: seller, recurrence_price_values: 3.times.map { { "monthly" => { enabled: true, price: 3 } } })
+        first_tier, second_tier, third_tier = membership.tiers
+        cart = cart_with
+        create(:cart_product, cart:, product: membership, option: first_tier)
+        create(:cart_product, cart:, product: membership, option: second_tier)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: membership, variant: third_tier, recurrence: BasePrice::Recurrence::MONTHLY)
+        create(:wishlist_product, wishlist:, product: create(:product, user: other_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(google_analytics_enabled).to eq("false")
+      end
+
       it "keeps analytics on when no seller in the cart opted out" do
         cart_with(create(:product, user: seller), create(:product, user: other_seller))
 
@@ -163,16 +190,6 @@ describe CheckoutController, type: :controller, inertia: true do
 
         meta = response.parsed_body.dig("props", "_inertia_meta").find { _1["property"] == "gr:google_analytics:enabled" }
         expect(meta["content"]).to eq("false")
-      end
-
-      it "loads no analytics for an opted-out seller's arriving product even when the cart looks full" do
-        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 1)
-        other_seller.update!(disable_third_party_analytics: true)
-        cart_with(create(:product, user: seller))
-
-        get :show, params: { product: create(:product, user: other_seller).unique_permalink }
-
-        expect(google_analytics_enabled).to eq("false")
       end
     end
 
@@ -412,6 +429,22 @@ describe CheckoutController, type: :controller, inertia: true do
         wishlist = create(:wishlist)
         create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
         create(:wishlist_product, wishlist:, product: create(:product, user: branded_seller))
+
+        get :show, params: { wishlist: wishlist.external_id }
+
+        expect(inertia.props[:checkout_style]).to be_nil
+      end
+
+      it "sends no styles when a membership arrival collapses the saved cart's tiers to fit another seller's product" do
+        stub_const("Cart::MAX_ALLOWED_CART_PRODUCTS", 2)
+        membership = create(:membership_product_with_preset_tiered_pricing, user: branded_seller, recurrence_price_values: 3.times.map { { "monthly" => { enabled: true, price: 3 } } })
+        first_tier, second_tier, third_tier = membership.tiers
+        cart = cart_with
+        create(:cart_product, cart:, product: membership, option: first_tier)
+        create(:cart_product, cart:, product: membership, option: second_tier)
+        wishlist = create(:wishlist)
+        create(:wishlist_product, wishlist:, product: membership, variant: third_tier, recurrence: BasePrice::Recurrence::MONTHLY)
+        create(:wishlist_product, wishlist:, product: create(:product, user: create(:user)))
 
         get :show, params: { wishlist: wishlist.external_id }
 
