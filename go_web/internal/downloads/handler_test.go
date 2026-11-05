@@ -575,3 +575,18 @@ func TestHSTSIsForTheAppDomainsRespondedPages(t *testing.T) {
 		t.Errorf("an exception: %d %q", w.Code, w.Header().Get("Strict-Transport-Security"))
 	}
 }
+
+func TestAPositionsPollWithoutAPurchaseReadsNoFiles(t *testing.T) {
+	e := newTestEnv(t)
+	imported := int64(1_780_602)
+	testdb.Insert(t, e.db, "imported_customers", map[string]any{"id": imported, "link_id": productID, "email": "buyer@example.com", "created_at": testNow, "updated_at": testNow})
+	// A page the file lookup can't read, as Ruby couldn't: only reading the files would fail.
+	testdb.Insert(t, e.db, "rich_contents", map[string]any{"id": int64(1_780_701), "entity_id": productID, "entity_type": "Link",
+		"description": `{"not":"a list of nodes"}`, "created_at": testNow, "updated_at": testNow})
+	// A purchase id that points nowhere, so url_redirect.purchase is nil.
+	token := e.purchase(productID, nil, map[string]any{"purchase_id": int64(1_789_996), "imported_customer_id": imported})
+	w := e.poll(call{token: token})
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"latest_media_locations":{}`) {
+		t.Errorf("%d %s", w.Code, w.Body.String())
+	}
+}

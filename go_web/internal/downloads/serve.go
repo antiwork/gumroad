@@ -68,8 +68,11 @@ func (h *handler) redirect(w http.ResponseWriter, p *page, location string) erro
 func (h *handler) render(w http.ResponseWriter, p *page, u *urlRedirect) error {
 	props := rails.NewRHash().Sym("errors", rails.NewRHash())
 	requested := rubySplit(p.req.HTTP.Header.Get("X-Inertia-Partial-Data"))
+	audio, locations := slices.Contains(requested, "audio_durations"), slices.Contains(requested, "latest_media_locations")
 	var files []delivery.ProductFile
-	if len(requested) > 0 {
+	// latest_media_locations_data returns {} before reading files when there's no purchase,
+	// and reading them anyway could raise where Rails doesn't.
+	if audio || (locations && p.purchase != nil) {
 		var err error
 		files, err = delivery.AliveProductFiles(p.ctx, h.c.DB, &delivery.Redirect{
 			ID: u.id, PurchaseID: u.purchaseID, ProductID: u.productID, InstallmentID: u.installmentID, ImportedCustomerID: u.importedCustomerID,
@@ -79,20 +82,20 @@ func (h *handler) render(w http.ResponseWriter, p *page, u *urlRedirect) error {
 		}
 	}
 	// requested_download_page_polling_props builds the hash in this order.
-	if slices.Contains(requested, "audio_durations") {
+	if audio {
 		props.Sym("audio_durations", delivery.AudioDurations(files, h.c.IDs))
 	}
-	if slices.Contains(requested, "latest_media_locations") {
+	if locations {
 		var purchaseID *int64
 		if p.purchase != nil {
 			purchaseID = &p.purchase.id
 		}
 		// checkPermissions has handed redirects with an installment to Rails.
-		locations, err := delivery.LatestMediaLocations(p.ctx, h.c.DB, purchaseID, false, files, h.c.IDs)
+		positions, err := delivery.LatestMediaLocations(p.ctx, h.c.DB, purchaseID, false, files, h.c.IDs)
 		if err != nil {
 			return err
 		}
-		props.Sym("latest_media_locations", locations)
+		props.Sym("latest_media_locations", positions)
 	}
 	props.Sym("_inertia_meta", h.metaTags(p).JSON())
 	body := inertia.Page(component, p.req.FullPath(), props)
