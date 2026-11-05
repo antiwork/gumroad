@@ -270,11 +270,17 @@ describe("EmailForm unsaved-changes guard", () => {
     beforeListeners.forEach((listener) => listener(event));
     return event.preventDefault.mock.calls.length > 0;
   };
+  // The baseline is taken once the message editor mounts, so an edit fired before that is
+  // baselined as clean. Retype until the guard reports the edit, which cannot happen before the
+  // baseline exists: a fixed wait loses the race whenever the mount is slow.
   const edit = async () => {
-    // The baseline is taken after the editor mounts.
-    await waitFor(() => expect(screen.getByPlaceholderText("Title")).toBeTruthy());
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    fireEvent.change(screen.getByPlaceholderText("Title"), { target: { value: "Edited" } });
+    const title = await screen.findByPlaceholderText("Title");
+    for (let version = 1; version <= 50; version++) {
+      fireEvent.change(title, { target: { value: `Edited ${version}` } });
+      if (unload()) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    throw new Error("the unsaved-changes guard never warned about an edit");
   };
 
   afterEach(() => vi.stubGlobal("confirm", undefined));
