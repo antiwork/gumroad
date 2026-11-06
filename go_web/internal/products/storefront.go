@@ -413,6 +413,8 @@ type card struct {
 	thumbnails           []thumbnailRow
 	hasTier, hasPlan     bool
 	thumbnailURL         any
+	// tiers are a tiered membership's preloaded tiers, with their alive buy prices.
+	tiers []*variantOption
 }
 
 // loadCards is section_props' Link.find of the hits, in hit order, for the shapes whose card
@@ -444,7 +446,8 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 			return nil, fallback("catalog " + reason)
 		}
 		var ok bool
-		if c.defaultRecurrence, ok = c.prod.subscriptionDurationName(); !ok {
+		if c.defaultRecurrence, ok = c.prod.subscriptionDurationName(); !ok || c.defaultRecurrence == "" && c.prod.is(productIsTieredMembership) {
+			// lowest_tier_price would compare the tier prices with a nil duration.
 			return nil, fallback("catalog subscription duration")
 		}
 		byID[c.prod.id] = c
@@ -476,10 +479,55 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	if err != nil {
 		return nil, err
 	}
+	tiers, err := h.cardTiers(p, cards)
+	if err != nil {
+		return nil, err
+	}
 	for id, c := range byID {
-		c.prices, c.stat, c.minVariantDifference, c.thumbnails = prices[id], stats[id], floors[id], thumbnails[id]
+		c.prices, c.stat, c.minVariantDifference, c.thumbnails, c.tiers = prices[id], stats[id], floors[id], thumbnails[id], tiers[id]
 	}
 	return cards, nil
+}
+
+// cardTiers is the tiers preload for the tiered memberships among the cards: each alive
+// Variant in an alive Tier category, with its alive buy prices and whether it's closed.
+func (h *handler) cardTiers(p *page, cards []*card) (map[int64][]*variantOption, error) {
+	var ids []int64
+	for _, c := range cards {
+		if c.prod.is(productIsTieredMembership) {
+			ids = append(ids, c.prod.id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	out := map[int64][]*variantOption{}
+	rows, err := h.c.DB.QueryContext(p.Ctx, "SELECT variant_categories.link_id, base_variants.id, base_variants.flags,"+
+		" base_variants.customizable_price FROM base_variants INNER JOIN variant_categories ON variant_categories.id = base_variants.variant_category_id"+
+		" WHERE base_variants.type = 'Variant' AND base_variants.deleted_at IS NULL AND variant_categories.deleted_at IS NULL"+
+		" AND variant_categories.title = 'Tier' AND variant_categories.link_id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
+	if err != nil {
+		return nil, err
+	}
+	var all []*variantOption
+	for rows.Next() {
+		var productID int64
+		o := &variantOption{}
+		if err := rows.Scan(&productID, &o.id, &o.flags, &o.customizablePrice); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[productID] = append(out[productID], o)
+		all = append(all, o)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := h.loadTierPrices(p.Ctx, all); err != nil {
+		return nil, err
+	}
+	return out, h.markClosedTiers(p.Ctx, p.seller.id, all)
 }
 
 // variantPriceFloors is lowest_variant_price_difference_cents over each product's preloaded
@@ -534,8 +582,6 @@ func unportedCard(sellerID int64, prod *product, hasSku bool) string {
 		return "seller"
 	case !prod.purchaseType.Valid || prod.purchaseType.Int64 != purchaseTypeBuyOnly:
 		return "rental"
-	case prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership):
-		return "membership"
 	case prod.defaultOfferCodeID.Valid:
 		return "default offer code"
 	case hasSku:
@@ -563,15 +609,30 @@ func (h *handler) cardSoldOut(p *page, c *card) (bool, error) {
 // description, and a product URL on this subdomain with layout=profile.
 func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, error) {
 	prod := c.prod
-	last, agreed := lastPrice(buyPrices(prod, c.prices))
-	if !agreed {
-		return nil, fallback("catalog price")
-	}
+	// display_price_cents(for_default_duration: true).
 	var price int64
-	if last != nil {
-		price = *last
+	pwyw := prod.customizablePrice.Bool
+	if prod.is(productIsTieredMembership) {
+		offered := offeredTiers(c.tiers)
+		price = lowestTierPriceCents(offered, &c.defaultRecurrence)
+		// has_customizable_price_option?
+		pwyw = slices.ContainsFunc(offered, func(o *variantOption) bool { return o.customizablePrice.Bool })
+	} else {
+		var rows []priceRow
+		for _, r := range c.prices {
+			if r.atDuration(prod, c.defaultRecurrence) {
+				rows = append(rows, r)
+			}
+		}
+		last, agreed := lastPrice(buyPrices(prod, rows))
+		if !agreed {
+			return nil, fallback("catalog price")
+		}
+		if last != nil {
+			price = *last
+		}
+		price += c.minVariantDifference.Int64
 	}
-	price += c.minVariantDifference.Int64
 	// default_price_recurrence: every match has the recurrence it matched on.
 	var recurrence any
 	for _, r := range c.prices {
@@ -585,7 +646,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 	var display *currencyDisplay
 	if buyer != nil {
 		if *buyer != pc && *buyer != "usd" && (prod.is(productFreeTrialEnabled) || prod.is(productIsInPreorderState) ||
-			prod.nativeType == "commission" || c.hasPlan) {
+			prod.nativeType == "commission" || c.hasPlan || prod.is(productIsRecurringBilling)) {
 			// buyer_currency_unquotable_product? may turn the local price off.
 			return nil, fallback("catalog unquotable product")
 		}
@@ -612,7 +673,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 	// url_for_product_page on the seller's own subdomain, whose port declined() rules out.
 	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) + "?layout=profile"
 	return props.
-		Sym("is_pay_what_you_want", prod.customizablePrice.Bool).
+		Sym("is_pay_what_you_want", pwyw).
 		Sym("url", url).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).
 		Sym("recurrence", recurrence), nil

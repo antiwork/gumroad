@@ -26,6 +26,12 @@ type priceRow struct {
 
 func (r priceRow) isRental() bool { return r.flags&priceIsRental != 0 }
 
+// atDuration is whether default_price keeps the row: a recurring product's buy prices only at
+// its subscription duration, without one every price.
+func (r priceRow) atDuration(prod *product, duration string) bool {
+	return r.isRental() || !prod.is(productIsRecurringBilling) || duration == "" || r.recurrence.Valid && r.recurrence.String == duration
+}
+
 // alivePrices is each product's alive_prices, as preload_product and the catalog's includes
 // load them.
 func (h *handler) alivePrices(ctx context.Context, ids []int64) (map[int64][]priceRow, error) {
@@ -104,7 +110,6 @@ func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error)
 	}
 	pc := prod.priceCurrencyType
 	duration, _ := prod.subscriptionDurationName()
-	byDuration := prod.is(productIsRecurringBilling) && duration != ""
 	ps := prices{rows: byProduct[prod.id]}
 	for _, r := range ps.rows {
 		rental := r.isRental()
@@ -119,7 +124,7 @@ func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error)
 			}
 			continue
 		}
-		if !rental && byDuration && (!r.recurrence.Valid || r.recurrence.String != duration) {
+		if !r.atDuration(prod, duration) {
 			continue
 		}
 		c := r.cents

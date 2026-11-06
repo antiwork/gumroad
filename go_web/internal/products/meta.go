@@ -233,7 +233,7 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 	// legacy subscription, of every alive buy price.
 	var cents *int64
 	if prod.is(productIsTieredMembership) {
-		c := v.variants.lowestTierPriceCents()
+		c := lowestTierPriceCents(offeredTiers(v.variants.tiers), nil)
 		cents = &c
 	} else {
 		cents = lowerOf(v.prices.buy, v.prices.rental)
