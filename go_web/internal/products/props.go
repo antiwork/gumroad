@@ -103,17 +103,11 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("public_files", v.publicFiles).
 		Sym("file_summaries", v.fileSummaries)
 
+	discountCode := v.discount.resultProps(externalID)
 	props.Sym("product", product).
-		Sym("discount_code", nil).
-		Sym("sale_label", nil).
-		Sym("selection_discounts", rails.NewRHash().
-			Sym("url_code", nil).
-			Sym("quantity", int64(1)).
-			Sym("recurrence", v.recurrences.defaultRecurrence()).
-			Sym("option_id", nil).
-			Sym("price_cents", nil).
-			Sym("options", rails.NewRHash()).
-			Sym("rent_options", nil)).
+		Sym("discount_code", discountCode).
+		Sym("sale_label", v.discount.label).
+		Sym("selection_discounts", selectionDiscounts(prod, v, discountCode)).
 		Sym("purchase", nil).
 		Sym("wishlists", []any{})
 }
@@ -278,7 +272,7 @@ func buyerCurrencyDisplay(productID, productCurrency string, c *currencyDisplay)
 		Sym("display_mode", "buyer_local")
 }
 
-// buyerLocalPriceProps is buyer_local_price_props without an original price: a discount is Rails'.
+// buyerLocalPriceProps is buyer_local_price_props.
 func buyerLocalPriceProps(props *rails.RHash, productCurrency string, c *currencyDisplay) {
 	if c == nil {
 		return
@@ -287,4 +281,7 @@ func buyerLocalPriceProps(props *rails.RHash, productCurrency string, c *currenc
 		Sym("buyer_local_currency_rate", minorUnitRate(c.rate, productCurrency, c.buyer)).
 		Sym("buyer_local_currency_subunit_to_unit", unitScalingFactor(c.buyer)).
 		Sym("buyer_local_price_cents", c.localCents)
+	if c.originalLocalCents != nil {
+		props.Sym("buyer_local_original_price_cents", *c.originalLocalCents)
+	}
 }

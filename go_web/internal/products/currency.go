@@ -37,6 +37,8 @@ type currencyDisplay struct {
 	buyer      string
 	localCents int64
 	rate       float64
+	// originalLocalCents is buyer_local_original_price_cents, set when a discount shows.
+	originalLocalCents *int64
 }
 
 // localCurrencyBuyer is the page's buyer currency when a local price may show: the seller has

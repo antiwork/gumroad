@@ -69,6 +69,10 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 	if err != nil || !listed {
 		return []any{}, err
 	}
+	if p.hasAutoApplyCode {
+		// Cards price through the seller's auto-applied code and label its sale.
+		return nil, fallback("catalog auto-apply")
+	}
 	s, err := h.cachedCatalog(p)
 	if err != nil {
 		return nil, err

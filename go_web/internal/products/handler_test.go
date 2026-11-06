@@ -241,6 +241,21 @@ func (e *testEnv) wantAll(t *testing.T, body string, wants []string, ids ...int6
 	}
 }
 
+// eurCookie asks for prices in euros, which localEUR shows at rate euros to the dollar.
+var eurCookie = map[string]string{"Cookie": "gumroad_buyer_currency=EUR"}
+
+func (e *testEnv) localEUR(rate string) {
+	e.redis.HSet("buyer_local_currency", "boolean", "true")
+	e.redis.Set("currencies:EUR", rate)
+}
+
+// insertOfferCode adds an offer code of the seller's.
+func insertOfferCode(t *testing.T, conn *sql.DB, id int64, columns map[string]any) {
+	row := map[string]any{"id": id, "user_id": sellerID, "created_at": testNow, "updated_at": testNow}
+	maps.Copy(row, columns)
+	testdb.Insert(t, conn, "offer_codes", row)
+}
+
 var dataPage = regexp.MustCompile(`data-page="([^"]*)"`)
 
 func pageProps(t *testing.T, body string) map[string]any {
@@ -749,10 +764,9 @@ func TestAMembershipRendersItsPrices(t *testing.T) {
 			price(t, conn, yearly, 4000, "usd", "yearly")
 			price(t, conn, quarterly, 3500, "eur", "yearly")
 		}},
-		{name: "a local price", reason: "unquotable buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
+		{name: "a local price", reason: "unquotable buyer currency", headers: eurCookie,
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-				e.redis.HSet("buyer_local_currency", "boolean", "true")
-				e.redis.Set("currencies:EUR", "0.92345")
+				e.localEUR("0.92345")
 				membership(conn, productIsRecurringBilling)
 				conn.Exec("UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
 			}},
@@ -898,6 +912,183 @@ func TestABundleRendersItsProducts(t *testing.T) {
 	}
 }
 
+// The fixture's price is 500 cents; each code is the seller's, with these columns set.
+func TestDefaultOfferCodes(t *testing.T) {
+	const autoID, explicitID = int64(1_795_001), int64(1_795_002)
+	auto := func(t *testing.T, conn *sql.DB, columns map[string]any) {
+		row := map[string]any{"code": "SALE20", "amount_percentage": 20, "universal": true, "auto_apply": true}
+		maps.Copy(row, columns)
+		insertOfferCode(t, conn, autoID, row)
+	}
+	explicit := func(t *testing.T, conn *sql.DB, columns map[string]any) {
+		row := map[string]any{"code": "LAUNCH", "amount_cents": 100, "expires_at": time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)}
+		maps.Copy(row, columns)
+		insertOfferCode(t, conn, explicitID, row)
+		testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_101), "offer_code_id": explicitID, "product_id": productID})
+		conn.Exec("UPDATE links SET default_offer_code_id = ? WHERE id = ?", explicitID, productID)
+	}
+	discount := func(codeJSON string, rest string) string {
+		return `{"valid":true,"code":` + codeJSON + `,"discount":` + rest + `}`
+	}
+	sale20 := discount(`"SALE20"`, `{"type":"percent","percents":20,"product_ids":null,"expires_at":null,"minimum_quantity":null,`+
+		`"duration_in_billing_cycles":null,"minimum_amount_cents":null}`)
+	launch := discount(`"LAUNCH"`, `{"type":"fixed","cents":100,"product_ids":["%[1]s"],"expires_at":"2026-12-01T00:00:00Z",`+
+		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}`)
+	future, past := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	const category, first, second = int64(1_795_501), int64(1_795_601), int64(1_795_602)
+	options := func(t *testing.T, conn *sql.DB, title string, secondFlags int) {
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": title})
+		for i, id := range []int64{first, second} {
+			flags := 0
+			if id == second {
+				flags = secondFlags
+			}
+			testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": category,
+				"name": fmt.Sprint("Option ", i), "position_in_category": i, "flags": flags, "created_at": testNow, "updated_at": testNow})
+			testdb.Insert(t, conn, "prices", map[string]any{"id": id + 1000, "variant_id": id, "price_cents": 300, "currency": "usd",
+				"recurrence": "monthly", "created_at": testNow, "updated_at": testNow})
+		}
+	}
+	saleEntry := `{"discount_code":` + sale20 + `,"sale_label":"Sale"}`
+	for _, c := range []struct {
+		name    string
+		wants   []string
+		reason  string
+		headers map[string]string
+		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		{name: "an auto-applied percent code", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`,
+			`"options":{"":` + saleEntry + `},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, nil) }},
+		{name: "an auto-applied code's own label", wants: []string{`"sale_label":"Black Friday",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"sale_label": "Black Friday"})
+			}},
+		{name: "an explicit default", wants: []string{`"discount_code":` + launch + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { explicit(t, conn, nil) }},
+		{name: "an expired explicit default", wants: []string{`"discount_code":null,"sale_label":null,`,
+			`"options":{"":{"discount_code":null,"sale_label":null}},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { explicit(t, conn, map[string]any{"expires_at": past}) }},
+		// default_offer_code has no alive scope; the lookups do.
+		{name: "a deleted explicit default", wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { explicit(t, conn, map[string]any{"deleted_at": past}) }},
+		{name: "the sale over an expired explicit default", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"expires_at": past})
+				auto(t, conn, nil)
+			}},
+		// Its uses left only count once it would otherwise win.
+		{name: "the sale over a limited default that has ended", wants: []string{`"discount_code":` + sale20 + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"expires_at": past, "max_purchase_count": 5})
+				auto(t, conn, nil)
+			}},
+		{name: "the sale over a default for existing customers", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"existing_customers_only": true, "ownership_duration_tiers": `[{"months":12,"percent":10}]`})
+				auto(t, conn, nil)
+			}},
+		{name: "a live explicit default over the sale", wants: []string{`"discount_code":` + launch + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				auto(t, conn, nil)
+			}},
+		{name: "a new-customers auto row", wants: []string{`"discount_code":null,"sale_label":null,`, `"options":{},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"new_customers_only": true})
+			}},
+		{name: "a sale that leaves this product out", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": int64(1_795_701), "offer_code_id": autoID,
+					"product_id": productID, "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a sale that hasn't started", wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, map[string]any{"valid_at": future}) }},
+		{name: "a fixed sale in another currency", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "currency_type": "eur"})
+			}},
+		// 400 and 500 cents through 0.92345.
+		{name: "a local price for the sale", headers: eurCookie,
+			wants: []string{`"buyer_local_price_cents":369,"buyer_local_original_price_cents":462,"rental_price_cents"`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("0.92345")
+				auto(t, conn, nil)
+			}},
+		{name: "a sale needing three", headers: eurCookie, wants: []string{`"minimum_quantity":3,`, `"buyer_local_price_cents":462,"rental_price_cents"`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("0.92345")
+				auto(t, conn, map[string]any{"minimum_quantity": 3})
+			}},
+		// Ruby's Float#round: 999 * 0.15 = 149.85 rounds to 150.
+		{name: "a percent rounding", headers: eurCookie, wants: []string{`"buyer_local_price_cents":849,"buyer_local_original_price_cents":999,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("1")
+				conn.Exec("UPDATE prices SET price_cents = 999 WHERE id = ?", priceID)
+				auto(t, conn, map[string]any{"amount_percentage": 15})
+			}},
+		{name: "a fixed sale over the price", headers: eurCookie, wants: []string{`"buyer_local_price_cents":0,"buyer_local_original_price_cents":500,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("1")
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 900})
+			}},
+		{name: "a rental's options", wants: []string{`"options":{"":` + saleEntry + `},"rent_options":{"":` + saleEntry + `}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				conn.Exec("UPDATE links SET purchase_type = 2 WHERE id = ?", productID)
+				testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_795_201), "link_id": productID, "price_cents": 300, "currency": "usd",
+					"flags": 1, "created_at": testNow, "updated_at": testNow})
+				auto(t, conn, nil)
+			}},
+		{name: "each option's quote", wants: []string{`"options":{"%[2]s":` + saleEntry + `,"%[3]s":` + saleEntry + `},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				options(t, conn, "Size", 0)
+				auto(t, conn, nil)
+			}},
+		{name: "a tier closed to new buyers left out", wants: []string{`"options":{"%[2]s":` + saleEntry + `},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("close_membership_tier_to_new_buyers", "boolean", "true")
+				conn.Exec("UPDATE links SET flags = flags | ?, subscription_duration = 0 WHERE id = ?",
+					productIsRecurringBilling|productIsTieredMembership, productID)
+				conn.Exec("UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
+				options(t, conn, "Tier", int(baseVariantClosedToNewPurchases))
+				auto(t, conn, nil)
+			}},
+		{name: "a limited sale", reason: "offer code limit", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"max_purchase_count": 10})
+		}},
+		{name: "a once-per-cart sale", reason: "once-per-cart offer code", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": 4})
+		}},
+		{name: "a sale for some options", reason: "offer code variants", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_795_301), "offer_code_id": autoID, "variant_id": int64(1_795_401)})
+		}},
+		// The collation matches SALE20 to sale20; Rails would take either.
+		{name: "two codes MySQL can't tell apart", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
+		}},
+		{name: "a code in other letters", reason: "offer code characters", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"code": "SOLDÉ"})
+		}},
+		// applicable? compares with ==, so no sale.
+		{name: "a sale in a currency only the collation matches", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "currency_type": "USD"})
+			}},
+		{name: "a default in a currency only the collation matches", reason: "offer code currency", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			explicit(t, conn, map[string]any{"amount_cents": nil, "amount_percentage": 10, "currency_type": "USD"})
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			c.setup(t, e, testdb.Open(t))
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second)
+		})
+	}
+}
+
 func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 	plan := func(t *testing.T, conn *sql.DB, id int64, recurrence string, deletedAt any) {
 		testdb.Insert(t, conn, "product_installment_plans", map[string]any{"id": id, "link_id": productID, "number_of_installments": 3,
@@ -928,10 +1119,9 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 		{name: "a recurrence the enum doesn't map", reason: "installment plan recurrence", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			plan(t, conn, 1_793_001, "weekly", nil)
 		}},
-		{name: "an installment plan with a local price", reason: "unquotable buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
+		{name: "an installment plan with a local price", reason: "unquotable buyer currency", headers: eurCookie,
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-				e.redis.HSet("buyer_local_currency", "boolean", "true")
-				e.redis.Set("currencies:EUR", "0.92345")
+				e.localEUR("0.92345")
 				plan(t, conn, 1_793_001, "monthly", nil)
 			}},
 		{name: "a preorder", wants: []string{`"eligible_for_installment_plans":false,`, `"preorder":{"release_date":"2026-12-01T10:00:00Z"},`},
@@ -947,10 +1137,9 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 					"created_at": testNow, "updated_at": testNow})
 			}},
 		{name: "a preorder without its link", reason: "preorder link", setup: func(t *testing.T, e *testEnv, conn *sql.DB) { preorder(conn) }},
-		{name: "a preorder with a local price", reason: "unquotable buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
+		{name: "a preorder with a local price", reason: "unquotable buyer currency", headers: eurCookie,
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-				e.redis.HSet("buyer_local_currency", "boolean", "true")
-				e.redis.Set("currencies:EUR", "0.92345")
+				e.localEUR("0.92345")
 				preorder(conn)
 			}},
 		{name: "a waitlist on a draft", wants: []string{`"waitlist":{"recaptcha_site_key":null,"count":null},`},

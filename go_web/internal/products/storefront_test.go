@@ -209,6 +209,10 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"default_offer_code_id": 1})
 			}},
+		{name: "the seller's auto-applied sale", reason: "catalog auto-apply", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				insertOfferCode(t, conn, 1_792_601, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true})
+			}},
 		{name: "a hit with no row", reason: "catalog product missing", hits: bothHits, server: search, searched: 1},
 		{name: "a failed search", reason: "catalog search", server: failing, searched: 1},
 		{name: "no search client", reason: "storefront"},

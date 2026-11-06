@@ -37,8 +37,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
 		// FileSummaryService would summarize each SKU.
 		return "skus", nil
-	case prod.defaultOfferCodeID.Valid:
-		return "default offer code", nil
 	case prod.is(productShouldShowSalesCount) && h.c.Page.Search == nil:
 		return "sales count", nil
 	case !prod.uniquePermalink.Valid:
@@ -62,23 +60,23 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		reason, query string
 		arg           int64
 	}{
-		{"auto-apply offer code", "SELECT 1 FROM offer_codes WHERE offer_codes.user_id = ? AND offer_codes.deleted_at IS NULL" +
-			" AND offer_codes.universal = 1 AND offer_codes.auto_apply = 1", seller.id},
 		{"product sections", "SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id},
 	}
 	// These aren't fallbacks: they spare a lookup on products that have none.
 	gates := []struct {
 		query string
+		arg   int64
 		dest  *bool
 	}{
 		{"SELECT 1 FROM affiliates_links INNER JOIN affiliates ON affiliates.id = affiliates_links.affiliate_id" +
-			" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator'", &p.hasCollaborator},
+			" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator'", prod.id, &p.hasCollaborator},
 		{"SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = ?" +
-			" AND product_installment_plans.deleted_at IS NULL", &p.hasInstallmentPlan},
+			" AND product_installment_plans.deleted_at IS NULL", prod.id, &p.hasInstallmentPlan},
 		{"SELECT 1 FROM public_files WHERE public_files.resource_type = 'Link' AND public_files.resource_id = ?" +
-			" AND public_files.deleted_at IS NULL", &p.hasPublicFiles},
+			" AND public_files.deleted_at IS NULL", prod.id, &p.hasPublicFiles},
 		// bundle_products renders them whether or not the product is still a bundle.
-		{"SELECT 1 FROM bundle_products WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL", &p.hasBundleProducts},
+		{"SELECT 1 FROM bundle_products WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL", prod.id, &p.hasBundleProducts},
+		{"SELECT 1 FROM offer_codes WHERE " + autoApplyCodes, seller.id, &p.hasAutoApplyCode},
 	}
 	// One round trip; each EXISTS stops at its first row.
 	n := len(checks) + len(gates)
@@ -88,7 +86,7 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		exprs, args, dest = append(exprs, "EXISTS("+c.query+")"), append(args, c.arg), append(dest, &found[i])
 	}
 	for _, g := range gates {
-		exprs, args, dest = append(exprs, "EXISTS("+g.query+")"), append(args, prod.id), append(dest, g.dest)
+		exprs, args, dest = append(exprs, "EXISTS("+g.query+")"), append(args, g.arg), append(dest, g.dest)
 	}
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT "+strings.Join(exprs, ", "), args...).Scan(dest...); err != nil {
 		return "", err
