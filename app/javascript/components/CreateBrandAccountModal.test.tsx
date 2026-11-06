@@ -36,7 +36,7 @@ const user = (flags: PayoutFlags): LoggedInUser => ({
     community: { index: false },
     churn: { show: false },
     page: { index: false, create: false },
-    user: { view_store_agent: false, use_store_agent: false },
+    user: { view_store_agent: false },
   },
   promotedNavItems: [],
   lazyLoadOffscreenDiscoverImages: false,

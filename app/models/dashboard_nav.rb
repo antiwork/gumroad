@@ -92,7 +92,6 @@ module DashboardNav
     items << "analytics" if seller.sales.exists?
     items << "affiliates" if seller.direct_affiliates.alive.exists? || seller.affiliate_requests.exists?
     items << "community" if seller.seller_communities.alive.exists?
-    items << "agent" if seller.ai_conversations.exists?
     items << "library" if user.purchases.exists?
     items
   end

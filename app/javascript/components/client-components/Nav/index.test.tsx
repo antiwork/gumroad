@@ -140,7 +140,7 @@ const buildUser = (promotedNavItems: string[]): LoggedInUser => ({
     community: { index: true },
     churn: { show: true },
     page: { index: true, create: true },
-    user: { view_store_agent: true, use_store_agent: true },
+    user: { view_store_agent: true },
   },
 });
 

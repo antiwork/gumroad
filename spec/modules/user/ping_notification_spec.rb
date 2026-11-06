@@ -114,9 +114,9 @@ describe User::PingNotification do
       expect(post_urls).to match_array([[user.notification_endpoint, user.notification_content_type]])
     end
 
-    # Ai::StoreAgentService's system prompt tells creators Ping is sales-only and routes every other
-    # event type elsewhere. If notification_endpoint ever starts firing on another resource, that
-    # advice becomes wrong — redden here rather than in the prompt.
+    # Creator-facing docs and AI agents describe Ping as sales-only and route every other event type
+    # elsewhere. If notification_endpoint ever starts firing on another resource, that advice
+    # becomes wrong — redden here rather than in the docs.
     it "never sends notification_endpoint anything but 'sale'" do
       user = create(:user, notification_endpoint: "http://notification.com")
 
@@ -264,7 +264,7 @@ describe User::PingNotification do
     end
 
     it "reports a same-name unflagged Store Agent subscription as undeliverable" do
-      agent_app = create(:oauth_application, owner: user, name: Ai::StoreAgentApiClient::AGENT_APP_NAME)
+      agent_app = create(:oauth_application, owner: user, name: OauthApplication::FIRST_PARTY_AGENT_APP_NAME)
       subscription = create(:resource_subscription, oauth_application: agent_app, user:)
 
       targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)
@@ -275,7 +275,7 @@ describe User::PingNotification do
     end
 
     it "does not report a flagged Store Agent subscription as undeliverable" do
-      agent_app = create(:oauth_application, owner: user, name: Ai::StoreAgentApiClient::AGENT_APP_NAME, is_first_party_agent_app: true)
+      agent_app = create(:oauth_application, owner: user, name: OauthApplication::FIRST_PARTY_AGENT_APP_NAME, is_first_party_agent_app: true)
       create(:resource_subscription, oauth_application: agent_app, user:)
 
       targets = user.ping_notification_targets(ResourceSubscription::SALE_RESOURCE_NAME)

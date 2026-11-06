@@ -3,34 +3,11 @@
 class McpConnectorsController < ApplicationController
   layout "home"
 
-  CLIENTS = {
-    "muse" => {
-      label: "Muse",
-      pending_review: true,
-      setup: "Add a remote MCP server in your client using the URL below. Choose OAuth when the client requests an authentication method.",
-      availability: "Submitted for review. The Gumroad connector is not yet available in Muse."
-    },
-    "claude" => {
-      label: "Claude",
-      directory_url: "https://claude.ai/directory/gumroad",
-      listing_notice: "Listed in Claude’s connector directory. You can also add it as a custom connector.",
-      connect_label: "Add Gumroad to Claude",
-      setup: "Open Gumroad in Claude’s connector directory and connect it. Or open Settings > Connectors in Claude, choose Add custom connector, and enter the URL below. If you cannot add connectors, ask your organization administrator.",
-      availability: "Add Gumroad from Claude’s connector directory. On Team and Enterprise plans, your organization’s settings control which connectors you can add."
-    },
-    "chatgpt" => {
-      label: "ChatGPT",
-      directory_url: "https://chatgpt.com/plugins/plugin_asdk_app_6adf8e8e7eac8191a9af1b87fdeedb45",
-      directory_name: "plugin directory",
-      listing_notice: "Listed in ChatGPT’s plugin directory.",
-      connect_label: "Add Gumroad to ChatGPT",
-      setup: "Open Gumroad in ChatGPT’s plugin directory and connect it. If you cannot add plugins, ask your workspace administrator.",
-      availability: "Add Gumroad from ChatGPT’s plugin directory."
-    }
-  }.freeze
-
-  HELP_ARTICLE_PATH = "355-connect-ai-assistants-to-gumroad"
-  SETUP_GUIDE_URL = "https://gumroad.com/help/article/#{HELP_ARTICLE_PATH}"
+  # Copy lives in Mcp::ConnectorCopy so the in-app Agent tab shows the same strings. The aliases
+  # keep the views and specs that read McpConnectorsController::CLIENTS unchanged.
+  CLIENTS = Mcp::ConnectorCopy::CLIENTS
+  HELP_ARTICLE_PATH = Mcp::ConnectorCopy::HELP_ARTICLE_PATH
+  SETUP_GUIDE_URL = Mcp::ConnectorCopy::SETUP_GUIDE_URL
 
   before_action :set_client, except: :index
   before_action :set_body_class

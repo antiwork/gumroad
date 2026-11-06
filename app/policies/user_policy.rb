@@ -17,11 +17,4 @@ class UserPolicy < ApplicationPolicy
   def view_store_agent?
     user.id == seller.id || user.role_admin_for?(seller) || user.role_marketing_for?(seller)
   end
-
-  # Whether they can actually talk to the agent. Every mutating/streaming agent endpoint authorizes
-  # against this, so the earned-access bar (User#eligible_for_store_agent?) stays a real boundary
-  # even though the tab renders without it.
-  def use_store_agent?
-    view_store_agent? && seller.eligible_for_store_agent?
-  end
 end

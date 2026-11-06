@@ -76,7 +76,6 @@ type Policies = {
   };
   user: {
     view_store_agent: boolean;
-    use_store_agent: boolean;
   };
 };
 

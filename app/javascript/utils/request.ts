@@ -124,8 +124,7 @@ export const request = async (settings: RequestSettings): Promise<Response> => {
     });
     if (response.status >= 500) throw new ResponseError();
     // We rate limit some endpoints — to prevent brute force attacks (see
-    // config/initializers/rack_attack.rb) and to cap expensive per-user work like the store agent's
-    // LLM calls. Surface the server's own explanation and its Retry-After when it sent them: the
+    // config/initializers/rack_attack.rb) and to cap expensive per-user work. Surface the server's own explanation and its Retry-After when it sent them: the
     // server is the only side that knows which limit was hit, what counts towards it, and how long
     // is left, and replacing that with a fixed generic string is what made a "wait an hour" into an
     // apparent malfunction for sellers.
