@@ -65,6 +65,8 @@ type page struct {
 	*pages.Visit
 	// seller is the subdomain's seller, user_by_domain.
 	seller *user
+	// viewer is the signed-in visitor, nil when signed out.
+	viewer *signedInUser
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
 	cacheWrites        []pendingWrite
 	rates              map[string]rateRead
@@ -86,8 +88,6 @@ type page struct {
 	urlCode string
 	// parent is the page's own view when this one renders a featured section's product within it.
 	parent *view
-	// viewer is the signed-in visitor, nil when signed out.
-	viewer *signedInUser
 }
 
 type fallback = pages.Fallback

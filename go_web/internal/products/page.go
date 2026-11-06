@@ -116,10 +116,6 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if err != nil {
 		return err
 	}
-	if p.viewer != nil && v.discount.listed {
-		// Default codes are evaluated for the buyer, whose purchases they can count.
-		return fallback("signed-in offer code")
-	}
 	// The share blocks in order: the signed-in one follows detected_buyer_currency's, and
 	// LinksController's own MobileAppWebView share comes last.
 	props := shared.Sym("detected_buyer_currency", nullableString(v.detectedCurrency))

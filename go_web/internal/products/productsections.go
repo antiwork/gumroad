@@ -296,9 +296,6 @@ func (h *handler) prepareFeatured(p *page, parent *view, ids []int64) (*featured
 	if err != nil {
 		return nil, err
 	}
-	if fp.viewer != nil && v.discount.listed {
-		return nil, fallback("signed-in offer code")
-	}
 	p.absorb(fp)
 	return &featuredSection{page: fp, prod: featured, view: v}, nil
 }

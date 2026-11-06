@@ -124,7 +124,8 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 			testdb.Insert(t, conn, "affiliates_links", map[string]any{"id": int64(1_796_502), "affiliate_id": int64(1_796_501),
 				"link_id": productID, "created_at": testNow, "updated_at": testNow})
 		}},
-		{name: "a code in the URL", reason: "signed-in offer code", target: "/l/guide/NOPE"},
+		// The code is evaluated for the buyer; one that doesn't exist is invalid for anyone.
+		{name: "a code in the URL", target: "/l/guide/NOPE", wants: []string{`"discount_code":{"valid":false,`}},
 		{name: "staff", reason: "team member", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			mustExec(t, conn, "UPDATE users SET flags = flags | ? WHERE id = ?", int64(1)<<27, buyerID)
 		}},

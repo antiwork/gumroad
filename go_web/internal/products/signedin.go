@@ -103,9 +103,6 @@ func (h *handler) loadViewer(p *page, prod *product) error {
 	case prod.userID == logged.ID:
 		// The seller's own view: can_edit, the waitlist and the editing-shaped sections.
 		return fallback("product's seller")
-	case p.urlCode != "":
-		// The code is evaluated for the buyer, whose purchases it can count.
-		return fallback("signed-in offer code")
 	}
 	if err := h.viewerHasNoPart(p, prod, logged.ID); err != nil {
 		return err
