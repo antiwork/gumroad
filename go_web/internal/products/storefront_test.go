@@ -28,19 +28,35 @@ func TestTheStorefrontCatalog(t *testing.T) {
 	if err := json.Unmarshal([]byte(wantBody), &want); err != nil {
 		t.Fatal(err)
 	}
+	defaultWant := want
 	var searches int
-	var hits string
+	var hits, total string
+	// respond answers a case that searches more than once, by the request's body.
+	var respond func(body map[string]any) (hits, total string)
+	reply := func(w io.Writer, hits, total string) {
+		io.WriteString(w, `{"hits":{"total":{"value":`+total+`,"relation":"eq"},"hits":`+hits+`},"aggregations":`+
+			`{"tags.keyword":{"buckets":[{"key":"design","doc_count":2}]},"filetypes.keyword":{"buckets":[{"key":"pdf","doc_count":2}]}}}`)
+	}
 	search := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		searches++
 		body, _ := io.ReadAll(r.Body)
 		var got any
-		if json.Unmarshal(body, &got) != nil || r.URL.Path != "/products/_search" || !reflect.DeepEqual(got, want) {
+		if json.Unmarshal(body, &got) != nil || r.URL.Path != "/products/_search" {
 			t.Errorf("search %s %s", r.URL.Path, body)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		io.WriteString(w, `{"hits":{"total":{"value":3,"relation":"eq"},"hits":`+hits+`},"aggregations":`+
-			`{"tags.keyword":{"buckets":[{"key":"design","doc_count":2}]},"filetypes.keyword":{"buckets":[{"key":"pdf","doc_count":2}]}}}`)
+		if respond != nil {
+			h, n := respond(got.(map[string]any))
+			reply(w, h, n)
+			return
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("search %s", body)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		reply(w, hits, total)
 	}))
 	defer search.Close()
 	failing := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +95,10 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		name, reason, hits string
 		server             *httptest.Server
 		searched           int
+		// body is the search body, when it isn't the default section's, and total its hit count
+		// when it isn't 3.
+		body, total string
+		respond     func(body map[string]any) (hits, total string)
 		// cachesOnFallback is a search kept although the page goes to Rails.
 		cachesOnFallback bool
 		setup            func(t *testing.T, conn *sql.DB)
@@ -199,9 +219,93 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productArchived, productID)
 			},
 			want: func(*testEnv) string { return `"sections":[],"main_section_index":0` }},
-		{name: "saved profile sections", reason: "storefront sections", server: search,
+		{name: "a saved products section in its page layout", server: search, searched: 1, total: "2",
+			hits: fmt.Sprintf(`[{"_id":"%d","_score":3.5},{"_id":"%d","_score":2.5}]`, productID, other),
+			// Production's body for a page_layout section: its shown products, boosted in order.
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d,%d]}}],`+
+				`"should":[{"term":{"_id":{"value":%d,"boost":2}}},{"term":{"_id":{"value":%d,"boost":1}}}]}},`+
+				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, productID, other, productID, other),
 			setup: func(t *testing.T, conn *sql.DB) {
-				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_501), "seller_id": sellerID,
+				addOther(t, conn, map[string]any{"flags": 0})
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_501), "seller_id": sellerID, "header": "Picks",
+					"json_data": fmt.Sprintf(`{"shown_products":[%d,%d],"default_product_sort":"page_layout","show_filters":true,"add_new_products":true}`,
+						productID, other), "created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1)
+				return fmt.Sprintf(`"sections":[{"id":"%s","header":"Picks","type":"SellerProfileProductsSection","show_filters":true,`+
+					`"default_product_sort":"page_layout","search_results":{"total":1,"tags_data":[{"key":"design","doc_count":2}],`+
+					`"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[],"products":[%s]},"exclude_ids":["%s"]}],"main_section_index":0`,
+					e.ids.Encrypt(1_792_501), card, e.ids.Encrypt(productID))
+			}},
+		{name: "a saved section sorted newest, its header hidden", server: search, searched: 1, total: "1",
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000,1762430000000]}]`, other),
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
+				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				// This product isn't in the section, so the total keeps it.
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_502), "seller_id": sellerID, "header": "Hidden",
+					"flags": 2, "json_data": fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"newest","show_filters":false,"add_new_products":true}`, other),
+					"created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string {
+				return fmt.Sprintf(`"sections":[{"id":"%s","header":null,"type":"SellerProfileProductsSection","show_filters":false,`+
+					`"default_product_sort":"newest","search_results":{"total":1,`, e.ids.Encrypt(1_792_502))
+			}},
+		{name: "an empty saved section", server: search, searched: 1, hits: `[]`, total: "0",
+			// Rails still sends the empty id list and should clause.
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[]}}],`+
+				`"should":[]}},"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID),
+			setup: func(t *testing.T, conn *sql.DB) {
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_504), "seller_id": sellerID,
+					"json_data":  `{"shown_products":[],"default_product_sort":"page_layout","show_filters":false,"add_new_products":true}`,
+					"created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string { return `"search_results":{"total":0,` }},
+		// Two sections share a product: each gets its own search, total and cards.
+		{name: "two saved sections sharing a product", server: search, searched: 2,
+			respond: func(body map[string]any) (string, string) {
+				must := body["query"].(map[string]any)["bool"].(map[string]any)["must"].([]any)
+				if ids := must[2].(map[string]any)["terms"].(map[string]any)["_id"].([]any); len(ids) == 2 {
+					return fmt.Sprintf(`[{"_id":"%d","_score":3.5},{"_id":"%d","_score":2.5}]`, productID, other), "2"
+				}
+				return fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000,1762430000000]}]`, other), "1"
+			},
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				for i, section := range []string{
+					fmt.Sprintf(`{"shown_products":[%d,%d],"default_product_sort":"page_layout","show_filters":false,"add_new_products":true}`, productID, other),
+					fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"newest","show_filters":false,"add_new_products":true}`, other),
+				} {
+					testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_511 + i), "seller_id": sellerID,
+						"header": fmt.Sprint("S", i), "json_data": section, "created_at": testNow, "updated_at": testNow})
+				}
+			},
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1)
+				facets := `"tags_data":[{"key":"design","doc_count":2}],"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[]`
+				return fmt.Sprintf(`"sections":[{"id":"%s","header":"S0","type":"SellerProfileProductsSection","show_filters":false,`+
+					`"default_product_sort":"page_layout","search_results":{"total":1,%s,"products":[%s]},"exclude_ids":["%s"]},`+
+					`{"id":"%s","header":"S1","type":"SellerProfileProductsSection","show_filters":false,`+
+					`"default_product_sort":"newest","search_results":{"total":1,%s,"products":[%s]},"exclude_ids":["%s"]}]`,
+					e.ids.Encrypt(1_792_511), facets, card, e.ids.Encrypt(productID), e.ids.Encrypt(1_792_512), facets, card, e.ids.Encrypt(productID))
+			}},
+		{name: "a section sorted by reviews", reason: "storefront section review sort", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_505), "seller_id": sellerID,
+					"json_data":  `{"shown_products":[1],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":true}`,
+					"created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a section json_data off the schema", reason: "storefront section json_data", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_503), "seller_id": sellerID,
+					"json_data":  `{"shown_products":[],"default_product_sort":"random","show_filters":false,"add_new_products":true}`,
 					"created_at": testNow, "updated_at": testNow})
 			}},
 		{name: "a card this port leaves to Rails", reason: "catalog default offer code", hits: bothHits, server: search, searched: 1,
@@ -218,7 +322,15 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		{name: "no search client", reason: "storefront"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			searches, hits = 0, c.hits
+			searches, hits, want, total, respond = 0, c.hits, defaultWant, c.total, c.respond
+			if total == "" {
+				total = "3"
+			}
+			if c.body != "" {
+				if err := json.Unmarshal([]byte(c.body), &want); err != nil {
+					t.Fatal(err)
+				}
+			}
 			e := newTestEnv(t)
 			conn := testdb.Open(t)
 			conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userProductPageStorefrontEnabled, sellerID)
