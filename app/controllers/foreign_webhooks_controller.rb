@@ -122,9 +122,16 @@ class ForeignWebhooksController < ApplicationController
     # an arbitrary client sent. Anything that is not a JSON object is a rejected sender, not a 500.
     def validate_sns_webhook
       body = request.raw_post
-      return if sns_notification?(body) && Aws::SNS::MessageVerifier.new.authentic?(body)
+      return if sns_notification?(body) && sns_authentic?(body)
 
       render json: { success: false }, status: :bad_request
+    end
+
+    # The verifier only rescues its own errors; a missing SigningCertURL escapes as a URI error.
+    def sns_authentic?(body)
+      Aws::SNS::MessageVerifier.new.authentic?(body)
+    rescue URI::InvalidURIError
+      false
     end
 
     def sns_notification?(body)

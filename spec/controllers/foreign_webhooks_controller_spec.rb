@@ -600,6 +600,17 @@ describe ForeignWebhooksController do
         expect(HandleSnsAwsConfigEventWorker.jobs.size).to eq(0)
       end
     end
+
+    context "when the body has a signature but no SigningCertURL" do
+      it "renders bad request and does not enqueue a job" do
+        body = { "Type" => "Notification", "MessageId" => "x", "Message" => "{}", "SignatureVersion" => "1", "Signature" => "abc" }
+
+        post :sns_aws_config, body: body.to_json, as: :json
+
+        expect(response).to be_a_bad_request
+        expect(HandleSnsAwsConfigEventWorker.jobs.size).to eq(0)
+      end
+    end
   end
 
   private
