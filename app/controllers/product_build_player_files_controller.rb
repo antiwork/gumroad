@@ -13,8 +13,7 @@ class ProductBuildPlayerFilesController < ApplicationController
   include SignedUrlHelper
 
   INDEX = "index.html"
-  DOCUMENT_EXTENSIONS = (ProductBuild::PAGE_EXTENSIONS + %w[svg xml]).freeze
-  SERVED_EXTENSIONS = (DOCUMENT_EXTENSIONS + %w[js mjs cjs css]).freeze
+  SERVED_EXTENSIONS = (ProductBuild::PAGE_EXTENSIONS + %w[svg xml js mjs cjs css]).freeze
   # Shorter than the signed link it points at, so a cached redirect never hands out an expired link.
   CACHE_MAX_AGE = 5.minutes
   # Room for a full save as JSON, where escaping can turn one byte into six (\u0001), plus the batch's
@@ -125,10 +124,10 @@ class ProductBuildPlayerFilesController < ApplicationController
 
       s3 = Aws::S3::Client.new
       head = s3.head_object(bucket: S3_BUCKET, key: s3_key)
-      if DOCUMENT_EXTENSIONS.include?(extension)
-        SecureHeaders.opt_out_of_header(request, :csp)
-        response.set_header("Content-Security-Policy", ProductBuilds::PlayerDocument.content_security_policy(request_origin: request.base_url, cdn_origin:, frame_ancestors:))
-      end
+      # On every file, not just documents: whatever a file turns out to be, opening its URL directly
+      # must never run it on the app's origin.
+      SecureHeaders.opt_out_of_header(request, :csp)
+      response.set_header("Content-Security-Policy", ProductBuilds::PlayerDocument.content_security_policy(request_origin: request.base_url, cdn_origin:, frame_ancestors:))
       # The path holds the content-page token and the grant, so it must not reach the CDN or a game's server.
       response.set_header("Referrer-Policy", "no-referrer")
       page ? serve_page(s3, head) : stream_file(s3, head)
@@ -143,13 +142,13 @@ class ProductBuildPlayerFilesController < ApplicationController
       body = ProductBuilds::PlayerDocument.render(s3.get_object(bucket: S3_BUCKET, key: s3_key).body.read, save_data:, save_url: save_endpoint)
       # The page carries the buyer's save.
       response.set_header("Cache-Control", "private, no-store")
-      send_data body, type: head.content_type, disposition: "inline"
+      send_data body, type: ProductBuild.content_type_for(@path), disposition: "inline"
     end
 
     # Streamed, not read into memory: a bundled script can be as large as the build allows.
     def stream_file(s3, head)
       expires_in CACHE_MAX_AGE, public: false
-      response.set_header("Content-Type", head.content_type)
+      response.set_header("Content-Type", ProductBuild.content_type_for(@path))
       response.set_header("Content-Length", head.content_length.to_s)
       key = s3_key
       self.response_body = Enumerator.new do |chunks|
