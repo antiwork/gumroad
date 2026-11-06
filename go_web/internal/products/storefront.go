@@ -69,6 +69,10 @@ func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnab
 // the sections in the editor's shape.
 func (p *page) ownView() bool { return p.viewer != nil && p.viewer.id == p.seller.id }
 
+// canEdit is LinkPolicy#edit? for the visitor; staff, whom is_team_member? lets in, and team roles
+// on another seller already went to Rails.
+func (p *page) canEdit() bool { return p.ownView() || p.collaborates }
+
 // productsSection is a saved SellerProfileProductsSection, on the profile or a product.
 type productsSection struct {
 	id            int64

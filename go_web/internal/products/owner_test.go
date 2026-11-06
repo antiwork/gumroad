@@ -138,8 +138,8 @@ func TestTheSellersOwnView(t *testing.T) {
 }
 
 // Rails shows the seller and collaborators the custom HTML page of an unpublished product, even a
-// coffee one, which show would redirect: the seller's goes to Rails with anyone signed in, and
-// another visitor's because only Rails can tell a collaborator.
+// coffee one, which show would redirect: the seller's goes to Rails, and so does any other signed-in
+// visitor's on an unpublished product.
 func TestTheSellerPreviewsTheirCustomHTML(t *testing.T) {
 	for _, c := range []struct {
 		name, reason  string

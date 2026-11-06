@@ -122,6 +122,20 @@ func TestTheCustomHTMLWrapperSignedIn(t *testing.T) {
 	if in.Code != http.StatusOK || e.railsHit != nil || csrfMeta.ReplaceAllString(in.Body.String(), "") != csrfMeta.ReplaceAllString(out.Body.String(), "") {
 		t.Errorf("signed in: %d %q", in.Code, in.Header().Get("X-Go-Web-Fallback"))
 	}
+	// Only an accepted, alive collaborator previews.
+	getsWrapper := func(who string) {
+		w := e.get(host, "/l/guide", e.signedIn(collabID, nil))
+		if w.Code != http.StatusOK || csrfMeta.ReplaceAllString(w.Body.String(), "") != csrfMeta.ReplaceAllString(out.Body.String(), "") {
+			t.Errorf("%s: %d %q", who, w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+	}
+	testdb.Insert(t, conn, "collaborator_invitations", map[string]any{"id": int64(1_795_453), "collaborator_id": int64(1_795_451),
+		"created_at": testNow, "updated_at": testNow})
+	getsWrapper("an invited collaborator")
+	mustExec(t, conn, "DELETE FROM collaborator_invitations WHERE id = ?", 1_795_453)
+	mustExec(t, conn, "UPDATE affiliates SET deleted_at = ? WHERE id = ?", testNow, 1_795_451)
+	getsWrapper("a removed collaborator")
+	mustExec(t, conn, "UPDATE affiliates SET deleted_at = NULL WHERE id = ?", 1_795_451)
 	for i, user := range []int64{sellerID, collabID} {
 		headers := e.signedIn(user, nil)
 		// A signature is good for one request.
