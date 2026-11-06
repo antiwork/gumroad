@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_25_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_25_000006) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -196,6 +196,8 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_25_000005) do
     t.datetime "deleted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["seller_id", "deleted_at", "updated_at", "id"], name: "index_ai_conversations_latest_per_seller"
+    t.index ["seller_id"], name: "index_ai_conversations_on_seller_id"
   end
 
   create_table "ai_messages_archived_20261106", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
@@ -205,6 +207,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_25_000005) do
     t.json "metadata"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["ai_conversation_id"], name: "index_ai_messages_on_ai_conversation_id"
   end
 
   create_table "asset_previews", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
