@@ -123,14 +123,9 @@ func (h *handler) loadViewer(p *page, prod *product) error {
 	return nil
 }
 
-// viewerHasNoPart goes to Rails for a product the visitor bought or collaborates on:
-// purchase_info_for_product_page takes their own purchases, in any state, over the browser's,
-// and collaborator_for? opens the editor's props.
+// viewerHasNoPart goes to Rails for a product the visitor collaborates on: collaborator_for?
+// opens the editor's props.
 func (h *handler) viewerHasNoPart(p *page, prod *product, userID int64) error {
-	bought, err := h.exists(p.Ctx, "SELECT 1 FROM purchases WHERE purchases.purchaser_id = ? AND purchases.link_id = ? LIMIT 1", userID, prod.id)
-	if err != nil || bought {
-		return firstErr(err, fallback("signed-in purchase"))
-	}
 	if !p.hasCollaborator {
 		return nil
 	}

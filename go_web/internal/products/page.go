@@ -54,6 +54,8 @@ type PageConfig struct {
 	// OGNamespace is FACEBOOK_OG_NAMESPACE, and RecaptchaSiteKey FollowRecaptcha.site_key.
 	OGNamespace, RecaptchaSiteKey string
 	NewNonce                      func() string
+	// EmailDigestKey is OBFUSCATE_IDS_CIPHER_KEY, which Purchase#email_digest signs with.
+	EmailDigestKey string
 	// GumroadAdminID is GUMROAD_ADMIN_ID, who writes payout setup notes; 0 leaves a page that
 	// reads them to Rails.
 	GumroadAdminID int64
@@ -214,6 +216,7 @@ type view struct {
 	sections []any
 	// wishlists are the signed-in visitor's, as product_props lists them.
 	wishlists []any
+	purchase  any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -350,6 +353,9 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	v.wishlists = h.viewerWishlists(p, prod)
+	if v.purchase, err = h.purchaseProps(p, prod, v); err != nil {
+		return nil, err
+	}
 	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
 		v.recaptchaSiteKey = pc.RecaptchaSiteKey
 	}
