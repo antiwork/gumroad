@@ -77,14 +77,18 @@ func (pc *PageConfig) cdnURL(s string) string {
 // anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
-	// show sends a coffee product to /coffee, which renders it. Of the before_actions left,
-	// prepare_product_page only sets meta tags and set_x_robots_tag_header marks a code;
-	// wanted and native are declined params.
+	// show sends a coffee product to /coffee, which renders it, with params.permit(:wanted,
+	// :native); native is declined. Of the before_actions left, prepare_product_page only sets
+	// meta tags and set_x_robots_tag_header marks a code.
 	if prod.nativeType == "coffee" {
 		if p.urlCode != "" {
 			w.Header().Set("X-Robots-Tag", "noindex")
 		}
-		return h.ctl.Redirect(w, p.Visit, "/coffee")
+		location := "/coffee"
+		if wanted, ok := p.Req.Param("wanted").(string); ok {
+			location += "?" + rails.ToQuery([2]string{"wanted", wanted})
+		}
+		return h.ctl.Redirect(w, p.Visit, location)
 	}
 	if reason, err := h.unportedShape(ctx, p, prod); err != nil || reason != "" {
 		return firstErr(err, fallback(reason))
@@ -103,6 +107,17 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	v, err := h.loadView(ctx, p, prod)
 	if err != nil {
 		return err
+	}
+	if p.wanted && !wantedRendersPage(prod) {
+		location, err := h.wantedCheckout(p, prod, v)
+		if err != nil {
+			return err
+		}
+		// The cover URLs Rails' meta tags cache on the way are left for the page to cache.
+		if p.urlCode != "" {
+			w.Header().Set("X-Robots-Tag", "noindex")
+		}
+		return h.ctl.Redirect(w, p.Visit, location)
 	}
 	nonce := pc.NewNonce()
 	meta, err := h.productMeta(p, prod, v)
@@ -402,7 +417,8 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		v.recaptchaSiteKey = pc.RecaptchaSiteKey
 	}
 	// Past here only the page reads: product_props leaves the sections and the profile alone.
-	if p.parent != nil {
+	// wanted=true renders no page but a pay-what-you-want one.
+	if p.parent != nil || p.wanted && !wantedRendersPage(prod) {
 		return v, nil
 	}
 	if p.iframe {
