@@ -121,7 +121,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 		inertia.Attr{Key: "content", Value: "app-id=" + pc.IOSAppID + ", app-argument=" + downloadURL}))
 
 	shared, err := pc.Shared.SignedOut(p.Ctx, pages.Request{
-		Req: p.Req, Session: p.Session, CSRFToken: p.MaskedCSRFToken(), ScriptNonce: nonce, Title: pageTitle(meta, h.c.Meta.Title),
+		Req: p.Req, Session: p.Session, CSRFToken: p.MaskedCSRFToken(), ScriptNonce: nonce, Title: meta.PageTitle(h.c.Meta.Title),
 	})
 	if errors.Is(err, pages.ErrUnported) {
 		return fallback("shared props")
@@ -272,13 +272,4 @@ func nullableString(s sql.NullString) any {
 		return nil
 	}
 	return s.String
-}
-
-// pageTitle is PageMeta::Base#page_title: the title tag's inner content or content, else the
-// default.
-func pageTitle(meta *inertia.MetaTags, fallback string) string {
-	if t := meta.Title(); rails.Present(t) {
-		return t
-	}
-	return fallback
 }
