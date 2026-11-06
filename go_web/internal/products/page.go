@@ -16,6 +16,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -44,6 +45,8 @@ type PageConfig struct {
 	PublicStorageURL string
 	// Search is EsClient; nil leaves what needs it to Rails.
 	Search *elastic.Client
+	// Sidekiq pushes jobs; nil leaves a page that enqueues one to Rails.
+	Sidekiq *sidekiq.Client
 	// OGNamespace is FACEBOOK_OG_NAMESPACE, and RecaptchaSiteKey FollowRecaptcha.site_key.
 	OGNamespace, RecaptchaSiteKey string
 	NewNonce                      func() string
@@ -111,6 +114,14 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	})
 
 	if !p.DryRun {
+		if p.warmReputation {
+			// Each command has the client's own timeout. A deadline across them could stop between
+			// queue.lua and the handoff, leaving a digest no later push or reaper clears.
+			if _, _, err := pc.Sidekiq.PushUntilExecuted(context.WithoutCancel(ctx), warmReputationJob, p.seller.id); err != nil {
+				web.Logger(p.Req.HTTP).Warn("reputation refresh push failed", "error", err.Error())
+				return fallback("reputation refresh push")
+			}
+		}
 		h.flushCacheWrites(ctx, p)
 	}
 	if err := h.ctl.Finish(w, p.Visit); err != nil {

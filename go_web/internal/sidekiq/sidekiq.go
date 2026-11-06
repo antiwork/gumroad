@@ -24,6 +24,9 @@ type Options struct {
 type Client struct {
 	Redis redis.Cmdable
 	Now   func() time.Time
+	// RedisVersion is the server's INFO redis_version, which PushUntilExecuted passes its
+	// scripts as the gem does (they don't read it); LoadRedisVersion reads it.
+	RedisVersion string
 }
 
 func (c *Client) now() time.Time {
@@ -47,7 +50,7 @@ func (c *Client) Push(ctx context.Context, opts Options, args ...any) (string, e
 // time, or a plain push when that time is not in the future.
 func (c *Client) PushIn(ctx context.Context, opts Options, interval time.Duration, args ...any) (string, error) {
 	now := c.now()
-	at := float64(now.UnixMicro())/1e6 + interval.Seconds()
+	at := epochF(now) + interval.Seconds()
 	jid, payload, err := payload(opts, args, now, true, interval > 0)
 	if err != nil {
 		return "", err
@@ -77,33 +80,47 @@ func Payload(opts Options, args []any, now time.Time) (string, []byte, error) {
 // payload also builds perform_in's, whose item puts "class" before "args" and whose
 // scheduled push drops "enqueued_at".
 func payload(opts Options, args []any, now time.Time, classFirst, scheduled bool) (string, []byte, error) {
+	jid, job, _, err := normalizeItem(opts, args, now, classFirst, "")
+	if err != nil {
+		return "", nil, err
+	}
+	if !scheduled {
+		job = append(job, Pair{"enqueued_at", epochF(now)})
+	}
+	out, err := Marshal(job)
+	return jid, out, err
+}
+
+// normalizeItem is the item normalize_item leaves for the client middleware, with a worker's
+// sidekiq-unique-jobs lock type when it has one, and the args it holds.
+func normalizeItem(opts Options, args []any, now time.Time, classFirst bool, lock string) (string, Hash, []any, error) {
 	if opts.Class == "" || opts.Queue == "" {
-		return "", nil, fmt.Errorf("sidekiq: job needs a class and a queue")
+		return "", nil, nil, fmt.Errorf("sidekiq: job needs a class and a queue")
 	}
 	switch opts.Retry.(type) {
 	case int, bool:
 	default:
-		return "", nil, fmt.Errorf("sidekiq: retry must be an int or a bool")
+		return "", nil, nil, fmt.Errorf("sidekiq: retry must be an int or a bool")
 	}
 	if args == nil {
 		args = []any{}
 	}
 	raw := make([]byte, 12)
 	if _, err := rand.Read(raw); err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	jid := hex.EncodeToString(raw)
-	at := float64(now.UnixMicro()) / 1e6
 	job := Hash{{"retry", opts.Retry}, {"queue", opts.Queue}, {"backtrace", true}}
+	if lock != "" {
+		job = append(job, Pair{"lock", lock})
+	}
 	if classFirst {
 		job = append(job, Pair{"class", opts.Class}, Pair{"args", args})
 	} else {
 		job = append(job, Pair{"args", args}, Pair{"class", opts.Class})
 	}
-	job = append(job, Pair{"jid", jid}, Pair{"created_at", at})
-	if !scheduled {
-		job = append(job, Pair{"enqueued_at", at})
-	}
-	out, err := Marshal(job)
-	return jid, out, err
+	return jid, append(job, Pair{"jid", jid}, Pair{"created_at", epochF(now)}), args, nil
 }
+
+// epochF is Time#to_f to the microsecond, as the payload's timestamps carry it.
+func epochF(now time.Time) float64 { return float64(now.UnixMicro()) / 1e6 }
