@@ -18,6 +18,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -43,6 +44,9 @@ type PageConfig struct {
 	// prefix, "https://<bucket>.s3.amazonaws.com/".
 	CDNMap           [][2]string
 	PublicStorageURL string
+	// CalendarHref is vite_asset_path("components/ui/Calendar.tsx"), "" when the manifest
+	// lacks it.
+	CalendarHref string
 	// Search is EsClient; nil leaves what needs it to Rails.
 	Search *elastic.Client
 	// Sidekiq pushes jobs; nil leaves a page that enqueues one to Rails.
@@ -50,6 +54,9 @@ type PageConfig struct {
 	// OGNamespace is FACEBOOK_OG_NAMESPACE, and RecaptchaSiteKey FollowRecaptcha.site_key.
 	OGNamespace, RecaptchaSiteKey string
 	NewNonce                      func() string
+	// CustomHTMLAnalytics is vite_typescript_tag("custom_html_analytics"); nil leaves a custom
+	// HTML product page to Rails.
+	CustomHTMLAnalytics *vite.Tags
 }
 
 // cdnURL is cdn_url_for.
@@ -101,10 +108,8 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	component := productComponent
 	if storefront(p) {
 		component = storefrontComponent
-		props.Sym("sections", v.catalog).Sym("main_section_index", int64(0))
-	} else {
-		props.Sym("sections", []any{}).Sym("main_section_index", v.mainSectionIndex)
 	}
+	props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
 
 	// as_embed is a declined param.
 	body := pc.Layout.Render(inertia.Document{
@@ -128,7 +133,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		return err
 	}
 	hdr := w.Header()
-	if !prod.alive() {
+	if !prod.alive() || p.urlCode != "" {
 		hdr.Set("X-Robots-Tag", "noindex")
 	}
 	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
@@ -184,8 +189,8 @@ type view struct {
 	discount        *offerDiscount
 	// ppp is ppp_details.
 	ppp *pppDetails
-	// catalog is the storefront's sections.
-	catalog []any
+	// sections are the product's own, or the storefront's catalog when they render none.
+	sections []any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -254,7 +259,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	if v.localBuyer != nil {
-		if v.currency, err = h.currencyDisplayFor(p, *v.localBuyer, prod.productCurrency(), displayed); err != nil {
+		if v.currency, err = h.currencyDisplayFor(p, prod, p.hasInstallmentPlan, *v.localBuyer, displayed); err != nil {
 			return nil, err
 		}
 	}
@@ -262,12 +267,6 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// buyer_local_price_props converts the original through the shown Float rate.
 		original := localPriceCents(*v.priceCents, prod.productCurrency(), c.buyer, shortestRat(c.rate))
 		c.originalLocalCents = &original
-	}
-	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled) ||
-		prod.is(productIsInPreorderState) || p.hasInstallmentPlan) {
-		// buyer_currency_unquotable_product? and the India mandate check can only turn a
-		// local price off.
-		return nil, fallback("unquotable buyer currency")
 	}
 	if v.installmentPlan, err = h.installmentPlanProps(ctx, p, prod); err != nil {
 		return nil, err
@@ -347,18 +346,27 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if err := h.loadCustomStyles(ctx, p, v); err != nil {
 		return nil, err
 	}
+	sections, err := h.listProductSections(p, prod, v)
+	if err != nil {
+		return nil, err
+	}
 	// Last: Elasticsearch searches are the costliest reads, and anything above may still fall back.
 	if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
 		return nil, err
 	}
-	if storefront(p) {
-		if v.catalog, err = h.loadCatalog(p, prod, v.localBuyer); err != nil {
-			return nil, err
-		}
+	if v.sections, err = h.renderProductSections(p, sections, v.localBuyer); err != nil {
+		return nil, err
 	}
 	v.mainSectionIndex = int64(0)
 	if raw, ok := v.productJSON.present("main_section_index"); ok {
 		v.mainSectionIndex = raw
+	}
+	// show_storefront_catalog?
+	if storefront(p) && len(v.sections) == 0 {
+		if v.sections, err = h.loadCatalog(p, prod, v.localBuyer); err != nil {
+			return nil, err
+		}
+		v.mainSectionIndex = int64(0)
 	}
 	return v, nil
 }

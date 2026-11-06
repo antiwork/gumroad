@@ -20,31 +20,41 @@ func (h *handler) exists(ctx context.Context, query string, args ...any) (bool, 
 	return err == nil, err
 }
 
+// unportedProductShape is the product itself, as the page and the custom HTML wrapper both
+// read it.
+func unportedProductShape(prod *product) string {
+	membership := unportedMembership(prod)
+	switch {
+	case prod.nativeType == "coffee":
+		return "coffee product"
+	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
+		return "purchase type"
+	case membership != "":
+		return membership
+	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
+		// FileSummaryService would summarize each SKU.
+		return "skus"
+	case !prod.uniquePermalink.Valid:
+		return "no unique permalink"
+	}
+	return ""
+}
+
 // unportedShape is a product this port leaves to Rails: a check per part of the page whose
 // Rails path it doesn't follow. Each runs before anything is written.
 func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (string, error) {
 	seller := p.seller
-	membership := unportedMembership(prod)
 	switch {
-	case prod.nativeType == "coffee":
-		return "coffee product", nil
+	case prod.nativeType == "call" && h.c.Page.CalendarHref == "":
+		// The calendar preload's vite_asset_path raises.
+		return "call calendar asset", nil
 	case seller.is(userProductPageStorefrontEnabled) && h.c.Page.Search == nil:
 		return "storefront", nil
-	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
-		return "purchase type", nil
-	case membership != "":
-		return membership, nil
-	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
-		// FileSummaryService would summarize each SKU.
-		return "skus", nil
 	case prod.is(productShouldShowSalesCount) && h.c.Page.Search == nil:
 		return "sales count", nil
-	case !prod.uniquePermalink.Valid:
-		return "no unique permalink", nil
 	}
-	switch prod.nativeType {
-	case "call", "commission":
-		return "native type " + prod.nativeType, nil
+	if reason := unportedProductShape(prod); reason != "" {
+		return reason, nil
 	}
 	// account_level_refund_policy_enabled?: the seller's policy shows unless it's off for all.
 	if seller.is(userRefundPolicyEnabled) {
@@ -55,12 +65,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		if err != nil {
 			return "", err
 		}
-	}
-	checks := []struct {
-		reason, query string
-		arg           int64
-	}{
-		{"product sections", "SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id},
 	}
 	// These aren't fallbacks: they spare a lookup on products that have none.
 	gates := []struct {
@@ -77,24 +81,15 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		// bundle_products renders them whether or not the product is still a bundle.
 		{"SELECT 1 FROM bundle_products WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL", prod.id, &p.hasBundleProducts},
 		{"SELECT 1 FROM offer_codes WHERE " + autoApplyCodes, seller.id, &p.hasAutoApplyCode},
+		{"SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id, &p.hasProductSections},
 	}
 	// One round trip; each EXISTS stops at its first row.
-	n := len(checks) + len(gates)
-	exprs, args, dest := make([]string, 0, n), make([]any, 0, n), make([]any, 0, n)
-	found := make([]bool, len(checks))
-	for i, c := range checks {
-		exprs, args, dest = append(exprs, "EXISTS("+c.query+")"), append(args, c.arg), append(dest, &found[i])
-	}
+	exprs, args, dest := make([]string, 0, len(gates)), make([]any, 0, len(gates)), make([]any, 0, len(gates))
 	for _, g := range gates {
 		exprs, args, dest = append(exprs, "EXISTS("+g.query+")"), append(args, g.arg), append(dest, g.dest)
 	}
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT "+strings.Join(exprs, ", "), args...).Scan(dest...); err != nil {
 		return "", err
-	}
-	for i, c := range checks {
-		if found[i] {
-			return c.reason, nil
-		}
 	}
 	// purchase_info_for_product_page finds a purchase made with this browser.
 	// An empty cookie isn't re-minted, and Rails looks up "" too.

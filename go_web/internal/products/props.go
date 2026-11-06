@@ -225,8 +225,8 @@ func nameOrUsername(u *user) string {
 	return sellerUsername(u)
 }
 
-// sectionsProps is ProfileSectionsPresenter#props for the product's own sections, which
-// unportedShape has checked are none.
+// sectionsProps is ProfileSectionsPresenter#props for the product's own sections. render fills
+// in the sections; the placeholder keeps the key where Rails has it.
 func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 	seller := p.seller
 	// seller.name || seller.username: an empty name is still a name.

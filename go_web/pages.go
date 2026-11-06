@@ -188,6 +188,20 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		}
 		cancel()
 	}
+	var customHTML *vite.Tags
+	manifest := b.pages.Layout.Manifest()
+	if tags, err := manifest.TypescriptTag("custom_html_analytics"); err != nil {
+		d.logger.Warn("custom HTML product pages left to Rails", "reason", err.Error())
+	} else if _, err := manifest.EntrypointStylesheet("custom_html_analytics"); err == nil {
+		// The wrapper's vite_typescript_tag renders style tags, which TypescriptTag leaves out.
+		d.logger.Warn("custom HTML product pages left to Rails", "reason", "custom_html_analytics has stylesheets")
+	} else {
+		customHTML = &tags
+	}
+	calendar, err := manifest.AssetPath("components/ui/Calendar.tsx")
+	if err != nil {
+		d.logger.Warn("call product pages left to Rails", "reason", err.Error())
+	}
 	return &products.PageConfig{
 		Layout:  b.pages.Layout,
 		CSP:     b.pages.CSP,
@@ -203,11 +217,14 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 			{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
 		},
 		PublicStorageURL: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
+		CalendarHref:     calendar,
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,
 		Search:           search,
 		Sidekiq:          jobs,
 		NewNonce:         newNonce,
+		// Its tags are the same on every render.
+		CustomHTMLAnalytics: customHTML,
 	}, nil
 }
 

@@ -263,6 +263,11 @@ func RenderInertiaJSON(w http.ResponseWriter, req *Request, body string) {
 	writeBody(w, req, http.StatusOK, JSONContentType, body, "", false, false)
 }
 
+// RenderHTML is `render html:`.
+func RenderHTML(w http.ResponseWriter, req *Request, body string) {
+	writeBody(w, req, http.StatusOK, web.TextHTML, body, "", true, false)
+}
+
 // RenderInertiaHTML is inertia_rails' first visit: the page through its layout, with the
 // Vary: X-Inertia the renderer sets on every response.
 func RenderInertiaHTML(w http.ResponseWriter, req *Request, body string) {

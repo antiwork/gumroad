@@ -59,6 +59,11 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 			}
 		}
 		target := web.Protocol(req.HTTP) + req.Host + "/l/" + web.EscapeSegment(permalink)
+		if p.urlCode != "" {
+			target += "/" + web.EscapeSegment(p.urlCode)
+			// set_x_robots_tag_header runs before check_if_needs_redirect.
+			w.Header().Set("X-Robots-Tag", "noindex")
+		}
 		if rawQuery != "" {
 			target += "?" + rawQuery
 		}
@@ -74,8 +79,14 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	if present, err := customHTMLPresent(ctx, conn, prod.id); err != nil {
 		return err
 	} else if present && (prod.alive() || prod.acceptsWaitlistSignups()) {
-		if on, err := h.flag(ctx, "custom_html_pages", p.seller.id); err != nil || on {
-			return firstErr(err, fallback("custom html"))
+		on, err := h.flag(ctx, "custom_html_pages", p.seller.id)
+		switch {
+		case err != nil:
+			return err
+		case on && !prod.alive():
+			return fallback("custom html waitlist")
+		case on:
+			return h.renderCustomHTML(w, p, prod)
 		}
 	}
 	return h.render(w, p, prod)

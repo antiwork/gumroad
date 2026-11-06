@@ -1,4 +1,10 @@
 {
+  "components/ui/Calendar.tsx": {
+    "file": "assets/Calendar-abc123.js",
+    "name": "Calendar",
+    "src": "components/ui/Calendar.tsx",
+    "isDynamicEntry": true
+  },
   "entrypoints/base.ts": {
     "file": "assets/entrypoints/base.ts-Ckth7Qha.js",
     "name": "entrypoints/base.ts",

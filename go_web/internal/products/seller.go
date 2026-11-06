@@ -37,6 +37,23 @@ func (h *handler) flag(ctx context.Context, name string, userID int64) (bool, er
 	return on, err
 }
 
+// pageFlag is flag for the page's seller, read once per page: Flipper's memoizer holds a flag
+// for the whole request in Rails, so cards on one page never see it flip.
+func (h *handler) pageFlag(p *page, name string) (bool, error) {
+	if on, ok := p.flags[name]; ok {
+		return on, nil
+	}
+	on, err := h.flag(p.Ctx, name, p.seller.id)
+	if err != nil {
+		return false, err
+	}
+	if p.flags == nil {
+		p.flags = map[string]bool{}
+	}
+	p.flags[name] = on
+	return on, nil
+}
+
 // warmReputationJob is WarmSellerReputationSummaryJob's sidekiq_options.
 var warmReputationJob = sidekiq.Options{Class: "WarmSellerReputationSummaryJob", Queue: "low", Retry: 1}
 
@@ -229,14 +246,14 @@ func recaptchaRequired(seller *user, siteKey string) bool {
 	return rails.Present(siteKey)
 }
 
-// loadCustomStyles is SellerProfile#custom_styles, compiled here rather than read from
-// Rails.cache, whose namespace is Rails' own deploy's, and whether the font preload is set.
-func (h *handler) loadCustomStyles(ctx context.Context, p *page, v *view) error {
+// sellerProfile is User#seller_profile's styling columns, all NULL for the profile it builds
+// when there's no row.
+func (h *handler) sellerProfile(ctx context.Context, sellerID int64) (customstyles.Profile, error) {
 	var hl, bg, font, radius, hover sql.NullString
 	err := h.c.DB.QueryRowContext(ctx, "SELECT highlight_color, background_color, font, border_radius, button_hover FROM seller_profiles"+
-		" WHERE seller_id = ? LIMIT 1", p.seller.id).Scan(&hl, &bg, &font, &radius, &hover)
+		" WHERE seller_id = ? LIMIT 1", sellerID).Scan(&hl, &bg, &font, &radius, &hover)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+		return customstyles.Profile{}, err
 	}
 	ptr := func(s sql.NullString) *string {
 		if !s.Valid {
@@ -244,9 +261,18 @@ func (h *handler) loadCustomStyles(ctx context.Context, p *page, v *view) error 
 		}
 		return &s.String
 	}
-	profile := customstyles.Profile{HighlightColor: ptr(hl), BackgroundColor: ptr(bg), Font: ptr(font), BorderRadius: ptr(radius), ButtonHover: ptr(hover)}
+	return customstyles.Profile{HighlightColor: ptr(hl), BackgroundColor: ptr(bg), Font: ptr(font), BorderRadius: ptr(radius), ButtonHover: ptr(hover)}, nil
+}
+
+// loadCustomStyles is SellerProfile#custom_styles, compiled here rather than read from
+// Rails.cache, whose namespace is Rails' own deploy's, and whether the font preload is set.
+func (h *handler) loadCustomStyles(ctx context.Context, p *page, v *view) error {
+	profile, err := h.sellerProfile(ctx, p.seller.id)
+	if err != nil {
+		return err
+	}
 	// after_initialize's default font.
-	v.fontPreload = !font.Valid || font.String == "ABC Favorit"
+	v.fontPreload = profile.Font == nil || *profile.Font == "ABC Favorit"
 	css, err := customstyles.CSS(profile)
 	if errors.Is(err, customstyles.ErrUnported) {
 		return fallback("custom styles")

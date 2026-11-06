@@ -20,10 +20,12 @@ const (
 	productComponent    = "Products/Show"
 	storefrontComponent = "Products/Profile/Show"
 	// ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID and _TYPE, and ProductSortKey::PAGE_LAYOUT.
-	defaultProductsSectionID   = "default-products"
-	profileProductsSectionType = "SellerProfileProductsSection"
-	pageLayoutSort             = "page_layout"
-	catalogPageSize            = 9
+	defaultProductsSectionID    = "default-products"
+	profileProductsSectionType  = "SellerProfileProductsSection"
+	profileSubscribeSectionType = "SellerProfileSubscribeSection"
+	profileRichTextSectionType  = "SellerProfileRichTextSection"
+	pageLayoutSort              = "page_layout"
+	catalogPageSize             = 9
 	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
 	catalogTagFacetSize      = 200
 	catalogFiletypeFacetSize = 8
@@ -53,11 +55,11 @@ func bucketsProps(buckets []catalogBucket) []any {
 	return out
 }
 
-// storefront is show_storefront_catalog? for a signed-out visitor, whose page has no
-// sections of its own (unportedShape) and isn't the Discover layout (a declined param).
+// storefront is whether the seller's pages render as Products/Profile/Show for a signed-out
+// visitor, off the Discover layout (a declined param).
 func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) }
 
-// productsSection is a saved SellerProfileProductsSection on the seller's profile.
+// productsSection is a saved SellerProfileProductsSection, on the profile or a product.
 type productsSection struct {
 	id            int64
 	header        any
@@ -74,8 +76,7 @@ const sectionHiddenHeader = 1 << 1
 // savedProductsSections is seller_profile_products_sections.on_profile, in id order as the
 // seller_id index returns them. json_data off the section schema goes to Rails.
 func (h *handler) savedProductsSections(ctx context.Context, sellerID int64) ([]*productsSection, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT seller_profile_sections.id, seller_profile_sections.header,"+
-		" seller_profile_sections.flags, seller_profile_sections.json_data, seller_profile_sections.updated_at"+
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+sectionColumns+
 		" FROM seller_profile_sections WHERE seller_profile_sections.seller_id = ? AND seller_profile_sections.type = ?"+
 		" AND seller_profile_sections.product_id IS NULL ORDER BY seller_profile_sections.id", sellerID, profileProductsSectionType)
 	if err != nil {
@@ -84,42 +85,69 @@ func (h *handler) savedProductsSections(ctx context.Context, sellerID int64) ([]
 	defer rows.Close()
 	var out []*productsSection
 	for rows.Next() {
-		var s productsSection
-		var header, data sql.NullString
-		var flags int64
-		var updatedAt db.NullTime
-		if err := rows.Scan(&s.id, &header, &flags, &data, &updatedAt); err != nil {
+		var r sectionRow
+		if err := rows.Scan(r.dest()...); err != nil {
 			return nil, err
 		}
-		j, ok := parseJSONData(data)
-		sort, sortOK := j.get("default_product_sort").(string)
-		showFilters, filtersOK := j.get("show_filters").(bool)
-		shown, shownOK := j.get("shown_products").([]any)
-		if _, known := sectionSortClauses[sort]; !ok || !sortOK || !known || !filtersOK || !shownOK {
-			return nil, fallback("storefront section json_data")
+		s, err := r.productsSection()
+		if err != nil {
+			return nil, err
 		}
-		if sort == "highest_rated" || sort == "most_reviewed" {
-			// A review moves these orders without touching links.updated_at, so go_web's cache and
-			// Rails' can each hold a different one.
-			return nil, fallback("storefront section review sort")
-		}
-		s.shownProducts = make([]int64, 0, len(shown))
-		for _, v := range shown {
-			n, _ := v.(json.Number)
-			id, ok := jsonInt(n)
-			if !ok {
-				return nil, fallback("storefront section json_data")
-			}
-			s.shownProducts = append(s.shownProducts, id)
-		}
-		s.sort, s.showFilters = sort, showFilters
-		if flags&sectionHiddenHeader == 0 {
-			s.header = nullString(header)
-		}
-		s.version = itoa(s.id) + "-" + updatedAt.Time.UTC().Format(time.RFC3339Nano)
-		out = append(out, &s)
+		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+// sectionRow is a seller_profile_sections row.
+type sectionRow struct {
+	id           int64
+	typ          string
+	header, data sql.NullString
+	flags        int64
+	updatedAt    db.NullTime
+}
+
+const sectionColumns = "seller_profile_sections.id, seller_profile_sections.type, seller_profile_sections.header," +
+	" seller_profile_sections.flags, seller_profile_sections.json_data, seller_profile_sections.updated_at"
+
+func (r *sectionRow) dest() []any {
+	return []any{&r.id, &r.typ, &r.header, &r.flags, &r.data, &r.updatedAt}
+}
+
+// shownHeader is cached_sections' header: nil when hide_header is set.
+func (r *sectionRow) shownHeader() any {
+	if r.flags&sectionHiddenHeader != 0 {
+		return nil
+	}
+	return nullString(r.header)
+}
+
+// productsSection reads a products section's json_data; anything off its schema goes to Rails.
+func (r *sectionRow) productsSection() (*productsSection, error) {
+	j, ok := parseJSONData(r.data)
+	sort, sortOK := j.get("default_product_sort").(string)
+	showFilters, filtersOK := j.get("show_filters").(bool)
+	shown, shownOK := j.get("shown_products").([]any)
+	if _, known := sectionSortClauses[sort]; !ok || !sortOK || !known || !filtersOK || !shownOK {
+		return nil, fallback("products section json_data")
+	}
+	if sort == "highest_rated" || sort == "most_reviewed" {
+		// A review moves these orders without touching links.updated_at, so go_web's cache and
+		// Rails' can each hold a different one.
+		return nil, fallback("products section review sort")
+	}
+	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters,
+		shownProducts: make([]int64, 0, len(shown))}
+	for _, v := range shown {
+		n, _ := v.(json.Number)
+		id, ok := jsonInt(n)
+		if !ok {
+			return nil, fallback("products section json_data")
+		}
+		s.shownProducts = append(s.shownProducts, id)
+	}
+	s.version = itoa(r.id) + "-" + r.updatedAt.Time.UTC().Format(time.RFC3339Nano)
+	return s, nil
 }
 
 // loadCatalog is ProductPresenter#product_page_props' storefront sections:
@@ -142,6 +170,13 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 		// nil is the virtual default-products section.
 		sections = []*productsSection{nil}
 	}
+	return h.productsSectionsProps(p, prod, sections, buyer)
+}
+
+// productsSectionsProps is section_props for products sections, with omit_product unless omit
+// is nil.
+func (h *handler) productsSectionsProps(p *page, omit *product, sections []*productsSection, buyer *string) ([]any, error) {
+	seller := p.seller
 	if p.hasAutoApplyCode {
 		// Cards price through the seller's auto-applied code and label its sale.
 		return nil, fallback("catalog auto-apply")
@@ -179,7 +214,7 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 		total, omitted := search.Total, false
 		var kept []*card
 		for _, id := range search.IDs {
-			if id == prod.id {
+			if omit != nil && id == omit.id {
 				omitted = true
 				continue
 			}
@@ -187,12 +222,14 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 		}
 		// omit_product: one fewer whether it was on the page or only counted beyond it, when the
 		// section's search counted it.
-		counted := prod.userID == seller.id
-		if s != nil {
-			counted = slices.Contains(s.shownProducts, prod.id)
-		}
-		if omitted || prod.alive() && !prod.is(productArchived) && counted {
-			total--
+		if omit != nil {
+			counted := omit.userID == seller.id
+			if s != nil {
+				counted = slices.Contains(s.shownProducts, omit.id)
+			}
+			if omitted || omit.alive() && !omit.is(productArchived) && counted {
+				total--
+			}
 		}
 		shown := make([]*card, 0, len(kept))
 		for _, c := range kept {
@@ -229,35 +266,40 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 			}
 			products = append(products, props)
 		}
-		out = append(out, h.catalogSection(p, prod, s, searches[i], built[i].total, products))
+		section := h.catalogSection(p, s, searches[i], built[i].total, products)
+		if omit != nil {
+			section.Sym("exclude_ids", []any{h.c.IDs.Encrypt(omit.id)})
+		}
+		out = append(out, section)
 	}
 	return out, nil
 }
 
 // catalogSection is section_props' hash for a saved products section, or for the virtual one
 // when s is nil.
-func (h *handler) catalogSection(p *page, prod *product, s *productsSection, search *catalogSearch, total int64, products []any) *rails.RHash {
+func (h *handler) catalogSection(p *page, s *productsSection, search *catalogSearch, total int64, products []any) *rails.RHash {
 	results := rails.NewRHash().
 		Sym("total", total).
 		Sym("tags_data", bucketsProps(search.Tags)).
 		Sym("filetypes_data", bucketsProps(search.Filetypes)).
 		Sym("taxonomy_attributes_data", []any{}).
 		Sym("products", products)
-	section := rails.NewRHash()
+	var section *rails.RHash
 	if s == nil {
-		section.Sym("id", defaultProductsSectionID).
-			Sym("header", "More from "+nameOrUsername(p.seller)).
-			Sym("type", profileProductsSectionType).
+		section = sectionHead(defaultProductsSectionID, "More from "+nameOrUsername(p.seller), profileProductsSectionType).
 			Sym("show_filters", false).
 			Sym("default_product_sort", pageLayoutSort)
 	} else {
-		section.Sym("id", h.c.IDs.Encrypt(s.id)).
-			Sym("header", s.header).
-			Sym("type", profileProductsSectionType).
+		section = sectionHead(h.c.IDs.Encrypt(s.id), s.header, profileProductsSectionType).
 			Sym("show_filters", s.showFilters).
 			Sym("default_product_sort", s.sort)
 	}
-	return section.Sym("search_results", results).Sym("exclude_ids", []any{h.c.IDs.Encrypt(prod.id)})
+	return section.Sym("search_results", results)
+}
+
+// sectionHead is the keys cached_sections starts every section with.
+func sectionHead(id string, header any, typ string) *rails.RHash {
+	return rails.NewRHash().Sym("id", id).Sym("header", header).Sym("type", typ)
 }
 
 // cachedCatalog is cached_sections' or cached_default_products_section's searches, under one key
@@ -322,6 +364,9 @@ func desc(field string) map[string]any { return map[string]any{field: map[string
 // searchCatalog is Link.filetype_options' and Link.search_options' searches for a section. They
 // share a query, so one request carries both facets.
 func (h *handler) searchCatalog(p *page, section *productsSection) (*catalogSearch, error) {
+	if h.c.Page.Search == nil {
+		return nil, fallback("products section search")
+	}
 	terms := func(field string, size int) map[string]any {
 		return map[string]any{"terms": map[string]any{"field": field, "size": size}}
 	}
@@ -413,6 +458,8 @@ type card struct {
 	thumbnails           []thumbnailRow
 	hasTier, hasPlan     bool
 	thumbnailURL         any
+	// tiers are a tiered membership's preloaded tiers, with their alive buy prices.
+	tiers []*variantOption
 }
 
 // loadCards is section_props' Link.find of the hits, in hit order, for the shapes whose card
@@ -444,7 +491,8 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 			return nil, fallback("catalog " + reason)
 		}
 		var ok bool
-		if c.defaultRecurrence, ok = c.prod.subscriptionDurationName(); !ok {
+		if c.defaultRecurrence, ok = c.prod.subscriptionDurationName(); !ok || c.defaultRecurrence == "" && c.prod.is(productIsTieredMembership) {
+			// lowest_tier_price would compare the tier prices with a nil duration.
 			return nil, fallback("catalog subscription duration")
 		}
 		byID[c.prod.id] = c
@@ -476,10 +524,55 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	if err != nil {
 		return nil, err
 	}
+	tiers, err := h.cardTiers(p, cards)
+	if err != nil {
+		return nil, err
+	}
 	for id, c := range byID {
-		c.prices, c.stat, c.minVariantDifference, c.thumbnails = prices[id], stats[id], floors[id], thumbnails[id]
+		c.prices, c.stat, c.minVariantDifference, c.thumbnails, c.tiers = prices[id], stats[id], floors[id], thumbnails[id], tiers[id]
 	}
 	return cards, nil
+}
+
+// cardTiers is the tiers preload for the tiered memberships among the cards: each alive
+// Variant in an alive Tier category, with its alive buy prices and whether it's closed.
+func (h *handler) cardTiers(p *page, cards []*card) (map[int64][]*variantOption, error) {
+	var ids []int64
+	for _, c := range cards {
+		if c.prod.is(productIsTieredMembership) {
+			ids = append(ids, c.prod.id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	out := map[int64][]*variantOption{}
+	rows, err := h.c.DB.QueryContext(p.Ctx, "SELECT variant_categories.link_id, base_variants.id, base_variants.flags,"+
+		" base_variants.customizable_price FROM base_variants INNER JOIN variant_categories ON variant_categories.id = base_variants.variant_category_id"+
+		" WHERE base_variants.type = 'Variant' AND base_variants.deleted_at IS NULL AND variant_categories.deleted_at IS NULL"+
+		" AND variant_categories.title = 'Tier' AND variant_categories.link_id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
+	if err != nil {
+		return nil, err
+	}
+	var all []*variantOption
+	for rows.Next() {
+		var productID int64
+		o := &variantOption{}
+		if err := rows.Scan(&productID, &o.id, &o.flags, &o.customizablePrice); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		out[productID] = append(out[productID], o)
+		all = append(all, o)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := h.loadTierPrices(p.Ctx, all); err != nil {
+		return nil, err
+	}
+	return out, h.markClosedTiers(p.Ctx, p.seller.id, all)
 }
 
 // variantPriceFloors is lowest_variant_price_difference_cents over each product's preloaded
@@ -534,8 +627,6 @@ func unportedCard(sellerID int64, prod *product, hasSku bool) string {
 		return "seller"
 	case !prod.purchaseType.Valid || prod.purchaseType.Int64 != purchaseTypeBuyOnly:
 		return "rental"
-	case prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership):
-		return "membership"
 	case prod.defaultOfferCodeID.Valid:
 		return "default offer code"
 	case hasSku:
@@ -563,15 +654,30 @@ func (h *handler) cardSoldOut(p *page, c *card) (bool, error) {
 // description, and a product URL on this subdomain with layout=profile.
 func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, error) {
 	prod := c.prod
-	last, agreed := lastPrice(buyPrices(prod, c.prices))
-	if !agreed {
-		return nil, fallback("catalog price")
-	}
+	// display_price_cents(for_default_duration: true).
 	var price int64
-	if last != nil {
-		price = *last
+	pwyw := prod.customizablePrice.Bool
+	if prod.is(productIsTieredMembership) {
+		offered := offeredTiers(c.tiers)
+		price = lowestTierPriceCents(offered, &c.defaultRecurrence)
+		// has_customizable_price_option?
+		pwyw = slices.ContainsFunc(offered, func(o *variantOption) bool { return o.customizablePrice.Bool })
+	} else {
+		var rows []priceRow
+		for _, r := range c.prices {
+			if r.atDuration(prod, c.defaultRecurrence) {
+				rows = append(rows, r)
+			}
+		}
+		last, agreed := lastPrice(buyPrices(prod, rows))
+		if !agreed {
+			return nil, fallback("catalog price")
+		}
+		if last != nil {
+			price = *last
+		}
+		price += c.minVariantDifference.Int64
 	}
-	price += c.minVariantDifference.Int64
 	// default_price_recurrence: every match has the recurrence it matched on.
 	var recurrence any
 	for _, r := range c.prices {
@@ -584,13 +690,8 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 	pc := prod.productCurrency()
 	var display *currencyDisplay
 	if buyer != nil {
-		if *buyer != pc && *buyer != "usd" && (prod.is(productFreeTrialEnabled) || prod.is(productIsInPreorderState) ||
-			prod.nativeType == "commission" || c.hasPlan) {
-			// buyer_currency_unquotable_product? may turn the local price off.
-			return nil, fallback("catalog unquotable product")
-		}
 		var err error
-		if display, err = h.currencyDisplayFor(p, *buyer, pc, &price); err != nil {
+		if display, err = h.currencyDisplayFor(p, prod, c.hasPlan, *buyer, &price); err != nil {
 			return nil, err
 		}
 	}
@@ -612,7 +713,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 	// url_for_product_page on the seller's own subdomain, whose port declined() rules out.
 	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) + "?layout=profile"
 	return props.
-		Sym("is_pay_what_you_want", prod.customizablePrice.Bool).
+		Sym("is_pay_what_you_want", pwyw).
 		Sym("url", url).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).
 		Sym("recurrence", recurrence), nil

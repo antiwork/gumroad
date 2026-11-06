@@ -71,6 +71,20 @@ func TestMissingEntrypointAndImport(t *testing.T) {
 	}
 }
 
+// vite_asset_path looks a name with a directory up as it is, then path_to_asset adds the host.
+func TestAssetPath(t *testing.T) {
+	m, err := LoadDir("https://assets.gumroad.com", "testdata")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := m.AssetPath("components/ui/Calendar.tsx"); err != nil || got != "https://assets.gumroad.com/vite/assets/Calendar-abc123.js" {
+		t.Errorf("%q %v", got, err)
+	}
+	if _, err := m.AssetPath("components/ui/Missing.tsx"); err == nil {
+		t.Error("a missing asset resolved")
+	}
+}
+
 // import_chunks_for lists a chunk after what it imports and skips one it has seen.
 func TestImportOrder(t *testing.T) {
 	dir := t.TempDir()
