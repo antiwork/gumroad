@@ -417,6 +417,12 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "an unknown purchase type", host: host, target: "/l/guide", reason: "purchase type",
 			setup: func() { conn.Exec("UPDATE links SET purchase_type = 3 WHERE id = ?", productID) },
 			undo:  func() { conn.Exec("UPDATE links SET purchase_type = 0 WHERE id = ?", productID) }},
+		{name: "bundle products on a product that isn't a bundle", host: host, target: "/l/guide", reason: "bundle products",
+			setup: func() {
+				testdb.Insert(t, conn, "bundle_products", map[string]any{"id": int64(1_790_351), "bundle_id": productID, "product_id": productID,
+					"quantity": 1, "created_at": testNow, "updated_at": testNow})
+			},
+			undo: func() { conn.Exec("DELETE FROM bundle_products WHERE id = ?", 1_790_351) }},
 		{name: "the seller's refund policy", host: host, target: "/l/guide", reason: "seller refund policy",
 			setup: func() {
 				conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userRefundPolicyEnabled, sellerID)
