@@ -65,12 +65,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 			return "", err
 		}
 	}
-	checks := []struct {
-		reason, query string
-		arg           int64
-	}{
-		{"product sections", "SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id},
-	}
 	// These aren't fallbacks: they spare a lookup on products that have none.
 	gates := []struct {
 		query string
@@ -88,22 +82,12 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		{"SELECT 1 FROM offer_codes WHERE " + autoApplyCodes, seller.id, &p.hasAutoApplyCode},
 	}
 	// One round trip; each EXISTS stops at its first row.
-	n := len(checks) + len(gates)
-	exprs, args, dest := make([]string, 0, n), make([]any, 0, n), make([]any, 0, n)
-	found := make([]bool, len(checks))
-	for i, c := range checks {
-		exprs, args, dest = append(exprs, "EXISTS("+c.query+")"), append(args, c.arg), append(dest, &found[i])
-	}
+	exprs, args, dest := make([]string, 0, len(gates)), make([]any, 0, len(gates)), make([]any, 0, len(gates))
 	for _, g := range gates {
 		exprs, args, dest = append(exprs, "EXISTS("+g.query+")"), append(args, g.arg), append(dest, g.dest)
 	}
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT "+strings.Join(exprs, ", "), args...).Scan(dest...); err != nil {
 		return "", err
-	}
-	for i, c := range checks {
-		if found[i] {
-			return c.reason, nil
-		}
 	}
 	// purchase_info_for_product_page finds a purchase made with this browser.
 	// An empty cookie isn't re-minted, and Rails looks up "" too.
