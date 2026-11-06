@@ -66,6 +66,7 @@ type page struct {
 	seller *user
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
 	cacheWrites []pendingWrite
+	rates       map[string]rateRead
 }
 
 type fallback = pages.Fallback

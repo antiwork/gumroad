@@ -2,9 +2,6 @@ package products
 
 import (
 	"database/sql"
-	"errors"
-
-	"github.com/redis/go-redis/v9"
 
 	"github.com/antiwork/gumroad/go_web/internal/description"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
@@ -235,17 +232,9 @@ func (h *handler) usdOfferCents(p *page, code string, cents *int64) (int64, bool
 	if cents == nil {
 		return 0, false, nil
 	}
-	upper, ok := asciiUpcase(code)
-	if !ok {
-		return 0, false, fallback("offer currency")
-	}
-	raw, err := h.c.Page.Redis.Get(p.Ctx, "currencies:"+upper).Result()
-	if errors.Is(err, redis.Nil) {
-		return 0, false, nil
-	}
-	if err != nil {
-		// Rails reads a failed get as no rate; whether it would fail too is unknowable here.
-		return 0, false, fallback("currency rate")
+	raw, found, err := h.currencyRate(p, code)
+	if err != nil || !found {
+		return 0, false, err
 	}
 	rate, exact := rails.StringToF(raw)
 	if !exact {
