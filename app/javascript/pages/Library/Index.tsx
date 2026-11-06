@@ -73,7 +73,7 @@ const PreviewGallery = ({ name, images }: { name: string; images: AssetPreview[]
         size="sm"
         color="filled"
         className="absolute right-2 bottom-2 z-10"
-        aria-label={`View images for ${name}`}
+        aria-label={`View ${images.length} ${images.length === 1 ? "image" : "images"} for ${name}`}
         onClick={() => setOpen(true)}
       >
         <ImageIcon className="size-4" />
@@ -95,7 +95,9 @@ const PreviewGallery = ({ name, images }: { name: string; images: AssetPreview[]
           activeCoverId={activeId}
           setActiveCoverId={setActiveId}
           productName={name}
-          className="rounded"
+          // The dialog is a flex column and the figure is overflow-hidden, so without shrink-0 it shrinks to the
+          // dialog's max height and crops the cover instead of letting the dialog scroll.
+          className="shrink-0 rounded"
         />
       </Modal>
     </>

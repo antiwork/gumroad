@@ -179,8 +179,8 @@ describe("LibraryPage", () => {
     );
     renderPage(props);
 
-    expect(screen.queryByRole("button", { name: "View images for Beta" })).toBeNull();
-    const trigger = screen.getByRole("button", { name: "View images for Alpha" });
+    expect(screen.queryByRole("button", { name: /images? for Beta$/u })).toBeNull();
+    const trigger = screen.getByRole("button", { name: "View 2 images for Alpha" });
     expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("https://example.com/d/p1");
 
     fireEvent.click(trigger);
@@ -201,7 +201,7 @@ describe("LibraryPage", () => {
     );
     renderPage(props);
 
-    const trigger = screen.getByRole("button", { name: "View images for Alpha" });
+    const trigger = screen.getByRole("button", { name: "View 2 images for Alpha" });
     trigger.focus();
     fireEvent.click(trigger);
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
