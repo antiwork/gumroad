@@ -8,8 +8,7 @@ import (
 )
 
 // productProps adds ProductPresenter::ProductProps#props, in its key order, for the product shapes
-// unportedShape lets through, seen by its seller or a visitor with no part in it: purchase
-// assumes no purchase of theirs.
+// unportedShape lets through.
 func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *view) {
 	ids, seller := h.c.IDs, p.seller
 	externalID := ids.Encrypt(prod.id)
@@ -97,7 +96,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("analytics", analyticsData(seller, v.sellerJSON)).
 		Sym("has_third_party_analytics", v.thirdPartyAnalytics).
 		Sym("ppp_details", v.ppp.props()).
-		Sym("can_edit", p.ownView()).
+		Sym("can_edit", p.canEdit()).
 		Sym("waitlist", h.waitlistProps(prod, v)).
 		Sym("refund_policy", v.refundPolicy).
 		Sym("bundle_products", v.bundle.props).

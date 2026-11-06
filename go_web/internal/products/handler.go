@@ -1,6 +1,6 @@
 // Package products serves the product page, GET /l/:id (LinksController#show), on a seller's
-// subdomain, for a visitor signed out, the seller, or one signed in with no part in the
-// product: Rails' filters, then Products/Show. Every request whose Rails path this port leaves
+// subdomain, for a visitor signed out or signed in as themselves: Rails' filters, then
+// Products/Show. Every request whose Rails path this port leaves
 // out goes to Rails before anything is written.
 package products
 
@@ -92,6 +92,8 @@ type page struct {
 	// own, never a featured product's.
 	layout        string
 	recommendedBy *string
+	// collaborates is whether the visitor is collaborator_for? this page's product.
+	collaborates bool
 	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props
 	// search afresh.
 	visitorSearch bool
