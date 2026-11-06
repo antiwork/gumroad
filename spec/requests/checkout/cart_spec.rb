@@ -483,4 +483,37 @@ describe "Checkout cart", :js, type: :system do
       end
     end
   end
+
+  describe "confirmation alert" do
+    let(:seller) { create(:named_seller) }
+    let(:free_product) { create(:product, user: seller, name: "Free product", price_cents: 0) }
+    let(:free_product2) { create(:product, user: seller, name: "Free product 2", price_cents: 0) }
+    let(:paid_product) { create(:product, user: seller, name: "Paid product", price_cents: 500) }
+
+    it "says the buyer signed up with the seller for free when every item is free" do
+      visit free_product.long_url
+      add_to_cart(free_product, pwyw_price: 0)
+      visit free_product2.long_url
+      add_to_cart(free_product2, pwyw_price: 0)
+
+      fill_checkout_form(free_product, is_free: true)
+      click_on "Get", exact: true
+
+      expect(page).to have_alert(text: "You signed up with #{seller.name_or_username} for free. We emailed the details to test@gumroad.com.", visible: :all, wait: 60)
+    end
+
+    it "keeps the purchase sentence when a free item is bought with a paid one" do
+      visit free_product.long_url
+      add_to_cart(free_product, pwyw_price: 0)
+      visit paid_product.long_url
+      add_to_cart(paid_product)
+
+      fill_checkout_form(paid_product)
+      click_on "Pay"
+
+      expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to test@gumroad.com.", visible: :all, wait: 60)
+      expect(free_product.sales.successful.sole.price_cents).to eq(0)
+      expect(paid_product.sales.successful.sole.price_cents).to eq(500)
+    end
+  end
 end

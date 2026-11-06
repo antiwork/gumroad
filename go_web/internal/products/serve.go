@@ -41,6 +41,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	switch {
 	case err != nil:
 		return err
+	case prod != nil && prod.bannedAt.Valid && p.utm != nil:
+		// track_utm_link_visit records a visit before check_banned's 404.
+		return fallback("utm visit on a banned product")
 	case prod == nil, prod.bannedAt.Valid:
 		// e404, and check_banned's.
 		return pages.ErrNotFound
@@ -48,6 +51,10 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		// fetch_leniently is scoped to the seller, so ensure_seller_is_not_deleted and
 		// ensure_domain_belongs_to_seller pass; anything else is Rails'.
 		return fallback("seller mismatch")
+	}
+	// set_affiliate_cookie: a redirect and the custom HTML page carry the cookie too.
+	if err := h.setAffiliateCookie(p); err != nil {
+		return err
 	}
 
 	// check_if_needs_redirect: on the seller's own subdomain only the permalink can differ.
@@ -67,6 +74,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		if rawQuery != "" {
 			target += "?" + rawQuery
 		}
+		if err := h.trackUTMVisit(w, p, prod); err != nil {
+			return err
+		}
 		if err := h.ctl.Commit(w, p.Visit); err != nil {
 			return err
 		}
@@ -74,16 +84,24 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return nil
 	}
 
-	// product_custom_html_visible? for a visitor. A waitlist page shows it when it holds the
-	// waitlist form, which is Rails' to find.
+	// product_custom_html_visible?: the seller and collaborators preview it whatever the
+	// product's state, and a waitlist page shows it when it holds the waitlist form, which is
+	// Rails' to find. Either way it renders before show's coffee redirect.
+	logged := p.Auth.LoggedInUser()
+	seller := logged != nil && logged.ID == prod.userID
 	if present, err := customHTMLPresent(ctx, conn, prod.id); err != nil {
 		return err
-	} else if present && (prod.alive() || prod.acceptsWaitlistSignups()) {
+	} else if present && !p.wanted && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
+		// ?wanted=true goes on to show, which sends the buyer to checkout.
 		on, err := h.flag(ctx, "custom_html_pages", p.seller.id)
 		switch {
 		case err != nil:
 			return err
-		case on && !prod.alive():
+		case on && !prod.alive() && logged != nil && !seller:
+			// A collaborator previews it, which renderCustomHTML leaves to Rails; anyone else gets the
+			// page, which isn't ported for an unpublished product here.
+			return fallback("custom html preview")
+		case on && !prod.alive() && !seller:
 			return fallback("custom html waitlist")
 		case on:
 			return h.renderCustomHTML(w, p, prod)

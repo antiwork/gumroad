@@ -50,7 +50,6 @@ beforeAll(() => {
       root_url: url("/"),
       dashboard_url: url("/dashboard"),
       discover_url: url("/discover"),
-      agent_url: url("/agent"),
       profile_url: url("/profile"),
       pages_url: url("/pages"),
       products_url: url("/products"),
@@ -140,13 +139,11 @@ const buildUser = (promotedNavItems: string[]): LoggedInUser => ({
     community: { index: true },
     churn: { show: true },
     page: { index: true, create: true },
-    user: { view_store_agent: true, use_store_agent: true },
   },
 });
 
 // Mirrors DashboardNav::PROMOTABLE_ITEMS.
 const ALL_PROMOTABLE = [
-  "agent",
   "profile",
   "pages",
   "collaborators",
@@ -219,7 +216,7 @@ describe("dashboard nav progressive disclosure", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Everything else" }));
 
-    for (const name of ["Agent", "Profile", "Pages", "Collaborators", "Checkout", "Emails", "Workflows", "Analytics"]) {
+    for (const name of ["Profile", "Pages", "Collaborators", "Checkout", "Emails", "Workflows", "Analytics"]) {
       expect(screen.getByRole("link", { name })).toBeTruthy();
     }
   });

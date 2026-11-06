@@ -60,6 +60,7 @@ export type DashboardPageProps = {
     first_payout?: boolean;
     first_email?: boolean;
     used_cli?: boolean;
+    connected_ai?: boolean;
   };
   getting_started_dismissed: boolean;
   social_connections?: { name: string; connected: boolean }[];
@@ -140,11 +141,11 @@ const GETTING_STARTED_ITEMS: GettingStartedItemType[] = [
     description: "Send out your first email blast.",
   },
   {
-    name: "Command line",
-    getCompleted: (stats) => !!stats.used_cli,
-    link: "/api#api-cli",
+    name: "Bring your AI",
+    getCompleted: (stats) => !!stats.connected_ai || !!stats.used_cli,
+    link: Routes.mcp_path(),
     IconComponent: CliIcon,
-    description: "Use Gumroad via the command line interface.",
+    description: "Connect Claude or ChatGPT.",
   },
 ];
 

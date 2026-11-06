@@ -101,6 +101,8 @@ class UrlRedirectPresenter
           # The purchase the receipt and invoice links point at; equal to `id` for a one-off purchase.
           receipt_purchase_id: receipt_purchase&.external_id,
           email: email_confirmation_required ? nil : purchase.email,
+          free: purchase.free_purchase?,
+          seller_name: purchase.seller.name_or_username,
           email_digest: purchase.email_digest,
           created_at: purchase.created_at,
           is_archived: purchase.is_archived,

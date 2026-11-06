@@ -26,6 +26,14 @@ class OauthApplication < Doorkeeper::Application
 
   scope :first_party_mobile, -> { where(uid: [MOBILE_API_OAUTH_APPLICATION_UID, LEGACY_MOBILE_API_OAUTH_APPLICATION_UID].compact) }
 
+  # The retired in-product Store Agent registered one first-party app per seller under this name.
+  # Those rows still exist (flagged is_first_party_agent_app), so the name stays reserved and the
+  # ping-notification exclusion that keys on the flag stays. Identity comes from the flag; the name
+  # carries no authorization meaning.
+  FIRST_PARTY_AGENT_APP_NAME = "Gumroad Store Agent (internal)"
+  FIRST_PARTY_AGENT_APP_REDIRECT_URI = "urn:ietf:wg:oauth:2.0:oob"
+  FIRST_PARTY_AGENT_APP_SCOPES = Ai::StoreAgentScopes.all_scopes_string
+
   def validate_file
     return unless file.attached?
 

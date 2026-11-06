@@ -277,6 +277,10 @@ func StringToI(s string) (n int64, ok bool) {
 		negative = s[i] == '-'
 		i++
 	}
+	// Base 10 takes an optional 0d prefix.
+	if i+1 < len(s) && s[i] == '0' && (s[i+1] == 'd' || s[i+1] == 'D') {
+		i += 2
+	}
 	var u uint64
 	seen := false
 	for ; i < len(s); i++ {

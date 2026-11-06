@@ -11,6 +11,11 @@ module CheckoutHelpers
     "tip_prompt" => "Tip",
   }.freeze
 
+  # The pay button names the amount once the checkout knows it ("Pay US$10", "Pay EUR 9"), and stays
+  # plain ("Pay") while the quote settles — match the label plus a boundary, so "PayPal", which has
+  # its own button, is never the match.
+  PAY_BUTTON_TEXT = /\APay\b/
+
   # The buy CTA's text follows the seller's call to action, so find the checkout link itself.
   def product_page_cta
     within(find(:article)) { first(:link, href: %r{/checkout\?}) }
@@ -173,7 +178,11 @@ module CheckoutHelpers
     block.call if block_given?
 
     expect do
-      click_on is_free ? "Get" : "Pay", exact: true
+      if is_free
+        click_on "Get", exact: true
+      else
+        click_on "Pay", text: PAY_BUTTON_TEXT
+      end
 
       case sca
       when nil then nil
@@ -186,13 +195,16 @@ module CheckoutHelpers
       if error.present?
         expect(page).to have_alert(text: error) if error != true
       else
+        buyer_email = logged_in_user&.email&.downcase || email&.downcase
         if gift.present? || product.is_in_preorder_state
           # Specific cases where we show the receipt instead of the product content
-          expect(page).to have_text("Your purchase was successful!", wait: 60)
-          expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
+          expect(page).to have_text(is_free ? "You signed up with #{product.user.name_or_username} for free" : "Your purchase was successful!", wait: 60)
+          expect(page).to have_text(is_free ? "We emailed the details to #{buyer_email}" : buyer_email)
+        elsif is_free
+          expect(page).to have_alert(text: "You signed up with #{product.user.name_or_username} for free. We emailed the details to #{buyer_email}", visible: :all, wait: 60)
         else
           # The alert show/hide timing can cause specs to be flaky
-          expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{logged_in_user&.email&.downcase || email&.downcase}", visible: :all, wait: 60)
+          expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{buyer_email}", visible: :all, wait: 60)
         end
 
         expect(page).to have_text("You bought this for #{gift[:email] || gift[:name]}") if gift&.dig(:email).present? || gift&.dig(:name).present?

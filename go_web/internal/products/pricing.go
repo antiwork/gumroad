@@ -28,9 +28,14 @@ func buyerCurrencyPreference(p *page) *string {
 	return &code
 }
 
+// pppEnabled is Link#purchasing_power_parity_enabled?.
+func pppEnabled(p *page, prod *product) bool {
+	return !prod.is(productPPPDisabled) && p.seller.is(userPPPEnabled)
+}
+
 // loadPPP is Link#ppp_details, and returns ProductProps#ppp_price_cents.
 func (h *handler) loadPPP(ctx context.Context, p *page, prod *product, v *view) (*int64, error) {
-	if prod.is(productPPPDisabled) || !p.seller.is(userPPPEnabled) || v.geo == nil {
+	if !pppEnabled(p, prod) || v.geo == nil {
 		return nil, nil
 	}
 	minFactor := 0.0

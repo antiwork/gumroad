@@ -547,7 +547,7 @@ class Rack::Attack
 
   # Media uploads: each POST can synchronously download up to 10 MB from a remote URL
   # (CreatePublicMediaService), making this one of the priciest v2 endpoints — unthrottled,
-  # it ties up workers and bandwidth. 20/10min is plenty for a creator (or the store agent)
+  # it ties up workers and bandwidth. 20/10min is plenty for a creator (or an AI agent)
   # building a page. Keyed by OAuth token (IP-keyed fallback for tokenless probes) so
   # rotating IPs doesn't bypass it. Matches both `/api/v2/media` and `/v2/media` prefixes,
   # mirroring the products/custom_html throttles above.

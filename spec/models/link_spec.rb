@@ -630,6 +630,12 @@ describe Link do
       expect(scrubbed_description(frame)).to include(%(src="https://heyzine.com/shelf/66f3c4fc1e.html"))
     end
 
+    it "keeps a Heyzine shelf frame at its named address too" do
+      frame = %(<iframe src="https://heyzine.com/shelf/turningtopeacelibrary" style="width: 100%; height: 800px;" allowfullscreen></iframe>)
+
+      expect(scrubbed_description(frame)).to include(%(src="https://heyzine.com/shelf/turningtopeacelibrary"))
+    end
+
     it "drops a Heyzine page that is not a shelf" do
       expect(scrubbed_description(%(<iframe src="https://heyzine.com/flip-book/66f3c4fc1e.html"></iframe>))).not_to include("<iframe")
     end
@@ -640,6 +646,14 @@ describe Link do
         %(<iframe src="https://www.heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
         %(<iframe src="http://heyzine.com/shelf/66f3c4fc1e.html"></iframe>),
         %(<iframe src="https://heyzine.com/shelf/66f3c4fc1e.html.evil"></iframe>),
+        %(<iframe src="https://heyzine.com/shelf/turningtopeacelibrary.html.evil"></iframe>),
+        %(<iframe src="https://heyzine.com/shelf/turningtopeacelibrary/2"></iframe>),
+        %(<iframe src="https://www.heyzine.com/shelf/turningtopeacelibrary"></iframe>),
+        %(<iframe src="http://heyzine.com/shelf/turningtopeacelibrary"></iframe>),
+        %(<iframe src="https://heyzine.com:8443/shelf/turningtopeacelibrary"></iframe>),
+        %(<iframe src="https://evil.test@heyzine.com/shelf/turningtopeacelibrary"></iframe>),
+        %(<iframe src="https://heyzine.com/shelf/turningtopeacelibrary?x=1"></iframe>),
+        %(<iframe src="https://heyzine.com/shelf/turningtopeacelibrary#f"></iframe>),
         %(<iframe src="https://heyzine.com:8443/shelf/66f3c4fc1e.html"></iframe>),
         %(<iframe src="https://heyzine.com:443/shelf/66f3c4fc1e.html"></iframe>),
         %(<iframe src="https://evil.test@heyzine.com/shelf/66f3c4fc1e.html"></iframe>),

@@ -16,6 +16,8 @@ FROM scratch
 
 # The S3 client reaches AWS over TLS.
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+# Signed-in pages show the seller's time zone offset, which Rails reads from the same bookworm tzdata.
+COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /geoip/ /geoip/
 COPY --from=build /credentials/ /credentials/
 COPY --from=build /vite/ /vite/

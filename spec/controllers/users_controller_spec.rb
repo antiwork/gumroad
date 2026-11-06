@@ -633,6 +633,12 @@ describe UsersController do
         expect(flash[:notice]).to eq("Your purchase was successful! We sent a receipt to buyer@example.com.")
       end
 
+      it "sets a free-signup flash message when purchase_free is present" do
+        get :coffee, params: { username: seller.username, purchase_email: "buyer@example.com", purchase_free: "true" }
+
+        expect(flash[:notice]).to eq("You signed up with #{seller.name_or_username} for free. We emailed the details to buyer@example.com.")
+      end
+
       it "sets custom styles in page meta when user has custom_styles" do
         get :coffee, params: { username: seller.username }
 

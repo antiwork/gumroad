@@ -1,19 +1,24 @@
 package products
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/elastic"
+	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
 
@@ -36,6 +41,13 @@ func TestTheStorefrontCatalog(t *testing.T) {
 	reply := func(w io.Writer, hits, total string) {
 		io.WriteString(w, `{"hits":{"total":{"value":`+total+`,"relation":"eq"},"hits":`+hits+`},"aggregations":`+
 			`{"tags.keyword":{"buckets":[{"key":"design","doc_count":2}]},"filetypes.keyword":{"buckets":[{"key":"pdf","doc_count":2}]}}}`)
+	}
+	// written is the entry Rails caches for a section the fake search answers.
+	written := func(id any, sort string, total int64, ids ...int64) railscache.Hash {
+		s := railsCachedSection("", nil, sort, total, ids...)
+		s[0].Value = id
+		s[5].Value.(railscache.Hash)[2].Value = []any{railscache.Hash{{Key: "key", Value: "pdf"}, {Key: "doc_count", Value: int64(2)}}}
+		return s
 	}
 	search := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		searches++
@@ -107,6 +119,11 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			`"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[],"products":[%s]},"exclude_ids":["%s"]}],"main_section_index":0`,
 			total, products, e.ids.Encrypt(productID))
 	}
+	// results is the default section's search results up to its first card, the other product's.
+	results := func(e *testEnv, total int) string {
+		return fmt.Sprintf(`"search_results":{"total":%d,"tags_data":[{"key":"design","doc_count":2}],"filetypes_data":[{"key":"pdf","doc_count":2}],`+
+			`"taxonomy_attributes_data":[],"products":[{"id":"%s",`, total, e.ids.Encrypt(other))
+	}
 	otherCard := func(e *testEnv) string {
 		id := e.ids.Encrypt(other)
 		return `{"id":"` + id + `","permalink":"gowebp2","name":"Other","seller":null,"ratings":{"count":3,"average":4.5},"thumbnail_url":null,` +
@@ -127,6 +144,47 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				"currency": "usd", "recurrence": p.recurrence, "created_at": testNow, "updated_at": testNow})
 		}
 	}
+	const saleID = int64(1_792_601)
+	// sale makes the other product a plain card, with otherColumns, and gives the seller an
+	// auto-applied 10% sale, with saleColumns.
+	sale := func(t *testing.T, conn *sql.DB, otherColumns, saleColumns map[string]any) {
+		columns := map[string]any{"flags": 0}
+		for k, v := range otherColumns {
+			columns[k] = v
+		}
+		addOther(t, conn, columns)
+		row := map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true}
+		for k, v := range saleColumns {
+			row[k] = v
+		}
+		insertOfferCode(t, conn, saleID, row)
+	}
+	// rentable makes the other product a plain card of purchaseType, which also rents at 150.
+	rentable := func(t *testing.T, conn *sql.DB, purchaseType int) {
+		addOther(t, conn, map[string]any{"flags": 0, "purchase_type": purchaseType})
+		testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1, "link_id": other, "price_cents": 150, "currency": "usd",
+			"flags": priceIsRental, "created_at": testNow, "updated_at": testNow})
+	}
+	// saleCard is the other product's card at price, ending in tail.
+	saleCard := func(e *testEnv, price int, tail string) string {
+		card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+		card = strings.Replace(card, `"price_cents":400`, fmt.Sprintf(`"price_cents":%d`, price), 1)
+		return strings.Replace(card, `"recurrence":null}`, `"recurrence":null`+tail+`}`, 1)
+	}
+	const onSale = `,"original_price_cents":300,"sale_label":"Sale"`
+	// scopedSale is a sale, left off this product, scoped to the other product's option at index
+	// scoped among options with the price differences diffs.
+	scopedSale := func(t *testing.T, conn *sql.DB, scoped int, diffs ...any) {
+		sale(t, conn, nil, nil)
+		insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": other, "title": "Size"})
+		for i, diff := range diffs {
+			testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_792_631 + i), "type": "Variant", "variant_category_id": category,
+				"name": "V", "price_difference_cents": diff, "created_at": testNow, "updated_at": testNow})
+		}
+		testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
+			"variant_id": int64(1_792_631 + scoped)})
+	}
 	legacyCard := func(e *testEnv) string {
 		card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
 		card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
@@ -141,16 +199,57 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		// when it isn't 3.
 		body, total string
 		respond     func(body map[string]any) (hits, total string)
-		// cachesOnFallback is a search kept although the page goes to Rails.
-		cachesOnFallback bool
-		setup            func(t *testing.T, conn *sql.DB)
-		// prepare sets flags and rates; headers go with the request.
+		setup       func(t *testing.T, conn *sql.DB)
+		// prepare sets flags and rates; headers and query go with the request.
 		prepare func(e *testEnv)
 		headers map[string]string
-		want    func(e *testEnv) string
+		query   string
+		// searchedAgain is the searches after a second view, when it differs from searched;
+		// uncached is a search nothing caches.
+		searchedAgain int
+		uncached      bool
+		want          func(e *testEnv) string
 		// check makes assertions want can't.
 		check func(t *testing.T, e *testEnv, page string)
 	}{
+		// A visitor search param searches afresh after the cached fetch, on every view, and goes into
+		// the cards' URLs and the byline's.
+		{name: "a recommendation", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?recommended_by=more_like_this",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			want: func(e *testEnv) string {
+				return `"url":"https://` + host + `/l/gowebp2?layout=profile\u0026recommended_by=more_like_this"`
+			},
+			check: func(t *testing.T, e *testEnv, page string) {
+				if want := `"profile_url":"https://` + host + `/?recommended_by=more_like_this"`; !strings.Contains(page, want) {
+					t.Errorf("want %s", want)
+				}
+			}},
+		// A visitor's query narrows section_props' fresh search, never the cached one.
+		{name: "a visitor query", server: search, searched: 2, searchedAgain: 3, query: "?query=pen+set",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			respond: func(body map[string]any) (string, string) {
+				must := body["query"].(map[string]any)["bool"].(map[string]any)["must"].([]any)
+				// The first is the cached fetch, whose entry is keyed without the query.
+				if searches == 1 && len(must) != 2 {
+					t.Errorf("the cached search carried the query: %v", must)
+				}
+				match := map[string]any{"simple_query_string": map[string]any{"query": "pen set",
+					"fields": []any{"name", "creator_name", "description", "tags"}, "default_operator": "and"}}
+				switch {
+				case len(must) == 2:
+					return bothHits, "3"
+				case len(must) == 3 && reflect.DeepEqual(must[0], match):
+					return fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other), "1"
+				}
+				return `[]`, "0"
+			},
+			// omit_product_in_search_total? drops the viewed product from the default section's total
+			// whether or not it matches the query.
+			want: func(e *testEnv) string { return results(e, 0) }},
+		// A blank one still searches afresh, with no clause.
+		{name: "a blank visitor query", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?query=+",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			want:  func(e *testEnv) string { return results(e, 2) }},
 		{name: "the rest of the catalog, without this product", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, nil)
@@ -167,7 +266,34 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				testdb.Insert(t, conn, "product_review_stats", map[string]any{"id": int64(1_792_401), "link_id": other, "reviews_count": 3,
 					"average_rating": 4.5, "created_at": testNow, "updated_at": testNow})
 			},
-			want: func(e *testEnv) string { return section(e, 2, otherCard(e)) }},
+			want: func(e *testEnv) string { return section(e, 2, otherCard(e)) },
+			check: func(t *testing.T, e *testEnv, _ string) {
+				// Rails reads this back: the virtual section's entry is a lone Hash, its id a UTF-8 literal.
+				if got := e.cache.values[railsSectionsKey(e, true)]; !reflect.DeepEqual(got, written(defaultProductsSectionID, pageLayoutSort, 3, other, productID)) {
+					t.Errorf("entry %#v", got)
+				}
+			}},
+		// preloaded_options' floor takes the alive SKUs, the default one too, with the variants; a SKU
+		// without a difference is compacted out.
+		{name: "SKUs below the variants", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, nil)
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": other, "title": "Size"})
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": category + 1, "type": "Variant", "variant_category_id": category,
+					"name": "V", "price_difference_cents": 100, "sales_count_for_inventory_cache": 0, "created_at": testNow, "updated_at": testNow})
+				for i, sku := range []map[string]any{{"price_difference_cents": 50, "flags": baseVariantIsDefaultSku},
+					{"price_difference_cents": 10, "deleted_at": testNow}, {"price_difference_cents": nil}} {
+					row := map[string]any{"id": int64(1_792_311 + i), "type": "Sku", "link_id": other, "name": "S",
+						"sales_count_for_inventory_cache": 0, "created_at": testNow, "updated_at": testNow}
+					maps.Copy(row, sku)
+					testdb.Insert(t, conn, "base_variants", row)
+				}
+				testdb.Insert(t, conn, "product_review_stats", map[string]any{"id": int64(1_792_401), "link_id": other, "reviews_count": 3,
+					"average_rating": 4.5, "created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string {
+				return section(e, 2, strings.Replace(otherCard(e), `"price_cents":400`, `"price_cents":350`, 1))
+			}},
 		{name: "this product beyond the page still leaves the total", server: search, searched: 1,
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
 			setup: func(t *testing.T, conn *sql.DB) {
@@ -377,10 +503,31 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					`"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[],"products":[%s]}},%s],"main_section_index":1`,
 					subscribeSection(e), e.ids.Encrypt(1_792_602), card, richTextSection(e))
 			}},
-		{name: "a listed featured product section", reason: "product section SellerProfileFeaturedProductSection", server: search,
+		// A visitor search param searches a product's own section afresh, a review sort too.
+		{name: "the product's own review-sorted section with a recommendation", server: search, searched: 1, searchedAgain: 2,
+			uncached: true, total: "1", query: "?recommended_by=wishlist",
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[4.5,3,1762430000000]}]`, other),
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
+				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
+				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
 			setup: func(t *testing.T, conn *sql.DB) {
-				addSection(t, conn, 1_792_605, "SellerProfileFeaturedProductSection", "", `{}`)
+				addOther(t, conn, map[string]any{"flags": 0})
+				addSection(t, conn, 1_792_602, profileProductsSectionType, "More",
+					fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":false}`, other))
+				listSections(t, conn, `{"sections":[1792602]}`)
+			},
+			want: func(e *testEnv) string {
+				return `"url":"https://` + host + `/l/gowebp2?layout=profile\u0026recommended_by=wishlist"`
+			}},
+		// A featured section naming no product has no props; listed, it replaces the catalog.
+		{name: "a listed featured section without a product", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addSection(t, conn, 1_792_605, profileFeaturedSectionType, "", `{}`)
 				listSections(t, conn, `{"sections":[1792605]}`)
+			},
+			want: func(e *testEnv) string {
+				return `"sections":[{"id":"` + e.ids.Encrypt(1_792_605) + `","header":"","type":"SellerProfileFeaturedProductSection","props":null}],"main_section_index":0`
 			}},
 		// Sections that render nothing leave the storefront catalog in place.
 		{name: "listed sections that aren't the product's", hits: bothHits, server: search, searched: 1,
@@ -477,11 +624,69 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					`"default_product_sort":"newest","search_results":{"total":1,%s,"products":[%s]},"exclude_ids":["%s"]}]`,
 					e.ids.Encrypt(1_792_511), facets, card, e.ids.Encrypt(productID), e.ids.Encrypt(1_792_512), facets, card, e.ids.Encrypt(productID))
 			}},
-		{name: "a section sorted by reviews", reason: "products section review sort", server: search,
+		// Rails' cached_sections entry is the order Rails renders, so go_web serves it without a
+		// search, a review-sorted section included.
+		{name: "a review-sorted section from Rails' cache", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_509), "seller_id": sellerID, "header": "Top",
+					"json_data":  fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":true}`, other),
+					"created_at": testNow, "updated_at": testNow})
+			},
+			prepare: func(e *testEnv) {
+				e.cache.values[railsSectionsKey(e, false)] = []any{railsCachedSection(e.ids.Encrypt(1_792_509), "Top", "highest_rated", 1, other)}
+			},
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1)
+				return fmt.Sprintf(`"sections":[{"id":"%s","header":"Top","type":"SellerProfileProductsSection","show_filters":false,`+
+					`"default_product_sort":"highest_rated","search_results":{"total":1,"tags_data":[{"key":"design","doc_count":2}],`+
+					`"filetypes_data":[],"taxonomy_attributes_data":[],"products":[%s]},"exclude_ids":["%s"]}],"main_section_index":0`,
+					e.ids.Encrypt(1_792_509), card, e.ids.Encrypt(productID))
+			}},
+		// cached_default_products_section's entry wins over a search too, with this product omitted.
+		{name: "the default section from Rails' cache", server: search,
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			prepare: func(e *testEnv) {
+				e.cache.values[railsSectionsKey(e, true)] = railsCachedSection(defaultProductsSectionID, nil, pageLayoutSort, 2, other, productID)
+			},
+			want: func(e *testEnv) string {
+				return `"search_results":{"total":1,"tags_data":[{"key":"design","doc_count":2}],"filetypes_data":[],` +
+					`"taxonomy_attributes_data":[],"products":[{"id":"` + e.ids.Encrypt(other) + `","permalink":"gowebp2"`
+			}},
+		// Rails would render its entry's sections, in its order; a different list goes to Rails.
+		{name: "Rails' cached sections in another order", reason: "cached sections", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				for _, id := range []int64{1_792_509, 1_792_510} {
+					testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": id, "seller_id": sellerID, "header": "Top",
+						"json_data":  `{"shown_products":[],"default_product_sort":"newest","show_filters":false,"add_new_products":true}`,
+						"created_at": testNow, "updated_at": testNow})
+				}
+			},
+			prepare: func(e *testEnv) {
+				e.cache.values[railsSectionsKey(e, false)] = []any{railsCachedSection(e.ids.Encrypt(1_792_510), "Top", "newest", 0),
+					railsCachedSection(e.ids.Encrypt(1_792_509), "Top", "newest", 0)}
+			}},
+		// Without Rails' entry, the search runs and its entry is written for both to read.
+		{name: "a section sorted by reviews", server: search, searched: 1, hits: `[]`, total: "0",
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[1]}}]}},`+
+				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
+				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID),
 			setup: func(t *testing.T, conn *sql.DB) {
 				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_505), "seller_id": sellerID,
 					"json_data":  `{"shown_products":[1],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":true}`,
 					"created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string {
+				return fmt.Sprintf(`"sections":[{"id":"%s","header":null,"type":"SellerProfileProductsSection","show_filters":false,`+
+					`"default_product_sort":"highest_rated","search_results":{"total":0,`, e.ids.Encrypt(1_792_505))
+			},
+			check: func(t *testing.T, e *testEnv, _ string) {
+				want := []any{written(railscache.ASCII(e.ids.Encrypt(1_792_505)), "highest_rated", 0)}
+				if got := e.cache.values[railsSectionsKey(e, false)]; !reflect.DeepEqual(got, want) {
+					t.Errorf("entry %#v", got)
+				}
 			}},
 		{name: "a section json_data off the schema", reason: "products section json_data", server: search,
 			setup: func(t *testing.T, conn *sql.DB) {
@@ -489,15 +694,119 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					"json_data":  `{"shown_products":[],"default_product_sort":"random","show_filters":false,"add_new_products":true}`,
 					"created_at": testNow, "updated_at": testNow})
 			}},
-		{name: "a card this port leaves to Rails", reason: "catalog default offer code", hits: bothHits, server: search, searched: 1,
-			cachesOnFallback: true,
+		{name: "a card this port leaves to Rails", reason: "catalog purchase type", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"default_offer_code_id": 1})
+				addOther(t, conn, map[string]any{"purchase_type": 5})
 			}},
-		{name: "the seller's auto-applied sale", reason: "catalog auto-apply", server: search,
+		{name: "the seller's sale on a card", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, nil) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "the sale's own label", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, map[string]any{"sale_label": "Black Friday"}) },
+			want: func(e *testEnv) string {
+				return section(e, 2, saleCard(e, 270, `,"original_price_cents":300,"sale_label":"Black Friday"`))
+			}},
+		{name: "a card the sale leaves out", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
-				insertOfferCode(t, conn, 1_792_601, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true})
+				sale(t, conn, nil, nil)
+				insertExcludedProduct(t, conn, 1_792_611, saleID, other)
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
+		// A live default code of the card's own wins over the sale, and carries no sale label.
+		{name: "a card's default code over the sale", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
+				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 250, `,"original_price_cents":300`)) }},
+		{name: "a card's expired default code under the sale", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
+				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "expires_at": testNow.Add(-time.Hour)})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// The default code is the sale itself, loaded twice; Rails compares them as records.
+		{name: "a card whose default code is the sale", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, map[string]any{"default_offer_code_id": saleID}, nil) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "a card's limited default code with uses left over the sale", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
+				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_792_651, 1_792_602, map[string]any{"link_id": other})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 250, `,"original_price_cents":300`)) }},
+		{name: "a card's used-up default code under the sale", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
+				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_792_651, 1_792_602, map[string]any{"link_id": other})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// discounted_price_cents quotes no sale this product alone can't meet.
+		{name: "a sale over the card's price", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, map[string]any{"minimum_amount_cents": 301}) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
+		{name: "a limited sale with uses left on a card", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, nil, map[string]any{"max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_792_651, saleID, nil)
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "a used-up sale on a card", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, nil, map[string]any{"max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_792_651, saleID, nil)
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
+		// discounts_lowest_priced_option?: the sale covers the card's cheapest option, one without a
+		// difference, which the nil minimum equals.
+		{name: "a sale scoped to the card's cheapest option", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 0, nil) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "a sale scoped to the cheaper of two options", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 0, 0, 100) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// restricted_variants_for finds none of this product's, so the sale applies.
+		{name: "a sale scoped to another product's option", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, nil, nil)
+				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Size"})
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_792_631), "type": "Variant", "variant_category_id": category,
+					"name": "V", "created_at": testNow, "updated_at": testNow})
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
+					"variant_id": int64(1_792_631)})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// It covers only a pricier option, so the card quotes the cheapest undiscounted.
+		{name: "a sale scoped to a pricier option", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 1, 0, 100) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
+		{name: "a sale scoped to a tier", reason: "catalog offer code tiers", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				tieredOther(t, conn)
+				insertOfferCode(t, conn, saleID, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true})
+				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
+					"variant_id": category + 1})
 			}},
+		// 270 and 300 cents through 0.92345.
+		{name: "a card's sale in the buyer's currency", hits: bothHits, server: search, searched: 1, headers: eurCookie,
+			setup:   func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, nil) },
+			prepare: func(e *testEnv) { e.localEUR("0.92345") },
+			want: func(e *testEnv) string {
+				return strings.Replace(saleCard(e, 270, onSale), `"buyer_currency_shown":"usd","product_currency":"usd",`+
+					`"buyer_local_price_cents":null,"rate":null,"display_mode":"default"}`, `"buyer_currency_shown":"eur","product_currency":"usd",`+
+					`"buyer_local_price_cents":249,"rate":0.92345,"display_mode":"buyer_local"},"buyer_currency":"eur","buyer_local_currency_rate":0.92345,`+
+					`"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":249,"buyer_local_original_price_cents":277`, 1)
+			}},
+		{name: "a rental card", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { rentable(t, conn, 1) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 150, "")) }},
+		{name: "a card to buy or rent", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { rentable(t, conn, 2) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
 		{name: "a hit with no row", reason: "catalog product missing", hits: bothHits, server: search, searched: 1},
 		{name: "a failed search", reason: "catalog search", server: failing, searched: 1},
 		{name: "no search client", reason: "storefront"},
@@ -528,7 +837,8 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				}
 				e.config.Page.Search = client
 			}
-			w := e.get(host, "/l/guide", e.withDryRun("/l/guide", c.headers, c.reason))
+			path := "/l/guide" + c.query
+			w := e.get(host, path, e.withDryRun(path, c.headers, c.reason))
 			if searches != c.searched {
 				t.Errorf("%d searches, want %d", searches, c.searched)
 			}
@@ -538,11 +848,6 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				}
 				if len(e.cache.writes) != 0 {
 					t.Errorf("a dry run wrote %v", e.cache.writes)
-				}
-				if c.cachesOnFallback {
-					if e.get(host, "/l/guide", nil); e.railsHit == nil || !strings.HasPrefix(strings.Join(e.cache.writes, " "), "go-web:storefront-catalog_") {
-						t.Errorf("rails %v, cache writes %v", e.railsHit != nil, e.cache.writes)
-					}
 				}
 				return
 			}
@@ -562,17 +867,22 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			}
 			var key string
 			for _, k := range e.cache.writes {
-				if strings.HasPrefix(k, "go-web:storefront-catalog_") {
+				// Rails' entry for the catalog, go_web's own for a product's sections.
+				if strings.HasPrefix(k, "profile-sections_") || strings.HasPrefix(k, "go-web:storefront-catalog_") {
 					key = k
 				}
 			}
-			if key == "" || e.cache.ttls[key] != 10*time.Minute {
+			if c.uncached != (key == "") || !c.uncached && e.cache.ttls[key] != 10*time.Minute {
 				t.Fatalf("cache writes %v", e.cache.writes)
 			}
 			// The next view reads the search from the cache.
-			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, "/l/guide", c.headers).Body.String())[1])
-			if searches != c.searched || !strings.Contains(again, c.want(e)) {
-				t.Errorf("%d searches, want %d; same catalog %v", searches, c.searched, strings.Contains(again, c.want(e)))
+			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, path, c.headers).Body.String())[1])
+			wantSearches := c.searched
+			if c.searchedAgain != 0 {
+				wantSearches = c.searchedAgain
+			}
+			if searches != wantSearches || !strings.Contains(again, c.want(e)) {
+				t.Errorf("%d searches, want %d; same catalog %v", searches, wantSearches, strings.Contains(again, c.want(e)))
 			}
 		})
 	}
@@ -632,4 +942,166 @@ func TestTheProductsOwnSections(t *testing.T) {
 	addSection(t, testdb.Open(t), 1_792_602, profileProductsSectionType, "More",
 		`{"shown_products":[],"default_product_sort":"newest","show_filters":false,"add_new_products":false}`)
 	e.render(t, nil, "products section search")
+}
+
+func railsSectionsKey(e *testEnv, virtual bool) string {
+	h := &handler{c: e.config}
+	ctx := context.Background()
+	products, err := h.readProductsCacheKey(ctx, sellerID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if virtual {
+		return "profile-sections_default_test-" + products
+	}
+	sections, err := h.savedProductsSections(ctx, sellerID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return "profile-sections_test-" + products + "-" + profileSectionsCacheKey(sellerID, sections)
+}
+
+// The key Rails gave a production seller's two sections, the later saved at 19:58:07.957624.
+func TestProfileSectionsCacheKey(t *testing.T) {
+	at := func(s string) db.NullTime {
+		v, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return db.NullTime{Time: v, Valid: true}
+	}
+	sections := []*productsSection{{updatedAt: at("2026-11-04T19:58:07.957624Z")}, {updatedAt: at("2026-10-01T08:00:00Z")}}
+	want := "seller_profile_products_sections/query-72c9c98aeb41f680791a94a5f360b55c-2-20261104195807957624"
+	if got := profileSectionsCacheKey(7499319, sections); got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
+// railsCachedSection is a products section as cached_sections Marshals it: an external id is
+// US-ASCII, as Base64 leaves it.
+func railsCachedSection(id string, header any, sort string, total int64, ids ...int64) railscache.Hash {
+	products := make([]any, len(ids))
+	for i, id := range ids {
+		products[i] = strconv.FormatInt(id, 10)
+	}
+	return railscache.Hash{
+		{Key: railscache.Symbol("id"), Value: railscache.ASCII(id)},
+		{Key: railscache.Symbol("header"), Value: header},
+		{Key: railscache.Symbol("type"), Value: profileProductsSectionType},
+		{Key: railscache.Symbol("show_filters"), Value: false},
+		{Key: railscache.Symbol("default_product_sort"), Value: sort},
+		{Key: railscache.Symbol("search_results"), Value: railscache.Hash{
+			{Key: railscache.Symbol("total"), Value: total},
+			{Key: railscache.Symbol("tags_data"), Value: []any{railscache.Hash{{Key: "key", Value: "design"}, {Key: "doc_count", Value: int64(2)}}}},
+			{Key: railscache.Symbol("filetypes_data"), Value: []any{}},
+			{Key: railscache.Symbol("taxonomy_attributes_data"), Value: []any{}},
+			{Key: railscache.Symbol("products"), Value: products},
+		}},
+	}
+}
+
+// A posts section lists the seller's shown posts that are published on the profile, newest
+// first, ties by id.
+func TestAProductPostsSection(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	post := func(id int64, published any, flags int64, columns map[string]any) {
+		row := map[string]any{"id": id, "seller_id": sellerID, "name": fmt.Sprintf("Post %d", id), "slug": fmt.Sprintf("post-%d", id),
+			"installment_type": "audience", "flags": flags, "published_at": published, "created_at": testNow, "updated_at": testNow}
+		for k, v := range columns {
+			row[k] = v
+		}
+		testdb.Insert(t, conn, "installments", row)
+	}
+	const shown = installmentShownOnProfile
+	post(1_795_501, testNow.Add(-time.Hour), shown, nil)
+	post(1_795_502, testNow, shown, nil)
+	post(1_795_503, testNow, shown, nil)
+	post(1_795_504, nil, shown, nil)
+	post(1_795_505, testNow, 0, nil)
+	post(1_795_506, testNow, shown, map[string]any{"deleted_at": testNow})
+	post(1_795_507, testNow, shown, map[string]any{"installment_type": "follower"})
+	post(1_795_508, testNow, shown, map[string]any{"workflow_id": int64(1)})
+	post(1_795_509, testNow, shown, map[string]any{"seller_id": int64(1)})
+	addSection(t, conn, 1_792_611, profilePostsSectionType, "News",
+		`{"shown_posts":[1795501,1795502,1795503,1795504,1795505,1795506,1795507,1795508,1795509]}`)
+	addSection(t, conn, 1_792_612, profilePostsSectionType, "Empty", `{"shown_posts":[]}`)
+	listSections(t, conn, `{"sections":[1792611,1792612]}`)
+
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+	entry := func(id int64, at string) string {
+		return fmt.Sprintf(`{"id":"%s","name":"Post %d","slug":"post-%d","published_at":"%s"}`, e.ids.Encrypt(id), id, id, at)
+	}
+	want := `"sections":[{"id":"` + e.ids.Encrypt(1_792_611) + `","header":"News","type":"SellerProfilePostsSection","posts":[` +
+		entry(1_795_502, "2026-11-06T12:00:00Z") + "," + entry(1_795_503, "2026-11-06T12:00:00Z") + "," + entry(1_795_501, "2026-11-06T11:00:00Z") +
+		`]},{"id":"` + e.ids.Encrypt(1_792_612) + `","header":"Empty","type":"SellerProfilePostsSection","posts":[]}]`
+	if !strings.Contains(page, want) {
+		t.Errorf("want %s\nin %s", want, page)
+	}
+}
+
+// A featured section renders its product's product_props within the page, as the page renders
+// its own; a product that isn't the seller's alive one renders none.
+func TestAFeaturedProductSection(t *testing.T) {
+	const featured = int64(1_795_601)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "links", map[string]any{"id": featured, "user_id": sellerID, "name": "Featured", "unique_permalink": "gowebfp",
+		"price_cents": 700, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_795_602), "link_id": featured, "price_cents": 700, "currency": "usd",
+		"created_at": testNow, "updated_at": testNow})
+	addSection(t, conn, 1_792_621, profileFeaturedSectionType, "Pick", fmt.Sprintf(`{"featured_product_id":%d}`, featured))
+	addSection(t, conn, 1_792_622, profileFeaturedSectionType, "Gone", `{"featured_product_id":"1795699"}`)
+	// seller.products.alive leaves out a deleted, banned or unpublished product, and another seller's.
+	for i, columns := range []map[string]any{{"deleted_at": testNow}, {"banned_at": testNow}, {"purchase_disabled_at": testNow}, {"user_id": int64(1)}} {
+		id := featured + 10 + int64(i)
+		row := map[string]any{"id": id, "user_id": sellerID, "name": "Hidden", "unique_permalink": fmt.Sprintf("gowebh%d", i),
+			"price_cents": 100, "created_at": testNow, "updated_at": testNow}
+		for k, v := range columns {
+			row[k] = v
+		}
+		testdb.Insert(t, conn, "links", row)
+		addSection(t, conn, 1_792_630+int64(i), profileFeaturedSectionType, "Hidden", fmt.Sprintf(`{"featured_product_id":%d}`, id))
+	}
+	// A decimal String finds the product as the Integer does.
+	addSection(t, conn, 1_792_623, profileFeaturedSectionType, "Again", fmt.Sprintf(`{"featured_product_id":"%d"}`, featured))
+	listSections(t, conn, `{"sections":[1792621,1792622,1792630,1792631,1792632,1792633,1792623]}`)
+
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+	id := e.ids.Encrypt(featured)
+	for _, want := range []string{
+		`"sections":[{"id":"` + e.ids.Encrypt(1_792_621) + `","header":"Pick","type":"SellerProfileFeaturedProductSection",` +
+			`"props":{"product":{"id":"` + id + `","permalink":"gowebfp","name":"Featured",`,
+		`"price_cents":700,`,
+		`"long_url":"https://gowebproductseller.gumroad.com/l/gowebfp",`,
+		`},"discount_code":null,"sale_label":null,`,
+		`"purchase":null,"wishlists":[]}},{"id":"` + e.ids.Encrypt(1_792_622) + `","header":"Gone","type":"SellerProfileFeaturedProductSection","props":null},`,
+		`"header":"Hidden","type":"SellerProfileFeaturedProductSection","props":null},{"id":"` + e.ids.Encrypt(1_792_631),
+		`"header":"Hidden","type":"SellerProfileFeaturedProductSection","props":null},{"id":"` + e.ids.Encrypt(1_792_633) +
+			`","header":"Hidden","type":"SellerProfileFeaturedProductSection","props":null},{"id":"` + e.ids.Encrypt(1_792_623) +
+			`","header":"Again","type":"SellerProfileFeaturedProductSection","props":{"product":{"id":"` + id + `"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	}
+}
+
+// Rails builds an unlisted featured section's product_props too, so its product's shape counts.
+func TestAnUnlistedFeaturedSectionsProduct(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_795_701), "user_id": sellerID, "name": "Tip jar", "unique_permalink": "gowebtip",
+		"native_type": "coffee", "price_cents": 100, "created_at": testNow, "updated_at": testNow})
+	addSection(t, conn, 1_792_641, profileFeaturedSectionType, "Tip", `{"featured_product_id":1795701}`)
+	listSections(t, conn, `{"sections":[]}`)
+	e.render(t, nil, "coffee product")
 }

@@ -111,8 +111,9 @@ export const CreateMedia = () => (
         <p>
           To use <code className="inline-code">signed_blob_id</code>, first reserve a direct upload with{" "}
           <code className="inline-code">POST /v2/direct_uploads</code> passing{" "}
-          <code className="inline-code">purpose=media</code>, upload the bytes to the URL it returns, then pass the
-          returned signed ID here.
+          <code className="inline-code">purpose=media</code>, upload the bytes to the URL it returns with every header
+          from <code className="inline-code">direct_upload.headers</code> exactly as returned, then pass the returned
+          signed ID here.
         </p>
       </>
     }

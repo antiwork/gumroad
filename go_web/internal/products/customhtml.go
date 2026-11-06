@@ -33,10 +33,21 @@ var customHTMLWaitlist string
 // customDomainCertificateLifetime is CustomDomain::CERTIFICATE_LIFETIME.
 const customDomainCertificateLifetime = 90 * 24 * time.Hour
 
-// renderCustomHTML is render_custom_html_if_present for a signed-out visitor, whose wanted,
-// native, code and purchase_id params declinedParams already left to Rails.
+// renderCustomHTML is render_custom_html_if_present, whose wanted, native, code and purchase_id
+// params declinedParams already left to Rails.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
+	if logged := p.Auth.LoggedInUser(); logged != nil {
+		// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
+		// staff went to Rails already.
+		if logged.ID == prod.userID {
+			return fallback("custom html preview")
+		}
+		collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
+		if err != nil || collaborates {
+			return firstErr(err, fallback("custom html preview"))
+		}
+	}
 	if pc.CustomHTMLAnalytics == nil {
 		return fallback("custom html analytics entrypoint")
 	}
@@ -123,6 +134,9 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		"«waitlist_script»", waitlist,
 	).Replace(customHTMLWrapper)
 
+	if err := h.trackUTMVisit(w, p, prod); err != nil {
+		return err
+	}
 	if !p.DryRun {
 		h.flushCacheWrites(ctx, p)
 	}

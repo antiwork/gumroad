@@ -61,8 +61,10 @@ type Visit struct {
 	// Cookies are the Set-Cookie lines the cookie jar writes, in the order they were set.
 	Cookies []string
 	Secure  bool
-	// MintedGUID is a _gumroad_guid set_gumroad_guid minted for this response.
+	// MintedGUID is a _gumroad_guid set_gumroad_guid minted for this response, and GUID what
+	// cookies[:_gumroad_guid] reads after it: the request's, or the minted one.
 	MintedGUID bool
+	GUID       string
 }
 
 // MaskedCSRFToken is form_authenticity_token.
@@ -194,8 +196,11 @@ func (c *Controller) BeforeActions(p *Visit) (location string, err error) {
 	}
 	if !req.HasCookie(guidCookie) {
 		p.MintedGUID = true
-		p.Cookies = append(p.Cookies, rails.CookieLine(guidCookie, web.NewUUID(), rails.CookieDomainAll(req.Host), "",
+		p.GUID = web.NewUUID()
+		p.Cookies = append(p.Cookies, rails.CookieLine(guidCookie, p.GUID, rails.CookieDomainAll(req.Host), "",
 			rails.AddYears(req.Now, 10), true, p.Secure))
+	} else {
+		p.GUID, _ = req.Cookie(guidCookie)
 	}
 	if p.Session.Get(recommenderSessionKey) != recommenderModel {
 		p.Session.Set(recommenderSessionKey, recommenderModel)

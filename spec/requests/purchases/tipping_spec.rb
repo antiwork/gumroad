@@ -145,7 +145,11 @@ describe("Product checkout with tipping", type: :system, js: true) do
       expect(page).not_to have_radio_button("Other")
       expect(page).not_to have_field("Tip")
 
-      check_out(free_product1, is_free: true)
+      fill_checkout_form(free_product1, is_free: true)
+      click_on "Get", exact: true
+
+      # Two sellers, so the confirmation names neither.
+      expect(page).to have_alert(text: "You signed up for free. We emailed the details to test@gumroad.com.", visible: :all, wait: 60)
 
       purchase = Purchase.last
       expect(purchase).to be_successful

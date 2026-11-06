@@ -9,6 +9,21 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
+// Purchase flag bits (has_flags in purchase.rb).
+const (
+	purchaseIsAdditionalContribution       int64 = 1 << 0
+	purchaseIsOriginalSubscription         int64 = 1 << 2
+	purchaseIsPreorderAuthorization        int64 = 1 << 3
+	purchaseIsGiftReceiver                 int64 = 1 << 5
+	purchaseIsGiftSender                   int64 = 1 << 6
+	purchaseChargebackReversed             int64 = 1 << 9
+	purchaseWasTaxable                     int64 = 1 << 12
+	purchaseIsArchivedOriginalSubscription int64 = 1 << 17
+	purchaseIsAccessRevoked                int64 = 1 << 24
+	purchaseIsBundle                       int64 = 1 << 25
+	purchaseIsCommissionCompletion         int64 = 1 << 29
+)
+
 // Link flag bits (has_flags in link.rb).
 const (
 	productRefundPolicyEnabled int64 = 1 << iota

@@ -42,6 +42,13 @@ type currencyDisplay struct {
 	originalLocalCents *int64
 }
 
+// setOriginal sets buyer_local_original_price_cents for original, in productCurrency.
+func (c *currencyDisplay) setOriginal(original int64, productCurrency string) {
+	// buyer_local_price_props converts the original through the shown Float rate.
+	local := localPriceCents(original, productCurrency, c.buyer, shortestRat(c.rate))
+	c.originalLocalCents = &local
+}
+
 // localCurrencyBuyer is the page's buyer currency when a local price may show: the seller has
 // opted in, and the currency cookie or GeoIP names one.
 func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {
@@ -248,16 +255,8 @@ func (h *handler) sellerStripeAccount(p *page) (*stripeAccount, error) {
 		if err := rows.Scan(&raw, &country, &a.currency); err != nil {
 			return nil, err
 		}
-		var ok bool
-		if a.data, ok = parseJSONData(raw); !ok {
-			return nil, fallback("merchant account json_data")
-		}
-		switch meta := a.data.get("meta").(type) {
-		case nil:
-		case *rails.Hash:
-			a.connect = meta.Value("stripe_connect") == "true"
-		default:
-			return nil, fallback("merchant account json_data")
+		if a.data, a.connect, err = merchantAccountConnect(raw); err != nil {
+			return nil, err
 		}
 		switch {
 		case a.connect && connect == nil:
@@ -307,6 +306,22 @@ func (h *handler) platformStripeAccount(ctx context.Context) (*platformAccount, 
 		return nil, err
 	}
 	return a, nil
+}
+
+// merchantAccountConnect reads a merchant account's json_data as Rails classifies it, by
+// meta.stripe_connect; a json_data or meta Rails would raise on goes to Rails.
+func merchantAccountConnect(raw sql.NullString) (jsonData, bool, error) {
+	j, ok := parseJSONData(raw)
+	if !ok {
+		return jsonData{}, false, fallback("merchant account json_data")
+	}
+	switch meta := j.get("meta").(type) {
+	case nil:
+		return j, false, nil
+	case *rails.Hash:
+		return j, meta.Value("stripe_connect") == "true", nil
+	}
+	return jsonData{}, false, fallback("merchant account json_data")
 }
 
 // mismatchMap is settlement_currency_mismatch_map, nil when blank; anything else but a Hash

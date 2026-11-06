@@ -1,28 +1,27 @@
 # frozen_string_literal: true
 
-# Ai::StoreAgentScopes resolves WHICH OAuth scopes the agent's short-lived token may carry for a
-# given acting user, based on that user's team role for the seller.
+# Ai::StoreAgentScopes resolves WHICH OAuth scopes a token acting for a seller may carry for a
+# given acting user, based on that user's team role for the seller. Today its caller is
+# MobileAccountToken (brand tokens for team members in the mobile app); the name dates from the
+# retired in-product Store Agent, which minted its tokens the same way.
 #
 # Why this exists (security):
-#   The agent replays the real public v2 API with a token whose resource owner is always the STORE
-#   OWNER (so the right records resolve). The v2 API authenticates the token's resource owner and
-#   gates each endpoint by SCOPE only — it never consults the acting team member's role. Left
-#   unchecked, a non-owner teammate allowed on the Agent tab (e.g. a marketing member) would inherit
-#   the owner's full scope set and could read payouts/tax data or issue refunds that the dashboard's
-#   Pundit rules deny for their role.
+#   Such a token's resource owner is always the STORE OWNER (so the right records resolve). The v2
+#   API authenticates the token's resource owner and gates each endpoint by SCOPE only — it never
+#   consults the acting team member's role. Left unchecked, a non-owner teammate (e.g. a marketing
+#   member) would inherit the owner's full scope set and could read payouts/tax data or issue
+#   refunds that the dashboard's Pundit rules deny for their role.
 #
 #   So we mint the token with only the subset of scopes the acting user's role is actually allowed,
 #   mirroring the dashboard Pundit policies. An endpoint outside that subset then 403s at the v2
-#   layer exactly as it would in the dashboard. This is the real boundary; the service/executor add
-#   a defense-in-depth pre-check on top so a denied endpoint is refused before any dispatch.
+#   layer exactly as it would in the dashboard.
 #
 # Role -> scope mapping is grounded in the existing dashboard policies (the source of truth):
 #   - Content (products, sales reads, emails, profile): LinkPolicy#new?, Audience::PurchasePolicy
 #     #index?, WorkflowPolicy#create?, ProfileSectionPolicy#update? -> admin OR marketing.
 #   - Financial / sensitive writes (payouts, tax data, sale edits/refunds/shipping):
 #     BalancePolicy#index?, Audience::PurchasePolicy#update?/refund?/mark_as_shipped? -> admin (and
-#     accountant/support, but those roles can't reach the Agent tab; see UserPolicy#use_store_agent?).
-#     NOT marketing. We default-deny these to non-admins.
+#     accountant/support). NOT marketing. We default-deny these to non-admins.
 #
 # `account` + `view_public` are the always-required baseline (Api::V2::BaseController appends
 # :account to every authorize! check). The owner satisfies every role_*_for? predicate, so the owner

@@ -75,6 +75,7 @@ class CustomerMailer < ApplicationMailer
 
     # MailSubject calls link_name on the first successful purchase and raises when that set is empty.
     return if @chargeable.successful_purchases.none?
+    return if for_email && suppress_receipt_from_unproven_seller?(@chargeable)
 
     @receipt_presenter = ReceiptPresenter.new(@chargeable, for_email:)
 
@@ -444,7 +445,13 @@ class CustomerMailer < ApplicationMailer
         break if window.empty?
 
         scope = scope.where("purchases.id < ?", window.last.id)
-        chargeables = renderable_chargeables((chargeables + window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq)
+        # A blocked receipt must not take one of the twenty slots (gp#4366).
+        renderable_chargeables(window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq.each do |chargeable|
+          next if chargeables.include?(chargeable) || suppress_receipt_from_unproven_seller?(chargeable)
+
+          chargeables << chargeable
+          break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
+        end
         break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
       end
 
@@ -523,5 +530,23 @@ class CustomerMailer < ApplicationMailer
     rescue => e
       ErrorNotifier.notify(e)
       true
+    end
+
+    # Free "purchases" from a brand-new seller make Gumroad mail anyone the receipt, with the
+    # seller and product names in the From and subject (gp#4366). Paid orders always send: the
+    # charge itself is the proof. Only the email is skipped; the buyer keeps access.
+    def suppress_receipt_from_unproven_seller?(chargeable)
+      # A purchase that carries its own price is already known to be paid, so it costs no second read.
+      return false if chargeable.is_a?(Purchase) && chargeable.price_cents.to_i > 0
+
+      purchases = chargeable.successful_purchases
+      return false if purchases.any? { _1.price_cents.to_i > 0 }
+
+      seller = chargeable.seller
+      return false unless ContentModeration::GumroadImpersonation.unproven_seller?(seller)
+
+      ContentModeration::GumroadImpersonation.gumroad_address?(chargeable.orderable.email) ||
+        ContentModeration::GumroadImpersonation.impersonates?(seller.name) ||
+        purchases.any? { ContentModeration::GumroadImpersonation.impersonates?(_1.link_name) }
     end
 end

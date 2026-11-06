@@ -7,6 +7,7 @@ import { RichContent, RichContentPage } from "$app/parsers/richContent";
 import { assertDefined } from "$app/utils/assert";
 import FileUtils from "$app/utils/file";
 import { assertString } from "$app/utils/guards";
+import { purchaseConfirmationMessage } from "$app/utils/purchaseConfirmation";
 import {
   generatePageIcon,
   PAGE_ICON_COMPONENTS,
@@ -143,7 +144,14 @@ export const WithContent = ({
 
   useRunOnce(() => {
     if (url.searchParams.get("receipt") === "true" && props.purchase?.email) {
-      showAlert(`Your purchase was successful! We sent a receipt to ${props.purchase.email}.`, "success");
+      showAlert(
+        purchaseConfirmationMessage({
+          free: props.purchase.free,
+          sellerName: props.purchase.seller_name,
+          email: props.purchase.email,
+        }),
+        "success",
+      );
       url.searchParams.delete("receipt");
       router.replace({ url: url.toString(), preserveState: true, preserveScroll: true });
 

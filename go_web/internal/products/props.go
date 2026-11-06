@@ -7,8 +7,8 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
-// productProps adds ProductPresenter::ProductProps#props for a signed-out visitor, in its key
-// order, for the product shapes unportedShape lets through.
+// productProps adds ProductPresenter::ProductProps#props, in its key order, for the product shapes
+// unportedShape lets through.
 func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *view) {
 	ids, seller := h.c.IDs, p.seller
 	externalID := ids.Encrypt(prod.id)
@@ -96,20 +96,20 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("analytics", analyticsData(seller, v.sellerJSON)).
 		Sym("has_third_party_analytics", v.thirdPartyAnalytics).
 		Sym("ppp_details", v.ppp.props()).
-		Sym("can_edit", false).
+		Sym("can_edit", p.canEdit()).
 		Sym("waitlist", h.waitlistProps(prod, v)).
 		Sym("refund_policy", v.refundPolicy).
 		Sym("bundle_products", v.bundle.props).
 		Sym("public_files", v.publicFiles).
 		Sym("file_summaries", v.fileSummaries)
 
-	discountCode := v.discount.resultProps(externalID)
+	discountCode := v.discount.resultProps()
 	props.Sym("product", product).
 		Sym("discount_code", discountCode).
 		Sym("sale_label", v.discount.label).
 		Sym("selection_discounts", selectionDiscounts(prod, v, discountCode)).
-		Sym("purchase", nil).
-		Sym("wishlists", []any{})
+		Sym("purchase", v.purchase).
+		Sym("wishlists", v.wishlists)
 }
 
 // pwywDefault is pwyw_default_price_cents.
@@ -191,7 +191,8 @@ func analyticsData(u *user, j jsonData) *rails.RHash {
 // authorByline is UserPresenter#author_byline_props with the request's
 // seller_custom_domain_url: on the seller's subdomain that is its root URL.
 func (h *handler) authorByline(p *page, v *view) any {
-	return bylineProps(p.seller, v.avatarURL, h.sellerCustomDomainURL(p))
+	// User#profile_url adds recommended_by as url_for_product_page does.
+	return bylineProps(p.seller, v.avatarURL, h.sellerCustomDomainURL(p)+productPageQuery("", p.recommendedBy))
 }
 
 // bylineProps is UserPresenter#author_byline_props for u, nil without a username.
@@ -210,6 +211,12 @@ func bylineProps(u *user, avatarURL, profileURL string) any {
 // userSubdomain is User#subdomain: the username with dashes for underscores, under ROOT_DOMAIN.
 func (h *handler) userSubdomain(u *user) string {
 	return strings.ReplaceAll(sellerUsername(u), "_", "-") + "." + h.c.Env.RootDomain
+}
+
+// userProfileURL is User#profile_url without a custom domain: subdomain_with_protocol, no
+// trailing slash.
+func (h *handler) userProfileURL(u *user) string {
+	return h.c.Env.Protocol + "://" + h.userSubdomain(u)
 }
 
 // sellerCustomDomainURL is root_url(protocol: PROTOCOL, host: request.host_with_port).
@@ -242,17 +249,21 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 		Sym("youtube_channel_id", v.youtubeChannelID).
 		Sym("subdomain", h.userSubdomain(seller)).
 		Sym("is_verified", seller.verified.Bool).
-		Sym("can_edit", false).
+		Sym("can_edit", p.ownView()).
 		Sym("follow_recaptcha_site_key", v.recaptchaSiteKey).
 		Sym("hide_follow_form", seller.is(userHideFollowForm))
 	if v.reputationEnabled {
 		profile.Sym("reputation", v.profileReputation)
 	}
-	return rails.NewRHash().
-		Sym("currency_code", "usd").
+	props := rails.NewRHash().
+		Sym("currency_code", viewerCurrency(p)).
 		Sym("show_ratings_filter", v.showRatingsFilter).
 		Sym("creator_profile", profile).
 		Sym("sections", []any{})
+	if v.editor != nil {
+		props.Merge(v.editor)
+	}
+	return props
 }
 
 // buyerCurrencyDisplay is buyer_currency_display_props' hash.

@@ -81,8 +81,8 @@ type Document struct {
 	// UserAgent is the User-Agent header, and AsEmbed whether params[:as_embed] is truthy.
 	UserAgent string
 	AsEmbed   bool
-	// BodyID is @body_id.
-	BodyID string
+	// BodyID is @body_id, and BodyClass @body_class.
+	BodyID, BodyClass string
 	// DesignSettings and UserAgentInfo are the JSON the layout writes into its hidden divs.
 	DesignSettings, UserAgentInfo string
 }
@@ -101,13 +101,18 @@ func (l *Layout) Render(d Document) string {
 	if strings.Contains(d.UserAgent, "Macintosh") {
 		class += " mac"
 	}
+	if d.BodyClass != "" {
+		class += " " + d.BodyClass
+	}
 	style := ""
 	if d.AsEmbed {
 		style = "background: transparent"
 	}
 	b.WriteString(`  <body id="`)
 	web.WriteHTMLEscaped(&b, d.BodyID)
-	b.WriteString(`" class="` + class + `" style="` + style + "\">\n")
+	b.WriteString(`" class="`)
+	web.WriteHTMLEscaped(&b, class)
+	b.WriteString(`" style="` + style + "\">\n")
 	b.WriteString(`    <div id="design-settings" data-settings="`)
 	web.WriteHTMLEscaped(&b, d.DesignSettings)
 	b.WriteString("\" style=\"display: none;\"></div>\n" + `    <div id="user-agent-info" data-settings="`)

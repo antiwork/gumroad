@@ -70,6 +70,7 @@ import {
   requiresReusablePaymentMethod,
   shouldSuppressClientConfirmWallets,
   BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
+  PayRecapContext,
   usePayLabel,
   useState,
 } from "$app/components/Checkout/payment";
@@ -80,6 +81,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -1265,6 +1267,29 @@ const CreditCardContent = ({
   );
 };
 
+// Names each paid item when the cart mixes free and paid lines, so a free download can't carry a charge unnoticed.
+const PayRecapLines = () => {
+  const recap = React.useContext(PayRecapContext);
+  if (!recap || recap.paidLines.length === 0) return null;
+  const pending = recap.paidLines.some((line) => line.price == null);
+  return (
+    <div className="text-sm" data-checkout-pay-recap="true" aria-busy={pending}>
+      You are paying for:{" "}
+      {recap.paidLines.map((line, index) => (
+        <React.Fragment key={index}>
+          {index > 0 ? ", " : null}
+          {line.name}{" "}
+          {line.price != null ? (
+            `(${line.price})`
+          ) : (
+            <Skeleton className="inline-block w-10 align-middle" aria-hidden="true" />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
 const CreditCardPayButtonContent = ({
   disabled = false,
   isTestPurchase,
@@ -1281,6 +1306,7 @@ const CreditCardPayButtonContent = ({
 
   return (
     <div className="flex flex-col gap-4">
+      <PayRecapLines />
       <Button
         color="primary"
         onClick={() => {
@@ -1362,10 +1388,13 @@ const BraintreePayPal = ({ token }: { token: string }) => {
   }, [state.status.type]);
 
   return (
-    <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
-      <Paypal pack="brands" className="size-5" />
-      {payLabel}
-    </Button>
+    <div className="flex flex-col gap-4">
+      <PayRecapLines />
+      <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+        <Paypal pack="brands" className="size-5" />
+        {payLabel}
+      </Button>
+    </div>
   );
 };
 
@@ -1546,6 +1575,7 @@ const PayPalContent = () => {
 
   return (
     <div className="flex flex-col items-center gap-4">
+      {nativePaypal && implementation === "native" ? <PayRecapLines /> : null}
       {nativePaypal && implementation === "native" ? (
         <NativePayPal key={paypalGeneration} implementation={nativePaypal} />
       ) : braintreeToken.type === "available" ? (
@@ -1768,6 +1798,7 @@ const StripePaymentRequestContent = () => {
 
   return (
     <div className="flex flex-col gap-4">
+      <PayRecapLines />
       <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
         {payLabel}
       </Button>

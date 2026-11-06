@@ -331,27 +331,24 @@ func (h *handler) videoPosterURL(ctx context.Context, p *page, c *cover) (string
 // persistedPosterURL is persisted_video_poster_url: the blob's preview image resized to
 // retina_width, when that variant exists; "" otherwise.
 func (h *handler) persistedPosterURL(ctx context.Context, c *cover) (string, error) {
-	rows, err := h.c.DB.QueryContext(ctx, `SELECT blobs.id, blobs.filename, blobs.content_type FROM active_storage_attachments att
-		INNER JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
-		WHERE att.record_type = 'ActiveStorage::Blob' AND att.record_id = ? AND att.name = 'preview_image' LIMIT 2`, c.blobID)
-	if err != nil {
+	// blob.preview_image's has_one statement, verbatim: it has no ORDER BY, so among duplicate
+	// attachments MySQL's plan picks the row, and the same text gets the same plan.
+	var attached sql.NullInt64
+	if err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		cols["blob_id"] = &attached
+		return func() {}
+	}, "SELECT `active_storage_attachments`.* FROM `active_storage_attachments` WHERE `active_storage_attachments`.`record_id` = ?"+
+		" AND `active_storage_attachments`.`record_type` = 'ActiveStorage::Blob' AND `active_storage_attachments`.`name` = 'preview_image' LIMIT 1",
+		c.blobID); err != nil || !attached.Valid {
 		return "", err
-	}
-	defer rows.Close()
-	if !rows.Next() {
-		return "", rows.Err()
 	}
 	var preview struct {
 		id                    int64
 		filename, contentType sql.NullString
 	}
-	if err := rows.Scan(&preview.id, &preview.filename, &preview.contentType); err != nil {
-		return "", err
-	}
-	if rows.Next() {
-		return "", fallback("video preview image")
-	}
-	if err := rows.Err(); err != nil {
+	// The attachments' foreign key keeps the blob.
+	if err := h.c.DB.QueryRowContext(ctx, "SELECT active_storage_blobs.id, active_storage_blobs.filename, active_storage_blobs.content_type"+
+		" FROM active_storage_blobs WHERE active_storage_blobs.id = ? LIMIT 1", attached.Int64).Scan(&preview.id, &preview.filename, &preview.contentType); err != nil {
 		return "", err
 	}
 	width := any(int64(coverRetinaWidth))
@@ -446,11 +443,20 @@ func (c *cover) displayHeight() (int64, bool) {
 // previewImagePath is preview_image_path? for the main cover: an image file or an Unsplash photo.
 func (c *cover) previewImagePath() bool { return c.isImage || c.isUnsplash }
 
+// filenameSanitizer is the tr in ActiveStorage::Filename#sanitized.
+var filenameSanitizer = strings.NewReplacer("\u202E", "-", "%", "-", "$", "-", "|", "-", ":", "-", ";", "-", "/", "-", "<", "-",
+	">", "-", "?", "-", "*", "-", `"`, "-", "\t", "-", "\r", "-", "\n", "-", `\`, "-")
+
+// sanitizedFilename is ActiveStorage::Filename#to_s. A blob uploaded from a URL keeps its query
+// string, whose ? and % this rewrites.
+func sanitizedFilename(name string) string { return filenameSanitizer.Replace(rails.Strip(name)) }
+
+// filetype is AssetPreview#filetype.
 func (c *cover) filetype() any {
 	if c.oembed != nil || c.isUnsplash {
 		return nil
 	}
-	if ext := strings.Replace(rails.FileExtname(c.filename), ".", "", 1); ext != "" {
+	if ext := strings.Replace(rails.FileExtname(sanitizedFilename(c.filename)), ".", "", 1); ext != "" {
 		return ext
 	}
 	parts := rails.Split(c.contentType, "/")

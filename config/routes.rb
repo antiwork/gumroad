@@ -84,12 +84,12 @@ Rails.application.routes.draw do
 
       get "/user", to: "users#show"
       # The seller's store theme (background colour, highlight colour, font). Read-only: these have
-      # no self-serve editor, but a caller — the store agent especially — needs to be able to SEE
+      # no self-serve editor, but a caller — an AI agent especially — needs to be able to SEE
       # the theme that is already rendering on the seller's storefront and product pages.
       get "/user/theme", to: "users#theme"
       # The seller's default (non-custom-HTML) profile layout: their tabs and the sections inside
       # them, with each section's heading. Read-only — the seller edits these in the dashboard, and
-      # the store agent needs to be able to SEE them so it stops telling sellers that headings on
+      # an AI agent needs to be able to SEE them so it stops telling sellers that headings on
       # their own storefront do not exist (gumroad-private#1466).
       get "/user/profile_layout", to: "users#profile_layout"
       match "/user", to: "users#update", via: [:put, :patch]
@@ -102,11 +102,11 @@ Rails.application.routes.draw do
       resources :pages, only: [:index, :show, :create, :update, :destroy]
       # Creator public media library (images hosted on public storage so they render on
       # custom pages under their CSP). `create` accepts a remote url (downloaded server-side with
-      # SSRF protection) or a signed_blob_id; also the store agent's media ingestion path.
+      # SSRF protection) or a signed_blob_id; also an AI agent's media ingestion path.
       resources :media, only: [:index, :create, :destroy]
       resources :categories, only: [:index]
       # Gumroad's own help center articles, as plain text. Read-only and public (these are the
-      # same pages served at gumroad.com/help), so the store agent can check how a feature really
+      # same pages served at gumroad.com/help), so an AI agent can check how a feature really
       # works instead of guessing. Addressed by the article's slug, same as the web route.
       resources :help_articles, only: [:index, :show], param: :slug, path: "help/articles"
       resource :refund_policy, only: [:show, :update], controller: :refund_policies
@@ -402,12 +402,8 @@ Rails.application.routes.draw do
           end
         end
         resources :products, only: [:index, :destroy]
+        # Tombstone for the removed mobile Agent chat: shipped builds call this on mount.
         get "/agent/meta", to: "agent#meta"
-        get "/agent/conversations/latest", to: "agent#latest_conversation"
-        get "/agent/turns/:client_turn_id", to: "agent#turn_status"
-        post "/agent/messages", to: "agent#create"
-        post "/agent/messages/stream", to: "agent_streams#create"
-        post "/agent/actions", to: "agent#execute"
         resources :devices, only: :create
         resources :installments, only: :show
         resources :consumption_analytics, only: [:create], format: :json
@@ -1162,8 +1158,8 @@ Rails.application.routes.draw do
     get "/product_files_utility/product_files/:product_id", to: "product_files_utility#download_product_files", as: :download_product_files
     get "/product_files_utility/folder_archive/:folder_id", to: "product_files_utility#download_folder_archive", as: :download_folder_archive
 
-    # agent (conversational store assistant)
-    get "/agent", to: "agent#index", as: :agent
+    # The Agent tab is gone; kept for bookmarks and the mobile app's tombstone notice.
+    get "/agent", to: redirect("/mcp", status: 301)
 
     # analytics
     get "/analytics" => redirect("/dashboard/sales")
@@ -1371,19 +1367,6 @@ Rails.application.routes.draw do
         end
 
         resources :ai_product_details_generations, only: [:create]
-
-        # Conversational store agent
-        post "/agent/messages", to: "agent_messages#create", as: :agent_messages
-        post "/agent/messages/stream", to: "agent_message_streams#create", as: :agent_messages_stream
-        post "/agent/actions", to: "agent_messages#execute", as: :agent_actions
-        get "/agent/actions/status", to: "agent_conversations#action_status", as: :agent_action_status
-        get "/agent/conversations/latest", to: "agent_conversations#latest", as: :agent_conversations_latest
-        get "/agent/turns/:client_turn_id", to: "agent_conversations#turn_status", as: :agent_turn_status
-        post "/agent/custom_html_preview", to: "agent_custom_html_previews#create", as: :agent_custom_html_preview
-        # Serves a staged preview document by token. This must be a real URL (not JSON consumed
-        # into an iframe srcdoc) so the response can carry the custom-page CSP header — srcdoc
-        # documents inherit the dashboard's CSP, which blocks the page's inline scripts.
-        get "/agent/custom_html_previews/:token", to: "agent_custom_html_previews#show", as: :agent_custom_html_preview_document, defaults: { format: :html }
       end
     end
 

@@ -1,30 +1,48 @@
 package products
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
+
+// installmentShownOnProfile is flag 8 of Installment's has_flags.
+const installmentShownOnProfile = 1 << 7
 
 // productSections are the product's own sections that Link#sections lists, in its order, each
 // either rendered already or a products section still to search.
 type productSections struct {
 	listed   []listedSection
 	products []*productsSection
+	featured []*featuredSection
+}
+
+// featuredSection is a listed featured product section and its product, loaded short of its
+// sales count, when it names one.
+type featuredSection struct {
+	props *rails.RHash
+	page  *page
+	prod  *product
+	view  *view
 }
 
 type listedSection struct {
 	props    *rails.RHash
 	products *productsSection
+	// editor is what the seller's own view merges into a products section's props.
+	editor *rails.RHash
 }
 
 // sectionTypes are SellerProfileSection's subclasses.
 var sectionTypes = map[string]bool{
 	profileProductsSectionType: true, profileSubscribeSectionType: true, profileRichTextSectionType: true,
-	"SellerProfilePostsSection": true, "SellerProfileFeaturedProductSection": true, "SellerProfileWishlistsSection": true,
+	profilePostsSectionType: true, profileFeaturedSectionType: true, profileWishlistsSectionType: true,
 }
 
 // listProductSections reads the sections product_page_props renders, before any search: Rails
@@ -32,6 +50,7 @@ var sectionTypes = map[string]bool{
 // when the product doesn't list it.
 func (h *handler) listProductSections(p *page, prod *product, v *view) (*productSections, error) {
 	ps := &productSections{}
+	editing := p.ownView()
 	// Link#sections is [] when blank; filter_map finds nothing in a Hash and raises on the rest.
 	var list []any
 	if raw, ok := v.productJSON.present("sections"); ok {
@@ -66,6 +85,11 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 	}
 	defer rows.Close()
 	byKey := map[string]listedSection{}
+	type pending struct {
+		props *rails.RHash
+		ids   []int64
+	}
+	var posts, featured, wishlists []pending
 	for rows.Next() {
 		var r sectionRow
 		if err := rows.Scan(r.dest()...); err != nil {
@@ -77,10 +101,56 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 			return nil, fallback("product section row")
 		}
 		key := strconv.FormatInt(r.id, 10)
-		if !slices.Contains(keys, key) {
+		listed := slices.Contains(keys, key)
+		var head *rails.RHash
+		if listed {
+			header := r.shownHeader()
+			if editing {
+				// section.header || ""
+				header = r.header.String
+			}
+			head = sectionHead(h.c.IDs.Encrypt(r.id), header, r.typ)
+			byKey[key] = listedSection{props: head}
+		}
+		// The editor's hide_header follows the cached keys and precedes those section_props adds.
+		hideHeader := func() {
+			if editing && head != nil {
+				head.Sym("hide_header", r.hidesHeader())
+			}
+		}
+		if r.typ == profileFeaturedSectionType {
+			ids, err := featuredProductID(j)
+			if err != nil {
+				return nil, err
+			}
+			if editing {
+				// The editor's shape names the product without rendering it.
+				if head != nil && len(ids) > 0 {
+					head.Sym("featured_product_id", h.c.IDs.Encrypt(ids[0]))
+				}
+				hideHeader()
+				continue
+			}
+			// Rails builds an unlisted one's product_props too, so it is loaded and dropped.
+			featured = append(featured, pending{head, ids})
 			continue
 		}
-		var field string
+		if r.typ == profileWishlistsSectionType {
+			// An unlisted one's cards are built and dropped too.
+			ids, err := shownWishlists(j)
+			if err != nil {
+				return nil, err
+			}
+			if listed {
+				head.Sym("shown_wishlists", h.encryptIDs(ids))
+			}
+			hideHeader()
+			wishlists = append(wishlists, pending{head, ids})
+			continue
+		}
+		if !listed {
+			continue
+		}
 		switch r.typ {
 		case profileProductsSectionType:
 			s, err := r.productsSection()
@@ -88,19 +158,75 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 				return nil, err
 			}
 			ps.products = append(ps.products, s)
-			byKey[key] = listedSection{products: s}
-			continue
+			listing := listedSection{products: s}
+			if editing {
+				listing.editor = rails.NewRHash().Sym("header", r.header.String).Sym("hide_header", r.hidesHeader()).
+					Sym("shown_products", h.encryptIDs(s.shownProducts)).Sym("add_new_products", j.get("add_new_products"))
+			}
+			byKey[key] = listing
 		case profileSubscribeSectionType:
-			field = "button_label"
+			head.Sym("button_label", j.get("button_label"))
+			hideHeader()
 		case profileRichTextSectionType:
-			field = "text"
+			head.Sym("text", j.get("text"))
+			hideHeader()
+		case profilePostsSectionType:
+			// section.shown_posts: nil matches no post, as where(id: nil) does.
+			var shown []int64
+			if raw := j.get("shown_posts"); raw != nil {
+				list, _ := raw.([]any)
+				if shown, ok = jsonIDs(list); !ok || list == nil {
+					return nil, fallback("product section json_data")
+				}
+			}
+			hideHeader()
+			posts = append(posts, pending{head, shown})
 		default:
 			return nil, fallback("product section " + r.typ)
 		}
-		byKey[key] = listedSection{props: sectionHead(h.c.IDs.Encrypt(r.id), r.shownHeader(), r.typ).Sym(field, j.get(field))}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	rows.Close()
+	for _, s := range posts {
+		list, err := h.visiblePosts(p, s.ids)
+		if err != nil {
+			return nil, err
+		}
+		if !editing {
+			s.props.Sym("posts", list)
+			continue
+		}
+		ids := make([]any, len(list))
+		for i, post := range list {
+			ids[i] = post.(*rails.RHash).Get("id")
+		}
+		s.props.Sym("shown_posts", ids)
+	}
+	for _, s := range wishlists {
+		cards, err := h.wishlistCards(p, s.ids)
+		if err != nil {
+			return nil, err
+		}
+		if s.props != nil {
+			s.props.Sym("wishlists", cards)
+		}
+	}
+	for _, s := range featured {
+		f, err := h.prepareFeatured(p, v, s.ids)
+		if err != nil {
+			return nil, err
+		}
+		if s.props == nil {
+			continue
+		}
+		if f == nil {
+			s.props.Sym("props", nil)
+			continue
+		}
+		f.props = s.props
+		ps.featured = append(ps.featured, f)
 	}
 	for _, key := range keys {
 		if s, ok := byKey[key]; ok {
@@ -109,21 +235,55 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 	}
 	if len(ps.products) > 0 {
 		switch {
+		case reviewSorted(ps.products) && !p.visitorSearch:
+			return nil, fallback("products section review sort")
 		case h.c.Page.Search == nil:
 			return nil, fallback("products section search")
-		case p.hasAutoApplyCode:
-			// Cards price through the seller's auto-applied code and label its sale.
-			return nil, fallback("products section auto-apply")
 		}
 	}
 	return ps, nil
 }
 
-// renderProductSections is the listed sections' props, searching the products sections without omit_product.
+// featuredProductID is the featured_product_id the cached external id finds by: an Integer, or
+// a decimal String, which to_s leaves the same.
+func featuredProductID(j jsonData) ([]int64, error) {
+	switch raw := j.get("featured_product_id").(type) {
+	case nil:
+		return nil, nil
+	case json.Number, string:
+		text, _ := rails.String(raw)
+		if id, ok := decimalID(text); ok {
+			return []int64{id}, nil
+		}
+	}
+	return nil, fallback("product section json_data")
+}
+
+// renderProductSections is the listed sections' props: the featured products' sales counts and
+// props, and the products sections searched without omit_product.
 func (h *handler) renderProductSections(p *page, ps *productSections, buyer *string) ([]any, error) {
+	for _, f := range ps.featured {
+		if err := h.loadSalesCount(p.Ctx, f.page, f.prod, f.view); err != nil {
+			return nil, err
+		}
+		p.absorb(f.page)
+		props := rails.NewRHash()
+		h.productProps(props, f.page, f.prod, f.view)
+		f.props.Sym("props", props)
+	}
 	built := map[*productsSection]any{}
 	if len(ps.products) > 0 {
-		props, err := h.productsSectionsProps(p, nil, ps.products, buyer)
+		search := h.cachedCatalog
+		if p.visitorSearch {
+			// section_props replaces the search, so go_web's cache and its review-sort caveat
+			// don't apply.
+			search = h.visitorSearchSections
+		}
+		searches, err := search(p, ps.products)
+		if err != nil {
+			return nil, err
+		}
+		props, err := h.productsSectionsProps(p, nil, ps.products, searches, buyer)
 		if err != nil {
 			return nil, err
 		}
@@ -133,11 +293,143 @@ func (h *handler) renderProductSections(p *page, ps *productSections, buyer *str
 	}
 	out := make([]any, len(ps.listed))
 	for i, s := range ps.listed {
-		if s.props != nil {
+		switch {
+		case s.props != nil:
 			out[i] = s.props
-		} else {
+		case s.editor != nil:
+			out[i] = built[s.products].(*rails.RHash).Merge(s.editor)
+		default:
 			out[i] = built[s.products]
 		}
 	}
 	return out, nil
+}
+
+// visiblePosts is ProfileSectionsPresenter#visible_posts for a section: the seller's shown
+// posts that are published on the profile, newest first.
+func (h *handler) visiblePosts(p *page, shown []int64) ([]any, error) {
+	if len(shown) == 0 {
+		return []any{}, nil
+	}
+	return h.profilePosts(p, " AND installments.id IN ("+placeholders(len(shown))+")", int64Args(shown)...)
+}
+
+// profilePosts is visible_posts, narrowed by filter.
+func (h *handler) profilePosts(p *page, filter string, args ...any) ([]any, error) {
+	rows, err := h.c.DB.QueryContext(p.Ctx, "SELECT installments.id, installments.name, installments.slug, installments.published_at"+
+		" FROM installments WHERE installments.seller_id = ? AND installments.deleted_at IS NULL AND installments.published_at IS NOT NULL"+
+		" AND installments.installment_type = 'audience' AND (installments.flags & ?) != 0 AND installments.workflow_id IS NULL"+
+		filter+" ORDER BY installments.published_at DESC, installments.id ASC LIMIT 999",
+		append([]any{p.seller.id, installmentShownOnProfile}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []any{}
+	for rows.Next() {
+		var id int64
+		var name, slug sql.NullString
+		var published db.NullTime
+		if err := rows.Scan(&id, &name, &slug, &published); err != nil {
+			return nil, err
+		}
+		out = append(out, rails.NewRHash().Sym("id", h.c.IDs.Encrypt(id)).Sym("name", nullString(name)).
+			Sym("slug", nullString(slug)).Sym("published_at", published.OrNil()))
+	}
+	return out, rows.Err()
+}
+
+// encryptIDs is ids.map { ObfuscateIds.encrypt(_1) }.
+func (h *handler) encryptIDs(ids []int64) []any {
+	out := make([]any, len(ids))
+	for i, id := range ids {
+		out[i] = h.c.IDs.Encrypt(id)
+	}
+	return out
+}
+
+// editorProps is the editing payload's products, posts and wishlist_options.
+func (h *handler) editorProps(p *page) (*rails.RHash, error) {
+	products := []any{}
+	// Rails' own statement, which sets no order.
+	err := scanNamed(p.Ctx, h.c.DB, func(cols map[string]any) func() {
+		var id int64
+		var name sql.NullString
+		cols["id"], cols["name"] = &id, &name
+		return func() {
+			products = append(products, rails.NewRHash().Sym("id", h.c.IDs.Encrypt(id)).Sym("name", nullString(name)))
+		}
+	}, "SELECT `links`.`id`, `links`.`name` FROM `links` WHERE `links`.`user_id` = ? AND `links`.`purchase_disabled_at` IS NULL"+
+		" AND `links`.`banned_at` IS NULL AND `links`.`deleted_at` IS NULL AND ((`links`.`flags` & ? = 0))", p.seller.id, productArchived)
+	if err != nil {
+		return nil, err
+	}
+	posts, err := h.profilePosts(p, "")
+	if err != nil {
+		return nil, err
+	}
+	// seller.wishlists.alive are the visitor's own.
+	options := make([]any, len(p.viewer.wishlists))
+	for i, w := range p.viewer.wishlists {
+		options[i] = rails.NewRHash().Sym("id", h.c.IDs.Encrypt(w.id)).Sym("name", nullString(w.name))
+	}
+	return rails.NewRHash().Sym("products", products).Sym("posts", posts).Sym("wishlist_options", options), nil
+}
+
+// prepareFeatured loads the seller's alive product a featured section names, as
+// ProductPresenter#product_props would render it with no URL code, short of its sales count; nil
+// when there is none.
+func (h *handler) prepareFeatured(p *page, parent *view, ids []int64) (*featuredSection, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	featured := &product{}
+	err := h.c.DB.QueryRowContext(p.Ctx, "SELECT "+productColumns+" FROM links WHERE links.id = ? AND links.user_id = ? LIMIT 1",
+		ids[0], p.seller.id).Scan(featured.dest()...)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && !featured.alive() {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	fp := p.featuredPage(parent)
+	if reason, err := h.unportedShape(p.Ctx, fp, featured); err != nil || reason != "" {
+		return nil, firstErr(err, fallback(reason))
+	}
+	// product_props renders it for the same visitor, whose collaboration on it lets them edit it.
+	if err := h.viewerCollaborates(fp, featured); err != nil {
+		return nil, err
+	}
+	v, err := h.loadView(p.Ctx, fp, featured)
+	if err != nil {
+		return nil, err
+	}
+	p.absorb(fp)
+	return &featuredSection{page: fp, prod: featured, view: v}, nil
+}
+
+// featuredPage is the page a featured product renders on, sharing this one's seller-level reads.
+// Its gates and offer codes are its own: autoApply, for one, holds the product it was read for.
+func (p *page) featuredPage(parent *view) *page {
+	if p.rates == nil {
+		p.rates = map[string]rateRead{}
+	}
+	if p.flags == nil {
+		p.flags = map[string]bool{}
+	}
+	return &page{Visit: p.Visit, seller: p.seller, rates: p.rates, settleable: p.settleable, flags: p.flags,
+		productsKey: p.productsKey, parent: parent, viewer: p.viewer}
+}
+
+// absorb takes back what a featured page read or queued.
+func (p *page) absorb(fp *page) {
+	p.cacheWrites = append(p.cacheWrites, fp.cacheWrites...)
+	fp.cacheWrites = nil
+	p.warmReputation = p.warmReputation || fp.warmReputation
+	if p.settleable == nil {
+		p.settleable = fp.settleable
+	}
+	if p.productsKey == "" {
+		p.productsKey = fp.productsKey
+	}
 }

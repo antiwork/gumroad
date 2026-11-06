@@ -20,7 +20,6 @@ import {
   Handshake,
   HomeAlt2,
   MessageBubble,
-  MessageBubbleDots,
   Search,
   Store,
   Workflow,
@@ -169,16 +168,6 @@ export const Nav = (props: Props) => {
       text: "Home",
       icon: <HomeAlt2 pack="filled" className="size-5" />,
       href: Routes.dashboard_url(routeParams),
-      exactHrefMatch: true,
-    },
-    {
-      key: "agent",
-      // Role, not eligibility: a seller under the earned-access bar keeps the tab and is told why
-      // it is locked when they open it, rather than watching it disappear.
-      visible: !!loggedInUser?.policies.user.view_store_agent,
-      text: "Agent",
-      icon: <MessageBubbleDots pack="filled" className="size-5" />,
-      href: Routes.agent_url(routeParams),
       exactHrefMatch: true,
     },
     {

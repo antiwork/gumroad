@@ -27,7 +27,11 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 	for _, property := range []string{"gr:google_analytics:enabled", "gr:fb_pixel:enabled", "gr:tiktok_pixel:enabled"} {
 		set("", "", "", inertia.Pairs("property", property, "content", enabled)...)
 	}
-	set("", "", "", inertia.Pairs("property", "gr:logged_in_user:id", "content", "")...)
+	var viewerID string
+	if p.viewer != nil {
+		viewerID = p.viewer.externalID.String
+	}
+	set("", "", "", inertia.Pairs("property", "gr:logged_in_user:id", "content", viewerID)...)
 	set("", "", "", inertia.Pairs("property", "gr:page:type", "content", "")...)
 	set("", "", "", inertia.Pairs("title", prod.name)...)
 

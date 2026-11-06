@@ -49,6 +49,7 @@ beforeAll(() => {
     Routes: {
       custom_domain_coffee_url: url("/coffee"),
       edit_link_path: url("/products/product-permalink/edit"),
+      follow_user_from_embed_form_url: url("/follow_from_embed_form"),
       new_email_path: url("/emails/new"),
       settings_payments_path: url("/settings/payments"),
       short_link_url: url("/l/product-permalink"),
@@ -196,6 +197,7 @@ const renderProductTab = (
             successfulSalesCount: 0,
             ratings: { count: 0, average: 0, percentages: [0, 0, 0, 0, 0] },
             seller: { id: "seller-id", name: "Seller", avatar_url: "", profile_url: "", is_verified: false },
+            savedWaitlistEnabled: false,
             currentSellerExternalId: "seller-external-id",
             existingFiles: [],
             setExistingFiles: vi.fn(),

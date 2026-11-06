@@ -284,6 +284,44 @@ describe "Widget Page scenario", js: true, type: :system do
       end
     end
 
+    context "when the seller's account has not been reviewed" do
+      let(:seller) { create(:named_seller) }
+      let!(:waitlist_product) { create(:product, user: seller, name: "Upcoming course", waitlist_enabled: true, purchase_disabled_at: Time.current) }
+
+      it "shows the preview the server's reason the follow was refused" do
+        login_as(seller)
+        visit widgets_path
+        within_section "Subscribe form", section_element: :section do
+          fill_in "Your email address", with: "visitor@example.com"
+          click_on "Follow"
+        end
+        expect(page).to have_alert(text: "Please subscribe from #{seller.name_or_username}'s subscribe page so we can confirm you're not a bot. #{custom_domain_subscribe_url(host: seller.subdomain_with_protocol)}")
+        expect(seller.followers).to be_empty
+      end
+
+      it "asks a visitor who submits the embedded form to take one more step" do
+        visit seller.profile_url
+        submit_embedded_form = ->(product_id) do
+          execute_script(<<~JS, follow_user_from_embed_form_path, seller.external_id, product_id)
+            const form = Object.assign(document.createElement("form"), { method: "post", action: arguments[0] });
+            const fields = { seller_id: arguments[1], email: "visitor@example.com", product_id: arguments[2] };
+            for (const [name, value] of Object.entries(fields)) if (value) form.append(Object.assign(document.createElement("input"), { name, value }));
+            document.body.append(form);
+            form.submit();
+          JS
+        end
+
+        submit_embedded_form.(nil)
+        expect(page).to have_selector("h2", text: "One more step")
+        expect(page).to have_link("Go to the subscribe page", href: custom_domain_subscribe_url(host: seller.subdomain_with_protocol))
+
+        submit_embedded_form.(waitlist_product.external_id)
+        expect(page).to have_link("Go to the product page", href: "#{waitlist_product.long_url}?native=true")
+        expect(page).to have_selector("h2", text: "One more step")
+        expect(page).to have_text("Please join the waitlist from the product page so we can confirm you're not a bot.")
+      end
+    end
+
     context "with switching account to user as admin for seller" do
       include_context "with switching account to user as admin for seller"
 

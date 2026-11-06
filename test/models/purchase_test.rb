@@ -3044,6 +3044,8 @@ class PurchaseTest < ActiveSupport::TestCase
                    account_by_this_email_exists: false,
                    display_product_reviews: true,
                    currency_type: "usd",
+                   is_free_purchase: false,
+                   seller_name: link.user.name_or_username,
                    non_formatted_price: 100,
                    non_formatted_seller_tax_amount: "0",
                    has_sales_tax_to_show: false,

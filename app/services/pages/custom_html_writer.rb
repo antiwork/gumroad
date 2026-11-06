@@ -60,8 +60,8 @@ class Pages::CustomHtmlWriter
   # so a seller asking for a tiny tweak could lose their entire hand-built page to a fresh, much
   # smaller regeneration.
   #
-  # Passing either checksum makes the edit "guarded": the server-built undo of an earlier targeted
-  # edit (Ai::StoreAgentHtmlUndo). Guarded edits go through check_guarded_edit below.
+  # Passing either checksum makes the edit "guarded": a caller-built undo of an earlier targeted
+  # edit. Guarded edits go through check_guarded_edit below.
   def self.edit!(pageable, find:, replace:, expected_custom_html_sha256: nil, result_custom_html_sha256: nil)
     previous_custom_html = nil
     sanitization_report = nil

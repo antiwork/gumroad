@@ -42,10 +42,10 @@ class Onetime::BackfillFirstPartyStoreAgentOauthApplications
 
     def candidates
       OauthApplication.where(
-        name: Ai::StoreAgentApiClient::AGENT_APP_NAME,
+        name: OauthApplication::FIRST_PARTY_AGENT_APP_NAME,
         owner_type: "User",
-        redirect_uri: Ai::StoreAgentApiClient::AGENT_APP_REDIRECT_URI,
-        scopes: Ai::StoreAgentApiClient::AGENT_APP_SCOPES,
+        redirect_uri: OauthApplication::FIRST_PARTY_AGENT_APP_REDIRECT_URI,
+        scopes: OauthApplication::FIRST_PARTY_AGENT_APP_SCOPES,
       )
     end
 end

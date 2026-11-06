@@ -108,7 +108,7 @@ class LibraryPresenter
 
     purchases = logged_in_user.purchases.visible_in_library
       .by_external_ids(external_ids)
-      .includes(:subscription, link: { alive_third_party_analytics: [] })
+      .includes(:subscription, :seller, link: { alive_third_party_analytics: [] })
     purchases = purchases.reject { |purchase| purchase.link.is_recurring_billing && purchase.subscription && !purchase.subscription.grant_access_to_product? }
     universal_analytics_user_ids = universal_analytics_user_ids(purchases.map { _1.link.user_id })
 
@@ -116,6 +116,9 @@ class LibraryPresenter
       {
         id: purchase.external_id,
         email: purchase.email,
+        free: purchase.free_purchase?,
+        seller_id: purchase.seller.external_id,
+        seller_name: purchase.seller.name_or_username,
         permalink: purchase.link.unique_permalink,
         has_third_party_analytics: third_party_analytics?(purchase.link, universal_analytics_user_ids),
       }

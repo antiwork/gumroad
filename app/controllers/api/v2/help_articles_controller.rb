@@ -4,12 +4,12 @@
 # gumroad.com/help/article/<slug>), so a program can look up how Gumroad actually works instead of
 # guessing.
 #
-# This is the store agent's documentation lookup. The agent drives the public v2 API for everything
-# it does (see Ai::StoreAgentApiClient), and before these endpoints existed it had no way to check a
-# product question against a source of truth: asked about anything it had no write endpoint for, it
-# answered from its own assumptions, and in the worst case told a creator a feature they were
-# already using did not exist. The help center is documentation the support team keeps correct, so
-# reading it is what makes the agent's answers checkable.
+# This is an AI agent's documentation lookup. An agent driving the public v2 API (an MCP client
+# such as Claude or ChatGPT) otherwise has no way to check a product question against a source of
+# truth: asked about anything it has no write endpoint for, it answers from its own assumptions,
+# and in the worst case tells a creator a feature they are already using does not exist. The help
+# center is documentation the support team keeps correct, so reading it is what makes an agent's
+# answers checkable.
 #
 # The content is public — these are pages anyone can read without an account — so the only scope
 # required is the baseline read scope every token carries. Nothing here touches seller data.

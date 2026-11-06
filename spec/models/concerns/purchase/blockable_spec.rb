@@ -2500,6 +2500,83 @@ describe Purchase::Blockable do
     end
   end
 
+  describe "#block_buyer_based_on_chargeback_count! across identifiers" do
+    let(:purchase) { create(:purchase, email: "fresh-alias@example.com", stripe_fingerprint: "fp_repeat", browser_guid: "guid-repeat") }
+
+    def chargeback_rows(count, **attrs)
+      count.times do |i|
+        create(:purchase).update_columns(chargeback_date: Time.current, email: "alias-#{i}-#{SecureRandom.hex(3)}@example.com", **attrs)
+      end
+    end
+
+    it "blocks the card and browser when the same card has 5 chargebacks under different emails and accounts" do
+      chargeback_rows(5, stripe_fingerprint: "fp_repeat", browser_guid: "guid-repeat")
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.to change { PlatformBlock.count }.by(2)
+      expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      expect(purchase.blocked_by_browser_guid?).to be true
+      expect(purchase.blocked_by_email?).to be false
+      expect(purchase.blocked_by_ip_address?).to be false
+      expect(purchase.comments.last.content).to start_with("Auto-blocked card and browser: 5 chargebacks on this card")
+    end
+
+    it "blocks only the browser when only the guid reaches 5" do
+      chargeback_rows(5, browser_guid: "guid-repeat")
+
+      purchase.block_buyer_based_on_chargeback_count!
+
+      expect(purchase.blocked_by_browser_guid?).to be true
+      expect(purchase.blocked_by_charge_processor_fingerprint?).to be false
+      expect(purchase.comments.last.content).to start_with("Auto-blocked browser:")
+    end
+
+    [:is_gift_receiver_purchase, :is_bundle_product_purchase].each do |flag|
+      it "does not count the charged-back #{flag} rows that share the disputed purchase's browser" do
+        chargeback_rows(3, browser_guid: "guid-repeat")
+        3.times { create(:purchase, flag => true).update_columns(chargeback_date: Time.current, browser_guid: "guid-repeat") }
+
+        expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
+      end
+    end
+
+    it "does not count the card off Stripe, where the blocked value is the masked card" do
+      purchase.update_columns(charge_processor_id: BraintreeChargeProcessor.charge_processor_id, browser_guid: "guid-other")
+      chargeback_rows(5, stripe_fingerprint: "fp_repeat")
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
+    end
+
+    it "does not block at 4 chargebacks per card" do
+      chargeback_rows(4, stripe_fingerprint: "fp_repeat")
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
+    end
+
+    it "ignores PayPal-processor chargebacks and the shared IP" do
+      chargeback_rows(5, stripe_fingerprint: "fp_repeat", charge_processor_id: PaypalChargeProcessor.charge_processor_id)
+      chargeback_rows(5, ip_address: purchase.ip_address)
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
+    end
+
+    it "still blocks the card and browser when the email is already blocked and has 5 chargebacks" do
+      chargeback_rows(5, stripe_fingerprint: "fp_repeat", browser_guid: "guid-repeat")
+      5.times { create(:purchase).update_columns(chargeback_date: Time.current, email: purchase.email) }
+      purchase.block_by_email!(by_user_id: nil)
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.to change { PlatformBlock.count }.by(2)
+      expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      expect(purchase.blocked_by_browser_guid?).to be true
+    end
+
+    it "does not block again or comment twice once the card and browser are blocked" do
+      chargeback_rows(5, stripe_fingerprint: "fp_repeat", browser_guid: "guid-repeat")
+      purchase.block_buyer_based_on_chargeback_count!
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { [PlatformBlock.count, Comment.count] }
+    end
+  end
+
   describe "#pause_payouts_for_seller_based_on_chargeback_rate!" do
     let(:seller) { create(:user) }
     let(:product) { create(:product, user: seller) }

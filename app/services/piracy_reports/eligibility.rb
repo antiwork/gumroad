@@ -10,7 +10,7 @@ class PiracyReports::Eligibility
 
   def self.store_agent_gate_error
     minimum = MoneyFormatter.format(User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT, :usd, no_cents_if_whole: true, symbol: true)
-    "Piracy reports unlock with the Agent: confirm your email, complete a payout and reach #{minimum} in sales"
+    "Piracy reports unlock once you confirm your email, complete a payout and reach #{minimum} in sales"
   end
 
   def initialize(seller:, product:)

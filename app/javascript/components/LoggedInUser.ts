@@ -74,10 +74,6 @@ type Policies = {
     index: boolean;
     create: boolean;
   };
-  user: {
-    view_store_agent: boolean;
-    use_store_agent: boolean;
-  };
 };
 
 export type LoggedInUser = {

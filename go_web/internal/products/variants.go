@@ -128,6 +128,7 @@ func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*var
 		return nil, err
 	}
 	defer rows.Close()
+	tied := false
 	for rows.Next() {
 		o := &variantOption{}
 		if err := rows.Scan(&o.id, &o.categoryID, &o.name, &o.description, &o.maxPurchaseCount, &o.sold, &o.priceDifference,
@@ -141,8 +142,7 @@ func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*var
 		// With SKUs enabled, Rails never orders these.
 		if o.categoryID == vs.categories[0] && !skus {
 			if n := len(vs.options); n > 0 && sameOrder(vs.options[n-1], o) {
-				// in_order leaves ties to MySQL.
-				return nil, fallback("variant order")
+				tied = true
 			}
 			o.externalID = h.c.IDs.Encrypt(o.id)
 			vs.options = append(vs.options, o)
@@ -150,6 +150,12 @@ func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*var
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+	rows.Close()
+	if tied {
+		if err := h.orderTiedOptions(ctx, prod.id, vs.categories[0], vs.options); err != nil {
+			return nil, err
+		}
 	}
 	if !prod.is(productIsTieredMembership) {
 		return vs, nil
@@ -204,6 +210,38 @@ func (h *handler) loadTierPrices(ctx context.Context, all []*variantOption) erro
 		byID[id].buyPrices = append(byID[id].buyPrices, p)
 	}
 	return rows.Err()
+}
+
+// optionRecordsStatement is option_records' statement for a product's first category, as Rails
+// writes it.
+const optionRecordsStatement = "SELECT `base_variants`.* FROM `base_variants` INNER JOIN `variant_categories`" +
+	" ON `base_variants`.`variant_category_id` = `variant_categories`.`id` WHERE `base_variants`.`type` = 'Variant'" +
+	" AND `variant_categories`.`link_id` = ? AND `base_variants`.`variant_category_id` = ? AND `base_variants`.`deleted_at` IS NULL" +
+	" ORDER BY `base_variants`.`position_in_category` ASC, `base_variants`.`created_at` ASC"
+
+// orderTiedOptions puts options in the order option_records' statement returns them: in_order
+// sets no tiebreak, so MySQL's plan for that same statement orders the ties.
+func (h *handler) orderTiedOptions(ctx context.Context, productID, categoryID int64, options []*variantOption) error {
+	byID := make(map[int64]*variantOption, len(options))
+	for _, o := range options {
+		byID[o.id] = o
+	}
+	ids, err := h.scanIDs(ctx, optionRecordsStatement, productID, categoryID)
+	if err != nil {
+		return err
+	}
+	var ordered []*variantOption
+	for _, id := range ids {
+		if o := byID[id]; o != nil {
+			ordered = append(ordered, o)
+		}
+	}
+	if len(ordered) != len(options) {
+		// The two reads disagree on which options there are.
+		return fallback("variant order")
+	}
+	copy(options, ordered)
+	return nil
 }
 
 func sameOrder(a, b *variantOption) bool {

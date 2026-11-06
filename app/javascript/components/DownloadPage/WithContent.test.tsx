@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { router } from "@inertiajs/react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { saveLastContentPage } from "$app/data/products";
 
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
+import { showAlert } from "$app/components/server-components/Alert";
 import { useIsAboveBreakpoint } from "$app/components/useIsAboveBreakpoint";
 
 import { scrollWithinScrollableAncestor } from "./contentPageNavigation";
@@ -37,6 +39,7 @@ vi.mock("$app/components/DownloadPage/Layout", () => ({
 
 vi.mock("$app/components/useIsAboveBreakpoint", () => ({ useIsAboveBreakpoint: vi.fn(() => true) }));
 
+vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
 vi.mock("$app/components/useAddThirdPartyAnalytics", () => ({ useAddThirdPartyAnalytics: () => vi.fn() }));
 vi.mock("$app/components/useReactNativeMessage", () => ({ useReactNativeMessage: () => {} }));
 vi.mock("$app/utils/user_analytics", () => ({ trackSellerPurchaseEvent: vi.fn() }));
@@ -75,6 +78,8 @@ const purchaseProps = () => ({
   id: "purchase-1",
   receipt_purchase_id: null,
   email: "buyer@example.com",
+  free: false,
+  seller_name: "Seller",
   email_digest: "digest",
   is_archived: false,
   has_invoice: false,
@@ -206,5 +211,24 @@ describe("DownloadPage content navigation", () => {
     await waitFor(() => expect(scrollWithinScrollableAncestor).toHaveBeenCalled());
     const firstCall = vi.mocked(scrollWithinScrollableAncestor).mock.calls[0];
     expect(firstCall?.[0].dataset.contentPageId).toBe("page-c");
+  });
+});
+
+describe("DownloadPage receipt alert", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("says the buyer signed up with the seller for free", () => {
+    window.history.replaceState(null, "", "/d/token?receipt=true");
+    vi.spyOn(router, "replace").mockImplementation(() => {});
+
+    renderPage(content(null), { ...purchaseProps(), free: true, seller_name: "Ana" });
+
+    expect(showAlert).toHaveBeenCalledWith(
+      "You signed up with Ana for free. We emailed the details to buyer@example.com.",
+      "success",
+    );
   });
 });

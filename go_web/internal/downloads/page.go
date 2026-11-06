@@ -2,13 +2,9 @@ package downloads
 
 import (
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/base64"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
@@ -140,12 +136,6 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if owner.VariantID != nil {
 		variantID = h.c.IDs.Encrypt(*owner.VariantID)
 	}
-	var emailDigest any
-	if rails.Present(d.email.String) {
-		mac := hmac.New(sha256.New, []byte(pc.EmailDigestKey))
-		mac.Write([]byte(strconv.FormatInt(pu.id, 10) + ":" + d.email.String))
-		emailDigest = base64.URLEncoding.EncodeToString(mac.Sum(nil))
-	}
 	permalink := d.uniquePermalink.String
 	if rails.Present(d.customPermalink.String) {
 		permalink = d.customPermalink.String
@@ -177,7 +167,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("id", purchaseID).
 			Sym("receipt_purchase_id", purchaseID).
 			Sym("email", nullableString(d.email)).
-			Sym("email_digest", emailDigest).
+			Sym("email_digest", rails.EmailDigest(pc.EmailDigestKey, pu.id, d.email.String)).
 			Sym("created_at", d.createdAt.OrNil()).
 			Sym("is_archived", pu.flags&purchaseIsArchived != 0).
 			Sym("has_invoice", d.hasInvoice()).

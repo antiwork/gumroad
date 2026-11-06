@@ -12,7 +12,7 @@ module DashboardNav
   # Rendered only once promoted. Promotion records a visit, it does not grant access: the rows that
   # carry a policy gate in the nav keep it, so a promotion for a destination the user cannot open
   # renders nothing.
-  PROMOTABLE_ITEMS = %w[agent profile pages collaborators checkout emails workflows analytics affiliates community library].freeze
+  PROMOTABLE_ITEMS = %w[profile pages collaborators checkout emails workflows analytics affiliates community library].freeze
 
   ITEMS = (CORE_ITEMS + PROMOTABLE_ITEMS).freeze
 
@@ -23,7 +23,6 @@ module DashboardNav
   # would both credit the seller-side Checkout row to every buyer and run the seed scan inside the
   # purchase funnel.
   PATH_PREFIXES = {
-    "/agent" => "agent",
     "/profile" => "profile",
     "/pages" => "pages",
     "/collaborators" => "collaborators",
@@ -92,7 +91,6 @@ module DashboardNav
     items << "analytics" if seller.sales.exists?
     items << "affiliates" if seller.direct_affiliates.alive.exists? || seller.affiliate_requests.exists?
     items << "community" if seller.seller_communities.alive.exists?
-    items << "agent" if seller.ai_conversations.exists?
     items << "library" if user.purchases.exists?
     items
   end

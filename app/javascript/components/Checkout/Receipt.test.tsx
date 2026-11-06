@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ErrorLineItemResult } from "$app/data/purchase";
+import type { ErrorLineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
 import { cast } from "$app/utils/cast";
 
 import type { CartItem } from "$app/components/Checkout/cartState";
@@ -163,5 +163,58 @@ describe("LineItemResultEntry for a failed line item", () => {
       expect(screen.queryByText(/Go back to checkout/u)).toBeNull();
       expect(screen.queryByRole("link", { name: "Back to checkout" })).toBeNull();
     });
+  });
+});
+
+describe("Receipt header", () => {
+  beforeEach(() => vi.stubGlobal("Routes", { new_purchase_invoice_path: () => "/invoice" }));
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  const item = (name: string) => cast<CartItem>({ product: { name, is_preorder: false, free_trial: null } });
+  const succeeded = (overrides: Partial<SuccessfulLineItemResult>) =>
+    cast<SuccessfulLineItemResult>({
+      success: true,
+      id: "purchase-1",
+      email: "repeat.buyer@example.com",
+      seller_id: "seller-1",
+      seller_name: "Ana",
+      price: "$0",
+      non_formatted_price: 0,
+      is_free_purchase: true,
+      variants_displayable: "",
+      enabled_integrations: {},
+      ...overrides,
+    });
+  const renderReceipt = (results: { item: CartItem; result: SuccessfulLineItemResult }[]) =>
+    render(
+      <DomainSettingsProvider value={domains}>
+        <Receipt results={results} discoverUrl="https://discover.example.com" canBuyerSignUp={false} />
+      </DomainSettingsProvider>,
+    );
+
+  it("says the buyer signed up with the seller for free when every purchase is free", () => {
+    renderReceipt([
+      { item: item("Starter Pack"), result: succeeded({}) },
+      { item: item("Bonus Pack"), result: succeeded({ id: "purchase-2" }) },
+    ]);
+
+    expect(screen.getByRole("heading", { name: "You signed up with Ana for free" })).toBeTruthy();
+    expect(screen.getByText("We emailed the details to repeat.buyer@example.com")).toBeTruthy();
+  });
+
+  it("keeps the purchase heading when the checkout includes a paid item", () => {
+    renderReceipt([
+      { item: item("Starter Pack"), result: succeeded({}) },
+      {
+        item: item("Pro Course"),
+        result: succeeded({ id: "purchase-2", price: "$10", non_formatted_price: 1000, is_free_purchase: false }),
+      },
+    ]);
+
+    expect(screen.getByRole("heading", { name: "Your purchase was successful!" })).toBeTruthy();
+    expect(screen.getByText("We charged your card and sent a receipt to repeat.buyer@example.com")).toBeTruthy();
   });
 });

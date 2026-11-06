@@ -162,6 +162,7 @@ func newTestEnv(t *testing.T) *testEnv {
 			PublicStorageURL: "https://gumroad-public-storage.s3.amazonaws.com/",
 			OGNamespace:      "gumroad",
 			NewNonce:         func() string { return "NONCE" },
+			GumroadAdminID:   767082,
 			CustomHTMLAnalytics: &vite.Tags{HTML: `<script src="` + testAnalyticsScript + `" crossorigin="" type="module"></script>`,
 				Links: []string{"<" + testAnalyticsScript + ">; rel=modulepreload; as=script; crossorigin=; nopush"}},
 		},
@@ -278,6 +279,20 @@ func insertOfferCode(t *testing.T, conn *sql.DB, id int64, columns map[string]an
 	row := map[string]any{"id": id, "user_id": sellerID, "created_at": testNow, "updated_at": testNow}
 	maps.Copy(row, columns)
 	testdb.Insert(t, conn, "offer_codes", row)
+}
+
+// insertCodeUse adds a successful purchase of the product through the code.
+func insertCodeUse(t *testing.T, conn *sql.DB, id, code int64, columns map[string]any) {
+	row := map[string]any{"id": id, "seller_id": sellerID, "link_id": productID, "offer_code_id": code, "purchase_state": "successful",
+		"quantity": 1, "created_at": testNow, "updated_at": testNow}
+	maps.Copy(row, columns)
+	testdb.Insert(t, conn, "purchases", row)
+}
+
+// insertExcludedProduct leaves product out of the code.
+func insertExcludedProduct(t *testing.T, conn *sql.DB, id, code, product int64) {
+	testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": id, "offer_code_id": code,
+		"product_id": product, "created_at": testNow, "updated_at": testNow})
 }
 
 // insertPlatformAccount adds MerchantAccount.gumroad("stripe").
@@ -477,7 +492,7 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "an offer_code param", host: host, target: "/l/guide?offer_code=X", reason: "param offer_code"},
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
 		{name: "a code param the collation could read", host: host, target: "/l/guide?code=caf%C3%A9", reason: "param code"},
-		{name: "a utm visit", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm link"},
+		{name: "a utm visit without Sidekiq", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm visit push"},
 		{name: "a seller without a user", host: "nosuchseller.gumroad.com", target: "/l/guide", reason: "no seller"},
 		{name: "the analytics host's route", host: "gumroad-analytics-com.gumroad.com", target: "/l/guide", reason: "host"},
 		{name: "a Forwarded header", host: host, target: "/l/guide", reason: "forwarded header",
@@ -852,12 +867,12 @@ func TestABundleRendersItsProducts(t *testing.T) {
 		item(t, conn, 1_794_401, ebook, nil, 1, 1)
 		item(t, conn, 1_794_402, course, proVariant, 2, 0)
 	}
-	const products = `"bundle_products":[` +
-		`{"id":"%[2]s","name":"Course","ratings":null,"price":2400,"currency_code":"usd","thumbnail_url":null,"native_type":"course",` +
-		`"url":"https://gowebproductseller.gumroad.com/l/bp2","quantity":2,"variant":"Pro"},` +
-		`{"id":"%[1]s","name":"Ebook","ratings":{"count":2,"average":4.5},"price":300,"currency_code":"usd",` +
+	const courseProps = `{"id":"%[2]s","name":"Course","ratings":null,"price":2400,"currency_code":"usd","thumbnail_url":null,` +
+		`"native_type":"course","url":"https://gowebproductseller.gumroad.com/l/bp2","quantity":2,"variant":"Pro"}`
+	const ebookProps = `{"id":"%[1]s","name":"Ebook","ratings":{"count":2,"average":4.5},"price":300,"currency_code":"usd",` +
 		`"thumbnail_url":"https://images.unsplash.com/x","native_type":"ebook","url":"https://gowebproductseller.gumroad.com/l/ebook",` +
-		`"quantity":1,"variant":null}]`
+		`"quantity":1,"variant":null}`
+	const products = `"bundle_products":[` + courseProps + `,` + ebookProps + `]`
 	for _, c := range []struct {
 		name   string
 		wants  []string
@@ -880,10 +895,18 @@ func TestABundleRendersItsProducts(t *testing.T) {
 		// Rails lists them on any product; only a bundle counts their inventory.
 		{name: "bundle products on a product that isn't a bundle", wants: []string{products, `"quantity_remaining":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { setup(t, conn, false) }},
-		{name: "bundle products tied in order", reason: "bundle product order", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			setup(t, conn, true)
-			conn.Exec("UPDATE bundle_products SET position = NULL WHERE bundle_id = ?", productID)
-		}},
+		// Two tied rows come back in id order.
+		{name: "bundle products tied in order", wants: []string{`"bundle_products":[` + ebookProps + `,` + courseProps + `]`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("UPDATE bundle_products SET position = NULL WHERE bundle_id = ?", productID)
+			}},
+		{name: "a variant that's gone", wants: []string{`"native_type":"course","url":"https://gowebproductseller.gumroad.com/l/bp2","quantity":2,"variant":null}`,
+			`"name":"Course","ratings":null,"price":2000,`, `"quantity_remaining":6,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("DELETE FROM base_variants WHERE id = ?", proVariant)
+			}},
 		{name: "another seller's product", reason: "bundle product seller", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			setup(t, conn, true)
 			conn.Exec("UPDATE links SET user_id = ? WHERE id = ?", sellerID+1, ebook)
@@ -950,6 +973,47 @@ func TestABundleRendersItsProducts(t *testing.T) {
 			e.wantAll(t, e.render(t, nil, c.reason), c.wants, ebook, course)
 		})
 	}
+	// Past a handful of ties MySQL's sort leaves id order, so only Rails' own statement, written
+	// here as Rails runs it, matches.
+	t.Run("many bundle products tied in order", func(t *testing.T) {
+		e := newTestEnv(t)
+		conn := testdb.Open(t)
+		setup(t, conn, true)
+		conn.Exec("DELETE FROM bundle_products WHERE bundle_id = ?", bundleID)
+		for i := range 60 {
+			item(t, conn, 1_794_410+int64(i), ebook, nil, i+1, nil)
+		}
+		var want []string
+		err := scanNamed(t.Context(), conn, func(cols map[string]any) func() {
+			var quantity string
+			cols["quantity"] = &quantity
+			return func() { want = append(want, quantity) }
+		}, "SELECT `bundle_products`.* FROM `bundle_products` WHERE `bundle_products`.`bundle_id` = "+strconv.FormatInt(bundleID, 10)+
+			" AND `bundle_products`.`deleted_at` IS NULL ORDER BY `bundle_products`.`position` ASC")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, m := range regexp.MustCompile(`"quantity":(\d+),"variant":null}`).FindAllStringSubmatch(e.render(t, nil, ""), -1) {
+			got = append(got, m[1])
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
+	// url_for_product_page carries the page's layout and recommended_by, sorted and CGI-escaped.
+	t.Run("a layout and a recommendation", func(t *testing.T) {
+		e := newTestEnv(t)
+		setup(t, testdb.Open(t), true)
+		w := e.get(host, "/l/guide?recommended_by=a+b%26c&layout=profile", nil)
+		if w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		want := `"url":"https://gowebproductseller.gumroad.com/l/bp2?layout=profile\u0026recommended_by=a+b%26c"`
+		if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	})
 }
 
 // The fixture's price is 500 cents; each code is the seller's, with these columns set.
@@ -990,10 +1054,14 @@ func TestDefaultOfferCodes(t *testing.T) {
 		}
 	}
 	saleEntry := `{"discount_code":` + sale20 + `,"sale_label":"Sale"}`
-	exclude := func(t *testing.T, conn *sql.DB, id, code, product int64) {
-		testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": id, "offer_code_id": code,
-			"product_id": product, "created_at": testNow, "updated_at": testNow})
+	// oncePerCart is the sale as a once-per-cart code of amount that allocates cents; %[6]s is its id.
+	oncePerCart := func(cents, amount int, minimumQuantity string, limited bool) string {
+		return `"discount_code":` + discount(`"SALE20"`, fmt.Sprintf(`{"type":"fixed","cents":%d,"product_ids":null,"expires_at":null,`+
+			`"minimum_quantity":%s,"duration_in_billing_cycles":null,"minimum_amount_cents":null,"once_per_cart":true,`+
+			`"once_per_cart_id":"%%[6]s","once_per_cart_amount_cents":%d,"once_per_cart_has_usage_limit":%t}`,
+			cents, minimumQuantity, amount, limited)) + `,"sale_label":"Sale",`
 	}
+	exclude := insertExcludedProduct
 	// otherID is another product of the seller's, which wantAll's %[4]s names.
 	const otherID = int64(1_795_801)
 	otherProduct := func(t *testing.T, conn *sql.DB, id int64, permalink string) {
@@ -1072,13 +1140,36 @@ func TestDefaultOfferCodes(t *testing.T) {
 				exclude(t, conn, 1_795_701, autoID, otherID-1)
 				exclude(t, conn, 1_795_702, autoID, otherID)
 			}},
-		{name: "a sale that leaves two products out", reason: "offer code exclusions", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, nil)
-			otherProduct(t, conn, otherID, "gowebp2")
-			otherProduct(t, conn, otherID+1, "gowebp3")
-			exclude(t, conn, 1_795_701, autoID, otherID)
-			exclude(t, conn, 1_795_702, autoID, otherID+1)
-		}},
+		{name: "a sale that leaves two products out", wants: []string{`"discount_code":` + strings.Replace(sale20, `"minimum_amount_cents":null}`,
+			`"minimum_amount_cents":null,"excluded_product_ids":["%[4]s","%[5]s"]}`, 1) + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				otherProduct(t, conn, otherID+1, "gowebp3")
+				exclude(t, conn, 1_795_701, autoID, otherID)
+				exclude(t, conn, 1_795_702, autoID, otherID+1)
+			}},
+		// products comes in the join table's row order, not the products'.
+		{name: "an explicit default for two products", wants: []string{`"discount_code":` +
+			strings.Replace(launch, `"product_ids":["%[1]s"]`, `"product_ids":["%[4]s","%[1]s"]`, 1) + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_100), "offer_code_id": explicitID, "product_id": otherID})
+			}},
+		// The preload keeps a duplicate join row, and skips one without a product.
+		{name: "an explicit default with a duplicate and an empty join row", wants: []string{`"discount_code":` +
+			strings.Replace(launch, `"product_ids":["%[1]s"]`, `"product_ids":["%[1]s","%[1]s"]`, 1) + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_102), "offer_code_id": explicitID, "product_id": productID})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": explicitID})
+			}},
+		{name: "an explicit default whose other product is gone", wants: []string{`"discount_code":` + launch + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_100), "offer_code_id": explicitID, "product_id": otherID})
+			}},
 		// Only a universal code lists what it leaves out.
 		{name: "an explicit default with an exclusion row", wants: []string{`"discount_code":` + launch + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
@@ -1137,20 +1228,80 @@ func TestDefaultOfferCodes(t *testing.T) {
 				options(t, conn, "Tier", int(baseVariantClosedToNewPurchases))
 				auto(t, conn, nil)
 			}},
-		{name: "a limited sale", reason: "offer code limit", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, map[string]any{"max_purchase_count": 10})
+		{name: "a limited sale with uses left", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"max_purchase_count": 10})
+				insertCodeUse(t, conn, 1_795_901, autoID, map[string]any{"quantity": 9})
+			}},
+		{name: "a sold-out sale", wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_795_901, autoID, nil)
+			}},
+		// default_offer_code_uses_left? hands a used-up explicit default's place to the sale.
+		{name: "the sale over a used-up default", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_795_901, explicitID, nil)
+				auto(t, conn, nil)
+			}},
+		{name: "the sale over a used-up once-per-cart default", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"max_purchase_count": 1, "flags": offerCodeOncePerCart})
+				insertCodeUse(t, conn, 1_795_901, explicitID, nil)
+				auto(t, conn, nil)
+			}},
+		{name: "a limited default with uses left over the sale", wants: []string{`"discount_code":` + launch + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_795_901, explicitID, nil)
+				auto(t, conn, nil)
+			}},
+		// allocate_once_per_cart_discount takes the cents off the product's own line, up to its price
+		// and short of leaving it under the currency's minimum.
+		{name: "a once-per-cart sale", wants: []string{oncePerCart(100, 100, "null", false)}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": offerCodeOncePerCart})
 		}},
-		{name: "a once-per-cart sale", reason: "once-per-cart offer code", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": 4})
+		{name: "a once-per-cart sale over the price", wants: []string{oncePerCart(500, 600, "null", false)},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+			}},
+		{name: "a once-per-cart sale leaving less than the minimum", headers: eurCookie, wants: []string{oncePerCart(401, 450, "null", false),
+			`"buyer_local_price_cents":99,"buyer_local_original_price_cents":500,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("1")
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 450, "flags": offerCodeOncePerCart})
+			}},
+		// It spends one use whatever the quantity, so one left serves a code of two, allocated
+		// against both units.
+		{name: "a once-per-cart sale of two with one use left", wants: []string{oncePerCart(600, 600, "2", true)},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart,
+					"minimum_quantity": 2, "max_purchase_count": 1})
+			}},
+		{name: "a once-per-cart sale without a price", reason: "once-per-cart price", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("DELETE FROM prices WHERE id = ?", priceID)
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": offerCodeOncePerCart})
+		}},
+		{name: "a once-per-cart sale in an unknown currency", reason: "once-per-cart price", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET price_currency_type = 'xyz' WHERE id = ?", productID)
+			conn.Exec("UPDATE prices SET currency = 'xyz' WHERE id = ?", priceID)
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": offerCodeOncePerCart, "currency_type": "xyz"})
 		}},
 		{name: "a sale for some options", reason: "offer code variants", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, nil)
 			testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_795_301), "offer_code_id": autoID, "variant_id": int64(1_795_401)})
 		}},
-		// The collation matches SALE20 to sale20; Rails would take either.
-		{name: "two codes MySQL can't tell apart", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+		// The collation matches SALE20 to sale20, and both of Rails' lookups take the sale first.
+		{name: "two codes MySQL can't tell apart", wants: []string{saleEntry}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, nil)
 			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
+		}},
+		// The sale's string finds the product's own code, not the sale.
+		{name: "a product's code with the sale's string", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
+			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
 		}},
 		{name: "a code in other letters", reason: "offer code characters", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, map[string]any{"code": "SOLDÉ"})
@@ -1167,7 +1318,7 @@ func TestDefaultOfferCodes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
-			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID)
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID, otherID+1, autoID)
 		})
 	}
 }
@@ -1208,14 +1359,20 @@ func TestURLOfferCodes(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "a once-per-cart code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":{"valid":true,"code":"SAVE10",` +
+			`"discount":{"type":"fixed","cents":500,"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,` +
+			`"minimum_amount_cents":null,"once_per_cart":true,"once_per_cart_id":"%[2]s","once_per_cart_amount_cents":600,` +
+			`"once_per_cart_has_usage_limit":false}},"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+			}},
 		{name: "an unknown code", target: "/l/guide/NOPE", wants: []string{quotes("NOPE", invalid("invalid_offer"), "null")}},
 		{name: "a deleted code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"deleted_at": past}) }},
 		{name: "a code that leaves this product out", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
-				testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": int64(1_796_101), "offer_code_id": codeID,
-					"product_id": productID, "created_at": testNow, "updated_at": testNow})
+				insertExcludedProduct(t, conn, 1_796_101, codeID, productID)
 			}},
 		{name: "a fixed code in another currency", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
@@ -1272,18 +1429,66 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, nil)
 				sale(t, conn)
 			}},
-		{name: "a limited code", target: "/l/guide/SAVE10", reason: "offer code limit",
-			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"max_purchase_count": 5}) }},
+		{name: "a limited code with uses left", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 5})
+				insertCodeUse(t, conn, 1_796_501, codeID, map[string]any{"quantity": 4})
+			}},
+		{name: "an ended code with no uses left", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", invalid("inactive"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 1, "expires_at": past})
+				insertCodeUse(t, conn, 1_796_501, codeID, nil)
+			}},
+		{name: "a sold-out code", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", invalid("sold_out"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_796_501, codeID, map[string]any{"quantity": 2})
+			}},
+		// The quantity rises to the code's minimum, which the uses left must cover.
+		{name: "a code with fewer uses left than its minimum", target: "/l/guide/SAVE10",
+			wants: []string{quotes("SAVE10", invalid("insufficient_times_of_use"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 5, "minimum_quantity": 3})
+				insertCodeUse(t, conn, 1_796_501, codeID, map[string]any{"quantity": 3})
+			}},
 		{name: "a code for some options", target: "/l/guide/SAVE10", reason: "offer code variants",
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
 				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_301), "offer_code_id": codeID, "variant_id": int64(1_796_401)})
 			}},
-		// The collation matches the typed code to both rows.
-		{name: "two codes MySQL can't tell apart", target: "/l/guide/save10", reason: "offer code lookup",
+		// The collation matches the typed code to both rows, and both of Rails' lookups take SAVE10.
+		{name: "two codes MySQL can't tell apart", target: "/l/guide/save10", wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "universal": true})
+			}},
+		// The computing service passes over a code for another product to the one that applies.
+		{name: "another product's code first", target: "/l/guide/save10", wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				insertOfferCode(t, conn, codeID-1, map[string]any{"code": "save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_104), "offer_code_id": codeID - 1, "product_id": int64(1_796_999)})
+			}},
+		// Nothing by the string applies, so the computing service answers invalid_offer.
+		{name: "no code by the string applying", target: "/l/guide/save10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"universal": false, "amount_percentage": nil, "amount_cents": 100, "currency_type": "eur"})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_105), "offer_code_id": codeID, "product_id": productID})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_106), "offer_code_id": autoID, "product_id": int64(1_796_999)})
+			}},
+		{name: "another seller's code on this product", target: "/l/guide/save10", reason: "offer code lookup",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				insertOfferCode(t, conn, codeID, map[string]any{"code": "SAVE10", "amount_percentage": 10, "user_id": int64(1)})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_107), "offer_code_id": codeID, "product_id": productID})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_108), "offer_code_id": autoID, "product_id": int64(1_796_999)})
+			}},
+		{name: "a product's code with a universal code's string", target: "/l/guide/save10", reason: "offer code lookup",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
 			}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1292,7 +1497,7 @@ func TestURLOfferCodes(t *testing.T) {
 				c.setup(t, e, testdb.Open(t))
 			}
 			body, hdr := e.renderAt(t, c.target, c.headers, c.reason)
-			e.wantAll(t, body, c.wants, productID)
+			e.wantAll(t, body, c.wants, productID, codeID)
 			if c.reason == "" && (hdr.Get("X-Robots-Tag") == "noindex") == c.indexed {
 				t.Errorf("X-Robots-Tag %q", hdr.Get("X-Robots-Tag"))
 			}
@@ -1649,6 +1854,11 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 			display("jpy", "usd", "776", "155.1234", "buyer_local") + `,"buyer_currency":"jpy",` +
 				`"buyer_local_currency_rate":1.551234,"buyer_local_currency_subunit_to_unit":1,"buyer_local_price_cents":776,"rental_price_cents":`,
 			"", nil},
+		// The json gem's Grisu2 writes this Float with more digits than Float#to_s.
+		{"a rate JSON writes long", "usd", "AUD",
+			display("aud", "usd", "728", "1.4568160000000001", "buyer_local") + `,"buyer_currency":"aud",` +
+				`"buyer_local_currency_rate":1.4568160000000001,"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":728,"rental_price_cents":`,
+			"", func(t *testing.T, e *testEnv, conn *sql.DB) { e.redis.Set("currencies:AUD", "1.456816") }},
 		{"no rate", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) { e.redis.Del("currencies:EUR") }},
 		{"a rate String#to_d reads loosely", "usd", "EUR", "", "currency rate", func(t *testing.T, e *testEnv, conn *sql.DB) {
 			e.redis.Set("currencies:EUR", "0.9_2")
@@ -1787,10 +1997,6 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 			conn.Exec("UPDATE variant_categories SET title = 'tier ' WHERE id = ?", size)
 			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, 3, 1, 0))
 		}},
-		{"options tied in order", nil, "variant order", func(t *testing.T, conn *sql.DB) {
-			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", nil, nil, nil, 0))
-			testdb.Insert(t, conn, "base_variants", variant(large, size, "Large", nil, nil, nil, 0))
-		}},
 		{"a physical product's options, without file summaries", []string{`"is_physical":true,`, `"native_type":"physical",`,
 			`"options":[{"id":"%[1]s","name":"Small",`, `"file_summaries":{"product":null,"options":{}}`},
 			"", func(t *testing.T, conn *sql.DB) {
@@ -1847,6 +2053,47 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// in_order sets no tiebreak, so tied options come in the order MySQL returns Rails' own statement.
+func TestTiedOptionsTakeTheOrderOfRailsStatement(t *testing.T) {
+	const size = int64(1_791_001)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": size, "link_id": productID, "title": "Size"})
+	for i, id := range []int64{1_791_103, 1_791_101, 1_791_102} {
+		testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": size,
+			"name": fmt.Sprint("Option ", i), "sales_count_for_inventory_cache": 0, "created_at": testNow, "updated_at": testNow})
+	}
+	var want []int64
+	err := scanNamed(t.Context(), conn, func(cols map[string]any) func() {
+		var id int64
+		cols["id"] = &id
+		return func() { want = append(want, id) }
+	}, optionRecordsStatement, productID, size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Whatever order the options arrive in, they leave in the statement's.
+	options := []*variantOption{{id: want[2]}, {id: want[1]}, {id: want[0]}}
+	if err := (&handler{c: e.config}).orderTiedOptions(t.Context(), productID, size, options); err != nil {
+		t.Fatal(err)
+	}
+	got := []int64{options[0].id, options[1].id, options[2].id}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("options %v, want %v", got, want)
+	}
+	// And the page renders them, rather than leaving it to Rails.
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	rendered := pageProps(t, w.Body.String())["product"].(map[string]any)["options"].([]any)
+	for i, o := range rendered {
+		if o.(map[string]any)["id"] != e.ids.Encrypt(want[i]) {
+			t.Errorf("rendered option %d is %v", i, o.(map[string]any)["id"])
+		}
 	}
 }
 
@@ -2079,4 +2326,19 @@ func defaultStyles(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return css
+}
+
+func TestACoffeeProductRedirectsToCoffee(t *testing.T) {
+	e := newTestEnv(t)
+	if _, err := testdb.Open(t).Exec("UPDATE links SET native_type = 'coffee' WHERE id = ?", productID); err != nil {
+		t.Fatal(err)
+	}
+	for target, robots := range map[string]string{"/l/guide": "", "/l/guide/SAVE10": "noindex"} {
+		w := e.get(host, target, nil)
+		if w.Code != http.StatusFound || w.Header().Get("Location") != "https://"+host+"/coffee" || e.railsHit != nil ||
+			w.Header().Get("X-Robots-Tag") != robots {
+			t.Errorf("%s: %d %q %q %q, Rails hit: %v", target, w.Code, w.Header().Get("Location"), w.Header().Get("X-Robots-Tag"),
+				w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+		}
+	}
 }

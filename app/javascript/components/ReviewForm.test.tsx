@@ -79,7 +79,6 @@ const rawLoggedInUser = {
     community: { index: false },
     churn: { show: false },
     page: { index: false, create: false },
-    user: { view_store_agent: false, use_store_agent: false },
   },
   promoted_nav_items: [],
   lazy_load_offscreen_discover_images: false,

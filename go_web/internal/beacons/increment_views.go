@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"database/sql"
-	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -32,23 +31,6 @@ var transparentGIF = rails.NewStatic(transparentGIFBytes)
 // ElasticsearchIndexerWorker's sidekiq_options over default_job_options.
 var elasticsearchIndexer = sidekiq.Options{Class: "ElasticsearchIndexerWorker", Queue: "default", Retry: 10}
 
-// The keys of config/initializers/bots.rb's BOT_MAP, written by testdata/rails_fixtures.rb.
-//
-//go:embed bot_map.json
-var botMapJSON []byte
-
-var botUserAgents = func() map[string]bool {
-	var agents []string
-	if err := json.Unmarshal(botMapJSON, &agents); err != nil {
-		panic(err)
-	}
-	set := make(map[string]bool, len(agents))
-	for _, a := range agents {
-		set[a] = true
-	}
-	return set
-}()
-
 type product struct {
 	id, userID int64
 	priceCents sql.NullInt64
@@ -69,24 +51,6 @@ func (h *handlers) fetchProduct(c *actionContext) (*product, error) {
 	return p, err
 }
 
-// isBot is ApplicationController#is_bot?.
-func isBot(req *rails.Request) bool {
-	ua := req.UserAgent()
-	if ua == nil {
-		return false
-	}
-	if botUserAgents[*ua] || rails.Present(req.Param("user_agent_bot")) {
-		return true
-	}
-	lower := strings.ToLower(*ua)
-	for _, bot := range []string{"msnbot", "yahoo! slurp", "googlebot", "whatsapp"} {
-		if strings.Contains(lower, bot) {
-			return true
-		}
-	}
-	return false
-}
-
 // incrementViews is LinksController#increment_views. The analytics token is only checked
 // once nothing else skips the view; the check has no side effects.
 func (h *handlers) incrementViews(c *actionContext) error {
@@ -96,7 +60,7 @@ func (h *handlers) incrementViews(c *actionContext) error {
 	}
 	req := c.req
 	logged := c.auth.LoggedInUser()
-	skip := isBot(req)
+	skip := rails.IsBot(req)
 	if logged != nil {
 		// A token's impersonation leaves current_seller nil, and current_seller.id raises.
 		if c.auth.CurrentSeller == nil {

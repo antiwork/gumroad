@@ -26,6 +26,41 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
+    context "with a free purchase from a new seller (gp#4366)" do
+      let(:seller) { create(:user, email: "new-seller@example.com", name: "Alex") }
+      let(:product) { create(:product, user: seller, price_cents: 0, name: "Starter Pack") }
+
+      def receipt_for(email:, product_name: nil, seller_name: nil)
+        product.update!(name: product_name) if product_name
+        seller.update_columns(name: seller_name) if seller_name
+        purchase = create(:free_purchase, link: product, seller:, email:)
+        described_class.receipt(purchase.id)
+      end
+
+      it "skips the email to a gumroad.com address" do
+        expect(receipt_for(email: "staff@gumroad.com").message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "skips the email when the seller name poses as Gumroad staff" do
+        expect(receipt_for(email: "buyer@example.com", seller_name: "Gumroad Security Team").message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "sends a normal free receipt to an outside buyer" do
+        expect(receipt_for(email: "buyer@example.com").subject).to eq("You got Starter Pack!")
+      end
+
+      it "sends once the seller is established" do
+        seller.update_columns(created_at: 60.days.ago)
+        expect(receipt_for(email: "staff@gumroad.com").to).to eq(["staff@gumroad.com"])
+      end
+
+      it "always sends a paid receipt" do
+        product.update!(price_cents: 500)
+        purchase = create(:purchase, link: product, seller:, email: "staff@gumroad.com")
+        expect(described_class.receipt(purchase.id).to).to eq(["staff@gumroad.com"])
+      end
+    end
+
     context "when the purchase belongs to a two-purchase charge" do
       let(:seller) { create(:named_seller) }
       let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Paid edition"), seller:, email: "buyer@example.com") }
@@ -1775,6 +1810,73 @@ describe CustomerMailer do
       mail = CustomerMailer.grouped_receipt(purchases.map(&:id))
       expect(mail.to).to eq([purchases.last.email])
       expect(mail.subject).to eq("Receipts for Purchases")
+    end
+
+    context "with a free purchase from a new seller (gp#4366)" do
+      let(:new_seller) { create(:user, email: "new-seller@example.com", name: "Alex") }
+      let(:free_product) { create(:product, user: new_seller, price_cents: 0, name: "Starter Pack") }
+
+      it "skips the group when the receipt would go to a gumroad.com address" do
+        purchase = create(:free_purchase, link: free_product, seller: new_seller, email: "staff@gumroad.com")
+
+        expect(CustomerMailer.grouped_receipt([purchase.id]).message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "skips the group when the seller name poses as Gumroad staff" do
+        new_seller.update_columns(name: "Gumroad Payout Verification")
+        purchase = create(:free_purchase, link: free_product, seller: new_seller, email: "buyer@example.com")
+
+        expect(CustomerMailer.grouped_receipt([purchase.id]).message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "sends a normal free grouped receipt to an outside buyer" do
+        purchase = create(:free_purchase, link: free_product, seller: new_seller, email: "buyer@example.com")
+
+        expect(CustomerMailer.grouped_receipt([purchase.id]).to).to eq(["buyer@example.com"])
+      end
+
+      it "always sends a paid receipt" do
+        paid_product = create(:product, user: new_seller, price_cents: 500, name: "Paid Pack")
+        purchase = create(:purchase, link: paid_product, seller: new_seller, email: "staff@gumroad.com")
+
+        expect(CustomerMailer.grouped_receipt([purchase.id]).to).to eq(["staff@gumroad.com"])
+      end
+
+      it "sends the buyer's older receipts when newer free ones are blocked" do
+        other_seller = create(:named_seller, name: "Priya")
+        kept_product = create(:product, user: other_seller, price_cents: 0, name: "Recipe Pack")
+        kept = create(:free_purchase, link: kept_product, seller: other_seller, email: "buyer@example.com")
+        new_seller.update_columns(name: "Gumroad Security Team")
+        blocked = create_list(:free_purchase, CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES,
+                              link: free_product, seller: new_seller, email: "buyer@example.com")
+
+        mail = CustomerMailer.grouped_receipt([kept.id] + blocked.map(&:id))
+        items = Nokogiri::HTML(mail.body.decoded).css(".item .product-checkout-cell h4").map { _1.text.strip }
+
+        expect(mail.to).to eq(["buyer@example.com"])
+        expect(items).to include("Recipe Pack")
+        expect(items).not_to include("Starter Pack")
+      end
+    end
+
+    it "does not read a purchase's rows again when it carries its own price" do
+      expect_any_instance_of(Purchase).not_to receive(:successful_purchases)
+
+      expect(described_class.new.send(:suppress_receipt_from_unproven_seller?, build(:purchase, price_cents: 500))).to be(false)
+    end
+
+    it "checks at most the twenty receipts it can send" do
+      checked = 0
+      allow_any_instance_of(CustomerMailer).to receive(:suppress_receipt_from_unproven_seller?).and_wrap_original do |original, chargeable|
+        checked += 1
+        original.call(chargeable)
+      end
+      many = create_list(:purchase, CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES + 5, link: product, seller:)
+
+      mail = CustomerMailer.grouped_receipt(many.map(&:id))
+
+      expect(mail.to).to eq([many.last.email])
+      expect(checked).to eq(CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES)
     end
 
     it "reads only bounded newest-first windows of a caller's match" do

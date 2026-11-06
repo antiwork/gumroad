@@ -54,6 +54,11 @@ type PageConfig struct {
 	// OGNamespace is FACEBOOK_OG_NAMESPACE, and RecaptchaSiteKey FollowRecaptcha.site_key.
 	OGNamespace, RecaptchaSiteKey string
 	NewNonce                      func() string
+	// EmailDigestKey is OBFUSCATE_IDS_CIPHER_KEY, which Purchase#email_digest signs with.
+	EmailDigestKey string
+	// GumroadAdminID is GUMROAD_ADMIN_ID, who writes payout setup notes; 0 leaves a page that
+	// reads them to Rails.
+	GumroadAdminID int64
 	// CustomHTMLAnalytics is vite_typescript_tag("custom_html_analytics"); nil leaves a custom
 	// HTML product page to Rails.
 	CustomHTMLAnalytics *vite.Tags
@@ -67,10 +72,27 @@ func (pc *PageConfig) cdnURL(s string) string {
 	return s
 }
 
-// render is LinksController#prepare_product_page and #show for a signed-out visitor, then
-// the after_actions. Everything is read before anything is written.
+// render is LinksController#prepare_product_page and #show for a visitor signed out or signed in as
+// themselves, then the after_actions. Everything is read before
+// anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
+	// show sends a coffee product to /coffee, which renders it, with params.permit(:wanted,
+	// :native); native is declined. Of the before_actions left, prepare_product_page only sets
+	// meta tags and set_x_robots_tag_header marks a code.
+	if prod.nativeType == "coffee" {
+		if p.urlCode != "" {
+			w.Header().Set("X-Robots-Tag", "noindex")
+		}
+		if err := h.trackUTMVisit(w, p, prod); err != nil {
+			return err
+		}
+		location := "/coffee"
+		if wanted, ok := p.Req.Param("wanted").(string); ok {
+			location += "?" + rails.ToQuery([2]string{"wanted", wanted})
+		}
+		return h.ctl.Redirect(w, p.Visit, location)
+	}
 	if reason, err := h.unportedShape(ctx, p, prod); err != nil || reason != "" {
 		return firstErr(err, fallback(reason))
 	}
@@ -81,10 +103,27 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if _, err := pages.FlashProps(p.Session); err != nil {
 		return fallback("shared props")
 	}
+	if err := h.loadViewer(p, prod); err != nil {
+		return err
+	}
 
 	v, err := h.loadView(ctx, p, prod)
 	if err != nil {
 		return err
+	}
+	if p.wanted && !wantedRendersPage(prod) {
+		location, err := h.wantedCheckout(p, prod, v)
+		if err != nil {
+			return err
+		}
+		if err := h.trackUTMVisit(w, p, prod); err != nil {
+			return err
+		}
+		// The cover URLs Rails' meta tags cache on the way are left for the page to cache.
+		if p.urlCode != "" {
+			w.Header().Set("X-Robots-Tag", "noindex")
+		}
+		return h.ctl.Redirect(w, p.Visit, location)
 	}
 	nonce := pc.NewNonce()
 	meta, err := h.productMeta(p, prod, v)
@@ -100,31 +139,66 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if err != nil {
 		return err
 	}
-	props := shared.
-		Sym("detected_buyer_currency", nullableString(v.detectedCurrency)).
-		Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
+	// The share blocks in order: the signed-in one follows detected_buyer_currency's, and
+	// LinksController's own MobileAppWebView share comes last.
+	props := shared.Sym("detected_buyer_currency", nullableString(v.detectedCurrency))
+	if u := p.viewer; u != nil {
+		props.Sym("logged_in_user", u.loggedIn).Sym("current_seller", u.currentSeller).
+			Sym("current_user", u.currentUser).Sym("prompt_passkey_setup", u.promptPasskey)
+	}
+	props.Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
 	h.productProps(props, p, prod, v)
-	props.Merge(h.sectionsProps(p, v))
-	component := productComponent
-	if storefront(p) {
+	component, bodyClass := productComponent, ""
+	switch {
+	case p.iframe:
+		component, bodyClass = iframeComponent, "iframe"
+	case p.layout == productLayoutDiscover:
+		component = discoverComponent
+	case p.layout == productLayoutProfile || storefront(p):
 		component = storefrontComponent
 	}
-	props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
+	if !p.iframe {
+		props.Merge(h.sectionsProps(p, v))
+		props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
+		if p.layout == productLayoutDiscover {
+			props.Sym("taxonomy_path", v.taxonomyPath).Sym("taxonomies_for_nav", v.taxonomiesForNav)
+		}
+	}
 
 	// as_embed is a declined param.
 	body := pc.Layout.Render(inertia.Document{
 		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta,
-		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page",
+		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page", BodyClass: bodyClass,
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
 	})
 
+	recordSearch, err := h.recordsDiscoverSearch(p)
+	if err != nil {
+		return err
+	}
+	var taxonomyID sql.NullInt64
+	if recordSearch {
+		if taxonomyID, err = h.productTaxonomyID(ctx, prod); err != nil {
+			return err
+		}
+	}
 	if !p.DryRun {
+		// The pushes fall back while nothing Rails would repeat is written: its own reputation push
+		// is deduplicated, the UTM visit and the search aren't.
 		if p.warmReputation {
 			// Each command has the client's own timeout. A deadline across them could stop between
 			// queue.lua and the handoff, leaving a digest no later push or reaper clears.
 			if _, _, err := pc.Sidekiq.PushUntilExecuted(context.WithoutCancel(ctx), warmReputationJob, p.seller.id); err != nil {
 				web.Logger(p.Req.HTTP).Warn("reputation refresh push failed", "error", err.Error())
 				return fallback("reputation refresh push")
+			}
+		}
+		if err := h.trackUTMVisit(w, p, prod); err != nil {
+			return err
+		}
+		if recordSearch {
+			if err := h.createDiscoverSearch(ctx, p, prod, v.ip, taxonomyID); err != nil {
+				return err
 			}
 		}
 		h.flushCacheWrites(ctx, p)
@@ -191,6 +265,16 @@ type view struct {
 	ppp *pppDetails
 	// sections are the product's own, or the storefront's catalog when they render none.
 	sections []any
+	// wishlists are the signed-in visitor's, as product_props lists them.
+	wishlists []any
+	purchase  any
+	// taxonomyPath and taxonomiesForNav are layout=discover's discover_props.
+	taxonomyPath     any
+	taxonomiesForNav []any
+	// waitlistCount is waitlist_props' count, nil but for a visitor who can edit the product.
+	waitlistCount any
+	// editor is the editing payload's products, posts and wishlist_options, nil but for the seller.
+	editor *rails.RHash
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -216,15 +300,13 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	v.geo = h.lookup(v.ip)
 	v.detectedCurrency = buyerCurrencyForCountry(countryCode(v.geo))
 
-	// User#avatar_url.
-	avatar, err := pc.Avatars.URL(ctx, seller.id)
-	if errors.Is(err, storage.ErrUnported) {
-		return nil, fallback("avatar")
-	}
-	if err != nil {
+	// User#avatar_url, the page's own for a featured product.
+	var err error
+	if p.parent != nil {
+		v.avatarURL = p.parent.avatarURL
+	} else if v.avatarURL, err = h.avatarURL(ctx, seller.id); err != nil {
 		return nil, err
 	}
-	v.avatarURL = avatar
 
 	if v.prices, err = h.loadPrices(ctx, prod); err != nil {
 		return nil, err
@@ -239,7 +321,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// before that for a membership.
 		return nil, fallback("no price")
 	}
-	if v.discount, err = h.loadOfferDiscount(ctx, p, prod); err != nil {
+	if v.discount, err = h.loadOfferDiscount(ctx, p, prod, v.priceCents); err != nil {
 		return nil, err
 	}
 	pppPrice, err := h.loadPPP(ctx, p, prod, v)
@@ -264,9 +346,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		}
 	}
 	if c := v.currency; c != nil && *displayed < *v.priceCents {
-		// buyer_local_price_props converts the original through the shown Float rate.
-		original := localPriceCents(*v.priceCents, prod.productCurrency(), c.buyer, shortestRat(c.rate))
-		c.originalLocalCents = &original
+		c.setOriginal(*v.priceCents, prod.productCurrency())
 	}
 	if v.installmentPlan, err = h.installmentPlanProps(ctx, p, prod); err != nil {
 		return nil, err
@@ -330,6 +410,41 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.thirdPartyAnalytics, err = h.hasThirdPartyAnalytics(ctx, prod); err != nil {
 		return nil, err
 	}
+	v.wishlists = h.viewerWishlists(p, prod)
+	if v.purchase, err = h.purchaseProps(p, prod, v); err != nil {
+		return nil, err
+	}
+	if p.canEdit() && prod.acceptsWaitlistSignups() {
+		var n int64
+		if err := h.c.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM waitlist_entries INNER JOIN followers ON followers.id = waitlist_entries.follower_id"+
+			" WHERE waitlist_entries.product_id = ? AND followers.deleted_at IS NULL AND followers.confirmed_at IS NOT NULL", prod.id).Scan(&n); err != nil {
+			return nil, err
+		}
+		v.waitlistCount = n
+	}
+	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
+		v.recaptchaSiteKey = pc.RecaptchaSiteKey
+	}
+	// Past here only the page reads: product_props leaves the sections and the profile alone.
+	// wanted=true renders no page but a pay-what-you-want one.
+	if p.parent != nil || p.wanted && !wantedRendersPage(prod) {
+		return v, nil
+	}
+	if p.iframe {
+		// iframe_product_props is product_props alone; the meta tags still read the styles.
+		if err := h.loadCustomStyles(ctx, p, v); err != nil {
+			return nil, err
+		}
+		if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
+			return nil, err
+		}
+		return v, nil
+	}
+	if p.layout == productLayoutDiscover {
+		if v.taxonomyPath, v.taxonomiesForNav, err = h.discoverNav(p, prod); err != nil {
+			return nil, err
+		}
+	}
 	if v.showRatingsFilter, err = h.exists(ctx, "SELECT 1 FROM links WHERE links.user_id = ? AND links.purchase_disabled_at IS NULL"+
 		" AND links.banned_at IS NULL AND links.deleted_at IS NULL AND (links.flags & ?) != 0 LIMIT 1", seller.id, productDisplayReviews); err != nil {
 		return nil, err
@@ -340,15 +455,17 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	v.youtubeChannelID = nullString(channel)
-	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
-		v.recaptchaSiteKey = pc.RecaptchaSiteKey
-	}
 	if err := h.loadCustomStyles(ctx, p, v); err != nil {
 		return nil, err
 	}
 	sections, err := h.listProductSections(p, prod, v)
 	if err != nil {
 		return nil, err
+	}
+	if p.ownView() {
+		if v.editor, err = h.editorProps(p); err != nil {
+			return nil, err
+		}
 	}
 	// Last: Elasticsearch searches are the costliest reads, and anything above may still fall back.
 	if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
@@ -362,13 +479,23 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		v.mainSectionIndex = raw
 	}
 	// show_storefront_catalog?
-	if storefront(p) && len(v.sections) == 0 {
+	// show_storefront_catalog?: Discover's layout has none.
+	if storefront(p) && p.layout != productLayoutDiscover && len(v.sections) == 0 {
 		if v.sections, err = h.loadCatalog(p, prod, v.localBuyer); err != nil {
 			return nil, err
 		}
 		v.mainSectionIndex = int64(0)
 	}
 	return v, nil
+}
+
+// avatarURL is User#avatar_url.
+func (h *handler) avatarURL(ctx context.Context, userID int64) (string, error) {
+	avatar, err := h.c.Page.Avatars.URL(ctx, userID)
+	if errors.Is(err, storage.ErrUnported) {
+		return "", fallback("avatar")
+	}
+	return avatar, err
 }
 
 func countryCode(g *geoip.Result) *string {

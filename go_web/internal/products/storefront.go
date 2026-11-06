@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,11 +20,18 @@ import (
 const (
 	productComponent    = "Products/Show"
 	storefrontComponent = "Products/Profile/Show"
+	// productLayoutProfile is Product::Layout::PROFILE, and productLayoutDiscover DISCOVER.
+	productLayoutProfile  = "profile"
+	productLayoutDiscover = "discover"
+	discoverComponent     = "Products/Discover/Show"
+	iframeComponent       = "Products/Iframe/Show"
 	// ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID and _TYPE, and ProductSortKey::PAGE_LAYOUT.
 	defaultProductsSectionID    = "default-products"
 	profileProductsSectionType  = "SellerProfileProductsSection"
 	profileSubscribeSectionType = "SellerProfileSubscribeSection"
 	profileRichTextSectionType  = "SellerProfileRichTextSection"
+	profilePostsSectionType     = "SellerProfilePostsSection"
+	profileFeaturedSectionType  = "SellerProfileFeaturedProductSection"
 	pageLayoutSort              = "page_layout"
 	catalogPageSize             = 9
 	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
@@ -55,9 +63,17 @@ func bucketsProps(buckets []catalogBucket) []any {
 	return out
 }
 
-// storefront is whether the seller's pages render as Products/Profile/Show for a signed-out
-// visitor, off the Discover layout (a declined param).
-func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) }
+// storefront is whether the seller's pages render as Products/Profile/Show for a visitor who
+// isn't the seller, off the Discover layout (a declined param).
+func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) && !p.ownView() }
+
+// ownView is whether the visitor is the seller, pundit_user.seller == seller: Rails then renders
+// the sections in the editor's shape.
+func (p *page) ownView() bool { return p.viewer != nil && p.viewer.id == p.seller.id }
+
+// canEdit is LinkPolicy#edit? for the visitor; staff, whom is_team_member? lets in, and team roles
+// on another seller already went to Rails.
+func (p *page) canEdit() bool { return p.ownView() || p.collaborates }
 
 // productsSection is a saved SellerProfileProductsSection, on the profile or a product.
 type productsSection struct {
@@ -66,6 +82,7 @@ type productsSection struct {
 	shownProducts []int64
 	sort          string
 	showFilters   bool
+	updatedAt     db.NullTime
 	// version moves with the row, for the search's cache key.
 	version string
 }
@@ -114,9 +131,12 @@ func (r *sectionRow) dest() []any {
 	return []any{&r.id, &r.typ, &r.header, &r.flags, &r.data, &r.updatedAt}
 }
 
+// hidesHeader is SellerProfileSection#hide_header?.
+func (r *sectionRow) hidesHeader() bool { return r.flags&sectionHiddenHeader != 0 }
+
 // shownHeader is cached_sections' header: nil when hide_header is set.
 func (r *sectionRow) shownHeader() any {
-	if r.flags&sectionHiddenHeader != 0 {
+	if r.hidesHeader() {
 		return nil
 	}
 	return nullString(r.header)
@@ -131,21 +151,11 @@ func (r *sectionRow) productsSection() (*productsSection, error) {
 	if _, known := sectionSortClauses[sort]; !ok || !sortOK || !known || !filtersOK || !shownOK {
 		return nil, fallback("products section json_data")
 	}
-	if sort == "highest_rated" || sort == "most_reviewed" {
-		// A review moves these orders without touching links.updated_at, so go_web's cache and
-		// Rails' can each hold a different one.
-		return nil, fallback("products section review sort")
+	ids, ok := jsonIDs(shown)
+	if !ok {
+		return nil, fallback("products section json_data")
 	}
-	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters,
-		shownProducts: make([]int64, 0, len(shown))}
-	for _, v := range shown {
-		n, _ := v.(json.Number)
-		id, ok := jsonInt(n)
-		if !ok {
-			return nil, fallback("products section json_data")
-		}
-		s.shownProducts = append(s.shownProducts, id)
-	}
+	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters, updatedAt: r.updatedAt, shownProducts: ids}
 	s.version = itoa(r.id) + "-" + r.updatedAt.Time.UTC().Format(time.RFC3339Nano)
 	return s, nil
 }
@@ -170,21 +180,50 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 		// nil is the virtual default-products section.
 		sections = []*productsSection{nil}
 	}
-	return h.productsSectionsProps(p, prod, sections, buyer)
+	searches, err := h.catalogSearches(p, sections)
+	if err != nil {
+		return nil, err
+	}
+	// section_props searches afresh with any visitor search param, after the cached fetch.
+	if p.visitorSearch {
+		if searches, err = h.visitorSearchSections(p, sections); err != nil {
+			return nil, err
+		}
+	}
+	return h.productsSectionsProps(p, prod, sections, searches, buyer)
+}
+
+// productPageQuery is url_for_product_page's query on the seller's own host, which to_query
+// sorts and CGI-escapes as url.Values does.
+func productPageQuery(layout string, recommendedBy *string) string {
+	if layout == "" && recommendedBy == nil {
+		return ""
+	}
+	q := url.Values{}
+	if rails.Present(layout) {
+		q.Set("layout", layout)
+	}
+	if recommendedBy != nil && rails.Present(*recommendedBy) {
+		q.Set("recommended_by", *recommendedBy)
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + q.Encode()
+}
+
+// reviewSorted is whether a section is ordered by reviews: a review moves that order without
+// touching links.updated_at, so a search of go_web's own can differ from Rails' cache.
+func reviewSorted(sections []*productsSection) bool {
+	return slices.ContainsFunc(sections, func(s *productsSection) bool {
+		return s != nil && (s.sort == "highest_rated" || s.sort == "most_reviewed")
+	})
 }
 
 // productsSectionsProps is section_props for products sections, with omit_product unless omit
 // is nil.
-func (h *handler) productsSectionsProps(p *page, omit *product, sections []*productsSection, buyer *string) ([]any, error) {
+func (h *handler) productsSectionsProps(p *page, omit *product, sections []*productsSection, searches []*catalogSearch, buyer *string) ([]any, error) {
 	seller := p.seller
-	if p.hasAutoApplyCode {
-		// Cards price through the seller's auto-applied code and label its sale.
-		return nil, fallback("catalog auto-apply")
-	}
-	searches, err := h.cachedCatalog(p, sections)
-	if err != nil {
-		return nil, err
-	}
 	// Every section's cards load together; a product in several sections loads once.
 	var ids []int64
 	for _, search := range searches {
@@ -233,7 +272,8 @@ func (h *handler) productsSectionsProps(p *page, omit *product, sections []*prod
 		}
 		shown := make([]*card, 0, len(kept))
 		for _, c := range kept {
-			if c.prod.is(productHideSoldOutVariants) {
+			// The seller sees their sold-out products.
+			if !p.ownView() && c.prod.is(productHideSoldOutVariants) {
 				out, seen := soldOut[c.prod.id]
 				if !seen {
 					if out, err = h.cardSoldOut(p, c); err != nil {
@@ -254,6 +294,9 @@ func (h *handler) productsSectionsProps(p *page, omit *product, sections []*prod
 		built[i] = sectionCards{total, shown}
 	}
 	if err := h.cardThumbnails(p, allShown); err != nil {
+		return nil, err
+	}
+	if err := h.cardOffers(p, allShown); err != nil {
 		return nil, err
 	}
 	out := make([]any, 0, len(sections))
@@ -302,6 +345,24 @@ func sectionHead(id string, header any, typ string) *rails.RHash {
 	return rails.NewRHash().Sym("id", id).Sym("header", header).Sym("type", typ)
 }
 
+// searchSections is section_search_results for each section, in order.
+func (h *handler) searchSections(p *page, sections []*productsSection, query string) ([]*catalogSearch, error) {
+	searches := make([]*catalogSearch, len(sections))
+	for i, s := range sections {
+		var err error
+		if searches[i], err = h.searchCatalog(p, s, query); err != nil {
+			return nil, err
+		}
+	}
+	return searches, nil
+}
+
+// visitorSearchSections is section_props' fresh search, which matches the visitor's query.
+func (h *handler) visitorSearchSections(p *page, sections []*productsSection) ([]*catalogSearch, error) {
+	query, _ := p.query.(string)
+	return h.searchSections(p, sections, query)
+}
+
 // cachedCatalog is cached_sections' or cached_default_products_section's searches, under one key
 // of go_web's own that moves with the seller's products and with every section, as Rails' does.
 // Rails never reads it, so it's written even when the page then goes to Rails.
@@ -330,11 +391,9 @@ func (h *handler) cachedCatalog(p *page, sections []*productsSection) ([]*catalo
 		}
 		return searches, nil
 	}
-	searches := make([]*catalogSearch, len(sections))
-	for i, s := range sections {
-		if searches[i], err = h.searchCatalog(p, s); err != nil {
-			return nil, err
-		}
+	searches, err := h.searchSections(p, sections, "")
+	if err != nil {
+		return nil, err
 	}
 	text, err := json.Marshal(searches)
 	if err != nil {
@@ -363,17 +422,22 @@ func desc(field string) map[string]any { return map[string]any{field: map[string
 
 // searchCatalog is Link.filetype_options' and Link.search_options' searches for a section. They
 // share a query, so one request carries both facets.
-func (h *handler) searchCatalog(p *page, section *productsSection) (*catalogSearch, error) {
+func (h *handler) searchCatalog(p *page, section *productsSection, query string) (*catalogSearch, error) {
 	if h.c.Page.Search == nil {
 		return nil, fallback("products section search")
 	}
 	terms := func(field string, size int) map[string]any {
 		return map[string]any{"terms": map[string]any{"field": field, "size": size}}
 	}
-	must := []any{
+	var must []any
+	if rails.Present(query) {
+		must = append(must, map[string]any{"simple_query_string": map[string]any{"query": query,
+			"fields": []string{"name", "creator_name", "description", "tags"}, "default_operator": "and"}})
+	}
+	must = append(must,
 		map[string]any{"terms": map[string]any{"user_id": []int64{p.seller.id}}},
 		map[string]any{"term": map[string]any{"is_alive_on_profile": true}},
-	}
+	)
 	boolQuery := map[string]any{}
 	sort := []any{desc("created_at")}
 	if section != nil {
@@ -460,6 +524,9 @@ type card struct {
 	thumbnailURL         any
 	// tiers are a tiered membership's preloaded tiers, with their alive buy prices.
 	tiers []*variantOption
+	// offer is effective_default_offer_code; onSale is whether it's the seller's sale.
+	offer  *offerCode
+	onSale bool
 }
 
 // loadCards is section_props' Link.find of the hits, in hit order, for the shapes whose card
@@ -471,7 +538,6 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	ctx := p.Ctx
 	byID := make(map[int64]*card, len(ids))
 	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+productColumns+","+
-		" EXISTS(SELECT 1 FROM base_variants WHERE base_variants.link_id = links.id AND base_variants.type = 'Sku' AND base_variants.deleted_at IS NULL),"+
 		" EXISTS(SELECT 1 FROM variant_categories WHERE variant_categories.link_id = links.id AND variant_categories.deleted_at IS NULL"+
 		" AND variant_categories.title = 'Tier'),"+
 		" EXISTS(SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = links.id"+
@@ -483,11 +549,10 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	defer rows.Close()
 	for rows.Next() {
 		c := &card{prod: &product{}}
-		var hasSku bool
-		if err := rows.Scan(append(c.prod.dest(), &hasSku, &c.hasTier, &c.hasPlan)...); err != nil {
+		if err := rows.Scan(append(c.prod.dest(), &c.hasTier, &c.hasPlan)...); err != nil {
 			return nil, err
 		}
-		if reason := unportedCard(p.seller.id, c.prod, hasSku); reason != "" {
+		if reason := unportedCard(p.seller.id, c.prod); reason != "" {
 			return nil, fallback("catalog " + reason)
 		}
 		var ok bool
@@ -575,13 +640,19 @@ func (h *handler) cardTiers(p *page, cards []*card) (map[int64][]*variantOption,
 	return out, h.markClosedTiers(p.Ctx, p.seller.id, all)
 }
 
-// variantPriceFloors is lowest_variant_price_difference_cents over each product's preloaded
-// alive variants.
+// variantPriceFloors is lowest_variant_price_difference_cents over each product's
+// preloaded_options: its alive SKUs, the default one included, and its alive categories' alive
+// variants.
 func (h *handler) variantPriceFloors(ctx context.Context, ids []int64) (map[int64]sql.NullInt64, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT variant_categories.link_id, MIN(base_variants.price_difference_cents) FROM base_variants"+
+	in := placeholders(len(ids))
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT options.link_id, MIN(options.price_difference_cents) FROM ("+
+		"SELECT variant_categories.link_id, base_variants.price_difference_cents FROM base_variants"+
 		" INNER JOIN variant_categories ON variant_categories.id = base_variants.variant_category_id"+
 		" WHERE base_variants.type = 'Variant' AND base_variants.deleted_at IS NULL AND variant_categories.deleted_at IS NULL"+
-		" AND variant_categories.link_id IN ("+placeholders(len(ids))+") GROUP BY variant_categories.link_id", int64Args(ids)...)
+		" AND variant_categories.link_id IN ("+in+")"+
+		" UNION ALL SELECT base_variants.link_id, base_variants.price_difference_cents FROM base_variants"+
+		" WHERE base_variants.type = 'Sku' AND base_variants.deleted_at IS NULL AND base_variants.link_id IN ("+in+")"+
+		") options GROUP BY options.link_id", append(int64Args(ids), int64Args(ids)...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -619,18 +690,14 @@ func (h *handler) aliveThumbnails(ctx context.Context, ids []int64) (map[int64][
 }
 
 // unportedCard is a catalog product whose card this port leaves to Rails.
-func unportedCard(sellerID int64, prod *product, hasSku bool) string {
+func unportedCard(sellerID int64, prod *product) string {
 	_, known := currencies[prod.productCurrency()]
 	switch {
 	case prod.userID != sellerID:
 		// url_for_product_page and the seller's auto-apply code are the subdomain seller's.
 		return "seller"
-	case !prod.purchaseType.Valid || prod.purchaseType.Int64 != purchaseTypeBuyOnly:
-		return "rental"
-	case prod.defaultOfferCodeID.Valid:
-		return "default offer code"
-	case hasSku:
-		return "skus"
+	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
+		return "purchase type"
 	case !prod.priceCurrencyType.Valid || !known:
 		return "currency"
 	}
@@ -669,7 +736,8 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 				rows = append(rows, r)
 			}
 		}
-		last, agreed := lastPrice(buyPrices(prod, rows))
+		// default_price_cents: a rent-only product's is its rental price.
+		last, agreed := lastPrice(pricesForCurrency(prod, rows, prod.rentOnly()))
 		if !agreed {
 			return nil, fallback("catalog price")
 		}
@@ -686,14 +754,21 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 			break
 		}
 	}
+	base := price
+	price, err := h.cardPriceCents(p, c, base)
+	if err != nil {
+		return nil, err
+	}
 	ratings := cardRatings(prod, c.stat)
 	pc := prod.productCurrency()
 	var display *currencyDisplay
 	if buyer != nil {
-		var err error
 		if display, err = h.currencyDisplayFor(p, prod, c.hasPlan, *buyer, &price); err != nil {
 			return nil, err
 		}
+	}
+	if display != nil && price < base {
+		display.setOriginal(base, pc)
 	}
 	externalID := h.c.IDs.Encrypt(prod.id)
 	props := rails.NewRHash().
@@ -711,12 +786,20 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 		Sym("buyer_currency_display", buyerCurrencyDisplay(externalID, pc, display))
 	buyerLocalPriceProps(props, pc, display)
 	// url_for_product_page on the seller's own subdomain, whose port declined() rules out.
-	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) + "?layout=profile"
-	return props.
-		Sym("is_pay_what_you_want", pwyw).
+	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) +
+		productPageQuery(productLayoutProfile, p.recommendedBy)
+	props.Sym("is_pay_what_you_want", pwyw).
 		Sym("url", url).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).
-		Sym("recurrence", recurrence), nil
+		Sym("recurrence", recurrence)
+	if price < base {
+		props.Sym("original_price_cents", base)
+		// auto_apply_sale_label.
+		if c.onSale {
+			props.Sym("sale_label", c.offer.displayedSaleLabel())
+		}
+	}
+	return props, nil
 }
 
 // cardThumbnails is thumbnail_or_cover_url for each card: thumbnail_alive&.url, else the

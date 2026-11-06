@@ -20,6 +20,17 @@ func (h *handler) exists(ctx context.Context, query string, args ...any) (bool, 
 	return err == nil, err
 }
 
+// scanIDs is the id of each row a statement returns, in its order.
+func (h *handler) scanIDs(ctx context.Context, query string, args ...any) ([]int64, error) {
+	var ids []int64
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		var id int64
+		cols["id"] = &id
+		return func() { ids = append(ids, id) }
+	}, query, args...)
+	return ids, err
+}
+
 // unportedProductShape is the product itself, as the page and the custom HTML wrapper both
 // read it.
 func unportedProductShape(prod *product) string {
@@ -90,15 +101,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 	}
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT "+strings.Join(exprs, ", "), args...).Scan(dest...); err != nil {
 		return "", err
-	}
-	// purchase_info_for_product_page finds a purchase made with this browser.
-	// An empty cookie isn't re-minted, and Rails looks up "" too.
-	if guid, ok := p.Req.Cookie(guidCookie); ok && !p.MintedGUID {
-		found, err := h.exists(ctx, "SELECT 1 FROM purchases WHERE purchases.link_id = ? AND purchases.browser_guid = ?"+
-			" AND purchases.purchaser_id IS NULL LIMIT 1", prod.id, guid)
-		if err != nil || found {
-			return "browser purchase", err
-		}
 	}
 	return "", nil
 }
