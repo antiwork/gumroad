@@ -1841,6 +1841,22 @@ describe CustomerMailer do
 
         expect(CustomerMailer.grouped_receipt([purchase.id]).to).to eq(["staff@gumroad.com"])
       end
+
+      it "sends the buyer's older receipts when newer free ones are blocked" do
+        other_seller = create(:named_seller, name: "Priya")
+        kept_product = create(:product, user: other_seller, price_cents: 0, name: "Recipe Pack")
+        kept = create(:free_purchase, link: kept_product, seller: other_seller, email: "buyer@example.com")
+        new_seller.update_columns(name: "Gumroad Security Team")
+        blocked = create_list(:free_purchase, CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES,
+                              link: free_product, seller: new_seller, email: "buyer@example.com")
+
+        mail = CustomerMailer.grouped_receipt([kept.id] + blocked.map(&:id))
+        items = Nokogiri::HTML(mail.body.decoded).css(".item .product-checkout-cell h4").map { _1.text.strip }
+
+        expect(mail.to).to eq(["buyer@example.com"])
+        expect(items).to include("Recipe Pack")
+        expect(items).not_to include("Starter Pack")
+      end
     end
 
     it "reads only bounded newest-first windows of a caller's match" do

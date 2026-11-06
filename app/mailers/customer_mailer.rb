@@ -41,9 +41,6 @@ class CustomerMailer < ApplicationMailer
 
     # Re-check before the claim so a set that cannot be sent does not consume the 24h window.
     @chargeables = @chargeables.select(&:receipt_renderable?)
-    # gp#4366: /charge_data reaches this path too, so a free "purchase" from a brand-new seller
-    # must not carry its staff-looking name into the group's From and subject either.
-    @chargeables = @chargeables.reject { suppress_receipt_from_unproven_seller?(_1) }
     return if @chargeables.empty?
 
     last_chargeable = @chargeables.last
@@ -449,6 +446,9 @@ class CustomerMailer < ApplicationMailer
 
         scope = scope.where("purchases.id < ?", window.last.id)
         chargeables = renderable_chargeables((chargeables + window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq)
+        # Blocked receipts (gp#4366) are the newest ones, so they must not take one of the twenty
+        # slots and crowd the buyer's older receipts out of the window.
+        chargeables = chargeables.reject { suppress_receipt_from_unproven_seller?(_1) }
         break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
       end
 
