@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,14 +74,10 @@ func (h *handler) createDiscoverSearch(ctx context.Context, p *page, prod *produ
 	return tx.Commit()
 }
 
-// discoverNav is show's discover_props: the product's taxonomy path and taxonomies_for_nav.
-// The nav is Rails.cache's list, reordered by RecommendedProducts::DiscoverService's picks, which
-// a visitor's purchases or cart seed and it samples at random; only an unseeded one is ported.
+// discoverNav is show's discover_props: the product's taxonomy path and taxonomies_for_nav,
+// Rails.cache's list reordered by curated_products.
 func (h *handler) discoverNav(p *page, prod *product) (any, []any, error) {
 	ctx := p.Ctx
-	if p.viewer != nil {
-		return nil, nil, fallback("discover recommendations")
-	}
 	cached, found, err := h.readCache(ctx, "taxonomies_for_nav")
 	if err != nil {
 		return nil, nil, err
@@ -90,13 +87,7 @@ func (h *handler) discoverNav(p *page, prod *product) (any, []any, error) {
 	if !found || !ok {
 		return nil, nil, fallback("taxonomies for nav")
 	}
-	// Cart.fetch_by(user: nil, browser_guid:)'s alive products; any guest cart's count here.
-	seeded, err := h.exists(ctx, "SELECT 1 FROM carts INNER JOIN cart_products ON cart_products.cart_id = carts.id"+
-		" WHERE carts.browser_guid = ? AND carts.user_id IS NULL AND carts.deleted_at IS NULL AND cart_products.deleted_at IS NULL LIMIT 1", p.GUID)
-	if err != nil || seeded {
-		return nil, nil, firstErr(err, fallback("discover recommendations"))
-	}
-	nav := make([]any, len(list))
+	entries := make([]*rails.RHash, len(list))
 	for i, entry := range list {
 		hash, ok := entry.(railscache.Hash)
 		if !ok {
@@ -117,7 +108,18 @@ func (h *handler) discoverNav(p *page, prod *product) (any, []any, error) {
 				return nil, nil, fallback("taxonomies for nav")
 			}
 		}
-		nav[i] = props
+		entries[i] = props
+	}
+	curated, err := h.curatedTaxonomyIDs(p)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := h.sortNav(ctx, entries, curated); err != nil {
+		return nil, nil, err
+	}
+	nav := make([]any, len(entries))
+	for i, e := range entries {
+		nav[i] = e
 	}
 
 	// taxonomy&.ancestry_path&.join("/"): closure_tree's self_and_ancestors, root first, or nil
@@ -139,16 +141,76 @@ func (h *handler) discoverNav(p *page, prod *product) (any, []any, error) {
 		return nil, nil, err
 	}
 	defer rows.Close()
-	var slugs []string
+	var path []string
 	for rows.Next() {
 		var slug sql.NullString
 		if err := rows.Scan(&slug); err != nil {
 			return nil, nil, err
 		}
-		slugs = append(slugs, slug.String)
+		path = append(path, slug.String)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, err
 	}
-	return strings.Join(slugs, "/"), nav, nil
+	return strings.Join(path, "/"), nav, nil
+}
+
+// sortNav is taxonomies_for_nav's stable sort that brings the curated products' root taxonomies
+// first, the root of the earliest product first.
+func (h *handler) sortNav(ctx context.Context, nav []*rails.RHash, taxonomyIDs []int64) error {
+	if len(taxonomyIDs) == 0 {
+		return nil
+	}
+	ids := union(taxonomyIDs, nil)
+	type root struct {
+		slug         string
+		rows         int
+		withoutRoots bool
+	}
+	roots := map[int64]*root{}
+	// find(taxonomy_ids) through a LEFT JOIN that a taxonomy without a root still matches.
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		var id int64
+		var rootID sql.NullInt64
+		var slug sql.NullString
+		cols["id"], cols["root_id"], cols["root_slug"] = &id, &rootID, &slug
+		return func() {
+			r := roots[id]
+			if r == nil {
+				r = &root{}
+				roots[id] = r
+			}
+			r.rows++
+			r.slug = slug.String
+			r.withoutRoots = r.withoutRoots || !rootID.Valid || !slug.Valid
+		}
+	}, "SELECT taxonomies.id, roots.id AS root_id, roots.slug AS root_slug FROM taxonomies"+
+		" LEFT OUTER JOIN taxonomy_hierarchies ON taxonomy_hierarchies.descendant_id = taxonomies.id"+
+		" LEFT OUTER JOIN taxonomies roots ON roots.id = taxonomy_hierarchies.ancestor_id"+
+		" WHERE roots.parent_id IS NULL AND taxonomies.id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
+	if err != nil {
+		return err
+	}
+	scores := map[string]int{}
+	for index, id := range ids {
+		r := roots[id]
+		switch {
+		case r == nil:
+			// find raises RecordNotFound.
+			return fallback("curated taxonomy")
+		case r.rows != 1 || r.withoutRoots:
+			return fallback("curated taxonomy root")
+		}
+		if _, ok := scores[r.slug]; !ok {
+			scores[r.slug] = len(taxonomyIDs) - index
+		}
+	}
+	score := make(map[*rails.RHash]int, len(nav))
+	for _, entry := range nav {
+		if slug, ok := entry.Get("slug").(string); ok {
+			score[entry] = scores[slug]
+		}
+	}
+	slices.SortStableFunc(nav, func(a, b *rails.RHash) int { return score[b] - score[a] })
+	return nil
 }

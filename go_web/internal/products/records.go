@@ -74,6 +74,7 @@ const (
 	userPPPEnabled                   int64 = 1 << 2
 	userDisableThirdPartyAnalytics   int64 = 1 << 11
 	userCheckMerchantAccountIsLinked int64 = 1 << 24
+	userAllAdultProducts             int64 = 1 << 31
 	userRefundPolicyEnabled          int64 = 1 << 45
 	userRefundPolicyEnforced         int64 = 1 << 52
 	userProductPageStorefrontEnabled int64 = 1 << 57
