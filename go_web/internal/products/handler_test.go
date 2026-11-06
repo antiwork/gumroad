@@ -161,6 +161,8 @@ func newTestEnv(t *testing.T) *testEnv {
 			PublicStorageURL: "https://gumroad-public-storage.s3.amazonaws.com/",
 			OGNamespace:      "gumroad",
 			NewNonce:         func() string { return "NONCE" },
+			CustomHTMLAnalytics: &vite.Tags{HTML: `<script src="` + testAnalyticsScript + `" crossorigin="" type="module"></script>`,
+				Links: []string{"<" + testAnalyticsScript + ">; rel=modulepreload; as=script; crossorigin=; nopush"}},
 		},
 		DryRunKey:  pages.DryRunKey(testSecretKeyBase),
 		DryRunOnce: redisClient,
@@ -477,13 +479,6 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 			undo: func() {
 				conn.Exec("UPDATE users SET flags = flags & ~? WHERE id = ?", userRefundPolicyEnabled, sellerID)
 			}},
-		{name: "custom html", host: host, target: "/l/guide", reason: "custom html",
-			setup: func() {
-				e.redis.HSet("custom_html_pages", "boolean", "true")
-				testdb.Insert(t, conn, "pages", map[string]any{"id": int64(1_790_301), "pageable_type": "Link", "pageable_id": productID,
-					"custom_html": "<h1>x</h1>", "created_at": testNow, "updated_at": testNow})
-			},
-			undo: func() { conn.Exec("DELETE FROM pages WHERE id = ?", 1_790_301) }},
 	}
 	for i, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -1323,7 +1318,7 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productUnpublishedByAdmin, productID)
 			}},
 		// Rails shows the custom page when it holds the waitlist form.
-		{name: "a waitlist with custom HTML", reason: "custom html", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+		{name: "a waitlist with custom HTML", reason: "custom html waitlist", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			waitlist(conn, false)
 			conn.Exec("UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
 			e.redis.HSet("custom_html_pages", "boolean", "true")

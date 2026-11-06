@@ -20,31 +20,40 @@ func (h *handler) exists(ctx context.Context, query string, args ...any) (bool, 
 	return err == nil, err
 }
 
+// unportedProductShape is the product itself, as the page and the custom HTML wrapper both
+// read it.
+func unportedProductShape(prod *product) string {
+	membership := unportedMembership(prod)
+	switch {
+	case prod.nativeType == "coffee":
+		return "coffee product"
+	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
+		return "purchase type"
+	case membership != "":
+		return membership
+	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
+		// FileSummaryService would summarize each SKU.
+		return "skus"
+	case !prod.uniquePermalink.Valid:
+		return "no unique permalink"
+	case prod.nativeType == "call" || prod.nativeType == "commission":
+		return "native type " + prod.nativeType
+	}
+	return ""
+}
+
 // unportedShape is a product this port leaves to Rails: a check per part of the page whose
 // Rails path it doesn't follow. Each runs before anything is written.
 func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (string, error) {
 	seller := p.seller
-	membership := unportedMembership(prod)
 	switch {
-	case prod.nativeType == "coffee":
-		return "coffee product", nil
 	case seller.is(userProductPageStorefrontEnabled) && h.c.Page.Search == nil:
 		return "storefront", nil
-	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
-		return "purchase type", nil
-	case membership != "":
-		return membership, nil
-	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
-		// FileSummaryService would summarize each SKU.
-		return "skus", nil
 	case prod.is(productShouldShowSalesCount) && h.c.Page.Search == nil:
 		return "sales count", nil
-	case !prod.uniquePermalink.Valid:
-		return "no unique permalink", nil
 	}
-	switch prod.nativeType {
-	case "call", "commission":
-		return "native type " + prod.nativeType, nil
+	if reason := unportedProductShape(prod); reason != "" {
+		return reason, nil
 	}
 	// account_level_refund_policy_enabled?: the seller's policy shows unless it's off for all.
 	if seller.is(userRefundPolicyEnabled) {

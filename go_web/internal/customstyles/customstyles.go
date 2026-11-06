@@ -85,6 +85,19 @@ func CSS(p Profile) (string, error) {
 	return b.String(), nil
 }
 
+// WrapperBackground is custom_html_wrapper_theme_background_css's color: background_color
+// with its default, "" unless safe_for_css?.
+func WrapperBackground(p Profile) (string, error) {
+	color := valueOr(p.BackgroundColor, "#ffffff")
+	if !utf8.ValidString(color) {
+		return "", ErrUnported
+	}
+	if !safeForCSS(color) {
+		return "", nil
+	}
+	return color, nil
+}
+
 func valueOr(s *string, fallback string) string {
 	if s == nil {
 		return fallback
