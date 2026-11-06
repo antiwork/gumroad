@@ -733,11 +733,26 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		{name: "a sale scoped to the card's cheapest option", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 0, nil) },
 			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "a sale scoped to the cheaper of two options", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 0, 0, 100) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// restricted_variants_for finds none of this product's, so the sale applies.
+		{name: "a sale scoped to another product's option", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, nil, nil)
+				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Size"})
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_792_631), "type": "Variant", "variant_category_id": category,
+					"name": "V", "created_at": testNow, "updated_at": testNow})
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
+					"variant_id": int64(1_792_631)})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
 		// It covers only a pricier option, so the card quotes the cheapest undiscounted.
 		{name: "a sale scoped to a pricier option", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 1, 0, 100) },
 			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
-		{name: "a sale scoped to a tier", reason: "catalog offer code variants", hits: bothHits, server: search, searched: 1,
+		{name: "a sale scoped to a tier", reason: "catalog offer code tiers", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				tieredOther(t, conn)
 				insertOfferCode(t, conn, saleID, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true})

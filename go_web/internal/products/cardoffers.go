@@ -95,10 +95,6 @@ func (h *handler) cardPriceCents(p *page, c *card, base int64) (int64, error) {
 // the card's options or covers one of the cheapest of its preloaded_options, whose minimum
 // difference minVariantDifference holds.
 func (h *handler) coversLowestPricedOption(p *page, c *card, code *offerCode) (bool, error) {
-	if c.prod.is(productIsTieredMembership) {
-		// lowest_priced_tier_ids weighs the tiers' prices.
-		return false, fallback("catalog offer code variants")
-	}
 	// restricted_variants_for counts a Variant in a deleted category, and a deleted option, as the
 	// product's; only an alive one can be among the cheapest. With no difference at all the
 	// minimum is nil, which an option without one equals.
@@ -111,5 +107,12 @@ func (h *handler) coversLowestPricedOption(p *page, c *card, code *offerCode) (b
 		" WHERE offer_codes_variants.offer_code_id = ?"+
 		" AND IF(base_variants.type = 'Variant', variant_categories.link_id, base_variants.link_id) = ?",
 		c.minVariantDifference, code.id, c.prod.id).Scan(&restricted, &cheapest)
-	return restricted == 0 || cheapest > 0, err
+	switch {
+	case err != nil || restricted == 0:
+		return err == nil, err
+	case c.prod.is(productIsTieredMembership):
+		// lowest_priced_tier_ids weighs the tiers' prices.
+		return false, fallback("catalog offer code tiers")
+	}
+	return cheapest > 0, nil
 }
