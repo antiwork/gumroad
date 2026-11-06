@@ -100,7 +100,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("ppp_details", nil).
 		Sym("can_edit", false).
 		Sym("waitlist", nil).
-		Sym("refund_policy", nil).
+		Sym("refund_policy", v.refundPolicy).
 		Sym("bundle_products", []any{}).
 		Sym("public_files", []any{}).
 		Sym("file_summaries", v.fileSummaries)

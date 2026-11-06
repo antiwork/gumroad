@@ -409,6 +409,75 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 	}
 }
 
+func TestAProductRefundPolicyRendersHere(t *testing.T) {
+	policy := func(period any, finePrint string) map[string]any {
+		return map[string]any{"id": int64(1_790_801), "seller_id": sellerID, "product_id": productID, "max_refund_period_in_days": period,
+			"fine_print": finePrint, "created_at": testNow, "updated_at": testNow}
+	}
+	for _, c := range []struct {
+		name string
+		flag bool
+		row  map[string]any
+		want string
+	}{
+		{"fine print", true, policy(14, "Within 14 days &amp; unused.\nEmail us.\n\nThanks"),
+			`{"title":"14-day money back guarantee","fine_print":"\u003cp\u003eWithin 14 days \u0026amp; unused.\n\u003cbr /\u003eEmail us.\u003c/p\u003e\n\n\u003cp\u003eThanks\u003c/p\u003e","updated_at":"2026-11-06"}`},
+		{"blank fine print, unknown period", true, policy(45, " "), `{"title":null,"fine_print":null,"updated_at":"2026-11-06"}`},
+		{"no period", true, policy(nil, ""), `{"title":null,"fine_print":null,"updated_at":"2026-11-06"}`},
+		{"flag without a row", true, nil, `null`},
+		{"row without the flag", false, policy(30, "x"), `null`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			if c.flag {
+				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productRefundPolicyEnabled, productID)
+			}
+			if c.row != nil {
+				testdb.Insert(t, conn, "refund_policies", c.row)
+			}
+			w := e.get(host, "/l/guide", nil)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d, Rails hit: %v", w.Code, e.railsHit != nil)
+			}
+			page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+			if !strings.Contains(page, `"refund_policy":`+c.want+`,`) {
+				t.Errorf("want refund_policy %s in %s", c.want, page[strings.Index(page, `"refund_policy"`):][:200])
+			}
+		})
+	}
+}
+
+// The JSON-LD offer converts a non-USD price through the cached rate, else keeps its currency.
+// The fixture's price is 500: euro cents, or whole yen.
+func TestANonUSDProductOffersItsPriceInUSD(t *testing.T) {
+	const url = `"availability":"https://schema.org/InStock","url":"https://gowebproductseller.gumroad.com/l/guide",`
+	for _, c := range []struct{ code, rate, want string }{
+		{"eur", "0.92", `"priceCurrency":"USD",` + url + `"price":5.43}`},
+		{"eur", "", `"priceCurrency":"EUR",` + url + `"price":5.0}`},
+		{"eur", "0", `"priceCurrency":"EUR",` + url + `"price":5.0}`},
+		{"jpy", "151.23", `"priceCurrency":"USD",` + url + `"price":3.31}`},
+		{"jpy", "", `"priceCurrency":"JPY",` + url + `"price":500.0}`},
+	} {
+		t.Run(c.code+" at "+c.rate, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			conn.Exec("UPDATE links SET price_currency_type = ? WHERE id = ?", c.code, productID)
+			conn.Exec("UPDATE prices SET currency = ? WHERE id = ?", c.code, priceID)
+			if c.rate != "" {
+				e.redis.Set("currencies:"+strings.ToUpper(c.code), c.rate)
+			}
+			w := e.get(host, "/l/guide", nil)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d, Rails hit: %v", w.Code, e.railsHit != nil)
+			}
+			if !strings.Contains(w.Body.String(), c.want) {
+				t.Errorf("no %s in the JSON-LD", c.want)
+			}
+		})
+	}
+}
+
 func TestASellerRefundPolicyOffForAllRendersThePage(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)

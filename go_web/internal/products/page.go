@@ -148,6 +148,7 @@ type view struct {
 	customStyles            string
 	fontPreload             bool
 	mainSectionIndex        any
+	refundPolicy            any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -220,6 +221,9 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	if err := h.loadDescription(ctx, prod, v); err != nil {
+		return nil, err
+	}
+	if v.refundPolicy, err = h.loadRefundPolicy(ctx, prod); err != nil {
 		return nil, err
 	}
 	if v.fileSummaries, err = h.fileSummaries(ctx, prod, v.files); err != nil {

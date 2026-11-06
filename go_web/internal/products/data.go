@@ -45,13 +45,8 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "free trial", nil
 	case prod.is(productWaitlistEnabled):
 		return "waitlist", nil
-	case prod.is(productRefundPolicyEnabled):
-		return "refund policy", nil
 	case prod.defaultOfferCodeID.Valid:
 		return "default offer code", nil
-	case prod.priceCurrencyType.String != "usd":
-		// The JSON-LD offer's usd_offer_price_cents converts through a cached rate.
-		return "non-usd offer", nil
 	case !prod.uniquePermalink.Valid:
 		return "no unique permalink", nil
 	case prod.is(productShouldShowSalesCount):

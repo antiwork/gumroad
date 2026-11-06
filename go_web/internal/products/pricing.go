@@ -3,6 +3,9 @@ package products
 import (
 	"context"
 	"database/sql"
+	"math/big"
+	"strconv"
+	"strings"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
@@ -89,4 +92,39 @@ func (h *handler) hasThirdPartyAnalytics(ctx context.Context, prod *product) (bo
 	}
 	return h.exists(ctx, "SELECT 1 FROM third_party_analytics WHERE third_party_analytics.user_id = ? AND (link_id is null)"+
 		" AND third_party_analytics.deleted_at IS NULL AND third_party_analytics.location IN ('product', 'all') LIMIT 1", prod.userID)
+}
+
+// usdCents is get_usd_cents(currency, cents, rate:): BigDecimal(cents) / rate, rounded half up
+// (after * 100 for a single-unit currency). Past maxUSDCents BigDecimal's 32-digit quotient
+// could round differently, so that's Rails'.
+func usdCents(cents int64, rate float64, singleUnit bool) (int64, bool) {
+	r, ok := new(big.Rat).SetString(bigDecimalFloat(rate))
+	if !ok || r.Sign() <= 0 || cents < 0 {
+		return 0, false
+	}
+	q := new(big.Rat).Quo(new(big.Rat).SetInt64(cents), r)
+	if singleUnit {
+		q.Mul(q, big.NewRat(100, 1))
+	}
+	n := roundHalfUp(q, 0).Num()
+	if !n.IsInt64() || n.Int64() > maxUSDCents {
+		return 0, false
+	}
+	return n.Int64(), true
+}
+
+// maxUSDCents is far past any price; it keeps the quotient's whole part well inside the
+// digits BigDecimal computes.
+const maxUSDCents = 1e15
+
+// bigDecimalFloat is the decimal BigDecimal takes a Float operand as: its shortest
+// round-trip digits, cut (not rounded) to 16 significant digits.
+func bigDecimalFloat(f float64) string {
+	s := strconv.FormatFloat(f, 'e', -1, 64)
+	mantissa, exp, _ := strings.Cut(s, "e")
+	digits := strings.Replace(mantissa, ".", "", 1)
+	if len(digits) > 16 {
+		digits = digits[:16]
+	}
+	return digits[:1] + "." + digits[1:] + "e" + exp
 }
