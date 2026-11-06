@@ -219,3 +219,18 @@ func TestACoverWithTwoFilesUsesTheLowerBlob(t *testing.T) {
 		t.Errorf("covers %s", page)
 	}
 }
+
+func TestCoverFiletypeReadsTheSanitizedFilename(t *testing.T) {
+	for _, tc := range []struct{ filename, contentType, want string }{
+		{"cover.jpg?alt=media&token=1c45", "image/jpeg", "jpg-alt=media&token=1c45"},
+		{"cover.png?verify=17%3D", "image/png", "png-verify=17-3D"},
+		{"img.c?d/e", "image/png", "c-d-e"},
+		{" cover.jpeg \n", "image/jpeg", "jpeg"},
+		{"cover", "image/webp", "webp"},
+		{"a.b\\c\u202Ed", "image/png", "b-c-d"},
+	} {
+		if got := (&cover{filename: tc.filename, contentType: tc.contentType}).filetype(); got != tc.want {
+			t.Errorf("filetype of %q = %v, want %q", tc.filename, got, tc.want)
+		}
+	}
+}
