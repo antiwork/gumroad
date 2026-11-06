@@ -119,12 +119,18 @@ func (h *handler) loadPublicView(ctx context.Context, p *page, prod *product) (*
 	if v.attributes, err = attributesProps(v.productJSON, prod, v.files); err != nil {
 		return nil, err
 	}
-	// The lowest difference is current_base_variants.minimum: preload_product leaves the SKUs
-	// unloaded, so Rails asks MySQL.
-	if err := h.c.DB.QueryRowContext(ctx, "SELECT links.created_at, links.updated_at, (SELECT MIN(base_variants.price_difference_cents)"+
-		" FROM base_variants WHERE base_variants.deleted_at IS NULL AND (base_variants.link_id = links.id OR base_variants.variant_category_id IN"+
-		" (SELECT variant_categories.id FROM variant_categories WHERE variant_categories.link_id = links.id AND variant_categories.deleted_at IS NULL)))"+
-		" FROM links WHERE links.id = ?", prod.id).Scan(&v.createdAt, &v.updatedAt, &v.lowestDifference); err != nil {
+	if err := h.c.DB.QueryRowContext(ctx, "SELECT links.created_at, links.updated_at FROM links WHERE links.id = ?", prod.id).
+		Scan(&v.createdAt, &v.updatedAt); err != nil {
+		return nil, err
+	}
+	// current_base_variants.minimum: preload_product leaves the SKUs unloaded, so Rails asks MySQL,
+	// with the categories' ids inline. A subquery there scans the whole table.
+	categories, args := "NULL", []any{prod.id}
+	if len(v.variants.categories) > 0 {
+		categories, args = placeholders(len(v.variants.categories)), append(args, int64Args(v.variants.categories)...)
+	}
+	if err := h.c.DB.QueryRowContext(ctx, "SELECT MIN(price_difference_cents) FROM `base_variants` WHERE `base_variants`.`deleted_at` IS NULL"+
+		" AND (link_id = ? OR variant_category_id IN ("+categories+"))", args...).Scan(&v.lowestDifference); err != nil {
 		return nil, err
 	}
 	if v.reviews, err = h.publicReviews(ctx, p, prod); err != nil {
