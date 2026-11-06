@@ -1096,7 +1096,7 @@ const Form = ({
       ...(product.options ?? []).map((option) => ownershipOptionRow(product, option)),
     ]);
   const ownershipOptionRows = Object.keys(ownershipOptionIdsByProduct).flatMap((productId) => {
-    const optionIds = ownershipOptionIdsByProduct[productId];
+    const optionIds = ownershipOptionIdsByProduct[productId] ?? [];
     const product = products.find(({ id }) => id === productId);
     if (!product) return [];
     const eligibleOptions = (product.options ?? []).filter(({ id }) => optionIds.includes(id));
