@@ -24,7 +24,7 @@ func Parameterize(s string) string {
 // transliterate is ActiveSupport's transliterate: NFC, then each non-ASCII character's
 // approximation, else "?". x/text's tables are Unicode 15.0 below go1.27, as Ruby 3.4's are.
 func transliterate(s string) string {
-	if isASCII(s) {
+	if IsASCII(s) {
 		return s
 	}
 	var b strings.Builder
@@ -41,7 +41,8 @@ func transliterate(s string) string {
 	return b.String()
 }
 
-func isASCII(s string) bool {
+// IsASCII is String#ascii_only?.
+func IsASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] >= utf8.RuneSelf {
 			return false

@@ -41,6 +41,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	switch {
 	case err != nil:
 		return err
+	case prod != nil && prod.bannedAt.Valid && p.utm != nil:
+		// track_utm_link_visit records a visit before check_banned's 404.
+		return fallback("utm visit on a banned product")
 	case prod == nil, prod.bannedAt.Valid:
 		// e404, and check_banned's.
 		return pages.ErrNotFound
@@ -70,6 +73,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		}
 		if rawQuery != "" {
 			target += "?" + rawQuery
+		}
+		if err := h.trackUTMVisit(w, p, prod); err != nil {
+			return err
 		}
 		if err := h.ctl.Commit(w, p.Visit); err != nil {
 			return err
