@@ -13,3 +13,18 @@ Rails.application.config.after_initialize do
   Premailer::Rails::CSSHelper.cache = EmailStylesheetLoader::Cache.new
   Premailer::Rails::CSSHelper.singleton_class.prepend(EmailStylesheetLoader::DocumentDeadline)
 end
+
+# Premailer inlines var() declarations as written; resolve them for clients without custom properties.
+module EmailCustomPropertyInlining
+  def initialize(html)
+    super
+    @email_root_properties = EmailCustomPropertyResolver.root_properties(@options[:css_string])
+  end
+
+  def to_inline_css
+    EmailCustomPropertyResolver.resolve(super, @email_root_properties)
+  end
+end
+Rails.application.config.after_initialize do
+  Premailer::Rails::CustomizedPremailer.prepend(EmailCustomPropertyInlining)
+end
