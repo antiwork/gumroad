@@ -1651,6 +1651,11 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 			display("jpy", "usd", "776", "155.1234", "buyer_local") + `,"buyer_currency":"jpy",` +
 				`"buyer_local_currency_rate":1.551234,"buyer_local_currency_subunit_to_unit":1,"buyer_local_price_cents":776,"rental_price_cents":`,
 			"", nil},
+		// The json gem's Grisu2 writes this Float with more digits than Float#to_s.
+		{"a rate JSON writes long", "usd", "AUD",
+			display("aud", "usd", "728", "1.4568160000000001", "buyer_local") + `,"buyer_currency":"aud",` +
+				`"buyer_local_currency_rate":1.4568160000000001,"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":728,"rental_price_cents":`,
+			"", func(t *testing.T, e *testEnv, conn *sql.DB) { e.redis.Set("currencies:AUD", "1.456816") }},
 		{"no rate", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) { e.redis.Del("currencies:EUR") }},
 		{"a rate String#to_d reads loosely", "usd", "EUR", "", "currency rate", func(t *testing.T, e *testEnv, conn *sql.DB) {
 			e.redis.Set("currencies:EUR", "0.9_2")
