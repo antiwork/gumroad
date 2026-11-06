@@ -27,6 +27,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -48,7 +49,7 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 		// Rails would render nil for these.
 		return nil, fmt.Errorf("%w: OBFUSCATE_IDS_CIPHER_KEY or DROPBOX_PICKER_API_KEY is not set", errPagesOff)
 	}
-	manifest, err := d.viteManifest(dir)
+	manifest, err := vite.LoadDir(env.AssetHost(), dir)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errPagesOff, err)
 	}
@@ -187,9 +188,15 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		}
 		cancel()
 	}
-	manifest, err := d.viteManifest(getenv("VITE_MANIFEST_DIR"))
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errPagesOff, err)
+	var customHTML *vite.Tags
+	manifest := b.pages.Layout.Manifest()
+	if tags, err := manifest.TypescriptTag("custom_html_analytics"); err != nil {
+		d.logger.Warn("custom HTML product pages left to Rails", "reason", err.Error())
+	} else if _, err := manifest.EntrypointStylesheet("custom_html_analytics"); err == nil {
+		// The wrapper's vite_typescript_tag renders style tags, which TypescriptTag leaves out.
+		d.logger.Warn("custom HTML product pages left to Rails", "reason", "custom_html_analytics has stylesheets")
+	} else {
+		customHTML = &tags
 	}
 	calendar, err := manifest.AssetPath("components/ui/Calendar.tsx")
 	if err != nil {
@@ -216,6 +223,8 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		Search:           search,
 		Sidekiq:          jobs,
 		NewNonce:         newNonce,
+		// Its tags are the same on every render.
+		CustomHTMLAnalytics: customHTML,
 	}, nil
 }
 

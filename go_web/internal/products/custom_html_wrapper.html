@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>«title»</title>
+    <link rel="canonical" href="«canonical»">
+    <meta name="description" content="«meta_description»">
+    <meta property="og:title" content="«title»">
+    <meta property="og:description" content="«meta_description»">
+    <meta property="og:type" content="product">
+    <meta property="og:url" content="«canonical»">
+    «share_image_tags»
+    «structured_data_tag»
+    <meta name="csrf-token" content="«csrf_token»">
+    «analytics_head»
+    <style>html,body{margin:0;padding:0;height:100%;overflow:hidden}iframe{display:block;width:100%;height:100%;border:0}.seo-summary{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}«background_css»</style>
+  </head>
+  <body>
+    <div class="seo-summary">
+      <h1>«title»</h1>
+      <p>«description»</p>
+    </div>
+    <iframe
+      id="gumroad-landing-frame"
+      src="«iframe_src»"
+      title="«title»"
+      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+    ></iframe>
+    <script nonce="«nonce»" data-cfasync="false">
+      var frame = document.getElementById("gumroad-landing-frame");
+      var BASE_CHECKOUT = «checkout_url»;
+      // Hosts this seller controls. A "gumroad:navigate" message is only
+      // honored for these, so the untrusted iframe can never send the
+      // visitor's tab off to a phishing site with gumroad.com still in
+      // the URL bar.
+      var STORE_HOSTNAMES = «store_hostnames»;
+      var GUMROAD_NAV_HOSTS = «nav_hosts»;
+              var GUMROAD_NAV_PATHS = ["/library","/checkout"];
+              function gumroadNavigationTarget(url, storeHostnames) {
+                if (storeHostnames.indexOf(url.hostname) !== -1) return url.href;
+                if (GUMROAD_NAV_HOSTS.indexOf(url.hostname) === -1) return null;
+                var path = url.pathname.replace(/\/+$/, "");
+                if (GUMROAD_NAV_PATHS.indexOf(path) === -1) return null;
+                return url.origin + path;
+              }
+      // Whitelist the selection-state keys the checkout already accepts on the
+      // URL (see LinksController#show). The iframe is opaque-origin and untrusted,
+      // so anything not in this list is ignored even if the buy button claims it.
+      var ALLOWED_CHECKOUT_KEYS = ["variant","option","quantity","price","recurrence"];
+      function buildCheckoutUrl(base, params) {
+        if (!params || typeof params !== "object") return base;
+        try {
+          var u = new URL(base, window.location.origin);
+          for (var i = 0; i < ALLOWED_CHECKOUT_KEYS.length; i++) {
+            var k = ALLOWED_CHECKOUT_KEYS[i], v = params[k];
+            if (v == null || v === "") continue;
+            u.searchParams.set(k, String(v));
+          }
+          return u.pathname + u.search;
+        } catch (_e) { return base; }
+      }
+      window.addEventListener("message", function (e) {
+        // Opaque-origin e.origin isn't a usable check — gate on e.source.
+        if (!frame || e.source !== frame.contentWindow) return;
+        // String form: back-compat for any caller still sending the old signal.
+        if (e.data === "gumroad:checkout") { window.location.href = BASE_CHECKOUT; return; }
+        // Structured form: {type:"gumroad:checkout", params:{variant,quantity,price,recurrence}}.
+        if (e.data && typeof e.data === "object" && e.data.type === "gumroad:checkout") {
+          window.location.href = buildCheckoutUrl(BASE_CHECKOUT, e.data.params);
+          return;
+        }
+        // Same-tab navigation to the seller's own Gumroad pages (their
+        // storefront, their other products) and to Gumroad's blessed
+        // account/cart paths. The sandbox deliberately withholds
+        // top-level navigation from the iframe, so a plain link inside
+        // the page can't do this itself — it asks here and we
+        // re-validate the destination.
+        if (e.data && typeof e.data === "object" && e.data.type === "gumroad:navigate" && typeof e.data.url === "string") {
+          var url;
+          try { url = new URL(e.data.url, window.location.href); } catch (_err) { return; }
+          if (url.protocol !== "https:" && url.protocol !== "http:") return;
+          var destination = gumroadNavigationTarget(url, STORE_HOSTNAMES);
+          if (destination === null) return;
+          window.location.href = destination;
+        }
+      });
+    </script>
+    <script nonce="«nonce»" data-cfasync="false" data-gumroad-background-wrapper>
+  (function () {
+    var frame = document.getElementById("gumroad-landing-frame");
+    var meta = null;
+    function colorAlpha(color) {
+  if (!color || color === "transparent") return 0;
+  var body = color.match(/\(([^)]*)\)\s*$/);
+  if (!body) return color.indexOf("(") === -1 ? 1 : null;
+  var parts = body[1].split("/");
+  var alpha = parts.length > 1 ? parts[parts.length - 1] : null;
+  if (alpha === null) {
+    var channels = body[1].split(",");
+    if (channels.length > 3) alpha = channels[3];
+  }
+  if (alpha === null) return 1;
+  var value = parseFloat(alpha);
+  if (!isFinite(value)) return null;
+  return alpha.indexOf("%") === -1 ? value : value / 100;
+}
+function opaque(color) {
+  return colorAlpha(color) === 1;
+}
+
+    // Must be IN the document: computed values resolve against the
+    // element's context, and a detached node has none.
+    var probe = document.createElement("div");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.display = "none";
+    var probeAttached = false;
+    // A computed color is well under this; the cap just stops a hostile
+    // child from making us parse megabyte strings in a loop.
+    var MAX_VALUE_LENGTH = 128;
+    function resolve(value, colorScheme) {
+      if (!probeAttached) {
+        document.body.appendChild(probe);
+        probeAttached = true;
+      }
+      probe.style.colorScheme = "";
+      probe.style.backgroundColor = "";
+      if (colorScheme !== null) {
+        probe.style.colorScheme = colorScheme;
+        var computedScheme = window.getComputedStyle(probe).colorScheme;
+        if (!probe.style.colorScheme || !computedScheme || computedScheme === "normal") return null;
+        value = "Canvas";
+      }
+      // Must stay `backgroundColor` — a color property cannot fetch, so
+      // `var(--x, url(https://evil.example/pixel))` never dereferences.
+      // The `background` shorthand or `backgroundImage` would fire it.
+      probe.style.backgroundColor = value;
+      var computed = window.getComputedStyle(probe).backgroundColor;
+      if (!opaque(computed)) return null;
+      return computed;
+    }
+    function clear() {
+      document.documentElement.style.backgroundColor = "";
+      if (meta) {
+        meta.parentNode.removeChild(meta);
+        meta = null;
+      }
+    }
+    frame.addEventListener("load", function () {
+      clear();
+      frame.contentWindow.postMessage({ type: "gumroad:background:request" }, "*");
+    });
+    window.addEventListener("message", function (e) {
+      if (!frame || e.source !== frame.contentWindow) return;
+      var d = e.data;
+      if (!d || typeof d !== "object" || d.type !== "gumroad:background") return;
+      var colorScheme = d.colorScheme == null ? null : d.colorScheme;
+      // The page went transparent after having a color: drop the tint
+      // rather than leaving the previous theme painted under it.
+      if (d.color === null && colorScheme === null) return clear();
+      var color;
+      if (colorScheme !== null) {
+        if (
+          d.color !== null ||
+          typeof colorScheme !== "string" ||
+          colorScheme.length > MAX_VALUE_LENGTH
+        ) return;
+        color = resolve("", colorScheme);
+      } else {
+        if (typeof d.color !== "string" || d.color.length > MAX_VALUE_LENGTH) return;
+        color = resolve(d.color, null);
+      }
+      // An unresolvable value is refused outright — it is not evidence
+      // that the page has no background, so whatever is applied stays.
+      if (!color) return;
+      document.documentElement.style.backgroundColor = color;
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.setAttribute("name", "theme-color");
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute("content", color);
+    });
+  })();
+</script>
+
+    «waitlist_script»
+    
+  </body>
+</html>

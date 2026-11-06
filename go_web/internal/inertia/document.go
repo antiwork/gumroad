@@ -27,6 +27,7 @@ type LayoutConfig struct {
 // parts is rendered once.
 type Layout struct {
 	head, tail, link string
+	manifest         *vite.Manifest
 }
 
 // NewLayout renders the layout's fixed parts. The Vite entrypoints must be in the manifest.
@@ -61,8 +62,11 @@ func NewLayout(c LayoutConfig) (*Layout, error) {
 	// yield :script follows the script tag.
 	tail := "\n\n      " + script.HTML + "\n    \n  </body>\n</html>\n"
 	// The head renders before the body, so its stylesheet's link comes first.
-	return &Layout{head: head.String(), tail: tail, link: vite.LinkHeader(stylesheet, script)}, nil
+	return &Layout{head: head.String(), tail: tail, link: vite.LinkHeader(stylesheet, script), manifest: c.Manifest}, nil
 }
+
+// Manifest is the layout's Vite manifest, for resolving other entrypoints once at startup.
+func (l *Layout) Manifest() *vite.Manifest { return l.manifest }
 
 // LinkHeader is the Link header the asset tags add to every render.
 func (l *Layout) LinkHeader() string { return l.link }
