@@ -970,6 +970,17 @@ func TestDefaultOfferCodes(t *testing.T) {
 		}
 	}
 	saleEntry := `{"discount_code":` + sale20 + `,"sale_label":"Sale"}`
+	exclude := func(t *testing.T, conn *sql.DB, id, code, product int64) {
+		testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": id, "offer_code_id": code,
+			"product_id": product, "created_at": testNow, "updated_at": testNow})
+	}
+	// otherID is another product of the seller's, which wantAll's %[4]s names.
+	const otherID = int64(1_795_801)
+	otherProduct := func(t *testing.T, conn *sql.DB, id int64, permalink string) {
+		testdb.Insert(t, conn, "links", map[string]any{"id": id, "user_id": sellerID, "name": "Other", "unique_permalink": permalink,
+			"price_cents": 300, "created_at": testNow, "updated_at": testNow})
+	}
+	excludingOther := strings.Replace(sale20, `"minimum_amount_cents":null}`, `"minimum_amount_cents":null,"excluded_product_ids":["%[4]s"]}`, 1)
 	for _, c := range []struct {
 		name    string
 		wants   []string
@@ -1020,8 +1031,40 @@ func TestDefaultOfferCodes(t *testing.T) {
 		{name: "a sale that leaves this product out", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				auto(t, conn, nil)
-				testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": int64(1_795_701), "offer_code_id": autoID,
-					"product_id": productID, "created_at": testNow, "updated_at": testNow})
+				exclude(t, conn, 1_795_701, autoID, productID)
+			}},
+		{name: "a sale that leaves another product out", wants: []string{`"discount_code":` + excludingOther + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				exclude(t, conn, 1_795_701, autoID, otherID)
+			}},
+		// excluded_products skips a join row whose product is gone.
+		{name: "a sale that leaves out a product that's gone", wants: []string{`"discount_code":` + sale20 + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				exclude(t, conn, 1_795_701, autoID, otherID-1)
+			}},
+		{name: "a sale that leaves out a product that's gone and another", wants: []string{`"discount_code":` + excludingOther + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				exclude(t, conn, 1_795_701, autoID, otherID-1)
+				exclude(t, conn, 1_795_702, autoID, otherID)
+			}},
+		{name: "a sale that leaves two products out", reason: "offer code exclusions", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			otherProduct(t, conn, otherID, "gowebp2")
+			otherProduct(t, conn, otherID+1, "gowebp3")
+			exclude(t, conn, 1_795_701, autoID, otherID)
+			exclude(t, conn, 1_795_702, autoID, otherID+1)
+		}},
+		// Only a universal code lists what it leaves out.
+		{name: "an explicit default with an exclusion row", wants: []string{`"discount_code":` + launch + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				exclude(t, conn, 1_795_701, explicitID, otherID)
 			}},
 		{name: "a sale that hasn't started", wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, map[string]any{"valid_at": future}) }},
@@ -1104,7 +1147,7 @@ func TestDefaultOfferCodes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
-			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second)
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID)
 		})
 	}
 }
