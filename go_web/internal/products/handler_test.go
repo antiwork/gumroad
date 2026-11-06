@@ -898,6 +898,136 @@ func TestABundleRendersItsProducts(t *testing.T) {
 	}
 }
 
+// The fixture's price is 500 cents; each code is the seller's, with these columns set.
+func TestDefaultOfferCodes(t *testing.T) {
+	const autoID, explicitID = int64(1_795_001), int64(1_795_002)
+	code := func(t *testing.T, conn *sql.DB, id int64, columns map[string]any) {
+		row := map[string]any{"id": id, "user_id": sellerID, "created_at": testNow, "updated_at": testNow}
+		maps.Copy(row, columns)
+		testdb.Insert(t, conn, "offer_codes", row)
+	}
+	auto := func(t *testing.T, conn *sql.DB, columns map[string]any) {
+		code(t, conn, autoID, map[string]any{"code": "SALE20", "amount_percentage": 20, "universal": true, "auto_apply": true})
+		for k, v := range columns {
+			conn.Exec("UPDATE offer_codes SET "+k+" = ? WHERE id = ?", v, autoID)
+		}
+	}
+	explicit := func(t *testing.T, conn *sql.DB, expiresAt time.Time) {
+		code(t, conn, explicitID, map[string]any{"code": "LAUNCH", "amount_cents": 100, "expires_at": expiresAt})
+		testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_101), "offer_code_id": explicitID, "product_id": productID})
+		conn.Exec("UPDATE links SET default_offer_code_id = ? WHERE id = ?", explicitID, productID)
+	}
+	localPrice := map[string]string{"Cookie": "gumroad_buyer_currency=EUR"}
+	local := func(e *testEnv, rate string) {
+		e.redis.HSet("buyer_local_currency", "boolean", "true")
+		e.redis.Set("currencies:EUR", rate)
+	}
+	discount := func(kind string, rest string) string {
+		return `{"valid":true,"code":` + kind + `,"discount":` + rest + `}`
+	}
+	sale20 := discount(`"SALE20"`, `{"type":"percent","percents":20,"product_ids":null,"expires_at":null,"minimum_quantity":null,`+
+		`"duration_in_billing_cycles":null,"minimum_amount_cents":null}`)
+	launch := discount(`"LAUNCH"`, `{"type":"fixed","cents":100,"product_ids":["%[1]s"],"expires_at":"2026-12-01T00:00:00Z",`+
+		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}`)
+	future, past := time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		name    string
+		wants   []string
+		reason  string
+		headers map[string]string
+		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		{name: "an auto-applied percent code", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`,
+			`"options":{"":{"discount_code":` + sale20 + `,"sale_label":"Sale"}},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, nil) }},
+		{name: "an auto-applied code's own label", wants: []string{`"sale_label":"Black Friday",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"sale_label": "Black Friday"})
+			}},
+		{name: "an explicit default", wants: []string{`"discount_code":` + launch + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { explicit(t, conn, future) }},
+		{name: "an expired explicit default", wants: []string{`"discount_code":null,"sale_label":null,`,
+			`"options":{"":{"discount_code":null,"sale_label":null}},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { explicit(t, conn, past) }},
+		{name: "the sale over an expired explicit default", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, past)
+				auto(t, conn, nil)
+			}},
+		{name: "a live explicit default over the sale", wants: []string{`"discount_code":` + launch + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, future)
+				auto(t, conn, nil)
+			}},
+		{name: "a new-customers auto row", wants: []string{`"discount_code":null,"sale_label":null,`, `"options":{},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"new_customers_only": true})
+			}},
+		{name: "a sale that hasn't started", wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, map[string]any{"valid_at": future}) }},
+		{name: "a fixed sale in another currency", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "currency_type": "eur"})
+			}},
+		// 400 and 500 cents through 0.92345.
+		{name: "a local price for the sale", headers: localPrice,
+			wants: []string{`"buyer_local_price_cents":369,"buyer_local_original_price_cents":462,"rental_price_cents"`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				local(e, "0.92345")
+				auto(t, conn, nil)
+			}},
+		{name: "a sale needing three", headers: localPrice, wants: []string{`"minimum_quantity":3,`, `"buyer_local_price_cents":462,"rental_price_cents"`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				local(e, "0.92345")
+				auto(t, conn, map[string]any{"minimum_quantity": 3})
+			}},
+		// Ruby's Float#round: 999 * 0.15 = 149.85 rounds to 150.
+		{name: "a percent rounding", headers: localPrice, wants: []string{`"buyer_local_price_cents":849,"buyer_local_original_price_cents":999,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				local(e, "1")
+				conn.Exec("UPDATE prices SET price_cents = 999 WHERE id = ?", priceID)
+				auto(t, conn, map[string]any{"amount_percentage": 15})
+			}},
+		{name: "a fixed sale over the price", headers: localPrice, wants: []string{`"buyer_local_price_cents":0,"buyer_local_original_price_cents":500,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				local(e, "1")
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 900})
+			}},
+		{name: "a rental's options", wants: []string{`"options":{"":{"discount_code":` + sale20 + `,"sale_label":"Sale"}},` +
+			`"rent_options":{"":{"discount_code":` + sale20 + `,"sale_label":"Sale"}}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				conn.Exec("UPDATE links SET purchase_type = 2 WHERE id = ?", productID)
+				testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_795_201), "link_id": productID, "price_cents": 300, "currency": "usd",
+					"flags": 1, "created_at": testNow, "updated_at": testNow})
+				auto(t, conn, nil)
+			}},
+		{name: "a limited sale", reason: "offer code limit", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"max_purchase_count": 10})
+		}},
+		{name: "a once-per-cart sale", reason: "once-per-cart offer code", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": 4})
+		}},
+		{name: "a sale for some options", reason: "offer code variants", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_795_301), "offer_code_id": autoID, "variant_id": int64(1_795_401)})
+		}},
+		// The collation matches SALE20 to sale20; Rails would take either.
+		{name: "two codes MySQL can't tell apart", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			code(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
+		}},
+		{name: "a code in other letters", reason: "offer code characters", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"code": "SOLDÉ"})
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			c.setup(t, e, testdb.Open(t))
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID)
+		})
+	}
+}
+
 func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 	plan := func(t *testing.T, conn *sql.DB, id int64, recurrence string, deletedAt any) {
 		testdb.Insert(t, conn, "product_installment_plans", map[string]any{"id": id, "link_id": productID, "number_of_installments": 3,
