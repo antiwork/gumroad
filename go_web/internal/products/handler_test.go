@@ -1084,13 +1084,36 @@ func TestDefaultOfferCodes(t *testing.T) {
 				exclude(t, conn, 1_795_701, autoID, otherID-1)
 				exclude(t, conn, 1_795_702, autoID, otherID)
 			}},
-		{name: "a sale that leaves two products out", reason: "offer code exclusions", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, nil)
-			otherProduct(t, conn, otherID, "gowebp2")
-			otherProduct(t, conn, otherID+1, "gowebp3")
-			exclude(t, conn, 1_795_701, autoID, otherID)
-			exclude(t, conn, 1_795_702, autoID, otherID+1)
-		}},
+		{name: "a sale that leaves two products out", wants: []string{`"discount_code":` + strings.Replace(sale20, `"minimum_amount_cents":null}`,
+			`"minimum_amount_cents":null,"excluded_product_ids":["%[4]s","%[5]s"]}`, 1) + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				otherProduct(t, conn, otherID+1, "gowebp3")
+				exclude(t, conn, 1_795_701, autoID, otherID)
+				exclude(t, conn, 1_795_702, autoID, otherID+1)
+			}},
+		// products comes in the join table's row order, not the products'.
+		{name: "an explicit default for two products", wants: []string{`"discount_code":` +
+			strings.Replace(launch, `"product_ids":["%[1]s"]`, `"product_ids":["%[4]s","%[1]s"]`, 1) + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_100), "offer_code_id": explicitID, "product_id": otherID})
+			}},
+		// The preload keeps a duplicate join row, and skips one without a product.
+		{name: "an explicit default with a duplicate and an empty join row", wants: []string{`"discount_code":` +
+			strings.Replace(launch, `"product_ids":["%[1]s"]`, `"product_ids":["%[1]s","%[1]s"]`, 1) + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_102), "offer_code_id": explicitID, "product_id": productID})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": explicitID})
+			}},
+		{name: "an explicit default whose other product is gone", wants: []string{`"discount_code":` + launch + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_100), "offer_code_id": explicitID, "product_id": otherID})
+			}},
 		// Only a universal code lists what it leaves out.
 		{name: "an explicit default with an exclusion row", wants: []string{`"discount_code":` + launch + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
@@ -1205,7 +1228,7 @@ func TestDefaultOfferCodes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
-			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID)
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID, otherID+1)
 		})
 	}
 }
@@ -1849,10 +1872,6 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 			conn.Exec("UPDATE variant_categories SET title = 'tier ' WHERE id = ?", size)
 			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, 3, 1, 0))
 		}},
-		{"options tied in order", nil, "variant order", func(t *testing.T, conn *sql.DB) {
-			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", nil, nil, nil, 0))
-			testdb.Insert(t, conn, "base_variants", variant(large, size, "Large", nil, nil, nil, 0))
-		}},
 		{"a physical product's options, without file summaries", []string{`"is_physical":true,`, `"native_type":"physical",`,
 			`"options":[{"id":"%[1]s","name":"Small",`, `"file_summaries":{"product":null,"options":{}}`},
 			"", func(t *testing.T, conn *sql.DB) {
@@ -1909,6 +1928,47 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// in_order sets no tiebreak, so tied options come in the order MySQL returns Rails' own statement.
+func TestTiedOptionsTakeTheOrderOfRailsStatement(t *testing.T) {
+	const size = int64(1_791_001)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": size, "link_id": productID, "title": "Size"})
+	for i, id := range []int64{1_791_103, 1_791_101, 1_791_102} {
+		testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": size,
+			"name": fmt.Sprint("Option ", i), "sales_count_for_inventory_cache": 0, "created_at": testNow, "updated_at": testNow})
+	}
+	var want []int64
+	err := scanNamed(t.Context(), conn, func(cols map[string]any) func() {
+		var id int64
+		cols["id"] = &id
+		return func() { want = append(want, id) }
+	}, optionRecordsStatement, productID, size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Whatever order the options arrive in, they leave in the statement's.
+	options := []*variantOption{{id: want[2]}, {id: want[1]}, {id: want[0]}}
+	if err := (&handler{c: e.config}).orderTiedOptions(t.Context(), productID, size, options); err != nil {
+		t.Fatal(err)
+	}
+	got := []int64{options[0].id, options[1].id, options[2].id}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("options %v, want %v", got, want)
+	}
+	// And the page renders them, rather than leaving it to Rails.
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	rendered := pageProps(t, w.Body.String())["product"].(map[string]any)["options"].([]any)
+	for i, o := range rendered {
+		if o.(map[string]any)["id"] != e.ids.Encrypt(want[i]) {
+			t.Errorf("rendered option %d is %v", i, o.(map[string]any)["id"])
+		}
 	}
 }
 
