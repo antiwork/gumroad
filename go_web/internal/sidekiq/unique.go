@@ -26,6 +26,15 @@ var (
 	queueScript  = uniqueScript{"queue", redis.NewScript(queueLua)}
 	lockScript   = uniqueScript{"lock", redis.NewScript(lockLua)}
 	unlockScript = uniqueScript{"unlock", redis.NewScript(unlockLua)}
+
+	// releaseScript takes back a queued jid whose handoff failed, which unlock.lua leaves in
+	// place (it yields to a non-empty QUEUED). 0 means lock.lua did run, so unlock.lua frees it.
+	releaseScript = redis.NewScript(`
+redis.pcall("LREM", KEYS[2], -1, ARGV[1])
+redis.pcall("LREM", KEYS[3], -1, ARGV[1])
+if redis.call("HEXISTS", KEYS[4], ARGV[1]) == 1 then return 0 end
+if redis.call("GET", KEYS[1]) == ARGV[1] then redis.call("DEL", KEYS[1]) end
+return 1`)
 )
 
 // uniqueScript is a script and the file name Script::Caller passes it.
@@ -115,6 +124,18 @@ func (c *Client) PushUntilExecuted(ctx context.Context, opts Options, args ...an
 	return jid, true, nil
 }
 
+// release undoes a lock taken partway: a queued jid that never reached lock.lua, or a lock
+// whose reply was lost.
+func (l *uniqueLock) release(ctx context.Context) error {
+	keys := []string{l.digest, l.queued, l.primed, l.locked}
+	cleared, err := releaseScript.Run(ctx, l.c.Redis, keys, l.jid).Int()
+	if err != nil || cleared == 1 {
+		return err
+	}
+	_, err = l.run(ctx, unlockScript)
+	return err
+}
+
 // lock is Locksmith#lock without a wait: queue.lua, the primed handoff, then lock.lua, each
 // read the way lock! reads it.
 func (l *uniqueLock) lock(ctx context.Context) (bool, error) {
@@ -126,15 +147,23 @@ func (l *uniqueLock) lock(ctx context.Context) (bool, error) {
 	if err != nil || !l.takes(queued) {
 		return false, err
 	}
+	// Past queue.lua, a failed step would leave this jid queued for good: QUEUED has no TTL
+	// and the reaper only reads the digests set lock.lua writes.
 	primed, err := l.c.Redis.LMove(ctx, l.queued, l.primed, "RIGHT", "LEFT").Result()
 	if errors.Is(err, redis.Nil) {
 		return false, nil
 	}
-	if err != nil || !l.takes(primed) {
-		return false, err
+	if err != nil {
+		return false, errors.Join(err, l.release(ctx))
+	}
+	if !l.takes(primed) {
+		return false, nil
 	}
 	lockedJID, err := l.run(ctx, lockScript)
-	return lockedJID != "", err
+	if err != nil {
+		return false, errors.Join(err, l.release(ctx))
+	}
+	return lockedJID != "", nil
 }
 
 // takes is [job_id, "1"].include?(jid).

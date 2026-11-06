@@ -93,3 +93,23 @@ func TestAFailedPushFreesItsLock(t *testing.T) {
 		t.Errorf("next push: %v %v", pushed, err)
 	}
 }
+
+func TestAFailedHandoffReleasesTheQueuedJID(t *testing.T) {
+	m := miniredis.RunT(t)
+	c := &Client{Redis: redis.NewClient(&redis.Options{Addr: m.Addr()}), RedisVersion: "7.2.4"}
+	opts := Options{Class: "WarmSellerReputationSummaryJob", Queue: "low", Retry: 1}
+	ctx := context.Background()
+	const digest = "uniquejobs:54836a5574f6fc94db07c5b73bcdea7f"
+	// LMOVE onto a string fails after queue.lua queued the jid.
+	m.Set(digest+":PRIMED", "not a list")
+	if _, pushed, err := c.PushUntilExecuted(ctx, opts, 123); err == nil || pushed {
+		t.Fatalf("failed handoff: %v %v", pushed, err)
+	}
+	if m.Exists(digest) || m.Exists(digest+":QUEUED") {
+		t.Fatalf("the queued jid outlived the failure: %v", m.Keys())
+	}
+	m.Del(digest + ":PRIMED")
+	if _, pushed, err := c.PushUntilExecuted(ctx, opts, 123); err != nil || !pushed {
+		t.Errorf("next push: %v %v", pushed, err)
+	}
+}
