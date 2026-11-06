@@ -31,7 +31,8 @@ const (
 	profilePostsSectionType     = "SellerProfilePostsSection"
 	profileFeaturedSectionType  = "SellerProfileFeaturedProductSection"
 	pageLayoutSort              = "page_layout"
-	catalogPageSize             = 9
+	// Link::RECOMMENDED_PRODUCTS_PER_PAGE.
+	catalogPageSize = 9
 	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
 	catalogTagFacetSize      = 200
 	catalogFiletypeFacetSize = 8
@@ -426,8 +427,7 @@ func (h *handler) searchCatalog(p *page, section *productsSection, query string)
 		"query": map[string]any{"bool": boolQuery},
 		"aggregations": map[string]any{"tags.keyword": terms("tags.keyword", catalogTagFacetSize),
 			"filetypes.keyword": terms("filetypes.keyword", catalogFiletypeFacetSize)},
-		// One hit past the page shows whether its last one ties with the next.
-		"sort": sort, "size": catalogPageSize + 1, "from": 0, "_source": false, "track_total_hits": true}, &products)
+		"sort": sort, "size": catalogPageSize, "from": 0, "_source": false, "track_total_hits": true}, &products)
 	if err != nil {
 		return nil, searchFailed(p, "catalog", err)
 	}
@@ -435,27 +435,14 @@ func (h *handler) searchCatalog(p *page, section *productsSection, query string)
 		return nil, fallback("catalog total")
 	}
 	s := &catalogSearch{Total: products.Hits.Total.Value, Tags: products.Aggregations.Tags.Buckets,
-		Filetypes: products.Aggregations.Filetypes.Buckets, IDs: []int64{}}
-	var last string
+		Filetypes: products.Aggregations.Filetypes.Buckets, IDs: make([]int64, 0, len(products.Hits.Hits))}
+	// ES orders tied hits per shard copy; Rails renders whatever order it gets, so this does too.
 	for _, hit := range products.Hits.Hits {
 		id, err := strconv.ParseInt(hit.ID, 10, 64)
-		key := string(hit.Score)
-		if len(sort) > 0 {
-			raw, _ := json.Marshal(hit.Sort)
-			key = string(raw)
-		}
-		if err != nil || key == "" || len(hit.Sort) != len(sort) {
+		if err != nil || len(hit.Sort) != len(sort) || len(sort) == 0 && len(hit.Score) == 0 {
 			return nil, fallback("catalog hit")
 		}
-		if key == last {
-			// Tied hits come back in whichever order a shard copy keeps them.
-			return nil, fallback("catalog order")
-		}
-		last = key
 		s.IDs = append(s.IDs, id)
-	}
-	if len(s.IDs) > catalogPageSize {
-		s.IDs = s.IDs[:catalogPageSize]
 	}
 	return s, nil
 }

@@ -25,10 +25,10 @@ import (
 func TestTheStorefrontCatalog(t *testing.T) {
 	const other, otherPrice, category = int64(1_792_101), int64(1_792_201), int64(1_792_301)
 	// Link.search_options for the default products section as production builds it, with
-	// Link.filetype_options' facet on the same query and one more hit for the tie check.
+	// Link.filetype_options' facet on the same query.
 	wantBody := fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}}]}},`+
 		`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
-		`"sort":[{"created_at":{"order":"desc"}}],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID)
+		`"sort":[{"created_at":{"order":"desc"}}],"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID)
 	var want any
 	if err := json.Unmarshal([]byte(wantBody), &want); err != nil {
 		t.Fatal(err)
@@ -199,7 +199,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 	ownHits := fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000,1762430000000]}]`, other)
 	ownBody := fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
 		`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
-		`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other)
+		`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other)
 	// unlisted adds a products section the product doesn't list, finding the other product.
 	unlisted := func(t *testing.T, conn *sql.DB) {
 		addOther(t, conn, map[string]any{"flags": 0})
@@ -460,18 +460,16 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				}
 			},
 			want: func(e *testEnv) string { return section(e, 2, legacyCard(e)) }},
-		{name: "a tie at the page's edge", reason: "catalog order", server: search, searched: 1,
-			hits: func() string {
-				var hs []string
-				for i := range 10 {
-					sort := 1762430000000 - i
-					if i == 9 {
-						sort++
-					}
-					hs = append(hs, fmt.Sprintf(`{"_id":"%d","sort":[%d]}`, 1_792_001+i, sort))
+		// Tied hits keep the order the search returns, as Rails caches and renders them.
+		{name: "tied hits", server: search, searched: 1,
+			hits:  fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]},{"_id":"%d","sort":[1762430000000]}]`, other, productID),
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			check: func(t *testing.T, e *testEnv, _ string) {
+				if got := e.cache.values[railsSectionsKey(e, true)]; !reflect.DeepEqual(got, written(defaultProductsSectionID, pageLayoutSort, 3, other, productID)) {
+					t.Errorf("entry %#v", got)
 				}
-				return "[" + strings.Join(hs, ",") + "]"
-			}()},
+			},
+			want: func(e *testEnv) string { return results(e, 2) }},
 		{name: "a sold-out product hidden", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"flags": productHideSoldOutVariants, "max_purchase_count": 0})
@@ -488,7 +486,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d,%d]}}],`+
 				`"should":[{"term":{"_id":{"value":%d,"boost":2}}},{"term":{"_id":{"value":%d,"boost":1}}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
-				`"sort":[],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, productID, other, productID, other),
+				`"sort":[],"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID, productID, other, productID, other),
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"flags": 0})
 				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_501), "seller_id": sellerID, "header": "Picks",
@@ -507,7 +505,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000,1762430000000]}]`, other),
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
-				`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
+				`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"flags": 0})
 				// This product isn't in the section, so the total keeps it.
@@ -525,7 +523,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000,1762430000000]}]`, other),
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
-				`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
+				`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"flags": 0})
 				addProductSections(t, conn, other)
@@ -585,7 +583,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
 				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
-				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
+				`"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"flags": 0})
 				addSection(t, conn, 1_792_602, profileProductsSectionType, "More",
@@ -602,7 +600,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
 				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
-				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
+				`"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"flags": 0})
 				addSection(t, conn, 1_792_602, profileProductsSectionType, "More",
@@ -636,7 +634,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000,1762430000000]},{"_id":"%d","sort":[1762420000000,1762420000000]}]`, other, productID),
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d,%d]}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
-				`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":10,"from":0,"_source":false,"track_total_hits":true}`,
+				`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":9,"from":0,"_source":false,"track_total_hits":true}`,
 				sellerID, other, productID),
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"flags": 0})
@@ -680,7 +678,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			// Rails still sends the empty id list and should clause.
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[]}}],`+
 				`"should":[]}},"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
-				`"sort":[],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID),
+				`"sort":[],"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID),
 			setup: func(t *testing.T, conn *sql.DB) {
 				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_504), "seller_id": sellerID,
 					"json_data":  `{"shown_products":[],"default_product_sort":"page_layout","show_filters":false,"add_new_products":true}`,
@@ -764,7 +762,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[1]}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
 				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
-				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID),
+				`"size":9,"from":0,"_source":false,"track_total_hits":true}`, sellerID),
 			setup: func(t *testing.T, conn *sql.DB) {
 				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_505), "seller_id": sellerID,
 					"json_data":  `{"shown_products":[1],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":true}`,
