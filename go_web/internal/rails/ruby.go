@@ -361,3 +361,6 @@ func FileExtname(path string) string {
 	}
 	return path[dot:p]
 }
+
+// Strip is String#strip, which trims NUL and ASCII whitespace from both ends.
+func Strip(s string) string { return strings.Trim(s, "\x00\t\n\v\f\r ") }

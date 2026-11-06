@@ -170,8 +170,9 @@ func variationDigest(filename, contentType string) string {
 
 // VariantDigest is ActiveStorage::Variation#digest for blob.variant(resize_to_limit:
 // [width, height]) after default_to(default_variant_transformations): SHA1 of
-// Marshal.dump({format:, resize_to_limit: [width, height]}), Base64. A negative bound is nil.
-func VariantDigest(filename, contentType string, width, height int) string {
+// Marshal.dump({format:, resize_to_limit: [width, height]}), Base64. Each bound is an integer,
+// a float64 or nil, as Ruby holds it; anything else panics.
+func VariantDigest(filename, contentType string, width, height any) string {
 	var format any = railscache.Symbol("png")
 	if web, ok := webImageTypes[contentType]; ok {
 		format = web.first
@@ -179,15 +180,9 @@ func VariantDigest(filename, contentType string, width, height int) string {
 			format = ext
 		}
 	}
-	bound := func(n int) any {
-		if n < 0 {
-			return nil
-		}
-		return n
-	}
 	data, err := railscache.Dump(railscache.Hash{
 		{Key: railscache.Symbol("format"), Value: format},
-		{Key: railscache.Symbol("resize_to_limit"), Value: []any{bound(width), bound(height)}},
+		{Key: railscache.Symbol("resize_to_limit"), Value: []any{width, height}},
 	})
 	if err != nil {
 		// Only a non-UTF-8 symbol or an unsupported type fails, and these are neither.
