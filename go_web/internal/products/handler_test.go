@@ -1056,6 +1056,14 @@ func TestDefaultOfferCodes(t *testing.T) {
 		}
 	}
 	saleEntry := `{"discount_code":` + sale20 + `,"sale_label":"Sale"}`
+	// scopedSale is the sale with option_ids_by_product's JSON.
+	scopedSale := func(optionIDs string) string {
+		return discount(`"SALE20"`, `{"type":"percent","percents":20,"product_ids":null,"expires_at":null,"minimum_quantity":null,`+
+			`"duration_in_billing_cycles":null,"minimum_amount_cents":null,"option_ids_by_product":`+optionIDs+`}`)
+	}
+	scope := func(t *testing.T, conn *sql.DB, id, variantID int64) {
+		testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": id, "offer_code_id": autoID, "variant_id": variantID})
+	}
 	// oncePerCart is the sale as a once-per-cart code of amount that allocates cents; %[6]s is its id.
 	oncePerCart := func(cents, amount int, minimumQuantity string, limited bool) string {
 		return `"discount_code":` + discount(`"SALE20"`, fmt.Sprintf(`{"type":"fixed","cents":%d,"product_ids":null,"expires_at":null,`+
@@ -1290,9 +1298,53 @@ func TestDefaultOfferCodes(t *testing.T) {
 			conn.Exec("UPDATE prices SET currency = 'xyz' WHERE id = ?", priceID)
 			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": offerCodeOncePerCart, "currency_type": "xyz"})
 		}},
-		{name: "a sale for some options", reason: "offer code variants", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+		// The page quotes the sale without an option; each option outside its scope gets nothing.
+		{name: "a sale for some options", wants: []string{
+			`"discount_code":` + scopedSale(`{"%[1]s":["%[2]s"]}`) + `,"sale_label":"Sale",`,
+			`"options":{"%[2]s":{"discount_code":` + scopedSale(`{"%[1]s":["%[2]s"]}`) + `,"sale_label":"Sale"},` +
+				`"%[3]s":{"discount_code":null,"sale_label":null}},`,
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			options(t, conn, "Size", 0)
 			auto(t, conn, nil)
-			testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_795_301), "offer_code_id": autoID, "variant_id": int64(1_795_401)})
+			scope(t, conn, 1_795_301, first)
+		}},
+		// restricted_variants_for this product is empty, so every option gets the sale.
+		{name: "a sale for another product's option", wants: []string{
+			`"options":{"%[2]s":{"discount_code":` + scopedSale(`{"%[4]s":["%[5]s"]}`) + `,"sale_label":"Sale"},` +
+				`"%[3]s":{"discount_code":` + scopedSale(`{"%[4]s":["%[5]s"]}`) + `,"sale_label":"Sale"}},`,
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			options(t, conn, "Size", 0)
+			auto(t, conn, nil)
+			testdb.Insert(t, conn, "base_variants", map[string]any{"id": otherID + 1, "type": "Sku", "link_id": otherID, "name": "Blue",
+				"created_at": testNow, "updated_at": testNow})
+			scope(t, conn, 1_795_301, otherID+1)
+		}},
+		// The variants join finds no row, so there's no option_ids_by_product.
+		{name: "a sale for an option that's gone", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`, `"options":{"":` + saleEntry + `}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				scope(t, conn, 1_795_301, 1_795_699)
+			}},
+		{name: "a sale for an option without a product", reason: "offer code option product", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			testdb.Insert(t, conn, "base_variants", map[string]any{"id": otherID + 1, "type": "Variant", "variant_category_id": int64(1_795_599),
+				"name": "Lost", "created_at": testNow, "updated_at": testNow})
+			scope(t, conn, 1_795_301, otherID+1)
+		}},
+		// A page without options quotes no option, which every scope lets in.
+		{name: "a sale for a deleted option", wants: []string{`"options":{"":{"discount_code":` + scopedSale(`{"%[1]s":["%[5]s"]}`) + `,"sale_label":"Sale"}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": int64(1_795_502), "link_id": productID, "title": "Size", "deleted_at": past})
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": otherID + 1, "type": "Variant", "variant_category_id": int64(1_795_502),
+					"name": "Gone", "deleted_at": past, "created_at": testNow, "updated_at": testNow})
+				scope(t, conn, 1_795_301, otherID+1)
+			}},
+		{name: "a sale for an option of another type", reason: "offer code option type", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			options(t, conn, "Size", 0)
+			auto(t, conn, nil)
+			conn.Exec("UPDATE base_variants SET type = 'Other' WHERE id = ?", first)
+			scope(t, conn, 1_795_301, first)
 		}},
 		// The collation matches SALE20 to sale20, and both of Rails' lookups take the sale first.
 		{name: "two codes MySQL can't tell apart", wants: []string{saleEntry}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
@@ -1323,6 +1375,23 @@ func TestDefaultOfferCodes(t *testing.T) {
 			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID, otherID+1, autoID)
 		})
 	}
+	// option_ids_by_product keeps the order OfferCode#variants' own statement returns.
+	t.Run("a sale for both options", func(t *testing.T) {
+		e := newTestEnv(t)
+		conn := testdb.Open(t)
+		options(t, conn, "Size", 0)
+		auto(t, conn, nil)
+		scope(t, conn, 1_795_301, second)
+		scope(t, conn, 1_795_302, first)
+		ids, err := (&handler{c: e.config}).scanIDs(t.Context(), "SELECT `base_variants`.* FROM `base_variants` INNER JOIN `offer_codes_variants`"+
+			" ON `base_variants`.`id` = `offer_codes_variants`.`variant_id` WHERE `offer_codes_variants`.`offer_code_id` = "+strconv.FormatInt(autoID, 10))
+		if err != nil || len(ids) != 2 {
+			t.Fatal(ids, err)
+		}
+		optionIDs := `{"` + e.ids.Encrypt(productID) + `":["` + e.ids.Encrypt(ids[0]) + `","` + e.ids.Encrypt(ids[1]) + `"]}`
+		e.wantAll(t, e.render(t, nil, ""), []string{`"discount_code":` + scopedSale(optionIDs) + `,"sale_label":"Sale",`,
+			`"options":{"%[1]s":{"discount_code":` + scopedSale(optionIDs) + `,"sale_label":"Sale"},"%[2]s":`}, first, second)
+	})
 }
 
 // The fixture's price is 500 cents; SAVE10 is the seller's 10% code on every product.
@@ -1346,6 +1415,22 @@ func TestURLOfferCodes(t *testing.T) {
 			`"options":{"":{"discount_code":` + result + `,"sale_label":` + label + `}},"rent_options":null}`
 	}
 	past, future := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	// sizes are two options, the code's scope the first; wantAll's %[3]s and %[4]s name them.
+	const sizeCategory, small, large = int64(1_796_311), int64(1_796_312), int64(1_796_313)
+	sizes := func(t *testing.T, conn *sql.DB, scoped int64) {
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": sizeCategory, "link_id": productID, "title": "Size"})
+		for i, id := range []int64{small, large} {
+			testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": sizeCategory,
+				"name": fmt.Sprint("Size ", i), "position_in_category": i, "created_at": testNow, "updated_at": testNow})
+		}
+		testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_301), "offer_code_id": scoped, "variant_id": small})
+	}
+	const smallOnly = `,"option_ids_by_product":{"%[1]s":["%[3]s"]}`
+	optionQuotes := func(urlCode, smallResult, smallLabel, largeResult string) string {
+		return `"selection_discounts":{"url_code":"` + urlCode + `","quantity":1,"recurrence":null,"option_id":null,"price_cents":null,` +
+			`"options":{"%[3]s":{"discount_code":` + smallResult + `,"sale_label":` + smallLabel + `},` +
+			`"%[4]s":{"discount_code":` + largeResult + `,"sale_label":null}},"rent_options":null}`
+	}
 	for _, c := range []struct {
 		name, target string
 		wants        []string
@@ -1453,11 +1538,53 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, map[string]any{"max_purchase_count": 5, "minimum_quantity": 3})
 				insertCodeUse(t, conn, 1_796_501, codeID, map[string]any{"quantity": 3})
 			}},
-		{name: "a code for some options", target: "/l/guide/SAVE10", reason: "offer code variants",
-			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-				save10(t, conn, nil)
-				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_301), "offer_code_id": codeID, "variant_id": int64(1_796_401)})
-			}},
+		// The computing service drops an option outside the code's scope before its buyer and usage checks.
+		{name: "a code for some options", target: "/l/guide/SAVE10", wants: []string{
+			`"discount_code":` + valid("SAVE10", smallOnly) + `,"sale_label":null,`,
+			optionQuotes("SAVE10", valid("SAVE10", smallOnly), "null", invalid("option_not_eligible")),
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			save10(t, conn, nil)
+			sizes(t, conn, codeID)
+		}},
+		{name: "a sold-out code for some options", target: "/l/guide/SAVE10", wants: []string{
+			`"discount_code":` + invalid("sold_out") + `,`, optionQuotes("SAVE10", invalid("sold_out"), "null", invalid("option_not_eligible")),
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			save10(t, conn, map[string]any{"max_purchase_count": 1})
+			insertCodeUse(t, conn, 1_796_501, codeID, nil)
+			sizes(t, conn, codeID)
+		}},
+		// Outside the sale's scope the sold-out code's own scope decides.
+		{name: "a sale and a sold-out code for the same option", target: "/l/guide/SAVE10", wants: []string{
+			`"options":{"%[3]s":{"discount_code":{"valid":true,"code":"SALE20",`,
+			`"sale_label":"Sale"},"%[4]s":{"discount_code":` + invalid("option_not_eligible") + `,"sale_label":null}},`,
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			sale(t, conn)
+			sizes(t, conn, autoID)
+			save10(t, conn, map[string]any{"max_purchase_count": 1})
+			insertCodeUse(t, conn, 1_796_501, codeID, nil)
+			testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_302), "offer_code_id": codeID, "variant_id": small})
+		}},
+		{name: "an existing customers' code for some options", target: "/l/guide/SAVE10", wants: []string{
+			optionQuotes("SAVE10", invalid("not_existing_customer"), "null", invalid("option_not_eligible")),
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			save10(t, conn, map[string]any{"existing_customers_only": true})
+			sizes(t, conn, codeID)
+		}},
+		// inactive comes before the scope.
+		{name: "an expired code for some options", target: "/l/guide/SAVE10", wants: []string{
+			optionQuotes("SAVE10", invalid("inactive"), "null", invalid("inactive")),
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			save10(t, conn, map[string]any{"expires_at": past})
+			sizes(t, conn, codeID)
+		}},
+		// Outside the sale's scope, the unknown code's own result is left.
+		{name: "a sale for some options over an unknown code", target: "/l/guide/NOPE", wants: []string{
+			`"sale_label":"Sale",`, `"options":{"%[3]s":{"discount_code":{"valid":true,"code":"SALE20",`,
+			`"sale_label":"Sale"},"%[4]s":{"discount_code":` + invalid("invalid_offer") + `,"sale_label":null}},`,
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			sale(t, conn)
+			sizes(t, conn, autoID)
+		}},
 		// The collation matches the typed code to both rows, and both of Rails' lookups take SAVE10.
 		{name: "two codes MySQL can't tell apart", target: "/l/guide/save10", wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
@@ -1499,7 +1626,7 @@ func TestURLOfferCodes(t *testing.T) {
 				c.setup(t, e, testdb.Open(t))
 			}
 			body, hdr := e.renderAt(t, c.target, c.headers, c.reason)
-			e.wantAll(t, body, c.wants, productID, codeID)
+			e.wantAll(t, body, c.wants, productID, codeID, small, large)
 			if c.reason == "" && (hdr.Get("X-Robots-Tag") == "noindex") == c.indexed {
 				t.Errorf("X-Robots-Tag %q", hdr.Get("X-Robots-Tag"))
 			}
