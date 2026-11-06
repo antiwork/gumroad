@@ -157,6 +157,13 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 		{name: "a blank description", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			conn.Exec("UPDATE links SET description = '<p> </p>' WHERE id = ?", productID)
 		}, wants: []string{`<meta name="description" content="Available on Gumroad">`, "      <p>Available on Gumroad</p>\n"}},
+		// The wrapper has no set_product_page_meta, so no calendar preload.
+		{name: "a call", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET native_type = 'call' WHERE id = ?", productID)
+		}, wants: []string{`<script type="application/ld+json">`}, nots: []string{"call-calendar", "Calendar"}},
+		{name: "a commission", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET native_type = 'commission' WHERE id = ?", productID)
+		}, wants: []string{`<script type="application/ld+json">`}},
 		// A draft taking waitlist signups gets the bridge, with ids from this render only.
 		{name: "a draft taking waitlist signups", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			conn.Exec("UPDATE links SET draft = 1, flags = flags | ? WHERE id = ?", productWaitlistEnabled, productID)

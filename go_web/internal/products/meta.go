@@ -123,6 +123,9 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 			set("link", "", "", inertia.Pairs("rel", "preload", "as", "image", "href", c.url)...)
 		}
 	}
+	if prod.nativeType == "call" {
+		set("link", "call-calendar", "", inertia.Pairs("rel", "modulepreload", "crossorigin", "anonymous", "href", h.c.Page.CalendarHref)...)
+	}
 	set("link", "canonical", "", inertia.Pairs("rel", "canonical", "href", canonical)...)
 
 	data, err := h.structuredData(p, prod, v, canonical, shareImage)

@@ -156,6 +156,7 @@ func newTestEnv(t *testing.T) *testEnv {
 				}
 				return flags[name]
 			},
+			CalendarHref: calendarHref(t, manifest),
 			CDNMap: [][2]string{{"https://s3.amazonaws.com/gumroad/", "https://static-2.gumroad.com/res/gumroad/"},
 				{"https://gumroad-public-storage.s3.amazonaws.com/", "https://public-files.gumroad.com/"}},
 			PublicStorageURL: "https://gumroad-public-storage.s3.amazonaws.com/",
@@ -256,6 +257,14 @@ func (e *testEnv) wantAll(t *testing.T, body string, wants []string, ids ...int6
 	}
 }
 
+func calendarHref(t *testing.T, manifest *vite.Manifest) string {
+	href, err := manifest.AssetPath("components/ui/Calendar.tsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return href
+}
+
 // eurCookie asks for prices in euros, which localEUR shows at rate euros to the dollar.
 var eurCookie = map[string]string{"Cookie": "gumroad_buyer_currency=EUR"}
 
@@ -269,6 +278,25 @@ func insertOfferCode(t *testing.T, conn *sql.DB, id int64, columns map[string]an
 	row := map[string]any{"id": id, "user_id": sellerID, "created_at": testNow, "updated_at": testNow}
 	maps.Copy(row, columns)
 	testdb.Insert(t, conn, "offer_codes", row)
+}
+
+// insertPlatformAccount adds MerchantAccount.gumroad("stripe").
+func insertPlatformAccount(t *testing.T, conn *sql.DB, currency, jsonData string) {
+	testdb.Insert(t, conn, "merchant_accounts", map[string]any{"id": int64(1_790_901), "charge_processor_id": "stripe",
+		"currency": currency, "json_data": jsonData, "created_at": testNow, "updated_at": testNow})
+}
+
+// insertInstallmentPlan adds a three-installment plan to the product.
+func insertInstallmentPlan(t *testing.T, conn *sql.DB, id int64, recurrence string, deletedAt any) {
+	testdb.Insert(t, conn, "product_installment_plans", map[string]any{"id": id, "link_id": productID, "number_of_installments": 3,
+		"recurrence": recurrence, "deleted_at": deletedAt, "created_at": testNow, "updated_at": testNow})
+}
+
+// preorder puts the product in preorder, with a preorder link releasing at releaseAt.
+func preorder(t *testing.T, conn *sql.DB, releaseAt any) {
+	conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsInPreorderState, productID)
+	testdb.Insert(t, conn, "preorder_links", map[string]any{"id": int64(1_793_101), "link_id": productID, "release_at": releaseAt,
+		"created_at": testNow, "updated_at": testNow})
 }
 
 var dataPage = regexp.MustCompile(`data-page="([^"]*)"`)
@@ -775,7 +803,8 @@ func TestAMembershipRendersItsPrices(t *testing.T) {
 			price(t, conn, yearly, 4000, "usd", "yearly")
 			price(t, conn, quarterly, 3500, "eur", "yearly")
 		}},
-		{name: "a local price", reason: "unquotable buyer currency", headers: eurCookie,
+		// Without buyer_currency_charging, buyer_currency_settleable? never asks the product's shape.
+		{name: "a local price", headers: eurCookie, wants: []string{`"buyer_currency_shown":"eur",`, `"buyer_local_price_cents":462,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				e.localEUR("0.92345")
 				membership(conn, productIsRecurringBilling)
@@ -961,6 +990,17 @@ func TestDefaultOfferCodes(t *testing.T) {
 		}
 	}
 	saleEntry := `{"discount_code":` + sale20 + `,"sale_label":"Sale"}`
+	exclude := func(t *testing.T, conn *sql.DB, id, code, product int64) {
+		testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": id, "offer_code_id": code,
+			"product_id": product, "created_at": testNow, "updated_at": testNow})
+	}
+	// otherID is another product of the seller's, which wantAll's %[4]s names.
+	const otherID = int64(1_795_801)
+	otherProduct := func(t *testing.T, conn *sql.DB, id int64, permalink string) {
+		testdb.Insert(t, conn, "links", map[string]any{"id": id, "user_id": sellerID, "name": "Other", "unique_permalink": permalink,
+			"price_cents": 300, "created_at": testNow, "updated_at": testNow})
+	}
+	excludingOther := strings.Replace(sale20, `"minimum_amount_cents":null}`, `"minimum_amount_cents":null,"excluded_product_ids":["%[4]s"]}`, 1)
 	for _, c := range []struct {
 		name    string
 		wants   []string
@@ -1011,8 +1051,40 @@ func TestDefaultOfferCodes(t *testing.T) {
 		{name: "a sale that leaves this product out", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				auto(t, conn, nil)
-				testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": int64(1_795_701), "offer_code_id": autoID,
-					"product_id": productID, "created_at": testNow, "updated_at": testNow})
+				exclude(t, conn, 1_795_701, autoID, productID)
+			}},
+		{name: "a sale that leaves another product out", wants: []string{`"discount_code":` + excludingOther + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				exclude(t, conn, 1_795_701, autoID, otherID)
+			}},
+		// excluded_products skips a join row whose product is gone.
+		{name: "a sale that leaves out a product that's gone", wants: []string{`"discount_code":` + sale20 + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				exclude(t, conn, 1_795_701, autoID, otherID-1)
+			}},
+		{name: "a sale that leaves out a product that's gone and another", wants: []string{`"discount_code":` + excludingOther + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				exclude(t, conn, 1_795_701, autoID, otherID-1)
+				exclude(t, conn, 1_795_702, autoID, otherID)
+			}},
+		{name: "a sale that leaves two products out", reason: "offer code exclusions", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			otherProduct(t, conn, otherID, "gowebp2")
+			otherProduct(t, conn, otherID+1, "gowebp3")
+			exclude(t, conn, 1_795_701, autoID, otherID)
+			exclude(t, conn, 1_795_702, autoID, otherID+1)
+		}},
+		// Only a universal code lists what it leaves out.
+		{name: "an explicit default with an exclusion row", wants: []string{`"discount_code":` + launch + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, nil)
+				otherProduct(t, conn, otherID, "gowebp2")
+				exclude(t, conn, 1_795_701, explicitID, otherID)
 			}},
 		{name: "a sale that hasn't started", wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, map[string]any{"valid_at": future}) }},
@@ -1095,7 +1167,7 @@ func TestDefaultOfferCodes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
-			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second)
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID)
 		})
 	}
 }
@@ -1244,14 +1316,72 @@ func TestAnOfferCodeRedirectKeepsItsCode(t *testing.T) {
 	}
 }
 
+// A call's page differs only by the calendar's preload; its availabilities load later. A
+// commission's differs only in the local price Rails may withhold.
+func TestCallsAndCommissions(t *testing.T) {
+	const category = int64(1_797_001)
+	call := func(conn *sql.DB) {
+		conn.Exec("UPDATE links SET native_type = 'call', flags = flags | ? WHERE id = ?", productIsMultiseatLicense, productID)
+	}
+	for _, c := range []struct {
+		name    string
+		reason  string
+		headers map[string]string
+		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+		check   func(t *testing.T, e *testEnv, body string)
+	}{
+		{name: "a call", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			call(conn)
+			testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Duration"})
+			for i, minutes := range []int{30, 60} {
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": category + 1 + int64(i), "type": "Variant", "variant_category_id": category,
+					"name": fmt.Sprint(minutes, " minutes"), "position_in_category": i, "duration_in_minutes": minutes, "created_at": testNow, "updated_at": testNow})
+			}
+		}, check: func(t *testing.T, e *testEnv, body string) {
+			// set_product_page_meta adds it right before the canonical link.
+			preload := `<link rel="modulepreload" crossorigin="anonymous" href="` + e.config.Page.CalendarHref + `" inertia="call-calendar">`
+			if !strings.Contains(body, preload+"\n<link rel=\"canonical\"") {
+				t.Errorf("no %s right before the canonical link", preload)
+			}
+			e.wantAll(t, body, []string{`"headKey":"call-calendar"`, `"duration_in_minutes":30}`, `"is_multiseat_license":false,`,
+				`"eligible_for_installment_plans":true,`})
+		}},
+		{name: "a product that isn't a call", check: func(t *testing.T, e *testEnv, body string) {
+			if strings.Contains(body, "call-calendar") {
+				t.Error("a calendar preload")
+			}
+		}},
+		{name: "a call without the calendar in the manifest", reason: "call calendar asset", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			call(conn)
+			e.config.Page.CalendarHref = ""
+		}},
+		{name: "a commission", check: func(t *testing.T, e *testEnv, body string) {
+			e.wantAll(t, body, []string{`"native_type":"commission",`, `"eligible_for_installment_plans":false,`})
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET native_type = 'commission' WHERE id = ?", productID)
+		}},
+		{name: "a commission with a local price", headers: eurCookie, check: func(t *testing.T, e *testEnv, body string) {
+			e.wantAll(t, body, []string{`"buyer_currency_shown":"eur",`, `"native_type":"commission",`})
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			e.localEUR("0.92345")
+			conn.Exec("UPDATE links SET native_type = 'commission' WHERE id = ?", productID)
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			if c.setup != nil {
+				c.setup(t, e, testdb.Open(t))
+			}
+			body := e.render(t, c.headers, c.reason)
+			if c.check != nil {
+				c.check(t, e, body)
+			}
+		})
+	}
+}
+
 func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
-	plan := func(t *testing.T, conn *sql.DB, id int64, recurrence string, deletedAt any) {
-		testdb.Insert(t, conn, "product_installment_plans", map[string]any{"id": id, "link_id": productID, "number_of_installments": 3,
-			"recurrence": recurrence, "deleted_at": deletedAt, "created_at": testNow, "updated_at": testNow})
-	}
-	preorder := func(conn *sql.DB) {
-		conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsInPreorderState, productID)
-	}
+	plan := insertInstallmentPlan
 	waitlist := func(conn *sql.DB, draft bool) {
 		conn.Exec("UPDATE links SET flags = flags | ?, draft = ? WHERE id = ?", productWaitlistEnabled, draft, productID)
 	}
@@ -1274,28 +1404,25 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 		{name: "a recurrence the enum doesn't map", reason: "installment plan recurrence", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			plan(t, conn, 1_793_001, "weekly", nil)
 		}},
-		{name: "an installment plan with a local price", reason: "unquotable buyer currency", headers: eurCookie,
+		{name: "an installment plan with a local price", headers: eurCookie,
+			wants: []string{`"buyer_currency_shown":"eur",`, `"installment_plan":{"number_of_installments":3,"recurrence":"monthly"},`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				e.localEUR("0.92345")
 				plan(t, conn, 1_793_001, "monthly", nil)
 			}},
 		{name: "a preorder", wants: []string{`"eligible_for_installment_plans":false,`, `"preorder":{"release_date":"2026-12-01T10:00:00Z"},`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-				preorder(conn)
-				testdb.Insert(t, conn, "preorder_links", map[string]any{"id": int64(1_793_101), "link_id": productID,
-					"release_at": time.Date(2026, 12, 1, 10, 0, 0, 0, time.UTC), "created_at": testNow, "updated_at": testNow})
+				preorder(t, conn, time.Date(2026, 12, 1, 10, 0, 0, 0, time.UTC))
 			}},
 		{name: "a preorder without a release date", wants: []string{`"preorder":{"release_date":null},`},
-			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-				preorder(conn)
-				testdb.Insert(t, conn, "preorder_links", map[string]any{"id": int64(1_793_101), "link_id": productID,
-					"created_at": testNow, "updated_at": testNow})
-			}},
-		{name: "a preorder without its link", reason: "preorder link", setup: func(t *testing.T, e *testEnv, conn *sql.DB) { preorder(conn) }},
-		{name: "a preorder with a local price", reason: "unquotable buyer currency", headers: eurCookie,
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { preorder(t, conn, nil) }},
+		{name: "a preorder without its link", reason: "preorder link", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsInPreorderState, productID)
+		}},
+		{name: "a preorder with a local price", headers: eurCookie, wants: []string{`"buyer_currency_shown":"eur",`, `"preorder":{"release_date":null},`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				e.localEUR("0.92345")
-				preorder(conn)
+				preorder(t, conn, nil)
 			}},
 		{name: "a waitlist on a draft", wants: []string{`"waitlist":{"recaptcha_site_key":null,"count":null},`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { waitlist(conn, true) }},
@@ -1349,10 +1476,7 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 	eurLocal := display("eur", "usd", "462", "0.92345", "buyer_local") + `,"buyer_currency":"eur","buyer_local_currency_rate":0.92345,` +
 		`"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":462,"rental_price_cents":`
 	usdDefault := display("usd", "usd", "null", "null", "default") + `,"rental_price_cents":`
-	platform := func(t *testing.T, conn *sql.DB, currency, jsonData string) {
-		testdb.Insert(t, conn, "merchant_accounts", map[string]any{"id": int64(1_790_901), "charge_processor_id": "stripe",
-			"currency": currency, "json_data": jsonData, "created_at": testNow, "updated_at": testNow})
-	}
+	platform := insertPlatformAccount
 	own := func(t *testing.T, conn *sql.DB, country, jsonData string) {
 		testdb.Insert(t, conn, "merchant_accounts", map[string]any{"id": int64(1_790_902), "user_id": sellerID, "charge_processor_id": "stripe",
 			"country": country, "currency": "usd", "json_data": jsonData, "charge_processor_alive_at": testNow, "created_at": testNow,
@@ -1362,6 +1486,21 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 	linked := func(conn *sql.DB) {
 		conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userCheckMerchantAccountIsLinked, sellerID)
 	}
+	brlLocal := display("brl", "usd", "2716", "5.4321", "buyer_local") + `,"buyer_currency":"brl","buyer_local_currency_rate":5.4321,` +
+		`"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":2716,"rental_price_cents":`
+	// shape makes the product's flags and native type, charged on the platform account.
+	shape := func(t *testing.T, e *testEnv, conn *sql.DB, flags int64, nativeType string) {
+		charging(e)
+		platform(t, conn, "usd", `{}`)
+		conn.Exec("UPDATE links SET flags = flags | ?, native_type = ? WHERE id = ?", flags, nativeType, productID)
+	}
+	membership := func(t *testing.T, e *testEnv, conn *sql.DB, flags int64) {
+		shape(t, e, conn, productIsRecurringBilling|flags, "membership")
+		conn.Exec("UPDATE links SET subscription_duration = 0 WHERE id = ?", productID)
+		conn.Exec("UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
+	}
+	ramp := func(e *testEnv) { e.redis.HSet("buyer_currency_subscriptions", "boolean", "true") }
+	mandate := func(e *testEnv) { e.redis.HSet("india_card_mandate_reliability", "boolean", "true") }
 	for _, c := range []struct {
 		name, product, cookie, want, reason string
 		setup                               func(t *testing.T, e *testEnv, conn *sql.DB)
@@ -1448,6 +1587,60 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 			platform(t, conn, "usd", `{}`)
 			own(t, conn, "US", `{"meta":{"stripe_connect":"true"},"settlement_currency_mismatch_map":{"eur":"2026-11-06T06:00:00Z"}}`)
 		}},
+		{"a membership outside the subscription ramp", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(t, e, conn, 0)
+		}},
+		{"a membership in the subscription ramp", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(t, e, conn, 0)
+			ramp(e)
+		}},
+		{"a free trial in the subscription ramp", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(t, e, conn, productFreeTrialEnabled)
+			conn.Exec("UPDATE links SET free_trial_duration_unit = 0, free_trial_duration_amount = 1 WHERE id = ?", productID)
+			ramp(e)
+		}},
+		{"a commission outside the subscription ramp", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			shape(t, e, conn, 0, "commission")
+		}},
+		{"a commission in the subscription ramp", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			shape(t, e, conn, 0, "commission")
+			ramp(e)
+		}},
+		{"a preorder outside the subscription ramp", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			shape(t, e, conn, 0, "digital")
+			preorder(t, conn, nil)
+		}},
+		{"an installment plan outside the subscription ramp", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			shape(t, e, conn, 0, "digital")
+			insertInstallmentPlan(t, conn, 1_790_921, "monthly", nil)
+		}},
+		// Stripe's India mandate list has euros but not reais.
+		{"a membership in a currency the mandate takes", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(t, e, conn, 0)
+			ramp(e)
+			mandate(e)
+		}},
+		{"a membership in a currency the mandate doesn't take", "usd", "BRL", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(t, e, conn, 0)
+			ramp(e)
+			mandate(e)
+		}},
+		{"a one-time product in that currency", "usd", "BRL", brlLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			shape(t, e, conn, 0, "digital")
+			mandate(e)
+		}},
+		{"a membership in that currency without the mandate flag", "usd", "BRL", brlLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(t, e, conn, 0)
+			ramp(e)
+		}},
+		// A Connect account charges directly, which the mandate doesn't constrain.
+		{"a membership in that currency through a Connect account", "usd", "BRL", brlLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(t, e, conn, 0)
+			ramp(e)
+			mandate(e)
+			linked(conn)
+			own(t, conn, "US", `{"meta":{"stripe_connect":"true"}}`)
+		}},
 		{"a USD buyer skips the charging checks", "eur", "USD",
 			display("usd", "eur", "541", "1.0828956630028697", "buyer_local") + `,"buyer_currency":"usd",` +
 				`"buyer_local_currency_rate":1.0828956630028697,"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":541,"rental_price_cents":`,
@@ -1472,6 +1665,7 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 			e.redis.HSet("buyer_local_currency", "boolean", "true")
 			e.redis.Set("currencies:EUR", "0.92345")
 			e.redis.Set("currencies:JPY", "155.1234")
+			e.redis.Set("currencies:BRL", "5.4321")
 			if c.setup != nil {
 				c.setup(t, e, conn)
 			}

@@ -23,10 +23,12 @@ type offerCode struct {
 	validAt, expiresAt, deletedAt        db.NullTime
 	flags, tiers                         int64
 	// sqlCurrency is whether currency_type matches the product's under the column's collation.
-	sqlCurrency                 bool
-	hasVariants, hasExclusions  bool
-	excludesProduct, forProduct bool
-	products                    int64
+	sqlCurrency                              bool
+	hasVariants, excludesProduct, forProduct bool
+	products                                 int64
+	// excluded is the one excluded product's external id; manyExcluded is more than one.
+	excluded     string
+	manyExcluded bool
 }
 
 // OfferCode's once_per_cart flag bit.
@@ -43,25 +45,32 @@ const autoApplyCodes = "offer_codes.user_id = ? AND offer_codes.deleted_at IS NU
 func (h *handler) loadOfferCode(ctx context.Context, prod *product, condition string, args ...any) (*offerCode, error) {
 	c := &offerCode{}
 	var sqlCurrency sql.NullBool
+	var excluded sql.NullInt64
+	// excluded_products skips a join row whose product is gone.
+	const excludedFrom = " FROM offer_codes_excluded_products x INNER JOIN links ON links.id = x.product_id" +
+		" WHERE x.offer_code_id = offer_codes.id ORDER BY x.product_id LIMIT 1"
 	err := h.c.DB.QueryRowContext(ctx, "SELECT offer_codes.id, offer_codes.code, offer_codes.currency_type, offer_codes.sale_label,"+
 		" offer_codes.amount_cents, offer_codes.amount_percentage, offer_codes.max_purchase_count, offer_codes.minimum_quantity,"+
 		" offer_codes.duration_in_months, offer_codes.minimum_amount_cents, offer_codes.universal, offer_codes.existing_customers_only,"+
 		" offer_codes.new_customers_only, offer_codes.valid_at, offer_codes.expires_at, offer_codes.deleted_at, offer_codes.flags,"+
 		" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0), offer_codes.currency_type = ?,"+
 		" EXISTS(SELECT 1 FROM offer_codes_variants v WHERE v.offer_code_id = offer_codes.id),"+
-		" EXISTS(SELECT 1 FROM offer_codes_excluded_products x WHERE x.offer_code_id = offer_codes.id),"+
+		" (SELECT x.product_id"+excludedFrom+"), (SELECT x.product_id"+excludedFrom+" OFFSET 1) IS NOT NULL,"+
 		" EXISTS(SELECT 1 FROM offer_codes_excluded_products x WHERE x.offer_code_id = offer_codes.id AND x.product_id = ?),"+
 		" EXISTS(SELECT 1 FROM offer_codes_products j WHERE j.offer_code_id = offer_codes.id AND j.product_id = ?),"+
 		" (SELECT COUNT(*) FROM offer_codes_products j WHERE j.offer_code_id = offer_codes.id)"+
 		" FROM offer_codes WHERE "+condition, append([]any{prod.priceCurrencyType, prod.id, prod.id}, args...)...).
 		Scan(&c.id, &c.code, &c.currencyType, &c.saleLabel, &c.amountCents, &c.amountPercentage, &c.maxPurchaseCount,
 			&c.minimumQuantity, &c.durationInMonths, &c.minimumAmountCents, &c.universal, &c.existingOnly, &c.newOnly, &c.validAt,
-			&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &sqlCurrency, &c.hasVariants, &c.hasExclusions, &c.excludesProduct,
+			&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &sqlCurrency, &c.hasVariants, &excluded, &c.manyExcluded, &c.excludesProduct,
 			&c.forProduct, &c.products)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	c.sqlCurrency = sqlCurrency.Bool
+	if excluded.Valid && !c.manyExcluded {
+		c.excluded = h.c.IDs.Encrypt(excluded.Int64)
+	}
 	return c, err
 }
 
@@ -92,7 +101,8 @@ func (c *offerCode) unportedDiscount() string {
 		return "once-per-cart offer code"
 	case c.hasVariants:
 		return "offer code variants"
-	case c.universal && c.hasExclusions:
+	case c.universal && c.manyExcluded:
+		// excluded_product_ids follows the join table's rows, which come in no order.
 		return "offer code exclusions"
 	case !c.universal && (c.products != 1 || !c.forProduct):
 		return "offer code products"
@@ -340,6 +350,9 @@ func (d *offerDiscount) resultProps(prodExternalID string) any {
 		Sym("minimum_quantity", nullInt(c.minimumQuantity)).
 		Sym("duration_in_billing_cycles", nullInt(c.durationInMonths)).
 		Sym("minimum_amount_cents", nullInt(c.minimumAmountCents))
+	if c.universal && c.excluded != "" {
+		discount.Sym("excluded_product_ids", []any{c.excluded})
+	}
 	if c.newOnly {
 		// Display only; checkout decides.
 		discount.Sym("new_customers_only", true)

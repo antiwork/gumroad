@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math/big"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -59,12 +60,12 @@ func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {
 	return v.detectedCurrency, nil
 }
 
-// currencyDisplayFor is the rest of buyer_currency_display_props for a product priced at price
-// in pc, for the shapes this port serves, where unquotable products and the India mandate path
-// never arise. Each step that ends in the default display has no side effect, so the cheap ones
-// run first. Rails rescues every error into the default display; whether it would fail too is
-// unknowable here, so errors go to Rails.
-func (h *handler) currencyDisplayFor(p *page, buyer, pc string, price *int64) (*currencyDisplay, error) {
+// currencyDisplayFor is the rest of buyer_currency_display_props for prod at price; hasPlan is
+// whether it has an alive installment plan. Each step that ends in the default display has no
+// side effect, so the cheap ones run first. Rails rescues every error into the default display;
+// whether it would fail too is unknowable here, so errors go to Rails.
+func (h *handler) currencyDisplayFor(p *page, prod *product, hasPlan bool, buyer string, price *int64) (*currencyDisplay, error) {
+	pc := prod.productCurrency()
 	if buyer == pc || price == nil {
 		// A nil price raises in BigDecimal(""), and the rescue shows the default.
 		return nil, nil
@@ -83,15 +84,8 @@ func (h *handler) currencyDisplayFor(p *page, buyer, pc string, price *int64) (*
 	if err != nil || !ok {
 		return nil, err
 	}
-	if p.settleable == nil {
-		settleable, err := h.buyerCurrencySettleable(p, buyer)
-		if err != nil {
-			return nil, err
-		}
-		p.settleable = &settleable
-	}
-	if !*p.settleable {
-		return nil, nil
+	if settleable, err := h.buyerCurrencySettleable(p, prod, hasPlan, buyer); err != nil || !settleable {
+		return nil, err
 	}
 	rate := bigDecimalQuo(to, from)
 	f, _ := rate.Float64()
@@ -100,17 +94,63 @@ func (h *handler) currencyDisplayFor(p *page, buyer, pc string, price *int64) (*
 
 // buyerCurrencySettleable is buyer_currency_settleable? past the checks this shape always
 // passes; charge_minor_units_compatible? holds for every CURRENCY_CHOICES code.
-func (h *handler) buyerCurrencySettleable(p *page, buyer string) (bool, error) {
+func (h *handler) buyerCurrencySettleable(p *page, prod *product, hasPlan bool, buyer string) (bool, error) {
 	if buyer == "usd" {
 		return true, nil
 	}
-	if on, err := h.flag(p.Ctx, "buyer_currency_charging", p.seller.id); err != nil || !on {
+	if on, err := h.pageFlag(p, "buyer_currency_charging"); err != nil || !on {
 		return true, err
 	}
-	account, err := h.sellerStripeAccount(p)
-	if err != nil {
+	if unquotable, err := h.unquotableProduct(p, prod, hasPlan); err != nil || unquotable {
 		return false, err
 	}
+	if p.settleable == nil {
+		account, err := h.sellerStripeAccount(p)
+		if err != nil {
+			return false, err
+		}
+		settles, err := h.accountSettles(p, account, buyer)
+		if err != nil {
+			return false, err
+		}
+		p.settleable = &settleability{settles: settles, direct: account != nil && account.connect}
+	}
+	s := p.settleable
+	if !s.settles || s.direct || !prod.is(productIsRecurringBilling) {
+		return s.settles, nil
+	}
+	// indian_card_mandate_presentment_supported? comes before the settlement checks in Rails, so
+	// asking it after them can only add a fallback.
+	on, err := h.pageFlag(p, "india_card_mandate_reliability")
+	return !on || slices.Contains(indianCardMandateCurrencies, buyer), err
+}
+
+// settleability is accountSettles for the page's seller and buyer currency.
+type settleability struct {
+	settles bool
+	// direct is direct_charge_account?, whose charges the India mandate doesn't constrain.
+	direct bool
+}
+
+// unquotableProduct is buyer_currency_unquotable_product?. Past localCurrencyBuyer and the
+// charging flag, subscriptions_enabled? is its own flag alone.
+func (h *handler) unquotableProduct(p *page, prod *product, hasPlan bool) (bool, error) {
+	if prod.is(productFreeTrialEnabled) {
+		return true, nil
+	}
+	if prod.is(productIsInPreorderState) || prod.nativeType == "commission" || hasPlan || prod.is(productIsRecurringBilling) {
+		on, err := h.pageFlag(p, "buyer_currency_subscriptions")
+		return !on, err
+	}
+	return false, nil
+}
+
+// indianCardMandateCurrencies is StripeChargeProcessor::INDIA_CARD_MANDATE_CURRENCIES.
+var indianCardMandateCurrencies = []string{"inr", "aud", "usd", "eur", "gbp", "sgd", "cad", "chf", "sek", "aed", "jpy", "nok", "myr", "hkd"}
+
+// accountSettles is the rest of buyer_currency_settleable? for the seller's account, from
+// supported_merchant_account? on.
+func (h *handler) accountSettles(p *page, account *stripeAccount, buyer string) (bool, error) {
 	if account != nil && account.connect {
 		// A Connect account is supported and mints its own quote, so it must hold USD and carry no
 		// fresh marker: eur_native_charging_shape? needs the platform account.

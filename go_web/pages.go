@@ -198,6 +198,10 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 	} else {
 		customHTML = &tags
 	}
+	calendar, err := manifest.AssetPath("components/ui/Calendar.tsx")
+	if err != nil {
+		d.logger.Warn("call product pages left to Rails", "reason", err.Error())
+	}
 	return &products.PageConfig{
 		Layout:  b.pages.Layout,
 		CSP:     b.pages.CSP,
@@ -213,6 +217,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 			{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
 		},
 		PublicStorageURL: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
+		CalendarHref:     calendar,
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,
 		Search:           search,
