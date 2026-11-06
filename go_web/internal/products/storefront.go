@@ -186,7 +186,7 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 	}
 	// section_props searches afresh with any visitor search param, after the cached fetch.
 	if p.visitorSearch {
-		if searches, err = h.searchSections(p, sections); err != nil {
+		if searches, err = h.visitorSearchSections(p, sections); err != nil {
 			return nil, err
 		}
 	}
@@ -346,15 +346,21 @@ func sectionHead(id string, header any, typ string) *rails.RHash {
 }
 
 // searchSections is section_search_results for each section, in order.
-func (h *handler) searchSections(p *page, sections []*productsSection) ([]*catalogSearch, error) {
+func (h *handler) searchSections(p *page, sections []*productsSection, query string) ([]*catalogSearch, error) {
 	searches := make([]*catalogSearch, len(sections))
 	for i, s := range sections {
 		var err error
-		if searches[i], err = h.searchCatalog(p, s); err != nil {
+		if searches[i], err = h.searchCatalog(p, s, query); err != nil {
 			return nil, err
 		}
 	}
 	return searches, nil
+}
+
+// visitorSearchSections is section_props' fresh search, which matches the visitor's query.
+func (h *handler) visitorSearchSections(p *page, sections []*productsSection) ([]*catalogSearch, error) {
+	query, _ := p.query.(string)
+	return h.searchSections(p, sections, query)
 }
 
 // cachedCatalog is cached_sections' or cached_default_products_section's searches, under one key
@@ -385,7 +391,7 @@ func (h *handler) cachedCatalog(p *page, sections []*productsSection) ([]*catalo
 		}
 		return searches, nil
 	}
-	searches, err := h.searchSections(p, sections)
+	searches, err := h.searchSections(p, sections, "")
 	if err != nil {
 		return nil, err
 	}
@@ -416,17 +422,22 @@ func desc(field string) map[string]any { return map[string]any{field: map[string
 
 // searchCatalog is Link.filetype_options' and Link.search_options' searches for a section. They
 // share a query, so one request carries both facets.
-func (h *handler) searchCatalog(p *page, section *productsSection) (*catalogSearch, error) {
+func (h *handler) searchCatalog(p *page, section *productsSection, query string) (*catalogSearch, error) {
 	if h.c.Page.Search == nil {
 		return nil, fallback("products section search")
 	}
 	terms := func(field string, size int) map[string]any {
 		return map[string]any{"terms": map[string]any{"field": field, "size": size}}
 	}
-	must := []any{
+	var must []any
+	if rails.Present(query) {
+		must = append(must, map[string]any{"simple_query_string": map[string]any{"query": query,
+			"fields": []string{"name", "creator_name", "description", "tags"}, "default_operator": "and"}})
+	}
+	must = append(must,
 		map[string]any{"terms": map[string]any{"user_id": []int64{p.seller.id}}},
 		map[string]any{"term": map[string]any{"is_alive_on_profile": true}},
-	}
+	)
 	boolQuery := map[string]any{}
 	sort := []any{desc("created_at")}
 	if section != nil {

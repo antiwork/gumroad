@@ -36,18 +36,41 @@ func (h *handler) productTaxonomyID(ctx context.Context, prod *product) (sql.Nul
 	return id, err
 }
 
-// createDiscoverSearch is DiscoverSearch.create! for the clicked product. Without a query, which
-// is a declined param, there's no suggestion to create.
+// createDiscoverSearch is create_discover_search! for the clicked product. A typed query's
+// suggestion shares the search's transaction.
 func (h *handler) createDiscoverSearch(ctx context.Context, p *page, prod *product, ip string, taxonomyID sql.NullInt64) error {
+	ctx = context.WithoutCancel(ctx)
 	var userID any
 	if p.viewer != nil {
 		userID = p.viewer.id
 	}
+	autocomplete := p.Req.Param("autocomplete") == "true"
 	now := p.Req.Now.UTC().Truncate(time.Microsecond)
-	_, err := h.c.DB.ExecContext(context.WithoutCancel(ctx), "INSERT INTO discover_searches (query, taxonomy_id, user_id, ip_address,"+
-		" browser_guid, autocomplete, created_at, updated_at, clicked_resource_type, clicked_resource_id)"+
-		" VALUES (NULL, ?, ?, ?, ?, FALSE, ?, ?, 'Link', ?)", taxonomyID, userID, ip, p.GUID, now, now, prod.id)
-	return err
+	const insert = "INSERT INTO discover_searches (query, taxonomy_id, user_id, ip_address, browser_guid, autocomplete," +
+		" created_at, updated_at, clicked_resource_type, clicked_resource_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Link', ?)"
+	args := []any{p.query, taxonomyID, userID, ip, p.GUID, autocomplete, now, now, prod.id}
+	if !rails.Present(p.query) || autocomplete {
+		_, err := h.c.DB.ExecContext(ctx, insert, args...)
+		return err
+	}
+	tx, err := h.c.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, insert, args...)
+	if err != nil {
+		return err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, "INSERT INTO discover_search_suggestions (discover_search_id, created_at, updated_at)"+
+		" VALUES (?, ?, ?)", id, now, now); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // discoverNav is show's discover_props: the product's taxonomy path and taxonomies_for_nav.

@@ -100,6 +100,8 @@ type page struct {
 	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props
 	// search afresh.
 	visitorSearch bool
+	// query is params[:query]: a string, or nil for a bare or absent key.
+	query any
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
 	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
@@ -189,6 +191,9 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	}
 	p.iframe = rails.Truthy(v.Req.Param("overlay")) || rails.Truthy(v.Req.Param("embed"))
 	p.wanted = v.Req.Param("wanted") == "true"
+	if raw, ok := v.Req.Params.Get("query"); ok {
+		p.query, p.visitorSearch = raw, true
+	}
 	return p, nil
 }
 
@@ -223,7 +228,6 @@ var rendererParams = []string{
 	// The action and its presenter.
 	"offer_code", "quantity", "purchase_id",
 	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
-	"query", "autocomplete",
 	// The sections' search filters.
 	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
 	// MobileAppWebView and as_embed.
@@ -249,9 +253,11 @@ func declinedParams(req *rails.Request) string {
 			return "layout with iframe"
 		}
 	}
-	if raw, ok := req.Params.Get("recommended_by"); ok {
-		if _, isString := raw.(string); !isString && raw != nil {
-			return "param recommended_by"
+	for _, name := range []string{"recommended_by", "query"} {
+		if raw, ok := req.Params.Get(name); ok {
+			if _, isString := raw.(string); !isString && raw != nil {
+				return "param " + name
+			}
 		}
 	}
 	// Only a code whose lookups can't depend on Unicode normalization or the collation is
