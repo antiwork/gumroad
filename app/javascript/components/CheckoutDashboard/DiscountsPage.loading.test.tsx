@@ -65,6 +65,8 @@ const offerCode: OfferCode = {
   auto_apply: false,
   sale_label: null,
   ownership_products: [],
+  ownership_option_ids_by_product: {},
+  ownership_options: {},
   ownership_duration_tiers: null,
   option_ids_by_product: {},
 };

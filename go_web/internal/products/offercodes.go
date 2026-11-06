@@ -27,6 +27,8 @@ type offerCode struct {
 	// sqlCurrency is whether currency_type matches the product's under the column's collation.
 	sqlCurrency                              bool
 	hasVariants, excludesProduct, forProduct bool
+	// hasOwnershipVariants is ownership_variants.present?, which this port leaves to Rails.
+	hasOwnershipVariants bool
 	// anyExcluded is excluded_products.present?.
 	anyExcluded bool
 	// optionIDs is option_ids_by_product and scope the code's options on the product, both read
@@ -58,12 +60,13 @@ const offerCodeColumns = "offer_codes.id, offer_codes.code, offer_codes.currency
 	" offer_codes.duration_in_months, offer_codes.minimum_amount_cents, offer_codes.universal, offer_codes.existing_customers_only," +
 	" offer_codes.new_customers_only, offer_codes.valid_at, offer_codes.expires_at, offer_codes.deleted_at, offer_codes.flags," +
 	" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0)," +
-	" EXISTS(SELECT 1 FROM offer_codes_variants v WHERE v.offer_code_id = offer_codes.id)"
+	" EXISTS(SELECT 1 FROM offer_codes_variants v WHERE v.offer_code_id = offer_codes.id)," +
+	" EXISTS(SELECT 1 FROM offer_codes_ownership_variants v WHERE v.offer_code_id = offer_codes.id)"
 
 func (c *offerCode) ownDest() []any {
 	return []any{&c.id, &c.code, &c.currencyType, &c.saleLabel, &c.amountCents, &c.amountPercentage, &c.maxPurchaseCount,
 		&c.minimumQuantity, &c.durationInMonths, &c.minimumAmountCents, &c.universal, &c.existingOnly, &c.newOnly, &c.validAt,
-		&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &c.hasVariants}
+		&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &c.hasVariants, &c.hasOwnershipVariants}
 }
 
 // loadOfferCode reads the row a condition finds first, nil for none.

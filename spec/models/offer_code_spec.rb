@@ -2045,6 +2045,80 @@ describe OfferCode do
       expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
     end
 
+    it "does not qualify a buyer whose oldest purchase of the product has no date, matching the product page" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents)
+      create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents).update_column(:created_at, nil)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
+    context "when the ownership requirement names a single option" do
+      let(:versioned_product) { create(:product_with_digital_versions, user: seller, price_cents: 1000) }
+      let(:individual) { versioned_product.alive_variants.find_by(name: "Untitled 1") }
+      let(:give_one) { versioned_product.alive_variants.find_by(name: "Untitled 2") }
+      let(:offer_code) do
+        create(:offer_code, :for_existing_customers, products: [@product], ownership_products: [], ownership_variants: [individual],
+                                                     amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      end
+
+      it "qualifies a buyer who owns that option" do
+        create(:purchase, purchaser: buyer, link: versioned_product, seller:, price_cents: versioned_product.price_cents, variant_attributes: [individual])
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      end
+
+      it "qualifies a guest purchase of that option made under the buyer's email" do
+        create(:purchase, purchaser: nil, email: buyer.email, link: versioned_product, seller:, price_cents: versioned_product.price_cents, variant_attributes: [individual])
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      end
+
+      it "does not qualify a buyer who owns a different option of the same product" do
+        create(:purchase, purchaser: buyer, link: versioned_product, seller:, price_cents: versioned_product.price_cents, variant_attributes: [give_one])
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+      end
+
+      it "does not qualify a buyer who bought the product without an option" do
+        create(:purchase, purchaser: buyer, link: versioned_product, seller:, price_cents: versioned_product.price_cents)
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+      end
+
+      it "does not qualify a buyer who owns only the discounted product" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents)
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+        expect(offer_code.evaluate_for_buyer(buyer, product: @product)).to be_nil
+      end
+
+      it "does not qualify a refunded purchase of that option" do
+        create(:purchase, purchaser: buyer, link: versioned_product, seller:, price_cents: versioned_product.price_cents, variant_attributes: [individual], stripe_refunded: true)
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+      end
+
+      it "treats a product row and an option row as a union" do
+        offer_code.update!(ownership_products: [@product], ownership_variants: [give_one])
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents)
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 30)
+      end
+
+      it "counts ownership months from the option's purchase, not a sibling's" do
+        offer_code.update!(
+          ownership_products: [],
+          ownership_variants: [give_one],
+          amount_percentage: 0,
+          ownership_duration_tiers: [
+            { "months" => 0, "amount_percentage" => 10 },
+            { "months" => 6, "amount_percentage" => 50 },
+          ],
+        )
+        create(:purchase, purchaser: buyer, link: versioned_product, seller:, price_cents: versioned_product.price_cents, variant_attributes: [individual], created_at: 8.months.ago)
+
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+
+        create(:purchase, purchaser: buyer, link: versioned_product, seller:, price_cents: versioned_product.price_cents, variant_attributes: [give_one])
+
+        expect(offer_code.evaluate_for_buyer(buyer)).to include(type: "percent", percents: 10)
+      end
+    end
+
     context "with tiered discounts" do
       let(:offer_code) do
         create(:offer_code,

@@ -47,12 +47,23 @@ class Checkout::DiscountsPresenter
       auto_apply: offer_code.auto_apply?,
       sale_label: offer_code.sale_label,
       ownership_products: offer_code.ownership_products.map { product_props_for(_1) },
+      ownership_option_ids_by_product: offer_code.ownership_option_ids_by_product,
+      ownership_options: ownership_option_details(offer_code),
       ownership_duration_tiers: offer_code.normalized_ownership_duration_tiers,
       option_ids_by_product: offer_code.option_ids_by_product,
     }
   end
 
   private
+    # The products' option lists leave out deleted options and options outside a product's first
+    # category, so the picker needs these to label every saved ownership option.
+    def ownership_option_details(offer_code)
+      offer_code.ownership_variants.to_h do |option|
+        deleted = option.deleted? || (option.is_a?(Variant) && !!option.variant_category&.deleted?)
+        [option.external_id, { name: option.name.to_s, deleted: }]
+      end
+    end
+
     def product_props_for(product)
       {
         id: product.external_id,

@@ -30,6 +30,7 @@ type CustomProps = {
   maxLength: number | null;
   inputElRef: React.MutableRefObject<HTMLInputElement | null>;
   suppressMenuOpenRef: React.MutableRefObject<boolean>;
+  pinClearIndicator: boolean;
 };
 const CustomPropsContext = React.createContext<CustomProps>({
   customOption: null,
@@ -38,6 +39,7 @@ const CustomPropsContext = React.createContext<CustomProps>({
   maxLength: null,
   inputElRef: { current: null },
   suppressMenuOpenRef: { current: false },
+  pinClearIndicator: false,
 });
 
 export type Props<IsMulti extends boolean = boolean> = Omit<
@@ -55,11 +57,14 @@ export type Props<IsMulti extends boolean = boolean> = Omit<
   customOption?: CustomOption;
   allowMenuOpen?: () => boolean;
   maxLength?: number;
+  // Keeps the clear-all control in the control's top-right corner, apart from wrapped value pills,
+  // so it can't be mistaken for (or tapped instead of) the last pill's own remove control.
+  pinClearIndicator?: boolean;
 };
 
 // Forward a ref to react-select so parents can call .focus(), .blur(), etc.
 const SelectInner = <IsMulti extends boolean>(
-  props: Props<IsMulti>,
+  { pinClearIndicator = false, ...props }: Props<IsMulti>,
   ref: React.ForwardedRef<SelectInstance<Option, IsMulti, GroupBase<Option>>>,
 ) => {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
@@ -86,8 +91,9 @@ const SelectInner = <IsMulti extends boolean>(
       maxLength: props.maxLength ?? null,
       inputElRef,
       suppressMenuOpenRef,
+      pinClearIndicator,
     }),
-    [props.customOption, focusedOptionId],
+    [props.customOption, focusedOptionId, pinClearIndicator],
   );
 
   return (
@@ -197,10 +203,15 @@ const stopButtonActivationPropagation = (event: React.KeyboardEvent<HTMLButtonEl
 };
 
 const ClearIndicator = <IsMulti extends boolean>(props: ClearIndicatorProps<Option, IsMulti>) => {
-  const { inputElRef, suppressMenuOpenRef } = React.useContext(CustomPropsContext);
+  const { inputElRef, suppressMenuOpenRef, pinClearIndicator } = React.useContext(CustomPropsContext);
 
   return (
-    <components.ClearIndicator {...props} innerProps={{ ...props.innerProps, "aria-hidden": undefined }}>
+    <components.ClearIndicator
+      {...props}
+      // The top margin centers it on a single-row control (min-h-12), which is also the first pill row.
+      className={pinClearIndicator ? "mt-3.5 ml-4 flex self-start" : undefined}
+      innerProps={{ ...props.innerProps, "aria-hidden": undefined }}
+    >
       <button
         type="button"
         className="cursor-pointer all-unset"

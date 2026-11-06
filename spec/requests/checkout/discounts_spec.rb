@@ -538,6 +538,134 @@ describe("Checkout discounts page", type: :system, js: true) do
     end
 
     describe "ownership-based discounts" do
+      it "keeps a deleted option the buyer must have purchased when the picker changes" do
+        category = create(:variant_category, link: product2, title: "Edition")
+        signed = create(:variant, variant_category: category, name: "Signed")
+        retired = create(:variant, variant_category: category, name: "Retired")
+        offer_code2.update!(existing_customers_only: true, ownership_variants: [signed, retired])
+        retired.mark_deleted!
+
+        visit checkout_discounts_path
+        within(find(:table_row, { "Discount" => "Discount 2" })) { click_on "Edit" }
+
+        expect(page).to have_text("Product 2 (Signed)")
+        expect(page).to have_text("Product 2 (Retired, deleted)")
+        expect(page).to have_text("Buyers of a deleted option still qualify. Once removed, a deleted option can't be added back.")
+        select_combo_box_option "Product 1", from: "Must have purchased"
+        page.scroll_to find_button("Save changes"), align: :center
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Successfully updated discount!")
+
+        offer_code2.reload
+        expect(offer_code2.ownership_products).to eq([product1])
+        expect(offer_code2.ownership_variants).to contain_exactly(signed, retired)
+      end
+
+      it "names each saved ownership option, removes one chip at a time, and clears every scope only from clear-all" do
+        edition = create(:variant_category, link: product2, title: "Edition")
+        signed = create(:variant, variant_category: edition, name: "Signed")
+        retired = create(:variant, variant_category: edition, name: "Retired")
+        oak = create(:variant, variant_category: create(:variant_category, link: product2, title: "Frame"), name: "Oak")
+        old_print = create(:product, name: "Old print", user: seller)
+        first_run = create(:variant, variant_category: create(:variant_category, link: old_print), name: "First run")
+        offer_code2.update!(existing_customers_only: true, ownership_variants: [signed, retired, oak, first_run])
+        retired.mark_deleted!
+        old_print.mark_deleted!
+
+        visit checkout_discounts_path
+        within(find(:table_row, { "Discount" => "Discount 2" })) { click_on "Edit" }
+        picker = find_field("Must have purchased").find(:xpath, "ancestor::fieldset[1]")
+        within(picker) do
+          expect(page).to have_button("Product 2 (Signed)")
+          expect(page).to have_button("Product 2 (Retired, deleted)")
+          # Oak is alive but in a second category, which the products' option lists leave out.
+          expect(page).to have_button("Product 2 (Oak)")
+          expect(page).to have_button("Deleted product (First run, deleted)")
+          expect(page).not_to have_text("deleted options")
+          click_on "Product 2 (Signed)"
+          expect(page).not_to have_button("Product 2 (Signed)")
+          expect(page).to have_button("Product 2 (Retired, deleted)")
+          expect(page).to have_button("Product 2 (Oak)")
+        end
+        page.scroll_to find_button("Save changes"), align: :center
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Successfully updated discount!")
+        expect(offer_code2.reload.ownership_variants).to contain_exactly(retired, oak, first_run)
+
+        visit checkout_discounts_path
+        within(find(:table_row, { "Discount" => "Discount 2" })) { click_on "Edit" }
+        picker = find_field("Must have purchased").find(:xpath, "ancestor::fieldset[1]")
+        within(picker) do
+          expect(page).to have_button("Product 2 (Retired, deleted)")
+          expect(page).to have_button("Product 2 (Oak)")
+          expect(page).to have_button("Deleted product (First run, deleted)")
+          click_on "Clear value"
+          expect(page).not_to have_button("Product 2 (Retired, deleted)")
+          expect(page).not_to have_button("Product 2 (Oak)")
+          expect(page).not_to have_text("Buyers of a deleted option still qualify")
+        end
+        select_combo_box_option "Product 1", from: "Must have purchased"
+        page.scroll_to find_button("Save changes"), align: :center
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Successfully updated discount!")
+        offer_code2.reload
+        expect(offer_code2.ownership_products).to eq([product1])
+        expect(offer_code2.ownership_variants).to be_empty
+      end
+
+      it "keeps the clear-all control pinned to the field's top-right corner, apart from wrapped option chips" do
+        edition = create(:variant_category, link: product2, title: "Edition")
+        signed = create(:variant, variant_category: edition, name: "Signed and numbered by the artist")
+        unsigned = create(:variant, variant_category: edition, name: "Unsigned open edition")
+        retired = create(:variant, variant_category: edition, name: "Retired")
+        offer_code2.update!(existing_customers_only: true, ownership_variants: [signed, unsigned, retired])
+        retired.mark_deleted!
+
+        visit checkout_discounts_path
+        within(find(:table_row, { "Discount" => "Discount 2" })) { click_on "Edit" }
+        expect(page).to have_button("Product 2 (Unsigned open edition)")
+        picker = find_field("Must have purchased").find(:xpath, "ancestor::fieldset[1]")
+
+        measured = [[1440, false], [390, true], [320, true]].map do |width, mobile|
+          page.driver.browser.execute_cdp("Emulation.setDeviceMetricsOverride", width:, height: 844, deviceScaleFactor: 1, mobile:)
+          page.execute_script("arguments[0].scrollIntoView({ block: 'center' })", picker)
+          geometry = page.evaluate_script(<<~JS, picker)
+            ((fieldset) => {
+              const clear = fieldset.querySelector('button[aria-label="Clear value"]');
+              let control = clear.parentElement;
+              while (getComputedStyle(control).display === "contents" || !control.contains(fieldset.querySelector("input"))) control = control.parentElement;
+              const box = (el) => el.getBoundingClientRect();
+              const hit = (r) => document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest("button");
+              const c = box(clear), k = box(control);
+              const chips = [...control.querySelectorAll("button")].filter((b) => b !== clear).map((b) => {
+                const r = box(b), x = box(b.querySelector("svg"));
+                const dx = Math.max(0, c.left - r.right, r.left - c.right), dy = Math.max(0, c.top - r.bottom, r.top - c.bottom);
+                return { gap: Math.hypot(dx, dy), top: Math.round(r.top), xHitsChip: hit(x) === b,
+                         iconDistance: Math.hypot(x.left + x.width / 2 - (c.left + c.width / 2), x.top + x.height / 2 - (c.top + c.height / 2)) };
+              });
+              return { clearHitsClear: hit(c) === clear, fromTop: c.top - k.top, fromRight: k.right - c.right, controlHeight: k.height,
+                       rows: new Set(chips.map(({ top }) => top)).size, chips };
+            })(arguments[0])
+          JS
+          [width, mobile, geometry]
+        end
+
+        aggregate_failures do
+          measured.each do |width, mobile, geometry|
+            expect(geometry["clearHitsClear"]).to eq(true), "#{width}px: #{geometry}"
+            expect(geometry["chips"].map { _1["xHitsChip"] }).to all(eq(true)), "#{width}px: #{geometry}"
+            expect(geometry["fromTop"]).to be_between(10, 18), "#{width}px: #{geometry}"
+            expect(geometry["fromRight"]).to be <= 20, "#{width}px: #{geometry}"
+            expect(geometry["chips"].map { _1["gap"] }.min).to be >= 12, "#{width}px: #{geometry}"
+            expect(geometry["chips"].map { _1["iconDistance"] }.min).to be >= 32, "#{width}px: #{geometry}"
+            expect(geometry["rows"]).to be > 1, "#{width}px: #{geometry}" if mobile
+          end
+        end
+      ensure
+        # The emulation override outlives the session reset, so later examples would keep this phone viewport.
+        page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
+      end
+
       it "persists ownership products and tiers when combining both toggles, hiding the top-level Type input" do
         visit checkout_discounts_path
         click_on "New discount"

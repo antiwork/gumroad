@@ -79,6 +79,23 @@ describe Checkout::DiscountsController do
       expect(response.parsed_body["offer_codes"].size).to eq(3)
     end
 
+    it "loads every offer code's ownership options and their categories in one query each" do
+      stub_const("Checkout::DiscountsController::PER_PAGE", 3)
+      product = create(:product, user: seller)
+      offer_codes.each do |offer_code|
+        option = create(:variant, variant_category: create(:variant_category, link: product))
+        offer_code.update!(existing_customers_only: true, ownership_variants: [option])
+      end
+
+      category_queries = nil
+      option_queries = count_queries(matching: /offer_codes_ownership_variants/) do
+        category_queries = count_queries(matching: /FROM `variant_categories`/) { get :paged, params: { page: 1 } }
+      end
+
+      expect([option_queries, category_queries]).to eq([1, 1])
+      expect(response.parsed_body["offer_codes"].map { _1["ownership_option_ids_by_product"] }).to all(match(ObfuscateIds.encrypt(product.id) => [an_instance_of(String)]))
+    end
+
     it "returns HTTP success and renders correct JSON response" do
       get :paged, params: { page: 1 }
       expect(response).to be_successful
@@ -573,6 +590,51 @@ describe Checkout::DiscountsController do
                                                                      ])
       end
 
+      it "limits the ownership requirement to one option" do
+        owned_product = create(:product, user: seller)
+        owned_option = create(:variant, variant_category: create(:variant_category, link: owned_product))
+
+        expect do
+          post :create, params: {
+            name: "Option renewal",
+            code: "optionrenew",
+            amount_percentage: 50,
+            currency_type: nil,
+            universal: false,
+            selected_product_ids: [subject_product.external_id],
+            existing_customers_only: true,
+            ownership_product_ids: [],
+            ownership_option_ids: [owned_option.external_id],
+          }, as: :json
+        end.to change { seller.offer_codes.count }.by(1)
+
+        expect(response.parsed_body["success"]).to eq(true), response.body
+        offer_code = seller.offer_codes.find_by!(code: "optionrenew")
+        expect(offer_code.ownership_products).to be_empty
+        expect(offer_code.ownership_variants).to contain_exactly(owned_option)
+      end
+
+      it "drops an option that belongs to another seller" do
+        owned_product = create(:product, user: seller)
+        owned_option = create(:variant, variant_category: create(:variant_category, link: owned_product))
+        foreign_option = create(:variant, variant_category: create(:variant_category, link: create(:product)))
+
+        post :create, params: {
+          name: "Option renewal",
+          code: "optionrenew",
+          amount_percentage: 50,
+          currency_type: nil,
+          universal: false,
+          selected_product_ids: [subject_product.external_id],
+          existing_customers_only: true,
+          ownership_product_ids: [],
+          ownership_option_ids: [owned_option.external_id, foreign_option.external_id],
+        }, as: :json
+
+        expect(response.parsed_body["success"]).to eq(true), response.body
+        expect(seller.offer_codes.find_by!(code: "optionrenew").ownership_variants).to contain_exactly(owned_option)
+      end
+
       it "creates a tiered offer code without an existing-customers flag" do
         expect do
           post :create, params: {
@@ -870,6 +932,63 @@ describe Checkout::DiscountsController do
       expect(offer_code.name).to eq("Renamed discount")
       expect(offer_code.existing_customers_only?).to eq(true)
       expect(offer_code.ownership_products).to eq([owned_product])
+    end
+
+    it "preserves the ownership options when a partial update omits them" do
+      owned_product = create(:product, user: seller)
+      owned_option = create(:variant, variant_category: create(:variant_category, link: owned_product))
+      subject_product = create(:product, user: seller, price_cents: 2_00)
+      offer_code.update!(
+        products: [subject_product],
+        ownership_products: [],
+        ownership_variants: [owned_option],
+        existing_customers_only: true,
+        amount_cents: nil,
+        amount_percentage: 25,
+        duration_in_billing_cycles: nil,
+      )
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Renamed discount",
+        amount_percentage: 25,
+        existing_customers_only: true,
+      }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["success"]).to eq(true), response.body
+
+      expect(offer_code.reload.ownership_variants).to contain_exactly(owned_option)
+    end
+
+    it "replaces the ownership options when the form submits an empty list" do
+      owned_product = create(:product, user: seller)
+      owned_option = create(:variant, variant_category: create(:variant_category, link: owned_product))
+      subject_product = create(:product, user: seller, price_cents: 2_00)
+      offer_code.update!(
+        products: [subject_product],
+        ownership_products: [owned_product],
+        ownership_variants: [owned_option],
+        existing_customers_only: true,
+        amount_cents: nil,
+        amount_percentage: 25,
+        duration_in_billing_cycles: nil,
+      )
+
+      put :update, params: {
+        id: offer_code.external_id,
+        name: "Renamed discount",
+        amount_percentage: 25,
+        existing_customers_only: true,
+        ownership_product_ids: [owned_product.external_id],
+        ownership_option_ids: [],
+      }, as: :json
+
+      expect(response.parsed_body["success"]).to eq(true), response.body
+
+      offer_code.reload
+      expect(offer_code.ownership_products).to eq([owned_product])
+      expect(offer_code.ownership_variants).to be_empty
     end
 
     it "keeps exclusions for deleted products when their ids are resubmitted" do

@@ -4,6 +4,7 @@ import {
   extractParams,
   findWholeProductScopeIds,
   isQueryParams,
+  ownershipScopesFromSelection,
 } from "$app/components/CheckoutDashboard/DiscountsPage";
 
 describe("extractParams", () => {
@@ -37,6 +38,70 @@ describe("findWholeProductScopeIds", () => {
 
   it("keeps a product visible when its scope lists options, including an empty list", () => {
     expect(findWholeProductScopeIds([{ id: "1" }, { id: "2" }], { "1": ["opt-a"], "2": [] })).toEqual(new Set());
+  });
+});
+
+describe("ownershipScopesFromSelection", () => {
+  const targets = {
+    "1": { productId: "1", optionIds: [], kind: "product" as const },
+    "2:opt-a": { productId: "2", optionIds: ["opt-a"], kind: "option" as const },
+    "2:opt-b": { productId: "2", optionIds: ["opt-b"], kind: "option" as const },
+    "2:deleted": { productId: "2", optionIds: ["opt-gone"], kind: "deleted" as const },
+  };
+
+  it("keeps a product row as a whole-product requirement", () => {
+    expect(ownershipScopesFromSelection(["1"], targets)).toEqual({ productIds: ["1"], optionIdsByProduct: {} });
+  });
+
+  it("records the picked options under their product", () => {
+    expect(ownershipScopesFromSelection(["2:opt-a", "2:opt-b"], targets)).toEqual({
+      productIds: [],
+      optionIdsByProduct: { "2": ["opt-a", "opt-b"] },
+    });
+  });
+
+  it("carries a product row and another product's option row together", () => {
+    expect(ownershipScopesFromSelection(["1", "2:opt-a"], targets)).toEqual({
+      productIds: ["1"],
+      optionIdsByProduct: { "2": ["opt-a"] },
+    });
+  });
+
+  it("keeps deleted options next to live options of the same product", () => {
+    expect(ownershipScopesFromSelection(["2:opt-a", "2:deleted"], targets)).toEqual({
+      productIds: [],
+      optionIdsByProduct: { "2": ["opt-a", "opt-gone"] },
+    });
+  });
+
+  it("drops selections the menu no longer knows about", () => {
+    expect(ownershipScopesFromSelection(["missing"], targets)).toEqual({ productIds: [], optionIdsByProduct: {} });
+  });
+
+  it("narrows a whole-product row to the option added for that product", () => {
+    expect(
+      ownershipScopesFromSelection(
+        ["1", "2", "2:opt-a"],
+        { ...targets, "2": { productId: "2", optionIds: [], kind: "product" } },
+        "2:opt-a",
+      ),
+    ).toEqual({
+      productIds: ["1"],
+      optionIdsByProduct: { "2": ["opt-a"] },
+    });
+  });
+
+  it("widens a product's option rows to the whole product when its product row is added", () => {
+    expect(
+      ownershipScopesFromSelection(
+        ["2:opt-a", "2:deleted", "2"],
+        { ...targets, "2": { productId: "2", optionIds: [], kind: "product" } },
+        "2",
+      ),
+    ).toEqual({
+      productIds: ["2"],
+      optionIdsByProduct: {},
+    });
   });
 });
 

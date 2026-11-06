@@ -64,8 +64,9 @@ class Checkout::DiscountsController < Sellers::BaseController
       products: selected_products,
       variants: selected_options,
       ownership_products:,
+      ownership_variants:,
       excluded_products:,
-      **offer_code_params.except(:selected_product_ids, :selected_option_ids, :ownership_product_ids, :excluded_product_ids)
+      **offer_code_params.except(:selected_product_ids, :selected_option_ids, :ownership_product_ids, :ownership_option_ids, :excluded_product_ids)
     )
 
     if offer_code.save
@@ -82,7 +83,7 @@ class Checkout::DiscountsController < Sellers::BaseController
     authorize [:checkout, offer_code]
 
     parse_date_times
-    update_params = offer_code_params.except(:selected_product_ids, :selected_option_ids, :ownership_product_ids, :excluded_product_ids, :code, :ownership_duration_tiers).to_h
+    update_params = offer_code_params.except(:selected_product_ids, :selected_option_ids, :ownership_product_ids, :ownership_option_ids, :excluded_product_ids, :code, :ownership_duration_tiers).to_h
     if params.key?(:ownership_duration_tiers)
       update_params[:ownership_duration_tiers] = params[:ownership_duration_tiers].nil? ? nil : offer_code_params[:ownership_duration_tiers]
     end
@@ -92,6 +93,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       products: selected_products(offer_code),
       variants: selected_options(offer_code),
       ownership_products: ownership_products(offer_code),
+      ownership_variants: ownership_variants(offer_code),
       excluded_products: excluded_products(offer_code)
     )
       pagination, offer_codes = fetch_offer_codes
@@ -119,7 +121,7 @@ class Checkout::DiscountsController < Sellers::BaseController
         :name, :code, :universal, :max_purchase_count, :amount_cents, :amount_percentage,
         :currency_type, :valid_at, :expires_at, :minimum_quantity, :duration_in_billing_cycles,
         :minimum_amount_cents, :existing_customers_only, :new_customers_only, :once_per_cart, :auto_apply, :sale_label,
-        selected_product_ids: [], selected_option_ids: [], ownership_product_ids: [], excluded_product_ids: [],
+        selected_product_ids: [], selected_option_ids: [], ownership_product_ids: [], ownership_option_ids: [], excluded_product_ids: [],
         ownership_duration_tiers: [[:months, :amount_percentage]]
       )
     end
@@ -141,6 +143,17 @@ class Checkout::DiscountsController < Sellers::BaseController
       return offer_code.ownership_products if offer_code && !params.key?(:ownership_product_ids)
 
       current_seller.products.by_external_ids(offer_code_params[:ownership_product_ids])
+    end
+
+    # A Variant reaches its product through variant_category; a Sku stores it on link_id. Either
+    # scope keeps another seller's option ids from being attached to this code.
+    def ownership_variants(offer_code = nil)
+      return offer_code.ownership_variants if offer_code && !params.key?(:ownership_option_ids)
+
+      product_ids = current_seller.products.select(:id)
+      category_ids = VariantCategory.where(link_id: product_ids).select(:id)
+      requested = BaseVariant.by_external_ids(offer_code_params[:ownership_option_ids].to_a)
+      requested.where(link_id: product_ids).or(requested.where(variant_category_id: category_ids))
     end
 
     def selected_options(offer_code = nil)
@@ -197,7 +210,7 @@ class Checkout::DiscountsController < Sellers::BaseController
       offer_codes = current_seller.offer_codes
                       .alive
                       .where.not(code: nil)
-                      .includes(:products, :ownership_products, :excluded_products, :variants)
+                      .includes(:products, :ownership_products, :excluded_products, :variants, :ownership_variants)
                       .sorted_by(**paged_params[:sort].to_h.symbolize_keys).order(updated_at: :desc)
       offer_codes = offer_codes.where("name LIKE :query OR code LIKE :query", query: "%#{params[:query]}%") if params[:query].present?
       offer_codes_count = offer_codes.count.is_a?(Hash) ? offer_codes.count.length : offer_codes.count
@@ -217,7 +230,8 @@ class Checkout::DiscountsController < Sellers::BaseController
         pagination, offer_codes = pagy(offer_codes, page: e.pagy.last, limit: PER_PAGE)
       end
       # Only Variant has `variant_category` (a Sku reads its own link_id), so this can't be a nested include.
-      ActiveRecord::Associations::Preloader.new(records: offer_codes.flat_map(&:variants).grep(Variant), associations: :variant_category).call
+      options = offer_codes.flat_map { |offer_code| offer_code.variants + offer_code.ownership_variants }
+      ActiveRecord::Associations::Preloader.new(records: options.grep(Variant), associations: :variant_category).call
 
       [PagyPresenter.new(pagination).props, offer_codes]
     end

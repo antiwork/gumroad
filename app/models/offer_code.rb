@@ -26,6 +26,9 @@ class OfferCode < ApplicationRecord
   # Options (variants) the code is limited to. No rows means every option, which is how every code
   # created before option scoping existed keeps working.
   has_and_belongs_to_many :variants, class_name: "BaseVariant", join_table: "offer_codes_variants", association_foreign_key: "variant_id"
+  # Options the buyer must already own. A row in ownership_products counts any option of that
+  # product; a row here counts only that option.
+  has_and_belongs_to_many :ownership_variants, class_name: "BaseVariant", join_table: "offer_codes_ownership_variants", association_foreign_key: "variant_id"
   belongs_to :user
   has_many :purchases
   has_many :purchases_that_count_towards_offer_code_uses, -> { counts_towards_offer_code_uses }, class_name: "Purchase"
@@ -358,6 +361,12 @@ class OfferCode < ApplicationRecord
     end
   end
 
+  def ownership_option_ids_by_product
+    ownership_variants.group_by(&:owning_product_id).to_h do |product_id, options|
+      [ObfuscateIds.encrypt(product_id), options.map(&:external_id)]
+    end
+  end
+
   # Blank is ineligible here: purchase enforcement must fail closed if the chosen option is missing.
   # Preview omits the id and lets the client filter the returned discount.
   def applicable_to_variant?(link, variant)
@@ -452,8 +461,7 @@ class OfferCode < ApplicationRecord
   end
 
   def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil)
-    reference = ownership_reference_products(product)
-    months = ownership_months_for(buyer, reference) if existing_customers_only? || tiered?
+    months = ownership_months_for(buyer, ownership_reference_products(product), ownership_variants) if existing_customers_only? || tiered?
     return nil if existing_customers_only? && months.nil?
 
     if tiered?
@@ -480,9 +488,12 @@ class OfferCode < ApplicationRecord
   # not been proven to belong to the signed-in user, so trusting it would let
   # someone sign up with a stranger's email and inherit that stranger's
   # existing-customer discounts.
-  def ownership_months_for(buyer, products)
+  def ownership_months_for(buyer, products, variants = nil)
     return nil if buyer.nil?
-    return nil if products.blank?
+
+    variants = Array(variants)
+    product_ids = Array(products).map(&:id)
+    return nil if product_ids.empty? && variants.empty?
 
     ownership_condition = if buyer.email.present? && buyer.confirmed?
       ["purchases.purchaser_id = ? OR purchases.email = ?", buyer.id, buyer.email]
@@ -490,11 +501,12 @@ class OfferCode < ApplicationRecord
       ["purchases.purchaser_id = ?", buyer.id]
     end
 
-    oldest = qualifying_ownership_purchases
-      .where(link_id: products.map(&:id))
-      .where(*ownership_condition)
-      .order(:created_at)
-      .pick(:created_at)
+    # An option row counts only purchases of that option, so owning a sibling option of the same
+    # product does not qualify. Both branches are the same qualifying set, on different indexes.
+    oldest = [
+      (qualifying_ownership_purchases.where(link_id: product_ids).where(*ownership_condition).order(:created_at).pick(:created_at) if product_ids.any?),
+      (qualifying_ownership_purchases.joins(:variant_attributes).where(base_variants: { id: variants.map(&:id) }).where(*ownership_condition).order(:created_at).pick(:created_at) if variants.any?),
+    ].compact.min
     months_since(oldest)
   end
 
@@ -556,7 +568,7 @@ class OfferCode < ApplicationRecord
     end
 
     def ownership_reference_products(product = nil)
-      return ownership_products if ownership_products.present?
+      return ownership_products if ownership_products.present? || ownership_variants.present?
       return [product] if product
       applicable_products
     end
@@ -804,7 +816,7 @@ class OfferCode < ApplicationRecord
       return if deleted_at.present?
       return unless existing_customers_only?
 
-      if ownership_products.empty?
+      if ownership_products.empty? && ownership_variants.empty?
         errors.add(:base, "Pick at least one product the customer must already own.")
       end
     end

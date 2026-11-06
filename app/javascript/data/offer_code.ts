@@ -115,6 +115,7 @@ export type DiscountPayload = {
   autoApply: boolean;
   saleLabel: string | null;
   ownershipProductIds: string[];
+  ownershipOptionIds: string[];
   ownershipDurationTiers: { months: number; amount_percentage: number }[] | null;
 };
 
@@ -155,6 +156,7 @@ export const buildDiscountPayload = (payload: DiscountPayload) => ({
   auto_apply: payload.autoApply,
   sale_label: payload.autoApply ? payload.saleLabel : null,
   ownership_product_ids: payload.existingCustomersOnly ? payload.ownershipProductIds : [],
+  ownership_option_ids: payload.existingCustomersOnly ? payload.ownershipOptionIds : [],
   ownership_duration_tiers: payload.ownershipDurationTiers,
 });
 

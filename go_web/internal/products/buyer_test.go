@@ -168,6 +168,35 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 	}
 }
 
+// An option the buyer must have purchased is left to Rails, which reads the purchase's options:
+// owning another option of the product doesn't make the code apply here.
+func TestAnOwnershipOptionFallsBackToRails(t *testing.T) {
+	const codeID = int64(1_797_102)
+	buyer := &signedInUser{user: user{id: 1_797_002}}
+	want := fallback("offer code ownership variants")
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	h := &handler{c: e.config}
+	insertOfferCode(t, conn, codeID, map[string]any{"code": "LOYAL", "amount_percentage": 10, "universal": true,
+		"existing_customers_only": true})
+	testdb.Insert(t, conn, "offer_codes_ownership_variants", map[string]any{"id": int64(1_797_611), "offer_code_id": codeID,
+		"variant_id": int64(1_797_621), "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_311), "seller_id": sellerID, "link_id": productID,
+		"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
+	prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
+	p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, viewer: buyer}
+	if _, _, err := h.evaluateURLCode(p, prod, "loyal"); err != want {
+		t.Errorf("URL code: %v, want the fallback", err)
+	}
+	stored, err := h.loadOfferCode(t.Context(), prod, "offer_codes.id = ? LIMIT 1", codeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.evaluateOfferCode(p, prod, stored); err != want {
+		t.Errorf("default code: %v, want the fallback", err)
+	}
+}
+
 // A buyer can make the product's existing-customer default apply, which best_default_code_result
 // then weighs against the sale.
 func TestABuyersExistingCustomerDefault(t *testing.T) {
