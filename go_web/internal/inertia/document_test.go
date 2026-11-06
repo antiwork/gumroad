@@ -84,11 +84,11 @@ func TestLayoutBodyAttributes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := layout.Render(Document{Component: "C", URL: "/u?a=1&b='", Props: rails.NewRHash().Sym("a", `"'`), Meta: NewMetaTags(), UserAgent: "Mobile", AsEmbed: true})
+	got := layout.Render(Document{Component: "C", URL: "/u?a=1&b='", Props: rails.NewRHash().Sym("a", `"'`), Meta: NewMetaTags(), UserAgent: "Mobile", AsEmbed: true, BodyClass: "iframe"})
 	for _, want := range []string{
 		// URI.parse("").host is nil, which Ruby interpolates as "".
 		"<head prefix=\"og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# : http://ogp.me/ns/fb/#\">\n    <link rel=\"dns-prefetch\" href=\"//\">\n    <link rel=\"dns-prefetch\" href=\"//cdn.example.com\">\n  <meta",
-		`<body id="" class="group/body" style="background: transparent">`,
+		`<body id="" class="group/body iframe" style="background: transparent">`,
 		`data-page="{&quot;component&quot;:&quot;C&quot;,&quot;props&quot;:{&quot;a&quot;:&quot;\&quot;&#39;&quot;,&quot;_inertia_meta&quot;:[]},&quot;url&quot;:&quot;/u?a=1\u0026b=&#39;&quot;`,
 	} {
 		if !strings.Contains(got, want) {
