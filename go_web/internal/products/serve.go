@@ -2,6 +2,7 @@ package products
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 
@@ -24,17 +25,23 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	ctx, conn, req := p.Ctx, h.c.DB, p.Req
 
 	// fetch_product_for_show: a product custom domain's product comes first, and
-	// user_by_domain scopes the permalink to the subdomain's seller.
-	if exists, err := customDomainExists(ctx, conn, req.Host); err != nil || exists {
-		return firstErr(err, fallback("custom domain"))
-	}
-	label := subdomainHost.FindStringSubmatch(req.Host)[1]
-	if p.seller, err = subdomainSeller(ctx, conn, label); err != nil {
-		return err
-	}
-	if p.seller == nil {
-		// UserCustomDomainConstraint doesn't route a subdomain without a seller here.
-		return fallback("no seller")
+	// user_by_domain scopes the permalink to the subdomain's or custom domain's seller.
+	if m := subdomainHost.FindStringSubmatch(req.Host); m == nil {
+		if p.seller, err = customDomainSeller(ctx, conn, req.Host); err != nil {
+			return err
+		}
+		p.customDomain = true
+	} else {
+		if d, err := findCustomDomain(ctx, conn, req.Host); err != nil || d != nil {
+			return firstErr(err, fallback("custom domain"))
+		}
+		if p.seller, err = subdomainSeller(ctx, conn, m[1]); err != nil {
+			return err
+		}
+		if p.seller == nil {
+			// UserCustomDomainConstraint doesn't route a subdomain without a seller here.
+			return fallback("no seller")
+		}
 	}
 	id, _ := req.Param("id").(string)
 	prod, err := fetchLeniently(ctx, conn, id, p.seller.id)
@@ -57,7 +64,7 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return err
 	}
 
-	// check_if_needs_redirect: on the seller's own subdomain only the permalink can differ.
+	// check_if_needs_redirect: on the seller's own host only the permalink can differ.
 	if permalink := prod.generalPermalink(); permalink != id {
 		_, rawQuery, _ := strings.Cut(req.HTTP.RequestURI, "?")
 		for i := 0; i < len(rawQuery); i++ {
@@ -65,7 +72,7 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 				return fallback("redirect query")
 			}
 		}
-		target := web.Protocol(req.HTTP) + req.Host + "/l/" + web.EscapeSegment(permalink)
+		target := h.shortLinkURL(p, permalink)
 		if p.urlCode != "" {
 			target += "/" + web.EscapeSegment(p.urlCode)
 			// set_x_robots_tag_header runs before check_if_needs_redirect.
@@ -133,4 +140,32 @@ func firstErr(err, otherwise error) error {
 		return err
 	}
 	return otherwise
+}
+
+// customDomainSeller is user_by_domain on a seller's custom domain, which
+// UserCustomDomainConstraint routes here when its owner has a username.
+func customDomainSeller(ctx context.Context, conn *sql.DB, host string) (*user, error) {
+	d, err := findCustomDomain(ctx, conn, host)
+	switch {
+	case err != nil:
+		return nil, err
+	case d == nil:
+		return nil, fallback("no custom domain")
+	case d.productID.Valid:
+		// The product's own domain renders that product whatever the path names.
+		return nil, fallback("product custom domain")
+	case !d.userID.Valid:
+		return nil, fallback("no custom domain owner")
+	}
+	seller, err := userByID(ctx, conn, d.userID.Int64)
+	switch {
+	case err != nil:
+		return nil, err
+	case seller == nil || rails.Blank(seller.username.String):
+		return nil, fallback("no custom domain owner")
+	case seller.deletedAt.Valid:
+		// Rails 404s it in ensure_seller_is_not_deleted.
+		return nil, fallback("deleted custom domain owner")
+	}
+	return seller, nil
 }

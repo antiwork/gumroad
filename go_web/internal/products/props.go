@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 // productProps adds ProductPresenter::ProductProps#props, in its key order, for the product shapes
@@ -189,7 +190,7 @@ func analyticsData(u *user, j jsonData) *rails.RHash {
 }
 
 // authorByline is UserPresenter#author_byline_props with the request's
-// seller_custom_domain_url: on the seller's subdomain that is its root URL.
+// seller_custom_domain_url: the root URL of the subdomain or custom domain.
 func (h *handler) authorByline(p *page, v *view) any {
 	// User#profile_url adds recommended_by as url_for_product_page does.
 	return bylineProps(p.seller, v.avatarURL, h.sellerCustomDomainURL(p)+productPageQuery("", p.recommendedBy))
@@ -217,6 +218,21 @@ func (h *handler) userSubdomain(u *user) string {
 // trailing slash.
 func (h *handler) userProfileURL(u *user) string {
 	return h.c.Env.Protocol + "://" + h.userSubdomain(u)
+}
+
+// canonicalURL is product.long_url(host: custom_domain_host_for_meta(product)): on the seller's
+// own custom domain, the request's host.
+func (h *handler) canonicalURL(p *page, prod *product) string {
+	if p.customDomain {
+		return h.shortLinkURL(p, prod.generalPermalink())
+	}
+	return h.c.Env.ProductLongURL(sellerUsername(p.seller), prod.generalPermalink())
+}
+
+// shortLinkURL is short_link_url on the request's host, in default_url_options' protocol: https
+// even on a custom domain.
+func (h *handler) shortLinkURL(p *page, permalink string) string {
+	return h.c.Env.Protocol + "://" + p.Req.Host + "/l/" + web.EscapeSegment(permalink)
 }
 
 // sellerCustomDomainURL is root_url(protocol: PROTOCOL, host: request.host_with_port).

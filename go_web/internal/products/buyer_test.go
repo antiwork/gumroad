@@ -152,7 +152,9 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
 			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, viewer: c.buyer}
 			fromURL, errorCode, err := h.evaluateURLCode(p, prod, "loyal")
-			if err != nil || errorCode != c.errorCode || (fromURL == nil) != (c.errorCode != "") {
+			// The code comes back with any error the option scope can override.
+			codeLevel := c.errorCode == "invalid_offer" || c.errorCode == "inactive"
+			if err != nil || errorCode != c.errorCode || (fromURL == nil) != codeLevel {
 				t.Errorf("URL code: %v %q %v, want %q", fromURL != nil, errorCode, err, c.errorCode)
 			}
 			stored, err := h.loadOfferCode(t.Context(), prod, "offer_codes.id = ? LIMIT 1", codeID)

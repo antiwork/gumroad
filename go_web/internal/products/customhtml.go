@@ -65,7 +65,7 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	if err != nil {
 		return err
 	}
-	canonical := h.c.Env.ProductLongURL(sellerUsername(seller), prod.generalPermalink())
+	canonical := h.canonicalURL(p, prod)
 	data, err := h.structuredData(p, prod, v, canonical, social)
 	if err != nil {
 		return err

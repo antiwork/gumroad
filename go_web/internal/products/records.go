@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 // Purchase flag bits (has_flags in purchase.rb).
@@ -240,15 +242,65 @@ func isDigits(s string) bool {
 	return s != ""
 }
 
-// customDomainExists is CustomDomain.find_by_host for a host with a third-level label that
-// isn't www, as every host this port serves has.
-func customDomainExists(ctx context.Context, conn *sql.DB, host string) (bool, error) {
-	var one int
-	err := conn.QueryRowContext(ctx, "SELECT 1 FROM custom_domains WHERE custom_domains.deleted_at IS NULL AND custom_domains.domain = ? LIMIT 1", host).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+// customDomainRow is the custom domain CustomDomain.find_by_host finds, and what it points at.
+type customDomainRow struct {
+	userID, productID sql.NullInt64
+}
+
+// findCustomDomain is CustomDomain.find_by_host: the apex's row, else www's. find_by takes no
+// order, so a second row for the name it finds is one Rails could find instead.
+func findCustomDomain(ctx context.Context, conn *sql.DB, host string) (*customDomainRow, error) {
+	names, ok := web.CustomDomainNames(host)
+	switch {
+	case !ok:
+		return nil, fallback("custom domain suffix")
+	case len(names) == 0:
+		return nil, nil
 	}
-	return err == nil, err
+	rows, err := conn.QueryContext(ctx, "SELECT custom_domains.domain, custom_domains.user_id, custom_domains.product_id FROM custom_domains"+
+		" WHERE custom_domains.domain IN ("+placeholders(len(names))+") AND custom_domains.deleted_at IS NULL"+
+		" ORDER BY custom_domains.domain = ? DESC LIMIT 2", append(stringArgs(names), names[0])...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var found []customDomainRow
+	var domains []string
+	for rows.Next() {
+		var d customDomainRow
+		var domain string
+		if err := rows.Scan(&domain, &d.userID, &d.productID); err != nil {
+			return nil, err
+		}
+		found, domains = append(found, d), append(domains, domain)
+	}
+	switch {
+	case rows.Err() != nil:
+		return nil, rows.Err()
+	case len(found) == 0:
+		return nil, nil
+	case len(found) == 2 && strings.EqualFold(domains[0], domains[1]):
+		return nil, fallback("several custom domains for the host")
+	}
+	return &found[0], nil
+}
+
+func stringArgs(values []string) []any {
+	args := make([]any, len(values))
+	for i, v := range values {
+		args[i] = v
+	}
+	return args
+}
+
+// userByID is a belongs_to :user, which no alive scope narrows.
+func userByID(ctx context.Context, conn *sql.DB, id int64) (*user, error) {
+	u := &user{}
+	err := conn.QueryRowContext(ctx, "SELECT "+userColumns+" FROM users WHERE users.id = ? LIMIT 1", id).Scan(u.dest()...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return u, err
 }
 
 // fetchLeniently is Link.fetch_leniently(permalink, user: seller): a live match oldest
