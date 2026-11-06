@@ -111,7 +111,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if err != nil {
 		return err
 	}
-	if p.wanted && !wantedRendersPage(prod) {
+	if v.wanted != nil {
 		location, err := h.wantedCheckout(p, prod, v)
 		if err != nil {
 			return err
@@ -275,6 +275,8 @@ type view struct {
 	waitlistCount any
 	// editor is the editing payload's products, posts and wishlist_options, nil but for the seller.
 	editor *rails.RHash
+	// wanted is wanted=true's cart item; nil without one, or when show renders the page anyway.
+	wanted *wantedItem
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -374,10 +376,16 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.reviewStat, err = h.loadReviewStat(ctx, prod.id); err != nil {
 		return nil, err
 	}
-	if err := h.loadReputation(ctx, p, prod, v); err != nil {
+	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
 		return nil, err
 	}
-	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
+	if p.wanted {
+		// show redirects before it reads anything more.
+		if v.wanted, err = wantedCartItem(p, prod, v); err != nil || v.wanted != nil {
+			return v, err
+		}
+	}
+	if err := h.loadReputation(ctx, p, prod, v); err != nil {
 		return nil, err
 	}
 	if v.collaborator, err = h.collaboratorByline(ctx, p, prod); err != nil {
@@ -426,8 +434,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		v.recaptchaSiteKey = pc.RecaptchaSiteKey
 	}
 	// Past here only the page reads: product_props leaves the sections and the profile alone.
-	// wanted=true renders no page but a pay-what-you-want one.
-	if p.parent != nil || p.wanted && !wantedRendersPage(prod) {
+	if p.parent != nil {
 		return v, nil
 	}
 	if p.iframe {

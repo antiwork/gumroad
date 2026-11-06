@@ -49,6 +49,21 @@ func unportedMembership(prod *product) string {
 	return ""
 }
 
+// recurrenceNamed is the BasePrice::Recurrence of that name.
+func recurrenceNamed(name string) (recurrence, bool) {
+	i := slices.IndexFunc(allRecurrences, func(r recurrence) bool { return r.name == name })
+	if i < 0 {
+		return recurrence{}, false
+	}
+	return allRecurrences[i], true
+}
+
+// hasDefaultRecurrence is whether default_price_recurrence finds any alive price at the
+// subscription duration, rentals included.
+func hasDefaultRecurrence(rows []priceRow, duration string) bool {
+	return slices.ContainsFunc(rows, func(r priceRow) bool { return r.recurrence.Valid && r.recurrence.String == duration })
+}
+
 // tierRecurrences is the recurrences Link#recurrence_price_enabled? finds an alive buy price
 // at, in any currency. Each tier reaches the product afresh, so Rails asks MySQL, under the
 // column's collation; a recurrence that isn't exactly one of the names goes to Rails.
@@ -58,7 +73,7 @@ func tierRecurrences(ps prices) (map[string]bool, error) {
 		if r.isRental() || !r.recurrence.Valid {
 			continue
 		}
-		if !slices.ContainsFunc(allRecurrences, func(rec recurrence) bool { return rec.name == r.recurrence.String }) {
+		if _, ok := recurrenceNamed(r.recurrence.String); !ok {
 			return nil, fallback("price recurrence")
 		}
 		out[r.recurrence.String] = true
@@ -102,11 +117,8 @@ func (h *handler) loadRecurrences(ctx context.Context, prod *product, ps prices)
 		if r.isRental() || !r.recurrence.Valid {
 			continue
 		}
-		for _, rec := range allRecurrences {
-			if rec.name == r.recurrence.String {
-				enabled = append(enabled, enabledPrice{r, rec.months, rec.reminderDays})
-				break
-			}
+		if rec, ok := recurrenceNamed(r.recurrence.String); ok {
+			enabled = append(enabled, enabledPrice{r, rec.months, rec.reminderDays})
 		}
 	}
 	for i := range enabled {
@@ -121,8 +133,7 @@ func (h *handler) loadRecurrences(ctx context.Context, prod *product, ps prices)
 
 	out := &recurrences{}
 	duration, _ := prod.subscriptionDurationName()
-	// default_price_recurrence: any alive price at the subscription duration, rentals included.
-	if slices.ContainsFunc(ps.rows, func(r priceRow) bool { return r.recurrence.Valid && r.recurrence.String == duration }) {
+	if hasDefaultRecurrence(ps.rows, duration) {
 		out.def = duration
 	} else if len(enabled) > 0 {
 		out.def = enabled[0].row.recurrence.String
