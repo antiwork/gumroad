@@ -586,7 +586,6 @@ export const Checkout = ({
   // Keyed on the content so the context value only changes when the recap does.
   const payRecap = React.useMemo(
     () => (payRecapAmount == null ? null : { amount: payRecapAmount, paidLines }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- paidLinesKey stands in for paidLines
     [payRecapAmount, paidLinesKey],
   );
 
