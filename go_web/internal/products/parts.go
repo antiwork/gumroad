@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/antiwork/gumroad/go_web/internal/delivery"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 )
@@ -142,12 +143,10 @@ type productFile struct {
 	isbn                 sql.NullString
 }
 
-// ProductFile flag bits.
-const fileStreamOnly int64 = 1 << 3
-
-// streamOnly is stream_only? for the files that can be: a video, or anything the browser
-// reads. It is conservative, flagging any file with the bit.
-func (f productFile) streamOnly() bool { return f.flags&fileStreamOnly != 0 }
+// streamOnly is stream_only?.
+func (f productFile) streamOnly() bool {
+	return delivery.StreamOnly(f.filetype.String, f.filegroup.String, f.size, f.flags)
+}
 
 func (h *handler) aliveProductFiles(ctx context.Context, productID int64) ([]productFile, error) {
 	rows, err := h.c.DB.QueryContext(ctx, "SELECT `product_files`.`id`, `product_files`.`filetype`, `product_files`.`filegroup`,"+
