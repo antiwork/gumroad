@@ -2,7 +2,9 @@
 
 class CreateOfferCodesOwnershipVariants < ActiveRecord::Migration[7.1]
   # Renumbered from 20261225000006, which main's AI archive migration also took. A database that
-  # ran the old number already has this table.
+  # ran the old number already has this table (and treats the archive as run; nothing reads those
+  # tables). down keeps the table while that number is recorded, as on every database on main,
+  # because it can't tell which migration created it.
   SUPERSEDED_VERSION = "20261225000006"
 
   def up
@@ -21,7 +23,7 @@ class CreateOfferCodesOwnershipVariants < ActiveRecord::Migration[7.1]
 
   def down
     return unless table_exists?(:offer_codes_ownership_variants)
-    raise ActiveRecord::IrreversibleMigration if superseded_version_recorded?
+    return if superseded_version_recorded?
 
     drop_table :offer_codes_ownership_variants
   end
