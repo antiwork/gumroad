@@ -3,6 +3,7 @@ package products
 import (
 	"context"
 	"database/sql"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
@@ -27,23 +28,49 @@ func buyerCurrencyPreference(p *page) *string {
 	return &code
 }
 
-// checkPPP leaves ppp_details to Rails whenever it would be a discount.
-func (h *handler) checkPPP(ctx context.Context, p *page, prod *product, v *view) error {
+// loadPPP is Link#ppp_details, and returns ProductProps#ppp_price_cents.
+func (h *handler) loadPPP(ctx context.Context, p *page, prod *product, v *view) (*int64, error) {
 	if prod.is(productPPPDisabled) || !p.seller.is(userPPPEnabled) || v.geo == nil {
-		return nil
+		return nil, nil
 	}
 	minFactor := 0.0
 	if p.seller.pppLimit.Valid && p.seller.pppLimit.Int64 != 0 {
 		minFactor = 1 - float64(p.seller.pppLimit.Int64)/100.0
 	}
 	factor, ok := pppFactor(ctx, h.c.Page.Redis, v.geo.CountryCode)
+	if !ok || math.Signbit(factor) {
+		// [factor, min_ppp_factor].max can keep a negative factor, or a -0.0, typed as Ruby has it.
+		return nil, fallback("ppp factor")
+	}
+	if factor = max(factor, minFactor); factor >= 1 {
+		return nil, nil
+	}
+	cur, ok := currencies[prod.productCurrency()]
 	if !ok {
-		return fallback("ppp factor")
+		return nil, fallback("ppp currency")
 	}
-	if max(factor, minFactor) < 1 {
-		return fallback("ppp")
+	v.ppp = &pppDetails{country: v.geo.CountryName, factor: factor, minimumPrice: cur.minPrice}
+	price := v.priceCents
+	if price == nil || *price == 0 {
+		return nil, nil
 	}
-	return nil
+	// From the undiscounted price. Float#round rounds half away from zero, as math.Round does.
+	pppPrice := max(int64(math.Round(factor*float64(*price))), cur.minPrice)
+	return &pppPrice, nil
+}
+
+// pppDetails is Link#ppp_details when the factor is below 1.
+type pppDetails struct {
+	country      *string
+	factor       float64
+	minimumPrice int64
+}
+
+func (d *pppDetails) props() any {
+	if d == nil {
+		return nil
+	}
+	return rails.NewRHash().Sym("country", nullableString(d.country)).Sym("factor", d.factor).Sym("minimum_price", d.minimumPrice)
 }
 
 // remainingForSaleCount is Link#remaining_for_sale_count, its inventory read afresh.
