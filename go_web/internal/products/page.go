@@ -71,6 +71,15 @@ func (pc *PageConfig) cdnURL(s string) string {
 // the after_actions. Everything is read before anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
+	// show sends a coffee product to /coffee, which renders it. Of the before_actions left,
+	// prepare_product_page only sets meta tags and set_x_robots_tag_header marks a code;
+	// wanted and native are declined params.
+	if prod.nativeType == "coffee" {
+		if p.urlCode != "" {
+			w.Header().Set("X-Robots-Tag", "noindex")
+		}
+		return h.ctl.Redirect(w, p.Visit, "/coffee")
+	}
 	if reason, err := h.unportedShape(ctx, p, prod); err != nil || reason != "" {
 		return firstErr(err, fallback(reason))
 	}
@@ -216,15 +225,20 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	v.geo = h.lookup(v.ip)
 	v.detectedCurrency = buyerCurrencyForCountry(countryCode(v.geo))
 
-	// User#avatar_url.
-	avatar, err := pc.Avatars.URL(ctx, seller.id)
-	if errors.Is(err, storage.ErrUnported) {
-		return nil, fallback("avatar")
+	// User#avatar_url, the page's own for a featured product.
+	if p.parent != nil {
+		v.avatarURL = p.parent.avatarURL
+	} else {
+		avatar, err := pc.Avatars.URL(ctx, seller.id)
+		if errors.Is(err, storage.ErrUnported) {
+			return nil, fallback("avatar")
+		}
+		if err != nil {
+			return nil, err
+		}
+		v.avatarURL = avatar
 	}
-	if err != nil {
-		return nil, err
-	}
-	v.avatarURL = avatar
+	var err error
 
 	if v.prices, err = h.loadPrices(ctx, prod); err != nil {
 		return nil, err
@@ -328,6 +342,13 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.thirdPartyAnalytics, err = h.hasThirdPartyAnalytics(ctx, prod); err != nil {
 		return nil, err
 	}
+	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
+		v.recaptchaSiteKey = pc.RecaptchaSiteKey
+	}
+	// Past here only the page reads: product_props leaves the sections and the profile alone.
+	if p.parent != nil {
+		return v, nil
+	}
 	if v.showRatingsFilter, err = h.exists(ctx, "SELECT 1 FROM links WHERE links.user_id = ? AND links.purchase_disabled_at IS NULL"+
 		" AND links.banned_at IS NULL AND links.deleted_at IS NULL AND (links.flags & ?) != 0 LIMIT 1", seller.id, productDisplayReviews); err != nil {
 		return nil, err
@@ -338,9 +359,6 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	v.youtubeChannelID = nullString(channel)
-	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
-		v.recaptchaSiteKey = pc.RecaptchaSiteKey
-	}
 	if err := h.loadCustomStyles(ctx, p, v); err != nil {
 		return nil, err
 	}

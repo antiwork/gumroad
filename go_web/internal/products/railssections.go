@@ -102,9 +102,9 @@ func readCachedSection(entry any) (*cachedSection, bool) {
 	}
 	c.search = &catalogSearch{Total: total, Tags: tags, Filetypes: filetypes, IDs: make([]int64, 0, len(ids))}
 	for _, v := range ids {
-		text, ok := rubyString(v)
-		n, err := strconv.ParseInt(text, 10, 64)
-		if !ok || err != nil || strconv.FormatInt(n, 10) != text {
+		text, _ := rubyString(v)
+		n, ok := decimalID(text)
+		if !ok {
 			return nil, false
 		}
 		c.search.IDs = append(c.search.IDs, n)
