@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -252,6 +253,72 @@ func TestASignedOutVisitorGetsTheProductPage(t *testing.T) {
 	}
 	if w.Header().Get("X-Robots-Tag") != "" || w.Header().Get("Strict-Transport-Security") != "" {
 		t.Errorf("headers %v", w.Header())
+	}
+}
+
+// addCover gives the product an uploaded 2000×1000 JPEG cover, with its retina variant
+// processed when variant is true.
+func addCover(t *testing.T, variant bool) {
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_790_401), "link_id": productID, "guid": "cover-guid",
+		"position": 0, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_790_501), "key": "covers/original", "filename": "a.jpg",
+		"content_type": "image/jpeg", "metadata": `{"identified":true,"width":2000,"height":1000,"analyzed":true}`,
+		"service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
+	testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_790_601), "name": "file",
+		"record_type": "AssetPreview", "record_id": int64(1_790_401), "blob_id": int64(1_790_501), "created_at": testNow})
+	if !variant {
+		return
+	}
+	// Ruby's digest of {format: "jpg", resize_to_limit: [1005, nil]}.
+	testdb.Insert(t, conn, "active_storage_variant_records", map[string]any{"id": int64(1_790_701), "blob_id": int64(1_790_501),
+		"variation_digest": "WX6OQ3hf/g9WoAI2n/sUdFF1vxA="})
+	testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_790_502), "key": "covers/retina", "filename": "a.jpg",
+		"content_type": "image/jpeg", "service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
+	testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_790_602), "name": "image",
+		"record_type": "ActiveStorage::VariantRecord", "record_id": int64(1_790_701), "blob_id": int64(1_790_502), "created_at": testNow})
+}
+
+func TestAnUploadedCoverRendersItsRetinaVariant(t *testing.T) {
+	e := newTestEnv(t)
+	addCover(t, true)
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d, fallback %q, rails %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	body := w.Body.String()
+	product := pageProps(t, body)["product"].(map[string]any)
+	covers := product["covers"].([]any)
+	if len(covers) != 1 || product["main_cover_id"] != "cover-guid" {
+		t.Fatalf("covers %v, main %v", covers, product["main_cover_id"])
+	}
+	retina, original := "https://public-files.gumroad.com/covers/retina", "https://public-files.gumroad.com/covers/original"
+	for key, want := range map[string]any{"url": retina, "original_url": original, "id": "cover-guid", "type": "image",
+		"filetype": "jpg", "width": 670.0, "height": 335.0, "native_width": 2000.0, "native_height": 1000.0, "thumbnail": nil} {
+		if got := covers[0].(map[string]any)[key]; got != want {
+			t.Errorf("cover %s = %#v, want %#v", key, got, want)
+		}
+	}
+	for _, want := range []string{
+		`<meta property="og:image" content="` + retina + `"`,
+		`<meta property="twitter:card" content="summary_large_image"`,
+		`<link rel="preload" as="image" href="` + retina + `"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	// Rails.cache.fetch writes both URLs once the page renders.
+	if !slices.Contains(e.cache.writes, "attachment_1790601_original_url") || !slices.Contains(e.cache.writes, "attachment_1790601_retina_url") {
+		t.Errorf("cache writes %v", e.cache.writes)
+	}
+}
+
+func TestACoverWithoutItsRetinaVariantGoesToRails(t *testing.T) {
+	e := newTestEnv(t)
+	addCover(t, false)
+	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Header().Get("X-Go-Web-Fallback") != "retina variant unprocessed" {
+		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 }
 
