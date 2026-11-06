@@ -28,6 +28,9 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 	switch {
 	case prod.nativeType == "coffee":
 		return "coffee product", nil
+	case prod.nativeType == "call" && h.c.Page.CalendarHref == "":
+		// The calendar preload's vite_asset_path raises.
+		return "call calendar asset", nil
 	case seller.is(userProductPageStorefrontEnabled) && h.c.Page.Search == nil:
 		return "storefront", nil
 	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
@@ -41,10 +44,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "sales count", nil
 	case !prod.uniquePermalink.Valid:
 		return "no unique permalink", nil
-	}
-	switch prod.nativeType {
-	case "call", "commission":
-		return "native type " + prod.nativeType, nil
 	}
 	// account_level_refund_policy_enabled?: the seller's policy shows unless it's off for all.
 	if seller.is(userRefundPolicyEnabled) {

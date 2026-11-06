@@ -27,7 +27,6 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
-	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -49,7 +48,7 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 		// Rails would render nil for these.
 		return nil, fmt.Errorf("%w: OBFUSCATE_IDS_CIPHER_KEY or DROPBOX_PICKER_API_KEY is not set", errPagesOff)
 	}
-	manifest, err := vite.LoadDir(env.AssetHost(), dir)
+	manifest, err := d.viteManifest(dir)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errPagesOff, err)
 	}
@@ -188,6 +187,14 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		}
 		cancel()
 	}
+	manifest, err := d.viteManifest(getenv("VITE_MANIFEST_DIR"))
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errPagesOff, err)
+	}
+	calendar, err := manifest.AssetPath("components/ui/Calendar.tsx")
+	if err != nil {
+		d.logger.Warn("call product pages left to Rails", "reason", err.Error())
+	}
 	return &products.PageConfig{
 		Layout:  b.pages.Layout,
 		CSP:     b.pages.CSP,
@@ -203,6 +210,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 			{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
 		},
 		PublicStorageURL: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
+		CalendarHref:     calendar,
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,
 		Search:           search,

@@ -150,6 +150,16 @@ func importChunks(e *entry, seen map[string]bool) []*entry {
 
 func (m *Manifest) url(p string) string { return m.assetHost + p }
 
+// AssetPath is vite_asset_path for a name with its extension and a directory, which
+// resolve_entry_name looks up as it is.
+func (m *Manifest) AssetPath(name string) (string, error) {
+	e, ok := m.entries[name]
+	if !ok {
+		return "", fmt.Errorf("vite asset %q is not in the manifest", name)
+	}
+	return m.url(e.file), nil
+}
+
 // Tags is what one tag helper renders, and the links it adds to the Link header.
 type Tags struct {
 	HTML  string

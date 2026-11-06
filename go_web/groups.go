@@ -29,6 +29,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/robots"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
+	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 	"github.com/antiwork/gumroad/go_web/internal/webhooks"
 )
@@ -282,8 +283,21 @@ type dependencies struct {
 	proxy   *web.RailsProxy
 	geo     *geoip.Reader
 	geoRead bool
+	vite    *vite.Manifest
 	pages   *pageBase
 	closers []func() error
+}
+
+// viteManifest is VITE_MANIFEST_DIR's manifest, loaded once.
+func (d *dependencies) viteManifest(dir string) (*vite.Manifest, error) {
+	if d.vite == nil {
+		manifest, err := vite.LoadDir(d.env.AssetHost(), dir)
+		if err != nil {
+			return nil, err
+		}
+		d.vite = manifest
+	}
+	return d.vite, nil
 }
 
 // geoIP is the GEOIP Rails loads: nil when the mmdb is missing, and a path that is set
