@@ -230,7 +230,8 @@ class Checkout::DiscountsController < Sellers::BaseController
         pagination, offer_codes = pagy(offer_codes, page: e.pagy.last, limit: PER_PAGE)
       end
       # Only Variant has `variant_category` (a Sku reads its own link_id), so this can't be a nested include.
-      ActiveRecord::Associations::Preloader.new(records: offer_codes.flat_map(&:variants).grep(Variant), associations: :variant_category).call
+      options = offer_codes.flat_map { |offer_code| offer_code.variants + offer_code.ownership_variants }
+      ActiveRecord::Associations::Preloader.new(records: options.grep(Variant), associations: :variant_category).call
 
       [PagyPresenter.new(pagination).props, offer_codes]
     end

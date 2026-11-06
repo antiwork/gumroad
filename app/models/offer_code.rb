@@ -461,8 +461,7 @@ class OfferCode < ApplicationRecord
   end
 
   def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil)
-    reference = ownership_reference_products(product)
-    months = ownership_months_for(buyer, reference, ownership_variants) if existing_customers_only? || tiered?
+    months = ownership_months_for(buyer, ownership_reference_products(product), ownership_variants) if existing_customers_only? || tiered?
     return nil if existing_customers_only? && months.nil?
 
     if tiered?

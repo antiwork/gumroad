@@ -538,6 +538,28 @@ describe("Checkout discounts page", type: :system, js: true) do
     end
 
     describe "ownership-based discounts" do
+      it "keeps a deleted option the buyer must have purchased when the picker changes" do
+        category = create(:variant_category, link: product2, title: "Edition")
+        signed = create(:variant, variant_category: category, name: "Signed")
+        retired = create(:variant, variant_category: category, name: "Retired")
+        offer_code2.update!(existing_customers_only: true, ownership_variants: [signed, retired])
+        retired.mark_deleted!
+
+        visit checkout_discounts_path
+        within(find(:table_row, { "Discount" => "Discount 2" })) { click_on "Edit" }
+
+        expect(page).to have_text("Product 2 (Signed)")
+        expect(page).to have_text("Product 2 (deleted options)")
+        select_combo_box_option "Product 1", from: "Must have purchased"
+        page.scroll_to find_button("Save changes"), align: :center
+        click_on "Save changes"
+        expect(page).to have_alert(text: "Successfully updated discount!")
+
+        offer_code2.reload
+        expect(offer_code2.ownership_products).to eq([product1])
+        expect(offer_code2.ownership_variants).to contain_exactly(signed, retired)
+      end
+
       it "persists ownership products and tiers when combining both toggles, hiding the top-level Type input" do
         visit checkout_discounts_path
         click_on "New discount"

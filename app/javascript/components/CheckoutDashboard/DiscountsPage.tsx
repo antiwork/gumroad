@@ -215,31 +215,30 @@ export const findWholeProductScopeIds = (
 ): Set<string> =>
   new Set(selectedProducts.filter(({ id }) => optionIdsByProduct[id] === undefined).map(({ id }) => id));
 
-export type OwnershipScopeTarget = { productId: string; optionId?: string; kind: "product" | "option" | "deleted" };
+export type OwnershipScopeTarget = { productId: string; optionIds: string[]; kind: "product" | "option" | "deleted" };
 
 // The "Must have purchased" picker mirrors the product picker: an option row carries that option
-// into the per-product map, a product row stays a whole-product requirement.
+// into the per-product map, a product row stays a whole-product requirement, and adding one kind
+// replaces the other for that product (a whole-product row would make its option rows moot).
 export const ownershipScopesFromSelection = (
   selectedIds: string[],
   targets: Record<string, OwnershipScopeTarget>,
-  optionIdsByProduct: Record<string, string[]>,
+  addedId?: string,
 ): { productIds: string[]; optionIdsByProduct: Record<string, string[]> } => {
+  const added = addedId === undefined ? undefined : targets[addedId];
   const productIds: string[] = [];
-  const nextOptionIdsByProduct: Record<string, string[]> = {};
+  const optionIdsByProduct: Record<string, string[]> = {};
 
   for (const id of selectedIds) {
     const target = targets[id];
     if (!target) continue;
-    if (target.kind === "option" && target.optionId) {
-      (nextOptionIdsByProduct[target.productId] ??= []).push(target.optionId);
-    } else if (target.kind === "deleted") {
-      nextOptionIdsByProduct[target.productId] = optionIdsByProduct[target.productId] ?? [];
-    } else {
-      productIds.push(target.productId);
-    }
+    if (added && target.productId === added.productId && (target.kind === "product") !== (added.kind === "product"))
+      continue;
+    if (target.kind === "product") productIds.push(target.productId);
+    else (optionIdsByProduct[target.productId] ??= []).push(...target.optionIds);
   }
 
-  return { productIds, optionIdsByProduct: nextOptionIdsByProduct };
+  return { productIds, optionIdsByProduct };
 };
 
 export type DiscountsPageProps = {
@@ -1077,12 +1076,12 @@ const Form = ({
   const wholeOwnershipProductIds = findWholeProductScopeIds(ownershipProducts, ownershipOptionIdsByProduct);
   const ownershipScopeTargets: Record<string, OwnershipScopeTarget> = {};
   const ownershipProductOption = (product: Product): Option => {
-    ownershipScopeTargets[product.id] = { productId: product.id, kind: "product" };
+    ownershipScopeTargets[product.id] = { productId: product.id, optionIds: [], kind: "product" };
     return { id: product.id, label: product.name };
   };
   const ownershipOptionRow = (product: Product, option: { id: string; name: string }): Option => {
     const id = `${product.id}:${option.id}`;
-    ownershipScopeTargets[id] = { productId: product.id, optionId: option.id, kind: "option" };
+    ownershipScopeTargets[id] = { productId: product.id, optionIds: [option.id], kind: "option" };
     return {
       id,
       label: `${product.name} (${option.name})`,
@@ -1095,15 +1094,17 @@ const Form = ({
       ownershipProductOption(product),
       ...(product.options ?? []).map((option) => ownershipOptionRow(product, option)),
     ]);
-  const ownershipOptionRows = Object.keys(ownershipOptionIdsByProduct).flatMap((productId) => {
-    const optionIds = ownershipOptionIdsByProduct[productId] ?? [];
+  // Past buyers of a since-deleted option still qualify, so its saved id keeps a chip of its own
+  // instead of being dropped the next time the picker changes.
+  const ownershipOptionRows = Object.entries(ownershipOptionIdsByProduct).flatMap(([productId, optionIds]) => {
     const product = products.find(({ id }) => id === productId);
-    if (!product) return [];
-    const eligibleOptions = (product.options ?? []).filter(({ id }) => optionIds.includes(id));
-    if (eligibleOptions.length > 0) return eligibleOptions.map((option) => ownershipOptionRow(product, option));
+    const liveOptions = (product?.options ?? []).filter(({ id }) => optionIds.includes(id));
+    const rows = product ? liveOptions.map((option) => ownershipOptionRow(product, option)) : [];
+    const missingOptionIds = optionIds.filter((optionId) => !liveOptions.some(({ id }) => id === optionId));
+    if (missingOptionIds.length === 0) return rows;
     const id = `${productId}:deleted`;
-    ownershipScopeTargets[id] = { productId, kind: "deleted" };
-    return [{ id, label: `${product.name} (deleted options)` }];
+    ownershipScopeTargets[id] = { productId, optionIds: missingOptionIds, kind: "deleted" };
+    return [...rows, { id, label: `${product?.name ?? "Deleted product"} (deleted options)` }];
   });
   const selectedOwnershipScopes = [...ownershipProducts.map(ownershipProductOption), ...ownershipOptionRows];
 
@@ -1611,11 +1612,11 @@ const Form = ({
                     isMulti
                     isClearable
                     placeholder="Choose products or options"
-                    onChange={(selected) => {
+                    onChange={(selected, { action, option }) => {
                       const next = ownershipScopesFromSelection(
                         selected.map(({ id }) => id),
                         ownershipScopeTargets,
-                        ownershipOptionIdsByProduct,
+                        action === "select-option" ? option?.id : undefined,
                       );
                       setOwnershipProductIds({ value: next.productIds });
                       setOwnershipOptionIdsByProduct(next.optionIdsByProduct);
