@@ -32,7 +32,6 @@ const (
 	// nginx's proxy_next_upstream_timeout: a first attempt can spend it before its 504.
 	railsNginxRetryBudget = 10 * time.Second
 	maxReplayBody         = 64 << 10
-	maxDrainBody          = 64 << 10
 )
 
 // RailsProxy hands a request to a Rails web host unchanged, for the cases a ported action
@@ -249,7 +248,7 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return res, err
 	}
 	if res != nil {
-		io.Copy(io.Discard, io.LimitReader(res.Body, maxDrainBody))
+		// Unread: a host stalling mid-body would hold up the retry, and it's marked down anyway.
 		res.Body.Close()
 	}
 	var body io.ReadCloser

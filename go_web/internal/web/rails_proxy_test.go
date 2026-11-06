@@ -196,6 +196,32 @@ func TestRailsProxyPassesOnA502ThatMayHaveReachedPuma(t *testing.T) {
 	}
 }
 
+// A stopping host that sends its 502's headers and then stalls can't hold up the retry.
+func TestRailsProxyRetriesWithoutWaitingOnAStalledBody(t *testing.T) {
+	release := make(chan struct{})
+	stalled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Upstream-Bytes-Sent", "0")
+		w.WriteHeader(http.StatusBadGateway)
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer stalled.Close()
+	defer close(release)
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer good.Close()
+	tp := newTestProxy(t, addr(stalled), addr(good))
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() { done <- tp.forward(httptest.NewRequest("GET", "/x", nil)) }()
+	select {
+	case w := <-done:
+		if w.Code != 200 {
+			t.Errorf("%d", w.Code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the retry waited on the stalled body")
+	}
+}
+
 // nginx's 504 when Puma's accept queue is full and the connect times out.
 func TestRailsProxyRetriesA504ThatSentPumaNothing(t *testing.T) {
 	var hits int
