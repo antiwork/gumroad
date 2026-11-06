@@ -182,8 +182,7 @@ func rubyNumber(n json.Number) (string, error) {
 	return JSONFloat(f)
 }
 
-// JSONFloat is the json gem's fpconv_dtoa and emit_digits. It takes Go's shortest digits
-// where fpconv runs Grisu2, which can, rarely, pick a longer round-tripping string.
+// JSONFloat is the json gem's fpconv_dtoa and emit_digits.
 func JSONFloat(f float64) (string, error) {
 	if math.IsNaN(f) || math.IsInf(f, 0) {
 		return "", fmt.Errorf("%v not allowed in JSON", f)
@@ -195,9 +194,11 @@ func JSONFloat(f float64) (string, error) {
 	if f == 0 {
 		return sign + "0.0", nil
 	}
-	digits, exp10 := shortestDigits(f)
+	var buf [18]byte
+	raw, k := grisu2(f, buf[:0])
+	digits := string(raw)
 	ndigits := len(digits)
-	k := exp10 - (ndigits - 1)
+	exp10 := k + ndigits - 1
 	exp := exp10
 	if exp < 0 {
 		exp = -exp
