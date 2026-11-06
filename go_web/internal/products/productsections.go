@@ -449,6 +449,11 @@ func (p *page) absorb(fp *page) {
 	p.cacheWrites = append(p.cacheWrites, fp.cacheWrites...)
 	fp.cacheWrites = nil
 	p.warmReputation = p.warmReputation || fp.warmReputation
+	for _, id := range fp.retinaPushes {
+		if !slices.Contains(p.retinaPushes, id) {
+			p.retinaPushes = append(p.retinaPushes, id)
+		}
+	}
 	if p.settleable == nil {
 		p.settleable = fp.settleable
 	}

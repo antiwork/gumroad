@@ -16,7 +16,9 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/html4"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 // maxDimension keeps a width or height where Ruby's and Go's to_i and Float arithmetic agree;
@@ -36,7 +38,7 @@ var variableTypes = []string{"image/png", "image/gif", "image/jpeg", "image/tiff
 // cover is one of display_asset_previews: an uploaded image or video, or an embedded player.
 type cover struct {
 	guid                          sql.NullString
-	attachmentID                  int64
+	previewID, attachmentID       int64
 	blobID                        int64
 	key, filename                 string
 	contentType                   string
@@ -90,8 +92,7 @@ type coverOrder struct {
 }
 
 // loadCovers is display_asset_previews with each one's URLs. Any other cover goes to Rails:
-// an Unsplash one with a file or player, a video without a persisted poster (Rails may enqueue one), or an image
-// whose retina variant isn't processed yet (url_from_file enqueues it).
+// an Unsplash one with a file or player, or a video without a persisted poster (Rails may enqueue one).
 func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*cover, error) {
 	// One row per attachment, through the attachments' unique index; a preview on two rows
 	// has more than one file.
@@ -150,7 +151,7 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 			return nil, fallback("cover attachment")
 		default:
 			lastPreviewID = previewID
-			c.attachmentID, c.blobID, c.key, c.filename, c.contentType = attID.Int64, blobID.Int64, key.String, filename.String, contentType.String
+			c.previewID, c.attachmentID, c.blobID, c.key, c.filename, c.contentType = previewID, attID.Int64, blobID.Int64, key.String, filename.String, contentType.String
 			// display_type, and should_post_process? for an image.
 			switch {
 			case strings.HasPrefix(c.contentType, "image"):
@@ -258,7 +259,22 @@ func (h *handler) originalCoverURL(ctx context.Context, p *page, c *cover) (stri
 	return pc.cdnURL(original), err
 }
 
-// retinaCoverURL is url_from_file(style: :retina) for a processed variant.
+// retinaVariantJob is ProcessAssetPreviewRetinaWorker's sidekiq_options.
+var retinaVariantJob = sidekiq.Options{Class: "ProcessAssetPreviewRetinaWorker", Queue: "low", Retry: 3}
+
+// pushRetinaVariants is enqueue_retina_variant_process for each cover whose URL the page read.
+func (h *handler) pushRetinaVariants(ctx context.Context, p *page) error {
+	for _, id := range p.retinaPushes {
+		if _, _, err := h.c.Page.Sidekiq.PushUntilExecuted(context.WithoutCancel(ctx), retinaVariantJob, id); err != nil {
+			web.Logger(p.Req.HTTP).Warn("retina variant push failed", "error", err.Error())
+			return fallback("retina variant push")
+		}
+	}
+	return nil
+}
+
+// retinaCoverURL is url_from_file(style: :retina). An unprocessed variant enqueues its
+// processing, which the page pushes once it renders, and serves the original meanwhile.
 func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string, error) {
 	pc := h.c.Page
 	if !slices.Contains(variableTypes, c.contentType) {
@@ -270,8 +286,20 @@ func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string
 	}
 	digest := storage.VariantDigest(c.filename, c.contentType, c.width.minWith(coverRetinaWidth).value(), nil)
 	variantKey, found, err := h.variantKey(ctx, c.blobID, digest)
-	if err != nil || !found {
-		return "", firstErr(err, fallback("retina variant unprocessed"))
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		if h.c.Page.Sidekiq == nil {
+			return "", fallback("retina variant push")
+		}
+		if !slices.Contains(p.retinaPushes, c.previewID) {
+			p.retinaPushes = append(p.retinaPushes, c.previewID)
+		}
+		if c.originalURL != "" {
+			return c.originalURL, nil
+		}
+		return h.originalCoverURL(ctx, p, c)
 	}
 	if !variantKey.Valid {
 		return "", fallback("retina variant image")
