@@ -173,6 +173,28 @@ func TestAnOembedCoverRendersItsPlayer(t *testing.T) {
 	}
 }
 
+// A player without a safe thumbnail URL has a nil oembed_thumbnail_url: its twitter:image tag
+// carries no content, in the HTML and in the head's meta JSON.
+func TestAnOembedCoverWithoutAThumbnail(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	oembed := strings.Replace(psychOembed, "thumbnail_url: \" https://i.ytimg.com/vi/abc123/hqdefault.jpg\\n\"", "thumbnail_url: javascript:x", 1)
+	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_793_501), "link_id": productID, "guid": "player-guid",
+		"position": 0, "oembed": oembed, "created_at": testNow, "updated_at": testNow})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("status %d, fallback %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	body := w.Body.String()
+	for _, want := range []string{`<meta property="twitter:card" content="player"`,
+		`<meta property="twitter:image" inertia="meta-property-twitter-image">`,
+		`{"tagName":"meta","headKey":"meta-property-twitter-image","property":"twitter:image"}`} {
+		if !strings.Contains(html.UnescapeString(body), want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+}
+
 func TestAnOembedCoverThisPortCannotReadGoesToRails(t *testing.T) {
 	for name, raw := range map[string]string{
 		"a Ruby tag":     "--- !ruby/hash:ActiveSupport::HashWithIndifferentAccess\nhtml: x\ninfo:\n  width: 1\n",
