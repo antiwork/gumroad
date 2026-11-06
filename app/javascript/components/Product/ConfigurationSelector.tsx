@@ -806,15 +806,19 @@ export const ConfigurationSelector = React.forwardRef<
     (selectedOption && selection.recurrence
       ? selectedOption.recurrence_price_values?.[selection.recurrence]?.suggested_price_cents
       : product.pwyw?.suggested_price_cents) ?? 0;
-  // Only the code, and only when the base price is not PPP-priced: that is when CtaButton undoes the code.
-  const hintDiscount = pwywAmountIsAfterDiscount && !pppDiscounted ? applicableDiscount : null;
+  // CtaButton undoes PPP when PPP priced the selection, and the code otherwise, so the hint applies the same one.
+  const hintDiscount = discountForSelection ? discountForSelection(selection) : applicableDiscount;
   const suggestedPriceCents = Math.max(
-    computeSelectionDiscountedPrice(
-      configuredSuggestedPriceCents,
-      hintDiscount,
-      { ...product, ppp_details: null },
-      selection.quantity,
-    ).value,
+    !pwywAmountIsAfterDiscount
+      ? configuredSuggestedPriceCents
+      : pppDiscounted
+        ? computeDiscountedPrice(configuredSuggestedPriceCents, null, product).value
+        : computeSelectionDiscountedPrice(
+            configuredSuggestedPriceCents,
+            hintDiscount,
+            { ...product, ppp_details: null },
+            selection.quantity,
+          ).value,
     pwywMinimumPriceCents ?? discountedPriceCents,
   );
   const usePreexistingPrice =

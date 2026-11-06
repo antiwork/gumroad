@@ -419,4 +419,43 @@ describe("SubscriptionsManage pay-what-you-want hint", () => {
 
     expect(pwywInput().getAttribute("placeholder")).toBe("24+");
   });
+
+  it("drops the code from the hint when fewer seats no longer meet its minimum", () => {
+    const discount = {
+      type: "percent",
+      percents: 30,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: 2,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    };
+    const props = pwywProps(discount);
+    renderManage({
+      ...props,
+      product: {
+        ...props.product,
+        is_multiseat_license: true,
+        recurrences: [{ id: "price-monthly", recurrence: "monthly", price_cents: 1000 }],
+        options: [
+          {
+            id: "option-1",
+            name: "Tier",
+            quantity_left: null,
+            description: null,
+            price_difference_cents: null,
+            recurrence_price_values: { monthly: { price_cents: 1000, suggested_price_cents: 2400 } },
+            is_pwyw: true,
+            duration_in_minutes: null,
+          },
+        ],
+      },
+      subscription: { ...props.subscription, quantity: 2 },
+    });
+    expect(pwywInput().getAttribute("placeholder")).toBe("16.80+");
+
+    fireEvent.change(screen.getByLabelText("Seats"), { target: { value: "1" } });
+
+    expect(pwywInput().getAttribute("placeholder")).toBe("24+");
+  });
 });
