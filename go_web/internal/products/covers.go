@@ -254,6 +254,13 @@ func (c *cover) filetype() any {
 	return parts[len(parts)-1]
 }
 
+func nullInt(n sql.NullInt64) any {
+	if !n.Valid {
+		return nil
+	}
+	return n.Int64
+}
+
 func nullString(s sql.NullString) any {
 	if !s.Valid {
 		return nil

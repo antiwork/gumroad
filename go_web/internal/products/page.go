@@ -150,6 +150,7 @@ type view struct {
 	mainSectionIndex        any
 	refundPolicy            any
 	currency                *currencyDisplay
+	variants                *variants
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -218,7 +219,10 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if err := h.loadReputation(ctx, p, prod, v); err != nil {
 		return nil, err
 	}
-	if v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod); err != nil {
+	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
+		return nil, err
+	}
+	if v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod, v.variants); err != nil {
 		return nil, err
 	}
 	if err := h.loadDescription(ctx, prod, v); err != nil {
@@ -227,7 +231,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.refundPolicy, err = h.loadRefundPolicy(ctx, prod); err != nil {
 		return nil, err
 	}
-	if v.fileSummaries, err = h.fileSummaries(ctx, prod, v.files); err != nil {
+	if v.fileSummaries, err = h.fileSummaries(ctx, prod, v.files, v.variants); err != nil {
 		return nil, err
 	}
 	if v.attributes, err = attributesProps(v.productJSON, prod, v.files); err != nil {
