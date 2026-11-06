@@ -554,8 +554,12 @@ module Purchase::Blockable
       )
     end
 
-    card_cb_count = stripe_fingerprint.present? ? chargebacked.where(stripe_fingerprint:).count : 0
-    guid_cb_count = browser_guid.present? ? chargebacked.where(browser_guid:).count : 0
+    # A dispute also charges back the gift receiver row and bundle child rows, which share the
+    # browser guid, so count only the charged purchase, not its gift or bundle legs.
+    disputed_purchases = chargebacked.not_is_gift_receiver_purchase.not_is_bundle_product_purchase
+    # Off Stripe, charge_processor_fingerprint is the masked card_visual, not the counted fingerprint.
+    card_cb_count = stripe_charge_processor? && stripe_fingerprint.present? ? disputed_purchases.where(stripe_fingerprint:).count : 0
+    guid_cb_count = browser_guid.present? ? disputed_purchases.where(browser_guid:).count : 0
     card_tripped = card_cb_count >= MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK && !blocked_by_charge_processor_fingerprint?
     guid_tripped = guid_cb_count >= MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK && !blocked_by_browser_guid?
     return unless card_tripped || guid_tripped
@@ -563,8 +567,9 @@ module Purchase::Blockable
     block_by_charge_processor_fingerprint!(by_user_id: GUMROAD_ADMIN_ID) if card_tripped
     block_by_browser_guid!(by_user_id: GUMROAD_ADMIN_ID) if guid_tripped
 
+    blocked = [("card" if card_tripped), ("browser" if guid_tripped)].compact.join(" and ")
     create_blocked_buyer_comments!(
-      comment_content: "Auto-blocked: #{card_cb_count} chargebacks on this card, #{guid_cb_count} on this browser, across all emails and accounts"
+      comment_content: "Auto-blocked #{blocked}: #{card_cb_count} chargebacks on this card, #{guid_cb_count} on this browser, across all emails and accounts"
     )
   end
 

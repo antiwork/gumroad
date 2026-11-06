@@ -2517,7 +2517,7 @@ describe Purchase::Blockable do
       expect(purchase.blocked_by_browser_guid?).to be true
       expect(purchase.blocked_by_email?).to be false
       expect(purchase.blocked_by_ip_address?).to be false
-      expect(purchase.comments.last.content).to include("5 chargebacks on this card")
+      expect(purchase.comments.last.content).to start_with("Auto-blocked card and browser: 5 chargebacks on this card")
     end
 
     it "blocks only the browser when only the guid reaches 5" do
@@ -2527,6 +2527,23 @@ describe Purchase::Blockable do
 
       expect(purchase.blocked_by_browser_guid?).to be true
       expect(purchase.blocked_by_charge_processor_fingerprint?).to be false
+      expect(purchase.comments.last.content).to start_with("Auto-blocked browser:")
+    end
+
+    [:is_gift_receiver_purchase, :is_bundle_product_purchase].each do |flag|
+      it "does not count the charged-back #{flag} rows that share the disputed purchase's browser" do
+        chargeback_rows(3, browser_guid: "guid-repeat")
+        3.times { create(:purchase, flag => true).update_columns(chargeback_date: Time.current, browser_guid: "guid-repeat") }
+
+        expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
+      end
+    end
+
+    it "does not count the card off Stripe, where the blocked value is the masked card" do
+      purchase.update_columns(charge_processor_id: BraintreeChargeProcessor.charge_processor_id, browser_guid: "guid-other")
+      chargeback_rows(5, stripe_fingerprint: "fp_repeat")
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
     end
 
     it "does not block at 4 chargebacks per card" do
