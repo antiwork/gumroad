@@ -29,6 +29,17 @@ type offerCode struct {
 	hasVariants, excludesProduct, forProduct bool
 	// anyExcluded is excluded_products.present?.
 	anyExcluded bool
+	// optionIDs is option_ids_by_product and scope the code's options on the product, both read
+	// for a code with variants; an empty scope leaves every option in. ownerless is an option
+	// without an owning product, which optionIDs leaves out.
+	optionIDs *rails.RHash
+	scope     map[int64]bool
+	ownerless bool
+}
+
+// excludes is !applicable_to_variant?. A page without options has none to leave out.
+func (c *offerCode) excludes(o *variantOption) bool {
+	return o != nil && len(c.scope) > 0 && !c.scope[o.id]
 }
 
 // OfferCode's once_per_cart flag bit.
@@ -89,6 +100,77 @@ func (h *handler) loadOfferCodes(ctx context.Context, prod *product, condition s
 	return codes, rows.Err()
 }
 
+// codeOptionsStatement is OfferCode#variants' statement as Rails writes it, whose row order
+// option_ids_by_product keeps.
+const codeOptionsStatement = "SELECT `base_variants`.* FROM `base_variants` INNER JOIN `offer_codes_variants`" +
+	" ON `base_variants`.`id` = `offer_codes_variants`.`variant_id` WHERE `offer_codes_variants`.`offer_code_id` = ?"
+
+// loadCodeOptions reads a code's option_ids_by_product, grouped by each option's
+// owning_product_id, and its scope on prod, restricted_variants_for.
+func (h *handler) loadCodeOptions(ctx context.Context, prod *product, c *offerCode) error {
+	type option struct {
+		id                 int64
+		kind               sql.NullString
+		categoryID, linkID sql.NullInt64
+	}
+	var options []*option
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		o := &option{}
+		cols["id"], cols["type"], cols["variant_category_id"], cols["link_id"] = &o.id, &o.kind, &o.categoryID, &o.linkID
+		return func() { options = append(options, o) }
+	}, codeOptionsStatement, c.id)
+	if err != nil || len(options) == 0 {
+		return err
+	}
+	var categoryIDs []int64
+	for _, o := range options {
+		if o.kind.String == "Variant" && o.categoryID.Valid {
+			categoryIDs = append(categoryIDs, o.categoryID.Int64)
+		}
+	}
+	categoryProducts := map[int64]sql.NullInt64{}
+	if len(categoryIDs) > 0 {
+		err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+			var id int64
+			var linkID sql.NullInt64
+			cols["id"], cols["link_id"] = &id, &linkID
+			return func() { categoryProducts[id] = linkID }
+		}, "SELECT id, link_id FROM variant_categories WHERE id IN ("+placeholders(len(categoryIDs))+")", int64Args(categoryIDs)...)
+		if err != nil {
+			return err
+		}
+	}
+	var order []int64
+	byProduct := map[int64][]any{}
+	c.scope = map[int64]bool{}
+	for _, o := range options {
+		owner := o.linkID
+		switch o.kind.String {
+		case "Variant":
+			owner = categoryProducts[o.categoryID.Int64]
+		case "Sku":
+		default:
+			return fallback("offer code option type")
+		}
+		if !owner.Valid {
+			c.ownerless = true
+			continue
+		}
+		if _, ok := byProduct[owner.Int64]; !ok {
+			order = append(order, owner.Int64)
+		}
+		byProduct[owner.Int64] = append(byProduct[owner.Int64], h.c.IDs.Encrypt(o.id))
+		if owner.Int64 == prod.id {
+			c.scope[o.id] = true
+		}
+	}
+	c.optionIDs = rails.NewRHash()
+	for _, id := range order {
+		c.optionIDs.Str(h.c.IDs.Encrypt(id), byProduct[id])
+	}
+	return nil
+}
+
 // codeProductIDs is the external ids of a code's products or excluded_products, table being
 // their join table, as OfferCodeDiscountComputingService's includes preloads them: in the join
 // rows' order, which is whatever MySQL's plan for Rails' own unordered statement gives.
@@ -145,8 +227,6 @@ func (c *offerCode) unportedDiscount() string {
 		return "tiered offer code"
 	case c.amountCents.Valid == c.amountPercentage.Valid:
 		return "offer code amount"
-	case c.hasVariants:
-		return "offer code variants"
 	}
 	return ""
 }
@@ -261,9 +341,11 @@ type offerDiscount struct {
 	// echoes: the URL's as typed, else the stored one.
 	code       *offerCode
 	resultCode string
-	// invalid is the URL code's error_code when no code applies.
-	invalid string
-	label   any
+	// urlError is the URL code's error_code, "" when it applies or there is none. urlRow is that
+	// code when it applies, or when an option outside its scope would get option_not_eligible.
+	urlError string
+	urlRow   *offerCode
+	label    any
 	// products is the applying code's product_ids, else its excluded_product_ids when universal.
 	products []any
 	// cents is a fixed code's discount cents, which a once-per-cart code allocates.
@@ -353,14 +435,13 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		switch {
 		case err != nil:
 			return nil, err
-		case fromURL != nil && d.code != nil:
+		case errorCode == "" && d.code != nil:
 			// met_discount_conditions? and comparison_amount weigh the two.
 			return nil, fallback("offer code comparison")
-		case fromURL != nil:
+		case errorCode == "":
 			d.code, d.resultCode = fromURL, d.urlCode
-		case d.code == nil:
-			d.invalid = errorCode
 		}
+		d.urlError, d.urlRow = errorCode, fromURL
 	}
 	if d.code != nil && auto != nil {
 		// sale_label: the winning code is the auto-applied one.
@@ -377,6 +458,16 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_products", c.id)
 	case c.anyExcluded:
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_excluded_products", c.id)
+	}
+	if c := d.code; err == nil && c != nil && c.hasVariants {
+		if err = h.loadCodeOptions(ctx, prod, c); err == nil && c.ownerless {
+			// option_ids_by_product keys it by ObfuscateIds.encrypt(nil).
+			err = fallback("offer code option product")
+		}
+	}
+	// An invalid URL code's scope only shows on an option the applying code leaves out.
+	if c := d.urlRow; err == nil && c != nil && c != d.code && c.hasVariants && (d.code == nil || len(d.code.scope) > 0) {
+		err = h.loadCodeOptions(ctx, prod, c)
 	}
 	if c := d.code; err == nil && c != nil {
 		d.cents = c.amountCents.Int64
@@ -420,7 +511,8 @@ func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (bool,
 }
 
 // evaluateURLCode is BestOfferCodeService#evaluate_code for the URL's code: the code that
-// gives the visitor a discount, else the error_code it gets.
+// gives the visitor a discount, else the error_code it gets, with the code when the error
+// comes after the option scope.
 func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerCode, string, error) {
 	ctx, now := p.Ctx, p.Req.Now
 	id, err := h.findOfferCode(ctx, prod, typed)
@@ -437,12 +529,8 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	if reason := c.unportedLookup(prod); reason != "" {
 		return nil, "", fallback(reason)
 	}
-	switch {
-	case c.inactive(now):
+	if c.inactive(now) {
 		return nil, "inactive", nil
-	case c.hasVariants:
-		// The options' quotes check each one against the code's scope.
-		return nil, "", fallback("offer code variants")
 	}
 	resolved, err := h.resolvesForBuyer(ctx, prod, c, p.viewer)
 	switch {
@@ -450,15 +538,15 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 		return nil, "", err
 	case !resolved && c.existingOnly:
 		// A legacy code for both new and existing customers reports this one first.
-		return nil, "not_existing_customer", nil
+		return c, "not_existing_customer", nil
 	case !resolved:
-		return nil, "not_new_customer", nil
+		return c, "not_new_customer", nil
 	}
 	if reason := c.unportedDiscount(); reason != "" {
 		return nil, "", fallback(reason)
 	}
 	if shortfall, err := h.usesShortfall(p, c); err != nil || shortfall != "" {
-		return nil, shortfall, err
+		return c, shortfall, err
 	}
 	return c, "", nil
 }
@@ -518,10 +606,7 @@ func (h *handler) findOfferCode(ctx context.Context, prod *product, code string)
 func (d *offerDiscount) resultProps() any {
 	c := d.code
 	if c == nil {
-		if d.invalid == "" {
-			return nil
-		}
-		return rails.NewRHash().Sym("valid", false).Sym("error_code", d.invalid)
+		return invalidResult(d.urlError)
 	}
 	discount := rails.NewRHash()
 	if c.amountCents.Valid {
@@ -541,6 +626,9 @@ func (d *offerDiscount) resultProps() any {
 	if c.universal && len(d.products) > 0 {
 		discount.Sym("excluded_product_ids", d.products)
 	}
+	if c.optionIDs != nil {
+		discount.Sym("option_ids_by_product", c.optionIDs)
+	}
 	if c.newOnly {
 		// Display only; checkout decides.
 		discount.Sym("new_customers_only", true)
@@ -553,8 +641,8 @@ func (d *offerDiscount) resultProps() any {
 }
 
 // selectionDiscounts is selection_discounts. With no code in the URL and no default code it
-// has no options; otherwise each option the buyer can pick, rented or bought, shares the one
-// result, since no code here is scoped to options and only one can apply.
+// has no options; otherwise each option the buyer can pick, rented or bought, gets the one
+// result, as only one code can apply, unless the option is outside that code's scope.
 func selectionDiscounts(prod *product, v *view, result any) *rails.RHash {
 	urlCode := presence(v.discount.urlCode)
 	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", int64(1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
@@ -562,16 +650,15 @@ func selectionDiscounts(prod *product, v *view, result any) *rails.RHash {
 	if !v.discount.listed && urlCode == nil {
 		return s.Sym("options", rails.NewRHash()).Sym("rent_options", nil)
 	}
-	entry := rails.NewRHash().Sym("discount_code", result).Sym("sale_label", v.discount.label)
 	quotes := func() *rails.RHash {
 		out := rails.NewRHash()
 		if len(v.variants.options) == 0 {
-			return out.Str("", entry)
+			return out.Str("", v.discount.optionEntry(nil, result))
 		}
 		for _, o := range v.variants.options {
 			// cart_item prices another option in a closed tier's place.
 			if !o.closed {
-				out.Str(o.externalID, entry)
+				out.Str(o.externalID, v.discount.optionEntry(o, result))
 			}
 		}
 		return out
@@ -581,6 +668,30 @@ func selectionDiscounts(prod *product, v *view, result any) *rails.RHash {
 		rentOptions = quotes()
 	}
 	return s.Sym("options", quotes()).Sym("rent_options", rentOptions)
+}
+
+// optionEntry is an option's quote: BestOfferCodeService#result with that option. The computing
+// service drops an option outside the code's scope before its buyer and usage checks, so the URL
+// code then says option_not_eligible and a default gives nothing.
+func (d *offerDiscount) optionEntry(o *variantOption, result any) *rails.RHash {
+	entry := rails.NewRHash()
+	switch {
+	case d.code != nil && !d.code.excludes(o):
+		return entry.Sym("discount_code", result).Sym("sale_label", d.label)
+	case d.urlRow != nil && d.urlRow.excludes(o):
+		entry.Sym("discount_code", invalidResult("option_not_eligible"))
+	default:
+		entry.Sym("discount_code", invalidResult(d.urlError))
+	}
+	return entry.Sym("sale_label", nil)
+}
+
+// invalidResult is an invalid result's error_code, nil without one.
+func invalidResult(errorCode string) any {
+	if errorCode == "" {
+		return nil
+	}
+	return rails.NewRHash().Sym("valid", false).Sym("error_code", errorCode)
 }
 
 // discountedCents is discounted_price_cents at quantity 1.
