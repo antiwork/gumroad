@@ -99,6 +99,7 @@ import {
   getUnshippableProducts,
   isProcessing,
   isTippingEnabled,
+  PayRecapContext,
   useState,
 } from "./payment";
 
@@ -557,6 +558,38 @@ export const Checkout = ({
   // an all-whole cart keeps the compact US$10 look.
   const noCentsIfWhole = summaryAmountsAreAllWhole(summaryDisplayedCents, localCurrency?.subunitToUnit ?? 100);
 
+  // What the pay button restates. Only a plain one-charge cart gets it: commission deposits, installments
+  // and pre-order splits charge less than the total today, and a requoting cart has no settled amount.
+  const hasSplitCharge = commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0;
+  const payRecapAmount =
+    total != null && total > 0 && !awaitingBuyerAction && !isRequoting && !hasSplitCharge
+      ? localAmounts && localCurrency
+        ? formatPresentmentCents(localAmounts.totalCents, localCurrency, { noCentsIfWhole })
+        : formatCheckoutPrice(total, localCurrency, { noCentsIfWhole })
+      : null;
+  const linePrices = cart.items.map((item, index) => {
+    const canonicalCents = convertToUSD(item, hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity);
+    const localCents = localAmounts?.linePriceCents[index];
+    return {
+      name: item.product.name,
+      isFree: (localCents ?? canonicalCents) === 0,
+      price:
+        localCents != null && localCurrency
+          ? formatPresentmentCents(localCents, localCurrency, { noCentsIfWhole })
+          : formatCheckoutPrice(canonicalCents, localCurrency, { noCentsIfWhole }),
+    };
+  });
+  const paidLines = linePrices.some((line) => line.isFree)
+    ? linePrices.filter((line) => !line.isFree).map(({ name, price }) => ({ name, price }))
+    : [];
+  const paidLinesKey = paidLines.map((line) => `${line.name}\u0000${line.price}`).join("\u0001");
+  // Keyed on the content so the context value only changes when the recap does.
+  const payRecap = React.useMemo(
+    () => (payRecapAmount == null ? null : { amount: payRecapAmount, paidLines }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- paidLinesKey stands in for paidLines
+    [payRecapAmount, paidLinesKey],
+  );
+
   // Recommendations arrive after the page renders. They sit after the payment form in the
   // single-column (phone) order, so their arrival cannot push the form down. On wide screens the
   // form spans both grid rows and they sit under the cart.
@@ -864,7 +897,9 @@ export const Checkout = ({
                 ) : null}
               </CartItemList>
             </div>
-            <PaymentForm className={classNames(recommendations && "@[64rem]:row-span-2")} />
+            <PayRecapContext.Provider value={payRecap}>
+              <PaymentForm className={classNames(recommendations && "@[64rem]:row-span-2")} />
+            </PayRecapContext.Provider>
             <NavigationButton className="@[64rem]:hidden" href={cart.returnUrl ?? discoverUrl}>
               Continue shopping
             </NavigationButton>

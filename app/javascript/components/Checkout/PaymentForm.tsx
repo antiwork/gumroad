@@ -70,6 +70,7 @@ import {
   requiresReusablePaymentMethod,
   shouldSuppressClientConfirmWallets,
   BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
+  PayRecapContext,
   usePayLabel,
   useState,
 } from "$app/components/Checkout/payment";
@@ -1265,6 +1266,17 @@ const CreditCardContent = ({
   );
 };
 
+// Names each paid item when the cart mixes free and paid lines, so a free download can't carry a charge unnoticed.
+const PayRecapLines = () => {
+  const recap = React.useContext(PayRecapContext);
+  if (!recap || recap.paidLines.length === 0) return null;
+  return (
+    <p className="text-sm" data-checkout-pay-recap="true">
+      You are paying for: {recap.paidLines.map((line) => `${line.name} (${line.price})`).join(", ")}
+    </p>
+  );
+};
+
 const CreditCardPayButtonContent = ({
   disabled = false,
   isTestPurchase,
@@ -1281,6 +1293,7 @@ const CreditCardPayButtonContent = ({
 
   return (
     <div className="flex flex-col gap-4">
+      <PayRecapLines />
       <Button
         color="primary"
         onClick={() => {
@@ -1362,10 +1375,13 @@ const BraintreePayPal = ({ token }: { token: string }) => {
   }, [state.status.type]);
 
   return (
-    <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
-      <Paypal pack="brands" className="size-5" />
-      {payLabel}
-    </Button>
+    <div className="flex flex-col gap-4">
+      <PayRecapLines />
+      <Button color="paypal" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
+        <Paypal pack="brands" className="size-5" />
+        {payLabel}
+      </Button>
+    </div>
   );
 };
 
@@ -1768,6 +1784,7 @@ const StripePaymentRequestContent = () => {
 
   return (
     <div className="flex flex-col gap-4">
+      <PayRecapLines />
       <Button color="primary" onClick={() => dispatch({ type: "offer" })} disabled={isSubmitDisabled(state)}>
         {payLabel}
       </Button>

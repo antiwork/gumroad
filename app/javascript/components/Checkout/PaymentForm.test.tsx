@@ -5,6 +5,8 @@ import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  PayRecapContext,
+  type PayRecap,
   reduceCheckoutState,
   StateContext,
   type CheckoutPaymentConfig,
@@ -1349,5 +1351,36 @@ describe("PaymentForm saved PayPal account", () => {
     await waitFor(() => expect(paypalMock.render).toHaveBeenCalled());
     expect(screen.getByRole("radio", { name: "PayPal" })).toHaveProperty("checked", true);
     expect(screen.queryByRole("button", { name: "Update membership" })).toBeNull();
+  });
+});
+
+describe("pay recap", () => {
+  const renderWithRecap = (recap: PayRecap | null) =>
+    render(
+      <LoggedInUserProvider value={null}>
+        <StateContext.Provider
+          value={[state({ products: [{ ...state().products[0]!, requirePayment: true }] }), vi.fn()] as const}
+        >
+          <PayRecapContext.Provider value={recap}>
+            <PaymentForm />
+          </PayRecapContext.Provider>
+        </StateContext.Provider>
+      </LoggedInUserProvider>,
+    );
+
+  afterEach(cleanup);
+
+  it("puts the amount on the pay button and names each paid item of a mixed cart", () => {
+    renderWithRecap({ amount: "$49", paidLines: [{ name: "Lifetime Membership", price: "$49" }] });
+
+    expect(screen.getByRole("button", { name: "Pay $49" })).toBeTruthy();
+    expect(screen.getByText("You are paying for: Lifetime Membership ($49)")).toBeTruthy();
+  });
+
+  it("shows no item line when the cart has no free item", () => {
+    renderWithRecap({ amount: "$49", paidLines: [] });
+
+    expect(screen.getByRole("button", { name: "Pay $49" })).toBeTruthy();
+    expect(screen.queryByText(/You are paying for/u)).toBeNull();
   });
 });
