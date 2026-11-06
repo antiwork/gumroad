@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { followFromEmbed } from "$app/data/follow_embed";
+import { followFromEmbed, FollowFromEmbedError } from "$app/data/follow_embed";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { getAppliedStyles } from "$app/utils/styles";
@@ -80,7 +80,10 @@ export const FollowFormEmbed = ({
               showAlert(message, "success");
             } catch (e) {
               assertResponseError(e);
-              showAlert("Sorry, something went wrong. Please try again.", "error");
+              showAlert(
+                e instanceof FollowFromEmbedError ? e.message : "Sorry, something went wrong. Please try again.",
+                "error",
+              );
             }
           })}
         >

@@ -18,7 +18,7 @@ import { ProductSelect, Product } from "$app/components/Developer/ProductSelect"
 import { Tab, Tabs } from "$app/components/Developer/Tabs";
 import { useHasChanged } from "$app/components/Developer/useHasChanged";
 import { DomainSettingsProvider, useDomains } from "$app/components/DomainSettings";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { Label } from "$app/components/ui/Label";
@@ -47,6 +47,7 @@ export default function PublicWidgets() {
   const copyButtonUID = React.useId();
   const followFormEmbedUID = React.useId();
   const waitlistSelectUID = React.useId();
+  const waitlistDescriptionUID = React.useId();
   const [waitlistProductId, setWaitlistProductId] = React.useState("");
   const [followFormEmbedHTML, setFollowFormEmbedHTML] = React.useState("");
   React.useEffect(
@@ -121,20 +122,22 @@ export default function PublicWidgets() {
             {props.waitlist_products.length > 0 ? (
               <Fieldset>
                 <FieldsetTitle>
-                  <Label htmlFor={waitlistSelectUID}>Waitlist</Label>
+                  <Label htmlFor={waitlistSelectUID}>Also add signups to a waitlist</Label>
                 </FieldsetTitle>
                 <Select
                   id={waitlistSelectUID}
+                  aria-describedby={waitlistDescriptionUID}
                   value={waitlistProductId}
                   onChange={(evt) => setWaitlistProductId(evt.target.value)}
                 >
-                  <option value="">Subscribe to your profile</option>
+                  <option value="">No waitlist</option>
                   {props.waitlist_products.map((product) => (
                     <option key={product.id} value={product.id}>
-                      Waitlist: {product.name}
+                      {product.name}
                     </option>
                   ))}
                 </Select>
+                <FieldsetDescription id={waitlistDescriptionUID}>Everyone who signs up still subscribes to you.</FieldsetDescription>
               </Fieldset>
             ) : null}
             <Fieldset>

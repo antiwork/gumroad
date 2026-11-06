@@ -29,7 +29,15 @@ function FollowersFromEmbedFormPage() {
         <main className="mx-auto h-min w-full max-w-md">
           <CardContent asChild>
             <header className="text-center">
-              <h2>{success ? (confirmed ? "Followed!" : "Almost there") : "Something went wrong"}</h2>
+              <h2>
+                {success
+                  ? confirmed
+                    ? "Followed!"
+                    : "Almost there"
+                  : waitlist_url != null || subscribe_url != null
+                    ? "One more step"
+                    : "Something went wrong"}
+              </h2>
               <p>{message}</p>
               {waitlist_url != null ? (
                 <NavigationButton color="primary" href={waitlist_url}>

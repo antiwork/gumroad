@@ -65,6 +65,17 @@ describe HelpCenter::ArticlesController, inertia: true do
       expect(html.xpath("//meta[@name='twitter:description']/@content").text).to eq(article.description)
     end
 
+    it "links the newsletter article's contents to the steps for adding embed form signups to a waitlist" do
+      get :show, params: { slug: "170-audience" }
+      content = Nokogiri::HTML(inertia.props[:article][:content])
+
+      expect(content.at_xpath("//li[a[@href='#embed-form']]/ul/li/a[@href='#embed-form-waitlist']").text).to eq("Add signups to a product's waitlist")
+      heading = content.at_css("h4#embed-form-waitlist")
+      expect(heading.text).to eq("Add signups to a product's waitlist")
+      expect(heading.xpath("preceding-sibling::h3[1]/@id").text).to eq("embed-form")
+      expect(heading.xpath("following-sibling::h3[1]/@id").text).to eq("SendPosts")
+    end
+
     it "redirects to help center root for non-existent articles" do
       get :show, params: { slug: "non-existent-article" }
       expect(response).to redirect_to(help_center_root_path)

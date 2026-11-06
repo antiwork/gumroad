@@ -2,7 +2,11 @@
   <p>In this article:</p>
   <ul>
     <li><a href="#SubscribePage" target="_self">Your subscribe page</a></li>
-    <li><a href="#embed-form" target="_self">Embed the subscribe form on your website</a></li>
+    <li><a href="#embed-form" target="_self">Embed the subscribe form on your website</a>
+      <ul>
+        <li><a href="#embed-form-waitlist" target="_self">Add signups to a product's waitlist</a></li>
+      </ul>
+    </li>
     <li><a href="#SendPosts" target="_self">Sending email to your subscribers</a></li>
     <li><a href="#Workflows" target="_self">Using Workflows to keep subscribers engaged</a></li>
     <li><a href="#Manage" target="_self">Managing your subscribers</a>
@@ -28,9 +32,19 @@
   <p><i>Note:</i> until your account has been reviewed and is in good standing, your subscribe page runs a security check before we email visitors the confirmation link. This protects Gumroad's email reputation, since the confirmation email is sent from our sending domain. Usually the check runs quietly in the background and visitors do nothing extra, but reCAPTCHA sometimes asks them to solve a short puzzle first. The check goes away once we have reviewed your account, and comes back any time your account stops being in good standing after that: if it is flagged, placed on probation, suspended, or closed. If a visitor tells you the check will not load, the fixes in <a href="292-account-login-security">this article</a> usually sort it out.</p>
   <h3 id="embed-form">Embed the subscribe form on your website</h3>
   <p>Go to your <a href="https://gumroad.com/widgets">widgets page</a> and scroll down to the "Subscribe form" section. Click “Copy embed code” and paste it in your website’s HTML editor. If you need help finding the proper location to enter the code into your specific site, please refer to your site builder's help documentation.</p>
-  <p>To also add signups to one product's waitlist, use the "Waitlist" menu in that section to pick the product. The embed code then includes a hidden <code>product_id</code> field holding the product's ID. Each signup still subscribes to your profile and also joins that product's waitlist until the product launches; after that, the form only subscribes visitors to your profile. Only products that are unpublished and have a waitlist enabled appear in the menu. Waitlist signups follow the same reviewed-account rule as the rest of the form: while the security check applies to your account, visitors are asked to join the waitlist from the product's page instead, with a link to it.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/628256998c9b585083489fd2/file-g48XVBZuwX.png" %></figure>
   <p><i>Note:</i> the embedded form cannot run the security check, because it lives on your own website rather than on Gumroad. So whenever the check applies to your account — that is, until we have reviewed it, and again any time it later stops being in good standing — the embedded form does not accept subscriptions: visitors see a message asking them to subscribe from your Gumroad subscribe page instead, with the link to it. Your subscribe page keeps working the whole time, so that is the link to share in the meantime.</p>
+  <h4 id="embed-form-waitlist">Add signups to a product's waitlist</h4>
+  <ol>
+    <li>On your <a href="https://gumroad.com/widgets">widgets page</a>, in the "Subscribe form" section, pick the product under "Also add signups to a waitlist".</li>
+    <li>Click "Copy embed code" and paste it on your website. If the form is already there, replace the old code.</li>
+  </ol>
+  <p>Everyone who signs up still subscribes to you and also joins that product's waitlist. Once the product launches, the form goes back to only subscribing people to you.</p>
+  <ul>
+    <li><b>Don't see the menu?</b> It lists only unpublished products with "Let people join a waitlist on your product page" turned on.</li>
+    <li><b>Account not reviewed yet?</b> Visitors are sent to the product page to join the waitlist there, as explained in the note above.</li>
+    <li><b>Building your own form?</b> Copy the hidden <code>product_id</code> field from the embed code into it.</li>
+  </ul>
   <h3 id="SendPosts">Sending posts to your subscribers</h3>
   <p>To send out an email to your followers, you can go to your <a href="https://www.gumroad.com/posts">Emails</a> dashboard and click <a href="169-how-to-send-an-update">New Email</a> in the top right-hand corner.</p>
   <figure><%= image_tag "https://d33v4339jhl8k0.cloudfront.net/docs/assets/5c4657ad2c7d3a66e32d763f/images/655f4837ff620625c3f7efc9/file-ZzT0b4lAV6.png" %></figure>
