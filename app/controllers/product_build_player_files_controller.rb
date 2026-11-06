@@ -130,6 +130,7 @@ class ProductBuildPlayerFilesController < ApplicationController
       response.set_header("Content-Security-Policy", ProductBuilds::PlayerDocument.content_security_policy(request_origin: request.base_url, cdn_origin:, frame_ancestors:))
       # The path holds the content-page token and the grant, so it must not reach the CDN or a game's server.
       response.set_header("Referrer-Policy", "no-referrer")
+      response.set_header("X-Robots-Tag", "noindex, nofollow")
       page ? serve_page(s3, head) : stream_file(s3, head)
     rescue Aws::S3::Errors::NotFound, Aws::S3::Errors::NoSuchKey
       e404

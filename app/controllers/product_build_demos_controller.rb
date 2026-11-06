@@ -6,6 +6,8 @@ class ProductBuildDemosController < ApplicationController
   layout "inertia", only: :show
 
   before_action :set_build
+  # A demo is reached from an X card or the product page, never from search.
+  before_action :set_noindex_header
 
   def show
     override_content_security_policy_directives(frame_ancestors: ["'self'", *ProductBuild::DEMO_FRAME_ANCESTORS])

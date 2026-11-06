@@ -24,6 +24,8 @@ class ProductBuilds::DeployService
     existing = @product.product_builds.find_by(source_url: @url)
     return existing if existing
 
+    check_unproven_seller_limits!
+
     source_key = @url.delete_prefix(S3_BASE_URL)
     head = Aws::S3::Client.new.head_object(bucket: S3_BUCKET, key: source_key)
     raise DeployError, "The uploaded zip is empty or larger than #{ProductBuild::MAX_BYTE_SIZE / 1.gigabyte} GB." unless head.content_length.between?(1, ProductBuild::MAX_BYTE_SIZE)
@@ -46,4 +48,21 @@ class ProductBuilds::DeployService
   rescue Aws::S3::Errors::NotFound, Aws::S3::Errors::NoSuchKey
     raise DeployError, "The uploaded zip was not found. Finish the upload with POST /v2/files/complete first."
   end
+
+  private
+    # New accounts were used to probe the player with throwaway free builds. They can still deploy to
+    # a paid product, a few a day, until they are proven.
+    def check_unproven_seller_limits!
+      owner = @product.user
+      return unless ContentModeration::GumroadImpersonation.unproven_seller?(owner)
+
+      if @product.price_cents.to_i.zero?
+        raise DeployError, "Web builds on free products are available once your account is #{ContentModeration::GumroadImpersonation::PROVEN_ACCOUNT_AGE.in_days.to_i} days old or has made a paid sale. You can add a build to a paid product now."
+      end
+
+      recent = ProductBuild.joins(:product).where(links: { user_id: owner.id }).where("product_builds.created_at > ?", 1.day.ago).count
+      return if recent < ProductBuild::MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER
+
+      raise DeployError, "New accounts can upload #{ProductBuild::MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER} builds a day. Try again tomorrow."
+    end
 end

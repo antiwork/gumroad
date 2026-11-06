@@ -416,7 +416,7 @@ class UrlRedirectsController < ApplicationController
   def play
     product = @url_redirect.referenced_link
     build = product.product_builds.live.where.not(site_unpacked_at: nil).first
-    return e404 if build.nil?
+    return e404 if build.nil? || !build.free_play_allowed?
 
     # Playing starts a rental's viewing window, the same as streaming a video.
     @url_redirect.mark_rental_as_viewed!
