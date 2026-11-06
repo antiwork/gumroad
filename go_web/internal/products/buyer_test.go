@@ -123,8 +123,11 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 			setup: func(t *testing.T, conn *sql.DB) {
 				purchase(t, conn, 1_797_301, map[string]any{"purchaser_id": nil, "email": ""})
 			}},
-		{name: "a limited code for a returning customer", buyer: confirmed, code: map[string]any{"new_customers_only": true,
-			"max_purchase_count": 5}, errorCode: "not_new_customer", setup: func(t *testing.T, conn *sql.DB) { purchase(t, conn, 1_797_301, nil) }},
+		// not_new_customer outranks sold_out.
+		{name: "a sold-out code for a returning customer", buyer: confirmed, code: map[string]any{"new_customers_only": true,
+			"max_purchase_count": 1}, errorCode: "not_new_customer", setup: func(t *testing.T, conn *sql.DB) {
+			purchase(t, conn, 1_797_301, map[string]any{"offer_code_id": codeID})
+		}},
 		{name: "a legacy code for new and existing customers", buyer: confirmed,
 			code: map[string]any{"new_customers_only": true, "existing_customers_only": true}, errorCode: "not_existing_customer",
 			setup: func(t *testing.T, conn *sql.DB) { purchase(t, conn, 1_797_301, nil) }},
@@ -147,8 +150,8 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 				c.setup(t, conn)
 			}
 			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
-			now := testNow.Add(time.Hour)
-			fromURL, errorCode, err := h.evaluateURLCode(t.Context(), prod, "loyal", c.buyer, now)
+			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, viewer: c.buyer}
+			fromURL, errorCode, err := h.evaluateURLCode(p, prod, "loyal")
 			if err != nil || errorCode != c.errorCode || (fromURL == nil) != (c.errorCode != "") {
 				t.Errorf("URL code: %v %q %v, want %q", fromURL != nil, errorCode, err, c.errorCode)
 			}
@@ -156,7 +159,7 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if valid, err := h.evaluateOfferCode(t.Context(), prod, stored, c.buyer, now); err != nil || valid != (c.errorCode == "") {
+			if valid, err := h.evaluateOfferCode(p, prod, stored); err != nil || valid != (c.errorCode == "") {
 				t.Errorf("default code: %v %v, want %v", valid, err, c.errorCode == "")
 			}
 		})

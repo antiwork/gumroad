@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/pages"
+	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
 
@@ -21,8 +23,13 @@ func TestQuantityLeftCountsUsesAndReservations(t *testing.T) {
 			"offer_code_amount": 100, "pre_discount_minimum_price_cents": 0, "once_per_cart": true, "once_per_cart_allocation_id": allocation,
 			"created_at": testNow, "updated_at": testNow})
 	}
-	attempt := func(minutesAgo int) map[string]any {
-		return map[string]any{"purchase_state": "in_progress", "created_at": now.Add(-time.Duration(minutesAgo) * time.Minute)}
+	// attempt is an in-progress purchase started minutesAgo, with more columns.
+	attempt := func(minutesAgo int, more ...any) map[string]any {
+		columns := map[string]any{"purchase_state": "in_progress", "created_at": now.Add(-time.Duration(minutesAgo) * time.Minute)}
+		for i := 0; i+1 < len(more); i += 2 {
+			columns[more[i].(string)] = more[i+1]
+		}
+		return columns
 	}
 	for _, c := range []struct {
 		name  string
@@ -54,7 +61,7 @@ func TestQuantityLeftCountsUsesAndReservations(t *testing.T) {
 		}},
 		{name: "two purchases of one cart", used: 1, setup: func(t *testing.T, conn *sql.DB) {
 			for _, id := range []int64{1_798_101, 1_798_102} {
-				use(t, conn, id, map[string]any{"purchaser_id": nil})
+				use(t, conn, id, nil)
 				perCart(t, conn, id, "cart-1")
 			}
 		}},
@@ -89,8 +96,52 @@ func TestQuantityLeftCountsUsesAndReservations(t *testing.T) {
 			perCart(t, conn, 1_798_102, "cart-3")
 		}},
 		{name: "a preorder's charge attempt", setup: func(t *testing.T, conn *sql.DB) {
-			use(t, conn, 1_798_101, map[string]any{"purchase_state": "in_progress", "created_at": now, "preorder_id": 1_798_801})
+			use(t, conn, 1_798_101, attempt(0, "preorder_id", 1_798_801))
 			perCart(t, conn, 1_798_101, nil)
+		}},
+		{name: "a preorder's authorization attempt", used: 1, setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, attempt(0, "preorder_id", 1_798_801, "flags", purchaseIsPreorderAuthorization))
+			perCart(t, conn, 1_798_101, nil)
+		}},
+		{name: "a per-item discount row", used: 2, setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, map[string]any{"quantity": 2})
+			testdb.Insert(t, conn, "purchase_offer_code_discounts", map[string]any{"id": int64(1_798_101), "purchase_id": int64(1_798_101),
+				"offer_code_id": codeID, "offer_code_amount": 100, "pre_discount_minimum_price_cents": 0, "once_per_cart": false,
+				"created_at": testNow, "updated_at": testNow})
+		}},
+		{name: "an old attempt Stripe still has", used: 1, setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, attempt(20, "stripe_status", "requires_action"))
+			perCart(t, conn, 1_798_101, nil)
+		}},
+		{name: "an old attempt with a setup intent", used: 1, setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, attempt(20, "processor_setup_intent_id", "seti_1"))
+			perCart(t, conn, 1_798_101, nil)
+		}},
+		{name: "a renewal's attempt", setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, attempt(5, "subscription_id", 1_798_901))
+			perCart(t, conn, 1_798_101, nil)
+		}},
+		{name: "an additional contribution's attempt", setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, attempt(5, "flags", purchaseIsAdditionalContribution))
+			perCart(t, conn, 1_798_101, nil)
+		}},
+		{name: "the seller's own attempt", setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, attempt(5, "purchaser_id", sellerID))
+			perCart(t, conn, 1_798_101, nil)
+		}},
+		{name: "an abandoned cart attempt", setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, attempt(20))
+			perCart(t, conn, 1_798_101, "cart-4")
+		}},
+		{name: "two lines of one cart attempt", used: 1, setup: func(t *testing.T, conn *sql.DB) {
+			for _, id := range []int64{1_798_101, 1_798_102} {
+				use(t, conn, id, attempt(5))
+				perCart(t, conn, id, "cart-5")
+			}
+		}},
+		{name: "a cart that wasn't charged", used: 1, setup: func(t *testing.T, conn *sql.DB) {
+			use(t, conn, 1_798_101, map[string]any{"purchase_state": "not_charged"})
+			perCart(t, conn, 1_798_101, "cart-6")
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -101,7 +152,8 @@ func TestQuantityLeftCountsUsesAndReservations(t *testing.T) {
 				c.setup(t, conn)
 			}
 			h := &handler{c: e.config}
-			left, err := h.quantityLeft(t.Context(), &offerCode{id: codeID, maxPurchaseCount: sql.NullInt64{Int64: 10, Valid: true}}, now)
+			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: now}}}
+			left, err := h.codeQuantityLeft(p, &offerCode{id: codeID, maxPurchaseCount: sql.NullInt64{Int64: 10, Valid: true}})
 			if err != nil || left != 10-c.used {
 				t.Errorf("%d left, %v; want %d", left, err, 10-c.used)
 			}

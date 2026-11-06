@@ -77,8 +77,8 @@ type page struct {
 	hasProductSections bool
 	settleable         *settleability
 	autoApply          *offerCode
-	// usesLeft holds defaultUsesLeft's reads, by offer code.
-	usesLeft map[int64]bool
+	// codesLeft holds codeQuantityLeft's reads, by offer code.
+	codesLeft map[int64]int64
 	// flags holds pageFlag's reads.
 	flags       map[string]bool
 	productsKey string
