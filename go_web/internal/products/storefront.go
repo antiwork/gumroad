@@ -383,7 +383,7 @@ func (h *handler) cardSoldOut(p *page, c *card) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	remaining, err := h.remainingForSaleCount(p.Ctx, c.prod, vs)
+	remaining, err := h.remainingForSaleCount(p.Ctx, c.prod, vs, nil)
 	return remaining == int64(0), err
 }
 

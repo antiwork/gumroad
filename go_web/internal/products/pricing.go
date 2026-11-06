@@ -46,9 +46,9 @@ func (h *handler) checkPPP(ctx context.Context, p *page, prod *product, v *view)
 	return nil
 }
 
-// remainingForSaleCount is Link#remaining_for_sale_count without bundles, its
-// inventory read afresh.
-func (h *handler) remainingForSaleCount(ctx context.Context, prod *product, vs *variants) (any, error) {
+// remainingForSaleCount is Link#remaining_for_sale_count, its inventory read afresh.
+// bundleLeft is the bundle products' minimum, for a bundle.
+func (h *handler) remainingForSaleCount(ctx context.Context, prod *product, vs *variants, bundleLeft *int64) (any, error) {
 	if !vs.available() {
 		return int64(0), nil
 	}
@@ -56,15 +56,16 @@ func (h *handler) remainingForSaleCount(ctx context.Context, prod *product, vs *
 		// A lone tier's own inventory, closed or not.
 		return intOrNil(vs.tiers[0].quantityLeft()), nil
 	}
-	if !prod.maxPurchaseCount.Valid {
-		return nil, nil
+	left := bundleLeft
+	if prod.maxPurchaseCount.Valid {
+		var sold sql.NullInt64
+		if err := h.c.DB.QueryRowContext(ctx, "SELECT `links`.`sales_count_for_inventory_cache` FROM `links` WHERE `links`.`id` = ? LIMIT 1", prod.id).
+			Scan(&sold); err != nil {
+			return nil, err
+		}
+		left = minCents(left, quantityLeft(prod.maxPurchaseCount, sold))
 	}
-	var sold sql.NullInt64
-	if err := h.c.DB.QueryRowContext(ctx, "SELECT `links`.`sales_count_for_inventory_cache` FROM `links` WHERE `links`.`id` = ? LIMIT 1", prod.id).
-		Scan(&sold); err != nil {
-		return nil, err
-	}
-	return max(prod.maxPurchaseCount.Int64-sold.Int64, 0), nil
+	return intOrNil(left), nil
 }
 
 // hasThirdPartyAnalytics is has_third_party_analytics?("product").

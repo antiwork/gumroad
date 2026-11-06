@@ -60,7 +60,8 @@ func jsonScalar(v any) bool {
 // fileInfo is file_info_for_product_page: a lone file's WithFileProperties#file_info, less
 // the removed_file_info_attributes.
 func fileInfo(j jsonData, prod *product, files []productFile) ([][2]string, error) {
-	if len(files) != 1 {
+	// A bundle's own files aren't what its page describes.
+	if len(files) != 1 || prod.is(productIsBundle) {
 		return nil, nil
 	}
 	f := files[0]
@@ -227,10 +228,10 @@ func abs(n int) int {
 	return n
 }
 
-// fileSummaries is Product::FileSummaryService#perform for a product that isn't a bundle
-// (Rails'): one summary shared by every option, or one per option.
+// fileSummaries is Product::FileSummaryService#perform: one summary shared by every option, or
+// one per option.
 func (h *handler) fileSummaries(ctx context.Context, prod *product, files []productFile, vs *variants) (*rails.RHash, error) {
-	if prod.is(productIsPhysical) {
+	if prod.is(productIsPhysical) || prod.is(productIsBundle) {
 		return rails.NewRHash().Sym("product", nil).Sym("options", rails.NewRHash()), nil
 	}
 	productContents, err := h.richContents(ctx, "Link", []int64{prod.id})
