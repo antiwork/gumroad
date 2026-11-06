@@ -508,7 +508,7 @@ type card struct {
 	prices               []priceRow
 	minVariantDifference sql.NullInt64
 	stat                 *reviewStat
-	thumbnails           []thumbnailRow
+	thumbnail            *thumbnailRow
 	hasTier, hasPlan     bool
 	thumbnailURL         any
 	// tiers are a tiered membership's preloaded tiers, with their alive buy prices.
@@ -583,7 +583,7 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 		return nil, err
 	}
 	for id, c := range byID {
-		c.prices, c.stat, c.minVariantDifference, c.thumbnails, c.tiers = prices[id], stats[id], floors[id], thumbnails[id], tiers[id]
+		c.prices, c.stat, c.minVariantDifference, c.thumbnail, c.tiers = prices[id], stats[id], floors[id], thumbnails[id], tiers[id]
 	}
 	return cards, nil
 }
@@ -658,24 +658,22 @@ func (h *handler) variantPriceFloors(ctx context.Context, ids []int64) (map[int6
 	return out, rows.Err()
 }
 
-// aliveThumbnails is each product's thumbnail_alive rows.
-func (h *handler) aliveThumbnails(ctx context.Context, ids []int64) (map[int64][]thumbnailRow, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT thumbnails.product_id, thumbnails.id, thumbnails.unsplash_url FROM thumbnails"+
-		" WHERE thumbnails.deleted_at IS NULL AND thumbnails.product_id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := map[int64][]thumbnailRow{}
-	for rows.Next() {
-		var id int64
-		var t thumbnailRow
-		if err := rows.Scan(&id, &t.id, &t.unsplash); err != nil {
-			return nil, err
+// aliveThumbnails is each product's preloaded thumbnail_alive. It runs the preload's statement
+// as Rails writes it for several products, since has_one keeps the first row MySQL returns.
+func (h *handler) aliveThumbnails(ctx context.Context, ids []int64) (map[int64]*thumbnailRow, error) {
+	out := map[int64]*thumbnailRow{}
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		var productID int64
+		t := &thumbnailRow{}
+		cols["product_id"], cols["id"], cols["unsplash_url"] = &productID, &t.id, &t.unsplash
+		return func() {
+			if out[productID] == nil {
+				out[productID] = t
+			}
 		}
-		out[id] = append(out[id], t)
-	}
-	return out, rows.Err()
+	}, "SELECT `thumbnails`.* FROM `thumbnails` WHERE `thumbnails`.`deleted_at` IS NULL AND `thumbnails`.`product_id` IN ("+
+		placeholders(len(ids))+")", int64Args(ids)...)
+	return out, err
 }
 
 // unportedCard is a catalog product whose card this port leaves to Rails.
@@ -796,11 +794,9 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 func (h *handler) cardThumbnails(p *page, cards []*card) error {
 	var thumbnails []thumbnailRow
 	for _, c := range cards {
-		if len(c.thumbnails) > 1 {
-			// has_one's preload keeps whichever row MySQL returns first.
-			return fallback("catalog thumbnails")
+		if c.thumbnail != nil {
+			thumbnails = append(thumbnails, *c.thumbnail)
 		}
-		thumbnails = append(thumbnails, c.thumbnails...)
 	}
 	thumbnailURLs, err := h.thumbnailURLs(p.Ctx, thumbnails)
 	if err != nil {
@@ -808,8 +804,8 @@ func (h *handler) cardThumbnails(p *page, cards []*card) error {
 	}
 	var uncovered []int64
 	for _, c := range cards {
-		if len(c.thumbnails) == 1 {
-			if c.thumbnailURL = thumbnailURLs[c.thumbnails[0].id]; c.thumbnailURL != nil {
+		if c.thumbnail != nil {
+			if c.thumbnailURL = thumbnailURLs[c.thumbnail.id]; c.thumbnailURL != nil {
 				continue
 			}
 		}
