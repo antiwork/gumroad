@@ -72,9 +72,8 @@ func (pc *PageConfig) cdnURL(s string) string {
 	return s
 }
 
-// render is LinksController#prepare_product_page and #show for a visitor signed out or signed in as
-// themselves, then the after_actions. Everything is read before
-// anything is written.
+// render is LinksController#prepare_product_page and #show, then the after_actions. Everything is
+// read before anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
 	// show sends a coffee product to /coffee, which renders it, with params.permit(:wanted,
@@ -265,7 +264,7 @@ type view struct {
 	ppp *pppDetails
 	// sections are the product's own, or the storefront's catalog when they render none.
 	sections []any
-	// wishlists are the signed-in visitor's, as product_props lists them.
+	// wishlists are the current seller's, as product_props lists them.
 	wishlists []any
 	purchase  any
 	// taxonomyPath and taxonomiesForNav are layout=discover's discover_props.

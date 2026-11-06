@@ -61,17 +61,32 @@ func bucketsProps(buckets []catalogBucket) []any {
 	return out
 }
 
-// storefront is whether the seller's pages render as Products/Profile/Show for a visitor who
-// isn't the seller, off the Discover layout (a declined param).
+// storefront is whether the seller's pages render as Products/Profile/Show for a visitor whose
+// current seller isn't the seller.
 func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) && !p.ownView() }
 
-// ownView is whether the visitor is the seller, pundit_user.seller == seller: Rails then renders
-// the sections in the editor's shape.
-func (p *page) ownView() bool { return p.viewer != nil && p.viewer.id == p.seller.id }
+// ownView is pundit_user.seller == seller: Rails then renders the sections in the editor's shape.
+func (p *page) ownView() bool { return p.currentSeller != nil && p.currentSeller.id == p.seller.id }
 
-// canEdit is LinkPolicy#edit? for the visitor; staff, whom is_team_member? lets in, and team roles
-// on another seller already went to Rails.
-func (p *page) canEdit() bool { return p.ownView() || p.collaborates }
+// canEdit is LinkPolicy#edit? for the visitor; staff, whom is_team_member? lets in, went to Rails.
+func (p *page) canEdit() bool {
+	return p.collaborates || p.ownView() && p.hasRole(teamAdmin, teamMarketing)
+}
+
+// TeamMembership::ROLES.
+const (
+	teamOwner      = "owner"
+	teamAccountant = "accountant"
+	teamAdmin      = "admin"
+	teamMarketing  = "marketing"
+	teamSupport    = "support"
+)
+
+// hasRole is a role_*_for?(current_seller) check: the visitor's own account always passes,
+// another's when their membership's role is one of roles.
+func (p *page) hasRole(roles ...string) bool {
+	return p.currentSeller != nil && p.currentSeller == p.viewer || slices.Contains(roles, p.teamRole)
+}
 
 // productsSection is a saved SellerProfileProductsSection, on the profile or a product.
 type productsSection struct {

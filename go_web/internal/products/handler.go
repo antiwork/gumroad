@@ -1,5 +1,5 @@
 // Package products serves the product page, GET /l/:id (LinksController#show), on a seller's
-// subdomain, for a visitor signed out or signed in as themselves: Rails' filters, then
+// subdomain, for a visitor signed out or signed in: Rails' filters, then
 // Products/Show. Every request whose Rails path this port leaves
 // out goes to Rails before anything is written.
 package products
@@ -68,6 +68,10 @@ type page struct {
 	seller *user
 	// viewer is the signed-in visitor, nil when signed out.
 	viewer *signedInUser
+	// currentSeller is pundit_user's seller: the viewer, or the seller whose team they switched
+	// to with teamRole.
+	currentSeller *signedInUser
+	teamRole      string
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
 	cacheWrites        []pendingWrite
 	rates              map[string]rateRead

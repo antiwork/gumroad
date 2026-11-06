@@ -249,7 +249,7 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 		Sym("youtube_channel_id", v.youtubeChannelID).
 		Sym("subdomain", h.userSubdomain(seller)).
 		Sym("is_verified", seller.verified.Bool).
-		Sym("can_edit", p.ownView()).
+		Sym("can_edit", p.ownView() && p.hasRole(teamAdmin, teamMarketing)).
 		Sym("follow_recaptcha_site_key", v.recaptchaSiteKey).
 		Sym("hide_follow_form", seller.is(userHideFollowForm))
 	if v.reputationEnabled {

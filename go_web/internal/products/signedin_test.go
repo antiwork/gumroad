@@ -74,17 +74,10 @@ func TestASignedInVisitor(t *testing.T) {
 	}
 	body := w.Body.String()
 	page := html.UnescapeString(dataPage.FindStringSubmatch(body)[1])
-	policies := `{"affiliate_requests_onboarding_form":{"update":true},"direct_affiliate":{"create":true,"update":true},` +
-		`"collaborator":{"create":true,"update":true},"product":{"create":true},"product_review_response":{"update":true},` +
-		`"balance":{"index":true,"export":true},"checkout_offer_code":{"create":true},"checkout_form":{"update":true},` +
-		`"upsell":{"create":true},"settings_payments_user":{"show":true},"settings_main_user":{"update_username":true},` +
-		`"settings_profile":{"manage_social_connections":true,"update":true},"settings_third_party_analytics_user":{"update":true},` +
-		`"installment":{"create":true},"workflow":{"create":true},"utm_link":{"index":true},"community":{"index":false},` +
-		`"churn":{"show":true},"page":{"index":true,"create":true},"user":{"view_store_agent":true,"use_store_agent":false}}`
 	for _, want := range []string{
 		`"logged_in_user":{"id":"1796001","email":"buyer@example.com","name":"Buyer","avatar_url":"`,
 		`","confirmed":true,"team_memberships":[],"can_create_brand_account":false,"has_payout_setup_to_port":false,` +
-			`"can_port_bank_payout_setup":true,"will_copy_bank_payout":false,"policies":` + policies +
+			`"can_port_bank_payout_setup":true,"will_copy_bank_payout":false,` + teamPolicies(teamOwner) +
 			`,"promoted_nav_items":["library"],"lazy_load_offscreen_discover_images":false},"current_seller":{"id":"1796001",` +
 			`"email":"buyer@example.com","name":"Buyer","subdomain":"gowebbuyer.gumroad.com","avatar_url":"`,
 		`","is_buyer":false,"time_zone":{"name":"America/Los_Angeles","offset":-28800},"has_published_products":false,` +
