@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -188,6 +189,8 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		}
 		cancel()
 	}
+	// GlobalConfig.get("GUMROAD_ADMIN_ID", 767082) in production.
+	gumroadAdminID, _ := strconv.ParseInt(d.globalConfig("GUMROAD_ADMIN_ID", "767082"), 10, 64)
 	var customHTML *vite.Tags
 	manifest := b.pages.Layout.Manifest()
 	if tags, err := manifest.TypescriptTag("custom_html_analytics"); err != nil {
@@ -225,6 +228,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		NewNonce:         newNonce,
 		// Its tags are the same on every render.
 		CustomHTMLAnalytics: customHTML,
+		GumroadAdminID:      gumroadAdminID,
 	}, nil
 }
 
