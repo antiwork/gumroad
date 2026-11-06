@@ -292,6 +292,7 @@ type PaymentsPageProps = {
   payout_reserve_available: boolean;
   payouts_paused_by: "stripe" | "admin" | "system" | "user" | null;
   payout_reserve_percent?: number | null;
+  payouts_paused_for_failed_payouts?: boolean;
   account_status: AccountStatus;
   payouts_paused_by_user: boolean;
   payout_threshold_cents: number;
@@ -1490,6 +1491,7 @@ export default function PaymentsPage() {
           accountStatus={props.account_status}
           payoutsPausedBy={props.payouts_paused_by}
           payoutReservePercent={props.payout_reserve_percent ?? null}
+          failedPayoutsPause={props.payouts_paused_for_failed_payouts ?? false}
           canClearOwnPause={canClearOwnPayoutsPause}
         />
 
@@ -1596,9 +1598,11 @@ export default function PaymentsPage() {
                       ? "Your payouts have been paused by Gumroad."
                       : props.payouts_paused_by === "system" && props.payout_reserve_percent
                         ? "Payout pausing is managed automatically while the reserve hold is active."
-                        : props.payouts_paused_by === "system"
-                          ? "Your payouts have been paused for a security review."
-                          : null
+                        : props.payouts_paused_by === "system" && props.payouts_paused_for_failed_payouts
+                          ? "Your payouts are paused because recent transfers to your payout method were declined."
+                          : props.payouts_paused_by === "system"
+                            ? "Your payouts have been paused for a security review."
+                            : null
                 }
               >
                 {payoutsPausedToggle}

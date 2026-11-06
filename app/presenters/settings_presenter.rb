@@ -285,6 +285,7 @@ class SettingsPresenter
       payouts_paused_internally: seller.payouts_paused_internally?,
       payout_reserve_available: seller.chargeback_rate_payout_reserve_available?,
       payouts_paused_by: seller.payouts_paused_by_source,
+      payouts_paused_for_failed_payouts: seller.repeated_failed_payouts_hold_started_at.present?,
       payout_reserve_percent: seller.chargeback_rate_payout_reserve_active? ? User::CHARGEBACK_RATE_PAYOUT_RESERVE_PERCENT : nil,
       account_status: account_status_details(payments_policy),
       payouts_paused_by_user: seller.payouts_paused_by_user?,

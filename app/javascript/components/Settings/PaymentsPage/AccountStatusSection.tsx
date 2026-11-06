@@ -45,11 +45,13 @@ export default function AccountStatusSection({
   payoutsPausedBy,
   payoutReservePercent,
   canClearOwnPause = false,
+  failedPayoutsPause = false,
 }: {
   accountStatus: AccountStatus;
   payoutsPausedBy: "stripe" | "admin" | "system" | "user" | null;
   payoutReservePercent?: number | null;
   canClearOwnPause?: boolean;
+  failedPayoutsPause?: boolean;
 }) {
   if (!accountStatus.show_section) return null;
 
@@ -75,6 +77,12 @@ export default function AccountStatusSection({
         Your payouts are on hold because your chargeback rate is above 1.5%. You also paused payouts yourself, so
         nothing is paid out right now. Turn off Pause payouts below and save. We will then pay out most of your balance
         on your normal schedule and keep the rest in reserve.
+        <SupportLink />
+      </>
+    ) : payoutsPausedBy === "system" && failedPayoutsPause ? (
+      <>
+        We paused your payouts because the last few transfers to your payout method were declined by your bank. Add a
+        different payout account to resume, or contact your bank.
         <SupportLink />
       </>
     ) : payoutsPausedBy === "system" ? (

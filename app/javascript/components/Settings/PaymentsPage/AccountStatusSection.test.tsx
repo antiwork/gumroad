@@ -86,6 +86,12 @@ describe("optional review connections", () => {
     expect(screen.queryByText("Connect a social account (optional)")).toBeNull();
   });
 
+  it("explains a failed-payouts system pause without calling it a security review", () => {
+    render(<AccountStatusSection accountStatus={status} payoutsPausedBy="system" failedPayoutsPause />);
+    expect(screen.getByText(/transfers to your payout method were declined/u)).toBeTruthy();
+    expect(screen.queryByText(/security review/u)).toBeNull();
+  });
+
   it("does not render a prompt when the server excludes the seller", () => {
     render(
       <AccountStatusSection
