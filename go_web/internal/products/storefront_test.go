@@ -243,7 +243,9 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				}
 				return `[]`, "0"
 			},
-			want: func(e *testEnv) string { return results(e, 1) }},
+			// omit_product_in_search_total? drops the viewed product from the default section's total
+			// whether or not it matches the query.
+			want: func(e *testEnv) string { return results(e, 0) }},
 		// A blank one still searches afresh, with no clause.
 		{name: "a blank visitor query", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?query=+",
 			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
