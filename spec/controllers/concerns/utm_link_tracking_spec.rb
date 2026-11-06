@@ -97,6 +97,26 @@ describe UtmLinkTracking, type: :controller do
       expect(utm_link.utm_link_visits.count).to eq(1)
     end
 
+    it "renders the page when the visit write hits a read-only primary" do
+      read_only_error = Mysql2::Error.new("The MySQL server is running with the --read-only option so it cannot execute this statement", nil, 1290)
+      statement_error = ActiveRecord::StatementInvalid.new(read_only_error.message)
+      allow(statement_error).to receive(:cause).and_return(read_only_error)
+      allow_any_instance_of(UtmLinkVisitRecorder).to receive(:record).and_raise(statement_error)
+      expect(ErrorNotifier).to receive(:notify).with(statement_error, hash_including(:utm_params))
+
+      get :action, params: { utm_source: utm_link.utm_source, utm_medium: utm_link.utm_medium, utm_campaign: utm_link.utm_campaign }
+
+      expect(response).to be_successful
+    end
+
+    it "still raises other statement failures" do
+      allow_any_instance_of(UtmLinkVisitRecorder).to receive(:record).and_raise(ActiveRecord::StatementInvalid, "Unknown column 'utm_links.foo'")
+
+      expect do
+        get :action, params: { utm_source: utm_link.utm_source, utm_medium: utm_link.utm_medium, utm_campaign: utm_link.utm_campaign }
+      end.to raise_error(ActiveRecord::StatementInvalid, /Unknown column/)
+    end
+
     it "does nothing for non-GET requests" do
       expect do
         post :action, params: { utm_source: utm_link.utm_source, utm_medium: utm_link.utm_medium, utm_campaign: utm_link.utm_campaign, utm_content: utm_link.utm_content, utm_term: utm_link.utm_term }

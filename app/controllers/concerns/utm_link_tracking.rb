@@ -42,6 +42,11 @@ module UtmLinkTracking
       # Non-race uniqueness/validation failures cannot converge or retry safely. Report and
       # swallow so analytics never breaks the buyer-facing page.
       ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
+    rescue ActiveRecord::StatementInvalid => e
+      # A read-only primary rejects the write before running it while the page's own reads
+      # still succeed, so report the lost visit instead of failing the request.
+      raise unless MysqlReadOnlyPrimaryRetry.read_only_error?(e)
+      ErrorNotifier.notify(e, utm_params: params.permit(:utm_source, :utm_medium, :utm_campaign, :utm_term, :utm_content).to_h)
     end
 
     def determine_utm_link_target_resource(seller)
