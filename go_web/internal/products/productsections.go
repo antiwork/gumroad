@@ -354,7 +354,7 @@ func (h *handler) editorProps(p *page) (*rails.RHash, error) {
 			products = append(products, rails.NewRHash().Sym("id", h.c.IDs.Encrypt(id)).Sym("name", nullString(name)))
 		}
 	}, "SELECT `links`.`id`, `links`.`name` FROM `links` WHERE `links`.`user_id` = ? AND `links`.`purchase_disabled_at` IS NULL"+
-		" AND `links`.`banned_at` IS NULL AND `links`.`deleted_at` IS NULL AND ((`links`.`flags` & 16 = 0))", p.seller.id)
+		" AND `links`.`banned_at` IS NULL AND `links`.`deleted_at` IS NULL AND ((`links`.`flags` & ? = 0))", p.seller.id, productArchived)
 	if err != nil {
 		return nil, err
 	}
