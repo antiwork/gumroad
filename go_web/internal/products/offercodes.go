@@ -218,8 +218,7 @@ func (c *offerCode) inactive(now time.Time) bool {
 	return c.validAt.Valid && c.validAt.Time.After(now) || c.expiresAt.Valid && c.expiresAt.Time.Before(now)
 }
 
-// offerDiscount is what BestOfferCodeService#result gives a signed-out visitor, and its sale
-// label.
+// offerDiscount is what BestOfferCodeService#result gives the visitor, and its sale label.
 type offerDiscount struct {
 	// listed is whether default_offer_codes is non-empty, which selection_discounts reads.
 	listed bool
@@ -269,13 +268,15 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 		if rails.Blank(c.code.String) {
 			continue
 		}
-		valid, err := h.evaluateOfferCode(ctx, prod, c, now)
-		if err != nil {
+		valid, err := h.evaluateOfferCode(ctx, prod, c, p.viewer, now)
+		switch {
+		case err != nil:
 			return nil, err
-		}
-		if valid {
+		case valid && d.code != nil:
+			// best_default_code_result weighs a buyer's existing-customer default against the sale.
+			return nil, fallback("offer code comparison")
+		case valid:
 			d.code, d.resultCode = c, c.code.String
-			break
 		}
 	}
 	if d.urlCode = p.urlCode; d.urlCode != "" {
@@ -283,7 +284,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 			// The URL names the default that applies, so both would.
 			return nil, fallback("offer code comparison")
 		}
-		fromURL, errorCode, err := h.evaluateURLCode(ctx, prod, d.urlCode, now)
+		fromURL, errorCode, err := h.evaluateURLCode(ctx, prod, d.urlCode, p.viewer, now)
 		switch {
 		case err != nil:
 			return nil, err
@@ -309,13 +310,9 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 }
 
 // evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: whether it
-// gives this visitor a discount. Each lookup by its string must find c and only c.
-func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offerCode, now time.Time) (bool, error) {
+// gives buyer a discount. Each lookup by its string must find c and only c.
+func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offerCode, buyer *signedInUser, now time.Time) (bool, error) {
 	if reason := c.unportedLookup(prod); reason != "" {
-		return false, fallback(reason)
-	}
-	// evaluate_for_buyer(nil) gives a code for existing customers nothing, whatever its terms.
-	if reason := c.unportedDiscount(); reason != "" && !c.existingOnly {
 		return false, fallback(reason)
 	}
 	id, err := h.findOfferCode(ctx, prod, c.code.String)
@@ -324,13 +321,22 @@ func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offer
 		return false, err
 	case id != c.id:
 		return false, fallback("offer code lookup")
+	case !c.applicable(prod) || !c.currencyValid(prod) || c.inactive(now):
+		return false, nil
 	}
-	return c.applicable(prod) && c.currencyValid(prod) && !c.existingOnly && !c.inactive(now), nil
+	if resolved, err := h.resolvesForBuyer(ctx, prod, c, buyer); err != nil || !resolved {
+		return false, err
+	}
+	// Only a code that gives this buyer something has terms to read.
+	if reason := c.unportedDiscount(); reason != "" {
+		return false, fallback(reason)
+	}
+	return true, nil
 }
 
 // evaluateURLCode is BestOfferCodeService#evaluate_code for the URL's code: the code that
-// gives this visitor a discount, else the error_code it gets.
-func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed string, now time.Time) (*offerCode, string, error) {
+// gives buyer a discount, else the error_code it gets.
+func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed string, buyer *signedInUser, now time.Time) (*offerCode, string, error) {
 	id, err := h.findOfferCode(ctx, prod, typed)
 	if err != nil || id == 0 {
 		return nil, "invalid_offer", err
@@ -351,8 +357,16 @@ func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed stri
 	case c.hasVariants:
 		// The options' quotes check each one against the code's scope.
 		return nil, "", fallback("offer code variants")
-	case c.existingOnly:
+	}
+	resolved, err := h.resolvesForBuyer(ctx, prod, c, buyer)
+	switch {
+	case err != nil:
+		return nil, "", err
+	case !resolved && c.existingOnly:
+		// A legacy code for both new and existing customers reports this one first.
 		return nil, "not_existing_customer", nil
+	case !resolved:
+		return nil, "not_new_customer", nil
 	}
 	if reason := c.unportedDiscount(); reason != "" {
 		return nil, "", fallback(reason)

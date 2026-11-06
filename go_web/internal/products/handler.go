@@ -64,6 +64,8 @@ type page struct {
 	*pages.Visit
 	// seller is the subdomain's seller, user_by_domain.
 	seller *user
+	// viewer is the signed-in visitor, nil when signed out.
+	viewer *signedInUser
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
 	cacheWrites        []pendingWrite
 	rates              map[string]rateRead
