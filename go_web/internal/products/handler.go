@@ -65,8 +65,9 @@ type page struct {
 	// seller is the subdomain's seller, user_by_domain.
 	seller *user
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
-	cacheWrites []pendingWrite
-	rates       map[string]rateRead
+	cacheWrites     []pendingWrite
+	rates           map[string]rateRead
+	hasCollaborator bool
 }
 
 type fallback = pages.Fallback

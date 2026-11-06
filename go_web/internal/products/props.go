@@ -44,7 +44,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("permalink", nullString(prod.uniquePermalink)).
 		Sym("name", prod.name).
 		Sym("seller", h.authorByline(p, v)).
-		Sym("collaborating_user", nil).
+		Sym("collaborating_user", v.collaborator).
 		Sym("covers", covers).
 		Sym("main_cover_id", mainCover).
 		Sym("thumbnail_url", v.thumbnailURL).
@@ -196,17 +196,25 @@ func analyticsData(u *user, j jsonData) *rails.RHash {
 // authorByline is UserPresenter#author_byline_props with the request's
 // seller_custom_domain_url: on the seller's subdomain that is its root URL.
 func (h *handler) authorByline(p *page, v *view) any {
-	seller := p.seller
-	// User#username falls back to the external id.
-	if rails.Blank(sellerUsername(seller)) {
+	return bylineProps(p.seller, v.avatarURL, h.sellerCustomDomainURL(p))
+}
+
+// bylineProps is UserPresenter#author_byline_props for u, nil without a username.
+func bylineProps(u *user, avatarURL, profileURL string) any {
+	if rails.Blank(sellerUsername(u)) {
 		return nil
 	}
 	return rails.NewRHash().
-		Sym("id", nullString(seller.externalID)).
-		Sym("name", nameOrUsername(seller)).
-		Sym("avatar_url", v.avatarURL).
-		Sym("profile_url", h.sellerCustomDomainURL(p)).
-		Sym("is_verified", seller.verified.Bool)
+		Sym("id", nullString(u.externalID)).
+		Sym("name", nameOrUsername(u)).
+		Sym("avatar_url", avatarURL).
+		Sym("profile_url", profileURL).
+		Sym("is_verified", u.verified.Bool)
+}
+
+// userSubdomain is User#subdomain: the username with dashes for underscores, under ROOT_DOMAIN.
+func (h *handler) userSubdomain(u *user) string {
+	return strings.ReplaceAll(sellerUsername(u), "_", "-") + "." + h.c.Env.RootDomain
 }
 
 // sellerCustomDomainURL is root_url(protocol: PROTOCOL, host: request.host_with_port).
@@ -241,7 +249,7 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 		Sym("name", name).
 		Sym("twitter_handle", nullString(seller.twitterHandle)).
 		Sym("youtube_channel_id", v.youtubeChannelID).
-		Sym("subdomain", strings.ReplaceAll(sellerUsername(seller), "_", "-")+"."+h.c.Env.RootDomain).
+		Sym("subdomain", h.userSubdomain(seller)).
 		Sym("is_verified", seller.verified.Bool).
 		Sym("can_edit", false).
 		Sym("follow_recaptcha_site_key", recaptcha).
