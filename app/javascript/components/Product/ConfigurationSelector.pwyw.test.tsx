@@ -267,4 +267,18 @@ describe("PWYW suggested amount with a discount code", () => {
 
     expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("24+");
   });
+
+  it("leaves PPP out of the hint when the buy button does not undo it", () => {
+    render(
+      <ConfigurationSelector
+        product={{ ...product, price_cents: 0, ppp_details: { country: "India", factor: 0.5, minimum_price: 0 } }}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={null}
+        pwywAmountIsAfterDiscount
+      />,
+    );
+
+    expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("24+");
+  });
 });

@@ -791,6 +791,7 @@ export const ConfigurationSelector = React.forwardRef<
     basePriceCents,
     applicableDiscount,
     discountedPriceCents,
+    pppDiscounted,
     isPWYW,
     maxQuantity,
     hasOptions,
@@ -801,16 +802,19 @@ export const ConfigurationSelector = React.forwardRef<
     discountConditionsVerified: !!discountForSelection,
     preserveOncePerCartAllocation: !!discountForSelection,
   });
-  // The box holds the amount after the code only where the caller's buy button says so.
   const configuredSuggestedPriceCents =
     (selectedOption && selection.recurrence
       ? selectedOption.recurrence_price_values?.[selection.recurrence]?.suggested_price_cents
       : product.pwyw?.suggested_price_cents) ?? 0;
+  // Only the code, and only when the base price is not PPP-priced: that is when CtaButton undoes the code.
+  const hintDiscount = pwywAmountIsAfterDiscount && !pppDiscounted ? applicableDiscount : null;
   const suggestedPriceCents = Math.max(
-    pwywAmountIsAfterDiscount
-      ? computeSelectionDiscountedPrice(configuredSuggestedPriceCents, applicableDiscount, product, selection.quantity)
-          .value
-      : configuredSuggestedPriceCents,
+    computeSelectionDiscountedPrice(
+      configuredSuggestedPriceCents,
+      hintDiscount,
+      { ...product, ppp_details: null },
+      selection.quantity,
+    ).value,
     pwywMinimumPriceCents ?? discountedPriceCents,
   );
   const usePreexistingPrice =
