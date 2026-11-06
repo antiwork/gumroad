@@ -342,13 +342,26 @@ describe("heyzineShelfUrl", () => {
     );
   });
 
+  it("recognizes the named shelf address Heyzine serves as the page's canonical URL", () => {
+    expect(heyzineShelfUrl("https://heyzine.com/shelf/turningtopeacelibrary")).toBe(
+      "https://heyzine.com/shelf/turningtopeacelibrary",
+    );
+    expect(heyzineShelfUrl("  https://heyzine.com/shelf/turningtopeacelibrary?utm_source=x#page-2  ")).toBe(
+      "https://heyzine.com/shelf/turningtopeacelibrary",
+    );
+  });
+
   it.each([
     "https://heyzine.com/flip-book/66f3c4fc1e.html",
     "https://heyzine.com/shelf/",
     "https://heyzine.com/shelf/66f3c4fc1e.html.evil",
+    "https://heyzine.com/shelf/turningtopeacelibrary.html.evil",
+    "https://heyzine.com/shelf/turningtopeacelibrary/2",
     "https://www.heyzine.com/shelf/66f3c4fc1e.html",
+    "https://www.heyzine.com/shelf/turningtopeacelibrary",
     "https://heyzine.com.evil.test/shelf/66f3c4fc1e.html",
     "http://heyzine.com/shelf/66f3c4fc1e.html",
+    "http://heyzine.com/shelf/turningtopeacelibrary",
     "not a url at all",
   ])("leaves %s alone", (url) => {
     expect(heyzineShelfUrl(url)).toBeNull();
@@ -458,6 +471,22 @@ describe("insertMediaEmbed", () => {
       expect(rawEmbedHeight(html)).toBe(DEFAULT_RAW_EMBED_HEIGHT);
       // The link an email falls back to still opens the seller's library.
       expect(node?.attrs?.url).toBe("https://heyzine.com/shelf/66f3c4fc1e.html");
+    } finally {
+      editor.destroy();
+    }
+  });
+
+  it("frames the named shelf address too, which is what the seller's page links", () => {
+    const editor = editorWith({ type: "doc", content: [{ type: "paragraph" }] });
+    try {
+      insertMediaEmbed(editor, { ...HEYZINE_SHELF_LOOKUP, url: "https://heyzine.com/shelf/turningtopeacelibrary" });
+
+      const node = insertedNode(editor);
+      const html = String(node?.attrs?.html);
+      expect(html).toContain('src="https://heyzine.com/shelf/turningtopeacelibrary"');
+      expect(html).not.toContain("iframely.net");
+      expect(rawEmbedHeight(html)).toBe(DEFAULT_RAW_EMBED_HEIGHT);
+      expect(node?.attrs?.url).toBe("https://heyzine.com/shelf/turningtopeacelibrary");
     } finally {
       editor.destroy();
     }
