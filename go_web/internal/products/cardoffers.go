@@ -84,8 +84,35 @@ func (h *handler) cardPriceCents(p *page, c *card, base int64) (int64, error) {
 		return base, err
 	}
 	if code.hasVariants {
-		// discounts_lowest_priced_option? reads the options the code covers.
-		return 0, fallback("catalog offer code variants")
+		if covers, err := h.coversLowestPricedOption(p, c, code); err != nil || !covers {
+			return base, err
+		}
 	}
 	return max(base-code.amountOff(base), 0), nil
+}
+
+// coversLowestPricedOption is discounts_lowest_priced_option?: whether the code limits none of
+// the card's options or covers one of the cheapest of its preloaded_options, whose minimum
+// difference minVariantDifference holds.
+func (h *handler) coversLowestPricedOption(p *page, c *card, code *offerCode) (bool, error) {
+	// restricted_variants_for counts a Variant in a deleted category, and a deleted option, as the
+	// product's; only an alive one can be among the cheapest. With no difference at all the
+	// minimum is nil, which an option without one equals.
+	var restricted, cheapest int
+	err := h.c.DB.QueryRowContext(p.Ctx, "SELECT COUNT(*), COALESCE(SUM(base_variants.deleted_at IS NULL"+
+		" AND (base_variants.type = 'Sku' OR variant_categories.deleted_at IS NULL)"+
+		" AND base_variants.price_difference_cents <=> ?), 0) FROM offer_codes_variants"+
+		" INNER JOIN base_variants ON base_variants.id = offer_codes_variants.variant_id"+
+		" LEFT JOIN variant_categories ON variant_categories.id = base_variants.variant_category_id"+
+		" WHERE offer_codes_variants.offer_code_id = ?"+
+		" AND IF(base_variants.type = 'Variant', variant_categories.link_id, base_variants.link_id) = ?",
+		c.minVariantDifference, code.id, c.prod.id).Scan(&restricted, &cheapest)
+	switch {
+	case err != nil || restricted == 0:
+		return err == nil, err
+	case c.prod.is(productIsTieredMembership):
+		// lowest_priced_tier_ids weighs the tiers' prices.
+		return false, fallback("catalog offer code tiers")
+	}
+	return cheapest > 0, nil
 }
