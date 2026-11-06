@@ -108,10 +108,8 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	component := productComponent
 	if storefront(p) {
 		component = storefrontComponent
-		props.Sym("sections", v.catalog).Sym("main_section_index", int64(0))
-	} else {
-		props.Sym("sections", []any{}).Sym("main_section_index", v.mainSectionIndex)
 	}
+	props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
 
 	// as_embed is a declined param.
 	body := pc.Layout.Render(inertia.Document{
@@ -191,8 +189,8 @@ type view struct {
 	discount        *offerDiscount
 	// ppp is ppp_details.
 	ppp *pppDetails
-	// catalog is the storefront's sections.
-	catalog []any
+	// sections are the product's own, or the storefront's catalog when they render none.
+	sections []any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -348,18 +346,27 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if err := h.loadCustomStyles(ctx, p, v); err != nil {
 		return nil, err
 	}
+	sections, err := h.listProductSections(p, prod, v)
+	if err != nil {
+		return nil, err
+	}
 	// Last: Elasticsearch searches are the costliest reads, and anything above may still fall back.
 	if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
 		return nil, err
 	}
-	if storefront(p) {
-		if v.catalog, err = h.loadCatalog(p, prod, v.localBuyer); err != nil {
-			return nil, err
-		}
+	if v.sections, err = h.renderProductSections(p, sections, v.localBuyer); err != nil {
+		return nil, err
 	}
 	v.mainSectionIndex = int64(0)
 	if raw, ok := v.productJSON.present("main_section_index"); ok {
 		v.mainSectionIndex = raw
+	}
+	// show_storefront_catalog?
+	if storefront(p) && len(v.sections) == 0 {
+		if v.sections, err = h.loadCatalog(p, prod, v.localBuyer); err != nil {
+			return nil, err
+		}
+		v.mainSectionIndex = int64(0)
 	}
 	return v, nil
 }

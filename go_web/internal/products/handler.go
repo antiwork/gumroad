@@ -72,6 +72,7 @@ type page struct {
 	hasPublicFiles     bool
 	hasBundleProducts  bool
 	hasAutoApplyCode   bool
+	hasProductSections bool
 	settleable         *settleability
 	// flags holds pageFlag's reads.
 	flags       map[string]bool
