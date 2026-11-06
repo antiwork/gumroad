@@ -44,6 +44,9 @@ type PageConfig struct {
 	// prefix, "https://<bucket>.s3.amazonaws.com/".
 	CDNMap           [][2]string
 	PublicStorageURL string
+	// CalendarHref is vite_asset_path("components/ui/Calendar.tsx"), "" when the manifest
+	// lacks it.
+	CalendarHref string
 	// Search is EsClient; nil leaves what needs it to Rails.
 	Search *elastic.Client
 	// Sidekiq pushes jobs; nil leaves a page that enqueues one to Rails.
@@ -268,7 +271,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		c.originalLocalCents = &original
 	}
 	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled) ||
-		prod.is(productIsInPreorderState) || p.hasInstallmentPlan) {
+		prod.is(productIsInPreorderState) || p.hasInstallmentPlan || prod.nativeType == "commission") {
 		// buyer_currency_unquotable_product? and the India mandate check can only turn a
 		// local price off.
 		return nil, fallback("unquotable buyer currency")

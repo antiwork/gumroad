@@ -36,8 +36,6 @@ func unportedProductShape(prod *product) string {
 		return "skus"
 	case !prod.uniquePermalink.Valid:
 		return "no unique permalink"
-	case prod.nativeType == "call" || prod.nativeType == "commission":
-		return "native type " + prod.nativeType
 	}
 	return ""
 }
@@ -47,6 +45,9 @@ func unportedProductShape(prod *product) string {
 func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (string, error) {
 	seller := p.seller
 	switch {
+	case prod.nativeType == "call" && h.c.Page.CalendarHref == "":
+		// The calendar preload's vite_asset_path raises.
+		return "call calendar asset", nil
 	case seller.is(userProductPageStorefrontEnabled) && h.c.Page.Search == nil:
 		return "storefront", nil
 	case prod.is(productShouldShowSalesCount) && h.c.Page.Search == nil:
