@@ -47,6 +47,7 @@ class Checkout::DiscountsPresenter
       auto_apply: offer_code.auto_apply?,
       sale_label: offer_code.sale_label,
       ownership_products: offer_code.ownership_products.map { product_props_for(_1) },
+      ownership_option_ids_by_product: offer_code.ownership_option_ids_by_product,
       ownership_duration_tiers: offer_code.normalized_ownership_duration_tiers,
       option_ids_by_product: offer_code.option_ids_by_product,
     }

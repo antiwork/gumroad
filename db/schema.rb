@@ -1619,6 +1619,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_25_000006) do
     t.index ["product_id"], name: "index_offer_codes_ownership_products_on_product_id"
   end
 
+  create_table "offer_codes_ownership_variants", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "offer_code_id", null: false
+    t.bigint "variant_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["offer_code_id", "variant_id"], name: "index_offer_codes_ownership_variants_on_code_and_variant", unique: true
+    t.index ["variant_id"], name: "index_offer_codes_ownership_variants_on_variant_id"
+  end
+
   create_table "offer_codes_products", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "offer_code_id"
     t.bigint "product_id"

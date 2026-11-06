@@ -49,6 +49,7 @@ describe Checkout::DiscountsPresenter do
                      auto_apply: false,
                      sale_label: nil,
                      ownership_products: [],
+                     ownership_option_ids_by_product: {},
                      ownership_duration_tiers: nil,
                      option_ids_by_product: {},
                      excluded_products: [],
@@ -92,6 +93,7 @@ describe Checkout::DiscountsPresenter do
                      auto_apply: false,
                      sale_label: nil,
                      ownership_products: [],
+                     ownership_option_ids_by_product: {},
                      ownership_duration_tiers: nil,
                      option_ids_by_product: {},
                      excluded_products: [],
@@ -126,6 +128,7 @@ describe Checkout::DiscountsPresenter do
                      auto_apply: false,
                      sale_label: nil,
                      ownership_products: [],
+                     ownership_option_ids_by_product: {},
                      ownership_duration_tiers: nil,
                      option_ids_by_product: {},
                      excluded_products: [],
@@ -196,6 +199,7 @@ describe Checkout::DiscountsPresenter do
             auto_apply: false,
             sale_label: nil,
             ownership_products: [],
+            ownership_option_ids_by_product: {},
             ownership_duration_tiers: nil,
             option_ids_by_product: {},
             excluded_products: [],
@@ -270,6 +274,22 @@ describe Checkout::DiscountsPresenter do
                                                          { "months" => 0, "amount_percentage" => 0 },
                                                          { "months" => 12, "amount_percentage" => 50 },
                                                        ])
+      end
+
+      it "exposes the options the buyer must have purchased" do
+        owned_product = create(:product, user: seller, price_cents: 1000)
+        option = create(:variant, variant_category: create(:variant_category, link: owned_product))
+        offer_code = create(:offer_code,
+                            user: seller,
+                            products: [owned_product],
+                            ownership_products: [],
+                            ownership_variants: [option],
+                            existing_customers_only: true,
+                            amount_cents: nil,
+                            amount_percentage: 50,
+                            currency_type: nil)
+
+        expect(presenter.offer_code_props(offer_code)[:ownership_option_ids_by_product]).to eq({ owned_product.external_id => [option.external_id] })
       end
 
       it "exposes the new-customers-only flag" do
