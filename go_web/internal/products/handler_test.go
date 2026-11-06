@@ -829,6 +829,93 @@ func TestTheSalesCount(t *testing.T) {
 	}
 }
 
+func TestACollaboratorShowsAsCoCreator(t *testing.T) {
+	const collabID, affiliateID, otherID = int64(1_790_002), int64(1_792_001), int64(1_792_002)
+	affiliate := func(t *testing.T, conn *sql.DB, id int64, kind string, flags, linkFlags int64, deletedAt any) {
+		testdb.Insert(t, conn, "affiliates", map[string]any{"id": id, "seller_id": sellerID, "affiliate_user_id": collabID,
+			"affiliate_basis_points": 1000, "type": kind, "flags": flags, "deleted_at": deletedAt, "created_at": testNow, "updated_at": testNow})
+		testdb.Insert(t, conn, "affiliates_links", map[string]any{"id": id, "affiliate_id": id, "link_id": productID,
+			"affiliate_basis_points": 1000, "flags": linkFlags, "created_at": testNow, "updated_at": testNow})
+	}
+	// Flags are has_flags bits: Affiliate 1 apply_to_all_products and 3 dont_show_as_co_creator,
+	// ProductAffiliate 1 dont_show_as_co_creator.
+	collaborator := func(t *testing.T, conn *sql.DB, id, flags, linkFlags int64) {
+		affiliate(t, conn, id, "Collaborator", flags, linkFlags, nil)
+	}
+	byline := `"collaborating_user":{"id":"1790002","name":"Collab","avatar_url":"%s","profile_url":"https://collab-user.gumroad.com","is_verified":true}`
+	none := `"collaborating_user":null`
+	for _, c := range []struct {
+		name, want, reason string
+		setup              func(t *testing.T, conn *sql.DB)
+	}{
+		{"confirmed", byline, "", func(t *testing.T, conn *sql.DB) { collaborator(t, conn, affiliateID, 0, 0) }},
+		{"invitation pending", none, "", func(t *testing.T, conn *sql.DB) {
+			collaborator(t, conn, affiliateID, 0, 0)
+			testdb.Insert(t, conn, "collaborator_invitations", map[string]any{"id": int64(1_792_101), "collaborator_id": affiliateID,
+				"created_at": testNow, "updated_at": testNow})
+		}},
+		{"hidden on this product", none, "", func(t *testing.T, conn *sql.DB) { collaborator(t, conn, affiliateID, 0, 1) }},
+		{"hidden on every product", none, "", func(t *testing.T, conn *sql.DB) { collaborator(t, conn, affiliateID, 1|4, 0) }},
+		{"every product's setting overrides this one's", byline, "", func(t *testing.T, conn *sql.DB) {
+			collaborator(t, conn, affiliateID, 1, 1)
+		}},
+		{"hiding without every product is ignored", byline, "", func(t *testing.T, conn *sql.DB) {
+			collaborator(t, conn, affiliateID, 4, 0)
+		}},
+		{"deleted", none, "", func(t *testing.T, conn *sql.DB) {
+			affiliate(t, conn, affiliateID, "Collaborator", 0, 0, testNow)
+		}},
+		{"a direct affiliate", none, "", func(t *testing.T, conn *sql.DB) {
+			affiliate(t, conn, affiliateID, "DirectAffiliate", 0, 0, nil)
+		}},
+		{"two collaborators", "", "several collaborators", func(t *testing.T, conn *sql.DB) {
+			collaborator(t, conn, affiliateID, 0, 0)
+			collaborator(t, conn, otherID, 0, 0)
+		}},
+		// The collaborator's own avatar, without a processed variant, is Rails'.
+		{"the collaborator's avatar", "", "collaborator avatar", func(t *testing.T, conn *sql.DB) {
+			collaborator(t, conn, affiliateID, 0, 0)
+			testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_792_201), "key": "avatars/collab", "filename": "a.png",
+				"content_type": "image/png", "service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
+			testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_301), "name": "avatar", "record_type": "User",
+				"record_id": collabID, "blob_id": int64(1_792_201), "created_at": testNow})
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			testdb.User(t, conn, collabID, map[string]any{"username": "collab_user", "external_id": "1790002", "name": "Collab", "verified": true})
+			c.setup(t, conn)
+			var headers map[string]string
+			if c.reason != "" {
+				headers = e.dryRun(host, "/l/guide", testNow)
+			}
+			w := e.get(host, "/l/guide", headers)
+			if c.reason != "" {
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+			}
+			body := w.Body.String()
+			// A user without an avatar gets the same default the seller's byline shows.
+			avatar := pageProps(t, body)["product"].(map[string]any)["seller"].(map[string]any)["avatar_url"].(string)
+			want := c.want
+			if strings.Contains(want, "%s") {
+				want = fmt.Sprintf(want, avatar)
+			}
+			page := html.UnescapeString(dataPage.FindStringSubmatch(body)[1])
+			if !strings.Contains(page, want) {
+				i := strings.Index(page, `"collaborating_user"`)
+				t.Errorf("want %s, got %s", want, page[i:min(i+260, len(page))])
+			}
+		})
+	}
+}
+
 func TestASellerRefundPolicyOffForAllRendersThePage(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)

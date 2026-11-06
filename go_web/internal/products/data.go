@@ -77,20 +77,22 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 			" AND product_installment_plans.deleted_at IS NULL", prod.id},
 		{"auto-apply offer code", "SELECT 1 FROM offer_codes WHERE offer_codes.user_id = ? AND offer_codes.deleted_at IS NULL" +
 			" AND offer_codes.universal = 1 AND offer_codes.auto_apply = 1", seller.id},
-		{"collaborator", "SELECT 1 FROM affiliates_links INNER JOIN affiliates ON affiliates.id = affiliates_links.affiliate_id" +
-			" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator'", prod.id},
 		{"product sections", "SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id},
 		{"public files", "SELECT 1 FROM public_files WHERE public_files.resource_type = 'Link' AND public_files.resource_id = ?" +
 			" AND public_files.deleted_at IS NULL", prod.id},
 	}
-	// One round trip; each EXISTS stops at its first row.
-	exprs := make([]string, len(checks))
-	args := make([]any, len(checks))
+	// One round trip; each EXISTS stops at its first row. The last one isn't a fallback: it
+	// spares the collaborator lookup on products that have none.
+	exprs := make([]string, len(checks), len(checks)+1)
+	args := make([]any, len(checks), len(checks)+1)
 	found := make([]bool, len(checks))
-	dest := make([]any, len(checks))
+	dest := make([]any, len(checks), len(checks)+1)
 	for i, c := range checks {
 		exprs[i], args[i], dest[i] = "EXISTS("+c.query+")", c.arg, &found[i]
 	}
+	exprs = append(exprs, "EXISTS(SELECT 1 FROM affiliates_links INNER JOIN affiliates ON affiliates.id = affiliates_links.affiliate_id"+
+		" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator')")
+	args, dest = append(args, prod.id), append(dest, &p.hasCollaborator)
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT "+strings.Join(exprs, ", "), args...).Scan(dest...); err != nil {
 		return "", err
 	}
