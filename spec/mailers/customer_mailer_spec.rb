@@ -1859,6 +1859,20 @@ describe CustomerMailer do
       end
     end
 
+    it "checks at most the twenty receipts it can send" do
+      checked = 0
+      allow_any_instance_of(CustomerMailer).to receive(:suppress_receipt_from_unproven_seller?).and_wrap_original do |original, chargeable|
+        checked += 1
+        original.call(chargeable)
+      end
+      many = create_list(:purchase, CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES + 5, link: product, seller:)
+
+      mail = CustomerMailer.grouped_receipt(many.map(&:id))
+
+      expect(mail.to).to eq([many.last.email])
+      expect(checked).to eq(CustomerMailer::GROUPED_RECEIPT_MAX_CHARGEABLES)
+    end
+
     it "reads only bounded newest-first windows of a caller's match" do
       stub_const("CustomerMailer::GROUPED_RECEIPT_LOOKBACK", 1)
       stub_const("CustomerMailer::GROUPED_RECEIPT_READ_WINDOWS", 2)

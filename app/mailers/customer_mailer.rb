@@ -445,10 +445,15 @@ class CustomerMailer < ApplicationMailer
         break if window.empty?
 
         scope = scope.where("purchases.id < ?", window.last.id)
-        chargeables = renderable_chargeables((chargeables + window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq)
-        # Blocked receipts (gp#4366) are the newest ones, so they must not take one of the twenty
-        # slots and crowd the buyer's older receipts out of the window.
-        chargeables = chargeables.reject { suppress_receipt_from_unproven_seller?(_1) }
+        # A blocked receipt must not take one of the twenty slots (gp#4366); the walk stops as soon
+        # as twenty allowed ones are collected, so an ordinary buyer's lookup checks no more than
+        # it did before.
+        renderable_chargeables(window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq.each do |chargeable|
+          next if chargeables.include?(chargeable) || suppress_receipt_from_unproven_seller?(chargeable)
+
+          chargeables << chargeable
+          break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
+        end
         break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
       end
 
@@ -533,6 +538,9 @@ class CustomerMailer < ApplicationMailer
     # seller and product names in the From and subject (gp#4366). Paid orders always send: the
     # charge itself is the proof. Only the email is skipped; the buyer keeps access.
     def suppress_receipt_from_unproven_seller?(chargeable)
+      # A purchase that carries its own price is already known to be paid, so it costs no second read.
+      return false if chargeable.is_a?(Purchase) && chargeable.price_cents.to_i > 0
+
       purchases = chargeable.successful_purchases
       return false if purchases.any? { _1.price_cents.to_i > 0 }
 
