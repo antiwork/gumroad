@@ -1,4 +1,4 @@
-package beacons
+package rails
 
 import (
 	"encoding/json"

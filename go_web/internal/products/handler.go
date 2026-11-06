@@ -228,25 +228,19 @@ func declinedParams(req *rails.Request) string {
 	}
 	if raw, ok := req.Params.Get("layout"); ok {
 		switch raw {
-		case nil, "", productLayoutProfile:
-		case "discover":
-			return "layout discover"
+		case nil, "", productLayoutProfile, productLayoutDiscover:
 		default:
 			// Its value would go into the bundles' URLs.
 			return "param layout"
 		}
 		// The layout's component with embed's iframe body class is neither port's shape.
-		if raw == productLayoutProfile && (rails.Truthy(req.Param("overlay")) || rails.Truthy(req.Param("embed"))) {
+		if (raw == productLayoutProfile || raw == productLayoutDiscover) && (rails.Truthy(req.Param("overlay")) || rails.Truthy(req.Param("embed"))) {
 			return "layout with iframe"
 		}
 	}
 	if raw, ok := req.Params.Get("recommended_by"); ok {
-		switch by, isString := raw.(string); {
-		case !isString && raw != nil:
+		if _, isString := raw.(string); !isString && raw != nil {
 			return "param recommended_by"
-		case by == "search" || by == "discover":
-			// create_discover_search! writes the click.
-			return "discover search"
 		}
 	}
 	// Only a code whose lookups can't depend on Unicode normalization or the collation is

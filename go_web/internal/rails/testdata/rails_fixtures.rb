@@ -443,7 +443,7 @@ write("rails/testdata/guid_cookie.json", {
       })
 
 bots = eval(File.read(File.join(ROOT, "config/initializers/bots.rb")).sub("# frozen_string_literal: true", "").sub(/\ABOT_MAP = /m, "").strip.sub(/\ABOT_MAP\s*=\s*/, ""))
-write("beacons/bot_map.json", bots.keys)
+write("rails/bot_map.json", bots.keys)
 
 # --- Date._parse's zone table, from the date gem's source ---
 
