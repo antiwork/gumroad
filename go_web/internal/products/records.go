@@ -147,6 +147,16 @@ func (p *product) alive() bool {
 	return !p.purchaseDisabledAt.Valid && !p.bannedAt.Valid && !p.deletedAt.Valid
 }
 
+// published is Link#published?.
+func (p *product) published() bool {
+	return !p.deletedAt.Valid && !p.purchaseDisabledAt.Valid && !p.draft.Bool
+}
+
+// acceptsWaitlistSignups is Link#accepts_waitlist_signups?.
+func (p *product) acceptsWaitlistSignups() bool {
+	return p.is(productWaitlistEnabled) && !p.published() && !p.deletedAt.Valid && !p.bannedAt.Valid && !p.is(productUnpublishedByAdmin)
+}
+
 // generalPermalink is Link#general_permalink.
 func (p *product) generalPermalink() string {
 	if rails.Present(p.customPermalink.String) {

@@ -75,8 +75,8 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("rental_price_cents", intOrNil(v.prices.rental)).
 		Sym("pwyw", pwyw).
 		Sym("eligible_for_installment_plans", installmentEligible(prod)).
-		Sym("allow_installment_plan", false).
-		Sym("installment_plan", nil).
+		Sym("allow_installment_plan", v.installmentPlan != nil).
+		Sym("installment_plan", v.installmentPlan).
 		Sym("is_legacy_subscription", prod.is(productIsRecurringBilling) && !prod.is(productIsTieredMembership)).
 		Sym("is_tiered_membership", prod.is(productIsTieredMembership)).
 		Sym("is_recurring_billing", prod.is(productIsRecurringBilling)).
@@ -86,7 +86,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("is_licensed", prod.is(productIsLicensed)).
 		Sym("hide_sold_out_variants", prod.is(productHideSoldOutVariants)).
 		Sym("native_type", prod.nativeType).
-		Sym("preorder", nil).
+		Sym("preorder", v.preorder).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).
 		Sym("rental", rental).
 		Sym("is_quantity_enabled", prod.is(productQuantityEnabled)).
@@ -97,7 +97,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("has_third_party_analytics", v.thirdPartyAnalytics).
 		Sym("ppp_details", nil).
 		Sym("can_edit", false).
-		Sym("waitlist", nil).
+		Sym("waitlist", h.waitlistProps(prod, v)).
 		Sym("refund_policy", v.refundPolicy).
 		Sym("bundle_products", []any{}).
 		Sym("public_files", v.publicFiles).
@@ -134,10 +134,9 @@ func pwywDefault(prod *product, v *view) any {
 	return int64(0)
 }
 
-// installmentEligible is ProductInstallmentPlan.eligible_for_product? for a product that isn't
-// a preorder.
+// installmentEligible is ProductInstallmentPlan.eligible_for_product?.
 func installmentEligible(prod *product) bool {
-	if prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership) {
+	if prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership) || prod.is(productIsInPreorderState) {
 		return false
 	}
 	switch prod.nativeType {
@@ -241,10 +240,6 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 	if seller.name.Valid {
 		name = seller.name.String
 	}
-	var recaptcha any
-	if v.recaptchaRequired {
-		recaptcha = h.c.Page.RecaptchaSiteKey
-	}
 	profile := rails.NewRHash().
 		Sym("external_id", nullString(seller.externalID)).
 		Sym("avatar_url", v.avatarURL).
@@ -254,7 +249,7 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 		Sym("subdomain", h.userSubdomain(seller)).
 		Sym("is_verified", seller.verified.Bool).
 		Sym("can_edit", false).
-		Sym("follow_recaptcha_site_key", recaptcha).
+		Sym("follow_recaptcha_site_key", v.recaptchaSiteKey).
 		Sym("hide_follow_form", seller.is(userHideFollowForm))
 	if v.reputationEnabled {
 		profile.Sym("reputation", v.profileReputation)

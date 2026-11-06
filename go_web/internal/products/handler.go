@@ -65,10 +65,11 @@ type page struct {
 	// seller is the subdomain's seller, user_by_domain.
 	seller *user
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
-	cacheWrites     []pendingWrite
-	rates           map[string]rateRead
-	hasCollaborator bool
-	hasPublicFiles  bool
+	cacheWrites        []pendingWrite
+	rates              map[string]rateRead
+	hasCollaborator    bool
+	hasInstallmentPlan bool
+	hasPublicFiles     bool
 	// settleable is buyer_currency_settleable? for the page's seller and buyer currency.
 	settleable  *bool
 	productsKey string
