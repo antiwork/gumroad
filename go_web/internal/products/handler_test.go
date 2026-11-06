@@ -1208,10 +1208,16 @@ func TestDefaultOfferCodes(t *testing.T) {
 			auto(t, conn, nil)
 			testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_795_301), "offer_code_id": autoID, "variant_id": int64(1_795_401)})
 		}},
-		// The collation matches SALE20 to sale20; Rails would take either.
-		{name: "two codes MySQL can't tell apart", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+		// The collation matches SALE20 to sale20, and both of Rails' lookups take the sale first.
+		{name: "two codes MySQL can't tell apart", wants: []string{saleEntry}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, nil)
 			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
+		}},
+		// The sale's string finds the product's own code, not the sale.
+		{name: "a product's code with the sale's string", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, nil)
+			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
+			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
 		}},
 		{name: "a code in other letters", reason: "offer code characters", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, map[string]any{"code": "SOLDÉ"})
@@ -1359,11 +1365,39 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, nil)
 				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_301), "offer_code_id": codeID, "variant_id": int64(1_796_401)})
 			}},
-		// The collation matches the typed code to both rows.
-		{name: "two codes MySQL can't tell apart", target: "/l/guide/save10", reason: "offer code lookup",
+		// The collation matches the typed code to both rows, and both of Rails' lookups take SAVE10.
+		{name: "two codes MySQL can't tell apart", target: "/l/guide/save10", wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "universal": true})
+			}},
+		// The computing service passes over a code for another product to the one that applies.
+		{name: "another product's code first", target: "/l/guide/save10", wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				insertOfferCode(t, conn, codeID-1, map[string]any{"code": "save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_104), "offer_code_id": codeID - 1, "product_id": int64(1_796_999)})
+			}},
+		// Nothing by the string applies, so the computing service answers invalid_offer.
+		{name: "no code by the string applying", target: "/l/guide/save10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"universal": false, "amount_percentage": nil, "amount_cents": 100, "currency_type": "eur"})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_105), "offer_code_id": codeID, "product_id": productID})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_106), "offer_code_id": autoID, "product_id": int64(1_796_999)})
+			}},
+		{name: "another seller's code on this product", target: "/l/guide/save10", reason: "offer code lookup",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				insertOfferCode(t, conn, codeID, map[string]any{"code": "SAVE10", "amount_percentage": 10, "user_id": int64(1)})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_107), "offer_code_id": codeID, "product_id": productID})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_108), "offer_code_id": autoID, "product_id": int64(1_796_999)})
+			}},
+		{name: "a product's code with a universal code's string", target: "/l/guide/save10", reason: "offer code lookup",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
 			}},
 	} {
 		t.Run(c.name, func(t *testing.T) {

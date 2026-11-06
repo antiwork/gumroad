@@ -20,6 +20,17 @@ func (h *handler) exists(ctx context.Context, query string, args ...any) (bool, 
 	return err == nil, err
 }
 
+// scanIDs is the id of each row a statement returns, in its order.
+func (h *handler) scanIDs(ctx context.Context, query string, args ...any) ([]int64, error) {
+	var ids []int64
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		var id int64
+		cols["id"] = &id
+		return func() { ids = append(ids, id) }
+	}, query, args...)
+	return ids, err
+}
+
 // unportedProductShape is the product itself, as the page and the custom HTML wrapper both
 // read it.
 func unportedProductShape(prod *product) string {

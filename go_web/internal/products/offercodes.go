@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"math"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -336,7 +338,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 }
 
 // evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: whether it
-// gives the visitor a discount. Each lookup by its string must find c and only c.
+// gives the visitor a discount. Looking c up by its string must land on c.
 func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (bool, error) {
 	ctx, now := p.Ctx, p.Req.Now
 	if reason := c.unportedLookup(prod); reason != "" {
@@ -406,36 +408,49 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	return c, "", nil
 }
 
-// findOfferCode is find_offer_code's row for a code, 0 for none: the product's codes, then
-// the seller's universal ones, neither ordered. OfferCodeDiscountComputingService then finds the
-// seller's codes by string again, so only a code the seller has once is followed.
+// findOfferCode is find_offer_code's row for a code, 0 for none, by Rails' unordered statements.
+// OfferCodeDiscountComputingService then applies the first of the seller's codes by that string
+// that suits the product, in its own statement's order; any other row than this goes to Rails.
 func (h *handler) findOfferCode(ctx context.Context, prod *product, code string) (int64, error) {
 	code = strings.ToLower(code)
-	var id int64
-	n, err := h.scanFirst(ctx, []any{&id}, "SELECT DISTINCT offer_codes.id FROM offer_codes INNER JOIN offer_codes_products"+
-		" ON offer_codes.id = offer_codes_products.offer_code_id WHERE offer_codes_products.product_id = ?"+
-		" AND offer_codes.deleted_at IS NULL AND offer_codes.code = ? LIMIT 2", prod.id, code)
-	if err == nil && n == 0 {
-		n, err = h.scanFirst(ctx, []any{&id}, "SELECT offer_codes.id FROM offer_codes WHERE offer_codes.user_id = ?"+
-			" AND offer_codes.universal = 1 AND (offer_codes.currency_type = ? OR offer_codes.currency_type IS NULL)"+
-			" AND offer_codes.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products x"+
-			" WHERE x.offer_code_id = offer_codes.id AND x.product_id = ?) AND offer_codes.code = ? LIMIT 2",
-			prod.userID, prod.priceCurrencyType, prod.id, code)
+	ids, err := h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` INNER JOIN `offer_codes_products`"+
+		" ON `offer_codes`.`id` = `offer_codes_products`.`offer_code_id` WHERE `offer_codes_products`.`product_id` = ?"+
+		" AND `offer_codes`.`deleted_at` IS NULL AND `offer_codes`.`code` = ? LIMIT 1", prod.id, code)
+	if err == nil && len(ids) == 0 {
+		// not_excluding_product binds the id into a String condition, which Rails quotes.
+		ids, err = h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` WHERE `offer_codes`.`user_id` = ?"+
+			" AND (universal = 1 and (currency_type = ? or currency_type is null)) AND `offer_codes`.`deleted_at` IS NULL"+
+			" AND (NOT EXISTS (SELECT 1 FROM offer_codes_excluded_products WHERE offer_codes_excluded_products.offer_code_id = offer_codes.id"+
+			" AND offer_codes_excluded_products.product_id = ?)) AND `offer_codes`.`code` = ? LIMIT 1",
+			prod.userID, prod.priceCurrencyType, strconv.FormatInt(prod.id, 10), code)
+	}
+	if err != nil || len(ids) == 0 {
+		return 0, err
+	}
+	found := ids[0]
+	if ids, err = h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` WHERE `offer_codes`.`user_id` = ? AND `offer_codes`.`code` = ?"+
+		" AND `offer_codes`.`deleted_at` IS NULL", prod.userID, code); err != nil {
+		return 0, err
 	}
 	switch {
-	case err != nil || n == 0:
-		return 0, err
-	case n > 1:
+	case len(ids) == 1 && ids[0] == found:
+		// The callers check this row's terms themselves.
+		return found, nil
+	case !slices.Contains(ids, found):
+		// The product's code is another seller's, which the computing service never loads.
 		return 0, fallback("offer code lookup")
 	}
-	found := id
-	n, err = h.scanFirst(ctx, []any{&id}, "SELECT offer_codes.id FROM offer_codes WHERE offer_codes.user_id = ?"+
-		" AND offer_codes.code = ? AND offer_codes.deleted_at IS NULL LIMIT 2", prod.userID, code)
-	if err != nil {
-		return 0, err
-	}
-	if n != 1 || id != found {
-		return 0, fallback("offer code lookup")
+	for _, id := range ids {
+		c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", id)
+		if err != nil {
+			return 0, err
+		}
+		if c != nil && c.applicable(prod) && c.currencyValid(prod) {
+			if id != found {
+				return 0, fallback("offer code lookup")
+			}
+			break
+		}
 	}
 	return found, nil
 }
