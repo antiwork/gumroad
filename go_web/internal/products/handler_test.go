@@ -867,12 +867,12 @@ func TestABundleRendersItsProducts(t *testing.T) {
 		item(t, conn, 1_794_401, ebook, nil, 1, 1)
 		item(t, conn, 1_794_402, course, proVariant, 2, 0)
 	}
-	const products = `"bundle_products":[` +
-		`{"id":"%[2]s","name":"Course","ratings":null,"price":2400,"currency_code":"usd","thumbnail_url":null,"native_type":"course",` +
-		`"url":"https://gowebproductseller.gumroad.com/l/bp2","quantity":2,"variant":"Pro"},` +
-		`{"id":"%[1]s","name":"Ebook","ratings":{"count":2,"average":4.5},"price":300,"currency_code":"usd",` +
+	const courseProps = `{"id":"%[2]s","name":"Course","ratings":null,"price":2400,"currency_code":"usd","thumbnail_url":null,` +
+		`"native_type":"course","url":"https://gowebproductseller.gumroad.com/l/bp2","quantity":2,"variant":"Pro"}`
+	const ebookProps = `{"id":"%[1]s","name":"Ebook","ratings":{"count":2,"average":4.5},"price":300,"currency_code":"usd",` +
 		`"thumbnail_url":"https://images.unsplash.com/x","native_type":"ebook","url":"https://gowebproductseller.gumroad.com/l/ebook",` +
-		`"quantity":1,"variant":null}]`
+		`"quantity":1,"variant":null}`
+	const products = `"bundle_products":[` + courseProps + `,` + ebookProps + `]`
 	for _, c := range []struct {
 		name   string
 		wants  []string
@@ -895,10 +895,18 @@ func TestABundleRendersItsProducts(t *testing.T) {
 		// Rails lists them on any product; only a bundle counts their inventory.
 		{name: "bundle products on a product that isn't a bundle", wants: []string{products, `"quantity_remaining":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { setup(t, conn, false) }},
-		{name: "bundle products tied in order", reason: "bundle product order", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			setup(t, conn, true)
-			conn.Exec("UPDATE bundle_products SET position = NULL WHERE bundle_id = ?", productID)
-		}},
+		// Two tied rows come back in id order.
+		{name: "bundle products tied in order", wants: []string{`"bundle_products":[` + ebookProps + `,` + courseProps + `]`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("UPDATE bundle_products SET position = NULL WHERE bundle_id = ?", productID)
+			}},
+		{name: "a variant that's gone", wants: []string{`"native_type":"course","url":"https://gowebproductseller.gumroad.com/l/bp2","quantity":2,"variant":null}`,
+			`"name":"Course","ratings":null,"price":2000,`, `"quantity_remaining":6,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("DELETE FROM base_variants WHERE id = ?", proVariant)
+			}},
 		{name: "another seller's product", reason: "bundle product seller", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			setup(t, conn, true)
 			conn.Exec("UPDATE links SET user_id = ? WHERE id = ?", sellerID+1, ebook)
@@ -965,6 +973,34 @@ func TestABundleRendersItsProducts(t *testing.T) {
 			e.wantAll(t, e.render(t, nil, c.reason), c.wants, ebook, course)
 		})
 	}
+	// Past a handful of ties MySQL's sort leaves id order, so only Rails' own statement, written
+	// here as Rails runs it, matches.
+	t.Run("many bundle products tied in order", func(t *testing.T) {
+		e := newTestEnv(t)
+		conn := testdb.Open(t)
+		setup(t, conn, true)
+		conn.Exec("DELETE FROM bundle_products WHERE bundle_id = ?", bundleID)
+		for i := range 60 {
+			item(t, conn, 1_794_410+int64(i), ebook, nil, i+1, nil)
+		}
+		var want []string
+		err := scanNamed(t.Context(), conn, func(cols map[string]any) func() {
+			var quantity string
+			cols["quantity"] = &quantity
+			return func() { want = append(want, quantity) }
+		}, "SELECT `bundle_products`.* FROM `bundle_products` WHERE `bundle_products`.`bundle_id` = "+strconv.FormatInt(bundleID, 10)+
+			" AND `bundle_products`.`deleted_at` IS NULL ORDER BY `bundle_products`.`position` ASC")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, m := range regexp.MustCompile(`"quantity":(\d+),"variant":null}`).FindAllStringSubmatch(e.render(t, nil, ""), -1) {
+			got = append(got, m[1])
+		}
+		if !slices.Equal(got, want) {
+			t.Errorf("got %v, want %v", got, want)
+		}
+	})
 	// url_for_product_page carries the page's layout and recommended_by, sorted and CGI-escaped.
 	t.Run("a layout and a recommendation", func(t *testing.T) {
 		e := newTestEnv(t)
