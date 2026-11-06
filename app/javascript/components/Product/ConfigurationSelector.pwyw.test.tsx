@@ -233,3 +233,66 @@ describe("PWYW minimum while the discount is being quoted", () => {
     expect(blurWith("6").getAttribute("aria-invalid")).toBe("true");
   });
 });
+
+describe("PWYW suggested amount with a discount code", () => {
+  const product: Product = { ...pwywProduct, price_cents: 2400, pwyw: { suggested_price_cents: 2400 } };
+  const sale: Discount = {
+    type: "percent",
+    percents: 30,
+    product_ids: null,
+    expires_at: null,
+    minimum_quantity: null,
+    duration_in_billing_cycles: null,
+    minimum_amount_cents: null,
+  };
+  const renderWith = (amountAfterDiscount: boolean) =>
+    render(
+      <ConfigurationSelector
+        product={product}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={sale}
+        pwywAmountIsAfterDiscount={amountAfterDiscount}
+      />,
+    );
+
+  it("hints the amount after the code for a box that holds it", () => {
+    renderWith(true);
+
+    expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("16.80+");
+  });
+
+  it("hints the amount before the code for a box that holds that instead", () => {
+    renderWith(false);
+
+    expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("24+");
+  });
+
+  it("leaves PPP out of the hint when the buy button does not undo it", () => {
+    render(
+      <ConfigurationSelector
+        product={{ ...product, price_cents: 0, ppp_details: { country: "India", factor: 0.5, minimum_price: 0 } }}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={null}
+        pwywAmountIsAfterDiscount
+      />,
+    );
+
+    expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("24+");
+  });
+
+  it("hints the PPP amount when PPP prices the selection, since the buy button undoes PPP", () => {
+    render(
+      <ConfigurationSelector
+        product={{ ...product, ppp_details: { country: "India", factor: 0.5, minimum_price: 0 } }}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={null}
+        pwywAmountIsAfterDiscount
+      />,
+    );
+
+    expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("12+");
+  });
+});

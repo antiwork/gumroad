@@ -42,8 +42,12 @@ export const applyPlanChangeSelection = (
 export const withOncePerCartMinimum = (total: number, discount: Discount | null, minimumPrice: number) =>
   oncePerCartAmount(discount) !== null && total > 0 && total < minimumPrice ? minimumPrice : total;
 
+// A once-per-cart amount comes off the cart total instead, so only that kind leaves the amount the buyer
+// enters as the pre-discount one. Everything else prices the discount into the amount they pay.
+export const subscriptionPriceIncludesDiscount = (discount: Discount | null) => oncePerCartAmount(discount) === null;
+
 export const initialSubscriptionUnitPrice = (subscription: SubscriptionPrice) =>
-  (subscription.is_installment_plan || oncePerCartAmount(subscription.discount) === null
+  (subscription.is_installment_plan || subscriptionPriceIncludesDiscount(subscription.discount)
     ? subscription.price
     : subscription.pre_discount_price) / subscription.quantity;
 
@@ -51,7 +55,7 @@ export const subscriptionPWYWMinimumUnitPrice = (
   undiscountedPrice: number,
   discountedPrice: number,
   discount: Discount | null,
-) => (oncePerCartAmount(discount) === null ? discountedPrice : undiscountedPrice);
+) => (subscriptionPriceIncludesDiscount(discount) ? discountedPrice : undiscountedPrice);
 
 export const selectedSubscriptionTotal = ({
   unitPrice,
