@@ -445,9 +445,7 @@ class CustomerMailer < ApplicationMailer
         break if window.empty?
 
         scope = scope.where("purchases.id < ?", window.last.id)
-        # A blocked receipt must not take one of the twenty slots (gp#4366); the walk stops as soon
-        # as twenty allowed ones are collected, so an ordinary buyer's lookup checks no more than
-        # it did before.
+        # A blocked receipt must not take one of the twenty slots (gp#4366).
         renderable_chargeables(window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq.each do |chargeable|
           next if chargeables.include?(chargeable) || suppress_receipt_from_unproven_seller?(chargeable)
 
