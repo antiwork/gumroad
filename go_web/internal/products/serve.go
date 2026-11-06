@@ -3,6 +3,7 @@ package products
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -26,11 +27,11 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 
 	// fetch_product_for_show: a product custom domain's product comes first, and
 	// user_by_domain scopes the permalink to the subdomain's or custom domain's seller.
+	var prod *product
 	if m := subdomainHost.FindStringSubmatch(req.Host); m == nil {
-		if p.seller, err = customDomainSeller(ctx, conn, req.Host); err != nil {
+		if prod, err = h.resolveCustomDomain(p); err != nil {
 			return err
 		}
-		p.customDomain = true
 	} else {
 		if d, err := findCustomDomain(ctx, conn, req.Host); err != nil || d != nil {
 			return firstErr(err, fallback("custom domain"))
@@ -44,10 +45,12 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		}
 	}
 	id, _ := req.Param("id").(string)
-	prod, err := fetchLeniently(ctx, conn, id, p.seller.id)
+	if !p.productDomain {
+		if prod, err = fetchLeniently(ctx, conn, id, p.seller.id); err != nil {
+			return err
+		}
+	}
 	switch {
-	case err != nil:
-		return err
 	case prod != nil && prod.bannedAt.Valid && p.utm != nil:
 		// track_utm_link_visit records a visit before check_banned's 404.
 		return fallback("utm visit on a banned product")
@@ -64,8 +67,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return err
 	}
 
-	// check_if_needs_redirect: on the seller's own host only the permalink can differ.
-	if permalink := prod.generalPermalink(); permalink != id {
+	// check_if_needs_redirect: on the seller's own host only the permalink can differ, and a
+	// product's domain never redirects.
+	if permalink := prod.generalPermalink(); permalink != id && !p.productDomain {
 		_, rawQuery, _ := strings.Cut(req.HTTP.RequestURI, "?")
 		for i := 0; i < len(rawQuery); i++ {
 			if c := rawQuery[i]; c <= ' ' || c >= 0x7f {
@@ -142,18 +146,22 @@ func firstErr(err, otherwise error) error {
 	return otherwise
 }
 
-// customDomainSeller is user_by_domain on a seller's custom domain, which
-// UserCustomDomainConstraint routes here when its owner has a username.
-func customDomainSeller(ctx context.Context, conn *sql.DB, host string) (*user, error) {
-	d, err := findCustomDomain(ctx, conn, host)
+// resolveCustomDomain resolves a custom domain as routing and fetch_product_for_show do: a
+// product's domain renders that product whatever the path names, and a seller's scopes the
+// permalink to its owner.
+func (h *handler) resolveCustomDomain(p *page) (*product, error) {
+	ctx, conn := p.Ctx, h.c.DB
+	d, err := findCustomDomain(ctx, conn, p.Req.Host)
 	switch {
 	case err != nil:
 		return nil, err
 	case d == nil:
 		return nil, fallback("no custom domain")
+	case d.productID.Valid && d.userID.Valid:
+		// UTM tracking and url_for_product_page would read its user too.
+		return nil, fallback("custom domain with a product and a user")
 	case d.productID.Valid:
-		// The product's own domain renders that product whatever the path names.
-		return nil, fallback("product custom domain")
+		return h.productDomainProduct(p, d.productID.Int64)
 	case !d.userID.Valid:
 		return nil, fallback("no custom domain owner")
 	}
@@ -161,11 +169,50 @@ func customDomainSeller(ctx context.Context, conn *sql.DB, host string) (*user, 
 	switch {
 	case err != nil:
 		return nil, err
-	case seller == nil || rails.Blank(seller.username.String):
+	case seller == nil:
 		return nil, fallback("no custom domain owner")
 	case seller.deletedAt.Valid:
 		// Rails 404s it in ensure_seller_is_not_deleted.
 		return nil, fallback("deleted custom domain owner")
 	}
-	return seller, nil
+	p.seller, p.customDomain = seller, true
+	return nil, nil
+}
+
+// productDomainProduct is product_by_custom_domain: the domain's product, fetched leniently by
+// its general permalink under its seller. track_utm_link_visit records nothing here, since
+// UserCustomDomainConstraint finds no seller for the host.
+func (h *handler) productDomainProduct(p *page, productID int64) (*product, error) {
+	ctx, conn := p.Ctx, h.c.DB
+	domainProduct := &product{}
+	err := conn.QueryRowContext(ctx, "SELECT links.user_id, links.unique_permalink, links.custom_permalink FROM links WHERE links.id = ? LIMIT 1",
+		productID).Scan(&domainProduct.userID, &domainProduct.uniquePermalink, &domainProduct.customPermalink)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fallback("product custom domain without a product")
+	}
+	if err != nil {
+		return nil, err
+	}
+	permalink := domainProduct.generalPermalink()
+	if rails.Blank(permalink) {
+		return nil, fallback("product custom domain without a permalink")
+	}
+	prod, err := fetchLeniently(ctx, conn, permalink, domainProduct.userID)
+	switch {
+	case err != nil:
+		return nil, err
+	case prod == nil:
+		// Rails then fetches the path's permalink among every seller's products.
+		return nil, fallback("product custom domain without an alive product")
+	}
+	seller, err := userByID(ctx, conn, prod.userID)
+	switch {
+	case err != nil:
+		return nil, err
+	case seller == nil || seller.deletedAt.Valid:
+		// Rails 404s it in ensure_seller_is_not_deleted.
+		return nil, fallback("product custom domain seller deleted")
+	}
+	p.seller, p.productDomain, p.utm = seller, true, nil
+	return prod, nil
 }

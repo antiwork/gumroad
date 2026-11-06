@@ -5,7 +5,6 @@ import (
 	"database/sql"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
-	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 // bundleItem is an alive bundle_products row, with the product and variant it names.
@@ -108,8 +107,7 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 		if t := thumbnails[bp.id]; t != nil {
 			thumbnail = thumbnailURLs[t.id]
 		}
-		// url_for_product_page on the seller's own host: short_link_url in the request's protocol.
-		url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(bp.generalPermalink()) + query
+		url := h.productPageURL(p, bp.generalPermalink(), query)
 		b.props = append(b.props, rails.NewRHash().
 			Sym("id", h.c.IDs.Encrypt(bp.id)).
 			Sym("name", bp.name).
