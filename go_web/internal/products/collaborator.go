@@ -48,12 +48,8 @@ func (h *handler) collaboratorByline(ctx context.Context, p *page, prod *product
 	if !show || !userID.Valid {
 		return nil, nil
 	}
-	u := &user{}
-	err = h.c.DB.QueryRowContext(ctx, "SELECT "+userColumns+" FROM users WHERE users.id = ? LIMIT 1", userID.Int64).Scan(u.dest()...)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
+	u, err := userByID(ctx, h.c.DB, userID.Int64)
+	if u == nil || err != nil {
 		return nil, err
 	}
 	// author_byline_props returns before avatar_url for a user without a username.

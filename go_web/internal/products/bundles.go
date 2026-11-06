@@ -108,7 +108,7 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 		if t := thumbnails[bp.id]; t != nil {
 			thumbnail = thumbnailURLs[t.id]
 		}
-		// url_for_product_page on the seller's own subdomain: short_link_url on this host.
+		// url_for_product_page on the seller's own host: short_link_url in the request's protocol.
 		url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(bp.generalPermalink()) + query
 		b.props = append(b.props, rails.NewRHash().
 			Sym("id", h.c.IDs.Encrypt(bp.id)).

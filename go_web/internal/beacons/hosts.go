@@ -8,8 +8,6 @@ import (
 	"slices"
 	"strings"
 
-	"golang.org/x/net/publicsuffix"
-
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -42,12 +40,10 @@ var thirdPartyAnalyticsDomains = map[string]string{
 }
 
 func newHosts(env *web.Environment, db *sql.DB) *hosts {
-	// request.host has no port, so subdomain_request? strips ROOT_DOMAIN's.
-	root, _, _ := strings.Cut(env.RootDomain, ":")
 	return &hosts{
 		env:                 env,
 		db:                  db,
-		subdomain:           regexp.MustCompile(`\A[a-z0-9-]+.` + root + `\z`),
+		subdomain:           web.SubdomainRequestPattern(env.RootDomain),
 		thirdPartyAnalytics: regexp.MustCompile(thirdPartyAnalyticsDomains[env.Name]),
 	}
 }
@@ -114,21 +110,17 @@ type customDomain struct {
 
 // customDomain is CustomDomain.find_by_host, with the product and owner it points at.
 func (h *hosts) customDomain(ctx context.Context, host string) (*customDomain, error) {
-	name := strings.ToLower(strings.TrimSuffix(strings.TrimSpace(host), "."))
-	if name == "" || strings.HasPrefix(name, ".") || strings.Contains(name, "://") {
+	names, _ := web.CustomDomainNames(host)
+	if names == nil {
 		return nil, nil
 	}
-	registrable, err := publicsuffix.EffectiveTLDPlusOne(name)
-	if err != nil {
-		return nil, nil
-	}
-	query, args := `custom_domains.domain = ?`, []any{host}
-	if trd := strings.TrimSuffix(strings.TrimSuffix(name, registrable), "."); trd == "" || trd == "www" {
+	query, args := `custom_domains.domain = ?`, []any{names[0]}
+	if len(names) == 2 {
 		// find_by(domain:) || find_by(domain: "www.#{domain}"): the apex wins.
-		query, args = `custom_domains.domain IN (?, ?)`, []any{registrable, "www." + registrable}
+		query, args = `custom_domains.domain IN (?, ?)`, []any{names[0], names[1]}
 	}
 	d := &customDomain{}
-	err = h.db.QueryRowContext(ctx, `SELECT links.id IS NOT NULL, COALESCE(users.username, '')
+	err := h.db.QueryRowContext(ctx, `SELECT links.id IS NOT NULL, COALESCE(users.username, '')
 		FROM custom_domains
 		LEFT JOIN links ON links.id = custom_domains.product_id
 		LEFT JOIN users ON users.id = custom_domains.user_id

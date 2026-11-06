@@ -1,5 +1,6 @@
 // Package products serves the product page, GET /l/:id (LinksController#show), on a seller's
-// subdomain, for a visitor signed out or signed in as themselves: Rails' filters, then
+// subdomain or own custom domain, for a visitor signed out or signed in as themselves: Rails'
+// filters, then
 // Products/Show. Every request whose Rails path this port leaves
 // out goes to Rails before anything is written.
 package products
@@ -64,7 +65,7 @@ type handler struct {
 // page is the controller instance for one request.
 type page struct {
 	*pages.Visit
-	// seller is the subdomain's seller, user_by_domain.
+	// seller is user_by_domain: the subdomain's or the custom domain's.
 	seller *user
 	// viewer is the signed-in visitor, nil when signed out.
 	viewer *signedInUser
@@ -95,6 +96,8 @@ type page struct {
 	// own, never a featured product's.
 	layout        string
 	recommendedBy *string
+	// customDomain is a request on the seller's own custom domain, whose host the meta tags take.
+	customDomain bool
 	// utm is track_utm_link_visit's utm_params, nil when it records nothing.
 	utm sidekiq.Hash
 	// collaborates is whether the visitor is collaborator_for? this page's product.
@@ -137,8 +140,12 @@ func (h *handler) servePage(w http.ResponseWriter, r *http.Request, codeRoute bo
 }
 
 // subdomainHost is a seller subdomain as Subdomain.subdomain_request? matches it, with the
-// dots it leaves unescaped taken literally; any other host goes to Rails.
+// dots it leaves unescaped taken literally.
 var subdomainHost = regexp.MustCompile(`\A([a-z0-9-]+)\.gumroad\.com\z`)
+
+// railsSubdomainHost is Subdomain.subdomain_request?'s pattern itself, whose unescaped dots
+// also match a custom domain like mygumroad.com, which Rails then reads as a subdomain first.
+var railsSubdomainHost = web.SubdomainRequestPattern("gumroad.com")
 
 // analyticsHost is routes.rb's unanchored host constraint for THIRD_PARTY_ANALYTICS_DOMAIN,
 // which a subdomain like gumroad-analytics-com.gumroad.com also meets, so Rails 404s it.
@@ -203,19 +210,30 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 func declined(r *http.Request, env *web.Environment) string {
 	host := web.Host(r)
 	m := subdomainHost.FindStringSubmatch(host)
+	subdomain := m != nil
+	// A custom domain's request reaches Rails over plain http on port 80.
+	port, protocol := "443", "https://"
+	if !subdomain {
+		port, protocol = "80", "http://"
+	}
 	switch {
 	case r.Method != http.MethodGet:
 		return "method"
-	case m == nil || env.RootDomain != "gumroad.com":
-		// The app domain redirects here, and custom domains route by their own rules.
+	case env.RootDomain != "gumroad.com" || env.IsGumroadHost(host) || analyticsHost.MatchString(host):
 		return "host"
-	case m[1] == "www" || m[1] == "app" || env.IsGumroadHost(host) || analyticsHost.MatchString(host):
+	case subdomain && (m[1] == "www" || m[1] == "app"), !subdomain && railsSubdomainHost.MatchString(host):
+		return "host"
+	case !subdomain && r.Host == env.Domain:
+		// Rack::SSL redirects a raw gumroad.com Host to https before routing.
 		return "host"
 	case !permalinkParam.MatchString(r.PathValue("id")):
 		return "permalink"
-	case !rails.SecureCookies(env.Protocol, r):
+	case r.Header.Get("X-Forwarded-Ssl") != "" || r.Header.Get("X-Forwarded-Scheme") != "":
+		// Rack's scheme reads these; SecureHeaders' doesn't.
+		return "forwarded scheme"
+	case rails.SecureCookies(env.Protocol, r) != subdomain || web.Protocol(r) != protocol:
 		return "not ssl"
-	case web.HostWithPort(r) != host || web.ForwardedPort(r) != "" && web.ForwardedPort(r) != "443":
+	case web.HostWithPort(r) != host || web.ForwardedPort(r) != "" && web.ForwardedPort(r) != port:
 		// Rails' URLs here would carry the port.
 		return "port"
 	case r.ContentLength != 0 || len(r.TransferEncoding) > 0:
