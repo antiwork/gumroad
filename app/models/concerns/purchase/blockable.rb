@@ -537,29 +537,36 @@ module Purchase::Blockable
     stripe_charge_processor? ? stripe_fingerprint : card_visual
   end
 
+  # Email and account are the buyer's own labels and reset with every alias or guest checkout, so
+  # the card and browser are counted across every email and account too. IP stays out of the count:
+  # it is shared behind NATs and carrier pools.
   def block_buyer_based_on_chargeback_count!
-    email_cb_count = Purchase.excluding_paypal_processor
-                             .where(email: email)
-                             .where.not(chargeback_date: nil)
-                             .count
+    chargebacked = Purchase.excluding_paypal_processor.where.not(chargeback_date: nil)
 
-    purchaser_cb_count = if purchaser_id.present?
-      Purchase.excluding_paypal_processor
-              .where(purchaser_id: purchaser_id)
-              .where.not(chargeback_date: nil)
-              .count
-    else
-      0
-    end
-
+    email_cb_count = chargebacked.where(email: email).count
+    purchaser_cb_count = purchaser_id.present? ? chargebacked.where(purchaser_id: purchaser_id).count : 0
     chargeback_count = [email_cb_count, purchaser_cb_count].max
 
-    return if chargeback_count < MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK
-    return if buyer_blocked?
+    if chargeback_count >= MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK
+      return if buyer_blocked?
 
-    block_buyer!(
-      blocking_user_id: GUMROAD_ADMIN_ID,
-      comment_content: "Auto-blocked: buyer has #{chargeback_count} chargebacks (#{email_cb_count} by email, #{purchaser_cb_count} by account)"
+      return block_buyer!(
+        blocking_user_id: GUMROAD_ADMIN_ID,
+        comment_content: "Auto-blocked: buyer has #{chargeback_count} chargebacks (#{email_cb_count} by email, #{purchaser_cb_count} by account)"
+      )
+    end
+
+    card_cb_count = stripe_fingerprint.present? ? chargebacked.where(stripe_fingerprint:).count : 0
+    guid_cb_count = browser_guid.present? ? chargebacked.where(browser_guid:).count : 0
+    card_tripped = card_cb_count >= MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK && !blocked_by_charge_processor_fingerprint?
+    guid_tripped = guid_cb_count >= MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK && !blocked_by_browser_guid?
+    return unless card_tripped || guid_tripped
+
+    block_by_charge_processor_fingerprint!(by_user_id: GUMROAD_ADMIN_ID) if card_tripped
+    block_by_browser_guid!(by_user_id: GUMROAD_ADMIN_ID) if guid_tripped
+
+    create_blocked_buyer_comments!(
+      comment_content: "Auto-blocked: #{card_cb_count} chargebacks on this card, #{guid_cb_count} on this browser, across all emails and accounts"
     )
   end
 
