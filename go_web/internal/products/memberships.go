@@ -174,9 +174,9 @@ func (vs *variants) lowestTierPriceCents() int64 {
 	for _, o := range vs.tiers {
 		for i := range o.buyPrices {
 			c := &o.buyPrices[i].cents
-			all = minCents(all, c)
+			all = lowerOf(all, c)
 			if !o.closed {
-				open = minCents(open, c)
+				open = lowerOf(open, c)
 			}
 		}
 	}

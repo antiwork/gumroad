@@ -180,6 +180,7 @@ type view struct {
 	installmentPlan any
 	preorder        any
 	publicFiles     []any
+	bundle          *bundle
 	// catalog is the storefront's sections.
 	catalog []any
 }
@@ -282,7 +283,10 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.collaborator, err = h.collaboratorByline(ctx, p, prod); err != nil {
 		return nil, err
 	}
-	if v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod, v.variants); err != nil {
+	if v.bundle, err = h.loadBundle(ctx, p, prod); err != nil {
+		return nil, err
+	}
+	if v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod, v.variants, v.bundle.quantityLeft); err != nil {
 		return nil, err
 	}
 	if err := h.loadDescription(ctx, prod, v); err != nil {
