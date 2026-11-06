@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
@@ -101,6 +102,35 @@ func TestTheCustomHTMLWrapper(t *testing.T) {
 }
 
 var csrfMeta = regexp.MustCompile(`"csrf-token" content="[^"]*"`)
+
+// A signed-in visitor gets the document a signed-out one does; the seller and a collaborator
+// get Rails' live reload.
+func TestTheCustomHTMLWrapperSignedIn(t *testing.T) {
+	const collabID = int64(1_790_002)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	customHTML(t, e, conn)
+	addBuyer(t, conn, nil)
+	testdb.User(t, conn, collabID, map[string]any{"username": "collab_user", "external_id": "1790002", "name": "Collab"})
+	testdb.Insert(t, conn, "affiliates", map[string]any{"id": int64(1_795_451), "type": "Collaborator", "seller_id": sellerID,
+		"affiliate_user_id": collabID, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "affiliates_links", map[string]any{"id": int64(1_795_452), "affiliate_id": int64(1_795_451),
+		"link_id": productID, "created_at": testNow, "updated_at": testNow})
+
+	out := e.get(host, "/l/guide", nil)
+	in := e.get(host, "/l/guide", e.signedIn(buyerID, nil))
+	if in.Code != http.StatusOK || e.railsHit != nil || csrfMeta.ReplaceAllString(in.Body.String(), "") != csrfMeta.ReplaceAllString(out.Body.String(), "") {
+		t.Errorf("signed in: %d %q", in.Code, in.Header().Get("X-Go-Web-Fallback"))
+	}
+	for i, user := range []int64{sellerID, collabID} {
+		headers := e.signedIn(user, nil)
+		// A signature is good for one request.
+		headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide", testNow.Add(time.Duration(i)*time.Second))["X-Go-Web-Dry-Run"]
+		if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "custom html preview" {
+			t.Errorf("user %d: %d %q", user, w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+	}
+}
 
 func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 	domain := func(state string, issued any) func(t *testing.T, e *testEnv, conn *sql.DB) {

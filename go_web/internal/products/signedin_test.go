@@ -2,6 +2,7 @@ package products
 
 import (
 	"database/sql"
+	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -283,5 +284,33 @@ func TestAStoreAgentSeller(t *testing.T) {
 				t.Errorf("bodies %v", bodies)
 			}
 		})
+	}
+}
+
+// Several memberships list in Rails' order, the last accessed first, each with its seller.
+func TestSeveralTeamMemberships(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	addBuyer(t, conn, nil)
+	membership := func(id, sellerID int64, role string, accessed time.Time) {
+		testdb.Insert(t, conn, "team_memberships", map[string]any{"id": id, "user_id": buyerID, "seller_id": sellerID, "role": role,
+			"last_accessed_at": accessed, "created_at": testNow, "updated_at": testNow})
+	}
+	membership(1_796_711, buyerID, "owner", testNow.Add(-time.Hour))
+	membership(1_796_712, sellerID, "support", testNow)
+	// switchable leaves out a deleted seller's.
+	testdb.User(t, conn, 1_796_713, map[string]any{"username": "gonegowebseller", "deleted_at": testNow})
+	membership(1_796_714, 1_796_713, "admin", testNow.Add(time.Hour))
+	w := e.get(host, "/l/guide", e.signedIn(buyerID, nil))
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	body := w.Body.String()
+	avatar := pageProps(t, body)["product"].(map[string]any)["seller"].(map[string]any)["avatar_url"].(string)
+	want := fmt.Sprintf(`"team_memberships":[{"id":"%s","seller_name":"Seller","seller_avatar_url":"%s","has_some_read_only_access":true,`+
+		`"is_selected":false},{"id":"%s","seller_name":"Buyer","seller_avatar_url":"%s","has_some_read_only_access":false,"is_selected":true}]`,
+		e.ids.Encrypt(1_796_712), avatar, e.ids.Encrypt(1_796_711), avatar)
+	if page := html.UnescapeString(dataPage.FindStringSubmatch(body)[1]); !strings.Contains(page, want) {
+		t.Errorf("want %s\nin %s", want, page)
 	}
 }
