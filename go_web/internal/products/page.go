@@ -127,17 +127,22 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	}
 	props.Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
 	h.productProps(props, p, prod, v)
-	props.Merge(h.sectionsProps(p, v))
-	component := productComponent
-	if storefront(p) {
+	component, bodyClass := productComponent, ""
+	switch {
+	case p.iframe:
+		component, bodyClass = iframeComponent, "iframe"
+	case storefront(p):
 		component = storefrontComponent
 	}
-	props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
+	if !p.iframe {
+		props.Merge(h.sectionsProps(p, v))
+		props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
+	}
 
 	// as_embed is a declined param.
 	body := pc.Layout.Render(inertia.Document{
 		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta,
-		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page",
+		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page", BodyClass: bodyClass,
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
 	})
 
@@ -373,6 +378,16 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	}
 	// Past here only the page reads: product_props leaves the sections and the profile alone.
 	if p.parent != nil {
+		return v, nil
+	}
+	if p.iframe {
+		// iframe_product_props is product_props alone; the meta tags still read the styles.
+		if err := h.loadCustomStyles(ctx, p, v); err != nil {
+			return nil, err
+		}
+		if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
+			return nil, err
+		}
 		return v, nil
 	}
 	if v.showRatingsFilter, err = h.exists(ctx, "SELECT 1 FROM links WHERE links.user_id = ? AND links.purchase_disabled_at IS NULL"+
