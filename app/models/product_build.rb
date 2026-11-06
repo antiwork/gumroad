@@ -7,6 +7,8 @@ class ProductBuild < ApplicationRecord
   include TimestampStateFields
   STATUSES = %w[uploaded live superseded].freeze
   MAX_BUILDS_PER_PRODUCT = 50
+  # Per unproven seller (ContentModeration::GumroadImpersonation.unproven_seller?), across all their products.
+  MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER = 10
   MAX_BYTE_SIZE = 2.gigabytes
   # Limits on what a zip may unpack to. The zip itself is capped at MAX_BYTE_SIZE, but a small
   # archive can still expand into far more, so the unpack stops at these.
@@ -107,7 +109,17 @@ class ProductBuild < ApplicationRecord
   def player_enabled? = product.build_player_enabled?
 
   # Whether buyers get a Play action for this build on the content page.
-  def playable? = live? && site_ready? && player_enabled?
+  def playable? = live? && site_ready? && player_enabled? && free_play_allowed?
+
+  # A free build has no charge to check, so only a proven seller gets one. Pass the buyer's purchase
+  # to also refuse a fully discounted one.
+  def free_play_allowed?(purchase = nil)
+    return true unless ContentModeration::GumroadImpersonation.unproven_seller?(product.user)
+    return false if free_for_everyone?
+    return true if purchase.nil?
+
+    charged_purchases(purchase).any? { _1.is_test_purchase? || _1.price_cents.to_i.positive? }
+  end
 
   # Whether anyone can play this build with no purchase, from the public demo page and its X player
   # card. The build the seller chose qualifies, unless it is what buyers of a paid product get: a
@@ -115,9 +127,19 @@ class ProductBuild < ApplicationRecord
   # every buyer gets it for nothing anyway. The queries come last.
   def demo?
     return false unless Feature.active?(DEMO_FEATURE, product.user) && player_enabled? && site_ready? && on_sale?
+    # A demo is public, so it needs a proven seller even when what buyers get is paid.
+    return false if ContentModeration::GumroadImpersonation.unproven_seller?(product.user)
     return !purchased_version? if demo_selected?
 
     live? && free_for_everyone? && !product.product_builds.demo_selected.exists?
+  end
+
+  def self.free_product?(product)
+    return false if product.rent_only? || product.is_recurring_billing || product.price_cents != 0
+
+    variants = product.alive_variants
+    variants.where("price_difference_cents > 0").none? &&
+      VariantPrice.alive.is_buy.where(variant_id: variants.select(:id)).where("price_cents > 0").none?
   end
 
   # What buyers of a paid product get, which never becomes public.
@@ -202,7 +224,7 @@ class ProductBuild < ApplicationRecord
 
   # What the API and the editor's version history show of a build.
   def as_json(*)
-    { id: public_id, number:, status:, byte_size:, created_at:, promoted_at:, demo: demo_selected? }
+    { id: public_id, number:, status:, byte_size:, created_at:, promoted_at:, demo: demo_selected?, unpack_error: site_unpack_error.presence }
   end
 
   # Makes this build the one buyers get, superseding the current one. Promoting the live build again
@@ -248,12 +270,23 @@ class ProductBuild < ApplicationRecord
 
     # Free only when a buyer of any version can buy it for nothing (BaseVariant#free?, for all versions at
     # once). A rental-only product has no buy price.
-    def free_for_everyone?
-      return false if product.rent_only? || product.is_recurring_billing || product.price_cents != 0
+    def free_for_everyone? = self.class.free_product?(product)
 
-      variants = product.alive_variants
-      variants.where("price_difference_cents > 0").none? &&
-        VariantPrice.alive.is_buy.where(variant_id: variants.select(:id)).where("price_cents > 0").none?
+    # The purchases that could hold this one's charge. A purchase does not always carry the money on
+    # its own row: a bundle component is written with a price of 0 because the bundle purchase was the
+    # one charged (Purchase::CreateBundleProductPurchaseService), and a gift receiver's is 0 because
+    # the gifter paid. Reading only the row in hand would refuse a paid bundle or gift.
+    #
+    # In practice the call above rarely gets this far for those two: the charged row belongs to the
+    # same seller (BundleProductPurchase checks it), so it is a paid sale and the seller counts as
+    # proven at the first return. Following the money anyway keeps the decision about what was paid
+    # rather than about a definition of "proven" that the rest of the codebase does not apply
+    # uniformly (see CreatorHomePresenter, which excludes bundle component purchases from has_sale).
+    def charged_purchases(purchase)
+      charged = [purchase]
+      charged << purchase.bundle_purchase if purchase.is_bundle_product_purchase?
+      charged << purchase.gift_received&.gifter_purchase if purchase.is_gift_receiver_purchase?
+      charged.compact
     end
 
     def set_public_id

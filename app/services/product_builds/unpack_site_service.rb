@@ -22,6 +22,9 @@ class ProductBuilds::UnpackSiteService
   S3_KEY_MAX_BYTES = 1_024
   UNREADABLE_ARCHIVE = "The zip could not be read, so there is nothing to play."
   FINDER_METADATA_FOLDER = "__MACOSX"
+  # Unproven sellers' builds with these pages are held for support review.
+  PHISHING_WORDS = /\b(log\s*in|sign\s*in|verify|verification|payouts?|wallet|seed phrase|recovery phrase|bank account|paypal)\b/i
+  CREDENTIAL_PAGE_HELD = "This build has a page that asks for a password or sign-in details, so it needs a quick review before it can go live. Contact support and we'll take a look."
 
   # rubyzip holds every central-directory record in memory the moment the archive is opened, so the
   # directory is walked here first, with the budgets a build may hold. Counting entries alone would
@@ -291,6 +294,7 @@ class ProductBuilds::UnpackSiteService
           raise UnpackError, "An HTML page can be at most #{ProductBuild::MAX_PAGE_BYTE_SIZE / 1.megabyte} MB: #{shown(path)}."
         end
 
+        check_credential_page!(file, path)
         file.rewind
         key = "#{build.site_prefix}/#{path}"
         # Tracked before the call: a put that times out after S3 stored the object must still be cleaned up.
@@ -358,6 +362,29 @@ class ProductBuilds::UnpackSiteService
       end
 
       segments.join("/")
+    end
+
+    def check_credential_page!(file, path)
+      return unless ProductBuild::PAGE_EXTENSIONS.include?(File.extname(path).delete_prefix(".").downcase)
+      return unless credential_check_applies?
+
+      file.rewind
+      page = file.read.force_encoding(Encoding::UTF_8).scrub
+      return unless credential_page?(page)
+
+      Rails.logger.info("[ProductBuildCredentialPage] #{{ build_id: build.id, product_id: build.product_id, seller_id: build.product.user_id, path: }.to_json}")
+      raise UnpackError, CREDENTIAL_PAGE_HELD
+    end
+
+    def credential_page?(page)
+      types = Nokogiri::HTML(page).css("input").map { _1["type"].to_s.strip.downcase }
+      types.include?("password") || (types.include?("email") && page.match?(PHISHING_WORDS))
+    end
+
+    def credential_check_applies?
+      return @credential_check_applies if defined?(@credential_check_applies)
+
+      @credential_check_applies = ContentModeration::GumroadImpersonation.unproven_seller?(build.product.user)
     end
 
     def shown(name)

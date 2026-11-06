@@ -35,6 +35,7 @@ class ProductBuildPlayerFilesController < ApplicationController
     # Module scripts, fetch and wasm from the frame are CORS requests with `Origin: null`, and the
     # browser checks a redirect as well as the response it leads to.
     response.set_header("Access-Control-Allow-Origin", "*")
+    response.set_header("X-Robots-Tag", "noindex, nofollow")
     return serve_file if SERVED_EXTENSIONS.include?(extension)
 
     expires_in CACHE_MAX_AGE, public: false

@@ -61,6 +61,7 @@ const VersionRow = ({
           <InlineList className="truncate">
             {live ? <li>Buyers get this version</li> : ready ? <li>Not live yet</li> : null}
             <li>Added {deployedAgo(build.created_at)}</li>
+            {build.unpack_error ? <li className="text-danger">{build.unpack_error}</li> : null}
             {live ? <li>{FileUtils.getFullFileSizeString(build.byte_size)}</li> : null}
           </InlineList>
         </div>
