@@ -43,25 +43,28 @@ class AgentOnboardingPresenter
   # (Oauth::AuthorizationsController#current_resource_owner), so a brand's tokens carry the brand's
   # id even when a team member authorized the client. A revoked token keeps its history (first
   # connect, last activity) but does not count as connected.
-  # One query, bounded by resource_owner_id (indexed); grouped in Ruby by the client path segment,
-  # the same match the MCP metrics use.
+  # A brand token also stops working the moment the consenting member's sessions are invalidated
+  # (MobileAccountToken.valid?, which the API applies to every request), so it must not read as
+  # connected either.
+  # One indexed query on oauth_access_tokens by resource_owner_id, plus the membership lookup the API
+  # would do anyway for a token that carries one; grouped in Ruby by the client path segment, the
+  # same match the MCP metrics use.
   def connection_status_by_client
     status = CLIENT_ORDER.index_with { { connected: false, first_connected_at: nil, last_used_at: nil } }
 
     Doorkeeper::AccessToken
       .where(resource_owner_id: seller.id)
       .where.not(resource: nil)
-      .pluck(:resource, :created_at, :revoked_at)
-      .each do |resource, created_at, revoked_at|
-        key = self.class.client_key_for(resource)
+      .each do |token|
+        key = self.class.client_key_for(token.resource)
         next if key.nil?
 
         entry = status[key]
-        entry[:connected] = true if revoked_at.nil?
-        entry[:first_connected_at] = [entry[:first_connected_at], created_at].compact.min
+        entry[:connected] = true if token.revoked_at.nil? && MobileAccountToken.valid?(token)
+        entry[:first_connected_at] = [entry[:first_connected_at], token.created_at].compact.min
         # Doorkeeper tokens carry no last-used stamp; the newest token (or its revocation) is the
         # latest activity we can state honestly.
-        entry[:last_used_at] = [entry[:last_used_at], created_at, revoked_at].compact.max
+        entry[:last_used_at] = [entry[:last_used_at], token.created_at, token.revoked_at].compact.max
       end
 
     status

@@ -7,11 +7,12 @@ describe AgentOnboardingPresenter do
   let(:pundit_user) { SellerContext.new(user: seller, seller:) }
   let(:presenter) { described_class.new(pundit_user:) }
 
-  def mcp_token(user, client, created_at:, revoked_at: nil)
+  def mcp_token(user, client, created_at:, revoked_at: nil, resource_owner: nil, team_membership: nil)
     app = create(:oauth_application, owner: user)
     create("doorkeeper/access_token",
            application: app,
-           resource_owner_id: user.id,
+           resource_owner_id: (resource_owner || user).id,
+           team_membership_id: team_membership&.id,
            scopes: "view_sales",
            resource: Mcp::DynamicClientOauth.resource_identifier("/#{client}/v1/mcp"),
            created_at:,
@@ -90,6 +91,24 @@ describe AgentOnboardingPresenter do
       expect(claude[:connected]).to eq(false)
       expect(claude[:first_connected_at]).to eq(Time.zone.parse("2026-09-01 10:00").iso8601)
       expect(claude[:last_used_at]).to eq(Time.zone.parse("2026-09-15 10:00").iso8601)
+    end
+
+    it "reports a brand client as not connected once the consenting member's sessions were invalidated, keeping the history" do
+      admin = create(:user)
+      membership = create(:team_membership, user: admin, seller:, role: TeamMembership::ROLE_ADMIN)
+      connected_at = Time.zone.parse("2026-10-02 10:00")
+      mcp_token(admin, "claude", created_at: connected_at, resource_owner: seller, team_membership: membership)
+
+      expect(presenter.index_props[:clients].first[:connected]).to eq(true)
+
+      # What a session reset does to the member's tokens: the API stops honouring them
+      # (MobileAccountToken.valid?), so the tab must stop saying Connected even though the token
+      # itself is not revoked and its history stays.
+      admin.update!(last_active_sessions_invalidated_at: connected_at + 1.minute)
+
+      claude = presenter.index_props[:clients].first
+      expect(claude[:connected]).to eq(false)
+      expect(claude[:first_connected_at]).to eq(connected_at.iso8601)
     end
 
     it "never touches the Elasticsearch sales aggregation" do

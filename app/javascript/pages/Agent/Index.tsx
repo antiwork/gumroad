@@ -7,6 +7,7 @@ import { formatPostDate } from "$app/utils/date";
 import { Button, NavigationButton } from "$app/components/Button";
 import { CopyToClipboard } from "$app/components/CopyToClipboard";
 import { Card, CardContent } from "$app/components/ui/Card";
+import CodeSnippet from "$app/components/ui/CodeSnippet";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Pill } from "$app/components/ui/Pill";
 import { useUserAgentInfo } from "$app/components/UserAgent";
@@ -79,15 +80,17 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
         <CardContent details className="grid content-start gap-2">
           <h3 className="font-bold">Setup</h3>
           <p>{client.setup}</p>
-          <div className="flex flex-wrap items-center gap-2">
-            <code id={endpointId} className="min-w-0 flex-1 rounded border border-border bg-active-bg p-2 break-all">
-              {client.endpoint_url}
-            </code>
-            <CopyToClipboard text={client.endpoint_url}>
-              <Button size="sm" aria-label={`Copy ${client.label} connector URL`} aria-describedby={endpointId}>
-                Copy
-              </Button>
-            </CopyToClipboard>
+          <div className="flex flex-wrap items-start gap-2">
+            <div id={endpointId} className="min-w-0 grow">
+              <CodeSnippet>{client.endpoint_url}</CodeSnippet>
+            </div>
+            <div className="shrink-0">
+              <CopyToClipboard text={client.endpoint_url}>
+                <Button size="sm" aria-label={`Copy ${client.label} connector URL`} aria-describedby={endpointId}>
+                  Copy
+                </Button>
+              </CopyToClipboard>
+            </div>
           </div>
         </CardContent>
       </section>
