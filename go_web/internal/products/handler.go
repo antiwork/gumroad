@@ -72,6 +72,7 @@ type page struct {
 	hasPublicFiles     bool
 	hasBundleProducts  bool
 	hasAutoApplyCode   bool
+	hasProductSections bool
 	// settleable is buyer_currency_settleable? for the page's seller and buyer currency.
 	settleable  *bool
 	productsKey string

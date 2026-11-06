@@ -80,6 +80,7 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		// bundle_products renders them whether or not the product is still a bundle.
 		{"SELECT 1 FROM bundle_products WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL", prod.id, &p.hasBundleProducts},
 		{"SELECT 1 FROM offer_codes WHERE " + autoApplyCodes, seller.id, &p.hasAutoApplyCode},
+		{"SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id, &p.hasProductSections},
 	}
 	// One round trip; each EXISTS stops at its first row.
 	exprs, args, dest := make([]string, 0, len(gates)), make([]any, 0, len(gates)), make([]any, 0, len(gates))

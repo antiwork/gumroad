@@ -410,6 +410,11 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					"product_id": productID, "type": profileSubscribeSectionType, "json_data": nil, "created_at": testNow, "updated_at": testNow})
 				listSections(t, conn, `{"sections":[1792601]}`)
 			}},
+		{name: "a product listing no sections, with a row Rails would raise on", reason: "product section row", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_608), "seller_id": sellerID,
+					"product_id": productID, "type": "SellerProfileTextSection", "json_data": `{}`, "created_at": testNow, "updated_at": testNow})
+			}},
 		{name: "an empty saved section", server: search, searched: 1, hits: `[]`, total: "0",
 			// Rails still sends the empty id list and should clause.
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[]}}],`+

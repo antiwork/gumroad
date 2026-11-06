@@ -32,19 +32,19 @@ var sectionTypes = map[string]bool{
 // when the product doesn't list it.
 func (h *handler) listProductSections(p *page, prod *product, v *view) (*productSections, error) {
 	ps := &productSections{}
-	raw, ok := v.productJSON.present("sections")
-	if !ok {
-		return ps, nil
-	}
+	// Link#sections is [] when blank; filter_map finds nothing in a Hash and raises on the rest.
 	var list []any
-	switch raw := raw.(type) {
-	case []any:
-		list = raw
-	case *rails.Hash:
-		// filter_map over a Hash finds no section.
+	if raw, ok := v.productJSON.present("sections"); ok {
+		switch raw := raw.(type) {
+		case []any:
+			list = raw
+		case *rails.Hash:
+		default:
+			return nil, fallback("product sections json_data")
+		}
+	}
+	if !p.hasProductSections {
 		return ps, nil
-	default:
-		return nil, fallback("product sections json_data")
 	}
 	// Each entry matches by ObfuscateIds.encrypt(id), which encrypts id.to_s.
 	keys := make([]string, len(list))
