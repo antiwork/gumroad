@@ -220,14 +220,14 @@ describe("DownloadPage receipt alert", () => {
     vi.restoreAllMocks();
   });
 
-  it("confirms a free signup with the seller", () => {
+  it("says the buyer signed up with the seller for free", () => {
     window.history.replaceState(null, "", "/d/token?receipt=true");
     vi.spyOn(router, "replace").mockImplementation(() => {});
 
     renderPage(content(null), { ...purchaseProps(), free: true, seller_name: "Ana" });
 
     expect(showAlert).toHaveBeenCalledWith(
-      "You're in! Your free signup with Ana is confirmed. We sent a confirmation to buyer@example.com.",
+      "You signed up with Ana for free. We emailed the details to buyer@example.com.",
       "success",
     );
   });

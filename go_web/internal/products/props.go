@@ -109,7 +109,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("discount_code", discountCode).
 		Sym("sale_label", v.discount.label).
 		Sym("selection_discounts", selectionDiscounts(prod, v, discountCode)).
-		Sym("purchase", nil).
+		Sym("purchase", v.purchase).
 		Sym("wishlists", v.wishlists)
 }
 

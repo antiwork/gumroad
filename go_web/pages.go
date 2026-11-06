@@ -229,6 +229,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		// Its tags are the same on every render.
 		CustomHTMLAnalytics: customHTML,
 		GumroadAdminID:      gumroadAdminID,
+		EmailDigestKey:      b.pages.EmailDigestKey,
 	}, nil
 }
 

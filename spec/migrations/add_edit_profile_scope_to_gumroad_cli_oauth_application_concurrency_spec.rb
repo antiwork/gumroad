@@ -26,7 +26,8 @@ describe AddEditProfileScopeToGumroadCliOauthApplication, "rollback concurrency"
     Doorkeeper::AccessToken.where(application_id: @oauth_application.id).delete_all
     Doorkeeper::AccessGrant.where(application_id: @oauth_application.id).delete_all
     @oauth_application.delete
-    @seller.delete
+    @seller.destroy!
+    delete_leftovers(user_ids: [@seller.id])
   end
 
   it "rejects a device authorization that waits for the rollback application lock" do

@@ -14,6 +14,8 @@ import (
 type currency struct {
 	minPrice   int64
 	singleUnit bool
+	// prefix and suffix are MoneyFormatter's symbol around the amount.
+	prefix, suffix string
 }
 
 // currencyFor is get_currency_by_type: an unknown currency reads as USD's.

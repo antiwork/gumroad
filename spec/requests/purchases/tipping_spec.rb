@@ -149,7 +149,7 @@ describe("Product checkout with tipping", type: :system, js: true) do
       click_on "Get", exact: true
 
       # Two sellers, so the confirmation names neither.
-      expect(page).to have_alert(text: "You're in! Your free signup is confirmed. We sent a confirmation to test@gumroad.com.", visible: :all, wait: 60)
+      expect(page).to have_alert(text: "You signed up for free. We emailed the details to test@gumroad.com.", visible: :all, wait: 60)
 
       purchase = Purchase.last
       expect(purchase).to be_successful
