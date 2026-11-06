@@ -93,7 +93,7 @@ func (h *handler) loadRecurrences(ctx context.Context, prod *product, ps prices)
 		return nil, nil
 	}
 	type enabledPrice struct {
-		row          linkPrice
+		row          priceRow
 		months       int
 		reminderDays []any
 	}
@@ -122,7 +122,7 @@ func (h *handler) loadRecurrences(ctx context.Context, prod *product, ps prices)
 	out := &recurrences{}
 	duration, _ := prod.subscriptionDurationName()
 	// default_price_recurrence: any alive price at the subscription duration, rentals included.
-	if slices.ContainsFunc(ps.rows, func(r linkPrice) bool { return r.recurrence.Valid && r.recurrence.String == duration }) {
+	if slices.ContainsFunc(ps.rows, func(r priceRow) bool { return r.recurrence.Valid && r.recurrence.String == duration }) {
 		out.def = duration
 	} else if len(enabled) > 0 {
 		out.def = enabled[0].row.recurrence.String

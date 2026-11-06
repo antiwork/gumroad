@@ -28,7 +28,7 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 	switch {
 	case prod.nativeType == "coffee":
 		return "coffee product", nil
-	case seller.is(userProductPageStorefrontEnabled):
+	case seller.is(userProductPageStorefrontEnabled) && h.c.Page.Search == nil:
 		return "storefront", nil
 	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
 		return "purchase type", nil

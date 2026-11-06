@@ -113,8 +113,12 @@ func TestLiveRoundTrip(t *testing.T) {
 	if _, found, _ := s.Read(ctx, "round trip 0 é\t%"); found {
 		t.Error("Delete left the entry")
 	}
-	if err := s.Write(ctx, "too big", strings.Repeat("x", compressThreshold), 0); !errors.Is(err, ErrUnported) {
-		t.Errorf("a value Rails would deflate is ErrUnported, got %v", err)
+	big := strings.Repeat("x", compressThreshold)
+	if err := s.Write(ctx, "deflated", big, 0); err != nil {
+		t.Fatal(err)
+	}
+	if got, found, err := s.Read(ctx, "deflated"); err != nil || !found || got != big {
+		t.Errorf("a deflated value reads back as %d bytes, %v %v", len(fmt.Sprint(got)), found, err)
 	}
 }
 

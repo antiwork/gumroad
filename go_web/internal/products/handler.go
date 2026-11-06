@@ -69,6 +69,9 @@ type page struct {
 	rates              map[string]rateRead
 	hasCollaborator    bool
 	hasInstallmentPlan bool
+	// settleable is buyer_currency_settleable? for the page's seller and buyer currency.
+	settleable  *bool
+	productsKey string
 }
 
 type fallback = pages.Fallback

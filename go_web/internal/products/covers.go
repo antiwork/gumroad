@@ -37,6 +37,12 @@ type cover struct {
 	isImage, postProcess bool
 }
 
+// coverOrder is in_order's sort key, which leaves ties to MySQL.
+type coverOrder struct {
+	position  sql.NullInt64
+	createdAt db.NullTime
+}
+
 // loadCovers is display_asset_previews with each image's URLs. Any other cover goes to
 // Rails: an oEmbed or Unsplash one, a video (whose poster Rails may enqueue), or an image
 // whose retina variant isn't processed yet (url_from_file enqueues it).
@@ -56,16 +62,12 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 		return nil, err
 	}
 	defer rows.Close()
-	type orderKey struct {
-		position  sql.NullInt64
-		createdAt db.NullTime
-	}
 	var covers []*cover
-	var keys []orderKey
+	var keys []coverOrder
 	var lastPreviewID int64
 	for rows.Next() {
 		var c cover
-		var k orderKey
+		var k coverOrder
 		var previewID int64
 		var unsplash, key, filename, contentType, metadata sql.NullString
 		var hasOembed bool
@@ -146,50 +148,58 @@ func blobDimensions(metadata string) (width, height *int64, err error) {
 
 // coverURLs is url and url(style: :original), through cdn_url_for.
 func (h *handler) coverURLs(ctx context.Context, p *page, c *cover) error {
-	pc := h.c.Page
-	original, err := h.cachedURL(ctx, p, "attachment_"+itoa(c.attachmentID)+"_original_url", pc.PublicStorageURL+c.key)
+	original, err := h.originalCoverURL(ctx, p, c)
 	if err != nil {
 		return err
 	}
-	c.originalURL = pc.cdnURL(original)
+	c.originalURL = original
 	if !c.postProcess {
-		c.url = c.originalURL
+		c.url = original
 		return nil
 	}
+	c.url, err = h.retinaCoverURL(ctx, p, c)
+	return err
+}
+
+func (h *handler) originalCoverURL(ctx context.Context, p *page, c *cover) (string, error) {
+	pc := h.c.Page
+	original, err := h.cachedURL(ctx, p, "attachment_"+itoa(c.attachmentID)+"_original_url", pc.PublicStorageURL+c.key)
+	return pc.cdnURL(original), err
+}
+
+// retinaCoverURL is url_from_file(style: :retina) for a processed variant.
+func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string, error) {
+	pc := h.c.Page
 	if !slices.Contains(variableTypes, c.contentType) {
 		// retina_variant raises, and url_from_file's rescue answers file.url.
-		return fallback("invariable cover")
+		return "", fallback("invariable cover")
 	}
 	retina := coverRetinaWidth
 	if c.width == nil {
-		return fallback("cover width")
+		return "", fallback("cover width")
 	}
 	if *c.width < int64(retina) {
 		retina = int(*c.width)
 	}
 	digest := storage.VariantDigest(c.filename, c.contentType, retina, -1)
 	var variantKey sql.NullString
-	err = h.c.DB.QueryRowContext(ctx, `SELECT variant_blobs.key FROM active_storage_variant_records
+	err := h.c.DB.QueryRowContext(ctx, `SELECT variant_blobs.key FROM active_storage_variant_records
 		LEFT JOIN active_storage_attachments variant_images ON variant_images.record_type = 'ActiveStorage::VariantRecord'
 			AND variant_images.record_id = active_storage_variant_records.id AND variant_images.name = 'image'
 		LEFT JOIN active_storage_blobs variant_blobs ON variant_blobs.id = variant_images.blob_id
 		WHERE active_storage_variant_records.blob_id = ? AND active_storage_variant_records.variation_digest = ? LIMIT 1`,
 		c.blobID, digest).Scan(&variantKey)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fallback("retina variant unprocessed")
+		return "", fallback("retina variant unprocessed")
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !variantKey.Valid {
-		return fallback("retina variant image")
+		return "", fallback("retina variant image")
 	}
 	retinaURL, err := h.cachedURL(ctx, p, "attachment_"+itoa(c.attachmentID)+"_retina_url", pc.PublicStorageURL+variantKey.String)
-	if err != nil {
-		return err
-	}
-	c.url = pc.cdnURL(retinaURL)
-	return nil
+	return pc.cdnURL(retinaURL), err
 }
 
 // cachedURL is Rails.cache.fetch(key) { computed } for a URL string: the cached value, or

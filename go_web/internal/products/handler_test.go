@@ -228,6 +228,11 @@ var dataPage = regexp.MustCompile(`data-page="([^"]*)"`)
 
 func pageProps(t *testing.T, body string) map[string]any {
 	t.Helper()
+	return componentProps(t, body, productComponent)
+}
+
+func componentProps(t *testing.T, body, component string) map[string]any {
+	t.Helper()
 	m := dataPage.FindStringSubmatch(body)
 	if m == nil {
 		t.Fatalf("no data-page in\n%s", body)
