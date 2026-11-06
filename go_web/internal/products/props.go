@@ -95,7 +95,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("options", h.optionsProps(prod, v.variants, v.tierRecurrences)).
 		Sym("analytics", analyticsData(seller, v.sellerJSON)).
 		Sym("has_third_party_analytics", v.thirdPartyAnalytics).
-		Sym("ppp_details", nil).
+		Sym("ppp_details", v.ppp.props()).
 		Sym("can_edit", false).
 		Sym("waitlist", h.waitlistProps(prod, v)).
 		Sym("refund_policy", v.refundPolicy).

@@ -182,6 +182,8 @@ type view struct {
 	publicFiles     []any
 	bundle          *bundle
 	discount        *offerDiscount
+	// ppp is ppp_details.
+	ppp *pppDetails
 	// catalog is the storefront's sections.
 	catalog []any
 }
@@ -235,11 +237,18 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.discount, err = h.loadOfferDiscount(ctx, p, prod); err != nil {
 		return nil, err
 	}
-	// displayed_price_cents, without PPP, which checkPPP leaves to Rails.
+	pppPrice, err := h.loadPPP(ctx, p, prod, v)
+	if err != nil {
+		return nil, err
+	}
+	// displayed_price_cents: the discounted price, or PPP's when that's lower.
 	displayed := v.priceCents
 	if displayed != nil && v.discount.code != nil {
 		d := v.discount.discountedCents(*displayed)
 		displayed = &d
+	}
+	if displayed != nil && pppPrice != nil && *pppPrice < *displayed {
+		displayed = pppPrice
 	}
 	if v.localBuyer, err = h.localCurrencyBuyer(p, v); err != nil {
 		return nil, err
@@ -273,9 +282,6 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		if v.tierRecurrences, err = tierRecurrences(v.prices); err != nil {
 			return nil, err
 		}
-	}
-	if err := h.checkPPP(ctx, p, prod, v); err != nil {
-		return nil, err
 	}
 	if v.covers, err = h.loadCovers(ctx, p, prod.id); err != nil {
 		return nil, err
