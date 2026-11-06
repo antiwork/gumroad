@@ -76,9 +76,7 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 			" AND product_installment_plans.deleted_at IS NULL", prod.id, &p.hasInstallmentPlan},
 		// bundle_products renders them whether or not the product is still a bundle.
 		{"SELECT 1 FROM bundle_products WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL", prod.id, &p.hasBundleProducts},
-		// User#auto_apply_offer_code.
-		{"SELECT 1 FROM offer_codes WHERE offer_codes.user_id = ? AND offer_codes.deleted_at IS NULL AND offer_codes.universal = 1" +
-			" AND offer_codes.auto_apply = 1 AND offer_codes.new_customers_only = 0", seller.id, &p.hasAutoApplyCode},
+		{"SELECT 1 FROM offer_codes WHERE " + autoApplyCodes, seller.id, &p.hasAutoApplyCode},
 	}
 	// One round trip; each EXISTS stops at its first row.
 	n := len(checks) + len(gates)
