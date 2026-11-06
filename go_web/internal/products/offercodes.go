@@ -1,6 +1,7 @@
 package products
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -122,10 +123,52 @@ func (c *offerCode) currencyValid(prod *product) bool {
 
 // applicable is OfferCode#applicable?.
 func (c *offerCode) applicable(prod *product) bool {
+	return c.applicableTo(prod, c.excludesProduct)
+}
+
+// applicableTo is applicable? for a product other than the one the code was loaded for, which
+// excludes says whether it leaves out.
+func (c *offerCode) applicableTo(prod *product, excludes bool) bool {
 	if !c.universal {
 		return c.forProduct
 	}
-	return !c.excludesProduct && (!rails.Present(c.currencyType.String) || c.currencyMatches(prod))
+	return !excludes && (!rails.Present(c.currencyType.String) || c.currencyMatches(prod))
+}
+
+// effectiveDefaultCode is effective_default_offer_code, given default_offer_code and
+// auto_apply_offer_code_for. limited is a winning explicit code whose uses left, which
+// default_offer_code_uses_left? counts in purchases, decide it.
+func effectiveDefaultCode(prod *product, explicit, auto *offerCode, now time.Time) (code *offerCode, limited bool) {
+	if explicit != nil && explicit.newOnly {
+		explicit = nil
+	}
+	if auto == nil || explicit == nil {
+		return cmp.Or(explicit, auto), false
+	}
+	if explicit.deletedAt.Valid || rails.Blank(explicit.code.String) || explicit.inactive(now) || explicit.existingOnly ||
+		!explicit.currencyValid(prod) {
+		return auto, false
+	}
+	return explicit, explicit.maxPurchaseCount.Valid
+}
+
+// displayedSaleLabel is sale_label.presence || OfferCode::DEFAULT_SALE_LABEL.
+func (c *offerCode) displayedSaleLabel() string {
+	if rails.Present(c.saleLabel.String) {
+		return c.saleLabel.String
+	}
+	return defaultSaleLabel
+}
+
+// amountOff is OfferCode#amount_off.
+func (c *offerCode) amountOff(price int64) int64 {
+	switch {
+	case c.amountCents.Valid:
+		return c.amountCents.Int64
+	case !c.amountPercentage.Valid:
+		return 0
+	}
+	return int64(math.Round(float64(price) * (float64(c.amountPercentage.Int64) / 100.0)))
 }
 
 // inactive is OfferCode#inactive?.
@@ -170,21 +213,9 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 			return nil, err
 		}
 	}
-	// effective_default_offer_code.
-	eff := explicit
-	if eff != nil && eff.newOnly {
-		eff = nil
-	}
-	if auto != nil {
-		redeemable := eff != nil && !eff.deletedAt.Valid && rails.Present(eff.code.String) && !eff.inactive(now) && !eff.existingOnly &&
-			eff.currencyValid(prod)
-		if redeemable && eff.maxPurchaseCount.Valid {
-			// default_offer_code_uses_left? counts purchases.
-			return nil, fallback("offer code limit")
-		}
-		if !redeemable {
-			eff = auto
-		}
+	eff, limited := effectiveDefaultCode(prod, explicit, auto, now)
+	if limited {
+		return nil, fallback("offer code limit")
 	}
 	var list []*offerCode
 	if explicit != nil && explicit.existingOnly && explicit.currencyValid(prod) {
@@ -231,10 +262,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 			return nil, fallback("offer code characters")
 		}
 		if strings.EqualFold(d.resultCode, auto.code.String) {
-			d.label = defaultSaleLabel
-			if rails.Present(auto.saleLabel.String) {
-				d.label = auto.saleLabel.String
-			}
+			d.label = auto.displayedSaleLabel()
 		}
 	}
 	return d, nil
@@ -398,7 +426,7 @@ func (d *offerDiscount) discountedCents(price int64) int64 {
 		return price
 	}
 	if c.amountCents.Valid {
-		return max(price-c.amountCents.Int64, 0)
+		return max(price-c.amountOff(price), 0)
 	}
-	return price - int64(math.Round(float64(price)*(float64(c.amountPercentage.Int64)/100.0)))
+	return price - c.amountOff(price)
 }
