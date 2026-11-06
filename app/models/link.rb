@@ -2377,9 +2377,10 @@ class Link < ApplicationRecord
       end
     end
 
-    # iframely cannot frame a Heyzine shelf, so the editor frames the shelf page itself. Matched against
-    # the whole src, exactly as the editor writes it, so no port, userinfo, query, or fragment gets through.
-    HEYZINE_SHELF_EMBED_SRC = %r{\Ahttps://heyzine\.com/shelf/[\w-]+\.html\z}
+    # iframely cannot frame a Heyzine shelf, so the editor frames the shelf page itself, at /shelf/<id>.html
+    # or its canonical /shelf/<name>. Matched against the whole src, exactly as the editor writes it, so no
+    # port, userinfo, query, or fragment gets through.
+    HEYZINE_SHELF_EMBED_SRC = %r{\Ahttps://heyzine\.com/shelf/[\w-]+(?:\.html)?\z}
     private_constant :HEYZINE_SHELF_EMBED_SRC
 
     def heyzine_shelf_embed_src?(src)

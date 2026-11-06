@@ -92,9 +92,9 @@ const growsOnInsert = (data: IframelyEmbedData): boolean => {
 };
 
 // Iframely has no live frame for a Heyzine shelf — a library of flipbooks — and answers with its own
-// preview card, so the frame is built here pointing at the shelf page. That page is frameable and is
-// the seller's whole library; every other lookup keeps whatever iframely returned.
-const HEYZINE_SHELF_PATH = /^\/shelf\/[\w-]+\.html$/u;
+// preview card, so the frame is built here pointing at the shelf page. Heyzine serves the same shelf at
+// /shelf/<id>.html and at its canonical named form /shelf/<name>; every other lookup keeps iframely's html.
+const HEYZINE_SHELF_PATH = /^\/shelf\/[\w-]+(?:\.html)?$/u;
 
 export const heyzineShelfUrl = (raw: string): string | null => {
   try {

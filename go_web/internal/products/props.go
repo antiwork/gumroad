@@ -213,6 +213,12 @@ func (h *handler) userSubdomain(u *user) string {
 	return strings.ReplaceAll(sellerUsername(u), "_", "-") + "." + h.c.Env.RootDomain
 }
 
+// userProfileURL is User#profile_url without a custom domain: subdomain_with_protocol, no
+// trailing slash.
+func (h *handler) userProfileURL(u *user) string {
+	return h.c.Env.Protocol + "://" + h.userSubdomain(u)
+}
+
 // sellerCustomDomainURL is root_url(protocol: PROTOCOL, host: request.host_with_port).
 func (h *handler) sellerCustomDomainURL(p *page) string {
 	return h.c.Env.Protocol + "://" + p.Req.Host + "/"

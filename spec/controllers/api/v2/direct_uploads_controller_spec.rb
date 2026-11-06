@@ -167,6 +167,15 @@ describe Api::V2::DirectUploadsController do
         expect(response.parsed_body["error"]).to eq("content_type must be JPEG, PNG, GIF, or video.")
       end
 
+      it "serves non-inline video subtypes as binary attachments" do
+        post @action, params: @params.deep_merge(blob: { content_type: "video/mp4+xml" })
+
+        expect(response).to be_successful
+        headers = response.parsed_body["direct_upload"]["headers"]
+        expect(headers["Content-Type"]).to eq("application/octet-stream")
+        expect(headers["Content-Disposition"]).to start_with("attachment; filename=\"cover.png\"")
+      end
+
       describe "with purpose=media (media library reservations)" do
         before do
           @token.update!(scopes: "edit_profile")
