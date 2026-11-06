@@ -196,8 +196,8 @@ var rendererParams = []string{
 	"wanted", "layout", "embed", "overlay", "recommended_by", "offer_code", "quantity", "purchase_id",
 	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
 	"query", "autocomplete",
-	// set_affiliate_cookie and the sections' search filters.
-	"affiliate_id", "a", "tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
+	// The sections' search filters.
+	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
 	// MobileAppWebView and as_embed.
 	"display", "as_embed",
 }

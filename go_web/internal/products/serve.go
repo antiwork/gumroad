@@ -49,6 +49,10 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		// ensure_domain_belongs_to_seller pass; anything else is Rails'.
 		return fallback("seller mismatch")
 	}
+	// set_affiliate_cookie: a redirect and the custom HTML page carry the cookie too.
+	if err := h.setAffiliateCookie(p); err != nil {
+		return err
+	}
 
 	// check_if_needs_redirect: on the seller's own subdomain only the permalink can differ.
 	if permalink := prod.generalPermalink(); permalink != id {
