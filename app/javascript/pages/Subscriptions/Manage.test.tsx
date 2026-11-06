@@ -344,3 +344,118 @@ describe("SubscriptionsManage saved payment method", () => {
     });
   });
 });
+
+describe("SubscriptionsManage pay-what-you-want hint", () => {
+  afterEach(cleanup);
+
+  const pwywProps = (discount: Record<string, unknown>) =>
+    pageProps({
+      product: {
+        ...pageProps().product,
+        is_tiered_membership: true,
+        price_cents: 0,
+        recurrences: [{ id: "price-monthly", recurrence: "monthly", price_cents: 2400 }],
+        options: [
+          {
+            id: "option-1",
+            name: "Tier",
+            quantity_left: null,
+            description: null,
+            price_difference_cents: null,
+            recurrence_price_values: { monthly: { price_cents: 2400, suggested_price_cents: 2400 } },
+            is_pwyw: true,
+            duration_in_minutes: null,
+          },
+        ],
+      },
+      subscription: subscription({
+        option_id: "option-1",
+        price: 1680,
+        pre_discount_price: 2400,
+        discount,
+        option_discounts: { "option-1": discount },
+      }),
+    });
+
+  const pwywInput = () => {
+    const inputs = screen
+      .getAllByLabelText("Name a fair price:")
+      .filter((element): element is HTMLInputElement => element instanceof HTMLInputElement);
+    const input = inputs.at(0);
+    if (inputs.length !== 1 || !input) throw new Error(`expected one amount input, found ${inputs.length}`);
+    return input;
+  };
+
+  it("hints the amount after a percent code, which is what the subscriber pays", () => {
+    renderManage(
+      pwywProps({
+        type: "percent",
+        percents: 30,
+        product_ids: null,
+        expires_at: null,
+        minimum_quantity: null,
+        duration_in_billing_cycles: null,
+        minimum_amount_cents: null,
+      }),
+    );
+
+    expect(pwywInput().getAttribute("placeholder")).toBe("16.80+");
+  });
+
+  it("hints the full amount for a once-per-cart amount, which the cart subtracts", () => {
+    renderManage(
+      pwywProps({
+        type: "fixed",
+        cents: 720,
+        once_per_cart: true,
+        once_per_cart_amount_cents: 720,
+        product_ids: null,
+        expires_at: null,
+        minimum_quantity: null,
+        duration_in_billing_cycles: null,
+        minimum_amount_cents: null,
+      }),
+    );
+
+    expect(pwywInput().getAttribute("placeholder")).toBe("24+");
+  });
+
+  it("drops the code from the hint when fewer seats no longer meet its minimum", () => {
+    const discount = {
+      type: "percent",
+      percents: 30,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: 2,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    };
+    const props = pwywProps(discount);
+    renderManage({
+      ...props,
+      product: {
+        ...props.product,
+        is_multiseat_license: true,
+        recurrences: [{ id: "price-monthly", recurrence: "monthly", price_cents: 1000 }],
+        options: [
+          {
+            id: "option-1",
+            name: "Tier",
+            quantity_left: null,
+            description: null,
+            price_difference_cents: null,
+            recurrence_price_values: { monthly: { price_cents: 1000, suggested_price_cents: 2400 } },
+            is_pwyw: true,
+            duration_in_minutes: null,
+          },
+        ],
+      },
+      subscription: { ...props.subscription, quantity: 2 },
+    });
+    expect(pwywInput().getAttribute("placeholder")).toBe("16.80+");
+
+    fireEvent.change(screen.getByLabelText("Seats"), { target: { value: "1" } });
+
+    expect(pwywInput().getAttribute("placeholder")).toBe("24+");
+  });
+});

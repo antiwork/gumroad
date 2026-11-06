@@ -846,6 +846,7 @@ export const Product = ({
                 discount={discountCode?.valid ? withConfiguredOncePerCartAmount(discountCode.discount) : null}
                 rowDiscount={selectionDiscountCode ? rowDiscount : undefined}
                 discountPending={!!quote && quote.state !== "ready"}
+                pwywAmountIsAfterDiscount
                 ref={configurationSelectorRef}
               />
               <FileSummaryNote product={product} optionId={selection.optionId} />
