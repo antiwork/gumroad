@@ -156,8 +156,6 @@ func (h *handler) purchaseInfoProps(p *page, prod *product, v *view, vp *visitor
 	switch {
 	case vp.flags&(purchaseIsGiftReceiver|purchaseIsGiftSender) != 0:
 		return nil, fallback("gift purchase")
-	case vp.flags&purchaseIsBundle != 0:
-		return nil, fallback("bundle purchase")
 	case prod.is(productIsPhysical):
 		return nil, fallback("physical purchase")
 	}
