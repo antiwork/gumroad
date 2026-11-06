@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -391,14 +390,13 @@ func (h *handler) cardSoldOut(p *page, c *card) (bool, error) {
 // description, and a product URL on this subdomain with layout=profile.
 func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, error) {
 	prod := c.prod
-	buy := buyPrices(prod, c.prices)
-	if len(buy) > 1 && slices.Min(buy) != slices.Max(buy) {
-		// Which one is last is the preload's row order.
+	last, agreed := lastPrice(buyPrices(prod, c.prices))
+	if !agreed {
 		return nil, fallback("catalog price")
 	}
 	var price int64
-	if len(buy) > 0 {
-		price = buy[len(buy)-1]
+	if last != nil {
+		price = *last
 	}
 	price += c.minVariantDifference.Int64
 	// default_price_recurrence: every match has the recurrence it matched on.
@@ -409,11 +407,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 			break
 		}
 	}
-	var ratings any
-	if prod.is(productDisplayReviews) {
-		stat := c.stat.orTemplate()
-		ratings = rails.NewRHash().Sym("count", stat.reviewsCount).Sym("average", stat.averageRating)
-	}
+	ratings := cardRatings(prod, c.stat)
 	pc := prod.productCurrency()
 	var display *currencyDisplay
 	if buyer != nil {

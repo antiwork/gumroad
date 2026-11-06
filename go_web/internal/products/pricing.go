@@ -63,7 +63,7 @@ func (h *handler) remainingForSaleCount(ctx context.Context, prod *product, vs *
 			Scan(&sold); err != nil {
 			return nil, err
 		}
-		left = minCents(left, quantityLeft(prod.maxPurchaseCount, sold))
+		left = lowerOf(left, quantityLeft(prod.maxPurchaseCount, sold))
 	}
 	return intOrNil(left), nil
 }

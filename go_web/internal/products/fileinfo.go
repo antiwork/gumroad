@@ -60,7 +60,6 @@ func jsonScalar(v any) bool {
 // fileInfo is file_info_for_product_page: a lone file's WithFileProperties#file_info, less
 // the removed_file_info_attributes.
 func fileInfo(j jsonData, prod *product, files []productFile) ([][2]string, error) {
-	// A bundle's own files aren't what its page describes.
 	if len(files) != 1 || prod.is(productIsBundle) {
 		return nil, nil
 	}

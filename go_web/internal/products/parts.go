@@ -53,18 +53,35 @@ func (h *handler) alivePrices(ctx context.Context, ids []int64) (map[int64][]pri
 
 // buyPrices is prices_for_currency.select(&:is_buy?).
 func buyPrices(prod *product, prices []priceRow) []int64 {
+	return pricesForCurrency(prod, prices, false)
+}
+
+// pricesForCurrency is prices_for_currency's rentals or buy prices, from a preload.
+func pricesForCurrency(prod *product, prices []priceRow, rental bool) []int64 {
 	var out []int64
 	for _, r := range prices {
 		// prices_for_currency compares with ==, so a NULL currency only matches a NULL one.
-		if r.currency.Valid == prod.priceCurrencyType.Valid && r.currency.String == prod.priceCurrencyType.String && !r.isRental() {
+		if r.currency.Valid == prod.priceCurrencyType.Valid && r.currency.String == prod.priceCurrencyType.String && r.isRental() == rental {
 			out = append(out, r.cents)
 		}
 	}
 	return out
 }
 
-// minCents is the lower of two prices, either of which may be missing.
-func minCents(a, b *int64) *int64 {
+// lastPrice is the last of a preload's prices, nil for none; agreed is false when they
+// differ, since which one is last is the preload's row order.
+func lastPrice(cents []int64) (last *int64, agreed bool) {
+	switch {
+	case len(cents) == 0:
+		return nil, true
+	case slices.Min(cents) != slices.Max(cents):
+		return nil, false
+	}
+	return &cents[len(cents)-1], true
+}
+
+// lowerOf is the lower of two values, either of which may be missing.
+func lowerOf(a, b *int64) *int64 {
 	if a == nil || b != nil && *b < *a {
 		return b
 	}
@@ -206,6 +223,15 @@ func (s *reviewStat) orTemplate() reviewStat {
 }
 
 // ratingStats is Product::ReviewStat#rating_stats.
+// cardRatings is a card's ratings: the count and average when the product displays reviews.
+func cardRatings(prod *product, s *reviewStat) any {
+	if !prod.is(productDisplayReviews) {
+		return nil
+	}
+	stat := s.orTemplate()
+	return rails.NewRHash().Sym("count", stat.reviewsCount).Sym("average", stat.averageRating)
+}
+
 func (s *reviewStat) ratingStats() *rails.RHash {
 	stat := s.orTemplate()
 	return rails.NewRHash().
