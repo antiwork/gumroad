@@ -165,7 +165,7 @@ func TestTheDiscoverLayout(t *testing.T) {
 		componentProps(t, w.Body.String(), discoverComponent)
 		page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
 		want := `"sections":[],"main_section_index":0,"taxonomy_path":"design/icons","taxonomies_for_nav":[` +
-			`{"key":"1795911","label":"Design","slug":"design","parent_key":null},{"key":"1795912","label":null,"slug":"icons","parent_key":"1795911"}]}`
+			`{"key":"1795911","label":"Design","slug":"design","parent_key":null},{"key":"1795912","label":null,"slug":"icons","parent_key":"1795911"}],"_inertia_meta"`
 		if !strings.Contains(page, want) {
 			t.Errorf("want %s\nin %s", want, page)
 		}
