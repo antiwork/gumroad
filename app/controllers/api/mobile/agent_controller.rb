@@ -7,7 +7,7 @@
 # builds that know them.
 # The tab itself is removed in the next app release, after which this controller can go too.
 class Api::Mobile::AgentController < Api::Mobile::BaseController
-  NOTICE = "The Agent tab moved to the Gumroad web app. Connect your AI at gumroad.com/agent."
+  NOTICE = "The Agent tab is gone. Connect Claude or ChatGPT to your store at gumroad.com/mcp."
 
   before_action { doorkeeper_authorize! :mobile_api }
 

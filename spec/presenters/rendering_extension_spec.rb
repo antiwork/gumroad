@@ -152,9 +152,6 @@ describe "RenderingExtension" do
                     index: true,
                     create: true,
                   },
-                  user: {
-                    view_store_agent: true,
-                  }
                 },
                 promoted_nav_items: [],
                 lazy_load_offscreen_discover_images: false,

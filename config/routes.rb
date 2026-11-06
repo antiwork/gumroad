@@ -1158,8 +1158,8 @@ Rails.application.routes.draw do
     get "/product_files_utility/product_files/:product_id", to: "product_files_utility#download_product_files", as: :download_product_files
     get "/product_files_utility/folder_archive/:folder_id", to: "product_files_utility#download_folder_archive", as: :download_folder_archive
 
-    # agent (connect your own AI assistant through MCP)
-    get "/agent", to: "agent#index", as: :agent
+    # The Agent tab is gone; kept for bookmarks and the mobile app's tombstone notice.
+    get "/agent", to: redirect("/mcp", status: 301)
 
     # analytics
     get "/analytics" => redirect("/dashboard/sales")

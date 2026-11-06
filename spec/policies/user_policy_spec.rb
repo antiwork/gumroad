@@ -115,32 +115,4 @@ describe UserPolicy do
       end
     end
   end
-
-  permissions :view_store_agent? do
-    # The Agent tab (MCP onboarding) is open to every seller: no sales or payout bar.
-    it "grants the owner" do
-      seller_context = SellerContext.new(user: seller, seller:)
-      expect(subject).to permit(seller_context, seller)
-    end
-
-    it "grants an admin" do
-      seller_context = SellerContext.new(user: admin_for_seller, seller:)
-      expect(subject).to permit(seller_context, seller)
-    end
-
-    it "grants marketing" do
-      seller_context = SellerContext.new(user: marketing_for_seller, seller:)
-      expect(subject).to permit(seller_context, seller)
-    end
-
-    it "denies accountant" do
-      seller_context = SellerContext.new(user: accountant_for_seller, seller:)
-      expect(subject).to_not permit(seller_context, seller)
-    end
-
-    it "denies support" do
-      seller_context = SellerContext.new(user: support_for_seller, seller:)
-      expect(subject).to_not permit(seller_context, seller)
-    end
-  end
 end

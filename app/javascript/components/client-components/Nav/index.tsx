@@ -20,7 +20,6 @@ import {
   Handshake,
   HomeAlt2,
   MessageBubble,
-  MessageBubbleDots,
   Search,
   Store,
   Workflow,
@@ -169,15 +168,6 @@ export const Nav = (props: Props) => {
       text: "Home",
       icon: <HomeAlt2 pack="filled" className="size-5" />,
       href: Routes.dashboard_url(routeParams),
-      exactHrefMatch: true,
-    },
-    {
-      key: "agent",
-      // Role only: connecting an AI through MCP is open to every seller, so there is no eligibility bar.
-      visible: !!loggedInUser?.policies.user.view_store_agent,
-      text: "Agent",
-      icon: <MessageBubbleDots pack="filled" className="size-5" />,
-      href: Routes.agent_url(routeParams),
       exactHrefMatch: true,
     },
     {

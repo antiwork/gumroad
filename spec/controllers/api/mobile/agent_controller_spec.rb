@@ -21,7 +21,7 @@ describe Api::Mobile::AgentController do
         "greeting" => "",
         "suggestions" => [],
         "available" => false,
-        "notice" => "The Agent tab moved to the Gumroad web app. Connect your AI at gumroad.com/agent.",
+        "notice" => "The Agent tab is gone. Connect Claude or ChatGPT to your store at gumroad.com/mcp.",
       )
     end
 
