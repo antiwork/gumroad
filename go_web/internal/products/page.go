@@ -84,6 +84,9 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		if p.urlCode != "" {
 			w.Header().Set("X-Robots-Tag", "noindex")
 		}
+		if err := h.trackUTMVisit(w, p, prod); err != nil {
+			return err
+		}
 		return h.ctl.Redirect(w, p.Visit, "/coffee")
 	}
 	if reason, err := h.unportedShape(ctx, p, prod); err != nil || reason != "" {
@@ -162,8 +165,8 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		}
 	}
 	if !p.DryRun {
-		// The push falls back while nothing Rails would repeat is written: its own reputation push
-		// is deduplicated, the search isn't.
+		// The pushes fall back while nothing Rails would repeat is written: its own reputation push
+		// is deduplicated, the UTM visit and the search aren't.
 		if p.warmReputation {
 			// Each command has the client's own timeout. A deadline across them could stop between
 			// queue.lua and the handoff, leaving a digest no later push or reaper clears.
@@ -171,6 +174,9 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 				web.Logger(p.Req.HTTP).Warn("reputation refresh push failed", "error", err.Error())
 				return fallback("reputation refresh push")
 			}
+		}
+		if err := h.trackUTMVisit(w, p, prod); err != nil {
+			return err
 		}
 		if recordSearch {
 			if err := h.createDiscoverSearch(ctx, p, prod, v.ip, taxonomyID); err != nil {

@@ -134,6 +134,9 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		"«waitlist_script»", waitlist,
 	).Replace(customHTMLWrapper)
 
+	if err := h.trackUTMVisit(w, p, prod); err != nil {
+		return err
+	}
 	if !p.DryRun {
 		h.flushCacheWrites(ctx, p)
 	}

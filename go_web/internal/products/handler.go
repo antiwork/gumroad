@@ -92,6 +92,8 @@ type page struct {
 	// own, never a featured product's.
 	layout        string
 	recommendedBy *string
+	// utm is track_utm_link_visit's utm_params, nil when it records nothing.
+	utm map[string]any
 	// collaborates is whether the visitor is collaborator_for? this page's product.
 	collaborates bool
 	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props
@@ -171,6 +173,9 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	// The path's code overrides the query's; a blank one is no code.
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
+	}
+	if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
+		return nil, fallback("utm visit push")
 	}
 	p.layout, _ = v.Req.Param("layout").(string)
 	// A bare key is nil, which still counts as a visitor search param.
@@ -252,9 +257,8 @@ func declinedParams(req *rails.Request) string {
 			return "param code"
 		}
 	}
-	// track_utm_link_visit records a visit when all three are present.
-	if rails.Present(req.Param("utm_source")) && rails.Present(req.Param("utm_medium")) && rails.Present(req.Param("utm_campaign")) {
-		return "utm link"
+	if _, reason := utmParams(req); reason != "" {
+		return reason
 	}
 	for _, key := range req.Params.Keys() {
 		if strings.HasPrefix(key, "monthly") || strings.HasPrefix(key, "quarterly") || strings.HasPrefix(key, "biannually") ||
