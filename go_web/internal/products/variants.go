@@ -66,7 +66,7 @@ func (h *handler) loadVariants(ctx context.Context, prod *product) (*variants, e
 		return nil, err
 	}
 	if prod.is(productIsTieredMembership) {
-		return vs, h.loadTierPrices(ctx, vs)
+		return vs, h.loadTierPrices(ctx, slices.Concat(vs.options, vs.tiers))
 	}
 	if !prod.is(productSkusEnabled) {
 		return vs, nil
@@ -151,23 +151,23 @@ func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*var
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return vs, h.markClosedTiers(ctx, prod, vs)
+	if !prod.is(productIsTieredMembership) {
+		return vs, nil
+	}
+	return vs, h.markClosedTiers(ctx, prod.userID, vs.all)
 }
 
-// markClosedTiers sets closed_to_new_buyers?, which only a tiered membership's Variants can be.
-// The flag is read only for a Variant with the bit, as Rails does.
-func (h *handler) markClosedTiers(ctx context.Context, prod *product, vs *variants) error {
-	if !prod.is(productIsTieredMembership) {
-		return nil
-	}
+// markClosedTiers sets closed_to_new_buyers? on a tiered membership's Variants. The flag is
+// read only for a Variant with the bit, as Rails does.
+func (h *handler) markClosedTiers(ctx context.Context, sellerID int64, options []*variantOption) error {
 	on, read := false, false
-	for _, o := range vs.all {
+	for _, o := range options {
 		if o.flags&baseVariantClosedToNewPurchases == 0 {
 			continue
 		}
 		if !read {
 			var err error
-			if on, err = h.flag(ctx, "close_membership_tier_to_new_buyers", prod.userID); err != nil {
+			if on, err = h.flag(ctx, "close_membership_tier_to_new_buyers", sellerID); err != nil {
 				return err
 			}
 			read = true
@@ -179,8 +179,7 @@ func (h *handler) markClosedTiers(ctx context.Context, prod *product, vs *varian
 
 // loadTierPrices reads the alive buy VariantPrices of the options and tiers, which
 // recurrence_price_values and lowest_tier_price read.
-func (h *handler) loadTierPrices(ctx context.Context, vs *variants) error {
-	all := slices.Concat(vs.options, vs.tiers)
+func (h *handler) loadTierPrices(ctx context.Context, all []*variantOption) error {
 	if len(all) == 0 {
 		return nil
 	}

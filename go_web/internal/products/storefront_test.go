@@ -59,6 +59,32 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice, "link_id": other, "price_cents": 300, "currency": "usd",
 			"created_at": testNow, "updated_at": testNow})
 	}
+	// tieredOther makes the other product a monthly tiered membership: Basic at 300 a month,
+	// and Pro at 100, pay what you want and closed to new buyers. Their yearly prices are lower.
+	tieredOther := func(t *testing.T, conn *sql.DB) {
+		addOther(t, conn, map[string]any{"flags": productIsRecurringBilling | productIsTieredMembership, "subscription_duration": 0,
+			"native_type": "membership"})
+		testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1, "link_id": other, "price_cents": 0, "currency": "usd",
+			"recurrence": "monthly", "created_at": testNow, "updated_at": testNow})
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": other, "title": "Tier"})
+		for i, tier := range []struct {
+			name         string
+			cents, flags int
+			pwyw         bool
+		}{{"Basic", 300, 0, false}, {"Pro", 100, 4, true}} {
+			id := category + 1 + int64(i)
+			testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": category,
+				"name": tier.name, "flags": tier.flags, "customizable_price": tier.pwyw, "sales_count_for_inventory_cache": 0,
+				"created_at": testNow, "updated_at": testNow})
+			for j, p := range []struct {
+				cents      int
+				recurrence string
+			}{{tier.cents, "monthly"}, {50, "yearly"}} {
+				testdb.Insert(t, conn, "prices", map[string]any{"id": id + 100*int64(j+1), "variant_id": id, "price_cents": p.cents,
+					"currency": "usd", "recurrence": p.recurrence, "created_at": testNow, "updated_at": testNow})
+			}
+		}
+	}
 	section := func(e *testEnv, total int, products string) string {
 		return fmt.Sprintf(`"sections":[{"id":"default-products","header":"More from Seller","type":"SellerProfileProductsSection",`+
 			`"show_filters":false,"default_product_sort":"page_layout","search_results":{"total":%d,"tags_data":[{"key":"design","doc_count":2}],`+
@@ -82,7 +108,10 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		// cachesOnFallback is a search kept although the page goes to Rails.
 		cachesOnFallback bool
 		setup            func(t *testing.T, conn *sql.DB)
-		want             func(e *testEnv) string
+		// prepare sets flags and rates; headers go with the request.
+		prepare func(e *testEnv)
+		headers map[string]string
+		want    func(e *testEnv) string
 	}{
 		{name: "the rest of the catalog, without this product", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
@@ -177,6 +206,55 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
 				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
 			}},
+		// A closed Pro tier is neither the price nor pay what you want.
+		{name: "a tiered membership's card", server: search, searched: 1,
+			hits:    fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
+			setup:   func(t *testing.T, conn *sql.DB) { tieredOther(t, conn) },
+			prepare: func(e *testEnv) { e.redis.HSet("close_membership_tier_to_new_buyers", "boolean", "true") },
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"native_type":"ebook"`, `"native_type":"membership"`, 1)
+				card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
+				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
+			}},
+		{name: "a tiered membership's card with every tier open", server: search, searched: 1,
+			hits:  fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
+			setup: func(t *testing.T, conn *sql.DB) { tieredOther(t, conn) },
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"native_type":"ebook"`, `"native_type":"membership"`, 1)
+				card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
+				card = strings.Replace(card, `"is_pay_what_you_want":false`, `"is_pay_what_you_want":true`, 1)
+				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":100`, 1))
+			}},
+		{name: "a legacy subscription's card", server: search, searched: 1,
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": productIsRecurringBilling, "subscription_duration": 0})
+				for i, p := range []struct {
+					cents      int
+					recurrence string
+				}{{500, "monthly"}, {4000, "yearly"}} {
+					testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1 + int64(i), "link_id": other, "price_cents": p.cents,
+						"currency": "usd", "recurrence": p.recurrence, "created_at": testNow, "updated_at": testNow})
+				}
+			},
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
+				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":500`, 1))
+			}},
+		{name: "a tiered membership without a duration", reason: "catalog subscription duration", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				tieredOther(t, conn)
+				conn.Exec("UPDATE links SET subscription_duration = NULL WHERE id = ?", other)
+			}},
+		{name: "a membership card with a local price", reason: "catalog unquotable product", hits: bothHits, server: search, searched: 1,
+			headers: eurCookie,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": productIsRecurringBilling, "subscription_duration": 0})
+			},
+			prepare: func(e *testEnv) { e.localEUR("0.92345") }},
 		{name: "a tie at the page's edge", reason: "catalog order", server: search, searched: 1,
 			hits: func() string {
 				var hs []string
@@ -225,6 +303,9 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			if c.setup != nil {
 				c.setup(t, conn)
 			}
+			if c.prepare != nil {
+				c.prepare(e)
+			}
 			if c.server != nil {
 				client, err := elastic.NewWithClient(c.server.URL, c.server.Client())
 				if err != nil {
@@ -232,11 +313,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				}
 				e.config.Page.Search = client
 			}
-			var headers map[string]string
-			if c.reason != "" {
-				headers = e.dryRun(host, "/l/guide", testNow)
-			}
-			w := e.get(host, "/l/guide", headers)
+			w := e.get(host, "/l/guide", e.withDryRun(c.headers, c.reason))
 			if searches != c.searched {
 				t.Errorf("%d searches, want %d", searches, c.searched)
 			}

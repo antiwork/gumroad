@@ -167,26 +167,31 @@ func freeTrialProps(prod *product) any {
 }
 
 // lowestTierPriceCents is lowest_tier_price's price_cents: the cheapest alive buy price, in
-// any currency or recurrence, of the tiers open to new buyers, or of every tier when all are
-// closed, else 0.
-func (vs *variants) lowestTierPriceCents() int64 {
-	var open, all *int64
-	for _, o := range vs.tiers {
-		for i := range o.buyPrices {
-			c := &o.buyPrices[i].cents
-			all = lowerOf(all, c)
-			if !o.closed {
-				open = lowerOf(open, c)
+// any currency, of the offered tiers, else 0. With for_default_duration, only the prices at
+// the subscription duration count.
+func lowestTierPriceCents(offered []*variantOption, duration *string) int64 {
+	var lowest *int64
+	for _, o := range offered {
+		for i, p := range o.buyPrices {
+			if duration == nil || p.recurrence.Valid && p.recurrence.String == *duration {
+				lowest = lowerOf(lowest, &o.buyPrices[i].cents)
 			}
 		}
 	}
-	if !slices.ContainsFunc(vs.tiers, func(o *variantOption) bool { return !o.closed }) {
-		open = all
-	}
-	if open == nil {
+	if lowest == nil {
 		return 0
 	}
-	return *open
+	return *lowest
+}
+
+// offeredTiers is tiers_for_displayed_price: the tiers open to new buyers, or every tier
+// when all are closed.
+func offeredTiers(tiers []*variantOption) []*variantOption {
+	open := slices.DeleteFunc(slices.Clone(tiers), func(o *variantOption) bool { return o.closed })
+	if len(open) == 0 {
+		return tiers
+	}
+	return open
 }
 
 // closedToNewBuyers is closed_membership_for_new_buyers?.

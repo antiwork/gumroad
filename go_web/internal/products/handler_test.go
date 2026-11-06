@@ -200,18 +200,24 @@ func (e *testEnv) dryRun(hostname, target string, at time.Time) map[string]strin
 	return map[string]string{"X-Go-Web-Dry-Run": pages.SignDryRun(pages.DryRunKey(testSecretKeyBase), "GET", hostname, target, at)}
 }
 
+// withDryRun is headers, plus a dry run's for /l/guide when a fallback reason is expected.
+func (e *testEnv) withDryRun(headers map[string]string, reason string) map[string]string {
+	headers = maps.Clone(headers)
+	if reason == "" {
+		return headers
+	}
+	if headers == nil {
+		headers = map[string]string{}
+	}
+	maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
+	return headers
+}
+
 // render GETs /l/guide, as a dry run when reason is set, and fails unless the page renders
 // here or goes to Rails for reason. body is the unescaped page, "" after a fallback.
 func (e *testEnv) render(t *testing.T, headers map[string]string, reason string) (body string) {
 	t.Helper()
-	headers = maps.Clone(headers)
-	if reason != "" {
-		if headers == nil {
-			headers = map[string]string{}
-		}
-		maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
-	}
-	w := e.get(host, "/l/guide", headers)
+	w := e.get(host, "/l/guide", e.withDryRun(headers, reason))
 	if reason != "" {
 		if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != reason {
 			t.Fatalf("%d %q, want fallback %q", w.Code, w.Header().Get("X-Go-Web-Fallback"), reason)
