@@ -43,9 +43,7 @@ func (h *handler) loadSalesCount(ctx context.Context, p *page, prod *product, v 
 	// Production names the index without ES_INDEX_SUFFIX.
 	n, err := h.c.Page.Search.Count(ctx, "purchases", salesCountQuery(prod.id))
 	if err != nil {
-		// Rails raises; whether it would fail too is unknowable here.
-		web.Logger(p.Req.HTTP).Warn("sales count search failed", "error", err.Error())
-		return fallback("sales count search")
+		return searchFailed(p, "sales count", err)
 	}
 	v.salesCount = n
 	p.cacheWrites = append(p.cacheWrites, pendingWrite{key, n, salesCountTTL})
@@ -85,4 +83,10 @@ func salesCountQuery(productID int64) map[string]any {
 			term("selected_flags", "is_commission_completion_purchase"),
 		},
 	}}
+}
+
+// searchFailed is a search error: Rails raises, and whether it would fail too is unknowable here.
+func searchFailed(p *page, what string, err error) error {
+	web.Logger(p.Req.HTTP).Warn(what+" search failed", "error", err.Error())
+	return fallback(what + " search")
 }
