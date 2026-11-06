@@ -21,6 +21,22 @@ type productSections struct {
 	listed   []listedSection
 	products []*productsSection
 	featured []*featuredSection
+	// rows and allProducts are every one of the product's sections, listed or not, which
+	// cached_sections caches under a key of productID's.
+	productID   int64
+	rows        []cachedRow
+	allProducts []*productsSection
+}
+
+// cachedRow is a section as cached_sections reads it.
+type cachedRow struct {
+	row      sectionRow
+	data     jsonData
+	products *productsSection
+	// productsErr is an unlisted products section's, which only a search on a miss raises on.
+	productsErr error
+	// ids are a featured section's product or a wishlists section's wishlists.
+	ids []int64
 }
 
 // featuredSection is a listed featured product section and its product, loaded short of its
@@ -49,7 +65,7 @@ var sectionTypes = map[string]bool{
 // builds every one of the product's sections, so a row it would raise on goes to Rails even
 // when the product doesn't list it.
 func (h *handler) listProductSections(p *page, prod *product, v *view) (*productSections, error) {
-	ps := &productSections{}
+	ps := &productSections{productID: prod.id}
 	editing := p.ownView()
 	// Link#sections is [] when blank; filter_map finds nothing in a Hash and raises on the rest.
 	var list []any
@@ -102,6 +118,20 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 		}
 		key := strconv.FormatInt(r.id, 10)
 		listed := slices.Contains(keys, key)
+		cached := cachedRow{row: r, data: j}
+		if r.typ == profileProductsSectionType {
+			switch products, err := r.productsSectionFrom(j); {
+			case err != nil && listed:
+				return nil, err
+			case err != nil:
+				cached.productsErr = err
+			default:
+				cached.products = products
+				ps.allProducts = append(ps.allProducts, products)
+			}
+		}
+		ps.rows = append(ps.rows, cached)
+		row := &ps.rows[len(ps.rows)-1]
 		var head *rails.RHash
 		if listed {
 			header := r.shownHeader()
@@ -123,6 +153,7 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 			if err != nil {
 				return nil, err
 			}
+			row.ids = ids
 			if editing {
 				// The editor's shape names the product without rendering it.
 				if head != nil && len(ids) > 0 {
@@ -141,6 +172,7 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 			if err != nil {
 				return nil, err
 			}
+			row.ids = ids
 			if listed {
 				head.Sym("shown_wishlists", h.encryptIDs(ids))
 			}
@@ -153,15 +185,11 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 		}
 		switch r.typ {
 		case profileProductsSectionType:
-			s, err := r.productsSection()
-			if err != nil {
-				return nil, err
-			}
-			ps.products = append(ps.products, s)
-			listing := listedSection{products: s}
+			ps.products = append(ps.products, row.products)
+			listing := listedSection{products: row.products}
 			if editing {
 				listing.editor = rails.NewRHash().Sym("header", r.header.String).Sym("hide_header", r.hidesHeader()).
-					Sym("shown_products", h.encryptIDs(s.shownProducts)).Sym("add_new_products", j.get("add_new_products"))
+					Sym("shown_products", h.encryptIDs(row.products.shownProducts)).Sym("add_new_products", j.get("add_new_products"))
 			}
 			byKey[key] = listing
 		case profileSubscribeSectionType:
@@ -233,13 +261,8 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 			ps.listed = append(ps.listed, s)
 		}
 	}
-	if len(ps.products) > 0 {
-		switch {
-		case reviewSorted(ps.products) && !p.visitorSearch:
-			return nil, fallback("products section review sort")
-		case h.c.Page.Search == nil:
-			return nil, fallback("products section search")
-		}
+	if len(ps.products) > 0 && h.c.Page.Search == nil {
+		return nil, fallback("products section search")
 	}
 	return ps, nil
 }
@@ -273,15 +296,15 @@ func (h *handler) renderProductSections(p *page, ps *productSections, buyer *str
 	}
 	built := map[*productsSection]any{}
 	if len(ps.products) > 0 {
-		search := h.cachedCatalog
-		if p.visitorSearch {
-			// section_props replaces the search, so go_web's cache and its review-sort caveat
-			// don't apply.
-			search = h.visitorSearchSections
-		}
-		searches, err := search(p, ps.products)
+		searches, err := h.productSectionSearches(p, ps)
 		if err != nil {
 			return nil, err
+		}
+		// section_props searches afresh with any visitor search param, after the cached fetch.
+		if p.visitorSearch {
+			if searches, err = h.visitorSearchSections(p, ps.products); err != nil {
+				return nil, err
+			}
 		}
 		props, err := h.productsSectionsProps(p, nil, ps.products, searches, buyer)
 		if err != nil {
