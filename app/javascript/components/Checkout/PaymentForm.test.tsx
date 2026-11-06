@@ -1355,13 +1355,16 @@ describe("PaymentForm saved PayPal account", () => {
 });
 
 describe("pay recap", () => {
-  const renderWithRecap = (recap: PayRecap | null) => {
+  const renderWithRecap = (recap: PayRecap | null, overrides: Partial<State> = {}) => {
     const base = state();
     return render(
       <LoggedInUserProvider value={null}>
         <StateContext.Provider
           value={
-            [state({ products: base.products.map((item) => ({ ...item, requirePayment: true })) }), vi.fn()] as const
+            [
+              state({ products: base.products.map((item) => ({ ...item, requirePayment: true })), ...overrides }),
+              vi.fn(),
+            ] as const
           }
         >
           <PayRecapContext.Provider value={recap}>
@@ -1386,5 +1389,25 @@ describe("pay recap", () => {
 
     expect(screen.getByRole("button", { name: "Pay $49" })).toBeTruthy();
     expect(screen.queryByText(/You are paying for/u)).toBeNull();
+  });
+
+  it("names each paid item above the native PayPal button too", async () => {
+    paypalMock.render.mockReset();
+    paypalMock.loadScript.mockResolvedValue({ Buttons: () => ({ render: paypalMock.render }) });
+    renderWithRecap(
+      { amount: "$49", paidLines: [{ name: "Lifetime Membership", price: "$49" }] },
+      {
+        paymentMethod: "paypal",
+        paypalClientId: "paypal-client-id",
+        products: state().products.map((item) => ({
+          ...item,
+          requirePayment: true,
+          supportsPaypal: "native" as const,
+          paypalCardFundingDisabled: false,
+        })),
+      },
+    );
+
+    expect(await screen.findByText("You are paying for: Lifetime Membership ($49)")).toBeTruthy();
   });
 });

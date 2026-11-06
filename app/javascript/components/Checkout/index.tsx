@@ -559,13 +559,16 @@ export const Checkout = ({
   const noCentsIfWhole = summaryAmountsAreAllWhole(summaryDisplayedCents, localCurrency?.subunitToUnit ?? 100);
 
   // What the pay button restates. Only a plain one-charge cart gets it: commission deposits, installments
-  // and pre-order splits charge less than the total today, and a requoting cart has no settled amount.
+  // and pre-order splits charge less than the total today, a test purchase charges nothing, and a cart
+  // without a current quote (requoting, a failed requote showing the old one, or a payment setup still
+  // refreshing) has no settled amount.
   const hasSplitCharge =
     commissionCompletionTotal > 0 ||
     futureInstallmentsWithoutTipsTotal > 0 ||
-    state.products.some((item) => item.isPreorder);
+    state.products.some((item) => item.isPreorder || item.testPurchase);
+  const hasSettledQuote = state.surcharges.type === "loaded" && !state.checkoutPaymentStale;
   const payRecapAmount =
-    total != null && total > 0 && !awaitingBuyerAction && !isRequoting && !hasSplitCharge
+    total != null && total > 0 && hasSettledQuote && !awaitingBuyerAction && !isRequoting && !hasSplitCharge
       ? localAmounts && localCurrency
         ? formatPresentmentCents(localAmounts.totalCents, localCurrency, { noCentsIfWhole })
         : formatCheckoutPrice(total, localCurrency, { noCentsIfWhole })
