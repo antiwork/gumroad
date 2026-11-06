@@ -554,7 +554,7 @@ describe("receipt alert", () => {
   });
   afterEach(() => window.history.replaceState(null, "", "/"));
 
-  it("confirms a free signup with the seller when every purchase is free", () => {
+  it("says the buyer signed up with the seller for free when every purchase is free", () => {
     renderPage({ ...defaultProps(), receipt_purchases: [receiptPurchase("r1", true), receiptPurchase("r2", true)] });
 
     expect(showAlert).toHaveBeenCalledWith(

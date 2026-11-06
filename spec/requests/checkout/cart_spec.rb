@@ -490,7 +490,7 @@ describe "Checkout cart", :js, type: :system do
     let(:free_product2) { create(:product, user: seller, name: "Free product 2", price_cents: 0) }
     let(:paid_product) { create(:product, user: seller, name: "Paid product", price_cents: 500) }
 
-    it "confirms a free signup with the seller when every item is free" do
+    it "says the buyer signed up with the seller for free when every item is free" do
       visit free_product.long_url
       add_to_cart(free_product, pwyw_price: 0)
       visit free_product2.long_url

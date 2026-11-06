@@ -220,7 +220,7 @@ describe("DownloadPage receipt alert", () => {
     vi.restoreAllMocks();
   });
 
-  it("confirms a free signup with the seller", () => {
+  it("says the buyer signed up with the seller for free", () => {
     window.history.replaceState(null, "", "/d/token?receipt=true");
     vi.spyOn(router, "replace").mockImplementation(() => {});
 

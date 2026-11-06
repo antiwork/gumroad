@@ -195,7 +195,7 @@ describe("Receipt header", () => {
       </DomainSettingsProvider>,
     );
 
-  it("confirms a free signup with the seller when every purchase is free", () => {
+  it("says the buyer signed up with the seller for free when every purchase is free", () => {
     renderReceipt([
       { item: item("Starter Pack"), result: succeeded({}) },
       { item: item("Bonus Pack"), result: succeeded({ id: "purchase-2" }) },
