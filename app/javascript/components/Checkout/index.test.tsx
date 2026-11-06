@@ -14,7 +14,17 @@ vi.stubGlobal("Routes", new Proxy({}, { get: () => () => "#" }));
 
 // Subtrees that talk to Stripe/network or need browser APIs irrelevant to the amounts
 // being asserted.
-vi.mock("$app/components/Checkout/PaymentForm", () => ({ PaymentForm: () => <div aria-label="Payment form" /> }));
+// The stub exposes the pay recap the summary hands the real form, so tests can assert the button amount.
+vi.mock("$app/components/Checkout/PaymentForm", async () => {
+  const { PayRecapContext } = await vi.importActual<typeof import("$app/components/Checkout/payment")>(
+    "$app/components/Checkout/payment",
+  );
+  return {
+    PaymentForm: () => (
+      <div aria-label="Payment form" data-pay-recap={JSON.stringify(React.useContext(PayRecapContext))} />
+    ),
+  };
+});
 vi.mock("$app/components/Product/Card", () => ({
   Card: ({ product }: { product: { name: string } }) => <article>{product.name}</article>,
 }));
@@ -1611,5 +1621,206 @@ describe("Checkout renewal reminder notice", () => {
     );
 
     expect(view.queryByText(/before each renewal|free trial ends/u)).toBeNull();
+  });
+});
+
+describe("Checkout pay recap", () => {
+  const surcharges = (subtotal: number): State["surcharges"] => ({
+    type: "loaded",
+    result: {
+      vat_id_valid: false,
+      has_vat_id_input: false,
+      shipping_rate_cents: 0,
+      tax_cents: 0,
+      tax_included_cents: 0,
+      subtotal,
+      buyer_currency_quote: null,
+    },
+  });
+  const freeProduct = cartProduct({ id: "free", permalink: "free", name: "Free guide", price_cents: 0 });
+  const paidProduct = cartProduct({ id: "paid", permalink: "paid", name: "Course", price_cents: 4_900 });
+  const mixedCart = (): CartState => ({
+    items: [cartItem({ product: freeProduct, price: 0 }), cartItem({ product: paidProduct, price: 4_900 })],
+    discountCodes: [],
+  });
+  const mixedState = (overrides: Partial<State> = {}) =>
+    buildState({
+      products: [stateProduct({ permalink: "free", price: 0 }), stateProduct({ permalink: "paid", price: 4_900 })],
+      surcharges: surcharges(4_900),
+      ...overrides,
+    });
+  const recapOf = (view: ReturnType<typeof renderCheckout>): unknown =>
+    JSON.parse(view.getByLabelText("Payment form").getAttribute("data-pay-recap") ?? "null");
+
+  it("restates the total and names the paid item of a mixed cart", () => {
+    expect(recapOf(renderCheckout(mixedState(), mixedCart()))).toEqual({
+      amount: "US$49",
+      paidLines: [{ name: "Course", price: "US$49" }],
+    });
+  });
+
+  it("uses post-discount prices and treats an item discounted to zero as free", () => {
+    const percent = (percents: number) => ({
+      type: "percent" as const,
+      percents,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    });
+    const first = cartProduct({ id: "a", permalink: "a", name: "Ebook", price_cents: 1_000, has_offer_codes: true });
+    const second = cartProduct({ id: "b", permalink: "b", name: "Course", price_cents: 4_000, has_offer_codes: true });
+    const cart: CartState = {
+      items: [cartItem({ product: first, price: 1_000 }), cartItem({ product: second, price: 4_000 })],
+      discountCodes: [{ code: "SAVE", products: { a: percent(100), b: percent(25) }, fromUrl: false }],
+    };
+    const state = buildState({
+      products: [stateProduct({ permalink: "a", price: 0 }), stateProduct({ permalink: "b", price: 3_000 })],
+      surcharges: surcharges(3_000),
+    });
+
+    expect(recapOf(renderCheckout(state, cart))).toEqual({
+      amount: "US$30",
+      paidLines: [{ name: "Course", price: "US$30" }],
+    });
+  });
+
+  it("names paid lines in the buyer's currency from the server allocation", () => {
+    const state = mixedState({
+      surcharges: {
+        type: "loaded",
+        result: {
+          vat_id_valid: false,
+          has_vat_id_input: false,
+          shipping_rate_cents: 0,
+          tax_cents: 0,
+          tax_included_cents: 0,
+          subtotal: 4_900,
+          buyer_currency_quote: {
+            token: "quote-token",
+            currency: "cad",
+            canonical_total_cents: 4_900,
+            presentment_total_cents: 6_713,
+            rate: 1.37,
+            subunit_to_unit: 100,
+            expires_at: "2999-01-01T00:00:00Z",
+            line_allocations: [
+              { permalink: "free", price_cents: 0, tip_cents: 0, tax_cents: 0, shipping_cents: 0, total_cents: 0 },
+              {
+                permalink: "paid",
+                price_cents: 6_713,
+                tip_cents: 0,
+                tax_cents: 0,
+                shipping_cents: 0,
+                total_cents: 6_713,
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toEqual({
+      amount: "CA$67.13",
+      paidLines: [{ name: "Course", price: "CA$67.13" }],
+    });
+  });
+
+  it("keeps the plain label for a pre-order, which charges nothing today", () => {
+    const state = mixedState({
+      products: [
+        stateProduct({ permalink: "free", price: 0 }),
+        stateProduct({ permalink: "paid", price: 4_900, isPreorder: true }),
+      ],
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toBeNull();
+  });
+
+  it("keeps the plain label for a test purchase, which charges nothing", () => {
+    const state = mixedState({
+      products: [
+        stateProduct({ permalink: "free", price: 0 }),
+        stateProduct({ permalink: "paid", price: 4_900, testPurchase: true }),
+      ],
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toBeNull();
+  });
+
+  const pendingRecap = { amount: null, paidLines: [{ name: "Course", price: null }] };
+
+  it("keeps the plain label and drops the line while a failed requote still shows the previous quote", () => {
+    const loaded = surcharges(4_900);
+    if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
+    const state = mixedState({
+      surcharges: { type: "error" },
+      buyerCurrencyRemint: { previousCurrency: null, surcharges: loaded.result },
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toBeNull();
+  });
+
+  it("keeps the plain label and pending prices while the payment setup is being refreshed", () => {
+    expect(recapOf(renderCheckout(mixedState({ checkoutPaymentStale: true }), mixedCart()))).toEqual(pendingRecap);
+  });
+
+  it("keeps naming the paid item, without its old price, while the cart is requoted", () => {
+    const loaded = surcharges(4_900);
+    if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
+    const state = mixedState({
+      surcharges: { type: "pending" },
+      buyerCurrencyRemint: { previousCurrency: null, surcharges: loaded.result },
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toEqual(pendingRecap);
+  });
+
+  it("drops an item from the line as soon as a discount makes it free, before the requote lands", () => {
+    const loaded = surcharges(4_900);
+    if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
+    const cart: CartState = {
+      ...mixedCart(),
+      discountCodes: [
+        {
+          code: "FREE",
+          products: {
+            paid: {
+              type: "percent",
+              percents: 100,
+              product_ids: null,
+              expires_at: null,
+              minimum_quantity: null,
+              duration_in_billing_cycles: null,
+              minimum_amount_cents: null,
+            },
+          },
+          fromUrl: false,
+        },
+      ],
+    };
+    const state = mixedState({
+      surcharges: { type: "pending" },
+      buyerCurrencyRemint: { previousCurrency: null, surcharges: loaded.result },
+    });
+
+    expect(recapOf(renderCheckout(state, cart))).toBeNull();
+  });
+
+  it("lists shipping, which a free physical item can carry", () => {
+    const loaded = surcharges(4_900);
+    if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
+    const state = mixedState({
+      surcharges: { type: "loaded", result: { ...loaded.result, shipping_rate_cents: 500 } },
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toEqual({
+      amount: "US$54",
+      paidLines: [
+        { name: "Course", price: "US$49" },
+        { name: "Shipping", price: "US$5" },
+      ],
+    });
   });
 });

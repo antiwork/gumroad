@@ -11,6 +11,11 @@ module CheckoutHelpers
     "tip_prompt" => "Tip",
   }.freeze
 
+  # The pay button names the amount once the checkout knows it ("Pay US$10", "Pay EUR 9"), and stays
+  # plain ("Pay") while the quote settles — match the label plus a boundary, so "PayPal", which has
+  # its own button, is never the match.
+  PAY_BUTTON_TEXT = /\APay\b/
+
   # The buy CTA's text follows the seller's call to action, so find the checkout link itself.
   def product_page_cta
     within(find(:article)) { first(:link, href: %r{/checkout\?}) }
@@ -173,7 +178,11 @@ module CheckoutHelpers
     block.call if block_given?
 
     expect do
-      click_on is_free ? "Get" : "Pay", exact: true
+      if is_free
+        click_on "Get", exact: true
+      else
+        click_on "Pay", text: PAY_BUTTON_TEXT
+      end
 
       case sca
       when nil then nil

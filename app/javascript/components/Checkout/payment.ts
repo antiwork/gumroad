@@ -555,16 +555,24 @@ type Action =
   | { type: "surcharges-fetch-succeeded"; requestId: number; result: SurchargesResponse }
   | { type: "surcharges-fetch-failed"; requestId: number };
 
-export function getPayLabel(state: State) {
+// Display-ready recap of what the buyer is about to pay, supplied by the checkout summary (which owns
+// currency formatting). A null `amount` means no amount is settled yet, so the button keeps its plain label;
+// a null line `price` is pending for the same reason.
+export type PayRecap = { amount: string | null; paidLines: { name: string; price: string | null }[] };
+export const PayRecapContext = React.createContext<PayRecap | null>(null);
+
+export function getPayLabel(state: State, recap: PayRecap | null = null) {
   // A confirmation the buyer owes keeps the submit in `finished` so its retry can resubmit, but no
   // charge is in flight while they decide — "Processing..." there reads as a hung payment.
   if (isProcessing(state) && !state.awaitingBuyerConfirmation) return "Processing...";
-  return state.payLabel ?? (requiresPayment(state) ? "Pay" : "Get");
+  if (state.payLabel) return state.payLabel;
+  if (!requiresPayment(state)) return "Get";
+  return recap?.amount ? `Pay ${recap.amount}` : "Pay";
 }
 
 export function usePayLabel() {
   const [state] = useState();
-  return getPayLabel(state);
+  return getPayLabel(state, React.useContext(PayRecapContext));
 }
 
 export function requiresPayment(state: State) {

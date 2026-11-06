@@ -370,6 +370,13 @@ describe("pay label while a confirmation holds the submit open", () => {
     ).toBe("Pay");
   });
 
+  it("puts the amount on the label when a recap is known", () => {
+    const recap = { amount: "$49", paidLines: [] };
+    expect(getPayLabel(state({}), recap)).toBe("Pay $49");
+    expect(getPayLabel(state({}), null)).toBe("Pay");
+    expect(getPayLabel(state({ payLabel: "Pre-order" }), recap)).toBe("Pre-order");
+  });
+
   it("keeps the caller's label override", () => {
     expect(getPayLabel(state({ payLabel: "Pre-order" }))).toBe("Pre-order");
   });

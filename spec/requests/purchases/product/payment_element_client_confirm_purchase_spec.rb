@@ -78,7 +78,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
     # Client-side confirm errors never reach #finalize, so the built purchase remains in_progress.
     fill_checkout_form(@product, credit_card: nil)
     fill_in_payment_element(number: "4000000000000002")
-    click_on "Pay", exact: true
+    click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
 
     # Exact Stripe copy is brittle; the stable substring proves the error rendered.
     expect(page).to have_text(/declined/i, wait: 60)
@@ -110,7 +110,7 @@ describe("PurchaseScenario using StripeJs client-confirm", type: :system, js: tr
 
     fill_checkout_form(@product, credit_card: nil)
     fill_in_payment_element(number: "4000002500003155")
-    click_on "Pay", exact: true
+    click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
 
     within_sca_frame { click_on "Fail" }
 
