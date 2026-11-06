@@ -154,6 +154,7 @@ type view struct {
 	refundPolicy            any
 	currency                *currencyDisplay
 	variants                *variants
+	collaborator            any
 	salesCount              any
 }
 
@@ -224,6 +225,9 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
+		return nil, err
+	}
+	if v.collaborator, err = h.collaboratorByline(ctx, p, prod); err != nil {
 		return nil, err
 	}
 	if v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod, v.variants); err != nil {
