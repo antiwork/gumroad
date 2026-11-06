@@ -504,6 +504,29 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				addOther(t, conn, map[string]any{"flags": productHideSoldOutVariants, "max_purchase_count": 0})
 			},
 			want: func(e *testEnv) string { return section(e, 1, "") }},
+		{name: "a sold-out tiered membership hidden", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				tieredOther(t, conn)
+				conn.Exec("UPDATE links SET flags = flags | ?, max_purchase_count = 0 WHERE id = ?", productHideSoldOutVariants, other)
+			},
+			want: func(e *testEnv) string { return section(e, 1, "") }},
+		{name: "a bundle of a sold-out product hidden", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": productHideSoldOutVariants | productIsBundle, "native_type": "bundle"})
+				testdb.Insert(t, conn, "links", map[string]any{"id": other + 50, "user_id": sellerID, "name": "Part", "unique_permalink": "gowebpart",
+					"price_cents": 100, "max_purchase_count": 0, "created_at": testNow, "updated_at": testNow})
+				testdb.Insert(t, conn, "bundle_products", map[string]any{"id": int64(1_792_591), "bundle_id": other, "product_id": other + 50,
+					"quantity": 1, "position": 0, "created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string { return section(e, 1, "") }},
+		// No alive bundle product leaves the minimum nil, so nothing limits it.
+		{name: "an empty bundle shown", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": productHideSoldOutVariants | productIsBundle, "native_type": "bundle"})
+			},
+			want: func(e *testEnv) string {
+				return `{"id":"` + e.ids.Encrypt(other) + `","permalink":"gowebp2","name":"Other",`
+			}},
 		{name: "nothing else listed", server: search,
 			setup: func(t *testing.T, conn *sql.DB) {
 				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productArchived, productID)

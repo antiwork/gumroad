@@ -470,7 +470,7 @@ type card struct {
 	minVariantDifference sql.NullInt64
 	stat                 *reviewStat
 	thumbnail            *thumbnailRow
-	hasTier, hasPlan     bool
+	hasPlan              bool
 	thumbnailURL         any
 	// tiers are a tiered membership's preloaded tiers, with their alive buy prices.
 	tiers []*variantOption
@@ -488,8 +488,6 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	ctx := p.Ctx
 	byID := make(map[int64]*card, len(ids))
 	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+productColumns+","+
-		" EXISTS(SELECT 1 FROM variant_categories WHERE variant_categories.link_id = links.id AND variant_categories.deleted_at IS NULL"+
-		" AND variant_categories.title = 'Tier'),"+
 		" EXISTS(SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = links.id"+
 		" AND product_installment_plans.deleted_at IS NULL)"+
 		" FROM links WHERE links.id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
@@ -499,7 +497,7 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	defer rows.Close()
 	for rows.Next() {
 		c := &card{prod: &product{}}
-		if err := rows.Scan(append(c.prod.dest(), &c.hasTier, &c.hasPlan)...); err != nil {
+		if err := rows.Scan(append(c.prod.dest(), &c.hasPlan)...); err != nil {
 			return nil, err
 		}
 		if reason := unportedCard(p.seller.id, c.prod); reason != "" {
@@ -654,14 +652,22 @@ func unportedCard(sellerID int64, prod *product) string {
 
 // cardSoldOut is hide_sold_out_variants? && remaining_for_sale_count == 0.
 func (h *handler) cardSoldOut(p *page, c *card) (bool, error) {
-	if c.hasTier || c.prod.is(productIsBundle) {
-		return false, fallback("catalog inventory")
-	}
 	vs, err := h.loadVariants(p.Ctx, c.prod)
 	if err != nil {
 		return false, err
 	}
-	remaining, err := h.remainingForSaleCount(p.Ctx, c.prod, vs, nil)
+	var bundleLeft *int64
+	// remaining_for_sale_count returns before the bundle minimum for these.
+	if c.prod.is(productIsBundle) && vs.available() && len(vs.tiers) != 1 {
+		items, err := h.loadBundleItems(p.Ctx, c.prod)
+		if err != nil {
+			return false, err
+		}
+		if bundleLeft, err = h.bundleQuantityLeft(p.Ctx, items); err != nil {
+			return false, err
+		}
+	}
+	remaining, err := h.remainingForSaleCount(p.Ctx, c.prod, vs, bundleLeft)
 	return remaining == int64(0), err
 }
 
