@@ -101,12 +101,19 @@ describe "POST /rails/active_storage/direct_uploads" do
       expect(object.content_disposition).to start_with("attachment; filename=\"page.html\"")
     end
 
-    it "refuses an upload that changes the signed Content-Disposition" do
-      body = "<html><body>Hello</body></html>"
-      json = reserve(content_type: "text/html", filename: "page.html", body:)
-      headers = json["direct_upload"]["headers"].merge("Content-Disposition" => "inline")
+    {
+      "changes the signed Content-Disposition" => ->(headers) { headers.merge("Content-Disposition" => "inline") },
+      "drops the signed Content-Disposition" => ->(headers) { headers.except("Content-Disposition") },
+      "changes the signed Content-Type" => ->(headers) { headers.merge("Content-Type" => "text/html") },
+    }.each do |change, tamper|
+      it "refuses an upload that #{change}" do
+        body = "<html><body>Hello</body></html>"
+        json = reserve(content_type: "text/html", filename: "page.html", body:)
+        headers = tamper.call(json["direct_upload"]["headers"])
 
-      expect(put_object(json["direct_upload"], body, headers:)).to be_a(Net::HTTPForbidden)
+        expect(put_object(json["direct_upload"], body, headers:)).to be_a(Net::HTTPClientError)
+        expect(ActiveStorage::Blob.find_signed!(json["signed_id"]).service.bucket.object(json["key"]).exists?).to be(false)
+      end
     end
 
     it "stores a buyer document as a downloadable attachment and keeps its declared type on the blob" do
