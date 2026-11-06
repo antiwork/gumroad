@@ -31,6 +31,22 @@ func TestAPurchasingPowerParityPrice(t *testing.T) {
 			e.redis.Set("currencies:GBP", "0.79")
 		}, wants: []string{`"buyer_local_price_cents":198,"rate":0.79,"display_mode":"buyer_local"}`,
 			`"buyer_local_price_cents":198,"buyer_local_original_price_cents":395,"rental_price_cents"`}},
+		// 0.1 * 500 is 50, under USD's min_price of 99.
+		{name: "the minimum price floors it", factor: "0.1", setup: func(e *testEnv) {
+			e.redis.HSet("buyer_local_currency", "boolean", "true")
+			e.redis.Set("currencies:GBP", "0.79")
+		}, wants: []string{`"buyer_local_price_cents":78,"buyer_local_original_price_cents":395,`}},
+		// displayed_price_cents is the lower of the code's price and PPP's.
+		{name: "a deeper offer code beats PPP", factor: "0.5", setup: func(e *testEnv) {
+			e.redis.HSet("buyer_local_currency", "boolean", "true")
+			e.redis.Set("currencies:GBP", "0.79")
+			pppCode(e.t, 80)
+		}, wants: []string{`"buyer_local_price_cents":79,"buyer_local_original_price_cents":395,`}},
+		{name: "a deeper PPP price beats the code", factor: "0.4", setup: func(e *testEnv) {
+			e.redis.HSet("buyer_local_currency", "boolean", "true")
+			e.redis.Set("currencies:GBP", "0.79")
+			pppCode(e.t, 50)
+		}, wants: []string{`"buyer_local_price_cents":158,"buyer_local_original_price_cents":395,`}},
 		// String#to_f reads the leading number.
 		{name: "a factor with trailing text", factor: "0.5x", wants: []string{`"ppp_details":{"country":"United Kingdom","factor":0.5,`}},
 	} {
@@ -51,4 +67,13 @@ func TestAPurchasingPowerParityPrice(t *testing.T) {
 			e.wantAll(t, body, c.wants, productID)
 		})
 	}
+}
+
+// pppCode makes a percent-off default offer code for the product.
+func pppCode(t *testing.T, percent int) {
+	conn := testdb.Open(t)
+	const id = int64(1_795_301)
+	insertOfferCode(t, conn, id, map[string]any{"code": "PPPCODE", "amount_percentage": percent})
+	testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_311), "offer_code_id": id, "product_id": productID})
+	conn.Exec("UPDATE links SET default_offer_code_id = ? WHERE id = ?", id, productID)
 }
