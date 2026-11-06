@@ -3,6 +3,7 @@ package products
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
@@ -48,9 +49,14 @@ func (vp *visitorPurchase) dest() []any {
 		&vp.shippingCents, &vp.taxCents, &vp.gumroadTaxCents}
 }
 
-// purchaseProps is ProductProps#purchase_props of Link#purchase_info_for_product_page: the
-// signed-in visitor's own purchase, else one this browser made signed out.
+// purchaseProps is ProductProps#purchase_props of Link#purchase_info_for_product_page: a review
+// link's purchase, else the signed-in visitor's own, else one this browser made signed out.
 func (h *handler) purchaseProps(p *page, prod *product, v *view) (any, error) {
+	// The review link's purchase id and email digest identify the visitor, so its purchase keeps
+	// its license key and skips the expired-rental check.
+	if p.reviewPurchase != nil {
+		return h.purchaseInfoProps(p, prod, v, p.reviewPurchase, true)
+	}
 	guid, hasGUID := p.Req.Cookie(guidCookie)
 	hasGUID = hasGUID && !p.MintedGUID
 	if p.viewer != nil {
@@ -75,6 +81,44 @@ func (h *handler) purchaseProps(p *page, prod *product, v *view) (any, error) {
 	vp, err := h.lastEligiblePurchase(p, prod, "index_purchases_on_browser_guid", "purchases.link_id = ? AND (purchases.flags & ?) = 0"+
 		" AND purchases.browser_guid = ? AND purchases.purchaser_id IS NULL", prod.id, purchaseIsGiftReceiver, guid)
 	return h.shownPurchase(p, prod, v, vp, false, err)
+}
+
+// reviewCountedPurchases is Purchase.allowing_reviews_to_be_counted, as production renders it.
+var reviewCountedPurchases = fmt.Sprintf("purchases.purchase_state IN ('successful', 'gift_receiver_purchase_successful', 'not_charged')"+
+	" AND (purchases.purchase_state != 'not_charged' OR purchases.flags & %d != 0)"+
+	" AND (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)"+
+	" AND (purchases.stripe_partially_refunded IS NULL OR purchases.stripe_partially_refunded = false OR (purchases.flags & %d = 0))"+
+	" AND (purchases.chargeback_date IS NULL) AND %s AND (purchases.flags & %d = 0) AND (purchases.flags & %d = 0)"+
+	" AND ((purchases.flags & %d = 0) OR purchases.purchase_state = 'successful' AND (purchases.price_cents > 0)"+
+	" AND (stripe_refunded IS NULL OR stripe_refunded = 0)) AND (purchases.flags & %d = 0)",
+	purchaseIsFreeTrial, purchaseIsBundleProduct, notRecurringCharge, purchaseIsGiftSender, purchaseExcludesProductReview,
+	purchaseIsAccessRevoked, purchaseIsCommissionCompletion)
+
+// digestPurchase is purchase_for_email_digest: the product's review-counting sale that
+// params[:purchase_id] names, when params[:purchase_email_digest] is its email_digest.
+func (h *handler) digestPurchase(p *page, prod *product) (*visitorPurchase, error) {
+	external, _ := p.Req.Param("purchase_id").(string)
+	digest, _ := p.Req.Param("purchase_email_digest").(string)
+	if rails.Blank(external) || rails.Blank(digest) {
+		return nil, nil
+	}
+	id, ok := h.c.IDs.Decrypt(external)
+	if !ok {
+		return nil, nil
+	}
+	vp := &visitorPurchase{}
+	err := h.c.DB.QueryRowContext(p.Ctx, "SELECT "+visitorPurchaseColumns+" FROM purchases WHERE purchases.link_id = ? AND "+
+		reviewCountedPurchases+" AND purchases.id = ? LIMIT 1", prod.id, id).Scan(vp.dest()...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if want, _ := rails.EmailDigest(h.c.Page.EmailDigestKey, vp.id, vp.email.String).(string); !rails.SecureCompare(want, digest) {
+		return nil, nil
+	}
+	return vp, nil
 }
 
 // lastEligiblePurchase is the eligible purchases' last, nil without one. The index is the one

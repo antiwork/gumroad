@@ -33,8 +33,8 @@ var customHTMLWaitlist string
 // customDomainCertificateLifetime is CustomDomain::CERTIFICATE_LIFETIME.
 const customDomainCertificateLifetime = 90 * 24 * time.Hour
 
-// renderCustomHTML is render_custom_html_if_present, whose wanted, native, code and purchase_id
-// params declinedParams already left to Rails.
+// renderCustomHTML is render_custom_html_if_present, whose wanted and review link serve has
+// checked and whose native and code params declinedParams left to Rails.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
 	if logged := p.Auth.LoggedInUser(); logged != nil {

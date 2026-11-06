@@ -95,14 +95,18 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return nil
 	}
 
+	if p.reviewPurchase, err = h.digestPurchase(p, prod); err != nil {
+		return err
+	}
 	// product_custom_html_visible?: the seller and collaborators preview it whatever the
 	// product's state, and a waitlist page shows it when it holds the waitlist form, which is
-	// Rails' to find. Either way it renders before show's coffee redirect.
+	// Rails' to find. Either way it renders before show's coffee redirect, unless a review link
+	// needs the standard page's form.
 	logged := p.Auth.LoggedInUser()
 	seller := logged != nil && logged.ID == prod.userID
 	if present, err := customHTMLPresent(ctx, conn, prod.id); err != nil {
 		return err
-	} else if present && !p.wanted && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
+	} else if present && !p.wanted && p.reviewPurchase == nil && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
 		// ?wanted=true goes on to show, which sends the buyer to checkout.
 		on, err := h.flag(ctx, "custom_html_pages", p.seller.id)
 		switch {

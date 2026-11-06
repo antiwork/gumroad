@@ -99,6 +99,9 @@ type page struct {
 	// own, never a featured product's.
 	layout        string
 	recommendedBy *string
+	// reviewPurchase is the review link's purchase, purchase_for_email_digest's, on the page itself
+	// and not a featured section's, which Rails builds without the params.
+	reviewPurchase *visitorPurchase
 	// customDomain is a request on the seller's own custom domain, whose host the meta tags take;
 	// productDomain one on a product's domain, whose links go to the seller's subdomain.
 	customDomain, productDomain bool
@@ -250,8 +253,7 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"offer_code", "quantity", "purchase_id",
-	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
+	"offer_code", "quantity", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
 	// The sections' search filters.
 	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
 	// MobileAppWebView and as_embed.
@@ -277,7 +279,7 @@ func declinedParams(req *rails.Request) string {
 			return "layout with iframe"
 		}
 	}
-	for _, name := range []string{"recommended_by", "query"} {
+	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest"} {
 		if raw, ok := req.Params.Get(name); ok {
 			if _, isString := raw.(string); !isString && raw != nil {
 				return "param " + name
