@@ -5,15 +5,23 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 
+	"go.yaml.in/yaml/v3"
+
 	"github.com/antiwork/gumroad/go_web/internal/db"
+	"github.com/antiwork/gumroad/go_web/internal/html4"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 )
+
+// maxDimension keeps a width or height where Ruby's and Go's to_i and Float arithmetic agree;
+// no image or video comes near it.
+const maxDimension = 1 << 40
 
 // AssetPreview::DEFAULT_DISPLAY_WIDTH and RETINA_DISPLAY_WIDTH.
 const (
@@ -25,16 +33,53 @@ const (
 var variableTypes = []string{"image/png", "image/gif", "image/jpeg", "image/tiff", "image/bmp", "image/vnd.adobe.photoshop",
 	"image/vnd.microsoft.icon", "image/webp", "image/avif", "image/heic", "image/heif"}
 
-// cover is one of display_asset_previews, an uploaded image (the shapes this port renders).
+// cover is one of display_asset_previews: an uploaded image or video, or an embedded player.
 type cover struct {
-	guid                 sql.NullString
-	attachmentID         int64
-	blobID               int64
-	key, filename        string
-	contentType          string
-	width, height        *int64
-	url, originalURL     string
-	isImage, postProcess bool
+	guid                          sql.NullString
+	attachmentID                  int64
+	blobID                        int64
+	key, filename                 string
+	contentType                   string
+	width, height                 *dimension
+	url, originalURL              string
+	isImage, isVideo, postProcess bool
+	// oembed is an embedded player's column, as OEmbedFinder stores it.
+	oembed *oembedData
+	// thumbnail is thumbnail_url: a video's poster or a player's thumbnail; "" is nil.
+	thumbnail string
+}
+
+// dimension is a blob metadata width or height as JSON loads it: an Integer, or a Float from
+// the video analyzer.
+type dimension struct {
+	n     float64
+	float bool
+}
+
+// value is the Ruby number.
+func (d dimension) value() any {
+	if d.float {
+		return d.n
+	}
+	return int64(d.n)
+}
+
+func (d dimension) toI() int64 { return int64(d.n) }
+
+// newDimension is a width or height within maxDimension.
+func newDimension(n float64, float bool) (*dimension, bool) {
+	if n > maxDimension || n < -maxDimension {
+		return nil, false
+	}
+	return &dimension{n: n, float: float}, true
+}
+
+// minWith is [limit, d].min, which keeps limit unless d is strictly smaller.
+func (d dimension) minWith(limit int64) dimension {
+	if d.n < float64(limit) {
+		return d
+	}
+	return dimension{n: float64(limit)}
 }
 
 // coverOrder is in_order's sort key, which leaves ties to MySQL.
@@ -43,14 +88,14 @@ type coverOrder struct {
 	createdAt db.NullTime
 }
 
-// loadCovers is display_asset_previews with each image's URLs. Any other cover goes to
-// Rails: an oEmbed or Unsplash one, a video (whose poster Rails may enqueue), or an image
+// loadCovers is display_asset_previews with each one's URLs. Any other cover goes to Rails:
+// an Unsplash one, a video without a persisted poster (Rails may enqueue one), or an image
 // whose retina variant isn't processed yet (url_from_file enqueues it).
 func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*cover, error) {
 	// One row per attachment, through the attachments' unique index; a preview on two rows
 	// has more than one file.
 	rows, err := h.c.DB.QueryContext(ctx, `SELECT asset_previews.id, asset_previews.guid, asset_previews.position,
-		asset_previews.created_at, asset_previews.unsplash_url, asset_previews.oembed IS NOT NULL, att.id, blobs.id, blobs.key,
+		asset_previews.created_at, asset_previews.unsplash_url, asset_previews.oembed, att.id, blobs.id, blobs.key,
 		blobs.filename, blobs.content_type, blobs.metadata
 		FROM asset_previews
 		LEFT JOIN active_storage_attachments att ON att.record_type = 'AssetPreview' AND att.record_id = asset_previews.id
@@ -69,32 +114,48 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 		var c cover
 		var k coverOrder
 		var previewID int64
-		var unsplash, key, filename, contentType, metadata sql.NullString
-		var hasOembed bool
+		var unsplash, oembed, key, filename, contentType, metadata sql.NullString
 		var attID, blobID sql.NullInt64
-		if err := rows.Scan(&previewID, &c.guid, &k.position, &k.createdAt, &unsplash, &hasOembed, &attID, &blobID, &key,
+		if err := rows.Scan(&previewID, &c.guid, &k.position, &k.createdAt, &unsplash, &oembed, &attID, &blobID, &key,
 			&filename, &contentType, &metadata); err != nil {
 			return nil, err
 		}
 		switch {
 		case unsplash.Valid:
 			return nil, fallback("unsplash cover")
-		case hasOembed:
-			return nil, fallback("oembed cover")
+		case oembed.Valid && attID.Valid:
+			return nil, fallback("oembed cover with a file")
+		case oembed.Valid:
+			// Without a file, the join gives the preview one row.
+			if c.oembed, err = parseOembed(oembed.String); err != nil {
+				return nil, err
+			}
+			var okW, okH bool
+			c.width, okW = newDimension(float64(c.oembed.Info.Width), false)
+			c.height, okH = newDimension(float64(c.oembed.Info.Height), false)
+			if !okW || !okH {
+				return nil, fallback("oembed size")
+			}
 		case !attID.Valid:
 			return nil, fallback("cover without a file")
 		case previewID == lastPreviewID || !blobID.Valid:
 			return nil, fallback("cover attachment")
+		default:
+			lastPreviewID = previewID
+			c.attachmentID, c.blobID, c.key, c.filename, c.contentType = attID.Int64, blobID.Int64, key.String, filename.String, contentType.String
+			// display_type, and should_post_process? for an image.
+			switch {
+			case strings.HasPrefix(c.contentType, "image"):
+				c.isImage, c.postProcess = true, !strings.Contains(c.contentType, "gif")
+			case strings.HasPrefix(c.contentType, "video"):
+				c.isVideo = true
+			default:
+				return nil, fallback("cover type")
+			}
+			if c.width, c.height, err = blobDimensions(metadata.String); err != nil {
+				return nil, fallback("cover metadata")
+			}
 		}
-		lastPreviewID = previewID
-		c.attachmentID, c.blobID, c.key, c.filename, c.contentType = attID.Int64, blobID.Int64, key.String, filename.String, contentType.String
-		if c.isImage = strings.HasPrefix(c.contentType, "image"); !c.isImage {
-			return nil, fallback("video cover")
-		}
-		if c.width, c.height, err = blobDimensions(metadata.String); err != nil {
-			return nil, fallback("cover metadata")
-		}
-		c.postProcess = !strings.Contains(c.contentType, "gif")
 		covers = append(covers, &c)
 		keys = append(keys, k)
 	}
@@ -116,7 +177,7 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 }
 
 // blobDimensions reads the analyzer's width and height out of the blob's metadata.
-func blobDimensions(metadata string) (width, height *int64, err error) {
+func blobDimensions(metadata string) (width, height *dimension, err error) {
 	if strings.TrimSpace(metadata) == "" {
 		return nil, nil, nil
 	}
@@ -124,20 +185,23 @@ func blobDimensions(metadata string) (width, height *int64, err error) {
 	if err := json.Unmarshal([]byte(metadata), &m); err != nil {
 		return nil, nil, err
 	}
-	read := func(name string) (*int64, error) {
+	read := func(name string) (*dimension, error) {
 		raw, ok := m[name]
 		if !ok || string(raw) == "null" {
 			return nil, nil
 		}
 		var n json.Number
-		if err := json.Unmarshal(raw, &n); err != nil {
-			return nil, err
+		// json.Number also takes a quoted number, which Ruby keeps a String.
+		if raw[0] == '"' || json.Unmarshal(raw, &n) != nil {
+			return nil, errors.New("dimension is not a number")
 		}
-		v, err := n.Int64()
-		if err != nil {
-			return nil, err
+		float := strings.ContainsAny(string(n), ".eE")
+		f, err := n.Float64()
+		d, ok := newDimension(f, float)
+		if err != nil || !ok || !float && float64(int64(f)) != f {
+			return nil, errors.New("dimension out of range")
 		}
-		return &v, nil
+		return d, nil
 	}
 	if width, err = read("width"); err != nil {
 		return nil, nil, err
@@ -146,13 +210,29 @@ func blobDimensions(metadata string) (width, height *int64, err error) {
 	return width, height, err
 }
 
-// coverURLs is url and url(style: :original), through cdn_url_for.
+// coverURLs is url and url(style: :original), through cdn_url_for, and thumbnail_url.
 func (h *handler) coverURLs(ctx context.Context, p *page, c *cover) error {
+	if o := c.oembed; o != nil {
+		url, err := o.url()
+		if err != nil {
+			return err
+		}
+		c.url, c.originalURL = url, url
+		if thumbnail, ok := o.thumbnailURL(); ok {
+			c.thumbnail = thumbnail
+		}
+		return nil
+	}
 	original, err := h.originalCoverURL(ctx, p, c)
 	if err != nil {
 		return err
 	}
 	c.originalURL = original
+	if c.isVideo {
+		c.url = original
+		c.thumbnail, err = h.videoPosterURL(ctx, p, c)
+		return err
+	}
 	if !c.postProcess {
 		c.url = original
 		return nil
@@ -174,32 +254,110 @@ func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string
 		// retina_variant raises, and url_from_file's rescue answers file.url.
 		return "", fallback("invariable cover")
 	}
-	retina := coverRetinaWidth
 	if c.width == nil {
 		return "", fallback("cover width")
 	}
-	if *c.width < int64(retina) {
-		retina = int(*c.width)
-	}
-	digest := storage.VariantDigest(c.filename, c.contentType, retina, -1)
-	var variantKey sql.NullString
-	err := h.c.DB.QueryRowContext(ctx, `SELECT variant_blobs.key FROM active_storage_variant_records
-		LEFT JOIN active_storage_attachments variant_images ON variant_images.record_type = 'ActiveStorage::VariantRecord'
-			AND variant_images.record_id = active_storage_variant_records.id AND variant_images.name = 'image'
-		LEFT JOIN active_storage_blobs variant_blobs ON variant_blobs.id = variant_images.blob_id
-		WHERE active_storage_variant_records.blob_id = ? AND active_storage_variant_records.variation_digest = ? LIMIT 1`,
-		c.blobID, digest).Scan(&variantKey)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", fallback("retina variant unprocessed")
-	}
-	if err != nil {
-		return "", err
+	digest := storage.VariantDigest(c.filename, c.contentType, c.width.minWith(coverRetinaWidth).value(), nil)
+	variantKey, found, err := h.variantKey(ctx, c.blobID, digest)
+	if err != nil || !found {
+		return "", firstErr(err, fallback("retina variant unprocessed"))
 	}
 	if !variantKey.Valid {
 		return "", fallback("retina variant image")
 	}
 	retinaURL, err := h.cachedURL(ctx, p, "attachment_"+itoa(c.attachmentID)+"_retina_url", pc.PublicStorageURL+variantKey.String)
 	return pc.cdnURL(retinaURL), err
+}
+
+// variantKey is the image key of the blob's variant record for digest; found is false without
+// a record, and the key is NULL for a record without its image.
+func (h *handler) variantKey(ctx context.Context, blobID int64, digest string) (sql.NullString, bool, error) {
+	var key sql.NullString
+	err := h.c.DB.QueryRowContext(ctx, `SELECT variant_blobs.key FROM active_storage_variant_records
+		LEFT JOIN active_storage_attachments variant_images ON variant_images.record_type = 'ActiveStorage::VariantRecord'
+			AND variant_images.record_id = active_storage_variant_records.id AND variant_images.name = 'image'
+		LEFT JOIN active_storage_blobs variant_blobs ON variant_blobs.id = variant_images.blob_id
+		WHERE active_storage_variant_records.blob_id = ? AND active_storage_variant_records.variation_digest = ? LIMIT 1`,
+		blobID, digest).Scan(&key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return key, false, nil
+	}
+	return key, err == nil, err
+}
+
+// videoPosterURL is video_poster_url for a video ActiveStorage can preview (ffmpeg is on Rails'
+// hosts). With neither a cached nor a persisted poster, only Rails knows whether a failure
+// sentinel holds or GenerateVideoPosterWorker is enqueued.
+func (h *handler) videoPosterURL(ctx context.Context, p *page, c *cover) (string, error) {
+	key := "attachment_" + itoa(c.attachmentID) + "_poster_url"
+	cached, found, err := h.readCache(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	if found {
+		s, ok := cached.(string)
+		if !ok {
+			return "", fallback("cached poster")
+		}
+		if rails.Present(s) {
+			return s, nil
+		}
+	}
+	persisted, err := h.persistedPosterURL(ctx, c)
+	if err != nil {
+		return "", err
+	}
+	if persisted != "" {
+		p.cacheWrites = append(p.cacheWrites, pendingWrite{key, persisted, 0})
+		return persisted, nil
+	}
+	if found {
+		return "", nil
+	}
+	return "", fallback("video poster")
+}
+
+// persistedPosterURL is persisted_video_poster_url: the blob's preview image resized to
+// retina_width, when that variant exists; "" otherwise.
+func (h *handler) persistedPosterURL(ctx context.Context, c *cover) (string, error) {
+	rows, err := h.c.DB.QueryContext(ctx, `SELECT blobs.id, blobs.filename, blobs.content_type FROM active_storage_attachments att
+		INNER JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
+		WHERE att.record_type = 'ActiveStorage::Blob' AND att.record_id = ? AND att.name = 'preview_image' LIMIT 2`, c.blobID)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return "", rows.Err()
+	}
+	var preview struct {
+		id                    int64
+		filename, contentType sql.NullString
+	}
+	if err := rows.Scan(&preview.id, &preview.filename, &preview.contentType); err != nil {
+		return "", err
+	}
+	if rows.Next() {
+		return "", fallback("video preview image")
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	width := any(int64(coverRetinaWidth))
+	if c.width != nil {
+		width = c.width.minWith(coverRetinaWidth).value()
+	}
+	digest := storage.VariantDigest(preview.filename.String, preview.contentType.String, width, nil)
+	variantKey, found, err := h.variantKey(ctx, preview.id, digest)
+	if err != nil || !found {
+		return "", err
+	}
+	if !variantKey.Valid {
+		// variant.processed would process a record without its image.
+		return "", fallback("poster variant image")
+	}
+	pc := h.c.Page
+	return pc.cdnURL(pc.PublicStorageURL + variantKey.String), nil
 }
 
 // cachedURL is Rails.cache.fetch(key) { computed } for a URL string: the cached value, or
@@ -224,24 +382,30 @@ func (h *handler) cachedURL(ctx context.Context, p *page, key, computed string) 
 func (c *cover) json() *rails.RHash {
 	var width, height, nativeWidth, nativeHeight any
 	if c.width != nil {
-		nativeWidth = *c.width
-		if *c.width > 0 {
-			dw := min(int64(coverDisplayWidth), *c.width)
-			width = dw
-			if c.height != nil {
-				height = int64(float64(*c.height) * (float64(dw) / float64(*c.width)))
-			}
-		}
+		nativeWidth = c.width.value()
 	}
 	if c.height != nil {
-		nativeHeight = *c.height
+		nativeHeight = c.height.value()
+	}
+	if dw, ok := c.displayWidth(); ok {
+		width = dw.value()
+	}
+	if dh, ok := c.displayHeight(); ok {
+		height = dh
+	}
+	typ := "image"
+	switch {
+	case c.oembed != nil:
+		typ = "oembed"
+	case c.isVideo:
+		typ = "video"
 	}
 	return rails.NewRHash().
 		Sym("url", c.url).
 		Sym("original_url", c.originalURL).
-		Sym("thumbnail", nil).
+		Sym("thumbnail", presence(c.thumbnail)).
 		Sym("id", nullString(c.guid)).
-		Sym("type", "image").
+		Sym("type", typ).
 		Sym("filetype", c.filetype()).
 		Sym("width", width).
 		Sym("height", height).
@@ -249,8 +413,27 @@ func (c *cover) json() *rails.RHash {
 		Sym("native_height", nativeHeight)
 }
 
-// filetype is the filename's extension without its dot, else the content type's subtype.
+// displayWidth is display_width, false where it's nil.
+func (c *cover) displayWidth() (dimension, bool) {
+	if c.width == nil || c.width.toI() <= 0 {
+		return dimension{}, false
+	}
+	return c.width.minWith(coverDisplayWidth), true
+}
+
+// displayHeight is display_height, false where it's nil.
+func (c *cover) displayHeight() (int64, bool) {
+	dw, ok := c.displayWidth()
+	if !ok || c.height == nil {
+		return 0, false
+	}
+	return int64(float64(c.height.toI()) * (float64(dw.toI()) / c.width.n)), true
+}
+
 func (c *cover) filetype() any {
+	if c.oembed != nil {
+		return nil
+	}
 	if ext := strings.Replace(rails.FileExtname(c.filename), ".", "", 1); ext != "" {
 		return ext
 	}
@@ -284,4 +467,121 @@ func (h *handler) readCache(ctx context.Context, key string) (any, bool, error) 
 		return nil, false, fallback("cache")
 	}
 	return v, found, err
+}
+
+// oembedData is an asset preview's oembed column as OEmbedFinder stores it. Width and height
+// stand for their to_i, nil being 0.
+type oembedData struct {
+	HTML string `yaml:"html"`
+	Info *struct {
+		ThumbnailURL *string `yaml:"thumbnail_url"`
+		Width        int64   `yaml:"width"`
+		Height       int64   `yaml:"height"`
+	} `yaml:"info"`
+}
+
+// parseOembed loads the column as its YAML coder does, for the plain Hash OEmbedFinder writes.
+// A tag, an anchor or any other shape goes to Rails.
+func parseOembed(raw string) (*oembedData, error) {
+	var doc yaml.Node
+	if yaml.Unmarshal([]byte(raw), &doc) != nil || !plainYAML(&doc) {
+		return nil, fallback("oembed yaml")
+	}
+	var o oembedData
+	dec := yaml.NewDecoder(strings.NewReader(raw))
+	dec.KnownFields(true)
+	if dec.Decode(&o) != nil || o.Info == nil {
+		return nil, fallback("oembed yaml")
+	}
+	return &o, nil
+}
+
+// plainYAML is a document of maps, strings, decimal integers and nulls only, which Psych and
+// this decoder read alike: a plain 0o17 is a String to Psych but an int here.
+func plainYAML(n *yaml.Node) bool {
+	if n.Anchor != "" {
+		return false
+	}
+	switch n.Kind {
+	case yaml.DocumentNode:
+	case yaml.MappingNode:
+		if n.Tag != "!!map" {
+			return false
+		}
+	case yaml.ScalarNode:
+		if n.Tag != "!!str" && n.Tag != "!!null" && !(n.Tag == "!!int" && decimalInt.MatchString(n.Value)) {
+			return false
+		}
+	default:
+		return false
+	}
+	for _, c := range n.Content {
+		if !plainYAML(c) {
+			return false
+		}
+	}
+	return true
+}
+
+var (
+	decimalInt    = regexp.MustCompile(`\A-?(?:0|[1-9][0-9]*)\z`)
+	unsafeURL     = regexp.MustCompile(`(?i)\A[ \t\r\n\f\v]*(?:javascript|data|vbscript|file):`)
+	youtubeOembed = regexp.MustCompile(`youtube.*feature=oembed`)
+	vimeoVideo    = regexp.MustCompile(`vimeo.com/video/\d+\z`)
+)
+
+// safeURL is AssetPreview#safe_url?.
+func safeURL(url string) bool { return rails.Present(url) && !unsafeURL.MatchString(url) }
+
+// url is oembed_url: the first iframe's src, made absolute, with the players' API flags.
+func (o *oembedData) url() (string, error) {
+	frag, err := html4.ParseFragment(o.HTML)
+	if err != nil {
+		return "", fallback("oembed html")
+	}
+	iframe := firstElement(frag, "iframe")
+	if iframe == nil {
+		return "", fallback("oembed without an iframe")
+	}
+	src, ok := iframe.Attr("src")
+	if !ok {
+		// iframe[:src].strip raises.
+		return "", fallback("oembed iframe src")
+	}
+	url := rails.Strip(src)
+	if !safeURL(url) {
+		return "", fallback("oembed url")
+	}
+	if strings.HasPrefix(url, "//") {
+		url = "https:" + url
+	}
+	if youtubeOembed.MatchString(url) {
+		url += "&enablejsapi=1"
+	}
+	if vimeoVideo.MatchString(url) {
+		url += "?api=1"
+	}
+	return url, nil
+}
+
+// thumbnailURL is oembed_thumbnail_url.
+func (o *oembedData) thumbnailURL() (string, bool) {
+	var url string
+	if o.Info.ThumbnailURL != nil {
+		url = rails.Strip(*o.Info.ThumbnailURL)
+	}
+	return url, safeURL(url)
+}
+
+// firstElement is css(name).first: the first such element in document order.
+func firstElement(n *html4.Node, name string) *html4.Node {
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html4.ElementNode && c.Name == name {
+			return c
+		}
+		if found := firstElement(c, name); found != nil {
+			return found
+		}
+	}
+	return nil
 }
