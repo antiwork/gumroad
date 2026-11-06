@@ -1355,11 +1355,14 @@ describe("PaymentForm saved PayPal account", () => {
 });
 
 describe("pay recap", () => {
-  const renderWithRecap = (recap: PayRecap | null) =>
-    render(
+  const renderWithRecap = (recap: PayRecap | null) => {
+    const base = state();
+    return render(
       <LoggedInUserProvider value={null}>
         <StateContext.Provider
-          value={[state({ products: [{ ...state().products[0]!, requirePayment: true }] }), vi.fn()] as const}
+          value={
+            [state({ products: base.products.map((item) => ({ ...item, requirePayment: true })) }), vi.fn()] as const
+          }
         >
           <PayRecapContext.Provider value={recap}>
             <PaymentForm />
@@ -1367,6 +1370,7 @@ describe("pay recap", () => {
         </StateContext.Provider>
       </LoggedInUserProvider>,
     );
+  };
 
   afterEach(cleanup);
 
