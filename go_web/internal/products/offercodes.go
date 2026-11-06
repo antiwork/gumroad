@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
-	"errors"
 	"math"
 	"slices"
 	"strconv"
@@ -58,20 +57,36 @@ func (c *offerCode) ownDest() []any {
 
 // loadOfferCode reads the row a condition finds first, nil for none.
 func (h *handler) loadOfferCode(ctx context.Context, prod *product, condition string, args ...any) (*offerCode, error) {
-	c := &offerCode{}
-	var sqlCurrency sql.NullBool
+	codes, err := h.loadOfferCodes(ctx, prod, condition, args...)
+	if err != nil || len(codes) == 0 {
+		return nil, err
+	}
+	return codes[0], nil
+}
+
+// loadOfferCodes is loadOfferCode for every row condition finds.
+func (h *handler) loadOfferCodes(ctx context.Context, prod *product, condition string, args ...any) ([]*offerCode, error) {
 	// excluded_products skips a join row whose product is gone.
-	err := h.c.DB.QueryRowContext(ctx, "SELECT "+offerCodeColumns+", offer_codes.currency_type = ?,"+
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+offerCodeColumns+", offer_codes.currency_type = ?,"+
 		" EXISTS(SELECT 1 FROM offer_codes_excluded_products x INNER JOIN links ON links.id = x.product_id WHERE x.offer_code_id = offer_codes.id),"+
 		" EXISTS(SELECT 1 FROM offer_codes_excluded_products x WHERE x.offer_code_id = offer_codes.id AND x.product_id = ?),"+
 		" EXISTS(SELECT 1 FROM offer_codes_products j WHERE j.offer_code_id = offer_codes.id AND j.product_id = ?)"+
-		" FROM offer_codes WHERE "+condition, append([]any{prod.priceCurrencyType, prod.id, prod.id}, args...)...).
-		Scan(append(c.ownDest(), &sqlCurrency, &c.anyExcluded, &c.excludesProduct, &c.forProduct)...)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+		" FROM offer_codes WHERE "+condition, append([]any{prod.priceCurrencyType, prod.id, prod.id}, args...)...)
+	if err != nil {
+		return nil, err
 	}
-	c.sqlCurrency = sqlCurrency.Bool
-	return c, err
+	defer rows.Close()
+	var codes []*offerCode
+	for rows.Next() {
+		c := &offerCode{}
+		var sqlCurrency sql.NullBool
+		if err := rows.Scan(append(c.ownDest(), &sqlCurrency, &c.anyExcluded, &c.excludesProduct, &c.forProduct)...); err != nil {
+			return nil, err
+		}
+		c.sqlCurrency = sqlCurrency.Bool
+		codes = append(codes, c)
+	}
+	return codes, rows.Err()
 }
 
 // codeProductIDs is the external ids of a code's products or excluded_products, table being
@@ -440,12 +455,16 @@ func (h *handler) findOfferCode(ctx context.Context, prod *product, code string)
 		// The product's code is another seller's, which the computing service never loads.
 		return 0, fallback("offer code lookup")
 	}
+	codes, err := h.loadOfferCodes(ctx, prod, "offer_codes.id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
+	if err != nil {
+		return 0, err
+	}
+	byID := make(map[int64]*offerCode, len(codes))
+	for _, c := range codes {
+		byID[c.id] = c
+	}
 	for _, id := range ids {
-		c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", id)
-		if err != nil {
-			return 0, err
-		}
-		if c != nil && c.applicable(prod) && c.currencyValid(prod) {
+		if c := byID[id]; c != nil && c.applicable(prod) && c.currencyValid(prod) {
 			if id != found {
 				return 0, fallback("offer code lookup")
 			}
