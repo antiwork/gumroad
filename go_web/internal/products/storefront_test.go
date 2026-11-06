@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -210,6 +211,27 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				if got := e.cache.values[railsSectionsKey(e, true)]; !reflect.DeepEqual(got, written(defaultProductsSectionID, pageLayoutSort, 3, other, productID)) {
 					t.Errorf("entry %#v", got)
 				}
+			}},
+		// preloaded_options' floor takes the alive SKUs, the default one too, with the variants; a SKU
+		// without a difference is compacted out.
+		{name: "SKUs below the variants", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, nil)
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": other, "title": "Size"})
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": category + 1, "type": "Variant", "variant_category_id": category,
+					"name": "V", "price_difference_cents": 100, "sales_count_for_inventory_cache": 0, "created_at": testNow, "updated_at": testNow})
+				for i, sku := range []map[string]any{{"price_difference_cents": 50, "flags": baseVariantIsDefaultSku},
+					{"price_difference_cents": 10, "deleted_at": testNow}, {"price_difference_cents": nil}} {
+					row := map[string]any{"id": int64(1_792_311 + i), "type": "Sku", "link_id": other, "name": "S",
+						"sales_count_for_inventory_cache": 0, "created_at": testNow, "updated_at": testNow}
+					maps.Copy(row, sku)
+					testdb.Insert(t, conn, "base_variants", row)
+				}
+				testdb.Insert(t, conn, "product_review_stats", map[string]any{"id": int64(1_792_401), "link_id": other, "reviews_count": 3,
+					"average_rating": 4.5, "created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string {
+				return section(e, 2, strings.Replace(otherCard(e), `"price_cents":400`, `"price_cents":350`, 1))
 			}},
 		{name: "this product beyond the page still leaves the total", server: search, searched: 1,
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),

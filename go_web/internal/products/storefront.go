@@ -484,7 +484,6 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	ctx := p.Ctx
 	byID := make(map[int64]*card, len(ids))
 	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+productColumns+","+
-		" EXISTS(SELECT 1 FROM base_variants WHERE base_variants.link_id = links.id AND base_variants.type = 'Sku' AND base_variants.deleted_at IS NULL),"+
 		" EXISTS(SELECT 1 FROM variant_categories WHERE variant_categories.link_id = links.id AND variant_categories.deleted_at IS NULL"+
 		" AND variant_categories.title = 'Tier'),"+
 		" EXISTS(SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = links.id"+
@@ -496,11 +495,10 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	defer rows.Close()
 	for rows.Next() {
 		c := &card{prod: &product{}}
-		var hasSku bool
-		if err := rows.Scan(append(c.prod.dest(), &hasSku, &c.hasTier, &c.hasPlan)...); err != nil {
+		if err := rows.Scan(append(c.prod.dest(), &c.hasTier, &c.hasPlan)...); err != nil {
 			return nil, err
 		}
-		if reason := unportedCard(p.seller.id, c.prod, hasSku); reason != "" {
+		if reason := unportedCard(p.seller.id, c.prod); reason != "" {
 			return nil, fallback("catalog " + reason)
 		}
 		var ok bool
@@ -588,13 +586,19 @@ func (h *handler) cardTiers(p *page, cards []*card) (map[int64][]*variantOption,
 	return out, h.markClosedTiers(p.Ctx, p.seller.id, all)
 }
 
-// variantPriceFloors is lowest_variant_price_difference_cents over each product's preloaded
-// alive variants.
+// variantPriceFloors is lowest_variant_price_difference_cents over each product's
+// preloaded_options: its alive SKUs, the default one included, and its alive categories' alive
+// variants.
 func (h *handler) variantPriceFloors(ctx context.Context, ids []int64) (map[int64]sql.NullInt64, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT variant_categories.link_id, MIN(base_variants.price_difference_cents) FROM base_variants"+
+	in := placeholders(len(ids))
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT options.link_id, MIN(options.price_difference_cents) FROM ("+
+		"SELECT variant_categories.link_id, base_variants.price_difference_cents FROM base_variants"+
 		" INNER JOIN variant_categories ON variant_categories.id = base_variants.variant_category_id"+
 		" WHERE base_variants.type = 'Variant' AND base_variants.deleted_at IS NULL AND variant_categories.deleted_at IS NULL"+
-		" AND variant_categories.link_id IN ("+placeholders(len(ids))+") GROUP BY variant_categories.link_id", int64Args(ids)...)
+		" AND variant_categories.link_id IN ("+in+")"+
+		" UNION ALL SELECT base_variants.link_id, base_variants.price_difference_cents FROM base_variants"+
+		" WHERE base_variants.type = 'Sku' AND base_variants.deleted_at IS NULL AND base_variants.link_id IN ("+in+")"+
+		") options GROUP BY options.link_id", append(int64Args(ids), int64Args(ids)...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -632,7 +636,7 @@ func (h *handler) aliveThumbnails(ctx context.Context, ids []int64) (map[int64][
 }
 
 // unportedCard is a catalog product whose card this port leaves to Rails.
-func unportedCard(sellerID int64, prod *product, hasSku bool) string {
+func unportedCard(sellerID int64, prod *product) string {
 	_, known := currencies[prod.productCurrency()]
 	switch {
 	case prod.userID != sellerID:
@@ -640,8 +644,6 @@ func unportedCard(sellerID int64, prod *product, hasSku bool) string {
 		return "seller"
 	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
 		return "purchase type"
-	case hasSku:
-		return "skus"
 	case !prod.priceCurrencyType.Valid || !known:
 		return "currency"
 	}
