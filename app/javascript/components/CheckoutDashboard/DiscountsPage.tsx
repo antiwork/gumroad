@@ -103,6 +103,7 @@ export type OfferCode = {
   sale_label: string | null;
   ownership_products: Product[];
   ownership_option_ids_by_product: Record<string, string[]>;
+  ownership_options: Record<string, { name: string; deleted: boolean }>;
   ownership_duration_tiers: OwnershipDurationTier[] | null;
   option_ids_by_product: Record<string, string[]>;
 };
@@ -1094,19 +1095,37 @@ const Form = ({
       ownershipProductOption(product),
       ...(product.options ?? []).map((option) => ownershipOptionRow(product, option)),
     ]);
-  // Past buyers of a since-deleted option still qualify, so its saved id keeps a chip of its own
-  // instead of being dropped the next time the picker changes.
+  const ownershipOptionDetails = offerCode?.ownership_options ?? {};
+  // Past buyers of a since-deleted option still qualify, so each saved id keeps a named chip of its
+  // own instead of being dropped the next time the picker changes. A saved option the product's
+  // list leaves out but that isn't deleted (one in a second category) stays an ordinary option chip.
   const ownershipOptionRows = Object.entries(ownershipOptionIdsByProduct).flatMap(([productId, optionIds]) => {
     const product = products.find(({ id }) => id === productId);
-    const liveOptions = (product?.options ?? []).filter(({ id }) => optionIds.includes(id));
-    const rows = product ? liveOptions.map((option) => ownershipOptionRow(product, option)) : [];
-    const missingOptionIds = optionIds.filter((optionId) => !liveOptions.some(({ id }) => id === optionId));
-    if (missingOptionIds.length === 0) return rows;
+    const productName = product?.name ?? "Deleted product";
+    const unnamedOptionIds: string[] = [];
+    const rows = optionIds.flatMap((optionId): Option[] => {
+      const listed = product?.options?.find(({ id }) => id === optionId);
+      if (product && listed) return [ownershipOptionRow(product, listed)];
+      const details = ownershipOptionDetails[optionId];
+      if (!details) {
+        unnamedOptionIds.push(optionId);
+        return [];
+      }
+      const id = `${productId}:${optionId}`;
+      const name = details.name === "Untitled" ? productName : details.name;
+      ownershipScopeTargets[id] = { productId, optionIds: [optionId], kind: details.deleted ? "deleted" : "option" };
+      return [{ id, label: details.deleted ? `${productName} (${name}, deleted)` : `${productName} (${name})` }];
+    });
+    if (unnamedOptionIds.length === 0) return rows;
     const id = `${productId}:deleted`;
-    ownershipScopeTargets[id] = { productId, optionIds: missingOptionIds, kind: "deleted" };
-    return [...rows, { id, label: `${product?.name ?? "Deleted product"} (deleted options)` }];
+    ownershipScopeTargets[id] = { productId, optionIds: unnamedOptionIds, kind: "deleted" };
+    const count = unnamedOptionIds.length;
+    return [...rows, { id, label: `${productName} (${count} deleted ${count === 1 ? "option" : "options"})` }];
   });
   const selectedOwnershipScopes = [...ownershipProducts.map(ownershipProductOption), ...ownershipOptionRows];
+  const hasDeletedOwnershipOptions = selectedOwnershipScopes.some(
+    ({ id }) => ownershipScopeTargets[id]?.kind === "deleted",
+  );
 
   const initialTiers = offerCode?.ownership_duration_tiers ?? null;
   const tierIdRef = React.useRef(0);
@@ -1262,6 +1281,7 @@ const Form = ({
       sale_label: universal && autoApply && saleLabel.trim() ? saleLabel.trim() : null,
       ownership_products: existingCustomersOnly ? ownershipProducts : [],
       ownership_option_ids_by_product: existingCustomersOnly ? ownershipOptionIdsByProduct : {},
+      ownership_options: existingCustomersOnly ? ownershipOptionDetails : {},
       ownership_duration_tiers: tieredPayload,
       option_ids_by_product: universal ? {} : optionIdsByProduct,
     });
@@ -1611,6 +1631,7 @@ const Form = ({
                     value={selectedOwnershipScopes}
                     isMulti
                     isClearable
+                    pinClearIndicator
                     placeholder="Choose products or options"
                     onChange={(selected, { action, option }) => {
                       const next = ownershipScopesFromSelection(
@@ -1623,6 +1644,11 @@ const Form = ({
                     }}
                     aria-invalid={ownershipProductIds.error}
                   />
+                  {hasDeletedOwnershipOptions ? (
+                    <FieldsetDescription>
+                      Buyers of a deleted option still qualify. Once removed, a deleted option can't be added back.
+                    </FieldsetDescription>
+                  ) : null}
                 </Fieldset>
               </Dropdown>
             </Details>

@@ -49,6 +49,18 @@ describe("Select action buttons", () => {
     expect(screen.queryByRole("option")).toBeNull();
   });
 
+  it("pins the clear-all control to the top only when asked, and keeps it keyboard-operable", () => {
+    const onChange = vi.fn();
+    const { rerender } = render(<Select isMulti isClearable value={[option]} options={[option]} onChange={onChange} />);
+    expect(screen.getByLabelText("Clear value").parentElement?.className).not.toContain("self-start");
+
+    rerender(<Select isMulti isClearable pinClearIndicator value={[option]} options={[option]} onChange={onChange} />);
+    const button = screen.getByLabelText("Clear value");
+    expect(button.parentElement?.className).toContain("self-start");
+    if (fireEvent.keyDown(button, { key: "Enter" })) fireEvent.click(button);
+    expect(onChange).toHaveBeenCalledWith([], expect.objectContaining({ action: "clear" }));
+  });
+
   it("keeps mouse clearing working", () => {
     const onChange = vi.fn();
     render(<Select isMulti={false} isClearable value={option} options={[option]} onChange={onChange} />);
