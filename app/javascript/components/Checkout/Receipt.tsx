@@ -332,7 +332,7 @@ export const Receipt = ({
             {results.some(({ result }) => !result.success)
               ? "Summary"
               : freeSignup.free
-                ? `Your free signup${freeSignup.sellerName ? ` with ${freeSignup.sellerName}` : ""} is confirmed!`
+                ? `You signed up${freeSignup.sellerName ? ` with ${freeSignup.sellerName}` : ""} for free`
                 : "Your purchase was successful!"}
           </h2>
 
@@ -347,7 +347,7 @@ export const Receipt = ({
               )
                 ? `We charged your card and sent a receipt to ${state.email}`
                 : freeSignup.free
-                  ? `We sent a confirmation to ${state.email}`
+                  ? `We emailed the details to ${state.email}`
                   : `We sent a receipt to ${state.email}`}
             </p>
           ) : null}
