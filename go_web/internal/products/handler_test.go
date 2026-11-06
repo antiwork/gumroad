@@ -388,7 +388,7 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 			undo: func() {
 				conn.Exec("UPDATE users SET flags = flags & ~? WHERE id = ?", userProductPageStorefrontEnabled, sellerID)
 			}},
-		{name: "membership", host: host, target: "/l/guide", reason: "membership",
+		{name: "tiers without recurring billing", host: host, target: "/l/guide", reason: "tiers without recurring billing",
 			setup: func() {
 				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsTieredMembership, productID)
 			},
@@ -576,6 +576,175 @@ func TestARentalRendersItsPrices(t *testing.T) {
 			}
 			if c.missing != "" && strings.Contains(body, c.missing) {
 				t.Errorf("has %s", c.missing)
+			}
+		})
+	}
+}
+
+// The fixture's price is the monthly one; tiers sit in a Tier category with their own prices.
+func TestAMembershipRendersItsPrices(t *testing.T) {
+	const yearly, quarterly, tierCategory, basic, pro = int64(1_792_001), int64(1_792_002), int64(1_792_101), int64(1_792_201), int64(1_792_202)
+	price := func(t *testing.T, conn *sql.DB, id, cents int64, currency, recurrence string) {
+		testdb.Insert(t, conn, "prices", map[string]any{"id": id, "link_id": productID, "price_cents": cents, "currency": currency,
+			"recurrence": recurrence, "created_at": testNow, "updated_at": testNow})
+	}
+	membership := func(conn *sql.DB, flags int64) {
+		conn.Exec("UPDATE links SET flags = flags | ?, subscription_duration = 0, native_type = 'membership' WHERE id = ?", flags, productID)
+	}
+	tier := func(t *testing.T, conn *sql.DB, id int64, name string, position int, maxPurchases any, flags int, prices ...[2]any) {
+		testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": tierCategory, "name": name,
+			"position_in_category": position, "max_purchase_count": maxPurchases, "sales_count_for_inventory_cache": 2, "flags": flags,
+			"created_at": testNow, "updated_at": testNow})
+		for i, p := range prices {
+			row := map[string]any{"id": id + int64(i+1)*1000, "variant_id": id, "price_cents": p[0], "currency": "usd", "recurrence": p[1],
+				"created_at": testNow, "updated_at": testNow}
+			if id == basic && i == 0 {
+				row["suggested_price_cents"] = 350
+			}
+			testdb.Insert(t, conn, "prices", row)
+		}
+	}
+	tiered := func(t *testing.T, conn *sql.DB, basicFlags, proFlags int) {
+		membership(conn, productIsRecurringBilling|productIsTieredMembership)
+		conn.Exec("UPDATE prices SET price_cents = 0, recurrence = 'monthly' WHERE id = ?", priceID)
+		price(t, conn, yearly, 0, "usd", "yearly")
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": tierCategory, "link_id": productID, "title": "Tier"})
+		tier(t, conn, basic, "Basic", 0, nil, basicFlags, [2]any{300, "monthly"}, [2]any{3000, "yearly"})
+		tier(t, conn, pro, "Pro", 1, nil, proFlags, [2]any{900, "monthly"}, [2]any{1000, "quarterly"})
+	}
+	const offer = `"url":"https://gowebproductseller.gumroad.com/l/guide","price":`
+	tierOption := func(id, name, quantityLeft, values string) string {
+		return `{"id":"` + id + `","name":"` + name + `","quantity_left":` + quantityLeft + `,"description":"","price_difference_cents":null,` +
+			`"recurrence_price_values":` + values + `,"is_pwyw":false,"duration_in_minutes":null}`
+	}
+	basicValues := `{"monthly":{"price_cents":300,"suggested_price_cents":350},"yearly":{"price_cents":3000,"suggested_price_cents":null}}`
+	proValues := `{"monthly":{"price_cents":900,"suggested_price_cents":null}}`
+	for _, c := range []struct {
+		name    string
+		wants   []string
+		reason  string
+		headers map[string]string
+		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		{name: "a legacy subscription", wants: []string{`"price_cents":500,`,
+			`"is_legacy_subscription":true,"is_tiered_membership":false,"is_recurring_billing":true,`, `"eligible_for_installment_plans":false,`,
+			`"recurrences":{"default":"monthly","enabled":[{"recurrence":"monthly","price_cents":500,"id":"%[1]s","renewal_reminder_days":[]},` +
+				`{"recurrence":"yearly","price_cents":4000,"id":"%[2]s","renewal_reminder_days":[]}],"free_trial_reminder_days":null},`,
+			`"quantity":1,"recurrence":"monthly",`, offer + `5.0}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				membership(conn, productIsRecurringBilling)
+				conn.Exec("UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
+				price(t, conn, yearly, 4000, "usd", "yearly")
+			}},
+		// Every currency counts toward the recurrences and the offer.
+		{name: "renewal reminders, and a cheaper price in another currency", wants: []string{
+			`"enabled":[{"recurrence":"monthly","price_cents":500,"id":"%[1]s","renewal_reminder_days":[1]},` +
+				`{"recurrence":"quarterly","price_cents":100,"id":"%[3]s","renewal_reminder_days":[7]},` +
+				`{"recurrence":"yearly","price_cents":4000,"id":"%[2]s","renewal_reminder_days":[30,7]}]`, offer + `1.0}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("membership_renewal_reminders", "boolean", "true")
+				membership(conn, productIsRecurringBilling)
+				conn.Exec("UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
+				price(t, conn, yearly, 4000, "usd", "yearly")
+				price(t, conn, quarterly, 100, "eur", "quarterly")
+			}},
+		{name: "a free trial", wants: []string{`"free_trial":{"duration":{"unit":"week","amount":1}},`, `"free_trial_reminder_days":2}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("membership_renewal_reminders", "boolean", "true")
+				membership(conn, productIsRecurringBilling|productFreeTrialEnabled)
+				conn.Exec("UPDATE links SET free_trial_duration_unit = 0, free_trial_duration_amount = 1 WHERE id = ?", productID)
+				conn.Exec("UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
+			}},
+		// A tier's price at a recurrence the product doesn't sell is left out.
+		{name: "a tiered membership's tiers", wants: []string{`"price_cents":0,`,
+			`"is_legacy_subscription":false,"is_tiered_membership":true,"is_recurring_billing":true,`, `"quantity_remaining":null,`,
+			`"options":[` + tierOption("%[4]s", "Basic", "null", basicValues) + `,` + tierOption("%[5]s", "Pro", "null", proValues) + `]`,
+			`content="0.0" inertia="meta-property-product-price-amount"`, `"availability":"https://schema.org/InStock",` + offer + `3.0}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { tiered(t, conn, 0, 0) }},
+		// The offer then quotes the open tiers only.
+		{name: "a tier closed to new buyers", wants: []string{tierOption("%[4]s", "Basic", "0", basicValues), offer + `9.0}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("close_membership_tier_to_new_buyers", "boolean", "true")
+				tiered(t, conn, 4, 0)
+			}},
+		// The offer then quotes every tier.
+		{name: "every tier closed", wants: []string{`"quantity_remaining":0,`, `"availability":"https://schema.org/SoldOut",` + offer + `3.0}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("close_membership_tier_to_new_buyers", "boolean", "true")
+				tiered(t, conn, 4, 4)
+			}},
+		{name: "closed tiers without the flag", wants: []string{`"quantity_remaining":null,`, tierOption("%[5]s", "Pro", "null", proValues)},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { tiered(t, conn, 4, 4) }},
+		{name: "a lone tier's inventory", wants: []string{`"quantity_remaining":3,`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(conn, productIsRecurringBilling|productIsTieredMembership)
+			testdb.Insert(t, conn, "variant_categories", map[string]any{"id": tierCategory, "link_id": productID, "title": "Tier"})
+			tier(t, conn, basic, "Basic", 0, 5, 0, [2]any{300, "monthly"})
+		}},
+		{name: "no subscription duration", reason: "no subscription duration", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsRecurringBilling, productID)
+		}},
+		{name: "a subscription duration the enum doesn't map", reason: "subscription duration", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(conn, productIsRecurringBilling)
+			conn.Exec("UPDATE links SET subscription_duration = 9 WHERE id = ?", productID)
+		}},
+		{name: "a free trial unit the enum doesn't map", reason: "free trial unit", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(conn, productIsRecurringBilling|productFreeTrialEnabled)
+			conn.Exec("UPDATE links SET free_trial_duration_unit = 5 WHERE id = ?", productID)
+		}},
+		{name: "a rental membership", reason: "membership rental", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(conn, productIsRecurringBilling)
+			conn.Exec("UPDATE links SET purchase_type = 2 WHERE id = ?", productID)
+		}},
+		{name: "a tiered membership with SKUs", reason: "tiered skus", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(conn, productIsRecurringBilling|productIsTieredMembership|productSkusEnabled|productIsPhysical)
+		}},
+		// The tiers ask MySQL whether the product sells at a recurrence, under the collation.
+		{name: "a price recurrence that isn't exactly a name", reason: "price recurrence", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			tiered(t, conn, 0, 0)
+			conn.Exec("UPDATE prices SET recurrence = 'Yearly' WHERE id = ?", yearly)
+		}},
+		{name: "two prices at one recurrence", reason: "recurrence tie", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			membership(conn, productIsRecurringBilling)
+			price(t, conn, yearly, 4000, "usd", "yearly")
+			price(t, conn, quarterly, 3500, "eur", "yearly")
+		}},
+		{name: "a local price", reason: "membership buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("buyer_local_currency", "boolean", "true")
+				e.redis.Set("currencies:EUR", "0.92345")
+				membership(conn, productIsRecurringBilling)
+				conn.Exec("UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
+			}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			c.setup(t, e, conn)
+			headers := maps.Clone(c.headers)
+			if c.reason != "" {
+				if headers == nil {
+					headers = map[string]string{}
+				}
+				maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
+			}
+			w := e.get(host, "/l/guide", headers)
+			if c.reason != "" {
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+			}
+			body := html.UnescapeString(w.Body.String())
+			for _, want := range c.wants {
+				if strings.Contains(want, "%[") {
+					want = fmt.Sprintf(want, e.ids.Encrypt(priceID), e.ids.Encrypt(yearly), e.ids.Encrypt(quarterly), e.ids.Encrypt(basic), e.ids.Encrypt(pro))
+				}
+				if !strings.Contains(body, want) {
+					t.Errorf("want %s in %s", want, body[strings.Index(body, `"options"`):][:700])
+				}
 			}
 		})
 	}
@@ -787,8 +956,10 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 				file(t, conn, 1_791_201, small)
 				file(t, conn, 1_791_202, 0)
 			}},
-		{"a tier category", nil, "tier category", func(t *testing.T, conn *sql.DB) {
+		// The title matches Tier under the collation, and a lone tier's inventory is the product's.
+		{"a tier category", []string{`"quantity_remaining":2,`}, "", func(t *testing.T, conn *sql.DB) {
 			conn.Exec("UPDATE variant_categories SET title = 'tier ' WHERE id = ?", size)
+			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, 3, 1, 0))
 		}},
 		{"options tied in order", nil, "variant order", func(t *testing.T, conn *sql.DB) {
 			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", nil, nil, nil, 0))

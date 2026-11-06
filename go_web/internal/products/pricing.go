@@ -46,11 +46,15 @@ func (h *handler) checkPPP(ctx context.Context, p *page, prod *product, v *view)
 	return nil
 }
 
-// remainingForSaleCount is Link#remaining_for_sale_count without tiers or bundles, its
+// remainingForSaleCount is Link#remaining_for_sale_count without bundles, its
 // inventory read afresh.
 func (h *handler) remainingForSaleCount(ctx context.Context, prod *product, vs *variants) (any, error) {
 	if !vs.available() {
 		return int64(0), nil
+	}
+	if len(vs.tiers) == 1 {
+		// A lone tier's own inventory, closed or not.
+		return intOrNil(vs.tiers[0].quantityLeft()), nil
 	}
 	if !prod.maxPurchaseCount.Valid {
 		return nil, nil

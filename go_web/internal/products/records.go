@@ -93,19 +93,49 @@ type product struct {
 	nativeType          string
 	defaultOfferCodeID  sql.NullInt64
 	requireShipping     sql.NullBool
+	// subscriptionDuration and freeTrialDurationUnit are enums; see enumName.
+	subscriptionDuration                           sql.NullInt64
+	freeTrialDurationUnit, freeTrialDurationAmount sql.NullInt64
 }
 
 const productColumns = `links.id, links.user_id, links.name, links.unique_permalink, links.custom_permalink,
 	links.description, links.purchase_type, links.purchase_disabled_at, links.deleted_at, links.banned_at,
 	links.price_currency_type, links.customizable_price, links.max_purchase_count, links.suggested_price_cents,
 	links.draft, links.flags, links.json_data, links.duration_in_months, links.native_type,
-	links.default_offer_code_id, links.require_shipping`
+	links.default_offer_code_id, links.require_shipping, links.subscription_duration,
+	links.free_trial_duration_unit, links.free_trial_duration_amount`
 
 func (p *product) dest() []any {
 	return []any{&p.id, &p.userID, &p.name, &p.uniquePermalink, &p.customPermalink, &p.description, &p.purchaseType,
 		&p.purchaseDisabledAt, &p.deletedAt, &p.bannedAt, &p.priceCurrencyType, &p.customizablePrice,
 		&p.maxPurchaseCount, &p.suggestedPriceCents, &p.draft, &p.flags, &p.jsonData, &p.durationInMonths,
-		&p.nativeType, &p.defaultOfferCodeID, &p.requireShipping}
+		&p.nativeType, &p.defaultOfferCodeID, &p.requireShipping, &p.subscriptionDuration,
+		&p.freeTrialDurationUnit, &p.freeTrialDurationAmount}
+}
+
+// Link's subscription_duration and free_trial_duration_unit enums.
+var (
+	subscriptionDurations = []string{"monthly", "yearly", "quarterly", "biannually", "every_two_years"}
+	freeTrialUnits        = []string{"week", "month"}
+)
+
+// enumName is an enum column's name, "" for NULL; ok is false for a value the enum doesn't map.
+func enumName(names []string, n sql.NullInt64) (name string, ok bool) {
+	if !n.Valid {
+		return "", true
+	}
+	if n.Int64 < 0 || n.Int64 >= int64(len(names)) {
+		return "", false
+	}
+	return names[n.Int64], true
+}
+
+func (p *product) subscriptionDurationName() (string, bool) {
+	return enumName(subscriptionDurations, p.subscriptionDuration)
+}
+
+func (p *product) freeTrialUnitName() (string, bool) {
+	return enumName(freeTrialUnits, p.freeTrialDurationUnit)
 }
 
 func (p *product) is(flag int64) bool { return p.flags&flag != 0 }

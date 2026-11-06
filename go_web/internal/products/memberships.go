@@ -1,0 +1,198 @@
+package products
+
+import (
+	"context"
+	"slices"
+
+	"github.com/antiwork/gumroad/go_web/internal/rails"
+)
+
+// freeTrialReminderDays is Subscription::FREE_TRIAL_EXPIRING_REMINDER_EMAIL in days.
+const freeTrialReminderDays int64 = 2
+
+// recurrence is a BasePrice::Recurrence, with its months and renewal_reminder_lead_days.
+type recurrence struct {
+	name         string
+	months       int
+	reminderDays []any
+}
+
+// allRecurrences is BasePrice::Recurrence.all.
+var allRecurrences = []recurrence{
+	{"monthly", 1, []any{int64(1)}},
+	{"quarterly", 3, []any{int64(7)}},
+	{"biannually", 6, []any{int64(7)}},
+	{"yearly", 12, []any{int64(30), int64(7)}},
+	{"every_two_years", 24, []any{int64(30), int64(7)}},
+}
+
+// unportedMembership is a membership or free-trial shape this port leaves to Rails.
+func unportedMembership(prod *product) string {
+	recurring, tiered := prod.is(productIsRecurringBilling), prod.is(productIsTieredMembership)
+	duration, durationOK := prod.subscriptionDurationName()
+	_, unitOK := prod.freeTrialUnitName()
+	switch {
+	case tiered && !recurring:
+		return "tiers without recurring billing"
+	case tiered && prod.is(productSkusEnabled):
+		return "tiered skus"
+	case recurring && !durationOK:
+		return "subscription duration"
+	case recurring && duration == "":
+		// is_default_recurrence? would match a recurrence of "".
+		return "no subscription duration"
+	case recurring && prod.purchaseType.Int64 != purchaseTypeBuyOnly:
+		return "membership rental"
+	case prod.is(productFreeTrialEnabled) && !unitOK:
+		return "free trial unit"
+	}
+	return ""
+}
+
+// tierRecurrences is the recurrences Link#recurrence_price_enabled? finds an alive buy price
+// at, in any currency. Each tier reaches the product afresh, so Rails asks MySQL, under the
+// column's collation; a recurrence that isn't exactly one of the names goes to Rails.
+func tierRecurrences(ps prices) (map[string]bool, error) {
+	out := map[string]bool{}
+	for _, r := range ps.rows {
+		if r.isRental() || !r.recurrence.Valid {
+			continue
+		}
+		if !slices.ContainsFunc(allRecurrences, func(rec recurrence) bool { return rec.name == r.recurrence.String }) {
+			return nil, fallback("price recurrence")
+		}
+		out[r.recurrence.String] = true
+	}
+	return out, nil
+}
+
+// recurrences is Link#recurrences; nil is nil.
+type recurrences struct {
+	def       string
+	enabled   []any
+	trialDays any
+}
+
+func (r *recurrences) props() any {
+	if r == nil {
+		return nil
+	}
+	return rails.NewRHash().Sym("default", r.def).Sym("enabled", r.enabled).Sym("free_trial_reminder_days", r.trialDays)
+}
+
+// defaultRecurrence is recurrences&.dig(:default).
+func (r *recurrences) defaultRecurrence() any {
+	if r == nil {
+		return nil
+	}
+	return r.def
+}
+
+func (h *handler) loadRecurrences(ctx context.Context, prod *product, ps prices) (*recurrences, error) {
+	if !prod.is(productIsRecurringBilling) {
+		return nil, nil
+	}
+	type enabledPrice struct {
+		row          priceRow
+		months       int
+		reminderDays []any
+	}
+	var enabled []enabledPrice
+	for _, r := range ps.rows {
+		if r.isRental() || !r.recurrence.Valid {
+			continue
+		}
+		for _, rec := range allRecurrences {
+			if rec.name == r.recurrence.String {
+				enabled = append(enabled, enabledPrice{r, rec.months, rec.reminderDays})
+				break
+			}
+		}
+	}
+	for i := range enabled {
+		for j := range i {
+			if enabled[i].months == enabled[j].months {
+				// sort_by isn't stable.
+				return nil, fallback("recurrence tie")
+			}
+		}
+	}
+	slices.SortFunc(enabled, func(a, b enabledPrice) int { return a.months - b.months })
+
+	out := &recurrences{}
+	duration, _ := prod.subscriptionDurationName()
+	// default_price_recurrence: any alive price at the subscription duration, rentals included.
+	if slices.ContainsFunc(ps.rows, func(r priceRow) bool { return r.recurrence.Valid && r.recurrence.String == duration }) {
+		out.def = duration
+	} else if len(enabled) > 0 {
+		out.def = enabled[0].row.recurrence.String
+	} else {
+		return nil, nil
+	}
+	remindersOn := false
+	if len(enabled) > 0 || prod.is(productFreeTrialEnabled) {
+		var err error
+		if remindersOn, err = h.flag(ctx, "membership_renewal_reminders", prod.userID); err != nil {
+			return nil, err
+		}
+	}
+	out.enabled = make([]any, 0, len(enabled))
+	for _, e := range enabled {
+		days := []any{}
+		if remindersOn {
+			days = e.reminderDays
+		}
+		out.enabled = append(out.enabled, rails.NewRHash().
+			Sym("recurrence", e.row.recurrence.String).
+			Sym("price_cents", e.row.cents).
+			Sym("id", h.c.IDs.Encrypt(e.row.id)).
+			Sym("renewal_reminder_days", days))
+	}
+	if remindersOn && prod.is(productFreeTrialEnabled) {
+		out.trialDays = freeTrialReminderDays
+	}
+	return out, nil
+}
+
+// freeTrialProps is the free_trial prop.
+func freeTrialProps(prod *product) any {
+	if !prod.is(productFreeTrialEnabled) {
+		return nil
+	}
+	var unit any
+	if name, _ := prod.freeTrialUnitName(); name != "" {
+		unit = name
+	}
+	return rails.NewRHash().Sym("duration", rails.NewRHash().Sym("unit", unit).Sym("amount", nullInt(prod.freeTrialDurationAmount)))
+}
+
+// lowestTierPriceCents is lowest_tier_price's price_cents: the cheapest alive buy price, in
+// any currency or recurrence, of the tiers open to new buyers, or of every tier when all are
+// closed, else 0.
+func (vs *variants) lowestTierPriceCents() int64 {
+	var open, all *int64
+	for _, o := range vs.tiers {
+		for i := range o.buyPrices {
+			c := &o.buyPrices[i].cents
+			all = minCents(all, c)
+			if !o.closed {
+				open = minCents(open, c)
+			}
+		}
+	}
+	if !slices.ContainsFunc(vs.tiers, func(o *variantOption) bool { return !o.closed }) {
+		open = all
+	}
+	if open == nil {
+		return 0
+	}
+	return *open
+}
+
+// closedToNewBuyers is closed_membership_for_new_buyers?.
+func (vs *variants) closedToNewBuyers(prod *product) bool {
+	if !prod.is(productIsTieredMembership) || len(vs.tiers) == 0 {
+		return false
+	}
+	return !slices.ContainsFunc(vs.tiers, (*variantOption).available)
+}

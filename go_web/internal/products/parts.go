@@ -63,10 +63,21 @@ func buyPrices(prod *product, prices []priceRow) []int64 {
 	return out
 }
 
-// prices are Link#buy_price_cents and #rental_price_cents for a product without recurrence:
-// the last alive price of each kind in the product's currency, nil for a kind the purchase
-// type doesn't offer.
-type prices struct{ buy, rental *int64 }
+// minCents is the lower of two prices, either of which may be missing.
+func minCents(a, b *int64) *int64 {
+	if a == nil || b != nil && *b < *a {
+		return b
+	}
+	return a
+}
+
+// prices are the product's alive prices and Link#buy_price_cents and #rental_price_cents: the
+// last of each kind in the product's currency, a recurring product's buy price at its
+// subscription duration, and nil for a kind the purchase type doesn't offer.
+type prices struct {
+	buy, rental *int64
+	rows        []priceRow
+}
 
 func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error) {
 	byProduct, err := h.alivePrices(ctx, []int64{prod.id})
@@ -74,8 +85,10 @@ func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error)
 		return prices{}, err
 	}
 	pc := prod.priceCurrencyType
-	var ps prices
-	for _, r := range byProduct[prod.id] {
+	duration, _ := prod.subscriptionDurationName()
+	byDuration := prod.is(productIsRecurringBilling) && duration != ""
+	ps := prices{rows: byProduct[prod.id]}
+	for _, r := range ps.rows {
 		rental := r.isRental()
 		if rental && prod.purchaseType.Int64 == purchaseTypeBuyOnly || !rental && prod.rentOnly() {
 			continue
@@ -86,6 +99,9 @@ func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error)
 			if r.sqlMatch {
 				return prices{}, fallback("price currency collation")
 			}
+			continue
+		}
+		if !rental && byDuration && (!r.recurrence.Valid || r.recurrence.String != duration) {
 			continue
 		}
 		c := r.cents

@@ -243,9 +243,6 @@ type card struct {
 	thumbnailURL         any
 }
 
-// subscriptionDurations is Link's subscription_duration enum, in its integer order.
-var subscriptionDurations = []string{"monthly", "yearly", "quarterly", "biannually", "every_two_years"}
-
 // loadCards is section_props' Link.find of the hits, in hit order, for the shapes whose card
 // this port renders.
 func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
@@ -254,7 +251,7 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	}
 	ctx := p.Ctx
 	byID := make(map[int64]*card, len(ids))
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+productColumns+", links.subscription_duration,"+
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+productColumns+","+
 		" EXISTS(SELECT 1 FROM base_variants WHERE base_variants.link_id = links.id AND base_variants.type = 'Sku' AND base_variants.deleted_at IS NULL),"+
 		" EXISTS(SELECT 1 FROM variant_categories WHERE variant_categories.link_id = links.id AND variant_categories.deleted_at IS NULL"+
 		" AND variant_categories.title = 'Tier'),"+
@@ -267,19 +264,16 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	defer rows.Close()
 	for rows.Next() {
 		c := &card{prod: &product{}}
-		var duration sql.NullInt64
 		var hasSku bool
-		if err := rows.Scan(append(c.prod.dest(), &duration, &hasSku, &c.hasTier, &c.hasPlan)...); err != nil {
+		if err := rows.Scan(append(c.prod.dest(), &hasSku, &c.hasTier, &c.hasPlan)...); err != nil {
 			return nil, err
 		}
 		if reason := unportedCard(p.seller.id, c.prod, hasSku); reason != "" {
 			return nil, fallback("catalog " + reason)
 		}
-		if duration.Valid {
-			if duration.Int64 < 0 || duration.Int64 >= int64(len(subscriptionDurations)) {
-				return nil, fallback("catalog subscription duration")
-			}
-			c.defaultRecurrence = subscriptionDurations[duration.Int64]
+		var ok bool
+		if c.defaultRecurrence, ok = c.prod.subscriptionDurationName(); !ok {
+			return nil, fallback("catalog subscription duration")
 		}
 		byID[c.prod.id] = c
 	}
