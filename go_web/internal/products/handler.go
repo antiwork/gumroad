@@ -69,6 +69,7 @@ type page struct {
 	rates              map[string]rateRead
 	hasCollaborator    bool
 	hasInstallmentPlan bool
+	hasPublicFiles     bool
 	hasBundleProducts  bool
 	hasAutoApplyCode   bool
 	// settleable is buyer_currency_settleable? for the page's seller and buyer currency.

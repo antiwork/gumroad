@@ -561,7 +561,8 @@ func (h *handler) firstImageCoverURLs(p *page, ids []int64) (map[int64]string, e
 			AND att.name = 'file'
 		LEFT JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
 		WHERE asset_previews.link_id IN (`+placeholders(len(ids))+`) AND asset_previews.deleted_at IS NULL
-		ORDER BY asset_previews.link_id, asset_previews.position ASC, asset_previews.created_at ASC, asset_previews.id ASC`, int64Args(ids)...)
+		ORDER BY asset_previews.link_id, asset_previews.position ASC, asset_previews.created_at ASC, asset_previews.id ASC,
+			att.blob_id ASC`, int64Args(ids)...)
 	if err != nil {
 		return nil, err
 	}
@@ -582,7 +583,11 @@ func (h *handler) firstImageCoverURLs(p *page, ids []int64) (map[int64]string, e
 			rows.Close()
 			return nil, err
 		}
-		if n := len(previews); n > 0 && previews[n-1].id == r.id || r.attID.Valid && !r.blobID.Valid {
+		if n := len(previews); n > 0 && previews[n-1].id == r.id {
+			// has_one keeps the lowest blob_id.
+			continue
+		}
+		if r.attID.Valid && !r.blobID.Valid {
 			rows.Close()
 			return nil, fallback("cover attachment")
 		}

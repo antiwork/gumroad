@@ -179,6 +179,7 @@ type view struct {
 	tierRecurrences map[string]bool
 	installmentPlan any
 	preorder        any
+	publicFiles     []any
 	bundle          *bundle
 	discount        *offerDiscount
 	// catalog is the storefront's sections.
@@ -285,11 +286,6 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.files, err = h.aliveProductFiles(ctx, prod.id); err != nil {
 		return nil, err
 	}
-	for _, f := range v.files {
-		if f.streamOnly() {
-			return nil, fallback("stream-only files")
-		}
-	}
 	if v.reviewStat, err = h.loadReviewStat(ctx, prod.id); err != nil {
 		return nil, err
 	}
@@ -313,6 +309,12 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	}
 	if v.refundPolicy, err = h.loadRefundPolicy(ctx, prod); err != nil {
 		return nil, err
+	}
+	v.publicFiles = []any{}
+	if p.hasPublicFiles {
+		if v.publicFiles, err = h.publicFilesProps(ctx, prod.id); err != nil {
+			return nil, err
+		}
 	}
 	if v.fileSummaries, err = h.fileSummaries(ctx, prod, v.files, v.variants); err != nil {
 		return nil, err

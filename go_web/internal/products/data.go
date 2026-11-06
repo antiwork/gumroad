@@ -61,8 +61,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		arg           int64
 	}{
 		{"product sections", "SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id},
-		{"public files", "SELECT 1 FROM public_files WHERE public_files.resource_type = 'Link' AND public_files.resource_id = ?" +
-			" AND public_files.deleted_at IS NULL", prod.id},
 	}
 	// These aren't fallbacks: they spare a lookup on products that have none.
 	gates := []struct {
@@ -74,6 +72,8 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 			" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator'", prod.id, &p.hasCollaborator},
 		{"SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = ?" +
 			" AND product_installment_plans.deleted_at IS NULL", prod.id, &p.hasInstallmentPlan},
+		{"SELECT 1 FROM public_files WHERE public_files.resource_type = 'Link' AND public_files.resource_id = ?" +
+			" AND public_files.deleted_at IS NULL", prod.id, &p.hasPublicFiles},
 		// bundle_products renders them whether or not the product is still a bundle.
 		{"SELECT 1 FROM bundle_products WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL", prod.id, &p.hasBundleProducts},
 		{"SELECT 1 FROM offer_codes WHERE " + autoApplyCodes, seller.id, &p.hasAutoApplyCode},
