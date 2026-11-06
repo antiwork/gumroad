@@ -191,6 +191,28 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		return strings.Replace(card, `"price_cents":400`, `"price_cents":500`, 1)
 	}
 
+	// ownResults is the product's own products section's results, finding the other product.
+	ownResults := func(e *testEnv) string {
+		return `"search_results":{"total":1,"tags_data":[{"key":"design","doc_count":2}],"filetypes_data":[{"key":"pdf","doc_count":2}],` +
+			`"taxonomy_attributes_data":[],"products":[{"id":"` + e.ids.Encrypt(other) + `","permalink":"gowebp2"`
+	}
+	ownHits := fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000,1762430000000]}]`, other)
+	ownBody := fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
+		`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+		`"sort":[{"created_at":{"order":"desc"}},{"created_at":{"order":"desc"}}],"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other)
+	// unlisted adds a products section the product doesn't list, finding the other product.
+	unlisted := func(t *testing.T, conn *sql.DB) {
+		addOther(t, conn, map[string]any{"flags": 0})
+		addProductSections(t, conn, other)
+		addSection(t, conn, 1_792_609, profileProductsSectionType, "Hidden",
+			fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"newest","show_filters":false,"add_new_products":false}`, other))
+	}
+	unlistedEntry := func(e *testEnv, found int64) railscache.Hash {
+		s := railsCachedSection(e.ids.Encrypt(1_792_609), "Hidden", "newest", 1, found)
+		s[5].Value.(railscache.Hash)[2].Value = []any{railscache.Hash{{Key: "key", Value: "pdf"}, {Key: "doc_count", Value: int64(2)}}}
+		return s
+	}
+
 	for _, c := range []struct {
 		name, reason, hits string
 		server             *httptest.Server
@@ -204,10 +226,8 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		prepare func(e *testEnv)
 		headers map[string]string
 		query   string
-		// searchedAgain is the searches after a second view, when it differs from searched;
-		// uncached is a search nothing caches.
+		// searchedAgain is the searches after a second view, when it differs from searched.
 		searchedAgain int
-		uncached      bool
 		want          func(e *testEnv) string
 		// check makes assertions want can't.
 		check func(t *testing.T, e *testEnv, page string)
@@ -495,6 +515,16 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				addOther(t, conn, map[string]any{"flags": 0})
 				addProductSections(t, conn, other)
 			},
+			// The entry holds every section, listed or not, as cached_sections builds it.
+			check: func(t *testing.T, e *testEnv, page string) {
+				entry := e.cache.values[productSectionsKey(e, 4)]
+				if want := productSectionsEntry(e, other); !reflect.DeepEqual(entry, want) {
+					t.Errorf("entry %#v\nwant %#v", entry, want)
+				}
+				if _, err := railscache.Dump(entry); err != nil {
+					t.Error(err)
+				}
+			},
 			want: func(e *testEnv) string {
 				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
 				card = strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1)
@@ -503,9 +533,56 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					`"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[],"products":[%s]}},%s],"main_section_index":1`,
 					subscribeSection(e), e.ids.Encrypt(1_792_602), card, richTextSection(e))
 			}},
-		// A visitor search param searches a product's own section afresh, a review sort too.
-		{name: "the product's own review-sorted section with a recommendation", server: search, searched: 1, searchedAgain: 2,
-			uncached: true, total: "1", query: "?recommended_by=wishlist",
+		// Rails' entry renders without a search.
+		{name: "the product's own sections from Rails' cache", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				addProductSections(t, conn, other)
+			},
+			prepare: func(e *testEnv) { e.cache.values[productSectionsKey(e, 4)] = productSectionsEntry(e, other) },
+			want:    ownResults},
+		// An entry that isn't the product's rows is one Rails would render differently.
+		{name: "Rails' entry for fewer sections", reason: "cached sections", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				addProductSections(t, conn, other)
+			},
+			prepare: func(e *testEnv) { e.cache.values[productSectionsKey(e, 4)] = productSectionsEntry(e, other)[:3] }},
+		// cached_sections searches and caches an unlisted products section too; the next view reads it.
+		{name: "an unlisted products section", server: search, searched: 2, total: "1", hits: ownHits, body: ownBody,
+			setup: unlisted,
+			check: func(t *testing.T, e *testEnv, page string) {
+				entry, _ := e.cache.values[productSectionsKey(e, 5)].([]any)
+				if want := append(productSectionsEntry(e, other), unlistedEntry(e, other)); !reflect.DeepEqual(entry, want) {
+					t.Errorf("entry %#v\nwant %#v", entry, want)
+				}
+			},
+			want: ownResults},
+		// section_props finds an unlisted section's products too, and raises on one that's gone.
+		{name: "an unlisted section's product that's gone", reason: "catalog product missing", server: search, setup: unlisted,
+			prepare: func(e *testEnv) {
+				e.cache.values[productSectionsKey(e, 5)] = append(productSectionsEntry(e, other), unlistedEntry(e, 1_792_999))
+			}},
+		// Rails' entry for a product's own sections is shared, a review sort's too: the next view
+		// reads it.
+		{name: "the product's own review-sorted section", server: search, searched: 1, total: "1",
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[4.5,3,1762430000000]}]`, other),
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
+				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
+				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				addSection(t, conn, 1_792_602, profileProductsSectionType, "More",
+					fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":false}`, other))
+				listSections(t, conn, `{"sections":[1792602]}`)
+			},
+			want: func(e *testEnv) string {
+				return `"products":[{"id":"` + e.ids.Encrypt(other) + `","permalink":"gowebp2"`
+			}},
+		// A visitor search param searches it afresh after the cached fetch.
+		{name: "the product's own review-sorted section with a recommendation", server: search, searched: 2, searchedAgain: 3,
+			total: "1", query: "?recommended_by=wishlist",
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[4.5,3,1762430000000]}]`, other),
 			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
 				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
@@ -862,17 +939,20 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			if c.check != nil {
 				c.check(t, e, page)
 			}
-			if c.searched == 0 {
-				return
-			}
 			var key string
 			for _, k := range e.cache.writes {
-				// Rails' entry for the catalog, go_web's own for a product's sections.
-				if strings.HasPrefix(k, "profile-sections_") || strings.HasPrefix(k, "go-web:storefront-catalog_") {
+				if strings.HasPrefix(k, "profile-sections_") {
 					key = k
 				}
 			}
-			if c.uncached != (key == "") || !c.uncached && e.cache.ttls[key] != 10*time.Minute {
+			// Searches write Rails' entry; an entry Rails cached is served as it is.
+			if c.searched == 0 {
+				if key != "" {
+					t.Errorf("cache writes %v", e.cache.writes)
+				}
+				return
+			}
+			if e.cache.ttls[key] != 10*time.Minute {
 				t.Fatalf("cache writes %v", e.cache.writes)
 			}
 			// The next view reads the search from the cache.
@@ -897,9 +977,43 @@ func addProductSections(t *testing.T, conn *sql.DB, shown int64) {
 			fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"newest","show_filters":false,"add_new_products":false}`, shown))
 	}
 	addSection(t, conn, 1_792_603, profileRichTextSectionType, "About",
-		`{"text":{"type":"doc","attrs":{"width":1.5},"content":[{"text":"Hi <b>","type":"text"}]}}`)
+		// MySQL's JSON type sorts the keys, by length and then bytes.
+		`{"text":{"content":[{"type":"text","text":"Hi <b>"}],"attrs":{"width":1.5},"type":"doc"}}`)
 	addSection(t, conn, 1_792_604, "SellerProfileWishlistsSection", "Lists", `{"shown_wishlists":[1]}`)
 	listSections(t, conn, `{"sections":[1792601,1792602,1792603],"main_section_index":1}`)
+}
+
+// productSectionsKey is cached_sections' key for the product's own sections, rows of them saved at
+// testNow.
+func productSectionsKey(e *testEnv, rows int64) string {
+	h := &handler{c: e.config}
+	products, err := h.readProductsCacheKey(context.Background(), sellerID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return h.sectionsCacheKey(products, productSectionsCacheKey(productID, rows, db.NullTime{Time: testNow, Valid: true}))
+}
+
+// productSectionsEntry is the entry Rails caches for addProductSections' sections, its products
+// section finding shown.
+func productSectionsEntry(e *testEnv, shown int64) []any {
+	head := func(id int64, header, typ string) railscache.Hash {
+		return railscache.Hash{{Key: railscache.Symbol("id"), Value: railscache.ASCII(e.ids.Encrypt(id))},
+			{Key: railscache.Symbol("header"), Value: header}, {Key: railscache.Symbol("type"), Value: typ}}
+	}
+	products := railsCachedSection(e.ids.Encrypt(1_792_602), "More", "newest", 1, shown)
+	products[5].Value.(railscache.Hash)[2].Value = []any{railscache.Hash{{Key: "key", Value: "pdf"}, {Key: "doc_count", Value: int64(2)}}}
+	return []any{
+		append(head(1_792_601, "Join", profileSubscribeSectionType), railscache.Pair{Key: railscache.Symbol("button_label"), Value: "Subscribe"}),
+		products,
+		append(head(1_792_603, "About", profileRichTextSectionType), railscache.Pair{Key: railscache.Symbol("text"), Value: railscache.Hash{
+			{Key: "type", Value: "doc"},
+			{Key: "attrs", Value: railscache.Hash{{Key: "width", Value: 1.5}}},
+			{Key: "content", Value: []any{railscache.Hash{{Key: "text", Value: "Hi <b>"}, {Key: "type", Value: "text"}}}},
+		}}),
+		append(head(1_792_604, "Lists", profileWishlistsSectionType),
+			railscache.Pair{Key: railscache.Symbol("shown_wishlists"), Value: []any{railscache.ASCII(e.ids.Encrypt(1))}}),
+	}
 }
 
 // addSection saves one of the product's own sections.

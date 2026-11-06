@@ -2,9 +2,7 @@ package products
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"net/url"
 	"slices"
@@ -37,17 +35,17 @@ const (
 	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
 	catalogTagFacetSize      = 200
 	catalogFiletypeFacetSize = 8
-	// cached_default_products_section's expires_in.
+	// cached_sections' and cached_default_products_section's expires_in.
 	catalogTTL = 10 * time.Minute
 )
 
 // catalogSearch is section_search_results(nil): the seller's products on their profile,
 // newest first, with SearchProducts' tag and filetype facets.
 type catalogSearch struct {
-	Total     int64           `json:"total"`
-	Tags      []catalogBucket `json:"tags"`
-	Filetypes []catalogBucket `json:"filetypes"`
-	IDs       []int64         `json:"ids"`
+	Total     int64
+	Tags      []catalogBucket
+	Filetypes []catalogBucket
+	IDs       []int64
 }
 
 type catalogBucket struct {
@@ -83,8 +81,6 @@ type productsSection struct {
 	sort          string
 	showFilters   bool
 	updatedAt     db.NullTime
-	// version moves with the row, for the search's cache key.
-	version string
 }
 
 // sectionHiddenHeader is SellerProfileSection's hide_header flag.
@@ -145,19 +141,24 @@ func (r *sectionRow) shownHeader() any {
 // productsSection reads a products section's json_data; anything off its schema goes to Rails.
 func (r *sectionRow) productsSection() (*productsSection, error) {
 	j, ok := parseJSONData(r.data)
+	if !ok {
+		return nil, fallback("products section json_data")
+	}
+	return r.productsSectionFrom(j)
+}
+
+func (r *sectionRow) productsSectionFrom(j jsonData) (*productsSection, error) {
 	sort, sortOK := j.get("default_product_sort").(string)
 	showFilters, filtersOK := j.get("show_filters").(bool)
 	shown, shownOK := j.get("shown_products").([]any)
-	if _, known := sectionSortClauses[sort]; !ok || !sortOK || !known || !filtersOK || !shownOK {
+	if _, known := sectionSortClauses[sort]; !sortOK || !known || !filtersOK || !shownOK {
 		return nil, fallback("products section json_data")
 	}
 	ids, ok := jsonIDs(shown)
 	if !ok {
 		return nil, fallback("products section json_data")
 	}
-	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters, updatedAt: r.updatedAt, shownProducts: ids}
-	s.version = itoa(r.id) + "-" + r.updatedAt.Time.UTC().Format(time.RFC3339Nano)
-	return s, nil
+	return &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters, updatedAt: r.updatedAt, shownProducts: ids}, nil
 }
 
 // loadCatalog is ProductPresenter#product_page_props' storefront sections:
@@ -210,14 +211,6 @@ func productPageQuery(layout string, recommendedBy *string) string {
 		return ""
 	}
 	return "?" + q.Encode()
-}
-
-// reviewSorted is whether a section is ordered by reviews: a review moves that order without
-// touching links.updated_at, so a search of go_web's own can differ from Rails' cache.
-func reviewSorted(sections []*productsSection) bool {
-	return slices.ContainsFunc(sections, func(s *productsSection) bool {
-		return s != nil && (s.sort == "highest_rated" || s.sort == "most_reviewed")
-	})
 }
 
 // productsSectionsProps is section_props for products sections, with omit_product unless omit
@@ -361,50 +354,6 @@ func (h *handler) searchSections(p *page, sections []*productsSection, query str
 func (h *handler) visitorSearchSections(p *page, sections []*productsSection) ([]*catalogSearch, error) {
 	query, _ := p.query.(string)
 	return h.searchSections(p, sections, query)
-}
-
-// cachedCatalog is cached_sections' or cached_default_products_section's searches, under one key
-// of go_web's own that moves with the seller's products and with every section, as Rails' does.
-// Rails never reads it, so it's written even when the page then goes to Rails.
-func (h *handler) cachedCatalog(p *page, sections []*productsSection) ([]*catalogSearch, error) {
-	productsKey, err := h.productsCacheKey(p)
-	if err != nil {
-		return nil, err
-	}
-	key := "go-web:storefront-catalog_" + productsKey
-	if sections[0] != nil {
-		var versions []string
-		for _, s := range sections {
-			versions = append(versions, s.version)
-		}
-		sum := sha256.Sum256([]byte(strings.Join(versions, "\n")))
-		key += "_" + hex.EncodeToString(sum[:16])
-	}
-	cached, found, err := h.readCache(p.Ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		var searches []*catalogSearch
-		if text, ok := cached.(string); !ok || json.Unmarshal([]byte(text), &searches) != nil || len(searches) != len(sections) {
-			return nil, fallback("cached catalog")
-		}
-		return searches, nil
-	}
-	searches, err := h.searchSections(p, sections, "")
-	if err != nil {
-		return nil, err
-	}
-	text, err := json.Marshal(searches)
-	if err != nil {
-		return nil, err
-	}
-	if !p.DryRun {
-		if err := h.c.Page.Cache.Write(context.WithoutCancel(p.Ctx), key, string(text), catalogTTL); err != nil {
-			web.Logger(p.Req.HTTP).Warn("catalog cache write failed", "error", err.Error())
-		}
-	}
-	return searches, nil
 }
 
 // sectionSortClauses is search_options' sort for a section's default_product_sort: page_layout
