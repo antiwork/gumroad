@@ -595,6 +595,129 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 	}
 }
 
+func TestVariantsRenderAsOptions(t *testing.T) {
+	const size, color = int64(1_791_001), int64(1_791_002)
+	const small, large, red = int64(1_791_101), int64(1_791_102), int64(1_791_103)
+	// Rails leaves a Variant's link_id NULL; it belongs through its category.
+	variant := func(id, category int64, name string, position, maxPurchases, sold, diff any) map[string]any {
+		if sold == nil {
+			sold = 0
+		}
+		return map[string]any{"id": id, "type": "Variant", "variant_category_id": category, "name": name,
+			"position_in_category": position, "max_purchase_count": maxPurchases, "sales_count_for_inventory_cache": sold,
+			"price_difference_cents": diff, "created_at": testNow, "updated_at": testNow}
+	}
+	file := func(t *testing.T, conn *sql.DB, id int64, variantID int64) {
+		testdb.Insert(t, conn, "product_files", map[string]any{"id": id, "link_id": productID, "filetype": "pdf", "size": 2048,
+			"url": "https://s3.amazonaws.com/gumroad/attachments/x/y/original/a.pdf", "created_at": testNow, "updated_at": testNow})
+		if variantID != 0 {
+			testdb.Insert(t, conn, "base_variants_product_files", map[string]any{"id": id - 1_791_200 + 1_791_300, "base_variant_id": variantID,
+				"product_file_id": id})
+		}
+	}
+	const pdf = `{"formats":["PDF"],"total_size":2048,"count":1}`
+	for _, c := range []struct {
+		name   string
+		wants  []string
+		reason string
+		setup  func(t *testing.T, conn *sql.DB)
+	}{
+		{"options in position order, and the lowest difference in the offer", []string{`"options":[` +
+			`{"id":"%[2]s","name":"Guide \u003c1\u003e","quantity_left":null,"description":"","price_difference_cents":300,"recurrence_price_values":null,"is_pwyw":false,"duration_in_minutes":null},` +
+			`{"id":"%[1]s","name":"Small","quantity_left":2,"description":"","price_difference_cents":100,"recurrence_price_values":null,"is_pwyw":false,"duration_in_minutes":null}]`,
+			`"url":"https://gowebproductseller.gumroad.com/l/guide","price":6.0}`},
+			"", func(t *testing.T, conn *sql.DB) {
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 1, 3, 1, 100))
+				testdb.Insert(t, conn, "base_variants", variant(large, size, "Untitled", 0, nil, nil, 300))
+			}},
+		{"options from the first category only", []string{`"options":[{"id":"%[1]s","name":"Small",`}, "", func(t *testing.T, conn *sql.DB) {
+			testdb.Insert(t, conn, "variant_categories", map[string]any{"id": color, "link_id": productID, "title": "Color"})
+			testdb.Insert(t, conn, "base_variants", variant(red, color, "Red", 0, nil, nil, 0))
+			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+		}},
+		{"every option sold out", []string{`"quantity_remaining":0,`}, "", func(t *testing.T, conn *sql.DB) {
+			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, 1, 1, 0))
+		}},
+		{"another category still available", []string{`"quantity_remaining":null,`}, "", func(t *testing.T, conn *sql.DB) {
+			testdb.Insert(t, conn, "variant_categories", map[string]any{"id": color, "link_id": productID, "title": "Color"})
+			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, 1, 1, 0))
+			testdb.Insert(t, conn, "base_variants", variant(red, color, "Red", 0, 2, 1, 0))
+		}},
+		{"a pay-what-you-want default with no price difference", []string{`"pwyw":{"suggested_price_cents":null,"default_price_cents":0}`}, "",
+			func(t *testing.T, conn *sql.DB) {
+				conn.Exec("UPDATE links SET customizable_price = 1, price_cents = 0 WHERE id = ?", productID)
+				conn.Exec("UPDATE prices SET price_cents = 0 WHERE id = ?", priceID)
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+			}},
+		{"no pay-what-you-want default past a price difference", []string{`"pwyw":{"suggested_price_cents":null,"default_price_cents":null}`}, "",
+			func(t *testing.T, conn *sql.DB) {
+				conn.Exec("UPDATE links SET customizable_price = 1, price_cents = 0 WHERE id = ?", productID)
+				conn.Exec("UPDATE prices SET price_cents = 0 WHERE id = ?", priceID)
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 100))
+			}},
+		{"per-option files", []string{`"file_summaries":{"product":null,"options":{"%[1]s":` + pdf + `}}`}, "", func(t *testing.T, conn *sql.DB) {
+			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+			testdb.Insert(t, conn, "base_variants", variant(large, size, "Large", 1, nil, nil, 0))
+			file(t, conn, 1_791_201, small)
+			file(t, conn, 1_791_202, 0)
+		}},
+		{"files shared by every option", []string{`"file_summaries":{"product":` + pdf + `,"options":{"%[1]s":` + pdf + `,"%[2]s":` + pdf + `}}`}, "",
+			func(t *testing.T, conn *sql.DB) {
+				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productSameRichContentForAllVariants, productID)
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+				testdb.Insert(t, conn, "base_variants", variant(large, size, "Large", 1, nil, nil, 0))
+				file(t, conn, 1_791_201, 0)
+			}},
+		{"hidden option pages recovered", []string{`"file_summaries":{"product":null,"options":{"%[1]s":` + pdf + `}}`}, "",
+			func(t *testing.T, conn *sql.DB) {
+				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productSameRichContentForAllVariants, productID)
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+				testdb.Insert(t, conn, "rich_contents", map[string]any{"id": int64(1_791_401), "entity_type": "BaseVariant", "entity_id": small,
+					"title": "Chapter one", "description": `[]`, "position": 0, "created_at": testNow, "updated_at": testNow})
+				file(t, conn, 1_791_201, small)
+				file(t, conn, 1_791_202, 0)
+			}},
+		{"a tier category", nil, "tier category", func(t *testing.T, conn *sql.DB) {
+			conn.Exec("UPDATE variant_categories SET title = 'tier ' WHERE id = ?", size)
+		}},
+		{"options tied in order", nil, "variant order", func(t *testing.T, conn *sql.DB) {
+			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", nil, nil, nil, 0))
+			testdb.Insert(t, conn, "base_variants", variant(large, size, "Large", nil, nil, nil, 0))
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			testdb.Insert(t, conn, "variant_categories", map[string]any{"id": size, "link_id": productID, "title": "Size"})
+			c.setup(t, conn)
+			var headers map[string]string
+			if c.reason != "" {
+				headers = e.dryRun(host, "/l/guide", testNow)
+			}
+			w := e.get(host, "/l/guide", headers)
+			if c.reason != "" {
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+			}
+			body := w.Body.String()
+			page := html.UnescapeString(dataPage.FindStringSubmatch(body)[1])
+			for _, want := range c.wants {
+				if strings.Contains(want, "%[") {
+					want = fmt.Sprintf(want, e.ids.Encrypt(small), e.ids.Encrypt(large))
+				}
+				if !strings.Contains(page, want) && !strings.Contains(body, want) {
+					t.Errorf("want %s", want)
+				}
+			}
+		})
+	}
+}
+
 func TestASellerRefundPolicyOffForAllRendersThePage(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)

@@ -227,28 +227,95 @@ func abs(n int) int {
 	return n
 }
 
-// fileSummaries is Product::FileSummaryService#perform for a product without variants: one
-// summary of the files its rich content embeds (all of them when it embeds none).
-func (h *handler) fileSummaries(ctx context.Context, prod *product, files []productFile) (*rails.RHash, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT description FROM rich_contents WHERE entity_type = 'Link' AND entity_id = ? AND deleted_at IS NULL", prod.id)
+// fileSummaries is Product::FileSummaryService#perform for a product that isn't physical or
+// a bundle (both Rails'): one summary shared by every option, or one per option.
+func (h *handler) fileSummaries(ctx context.Context, prod *product, files []productFile, vs *variants) (*rails.RHash, error) {
+	productContents, err := h.richContents(ctx, "Link", []int64{prod.id})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var embedded []int64
-	for rows.Next() {
-		var desc []byte
-		if err := rows.Scan(&desc); err != nil {
+	contents := productContents[prod.id]
+	shared, variantContents, err := h.productLevelRichContent(ctx, prod, contents, vs)
+	if err != nil {
+		return nil, err
+	}
+	options := rails.NewRHash()
+	if shared {
+		summary, err := h.summarize(contents, files)
+		if err != nil {
 			return nil, err
 		}
-		ids, err := delivery.EmbeddedProductFileIDs(desc, h.c.IDs)
+		if summary != nil {
+			for _, o := range vs.options {
+				options.Str(o.externalID, summary)
+			}
+		}
+		return rails.NewRHash().Sym("product", nullableRHash(summary)).Sym("options", options), nil
+	}
+	ids := variantIDs(vs.options)
+	if variantContents == nil {
+		if variantContents, err = h.richContents(ctx, "BaseVariant", ids); err != nil {
+			return nil, err
+		}
+	}
+	optionFiles, err := h.variantFiles(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range vs.options {
+		summary, err := h.summarize(variantContents[o.id], optionFiles[o.id])
+		if err != nil {
+			return nil, err
+		}
+		if summary != nil {
+			options.Str(o.externalID, summary)
+		}
+	}
+	return rails.NewRHash().Sym("product", nil).Sym("options", options), nil
+}
+
+// productLevelRichContent is has_product_level_rich_content? for a product that isn't physical,
+// with the Variants' pages when recoverable_hidden_variant_rich_content? read them all.
+func (h *handler) productLevelRichContent(ctx context.Context, prod *product, contents []*delivery.RichContent,
+	vs *variants) (bool, map[int64][]*delivery.RichContent, error) {
+	if len(vs.all) == 0 {
+		return true, nil, nil
+	}
+	if !prod.is(productSameRichContentForAllVariants) {
+		return false, nil, nil
+	}
+	if has, err := anyEditorContent(contents); err != nil || has {
+		return has, nil, err
+	}
+	all, err := h.richContents(ctx, "BaseVariant", variantIDs(vs.all))
+	if err != nil {
+		return false, nil, err
+	}
+	for _, o := range vs.all {
+		if has, err := anyEditorContent(all[o.id]); err != nil || has {
+			return false, all, err
+		}
+	}
+	return true, all, nil
+}
+
+func nullableRHash(h *rails.RHash) any {
+	if h == nil {
+		return nil
+	}
+	return h
+}
+
+// summarize is FileSummaryService#summarize: the files the pages embed, else all of them,
+// without external links.
+func (h *handler) summarize(contents []*delivery.RichContent, files []productFile) (*rails.RHash, error) {
+	var embedded []int64
+	for _, c := range contents {
+		ids, err := delivery.EmbeddedProductFileIDs(c.DescriptionJSON, h.c.IDs)
 		if err != nil {
 			return nil, fallback("rich content")
 		}
 		embedded = append(embedded, ids...)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	var delivered []productFile
 	for _, f := range files {
@@ -256,34 +323,30 @@ func (h *handler) fileSummaries(ctx context.Context, prod *product, files []prod
 			delivered = append(delivered, f)
 		}
 	}
-	var summary any
-	if len(delivered) > 0 {
-		var formats []string
-		total, hasNil := int64(0), false
-		for _, f := range delivered {
-			up, ok := asciiUpcase(f.filetype.String)
-			if !ok {
-				return nil, fallback("file type")
-			}
-			if up != "" && !slices.Contains(formats, up) {
-				formats = append(formats, up)
-			}
-			if !f.size.Valid {
-				hasNil = true
-			}
-			total += f.size.Int64
-		}
-		slices.Sort(formats)
-		var totalSize any = total
-		if hasNil {
-			totalSize = nil
-		}
-		if formats == nil {
-			formats = []string{}
-		}
-		summary = rails.NewRHash().Sym("formats", formats).Sym("total_size", totalSize).Sym("count", int64(len(delivered)))
+	if len(delivered) == 0 {
+		return nil, nil
 	}
-	return rails.NewRHash().Sym("product", summary).Sym("options", rails.NewRHash()), nil
+	formats := []string{}
+	total, hasNil := int64(0), false
+	for _, f := range delivered {
+		up, ok := asciiUpcase(f.filetype.String)
+		if !ok {
+			return nil, fallback("file type")
+		}
+		if rails.Present(up) && !slices.Contains(formats, up) {
+			formats = append(formats, up)
+		}
+		if !f.size.Valid {
+			hasNil = true
+		}
+		total += f.size.Int64
+	}
+	slices.Sort(formats)
+	var totalSize any = total
+	if hasNil {
+		totalSize = nil
+	}
+	return rails.NewRHash().Sym("formats", formats).Sym("total_size", totalSize).Sym("count", int64(len(delivered))), nil
 }
 
 // asciiUpcase is String#upcase where it is ASCII's; other text is Rails'.

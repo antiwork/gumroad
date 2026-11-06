@@ -72,7 +72,9 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		reason, query string
 		arg           int64
 	}{
-		{"variants", "SELECT 1 FROM variant_categories WHERE variant_categories.link_id = ? AND variant_categories.deleted_at IS NULL", prod.id},
+		// Link#tiers changes quantity_remaining.
+		{"tier category", "SELECT 1 FROM variant_categories WHERE variant_categories.link_id = ? AND variant_categories.deleted_at IS NULL" +
+			" AND variant_categories.title = 'Tier'", prod.id},
 		{"installment plan", "SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = ?" +
 			" AND product_installment_plans.deleted_at IS NULL", prod.id},
 		{"auto-apply offer code", "SELECT 1 FROM offer_codes WHERE offer_codes.user_id = ? AND offer_codes.deleted_at IS NULL" +

@@ -188,8 +188,13 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 	var cents *int64
 	if v.priceCents != nil {
 		var diff sql.NullInt64
+		// lowest_variant_price_difference_cents, over every alive category.
+		in, args := "NULL", []any{prod.id}
+		if cats := v.variants.categories; len(cats) > 0 {
+			in, args = placeholders(len(cats)), append(args, int64Args(cats)...)
+		}
 		if err := h.c.DB.QueryRowContext(p.Ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
-			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN (NULL))", prod.id).Scan(&diff); err != nil {
+			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN ("+in+"))", args...).Scan(&diff); err != nil {
 			return nil, err
 		}
 		c := *v.priceCents + diff.Int64

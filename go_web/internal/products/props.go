@@ -32,7 +32,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		if prod.suggestedPriceCents.Valid {
 			suggested = prod.suggestedPriceCents.Int64
 		}
-		pwyw = rails.NewRHash().Sym("suggested_price_cents", suggested).Sym("default_price_cents", pwywDefault(prod, v.priceCents))
+		pwyw = rails.NewRHash().Sym("suggested_price_cents", suggested).Sym("default_price_cents", pwywDefault(prod, v.priceCents, v.variants))
 	}
 	var durationInMonths any
 	if prod.durationInMonths.Valid {
@@ -96,7 +96,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("is_quantity_enabled", prod.is(productQuantityEnabled)).
 		Sym("free_trial", nil).
 		Sym("recurrences", nil).
-		Sym("options", []any{}).
+		Sym("options", h.optionsProps(prod, v.variants)).
 		Sym("analytics", analyticsData(seller, v.sellerJSON)).
 		Sym("has_third_party_analytics", v.thirdPartyAnalytics).
 		Sym("ppp_details", nil).
@@ -122,12 +122,17 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("wishlists", []any{})
 }
 
-// pwywDefault is pwyw_default_price_cents with no options or rental.
-func pwywDefault(prod *product, price *int64) any {
-	if price != nil && *price == 0 && prod.suggestedPriceCents.Int64 == 0 {
-		return int64(0)
+// pwywDefault is pwyw_default_price_cents without a rental.
+func pwywDefault(prod *product, price *int64, vs *variants) any {
+	if price == nil || *price != 0 || prod.suggestedPriceCents.Int64 != 0 {
+		return nil
 	}
-	return nil
+	for _, o := range vs.options {
+		if o.priceDifference.Int64 != 0 {
+			return nil
+		}
+	}
+	return int64(0)
 }
 
 // installmentEligible is ProductInstallmentPlan.eligible_for_product? for a product that is
