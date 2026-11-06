@@ -150,6 +150,7 @@ const createContextValue = (props: Props) => ({
   successfulSalesCount: props.successful_sales_count,
   ratings: props.ratings,
   seller: props.seller,
+  savedWaitlistEnabled: props.product.waitlist_enabled,
   currentSellerExternalId: props.current_seller_external_id,
   existingFiles: props.existing_files,
   setExistingFiles: () => {},
@@ -545,6 +546,7 @@ const ProductEditPage = (props: Props) => {
   const [webAppUploading, setWebAppUploading] = React.useState(false);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  const [savedWaitlistEnabled, setSavedWaitlistEnabled] = React.useState(props.product.waitlist_enabled);
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
     setProduct((prevProduct) => {
@@ -729,6 +731,7 @@ const ProductEditPage = (props: Props) => {
       // snapshot still claim a description clear.
       reconciled.description_changed = false;
       lastSavedProductRef.current = reconciled;
+      setSavedWaitlistEnabled(reconciled.waitlist_enabled);
       setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
       setRichContentIdMappings((previous) => {
         const scopedMappings = Object.entries(response.rich_content_id_mappings_by_scope ?? {}).flatMap(
@@ -906,6 +909,7 @@ const ProductEditPage = (props: Props) => {
       save,
       saving,
       saveBlocked: reloadRequired !== null,
+      savedWaitlistEnabled,
       variantIdMappings,
       richContentIdMappings,
       fileIdMappings,
@@ -927,6 +931,7 @@ const ProductEditPage = (props: Props) => {
       fileIdMappings,
       richContentRemovedFileEmbedIds,
       webAppUploading,
+      savedWaitlistEnabled,
     ],
   );
 

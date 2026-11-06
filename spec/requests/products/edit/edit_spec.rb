@@ -714,15 +714,38 @@ describe("Product Edit Scenario", type: :system, js: true) do
     in_preview do
       expect(page).to have_button("Notify me", disabled: true)
     end
+    expect(page).to have_text("Save your changes to get a waitlist form for your website.")
+    expect(page).not_to have_field("Waitlist form embed code")
     expect do
       click_on "Save and continue"
       expect(page).to have_alert(text: "Changes saved!")
     end.to(change { product.reload.waitlist_enabled? }.to(true))
+    click_on "Product"
+    expect(page).to have_field("Waitlist form embed code", with: /name="product_id" value="#{Regexp.escape(product.external_id)}"/)
+    expect(page).not_to have_text("Save your changes to get a waitlist form for your website.")
 
     product.publish!
     visit edit_link_path(product.unique_permalink)
     expect(page).to have_text("Publicly show the number of sales on your product page")
     expect(page).not_to have_text("Let people join a waitlist on your product page")
+  end
+
+  it "gives the creator a waitlist form to embed on their website" do
+    seller.update!(user_risk_state: "compliant")
+    product.update!(waitlist_enabled: true)
+    product.unpublish!
+
+    visit edit_link_path(product.unique_permalink)
+    expect(page).to have_field("Waitlist form embed code", with: /name="product_id" value="#{Regexp.escape(product.external_id)}".*Notify me/m)
+    expect(page).to have_field("Waitlist form embed code", with: /name="seller_id" value="#{Regexp.escape(seller.external_id)}"/)
+
+    fill_in "Test your waitlist form with your email", with: "waitlister@example.com"
+    click_button "Notify me", id: "gumroad-follow-form-embed-button"
+    expect(page).to have_alert(text: "You're on the list for #{seller.name_or_username}'s launch. Check your inbox to confirm.")
+    expect(WaitlistEntry.sole.product).to eq(product)
+
+    uncheck "Let people join a waitlist on your product page"
+    expect(page).not_to have_field("Waitlist form embed code")
   end
 
   it "allows creator to limit the number of sales" do
@@ -1071,6 +1094,16 @@ describe("Product Edit Scenario", type: :system, js: true) do
         fill_in("Amount", with: 777)
         save_change
       end.to change { product.reload.name }.to(new_name)
+    end
+
+    it "gives the collaborator a waitlist form for the product owner" do
+      product.update!(waitlist_enabled: true)
+      product.unpublish!
+      login_as(collaborator.affiliate_user)
+
+      visit edit_link_path(product.unique_permalink)
+
+      expect(page).to have_field("Waitlist form embed code", with: /name="seller_id" value="#{Regexp.escape(seller.external_id)}"/)
     end
   end
 

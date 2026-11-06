@@ -200,6 +200,7 @@ const renderLayout = (
             successfulSalesCount: 0,
             ratings: { count: 0, average: 0, percentages: [0, 0, 0, 0, 0] },
             seller: { id: "seller-id", name: "Seller", avatar_url: "", profile_url: "", is_verified: false },
+            savedWaitlistEnabled: false,
             currentSellerExternalId: "seller-external-id",
             existingFiles: [],
             setExistingFiles: vi.fn(),

@@ -38,6 +38,7 @@ import { SuggestedAmountsEditor } from "$app/components/ProductEdit/ProductTab/S
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { TiersEditor } from "$app/components/ProductEdit/ProductTab/TiersEditor";
 import { VersionsEditor } from "$app/components/ProductEdit/ProductTab/VersionsEditor";
+import { WaitlistFormEmbed } from "$app/components/ProductEdit/ProductTab/WaitlistFormEmbed";
 import { RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { hasPaidVariantPricing, useProductEditContext } from "$app/components/ProductEdit/state";
 import { ToggleSettingRow } from "$app/components/SettingRow";
@@ -70,6 +71,8 @@ export const ProductTab = () => {
     priceCheckerEnabled,
     aiGenerated,
     customAttributeNameSuggestions,
+    seller,
+    savedWaitlistEnabled,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
@@ -456,10 +459,17 @@ export const ProductTab = () => {
                   ) : null}
                   {/* A coffee page has no product controls to swap for the form. */}
                   {product.is_published || product.native_type === "coffee" ? null : (
-                    <Switch
-                      checked={product.waitlist_enabled}
-                      onChange={(e) => updateProduct({ waitlist_enabled: e.target.checked })}
+                    <ToggleSettingRow
+                      value={product.waitlist_enabled}
+                      onChange={(waitlist_enabled) => updateProduct({ waitlist_enabled })}
                       label="Let people join a waitlist on your product page"
+                      dropdown={
+                        savedWaitlistEnabled ? (
+                          <WaitlistFormEmbed sellerId={seller.id} productId={id} />
+                        ) : (
+                          <p>Save your changes to get a waitlist form for your website.</p>
+                        )
+                      }
                     />
                   )}
                   <Switch
