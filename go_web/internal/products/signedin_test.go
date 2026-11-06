@@ -115,7 +115,6 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 		session              map[string]any
 		wants                []string
 	}{
-		{name: "the product's seller", reason: "product's seller", user: sellerID},
 		{name: "a buyer of the product", reason: "signed-in purchase", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_796_401), "link_id": productID, "seller_id": sellerID,
 				"purchaser_id": buyerID, "price_cents": 500, "purchase_state": "failed", "email": "buyer@example.com",

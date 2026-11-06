@@ -70,8 +70,8 @@ func (pc *PageConfig) cdnURL(s string) string {
 	return s
 }
 
-// render is LinksController#prepare_product_page and #show for a signed-out visitor, or one
-// signed in with no part in the product, then the after_actions. Everything is read before
+// render is LinksController#prepare_product_page and #show for a signed-out visitor, the seller, or
+// one signed in with no part in the product, then the after_actions. Everything is read before
 // anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
@@ -214,6 +214,10 @@ type view struct {
 	sections []any
 	// wishlists are the signed-in visitor's, as product_props lists them.
 	wishlists []any
+	// waitlistCount is waitlist_props' count, nil but for the seller.
+	waitlistCount any
+	// editor is the editing payload's products, posts and wishlist_options, nil but for the seller.
+	editor *rails.RHash
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -350,6 +354,14 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	v.wishlists = h.viewerWishlists(p, prod)
+	if p.ownView() && prod.acceptsWaitlistSignups() {
+		var n int64
+		if err := h.c.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM waitlist_entries INNER JOIN followers ON followers.id = waitlist_entries.follower_id"+
+			" WHERE waitlist_entries.product_id = ? AND followers.deleted_at IS NULL AND followers.confirmed_at IS NOT NULL", prod.id).Scan(&n); err != nil {
+			return nil, err
+		}
+		v.waitlistCount = n
+	}
 	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
 		v.recaptchaSiteKey = pc.RecaptchaSiteKey
 	}
@@ -373,6 +385,11 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	sections, err := h.listProductSections(p, prod, v)
 	if err != nil {
 		return nil, err
+	}
+	if p.ownView() {
+		if v.editor, err = h.editorProps(p); err != nil {
+			return nil, err
+		}
 	}
 	// Last: Elasticsearch searches are the costliest reads, and anything above may still fall back.
 	if err := h.loadSalesCount(ctx, p, prod, v); err != nil {

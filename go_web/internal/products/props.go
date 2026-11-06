@@ -8,8 +8,8 @@ import (
 )
 
 // productProps adds ProductPresenter::ProductProps#props, in its key order, for the product shapes
-// unportedShape lets through and a visitor with no part in the product: can_edit and purchase
-// assume it.
+// unportedShape lets through, seen by its seller or a visitor with no part in it: purchase
+// assumes no purchase of theirs.
 func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *view) {
 	ids, seller := h.c.IDs, p.seller
 	externalID := ids.Encrypt(prod.id)
@@ -97,7 +97,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("analytics", analyticsData(seller, v.sellerJSON)).
 		Sym("has_third_party_analytics", v.thirdPartyAnalytics).
 		Sym("ppp_details", v.ppp.props()).
-		Sym("can_edit", false).
+		Sym("can_edit", p.ownView()).
 		Sym("waitlist", h.waitlistProps(prod, v)).
 		Sym("refund_policy", v.refundPolicy).
 		Sym("bundle_products", v.bundle.props).
@@ -249,17 +249,21 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 		Sym("youtube_channel_id", v.youtubeChannelID).
 		Sym("subdomain", h.userSubdomain(seller)).
 		Sym("is_verified", seller.verified.Bool).
-		Sym("can_edit", false).
+		Sym("can_edit", p.ownView()).
 		Sym("follow_recaptcha_site_key", v.recaptchaSiteKey).
 		Sym("hide_follow_form", seller.is(userHideFollowForm))
 	if v.reputationEnabled {
 		profile.Sym("reputation", v.profileReputation)
 	}
-	return rails.NewRHash().
+	props := rails.NewRHash().
 		Sym("currency_code", viewerCurrency(p)).
 		Sym("show_ratings_filter", v.showRatingsFilter).
 		Sym("creator_profile", profile).
 		Sym("sections", []any{})
+	if v.editor != nil {
+		props.Merge(v.editor)
+	}
+	return props
 }
 
 // buyerCurrencyDisplay is buyer_currency_display_props' hash.
