@@ -116,6 +116,12 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		if err != nil {
 			return err
 		}
+		// prepare_product_page's meta tags read the covers' URLs before show redirects.
+		if !p.DryRun {
+			if err := h.pushRetinaVariants(ctx, p); err != nil {
+				return err
+			}
+		}
 		if err := h.trackUTMVisit(w, p, prod); err != nil {
 			return err
 		}
@@ -183,8 +189,11 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		}
 	}
 	if !p.DryRun {
-		// The pushes fall back while nothing Rails would repeat is written: its own reputation push
-		// is deduplicated, the UTM visit and the search aren't.
+		// The pushes fall back while nothing Rails would repeat is written: its own retina and
+		// reputation pushes are deduplicated, the UTM visit and the search aren't.
+		if err := h.pushRetinaVariants(ctx, p); err != nil {
+			return err
+		}
 		if p.warmReputation {
 			// Each command has the client's own timeout. A deadline across them could stop between
 			// queue.lua and the handoff, leaving a digest no later push or reaper clears.

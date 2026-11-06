@@ -35,6 +35,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -449,9 +450,114 @@ func TestAnUploadedCoverRendersItsRetinaVariant(t *testing.T) {
 	}
 }
 
-func TestACoverWithoutItsRetinaVariantGoesToRails(t *testing.T) {
+// url_from_file enqueues the missing variant and serves the original until it's processed.
+func TestACoverWithoutItsRetinaVariantQueuesIt(t *testing.T) {
+	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
+	addCover(t, false)
+	original := "https://public-files.gumroad.com/covers/original"
+	render := func(headers map[string]string) {
+		t.Helper()
+		w := e.get(host, "/l/guide", headers)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		body := w.Body.String()
+		cover := pageProps(t, body)["product"].(map[string]any)["covers"].([]any)[0].(map[string]any)
+		if cover["url"] != original || !strings.Contains(body, `<meta property="og:image" content="`+original+`"`) {
+			t.Errorf("cover %v", cover)
+		}
+	}
+	render(e.dryRun(host, "/l/guide", testNow))
+	if jobs.Exists("queue:low") {
+		t.Fatal("a dry run queued the variant")
+	}
+	render(nil)
+	queued, _ := jobs.List("queue:low")
+	if len(queued) != 1 || !strings.Contains(queued[0], `"args":[1790401],"class":"ProcessAssetPreviewRetinaWorker"`) {
+		t.Errorf("queue:low %v", queued)
+	}
+	if slices.Contains(e.cache.writes, "attachment_1790601_retina_url") {
+		t.Errorf("cache writes %v", e.cache.writes)
+	}
+	// lock: :until_executed holds while that job waits.
+	render(nil)
+	if queued, _ := jobs.List("queue:low"); len(queued) != 1 {
+		t.Errorf("%d jobs queued", len(queued))
+	}
+}
+
+// sidekiqJobs gives e a Sidekiq client on a fresh Redis, which it returns.
+func sidekiqJobs(t *testing.T, e *testEnv) *miniredis.Miniredis {
+	jobs := miniredis.RunT(t)
+	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr()}), RedisVersion: "7.2.4"}
+	return jobs
+}
+
+// The redirect to checkout queues it too, as prepare_product_page reads the covers first.
+func TestWantedQueuesACoversRetinaVariant(t *testing.T) {
+	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
+	addCover(t, false)
+	if w := e.get(host, "/l/guide?wanted=true", e.dryRun(host, "/l/guide?wanted=true", testNow)); w.Code != http.StatusFound {
+		t.Fatalf("dry run: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if jobs.Exists("queue:low") {
+		t.Fatal("a dry run queued the variant")
+	}
+	if w := e.get(host, "/l/guide?wanted=true", nil); w.Code != http.StatusFound {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if queued, _ := jobs.List("queue:low"); len(queued) != 1 {
+		t.Errorf("queue:low %v", queued)
+	}
+}
+
+func TestAFailedRetinaVariantPushGoesToRails(t *testing.T) {
+	e := newTestEnv(t)
+	jobs := miniredis.RunT(t)
+	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr(), MaxRetries: -1}), RedisVersion: "7.2.4"}
+	jobs.Close()
+	addCover(t, false)
+	if e.get(host, "/l/guide", nil); e.railsHit == nil || len(e.cache.writes) != 0 {
+		t.Errorf("rails %v, cache writes %v", e.railsHit != nil, e.cache.writes)
+	}
+}
+
+func TestACoverWithoutItsRetinaVariantOrSidekiqGoesToRails(t *testing.T) {
 	e := newTestEnv(t)
 	addCover(t, false)
+	e.render(t, nil, "retina variant push")
+}
+
+// A featured product's covers queue their variants with the page's.
+func TestAFeaturedProductsCoverWithoutItsRetinaVariantQueuesIt(t *testing.T) {
+	const featured, preview = int64(1_795_611), int64(1_795_621)
+	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "links", map[string]any{"id": featured, "user_id": sellerID, "name": "Featured", "unique_permalink": "gowebfp",
+		"price_cents": 700, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_795_612), "link_id": featured, "price_cents": 700, "currency": "usd",
+		"created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": preview, "link_id": featured, "guid": "featured-cover",
+		"position": 0, "created_at": testNow, "updated_at": testNow})
+	addBlob(t, conn, 1_795_631, "covers/featured", "f.jpg", "image/jpeg", `{"identified":true,"width":2000,"height":1000,"analyzed":true}`)
+	addAttachment(t, conn, 1_795_641, "file", "AssetPreview", preview, 1_795_631)
+	addSection(t, conn, 1_792_651, profileFeaturedSectionType, "Pick", fmt.Sprintf(`{"featured_product_id":%d}`, featured))
+	listSections(t, conn, `{"sections":[1792651]}`)
+	e.render(t, nil, "")
+	queued, _ := jobs.List("queue:low")
+	if len(queued) != 1 || !strings.Contains(queued[0], `"args":[1795621],"class":"ProcessAssetPreviewRetinaWorker"`) {
+		t.Errorf("queue:low %v", queued)
+	}
+}
+
+func TestCustomHTMLWithoutACoversRetinaVariantGoesToRails(t *testing.T) {
+	e := newTestEnv(t)
+	sidekiqJobs(t, e)
+	addCover(t, false)
+	customHTML(t, e, testdb.Open(t))
 	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Header().Get("X-Go-Web-Fallback") != "retina variant unprocessed" {
 		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}

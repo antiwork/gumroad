@@ -88,6 +88,8 @@ type page struct {
 	// warmReputation is snapshot_reputation_aggregate's perform_async, made once the page is
 	// certain to render here.
 	warmReputation bool
+	// retinaPushes are the asset previews whose retina variant url_from_file enqueues.
+	retinaPushes []int64
 	// urlCode is params[:code], the path's or the query's, when present.
 	urlCode string
 	// layout is params[:layout], and recommendedBy params[:recommended_by] when given: the page's

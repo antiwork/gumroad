@@ -840,7 +840,7 @@ func (h *handler) firstImageCoverURLs(p *page, ids []int64) (map[int64]string, e
 		case r.oembed:
 			return nil, fallback("oembed cover")
 		}
-		c := &cover{attachmentID: r.attID.Int64, blobID: r.blobID.Int64, key: r.key.String, filename: r.filename.String,
+		c := &cover{previewID: r.id, attachmentID: r.attID.Int64, blobID: r.blobID.Int64, key: r.key.String, filename: r.filename.String,
 			contentType: r.ctype.String, postProcess: !strings.Contains(r.ctype.String, "gif")}
 		if c.width, c.height, err = blobDimensions(r.metadata.String); err != nil {
 			return nil, fallback("cover metadata")
