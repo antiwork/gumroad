@@ -12,7 +12,6 @@ import (
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
-	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 const (
@@ -734,9 +733,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 		Sym("currency_code", pc).
 		Sym("buyer_currency_display", buyerCurrencyDisplay(externalID, pc, display))
 	buyerLocalPriceProps(props, pc, display)
-	// url_for_product_page on the seller's own host, in the request's protocol: http on a custom domain.
-	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) +
-		productPageQuery(productLayoutProfile, p.recommendedBy)
+	url := h.productPageURL(p, prod.generalPermalink(), productPageQuery(productLayoutProfile, p.recommendedBy))
 	props.Sym("is_pay_what_you_want", pwyw).
 		Sym("url", url).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).

@@ -99,8 +99,9 @@ type page struct {
 	// own, never a featured product's.
 	layout        string
 	recommendedBy *string
-	// customDomain is a request on the seller's own custom domain, whose host the meta tags take.
-	customDomain bool
+	// customDomain is a request on the seller's own custom domain, whose host the meta tags take;
+	// productDomain one on a product's domain, whose links go to the seller's subdomain.
+	customDomain, productDomain bool
 	// utm is track_utm_link_visit's utm_params, nil when it records nothing.
 	utm sidekiq.Hash
 	// collaborates is whether the visitor is collaborator_for? this page's product.

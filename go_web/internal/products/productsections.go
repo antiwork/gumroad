@@ -441,7 +441,8 @@ func (p *page) featuredPage(parent *view) *page {
 		p.flags = map[string]bool{}
 	}
 	return &page{Visit: p.Visit, seller: p.seller, rates: p.rates, settleable: p.settleable, flags: p.flags,
-		productsKey: p.productsKey, parent: parent, viewer: p.viewer, currentSeller: p.currentSeller, teamRole: p.teamRole}
+		productsKey: p.productsKey, parent: parent, viewer: p.viewer, currentSeller: p.currentSeller, teamRole: p.teamRole,
+		customDomain: p.customDomain, productDomain: p.productDomain}
 }
 
 // absorb takes back what a featured page read or queued.

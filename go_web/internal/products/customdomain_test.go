@@ -2,12 +2,21 @@ package products
 
 import (
 	"database/sql"
+	"fmt"
+	"html"
+	"io"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
+
+	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 )
 
 // customDomainHeaders are how a custom domain's request reaches the web tier: plain http on
@@ -85,16 +94,21 @@ func TestACustomDomainThisPortLeavesToRails(t *testing.T) {
 		setup              func(t *testing.T, conn *sql.DB)
 	}{
 		{name: "no domain", reason: "no custom domain"},
-		{name: "a product's domain", reason: "product custom domain", setup: func(t *testing.T, conn *sql.DB) {
+		// fetch_leniently finds no alive product, so Rails looks the path up among every seller's.
+		{name: "a deleted product's domain", reason: "product custom domain without an alive product", setup: func(t *testing.T, conn *sql.DB) {
 			addCustomDomain(t, conn, 1_799_511, shop, map[string]any{"user_id": nil, "product_id": productID})
+			mustExec(t, conn, "UPDATE links SET deleted_at = ? WHERE id = ?", testNow, productID)
+		}},
+		{name: "a product's domain with a deleted seller", reason: "product custom domain seller deleted", setup: func(t *testing.T, conn *sql.DB) {
+			addCustomDomain(t, conn, 1_799_511, shop, map[string]any{"user_id": nil, "product_id": productID})
+			mustExec(t, conn, "UPDATE users SET deleted_at = ? WHERE id = ?", testNow, sellerID)
+		}},
+		{name: "a domain with a product and a user", reason: "custom domain with a product and a user", setup: func(t *testing.T, conn *sql.DB) {
+			addCustomDomain(t, conn, 1_799_511, shop, map[string]any{"product_id": productID})
 		}},
 		{name: "two rows for the domain", reason: "several custom domains for the host", setup: func(t *testing.T, conn *sql.DB) {
 			addCustomDomain(t, conn, 1_799_511, shop, nil)
 			addCustomDomain(t, conn, 1_799_512, "SHOP.example.com", nil)
-		}},
-		{name: "an owner without a username", reason: "no custom domain owner", setup: func(t *testing.T, conn *sql.DB) {
-			addCustomDomain(t, conn, 1_799_511, shop, nil)
-			mustExec(t, conn, "UPDATE users SET username = NULL WHERE id = ?", sellerID)
 		}},
 		{name: "a deleted owner", reason: "deleted custom domain owner", setup: func(t *testing.T, conn *sql.DB) {
 			addCustomDomain(t, conn, 1_799_511, shop, nil)
@@ -154,5 +168,104 @@ func TestAnotherSellersProductOnACustomDomain(t *testing.T) {
 	addCustomDomain(t, conn, 1_799_522, "shop.example.com", map[string]any{"user_id": 1_799_521})
 	if w := e.get("shop.example.com", "/l/guide", customDomainHeaders(nil)); w.Code != http.StatusNotFound || e.railsHit != nil {
 		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+}
+
+// A product's own domain renders that product whatever the path names, never redirects, and
+// links to its seller's subdomain: user_by_domain finds no seller there, and the canonical URL
+// is the product's long URL. track_utm_link_visit records nothing on it.
+func TestAProductsCustomDomain(t *testing.T) {
+	const domain = "guide.example.com"
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	jobs := miniredis.RunT(t)
+	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr()}), RedisVersion: "7.2.4"}
+	addCustomDomain(t, conn, 1_799_541, domain, map[string]any{"user_id": nil, "product_id": productID})
+	for _, path := range []string{"/l/anything", "/l/gowebp1?utm_source=a&utm_medium=b&utm_campaign=c&recommended_by=search"} {
+		w := e.get(domain, path, customDomainHeaders(map[string]string{"Cookie": "_gumroad_guid=guid-1"}))
+		if w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("%s: %d %q", path, w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		body := w.Body.String()
+		product := pageProps(t, body)["product"].(map[string]any)
+		profileURL := "https://" + host
+		if strings.Contains(path, "recommended_by") {
+			profileURL += "?recommended_by=search"
+		}
+		if product["permalink"] != "gowebp1" || product["seller"].(map[string]any)["profile_url"] != profileURL {
+			t.Errorf("%s: %v %v", path, product["permalink"], product["seller"])
+		}
+		if want := `<link rel="canonical" href="https://` + host + `/l/guide"`; !strings.Contains(body, want) {
+			t.Errorf("%s: missing %s", path, want)
+		}
+	}
+	if queued, _ := jobs.List("queue:default"); len(queued) != 0 {
+		t.Errorf("queued %v", queued)
+	}
+}
+
+// User#username falls back to the external id, so an owner without one still routes here, and
+// the subdomain it names is the external id's.
+func TestACustomDomainOwnerWithoutAUsername(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	addCustomDomain(t, conn, 1_799_551, "shop.example.com", nil)
+	mustExec(t, conn, "UPDATE users SET username = NULL WHERE id = ?", sellerID)
+	w := e.get("shop.example.com", "/l/guide", customDomainHeaders(nil))
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if want := `"long_url":"https://1790001.gumroad.com/l/guide"`; !strings.Contains(html.UnescapeString(w.Body.String()), want) {
+		t.Errorf("missing %s", want)
+	}
+}
+
+// On a product's domain the code's path renders too, noindexed, and a banned product is a 404
+// with no UTM visit to record first.
+func TestAProductsCustomDomainShapes(t *testing.T) {
+	const domain = "guide.example.com"
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	jobs := miniredis.RunT(t)
+	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr()}), RedisVersion: "7.2.4"}
+	addCustomDomain(t, conn, 1_799_561, domain, map[string]any{"user_id": nil, "product_id": productID})
+	if w := e.get(domain, "/l/guide/save10", customDomainHeaders(nil)); w.Code != http.StatusOK || w.Header().Get("X-Robots-Tag") != "noindex" {
+		t.Errorf("code path: %d %q %q", w.Code, w.Header().Get("X-Robots-Tag"), w.Header().Get("X-Go-Web-Fallback"))
+	}
+	mustExec(t, conn, "UPDATE links SET banned_at = ? WHERE id = ?", testNow, productID)
+	if w := e.get(domain, "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", customDomainHeaders(nil)); w.Code != http.StatusNotFound || e.railsHit != nil {
+		t.Errorf("banned: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+}
+
+// A storefront card on a product's domain links to the seller's subdomain, as long_url does.
+func TestAProductsCustomDomainStorefrontCard(t *testing.T) {
+	const domain = "guide.example.com"
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	mustExec(t, conn, "UPDATE users SET flags = flags | ? WHERE id = ?", userProductPageStorefrontEnabled, sellerID)
+	testdb.Insert(t, conn, "links", map[string]any{"id": ownOther, "user_id": sellerID, "name": "Other", "unique_permalink": "gowebown2",
+		"price_cents": 300, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_799_002), "link_id": ownOther, "price_cents": 300, "currency": "usd",
+		"created_at": testNow, "updated_at": testNow})
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, fmt.Sprintf(`{"hits":{"total":{"value":2,"relation":"eq"},"hits":[{"_id":"%d","sort":[1762430000000]},`+
+			`{"_id":"%d","sort":[1762420000000]}]},"aggregations":{"tags.keyword":{"buckets":[]},"filetypes.keyword":{"buckets":[]}}}`,
+			ownOther, productID))
+	}))
+	t.Cleanup(server.Close)
+	client, err := elastic.NewWithClient(server.URL, server.Client())
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.config.Page.Search = client
+	addCustomDomain(t, conn, 1_799_571, domain, map[string]any{"user_id": nil, "product_id": productID})
+	w := e.get(domain, "/l/guide?recommended_by=search", customDomainHeaders(nil))
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	want := `"url":"https://` + host + `/l/gowebown2?layout=profile\u0026recommended_by=search"`
+	if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, want) {
+		t.Errorf("missing %s", want)
 	}
 }
