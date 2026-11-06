@@ -245,24 +245,25 @@ describe("PWYW suggested amount with a discount code", () => {
     duration_in_billing_cycles: null,
     minimum_amount_cents: null,
   };
-  const renderWith = (discount: Discount | null) =>
+  const renderWith = (amountAfterDiscount: boolean) =>
     render(
       <ConfigurationSelector
         product={product}
         selection={initialSelection}
         setSelection={() => {}}
-        discount={discount}
+        discount={sale}
+        pwywAmountIsAfterDiscount={amountAfterDiscount}
       />,
     );
 
-  it("hints the discounted amount, since the box holds the amount after the code", () => {
-    renderWith(sale);
+  it("hints the amount after the code for a box that holds it", () => {
+    renderWith(true);
 
     expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("16.80+");
   });
 
-  it("hints the suggested amount when no code applies", () => {
-    renderWith(null);
+  it("hints the amount before the code for a box that holds that instead", () => {
+    renderWith(false);
 
     expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("24+");
   });
