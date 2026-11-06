@@ -18,6 +18,42 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 	// to_query sorts the escaped pairs.
 	const checkout = "https://gumroad.com/checkout?"
 	const base = checkout + "action=show&controller=links&format=html"
+	const category, small, medium = int64(1_799_321), int64(1_799_322), int64(1_799_323)
+	variant := func(t *testing.T, conn *sql.DB, id int64, position, maxPurchases, diff any, pwyw bool) {
+		testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": category, "name": "Size",
+			"position_in_category": position, "max_purchase_count": maxPurchases, "sales_count_for_inventory_cache": 1,
+			"price_difference_cents": diff, "customizable_price": pwyw, "created_at": testNow, "updated_at": testNow})
+	}
+	sizes := func(t *testing.T, conn *sql.DB, smallPWYW bool) {
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Size"})
+		variant(t, conn, small, 0, nil, nil, smallPWYW)
+		variant(t, conn, medium, 1, nil, 200, false)
+	}
+	// The fixture's 500-cent price is the monthly one; duration is subscription_duration's enum value.
+	membership := func(t *testing.T, conn *sql.DB, flags int64, duration int) {
+		mustExec(t, conn, "UPDATE links SET flags = flags | ?, subscription_duration = ?, native_type = 'membership' WHERE id = ?",
+			productIsRecurringBilling|flags, duration, productID)
+		mustExec(t, conn, "UPDATE prices SET recurrence = 'monthly' WHERE id = ?", priceID)
+		testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_799_331), "link_id": productID, "price_cents": 4000, "currency": "usd",
+			"recurrence": "yearly", "created_at": testNow, "updated_at": testNow})
+	}
+	const tierCategory, basic, pro = int64(1_799_341), int64(1_799_342), int64(1_799_343)
+	tier := func(t *testing.T, conn *sql.DB, id int64, position int, maxPurchases any, pwyw bool, prices ...[2]any) {
+		testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": tierCategory, "name": "Tier",
+			"position_in_category": position, "max_purchase_count": maxPurchases, "sales_count_for_inventory_cache": 2,
+			"customizable_price": pwyw, "created_at": testNow, "updated_at": testNow})
+		for i, p := range prices {
+			testdb.Insert(t, conn, "prices", map[string]any{"id": id + int64(i+1)*1000, "variant_id": id, "price_cents": p[0], "currency": "usd",
+				"recurrence": p[1], "created_at": testNow, "updated_at": testNow})
+		}
+	}
+	// Basic sells monthly and yearly; Pro monthly and quarterly.
+	tiers := func(t *testing.T, conn *sql.DB, duration int, basicMax any, basicPWYW bool) {
+		membership(t, conn, productIsTieredMembership, duration)
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": tierCategory, "link_id": productID, "title": "Tier"})
+		tier(t, conn, basic, 0, basicMax, basicPWYW, [2]any{300, "monthly"}, [2]any{3000, "yearly"})
+		tier(t, conn, pro, 1, nil, false, [2]any{900, "monthly"}, [2]any{1000, "quarterly"})
+	}
 	for _, c := range []struct {
 		name, target, location, reason string
 		headers                        map[string]string
@@ -65,12 +101,83 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 				mustExec(t, conn, "UPDATE links SET customizable_price = TRUE WHERE id = ?", productID)
 				customHTML(t, e, conn)
 			}},
-		{name: "options", target: "/l/guide?wanted=true", reason: "wanted cart item",
+		// cart_item takes the first option with any left, and its price difference.
+		{name: "options", target: "/l/guide?wanted=true", location: base + "&id=guide&price=500&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { sizes(t, conn, false) }},
+		{name: "options, the first sold out", target: "/l/guide?wanted=true", location: base + "&id=guide&price=700&product=gowebp1&rent=false&wanted=true",
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": int64(1_799_311), "link_id": productID, "title": "Size"})
-				testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_799_312), "type": "Variant", "variant_category_id": int64(1_799_311),
-					"name": "S", "created_at": testNow, "updated_at": testNow})
+				sizes(t, conn, false)
+				mustExec(t, conn, "UPDATE base_variants SET max_purchase_count = 1 WHERE id = ?", small)
 			}},
+		{name: "a pay-what-you-want option", target: "/l/guide?wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { sizes(t, conn, true) }},
+		// Variant.find_by_external_id finds no SKU, so a SKU is never pay what you want.
+		{name: "a SKU", target: "/l/guide?wanted=true", location: base + "&id=guide&price=650&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				mustExec(t, conn, "UPDATE links SET flags = flags | ?, native_type = 'physical', require_shipping = 1 WHERE id = ?",
+					productIsPhysical|productSkusEnabled, productID)
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_799_324), "type": "Sku", "link_id": productID, "name": "Blue",
+					"price_difference_cents": 150, "customizable_price": true, "created_at": testNow, "updated_at": testNow})
+			}},
+		// The recurrence is the subscription duration's when a price has it, else the shortest.
+		{name: "a membership", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=4000&product=gowebp1&recurrence=yearly&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { membership(t, conn, 0, 1) }},
+		{name: "a membership with no price at its duration", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=500&product=gowebp1&recurrence=monthly&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { membership(t, conn, 0, 2) }},
+		// A tier's own prices.
+		{name: "a tiered membership", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=300&product=gowebp1&recurrence=monthly&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { tiers(t, conn, 0, nil, false) }},
+		{name: "a tiered membership at its yearly duration", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=3000&product=gowebp1&recurrence=yearly&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { tiers(t, conn, 1, nil, false) }},
+		// Pro has no yearly price, so its shortest.
+		{name: "a tiered membership past a sold-out tier", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=900&product=gowebp1&recurrence=monthly&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { tiers(t, conn, 1, 2, false) }},
+		// default_price_recurrence reads the product's prices, which have no quarterly one.
+		{name: "a tier's price at a duration the product has none at", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=900&product=gowebp1&recurrence=monthly&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { tiers(t, conn, 2, 2, false) }},
+		// With no tier left, cart_item reads the product's own prices.
+		{name: "a tiered membership with every tier sold out", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=500&product=gowebp1&recurrence=monthly&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				tiers(t, conn, 0, 2, false)
+				mustExec(t, conn, "UPDATE base_variants SET max_purchase_count = 2 WHERE id = ?", pro)
+			}},
+		{name: "a tier closed to new buyers", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=900&product=gowebp1&recurrence=monthly&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("close_membership_tier_to_new_buyers", "boolean", "true")
+				tiers(t, conn, 0, nil, false)
+				mustExec(t, conn, "UPDATE base_variants SET flags = ? WHERE id = ?", baseVariantClosedToNewPurchases, basic)
+			}},
+		{name: "a membership with no recurring price", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=0&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				mustExec(t, conn, "UPDATE links SET flags = flags | ?, subscription_duration = 0, native_type = 'membership' WHERE id = ?",
+					productIsRecurringBilling, productID)
+			}},
+		{name: "an option's difference below zero", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=0&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				sizes(t, conn, false)
+				mustExec(t, conn, "UPDATE base_variants SET max_purchase_count = 1 WHERE id = ?", small)
+				mustExec(t, conn, "UPDATE base_variants SET price_difference_cents = -700 WHERE id = ?", medium)
+			}},
+		{name: "the minimum after an option's difference", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=99&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				mustExec(t, conn, "UPDATE users SET flags = flags | ? WHERE id = ?", userPPPEnabled, sellerID)
+				sizes(t, conn, false)
+				mustExec(t, conn, "UPDATE base_variants SET max_purchase_count = 1 WHERE id = ?", small)
+				mustExec(t, conn, "UPDATE base_variants SET price_difference_cents = -450 WHERE id = ?", medium)
+			}},
+		{name: "a pay-what-you-want tier", target: "/l/guide?wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { tiers(t, conn, 0, nil, true) }},
 		// cart_item raises a price under the currency's minimum to it.
 		{name: "a price under the minimum", target: "/l/guide?wanted=true", location: base + "&id=guide&price=99&product=gowebp1&rent=false&wanted=true",
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {

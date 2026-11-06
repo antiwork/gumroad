@@ -1,34 +1,99 @@
 package products
 
 import (
+	"database/sql"
+	"slices"
 	"strconv"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
-// wantedRendersPage is show's wanted=true rendering the page instead: a pay-what-you-want
-// product with no price param, which is declined.
-func wantedRendersPage(prod *product) bool { return prod.customizablePrice.Bool }
+// wantedItem is the cart item show's wanted=true sends to checkout.
+type wantedItem struct {
+	price      int64
+	recurrence string
+}
 
-// wantedCheckout is the checkout URL show's wanted=true branch redirects to. The option, variant,
-// rent, price, quantity and recurrence params its cart item reads are declined.
-func (h *handler) wantedCheckout(p *page, prod *product, v *view) (string, error) {
-	if len(v.variants.options) > 0 || prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership) {
-		// cart_item picks an option or a recurrence.
-		return "", fallback("wanted cart item")
+// wantedCartItem is Link#cart_item for show's wanted=true, whose option, variant, rent, price,
+// quantity and recurrence params are declined; nil when show renders the page instead, for a
+// pay-what-you-want product or option.
+func wantedCartItem(p *page, prod *product, v *view) (*wantedItem, error) {
+	// The first option whose to_option quantity_left isn't 0; a coffee product never gets here.
+	var option *variantOption
+	if i := slices.IndexFunc(v.variants.options, (*variantOption).available); i >= 0 {
+		option = v.variants.options[i]
 	}
-	var price int64
+	item := &wantedItem{}
 	if v.priceCents != nil {
-		price = max(*v.priceCents, 0)
+		item.price = *v.priceCents
 	}
-	if pppEnabled(p, prod) && price != 0 {
+	if prod.is(productIsRecurringBilling) {
+		wantedRecurrence(prod, v, option, item)
+	}
+	if option != nil {
+		item.price += option.priceDifference.Int64
+	}
+	item.price = max(item.price, 0)
+	if pppEnabled(p, prod) && item.price != 0 {
 		cur, known := currencies[prod.productCurrency()]
 		if !known {
-			return "", fallback("ppp currency")
+			return nil, fallback("ppp currency")
 		}
-		price = max(price, cur.minPrice)
+		item.price = max(item.price, cur.minPrice)
 	}
+	// to_option_for_product's is_pwyw is false.
+	if prod.customizablePrice.Bool || option != nil && !option.sku && option.customizablePrice.Bool {
+		return nil, nil
+	}
+	return item, nil
+}
 
+// wantedRecurrence is cart_item's recurrence and its price: the buy price at
+// default_price_recurrence, else the shortest, from a tier's own prices when it has one.
+func wantedRecurrence(prod *product, v *view, option *variantOption, item *wantedItem) {
+	type recurringPrice struct {
+		cents  int64
+		name   string
+		months int
+	}
+	var recurring []recurringPrice
+	add := func(cents int64, name sql.NullString) {
+		if r, ok := recurrenceNamed(name.String); ok {
+			recurring = append(recurring, recurringPrice{cents, r.name, r.months})
+		}
+	}
+	// Variant.find_by_external_id finds no SKU, and a tiered membership has none here.
+	if prod.is(productIsTieredMembership) && option != nil {
+		for _, vp := range option.buyPrices {
+			add(vp.cents, vp.recurrence)
+		}
+	} else {
+		for _, r := range v.prices.rows {
+			if !r.isRental() {
+				add(r.cents, r.recurrence)
+			}
+		}
+	}
+	duration, _ := prod.subscriptionDurationName()
+	pick := -1
+	if hasDefaultRecurrence(v.prices.rows, duration) {
+		pick = slices.IndexFunc(recurring, func(r recurringPrice) bool { return r.name == duration })
+	}
+	if pick < 0 {
+		// min_by keeps the first of a tie.
+		for i, r := range recurring {
+			if pick < 0 || r.months < recurring[pick].months {
+				pick = i
+			}
+		}
+	}
+	if pick >= 0 {
+		item.price, item.recurrence = recurring[pick].cents, recurring[pick].name
+	}
+}
+
+// wantedCheckout is the checkout URL show's wanted=true branch redirects to.
+func (h *handler) wantedCheckout(p *page, prod *product, v *view) (string, error) {
 	// The request's String keys and checkout_url's own Symbol ones are different keys, so both
 	// reach the query.
 	var pairs [][2]string
@@ -44,7 +109,10 @@ func (h *handler) wantedCheckout(p *page, prod *product, v *view) (string, error
 		pairs = append(pairs, [2]string{key, value})
 	}
 	pairs = append(pairs, [2]string{"product", prod.uniquePermalink.String}, [2]string{"rent", "false"},
-		[2]string{"price", strconv.FormatInt(price, 10)})
+		[2]string{"price", strconv.FormatInt(v.wanted.price, 10)})
+	if v.wanted.recurrence != "" {
+		pairs = append(pairs, [2]string{"recurrence", v.wanted.recurrence})
+	}
 	if d := v.discount; d != nil && d.code != nil {
 		pairs = append(pairs, [2]string{"code", d.resultCode})
 	}
