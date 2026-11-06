@@ -1018,6 +1018,13 @@ func TestDefaultOfferCodes(t *testing.T) {
 		}
 	}
 	saleEntry := `{"discount_code":` + sale20 + `,"sale_label":"Sale"}`
+	// oncePerCart is the sale as a once-per-cart code of amount that allocates cents; %[6]s is its id.
+	oncePerCart := func(cents, amount int, minimumQuantity string, limited bool) string {
+		return `"discount_code":` + discount(`"SALE20"`, fmt.Sprintf(`{"type":"fixed","cents":%d,"product_ids":null,"expires_at":null,`+
+			`"minimum_quantity":%s,"duration_in_billing_cycles":null,"minimum_amount_cents":null,"once_per_cart":true,`+
+			`"once_per_cart_id":"%%[6]s","once_per_cart_amount_cents":%d,"once_per_cart_has_usage_limit":%t}`,
+			cents, minimumQuantity, amount, limited)) + `,"sale_label":"Sale",`
+	}
 	exclude := insertExcludedProduct
 	// otherID is another product of the seller's, which wantAll's %[4]s names.
 	const otherID = int64(1_795_801)
@@ -1214,8 +1221,36 @@ func TestDefaultOfferCodes(t *testing.T) {
 				insertCodeUse(t, conn, 1_795_901, explicitID, nil)
 				auto(t, conn, nil)
 			}},
-		{name: "a once-per-cart sale", reason: "once-per-cart offer code", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": 4})
+		// allocate_once_per_cart_discount takes the cents off the product's own line, up to its price
+		// and short of leaving it under the currency's minimum.
+		{name: "a once-per-cart sale", wants: []string{oncePerCart(100, 100, "null", false)}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": offerCodeOncePerCart})
+		}},
+		{name: "a once-per-cart sale over the price", wants: []string{oncePerCart(500, 600, "null", false)},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+			}},
+		{name: "a once-per-cart sale leaving less than the minimum", headers: eurCookie, wants: []string{oncePerCart(401, 450, "null", false),
+			`"buyer_local_price_cents":99,"buyer_local_original_price_cents":500,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("1")
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 450, "flags": offerCodeOncePerCart})
+			}},
+		// It spends one use whatever the quantity, so one left serves a code of two, allocated
+		// against both units.
+		{name: "a once-per-cart sale of two with one use left", wants: []string{oncePerCart(600, 600, "2", true)},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart,
+					"minimum_quantity": 2, "max_purchase_count": 1})
+			}},
+		{name: "a once-per-cart sale without a price", reason: "once-per-cart price", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("DELETE FROM prices WHERE id = ?", priceID)
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": offerCodeOncePerCart})
+		}},
+		{name: "a once-per-cart sale in an unknown currency", reason: "once-per-cart price", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET price_currency_type = 'xyz' WHERE id = ?", productID)
+			conn.Exec("UPDATE prices SET currency = 'xyz' WHERE id = ?", priceID)
+			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": offerCodeOncePerCart, "currency_type": "xyz"})
 		}},
 		{name: "a sale for some options", reason: "offer code variants", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, nil)
@@ -1247,7 +1282,7 @@ func TestDefaultOfferCodes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
-			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID, otherID+1)
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID, otherID+1, autoID)
 		})
 	}
 }
@@ -1288,6 +1323,13 @@ func TestURLOfferCodes(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "a once-per-cart code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":{"valid":true,"code":"SAVE10",` +
+			`"discount":{"type":"fixed","cents":500,"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,` +
+			`"minimum_amount_cents":null,"once_per_cart":true,"once_per_cart_id":"%[2]s","once_per_cart_amount_cents":600,` +
+			`"once_per_cart_has_usage_limit":false}},"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+			}},
 		{name: "an unknown code", target: "/l/guide/NOPE", wants: []string{quotes("NOPE", invalid("invalid_offer"), "null")}},
 		{name: "a deleted code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"deleted_at": past}) }},
@@ -1419,7 +1461,7 @@ func TestURLOfferCodes(t *testing.T) {
 				c.setup(t, e, testdb.Open(t))
 			}
 			body, hdr := e.renderAt(t, c.target, c.headers, c.reason)
-			e.wantAll(t, body, c.wants, productID)
+			e.wantAll(t, body, c.wants, productID, codeID)
 			if c.reason == "" && (hdr.Get("X-Robots-Tag") == "noindex") == c.indexed {
 				t.Errorf("X-Robots-Tag %q", hdr.Get("X-Robots-Tag"))
 			}

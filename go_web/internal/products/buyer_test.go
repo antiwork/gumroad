@@ -193,7 +193,7 @@ func TestABuyersExistingCustomerDefault(t *testing.T) {
 				viewer: buyer, hasAutoApplyCode: c.sale}
 			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true},
 				defaultOfferCodeID: sql.NullInt64{Int64: loyalID, Valid: true}}
-			d, err := h.loadOfferDiscount(t.Context(), p, prod)
+			d, err := h.loadOfferDiscount(t.Context(), p, prod, nil)
 			switch {
 			case c.reason != "":
 				if err != fallback(c.reason) {

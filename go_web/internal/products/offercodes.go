@@ -145,8 +145,6 @@ func (c *offerCode) unportedDiscount() string {
 		return "tiered offer code"
 	case c.amountCents.Valid == c.amountPercentage.Valid:
 		return "offer code amount"
-	case c.amountCents.Valid && c.flags&offerCodeOncePerCart != 0:
-		return "once-per-cart offer code"
 	case c.hasVariants:
 		return "offer code variants"
 	}
@@ -268,9 +266,40 @@ type offerDiscount struct {
 	label   any
 	// products is the applying code's product_ids, else its excluded_product_ids when universal.
 	products []any
+	// cents is a fixed code's discount cents, which a once-per-cart code allocates.
+	cents         int64
+	oncePerCartID string
 }
 
-func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product) (*offerDiscount, error) {
+// oncePerCart is OfferCodeDiscountComputingService#once_per_cart?.
+func (c *offerCode) oncePerCart() bool {
+	return c.amountCents.Valid && c.flags&offerCodeOncePerCart != 0
+}
+
+// quantity is evaluate_code's: one, raised to the code's minimum.
+func (c *offerCode) quantity() int64 {
+	return max(1, c.minimumQuantity.Int64)
+}
+
+// usageUnits is usage_units at that quantity.
+func (c *offerCode) usageUnits() int64 {
+	if c.oncePerCart() {
+		return 1
+	}
+	return c.quantity()
+}
+
+// oncePerCartCents is allocate_once_per_cart_discount for the product's own line.
+func oncePerCartCents(amount, full, minPrice int64) int64 {
+	allocated := min(amount, full)
+	if after := full - allocated; after > 0 && after < minPrice {
+		allocated = max(full-minPrice, 0)
+	}
+	return allocated
+}
+
+// loadOfferDiscount's price is Link#price_cents, which a once-per-cart code allocates against.
+func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product, price *int64) (*offerDiscount, error) {
 	d := &offerDiscount{}
 	// auto_apply_offer_code_for.
 	var auto *offerCode
@@ -348,6 +377,17 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_products", c.id)
 	case c.anyExcluded:
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_excluded_products", c.id)
+	}
+	if c := d.code; err == nil && c != nil {
+		d.cents = c.amountCents.Int64
+		if c.oncePerCart() {
+			cur, known := currencies[prod.productCurrency()]
+			if price == nil || !known {
+				return nil, fallback("once-per-cart price")
+			}
+			d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(), cur.minPrice)
+			d.oncePerCartID = h.c.IDs.Encrypt(c.id)
+		}
 	}
 	return d, err
 }
@@ -485,7 +525,7 @@ func (d *offerDiscount) resultProps() any {
 	}
 	discount := rails.NewRHash()
 	if c.amountCents.Valid {
-		discount.Sym("type", "fixed").Sym("cents", c.amountCents.Int64)
+		discount.Sym("type", "fixed").Sym("cents", d.cents)
 	} else {
 		discount.Sym("type", "percent").Sym("percents", c.amountPercentage.Int64)
 	}
@@ -504,6 +544,10 @@ func (d *offerDiscount) resultProps() any {
 	if c.newOnly {
 		// Display only; checkout decides.
 		discount.Sym("new_customers_only", true)
+	}
+	if c.oncePerCart() {
+		discount.Sym("once_per_cart", true).Sym("once_per_cart_id", d.oncePerCartID).
+			Sym("once_per_cart_amount_cents", c.amountCents.Int64).Sym("once_per_cart_has_usage_limit", c.maxPurchaseCount.Valid)
 	}
 	return rails.NewRHash().Sym("valid", true).Sym("code", d.resultCode).Sym("discount", discount)
 }
@@ -546,7 +590,7 @@ func (d *offerDiscount) discountedCents(price int64) int64 {
 		return price
 	}
 	if c.amountCents.Valid {
-		return max(price-c.amountCents.Int64, 0)
+		return max(price-d.cents, 0)
 	}
-	return price - int64(math.Round(float64(price)*(float64(c.amountPercentage.Int64)/100.0)))
+	return price - c.amountOff(price)
 }

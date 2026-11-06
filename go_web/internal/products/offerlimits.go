@@ -94,8 +94,8 @@ func (h *handler) effectiveDefault(p *page, prod *product, explicit, auto *offer
 	return auto, nil
 }
 
-// usesShortfall is the error_code has_sufficient_times_of_use? gives a single item, its quantity
-// raised to the code's minimum; "" when there are uses enough.
+// usesShortfall is the error_code has_sufficient_times_of_use? gives at the code's usage units;
+// "" when there are uses enough.
 func (h *handler) usesShortfall(p *page, c *offerCode) (string, error) {
 	if !c.maxPurchaseCount.Valid {
 		return "", nil
@@ -104,7 +104,7 @@ func (h *handler) usesShortfall(p *page, c *offerCode) (string, error) {
 	switch {
 	case err != nil:
 		return "", err
-	case left >= max(1, c.minimumQuantity.Int64):
+	case left >= c.usageUnits():
 		return "", nil
 	case left > 0:
 		return "insufficient_times_of_use", nil

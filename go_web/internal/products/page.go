@@ -312,7 +312,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// before that for a membership.
 		return nil, fallback("no price")
 	}
-	if v.discount, err = h.loadOfferDiscount(ctx, p, prod); err != nil {
+	if v.discount, err = h.loadOfferDiscount(ctx, p, prod, v.priceCents); err != nil {
 		return nil, err
 	}
 	pppPrice, err := h.loadPPP(ctx, p, prod, v)
