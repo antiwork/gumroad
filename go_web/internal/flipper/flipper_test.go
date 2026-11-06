@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -184,7 +185,7 @@ func TestFlipperNumberIsTypecastToNumber(t *testing.T) {
 	for s, opens := range map[string]bool{"99999999999999999999": true, "99999999999999999999e-30": true, "-99999999999999999999": false} {
 		state := &flagState{percentageOfTime: flipperNumber(s)}
 		f := &Flag{random: func() float64 { return 0.999999 }}
-		if got, _ := f.open(state); got != opens {
+		if got, _ := f.open(state, ""); got != opens {
 			t.Errorf("%q opens = %v, want %v", s, got, opens)
 		}
 	}
@@ -241,4 +242,34 @@ func TestFlipperFlagFailsClosedOnAnExpressionGate(t *testing.T) {
 			t.Errorf("%s: active() = %v, %v", name, on, err)
 		}
 	}
+}
+
+func TestActorGatesFollowFlipper(t *testing.T) {
+	mr := miniredis.RunT(t)
+	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	flag := func(name string, fields map[string]string) *Flag {
+		for k, v := range fields {
+			mr.HSet(name, k, v)
+		}
+		return New(client, name)
+	}
+	ctx := context.Background()
+	check := func(f *Flag, actor string, want bool, wantErr error) {
+		t.Helper()
+		got, err := f.ActiveFor(ctx, actor)
+		if got != want || !errors.Is(err, wantErr) {
+			t.Errorf("%s for %s = %v, %v; want %v, %v", f.name, actor, got, err, want, wantErr)
+		}
+	}
+	check(flag("a", map[string]string{"actors/User;1": "1"}), "User;1", true, nil)
+	check(flag("b", map[string]string{"actors/User;1": "1"}), "User;2", false, nil)
+	check(flag("c", map[string]string{"percentage_of_actors": "100"}), "User;2", true, nil)
+	check(flag("d", map[string]string{"percentage_of_actors": "0"}), "User;2", false, nil)
+	// Zlib.crc32("eUser;1") % 100_000 is 56_170 and "e2User;1"'s 63_963; Flipper compares them
+	// with the scaled float.
+	check(flag("e", map[string]string{"percentage_of_actors": "56.17"}), "User;1", false, nil)
+	check(flag("e2", map[string]string{"percentage_of_actors": "63.9631"}), "User;1", true, nil)
+	check(flag("g", map[string]string{"groups/admins": "1"}), "User;1", false, ErrUnevaluable)
+	check(flag("h", map[string]string{"percentage_of_time": "50"}), "User;1", false, ErrUnevaluable)
+	check(flag("i", map[string]string{"boolean": "true", "groups/admins": "1"}), "User;1", true, nil)
 }

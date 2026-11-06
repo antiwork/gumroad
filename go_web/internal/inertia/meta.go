@@ -12,8 +12,15 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
-// Attr is one tag_data entry, in the order set_meta_tag passed it.
-type Attr struct{ Key, Value string }
+// Attr is one tag_data entry, in the order set_meta_tag passed it. Value is what the tag
+// helper writes; JSON, when set, is the value as_json carries instead (a Float), and a
+// script's inner content is its JSON, encoded. Raw inner content is html_safe, written
+// unescaped.
+type Attr struct {
+	Key, Value string
+	JSON       any
+	Raw        bool
+}
 
 // MetaTag is InertiaRails::MetaTag.
 type MetaTag struct {
@@ -21,16 +28,26 @@ type MetaTag struct {
 	data                  []Attr
 }
 
+// ldJSONType is MetaTag::LD_JSON_TYPE; a script of any other type is text/plain.
+const ldJSONType = "application/ld+json"
+
 // NewMetaTag is MetaTag.new(tag_name:, head_key:, type:, **data). tagName "" is :meta; a
-// meta with only a title is the title tag. Script tags, whose type and content MetaTag
-// rewrites, are left out of this port.
+// meta with only a title is the title tag.
 func NewMetaTag(tagName, headKey, typ string, data ...Attr) MetaTag {
 	if tagName == "script" {
-		panic("inertia: script meta tags are not ported")
+		if headKey == "" {
+			// tag_digest would hash Ruby's Hash#to_s of the content.
+			panic("inertia: a script meta tag needs a head key")
+		}
+		if typ != ldJSONType {
+			typ = "text/plain"
+		}
 	}
 	t := MetaTag{tagName: tagName, typ: typ, data: data}
 	if tagName == "" && len(data) == 1 && data[0].Key == "title" {
-		t.tagName, t.data = "title", []Attr{{"inner_content", data[0].Value}}
+		inner := data[0]
+		inner.Key = "inner_content"
+		t.tagName, t.data = "title", []Attr{inner}
 	} else if tagName == "" {
 		t.tagName = "meta"
 	}
@@ -84,9 +101,13 @@ func (t MetaTag) digest() string {
 // blank values dropped.
 func (t MetaTag) JSON() *rails.RHash {
 	h := rails.NewRHash()
-	for _, a := range append([]Attr{{"tagName", t.tagName}, {"headKey", t.headKey}, {"type", t.typ}}, t.data...) {
-		if rails.Present(a.Value) {
-			h.Sym(camelizeLower(a.Key), a.Value)
+	for _, a := range append([]Attr{{Key: "tagName", Value: t.tagName}, {Key: "headKey", Value: t.headKey}, {Key: "type", Value: t.typ}}, t.data...) {
+		v := any(a.Value)
+		if a.JSON != nil {
+			v = a.JSON
+		}
+		if rails.Present(v) {
+			h.Sym(camelizeLower(a.Key), v)
 		}
 	}
 	return h

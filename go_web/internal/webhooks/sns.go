@@ -398,22 +398,22 @@ func (v *snsVerifier) acquire() bool {
 // certFetchTarget runs URI.parse and verify_uri! on a SigningCertURL, returning what
 // Net::HTTP would request.
 func certFetchTarget(rawURL string) (string, error) {
-	u, err := rubyParseURI(rawURL)
+	u, err := rails.ParseURI(rawURL)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errRailsRaises, err)
 	}
-	if u.scheme != "https" {
+	if u.Scheme != "https" {
 		return "", errors.New("the SigningCertURL must be https")
 	}
-	if !u.hasHost || !snsCertHost.MatchString(u.host) {
+	if !u.HasHost || !snsCertHost.MatchString(u.Host) {
 		return "", errors.New("signing cert is not hosted by AWS")
 	}
-	if rails.FileExtname(u.path) != ".pem" {
+	if rails.FileExtname(u.Path) != ".pem" {
 		return "", errors.New("the SigningCertURL must link to a .pem file")
 	}
 	// AWS serves signing certs on 443 only. Rails would try another port and fail, after a
 	// connect that can hang; refusing it at once answers the same 400.
-	if port, err := strconv.Atoi(u.port); u.port != "" && (err != nil || port != 443) {
+	if port, err := strconv.Atoi(u.Port); u.Port != "" && (err != nil || port != 443) {
 		return "", errors.New("the SigningCertURL must use port 443")
 	}
 	return certFetchURL(u), nil
@@ -455,22 +455,22 @@ func (v *snsVerifier) download(ctx context.Context, url string) (*rsa.PublicKey,
 
 // certFetchURL is what Net::HTTP requests: uri.host and uri.port, then request_uri.
 // Userinfo and the fragment are dropped.
-func certFetchURL(u rubyURI) string {
+func certFetchURL(u rails.URI) string {
 	port := 443
-	if u.port != "" {
+	if u.Port != "" {
 		// An unusable port fails the request, as it fails Net::HTTP's connect.
 		var err error
-		if port, err = strconv.Atoi(u.port); err != nil {
+		if port, err = strconv.Atoi(u.Port); err != nil {
 			port = -1
 		}
 	}
-	host := u.host
+	host := u.Host
 	if port != 443 {
-		host = net.JoinHostPort(u.host, strconv.Itoa(port))
+		host = net.JoinHostPort(u.Host, strconv.Itoa(port))
 	}
-	url := "https://" + host + u.path
-	if u.query != nil {
-		url += "?" + *u.query
+	url := "https://" + host + u.Path
+	if u.Query != nil {
+		url += "?" + *u.Query
 	}
 	return url
 }

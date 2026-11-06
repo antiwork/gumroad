@@ -1,10 +1,11 @@
-// Package flipper reads Flipper flags as Feature.active? does without an actor.
+// Package flipper reads Flipper flags as Feature.active? does, with or without an actor.
 package flipper
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"hash/crc32"
 	"math"
 	"math/rand/v2"
 	"strings"
@@ -29,8 +30,7 @@ type HashReader interface {
 	HGetAll(ctx context.Context, key string) *redis.MapStringStringCmd
 }
 
-// Flag reads one flag as Feature.active?(name) does without an actor, through
-// flipper-redis 1.3.0 (a hash at the flag's own name) and RedisFailOpen: a failed read
+// Flag reads one flag as Feature.active? does, through flipper-redis 1.3.0 (a hash at the flag's own name) and RedisFailOpen: a failed read
 // falls back to this process's last successful one, or raises when there was none.
 type Flag struct {
 	client HashReader
@@ -42,17 +42,23 @@ type Flag struct {
 	reading atomic.Pointer[flagRead]  // the one read in flight
 }
 
-// flagState holds the gates that can open without an actor, in Flipper's order. An
-// expression gate can't be evaluated here, so a set one makes the flag unknown.
+// flagState holds the flag's gates. An expression gate can't be evaluated here, so a set
+// one makes the flag unknown.
 type flagState struct {
 	boolean          bool
 	expression       bool
 	percentageOfTime float64
-	readAt, failedAt time.Time
+	// The actor gates: enabled actor ids, whether any group is enabled (a group's block is
+	// Ruby), and the percentage of actors.
+	actors             map[string]bool
+	groups             bool
+	percentageOfActors float64
+	readAt, failedAt   time.Time
 }
 
-// ErrUnevaluable is a flag whose expression gate only Flipper can evaluate.
-var ErrUnevaluable = errors.New("an expression gate is set, which only Flipper can evaluate")
+// ErrUnevaluable is a flag with a gate only Flipper can evaluate: an expression, or for an
+// actor an enabled group or a partial percentage of time.
+var ErrUnevaluable = errors.New("flipper: a gate only Flipper can evaluate is set")
 
 type flagRead struct {
 	done chan struct{}
@@ -66,10 +72,21 @@ func New(client HashReader, name string) *Flag {
 
 // Active is Feature.active?(name).
 func (f *Flag) Active(ctx context.Context) (bool, error) {
+	return f.active(ctx, "")
+}
+
+// ActiveFor is Feature.active?(name, actor) for the actor's flipper_id, such as "User;1".
+// A partial percentage of time is random in Rails, so a page that reads it can't be
+// matched; it, and any enabled group, is ErrUnevaluable when no earlier gate opens.
+func (f *Flag) ActiveFor(ctx context.Context, flipperID string) (bool, error) {
+	return f.active(ctx, flipperID)
+}
+
+func (f *Flag) active(ctx context.Context, actor string) (bool, error) {
 	for {
 		state := f.state.Load()
 		if now := f.now(); state != nil && (now.Sub(state.readAt) < flagCacheTTL || now.Sub(state.failedAt) < flagRetryBackoff) {
-			return f.open(state)
+			return f.open(state, actor)
 		}
 		read := &flagRead{done: make(chan struct{})}
 		if f.reading.CompareAndSwap(nil, read) {
@@ -78,7 +95,7 @@ func (f *Flag) Active(ctx context.Context) (bool, error) {
 			f.reading.Store(nil)
 			close(read.done)
 		} else if state != nil {
-			return f.open(state)
+			return f.open(state, actor)
 		} else if read = f.reading.Load(); read == nil {
 			continue
 		}
@@ -88,7 +105,7 @@ func (f *Flag) Active(ctx context.Context) (bool, error) {
 			return false, ctx.Err()
 		}
 		if state = f.state.Load(); state != nil {
-			return f.open(state)
+			return f.open(state, actor)
 		}
 		return false, read.err
 	}
@@ -108,23 +125,52 @@ func (f *Flag) refresh(ctx context.Context, last *flagState) error {
 	}
 	b := gates["boolean"]
 	expression, hasExpression := gates["expression"]
-	f.state.Store(&flagState{
-		boolean:          b == "true" || b == "1",
-		expression:       hasExpression && expressionSet(expression),
-		percentageOfTime: flipperNumber(gates["percentage_of_time"]),
-		readAt:           f.now(),
-	})
+	state := &flagState{
+		boolean:            b == "true" || b == "1",
+		expression:         hasExpression && expressionSet(expression),
+		percentageOfTime:   flipperNumber(gates["percentage_of_time"]),
+		percentageOfActors: flipperNumber(gates["percentage_of_actors"]),
+		actors:             map[string]bool{},
+		readAt:             f.now(),
+	}
+	// flipper-redis keeps a set gate's members as "<gate>/<value>" fields.
+	for field := range gates {
+		if id, ok := strings.CutPrefix(field, "actors/"); ok {
+			state.actors[id] = true
+		} else if strings.HasPrefix(field, "groups/") {
+			state.groups = true
+		}
+	}
+	f.state.Store(state)
 	return nil
 }
 
-func (f *Flag) open(state *flagState) (bool, error) {
+// open runs Flipper's gates in order: boolean, expression, actor, percentage of actors,
+// percentage of time, group.
+func (f *Flag) open(state *flagState, actor string) (bool, error) {
 	switch {
 	case state.boolean:
 		return true, nil
 	case state.expression:
 		return false, ErrUnevaluable
 	}
-	return f.random() < state.percentageOfTime/100, nil
+	if actor == "" {
+		return f.random() < state.percentageOfTime/100, nil
+	}
+	if state.actors[actor] {
+		return true, nil
+	}
+	// PercentageOfActors: crc32 of the feature name and the actor's id, scaled by 1,000.
+	if float64(crc32.ChecksumIEEE([]byte(f.name+actor))%100_000) < state.percentageOfActors*1000 {
+		return true, nil
+	}
+	switch {
+	case state.percentageOfTime >= 100:
+		return true, nil
+	case state.percentageOfTime > 0, state.groups:
+		return false, ErrUnevaluable
+	}
+	return false, nil
 }
 
 // expressionSet is the Expression gate's `!data.nil? && !data.empty?` on the stored JSON.

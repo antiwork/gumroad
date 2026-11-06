@@ -68,7 +68,7 @@ func (m DefaultMeta) Tags(v Viewer) *MetaTags {
 func pairs(kv []string) []Attr {
 	attrs := make([]Attr, 0, len(kv)/2)
 	for i := 0; i+1 < len(kv); i += 2 {
-		attrs = append(attrs, Attr{kv[i], kv[i+1]})
+		attrs = append(attrs, Attr{Key: kv[i], Value: kv[i+1]})
 	}
 	return attrs
 }

@@ -74,21 +74,21 @@ func TestMetaTagHeadKeysAndJSON(t *testing.T) {
 		tag  MetaTag
 		want string
 	}{
-		{NewMetaTag("", "", "", Attr{"title", "x"}), `{"tagName":"title","headKey":"title","innerContent":"x"}`},
-		{NewMetaTag("", "", "", Attr{"property", "og:image:alt"}, Attr{"content", "a"}), `{"tagName":"meta","headKey":"meta-property-og-image-alt","property":"og:image:alt","content":"a"}`},
-		{NewMetaTag("", "", "", Attr{"name", "x"}, Attr{"content", " "}), `{"tagName":"meta","headKey":"meta-name-x","name":"x"}`},
-		{NewMetaTag("", "", "", Attr{"http_equiv", "Refresh"}, Attr{"content", "1"}), `{"tagName":"meta","headKey":"meta-http_equiv-refresh","httpEquiv":"Refresh","content":"1"}`},
-		{NewMetaTag("link", "", "", Attr{"rel", "x"}, Attr{"href", "/y"}), `{"tagName":"link","headKey":"link-` + NewMetaTag("link", "", "", Attr{"href", "/y"}, Attr{"rel", "x"}).digest() + `","rel":"x","href":"/y"}`},
-		{NewMetaTag("style", "custom_styles", "", Attr{"inner_content", "a<b"}), `{"tagName":"style","headKey":"custom_styles","innerContent":"a\u003cb"}`},
+		{NewMetaTag("", "", "", Attr{Key: "title", Value: "x"}), `{"tagName":"title","headKey":"title","innerContent":"x"}`},
+		{NewMetaTag("", "", "", Attr{Key: "property", Value: "og:image:alt"}, Attr{Key: "content", Value: "a"}), `{"tagName":"meta","headKey":"meta-property-og-image-alt","property":"og:image:alt","content":"a"}`},
+		{NewMetaTag("", "", "", Attr{Key: "name", Value: "x"}, Attr{Key: "content", Value: " "}), `{"tagName":"meta","headKey":"meta-name-x","name":"x"}`},
+		{NewMetaTag("", "", "", Attr{Key: "http_equiv", Value: "Refresh"}, Attr{Key: "content", Value: "1"}), `{"tagName":"meta","headKey":"meta-http_equiv-refresh","httpEquiv":"Refresh","content":"1"}`},
+		{NewMetaTag("link", "", "", Attr{Key: "rel", Value: "x"}, Attr{Key: "href", Value: "/y"}), `{"tagName":"link","headKey":"link-` + NewMetaTag("link", "", "", Attr{Key: "href", Value: "/y"}, Attr{Key: "rel", Value: "x"}).digest() + `","rel":"x","href":"/y"}`},
+		{NewMetaTag("style", "custom_styles", "", Attr{Key: "inner_content", Value: "a<b"}), `{"tagName":"style","headKey":"custom_styles","innerContent":"a\u003cb"}`},
 	} {
 		if got := rails.EncodeJSON(c.tag.JSON()); got != c.want {
 			t.Errorf("got  %s\nwant %s", got, c.want)
 		}
 	}
 	tags := NewMetaTags()
-	tags.Set(NewMetaTag("", "", "", Attr{"title", "first"}))
-	tags.Set(NewMetaTag("", "", "", Attr{"name", "a"}, Attr{"content", "1"}))
-	tags.Set(NewMetaTag("", "", "", Attr{"title", "second"}))
+	tags.Set(NewMetaTag("", "", "", Attr{Key: "title", Value: "first"}))
+	tags.Set(NewMetaTag("", "", "", Attr{Key: "name", Value: "a"}, Attr{Key: "content", Value: "1"}))
+	tags.Set(NewMetaTag("", "", "", Attr{Key: "title", Value: "second"}))
 	if got := rails.EncodeJSON(tags.JSON()); got != `[{"tagName":"title","headKey":"title","innerContent":"second"},{"tagName":"meta","headKey":"meta-name-a","name":"a","content":"1"}]` {
 		t.Errorf("a replacement keeps its place: %s", got)
 	}

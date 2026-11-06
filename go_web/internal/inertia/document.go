@@ -77,6 +77,8 @@ type Document struct {
 	// UserAgent is the User-Agent header, and AsEmbed whether params[:as_embed] is truthy.
 	UserAgent string
 	AsEmbed   bool
+	// BodyID is @body_id.
+	BodyID string
 	// DesignSettings and UserAgentInfo are the JSON the layout writes into its hidden divs.
 	DesignSettings, UserAgentInfo string
 }
@@ -99,7 +101,9 @@ func (l *Layout) Render(d Document) string {
 	if d.AsEmbed {
 		style = "background: transparent"
 	}
-	b.WriteString(`  <body id="" class="` + class + `" style="` + style + "\">\n")
+	b.WriteString(`  <body id="`)
+	web.WriteHTMLEscaped(&b, d.BodyID)
+	b.WriteString(`" class="` + class + `" style="` + style + "\">\n")
 	b.WriteString(`    <div id="design-settings" data-settings="`)
 	web.WriteHTMLEscaped(&b, d.DesignSettings)
 	b.WriteString("\" style=\"display: none;\"></div>\n" + `    <div id="user-agent-info" data-settings="`)
@@ -144,10 +148,10 @@ func (t MetaTag) writeHTML(b *strings.Builder) {
 		web.WriteHTMLEscaped(b, v)
 		b.WriteByte('"')
 	}
-	inner := ""
+	var inner Attr
 	for _, a := range t.data {
 		if a.Key == "inner_content" {
-			inner = a.Value
+			inner = a
 			continue
 		}
 		attr(a.Key, a.Value)
@@ -159,7 +163,15 @@ func (t MetaTag) writeHTML(b *strings.Builder) {
 	attr("inertia", t.headKey)
 	b.WriteByte('>')
 	if !unaryTags[t.tagName] {
-		web.WriteHTMLEscaped(b, inner)
+		switch {
+		case t.tagName == "script" && inner.JSON != nil:
+			// tag_script_inner_content: json_escape(to_json), which EncodeJSON's escaping covers.
+			b.WriteString(rails.EncodeJSON(inner.JSON))
+		case inner.Raw:
+			b.WriteString(inner.Value)
+		default:
+			web.WriteHTMLEscaped(b, inner.Value)
+		}
 		b.WriteString("</" + t.tagName + ">")
 	}
 }
