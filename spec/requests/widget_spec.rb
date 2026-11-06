@@ -248,7 +248,7 @@ describe "Widget Page scenario", js: true, type: :system do
           visit widgets_path
           within_section "Subscribe form", section_element: :section  do
             expect(page).to have_field("Subscribe form embed code", text: seller.external_id)
-            expect(page).not_to have_select("Also add signups to a waitlist")
+            expect(page).not_to have_field("Also add signups to a waitlist")
             copy_button = find_button("Copy embed code")
             copy_button.hover
             expect(copy_button).to have_tooltip(text: "Copy to Clipboard")
@@ -287,6 +287,7 @@ describe "Widget Page scenario", js: true, type: :system do
 
     context "with a product accepting waitlist signups" do
       let!(:waitlist_product) { create(:product, user: seller, name: "Upcoming course", waitlist_enabled: true, purchase_disabled_at: Time.current) }
+      let!(:other_waitlist_product) { create(:product, user: seller, name: "Second course", waitlist_enabled: true, purchase_disabled_at: Time.current, created_at: 1.day.ago) }
 
       let(:profile_embed_code) { /\A(?!.*name="product_id").*name="seller_id" value="#{seller.external_id}"/m }
 
@@ -295,10 +296,18 @@ describe "Widget Page scenario", js: true, type: :system do
       it "puts the selected product in the embed code and the preview" do
         visit widgets_path
         within_section "Subscribe form", section_element: :section do
-          expect(page).to have_select("Also add signups to a waitlist", selected: "No waitlist", options: ["No waitlist", "Upcoming course"])
+          expect(page).to have_unchecked_field("Also add signups to a waitlist")
+          expect(page).not_to have_select("Waitlist product")
           expect(page).to have_field("Subscribe form embed code", with: profile_embed_code)
 
-          select "Upcoming course", from: "Also add signups to a waitlist"
+          check "Also add signups to a waitlist"
+          expect(page).to have_select("Waitlist product", selected: "Upcoming course", options: ["Upcoming course", "Second course"])
+          expect(page).to have_css("[id='#{find_field("Waitlist product")[:"aria-describedby"]}']", text: "Everyone who signs up still subscribes to you.")
+          expect(page).to have_field("Subscribe form embed code", with: /name="product_id" value="#{Regexp.escape(waitlist_product.external_id)}"/)
+
+          select "Second course", from: "Waitlist product"
+          expect(page).to have_field("Subscribe form embed code", with: /name="product_id" value="#{Regexp.escape(other_waitlist_product.external_id)}"/)
+          select "Upcoming course", from: "Waitlist product"
           expect(page).to have_field("Subscribe form embed code", with: /name="product_id" value="#{Regexp.escape(waitlist_product.external_id)}"/)
 
           fill_in "Your email address", with: "waitlister@example.com"
@@ -308,7 +317,8 @@ describe "Widget Page scenario", js: true, type: :system do
         expect(WaitlistEntry.sole.product).to eq(waitlist_product)
 
         within_section "Subscribe form", section_element: :section do
-          select "No waitlist", from: "Also add signups to a waitlist"
+          uncheck "Also add signups to a waitlist"
+          expect(page).not_to have_select("Waitlist product")
           expect(page).to have_field("Subscribe form embed code", with: profile_embed_code)
         end
       end
@@ -328,7 +338,7 @@ describe "Widget Page scenario", js: true, type: :system do
         expect(page).to have_alert(text: "Please subscribe from #{seller.name_or_username}'s subscribe page so we can confirm you're not a bot. #{custom_domain_subscribe_url(host: seller.subdomain_with_protocol)}")
 
         within_section "Subscribe form", section_element: :section do
-          select "Upcoming course", from: "Also add signups to a waitlist"
+          check "Also add signups to a waitlist"
           click_on "Follow"
         end
         expect(page).to have_alert(text: "Please join the waitlist from the product page so we can confirm you're not a bot. #{waitlist_product.long_url}?native=true")
