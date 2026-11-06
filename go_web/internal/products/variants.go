@@ -10,7 +10,8 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
-// variantOption is an alive Variant, as BaseVariant#to_option reads it.
+// variantOption is an alive Variant, as BaseVariant#to_option reads it, or an alive SKU, as
+// Sku#to_option_for_product does; a SKU's customizable_price is never read.
 type variantOption struct {
 	id, categoryID                     int64
 	externalID                         string
@@ -20,6 +21,7 @@ type variantOption struct {
 	customizablePrice                  sql.NullBool
 	position                           sql.NullInt64
 	createdAt                          db.NullTime
+	sku                                bool
 }
 
 // quantityLeft is BaseVariant#quantity_left, with the counter read with the row.
@@ -31,19 +33,45 @@ func (o *variantOption) quantityLeft() *int64 {
 	return &n
 }
 
-// variants are the product's alive categories and Variants. Tier categories, memberships and
-// SKUs are Rails'.
+// variants are the product's alive categories and Variants. Tier categories and memberships
+// are Rails'.
 type variants struct {
 	categories []int64
-	// options is option_records: the first category's Variants, in_order.
+	// options is option_records: the alive SKUs but the default one when SKUs are enabled,
+	// else the first category's Variants, in_order.
 	options []*variantOption
 	all     []*variantOption
 }
 
-// loadVariants reads every alive category and Variant. Rails takes the first category in
-// MySQL's order, which for this index is id order.
 func (h *handler) loadVariants(ctx context.Context, prod *product) (*variants, error) {
-	vs := &variants{}
+	vs, err := h.loadCategoryVariants(ctx, prod)
+	if err != nil || !prod.is(productSkusEnabled) {
+		return vs, err
+	}
+	// skus_alive_not_default has no order; both its index and the primary key give id order.
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT base_variants.id, base_variants.name, base_variants.description,"+
+		" base_variants.max_purchase_count, base_variants.sales_count_for_inventory_cache, base_variants.price_difference_cents,"+
+		" base_variants.duration_in_minutes FROM base_variants WHERE base_variants.type = 'Sku' AND base_variants.link_id = ?"+
+		" AND base_variants.deleted_at IS NULL AND (base_variants.flags & ? = 0) ORDER BY base_variants.id", prod.id, baseVariantIsDefaultSku)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		o := &variantOption{sku: true}
+		if err := rows.Scan(&o.id, &o.name, &o.description, &o.maxPurchaseCount, &o.sold, &o.priceDifference, &o.durationInMinutes); err != nil {
+			return nil, err
+		}
+		o.externalID = h.c.IDs.Encrypt(o.id)
+		vs.options = append(vs.options, o)
+	}
+	return vs, rows.Err()
+}
+
+// loadCategoryVariants reads every alive category and Variant. Rails takes the first category
+// in MySQL's order, which for this index is id order.
+func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*variants, error) {
+	vs, skus := &variants{}, prod.is(productSkusEnabled)
 	rows, err := h.c.DB.QueryContext(ctx, "SELECT variant_categories.id FROM variant_categories"+
 		" WHERE variant_categories.deleted_at IS NULL AND variant_categories.link_id = ? ORDER BY variant_categories.id", prod.id)
 	if err != nil {
@@ -79,13 +107,14 @@ func (h *handler) loadVariants(ctx context.Context, prod *product) (*variants, e
 			&o.durationInMinutes, &o.customizablePrice, &o.position, &o.createdAt); err != nil {
 			return nil, err
 		}
-		o.externalID = h.c.IDs.Encrypt(o.id)
 		vs.all = append(vs.all, o)
-		if o.categoryID == vs.categories[0] {
+		// With SKUs enabled, Rails never orders these.
+		if o.categoryID == vs.categories[0] && !skus {
 			if n := len(vs.options); n > 0 && sameOrder(vs.options[n-1], o) {
 				// in_order leaves ties to MySQL.
 				return nil, fallback("variant order")
 			}
+			o.externalID = h.c.IDs.Encrypt(o.id)
 			vs.options = append(vs.options, o)
 		}
 	}
@@ -119,13 +148,18 @@ func (vs *variants) available() bool {
 	return false
 }
 
-// optionsProps is Link#options: to_option for each, without a membership's recurrence prices.
+// optionsProps is Link#options: to_option for each Variant, without a membership's recurrence
+// prices, or to_option_for_product for each SKU.
 func (h *handler) optionsProps(prod *product, vs *variants) []any {
 	out := make([]any, 0, len(vs.options))
 	for _, o := range vs.options {
-		name := o.name.String
-		if name == "Untitled" {
-			name = prod.name
+		var name any = nullString(o.name)
+		if !o.sku {
+			n := o.name.String
+			if n == "Untitled" {
+				n = prod.name
+			}
+			name = n
 		}
 		out = append(out, rails.NewRHash().
 			Sym("id", o.externalID).

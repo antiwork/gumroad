@@ -89,7 +89,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("is_legacy_subscription", false).
 		Sym("is_tiered_membership", false).
 		Sym("is_recurring_billing", false).
-		Sym("is_physical", false).
+		Sym("is_physical", prod.is(productIsPhysical)).
 		Sym("custom_view_content_button_text", presence(j.get("custom_view_content_button_text"))).
 		Sym("is_multiseat_license", prod.is(productIsMultiseatLicense) && prod.nativeType != "call").
 		Sym("is_licensed", prod.is(productIsLicensed)).

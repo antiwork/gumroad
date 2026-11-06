@@ -227,9 +227,12 @@ func abs(n int) int {
 	return n
 }
 
-// fileSummaries is Product::FileSummaryService#perform for a product that isn't physical or
-// a bundle (both Rails'): one summary shared by every option, or one per option.
+// fileSummaries is Product::FileSummaryService#perform for a product that isn't a bundle
+// (Rails'): one summary shared by every option, or one per option.
 func (h *handler) fileSummaries(ctx context.Context, prod *product, files []productFile, vs *variants) (*rails.RHash, error) {
+	if prod.is(productIsPhysical) {
+		return rails.NewRHash().Sym("product", nil).Sym("options", rails.NewRHash()), nil
+	}
 	productContents, err := h.richContents(ctx, "Link", []int64{prod.id})
 	if err != nil {
 		return nil, err
