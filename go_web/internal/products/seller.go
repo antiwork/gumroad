@@ -16,6 +16,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 )
 
 // User::ReputationSummary's constants.
@@ -35,6 +36,9 @@ func (h *handler) flag(ctx context.Context, name string, userID int64) (bool, er
 	}
 	return on, err
 }
+
+// warmReputationJob is WarmSellerReputationSummaryJob's sidekiq_options.
+var warmReputationJob = sidekiq.Options{Class: "WarmSellerReputationSummaryJob", Queue: "low", Retry: 1}
 
 // loadReputation is seller_reputation_summary twice: the product props' snapshot, less the
 // product's own reviews, and the creator profile's cached aggregate.
@@ -70,16 +74,24 @@ func (h *handler) loadReputation(ctx context.Context, p *page, prod *product, v 
 		sig, sigOK := jsonInt(snapshot.Signature)
 		current = sigOK && sig == version
 	}
-	computedAt, _ := jsonInt(snapshot.ComputedAt)
-	if !current || computedAt <= p.Req.Now.Add(-reputationCacheTTL).Unix() {
-		// WarmSellerReputationSummaryJob is enqueued.
-		return fallback("reputation snapshot refresh")
-	}
-	agg, ok := aggregateOf(snapshot.Aggregate)
-	if !ok {
+	computedAt, computedOK := jsonInt(snapshot.ComputedAt)
+	if current && !computedOK {
+		// Comparing a missing computed_at raises.
 		return fallback("reputation snapshot")
 	}
-	v.snapshotReputation = buildSummary(subtractProduct(agg, prod, v.reviewStat))
+	if !current || computedAt <= p.Req.Now.Add(-reputationCacheTTL).Unix() {
+		if h.c.Page.Sidekiq == nil {
+			return fallback("reputation snapshot refresh")
+		}
+		p.warmReputation = true
+	}
+	if current {
+		agg, ok := aggregateOf(snapshot.Aggregate)
+		if !ok {
+			return fallback("reputation snapshot")
+		}
+		v.snapshotReputation = buildSummary(subtractProduct(agg, prod, v.reviewStat))
+	}
 
 	// The profile's: Rails.cache.fetch keyed by the products' lifecycle and the version.
 	lifecycle, err := h.productsCacheKey(p)
