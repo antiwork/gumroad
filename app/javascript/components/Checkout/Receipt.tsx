@@ -5,6 +5,7 @@ import { createAccount, CreateAccountPayload } from "$app/data/account";
 import type { ErrorLineItemResult, LineItemResult, SuccessfulLineItemResult } from "$app/data/purchase";
 import { trackUserProductAction } from "$app/data/user_action_event";
 import { classNames } from "$app/utils/classNames";
+import { freeSignupSummary } from "$app/utils/purchaseConfirmation";
 import { assertResponseError } from "$app/utils/request";
 
 import { Button, NavigationButton } from "$app/components/Button";
@@ -312,6 +313,7 @@ export const Receipt = ({
   const user = useLoggedInUser();
   const [state] = useState();
   if (state.status.type !== "finished") return null;
+  const freeSignup = freeSignupSummary(results);
   return (
     <Card className="mx-auto my-8 max-w-2xl">
       <CardContent asChild>
@@ -326,7 +328,13 @@ export const Receipt = ({
       </CardContent>
       <CardContent asChild details>
         <header className="space-y-1">
-          <h2>{results.some(({ result }) => !result.success) ? "Summary" : "Your purchase was successful!"}</h2>
+          <h2>
+            {results.some(({ result }) => !result.success)
+              ? "Summary"
+              : freeSignup.free
+                ? `Your free signup${freeSignup.sellerName ? ` with ${freeSignup.sellerName}` : ""} is confirmed!`
+                : "Your purchase was successful!"}
+          </h2>
 
           {results.some(({ result }) => result.success) ? (
             <p className="text-muted">
@@ -338,7 +346,9 @@ export const Receipt = ({
                   !item.product.free_trial,
               )
                 ? `We charged your card and sent a receipt to ${state.email}`
-                : `We sent a receipt to ${state.email}`}
+                : freeSignup.free
+                  ? `We sent a confirmation to ${state.email}`
+                  : `We sent a receipt to ${state.email}`}
             </p>
           ) : null}
         </header>

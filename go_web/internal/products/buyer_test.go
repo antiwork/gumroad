@@ -16,10 +16,10 @@ import (
 // through the evaluators the product page calls.
 func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 	const buyerID, codeID, otherID = int64(1_797_001), int64(1_797_101), int64(1_797_201)
-	confirmed := &signedInUser{id: buyerID, email: sql.NullString{String: "buyer@example.com", Valid: true},
+	confirmed := &signedInUser{user: user{id: buyerID}, email: sql.NullString{String: "buyer@example.com", Valid: true},
 		confirmedAt: db.NullTime{Time: testNow, Valid: true}}
-	unconfirmed := &signedInUser{id: buyerID, email: confirmed.email}
-	blank := &signedInUser{id: buyerID, email: sql.NullString{Valid: true}, confirmedAt: confirmed.confirmedAt}
+	unconfirmed := &signedInUser{user: user{id: buyerID}, email: confirmed.email}
+	blank := &signedInUser{user: user{id: buyerID}, email: sql.NullString{Valid: true}, confirmedAt: confirmed.confirmedAt}
 	purchase := func(t *testing.T, conn *sql.DB, id int64, columns map[string]any) {
 		row := map[string]any{"id": id, "seller_id": sellerID, "link_id": productID, "purchaser_id": buyerID,
 			"email": "buyer@example.com", "purchase_state": "successful", "created_at": testNow.AddDate(0, -2, 0), "updated_at": testNow}
@@ -123,8 +123,11 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 			setup: func(t *testing.T, conn *sql.DB) {
 				purchase(t, conn, 1_797_301, map[string]any{"purchaser_id": nil, "email": ""})
 			}},
-		{name: "a limited code for a returning customer", buyer: confirmed, code: map[string]any{"new_customers_only": true,
-			"max_purchase_count": 5}, errorCode: "not_new_customer", setup: func(t *testing.T, conn *sql.DB) { purchase(t, conn, 1_797_301, nil) }},
+		// not_new_customer outranks sold_out.
+		{name: "a sold-out code for a returning customer", buyer: confirmed, code: map[string]any{"new_customers_only": true,
+			"max_purchase_count": 1}, errorCode: "not_new_customer", setup: func(t *testing.T, conn *sql.DB) {
+			purchase(t, conn, 1_797_301, map[string]any{"offer_code_id": codeID})
+		}},
 		{name: "a legacy code for new and existing customers", buyer: confirmed,
 			code: map[string]any{"new_customers_only": true, "existing_customers_only": true}, errorCode: "not_existing_customer",
 			setup: func(t *testing.T, conn *sql.DB) { purchase(t, conn, 1_797_301, nil) }},
@@ -147,8 +150,8 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 				c.setup(t, conn)
 			}
 			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
-			now := testNow.Add(time.Hour)
-			fromURL, errorCode, err := h.evaluateURLCode(t.Context(), prod, "loyal", c.buyer, now)
+			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, viewer: c.buyer}
+			fromURL, errorCode, err := h.evaluateURLCode(p, prod, "loyal")
 			if err != nil || errorCode != c.errorCode || (fromURL == nil) != (c.errorCode != "") {
 				t.Errorf("URL code: %v %q %v, want %q", fromURL != nil, errorCode, err, c.errorCode)
 			}
@@ -156,7 +159,7 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if valid, err := h.evaluateOfferCode(t.Context(), prod, stored, c.buyer, now); err != nil || valid != (c.errorCode == "") {
+			if valid, err := h.evaluateOfferCode(p, prod, stored); err != nil || valid != (c.errorCode == "") {
 				t.Errorf("default code: %v %v, want %v", valid, err, c.errorCode == "")
 			}
 		})
@@ -167,7 +170,7 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 // then weighs against the sale.
 func TestABuyersExistingCustomerDefault(t *testing.T) {
 	const loyalID, saleID = int64(1_797_111), int64(1_797_112)
-	buyer := &signedInUser{id: 1_797_001}
+	buyer := &signedInUser{user: user{id: 1_797_001}}
 	for _, c := range []struct {
 		name, reason, code string
 		sale               bool

@@ -57,8 +57,8 @@ func bucketsProps(buckets []catalogBucket) []any {
 	return out
 }
 
-// storefront is whether the seller's pages render as Products/Profile/Show for a signed-out
-// visitor, off the Discover layout (a declined param).
+// storefront is whether the seller's pages render as Products/Profile/Show for a visitor who
+// isn't the seller, off the Discover layout (a declined param).
 func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) }
 
 // productsSection is a saved SellerProfileProductsSection, on the profile or a product.
@@ -699,7 +699,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 		}
 	}
 	base := price
-	price, err := cardPriceCents(c, base, p.Req.Now)
+	price, err := h.cardPriceCents(p, c, base)
 	if err != nil {
 		return nil, err
 	}

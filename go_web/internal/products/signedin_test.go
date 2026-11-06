@@ -1,0 +1,284 @@
+package products
+
+import (
+	"database/sql"
+	"html"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/antiwork/gumroad/go_web/internal/elastic"
+	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/session"
+	"github.com/antiwork/gumroad/go_web/internal/session/sessiontest"
+	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
+)
+
+const buyerID = int64(1_796_001)
+
+// signedIn is the session cookie Devise and the CSRF commit leave for a signed-in user.
+func (e *testEnv) signedIn(userID int64, extra map[string]any) map[string]string {
+	e.t.Helper()
+	s := rails.NewRHash().
+		Str("session_id", "0123456789abcdef0123456789abcdef").
+		Str("warden.user.user.key", []any{[]any{userID}, "salt"}).
+		Str("warden.user.user.session", rails.NewRHash().Str("last_sign_in_at", testNow.Unix())).
+		Str("_csrf_token", session.GenerateCSRFToken())
+	for k, v := range extra {
+		s.Str(k, v)
+	}
+	cookie := sessiontest.Encrypt(e.t, testSecretKeyBase, "_gumroad_app_session", []byte(rails.EncodeJSON(s)), testNow.Add(time.Hour))
+	return map[string]string{"Cookie": "_gumroad_app_session=" + url.QueryEscape(cookie)}
+}
+
+func addBuyer(t *testing.T, conn *sql.DB, extra map[string]any) {
+	row := map[string]any{"username": "gowebbuyer", "external_id": "1796001", "name": "Buyer", "email": "buyer@example.com",
+		"confirmed_at": testNow, "timezone": "Pacific Time (US & Canada)", "currency_type": "eur", "user_risk_state": "compliant"}
+	for k, v := range extra {
+		row[k] = v
+	}
+	testdb.User(t, conn, buyerID, row)
+}
+
+// A signed-in visitor on someone else's product: the shared props say who they are, and the
+// page lists their wishlists and their currency.
+func TestASignedInVisitor(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	addBuyer(t, conn, nil)
+	testdb.Insert(t, conn, "wishlists", map[string]any{"id": int64(1_796_101), "user_id": buyerID, "name": "Gifts",
+		"created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "wishlists", map[string]any{"id": int64(1_796_102), "user_id": buyerID, "name": "Gone", "deleted_at": testNow,
+		"created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "wishlist_products", map[string]any{"id": int64(1_796_201), "wishlist_id": int64(1_796_101), "product_id": productID,
+		"quantity": 1, "rent": false, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "wishlists", map[string]any{"id": int64(1_796_103), "user_id": buyerID, "name": "Later",
+		"created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "wishlist_products", map[string]any{"id": int64(1_796_202), "wishlist_id": int64(1_796_103), "product_id": productID,
+		"variant_id": int64(1_796_299), "recurrence": "monthly", "quantity": 2, "rent": true, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "wishlist_products", map[string]any{"id": int64(1_796_203), "wishlist_id": int64(1_796_103), "product_id": productID,
+		"quantity": 1, "rent": false, "deleted_at": testNow, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "dashboard_nav_promotions", map[string]any{"id": int64(1_796_301), "user_id": buyerID, "nav_item": "library",
+		"created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "dashboard_nav_promotions", map[string]any{"id": int64(1_796_302), "user_id": buyerID, "nav_item": "seeded",
+		"created_at": testNow, "updated_at": testNow})
+
+	w := e.get(host, "/l/guide", e.signedIn(buyerID, nil))
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	body := w.Body.String()
+	page := html.UnescapeString(dataPage.FindStringSubmatch(body)[1])
+	policies := `{"affiliate_requests_onboarding_form":{"update":true},"direct_affiliate":{"create":true,"update":true},` +
+		`"collaborator":{"create":true,"update":true},"product":{"create":true},"product_review_response":{"update":true},` +
+		`"balance":{"index":true,"export":true},"checkout_offer_code":{"create":true},"checkout_form":{"update":true},` +
+		`"upsell":{"create":true},"settings_payments_user":{"show":true},"settings_main_user":{"update_username":true},` +
+		`"settings_profile":{"manage_social_connections":true,"update":true},"settings_third_party_analytics_user":{"update":true},` +
+		`"installment":{"create":true},"workflow":{"create":true},"utm_link":{"index":true},"community":{"index":false},` +
+		`"churn":{"show":true},"page":{"index":true,"create":true},"user":{"view_store_agent":true,"use_store_agent":false}}`
+	for _, want := range []string{
+		`"logged_in_user":{"id":"1796001","email":"buyer@example.com","name":"Buyer","avatar_url":"`,
+		`","confirmed":true,"team_memberships":[],"can_create_brand_account":false,"has_payout_setup_to_port":false,` +
+			`"can_port_bank_payout_setup":true,"will_copy_bank_payout":false,"policies":` + policies +
+			`,"promoted_nav_items":["library"],"lazy_load_offscreen_discover_images":false},"current_seller":{"id":"1796001",` +
+			`"email":"buyer@example.com","name":"Buyer","subdomain":"gowebbuyer.gumroad.com","avatar_url":"`,
+		`","is_buyer":false,"time_zone":{"name":"America/Los_Angeles","offset":-28800},"has_published_products":false,` +
+			`"can_publish_products":false,"publish_blocked_reason":"no_payout_method","no_payout_rail_in_compliance_country":false,` +
+			`"legal_guardian_requirement_met":true,"legal_guardian_unsupported":false,"is_name_invalid_for_email_delivery":false,` +
+			`"profile_background_color":"#ffffff","profile_highlight_color":"#ff90e8","profile_font":"ABC Favorit"},"csp_nonce":`,
+		`"current_user":{"name":"Buyer","avatar_url":"`,
+		`"title":"Guide \u003c1\u003e","detected_buyer_currency":null,"current_user":{"name":"Buyer","avatar_url":"`,
+		`","impersonated_user":null},"prompt_passkey_setup":false,"is_mobile_app_web_view":false,`,
+		`"wishlists":[{"id":"%[1]s","name":"Gifts","selections_in_wishlist":[{"variant_id":null,"recurrence":null,"rent":false,"quantity":1}]},` +
+			`{"id":"%[2]s","name":"Later","selections_in_wishlist":[{"variant_id":"%[3]s","recurrence":"monthly","rent":true,"quantity":2}]}]`,
+		`"currency_code":"eur","show_ratings_filter":`,
+	} {
+		want = strings.NewReplacer("%[1]s", e.ids.Encrypt(1_796_101), "%[2]s", e.ids.Encrypt(1_796_103), "%[3]s", e.ids.Encrypt(1_796_299)).Replace(want)
+		if !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	}
+	if !strings.Contains(body, `<meta property="gr:logged_in_user:id" content="1796001" inertia=`) {
+		t.Error("gr:logged_in_user:id")
+	}
+}
+
+func TestASignedInVisitorsShapes(t *testing.T) {
+	for _, c := range []struct {
+		name, reason, target string
+		setup                func(t *testing.T, e *testEnv, conn *sql.DB)
+		user                 int64
+		session              map[string]any
+		wants                []string
+	}{
+		{name: "the product's seller", reason: "product's seller", user: sellerID},
+		{name: "a buyer of the product", reason: "signed-in purchase", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_796_401), "link_id": productID, "seller_id": sellerID,
+				"purchaser_id": buyerID, "price_cents": 500, "purchase_state": "failed", "email": "buyer@example.com",
+				"created_at": testNow, "updated_at": testNow})
+		}},
+		{name: "a collaborator on the product", reason: "product's collaborator", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "affiliates", map[string]any{"id": int64(1_796_501), "type": "Collaborator", "seller_id": sellerID,
+				"affiliate_user_id": buyerID, "created_at": testNow, "updated_at": testNow})
+			testdb.Insert(t, conn, "affiliates_links", map[string]any{"id": int64(1_796_502), "affiliate_id": int64(1_796_501),
+				"link_id": productID, "created_at": testNow, "updated_at": testNow})
+		}},
+		// The code is evaluated for the buyer; one that doesn't exist is invalid for anyone.
+		{name: "a code in the URL", target: "/l/guide/NOPE", wants: []string{`"discount_code":{"valid":false,`}},
+		{name: "staff", reason: "team member", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			mustExec(t, conn, "UPDATE users SET flags = flags | ? WHERE id = ?", int64(1)<<27, buyerID)
+		}},
+		{name: "an unknown time zone", reason: "time zone", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			mustExec(t, conn, "UPDATE users SET timezone = 'Atlantis' WHERE id = ?", buyerID)
+		}},
+		{name: "a compliance country this port has no name for", reason: "compliance country", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "user_compliance_info", map[string]any{"id": int64(1_796_601), "user_id": buyerID, "country": "Atlantis",
+				"created_at": testNow, "updated_at": testNow})
+		}},
+		// A seller with payouts in India: native payouts but no portable bank.
+		{name: "an Indian seller's payout setup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "user_compliance_info", map[string]any{"id": int64(1_796_602), "user_id": buyerID, "country": "India",
+				"created_at": testNow, "updated_at": testNow})
+			testdb.Insert(t, conn, "bank_accounts", map[string]any{"id": int64(1_796_603), "user_id": buyerID, "type": "IndianBankAccount",
+				"created_at": testNow, "updated_at": testNow})
+		}, wants: []string{`"has_payout_setup_to_port":false,"can_port_bank_payout_setup":false,"will_copy_bank_payout":false,`,
+			`"no_payout_rail_in_compliance_country":false,`}},
+		{name: "a portable bank", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "user_compliance_info", map[string]any{"id": int64(1_796_604), "user_id": buyerID, "country": "United States",
+				"created_at": testNow, "updated_at": testNow})
+			testdb.Insert(t, conn, "bank_accounts", map[string]any{"id": int64(1_796_605), "user_id": buyerID, "type": "AchAccount",
+				"created_at": testNow, "updated_at": testNow})
+		}, wants: []string{`"has_payout_setup_to_port":true,"can_port_bank_payout_setup":true,"will_copy_bank_payout":true,`}},
+		// A minor outside the US can't have a guardian.
+		{name: "a minor outside the US", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "user_compliance_info", map[string]any{"id": int64(1_796_606), "user_id": buyerID, "country": "Canada",
+				"birthday": testNow.AddDate(-17, 0, 0), "created_at": testNow, "updated_at": testNow})
+		}, wants: []string{`"legal_guardian_requirement_met":false,"legal_guardian_unsupported":true,`}},
+		{name: "a payout setup staff rejected", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "comments", map[string]any{"id": int64(1_796_801), "commentable_id": buyerID, "commentable_type": "User",
+				"comment_type": "payout_note", "author_id": int64(767082), "content": "No", "json_data": `{"payout_setup_rejection":true}`,
+				"created_at": testNow, "updated_at": testNow})
+		}, wants: []string{`"can_publish_products":false,"publish_blocked_reason":"payout_setup_rejected",`}},
+		// A featured section renders its product for the same visitor, so their purchase of it counts.
+		{name: "a featured product the visitor bought", reason: "signed-in purchase", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_796_901), "user_id": sellerID, "name": "Featured",
+				"unique_permalink": "gowebsf", "price_cents": 700, "created_at": testNow, "updated_at": testNow})
+			testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_796_902), "link_id": int64(1_796_901), "price_cents": 700,
+				"currency": "usd", "created_at": testNow, "updated_at": testNow})
+			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_796_903), "link_id": int64(1_796_901), "seller_id": sellerID,
+				"purchaser_id": buyerID, "price_cents": 700, "purchase_state": "successful", "email": "buyer@example.com",
+				"created_at": testNow, "updated_at": testNow})
+			addSection(t, conn, 1_796_904, profileFeaturedSectionType, "Pick", `{"featured_product_id":1796901}`)
+			listSections(t, conn, `{"sections":[1796904]}`)
+		}},
+		{name: "a passkey prompt", session: map[string]any{"prompt_passkey_setup": buyerID},
+			wants: []string{`"prompt_passkey_setup":true,`}},
+		{name: "a name with a colon and a team", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			mustExec(t, conn, "UPDATE users SET name = 'Shop: Buyer' WHERE id = ?", buyerID)
+			testdb.Insert(t, conn, "team_memberships", map[string]any{"id": int64(1_796_701), "user_id": buyerID, "seller_id": buyerID,
+				"role": "owner", "created_at": testNow, "updated_at": testNow})
+		}, wants: []string{`"is_name_invalid_for_email_delivery":true,`, `"team_memberships":[{"id":"%[1]s","seller_name":"Shop: Buyer","seller_avatar_url":"`,
+			`","has_some_read_only_access":false,"is_selected":true}]`}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			addBuyer(t, conn, nil)
+			if c.setup != nil {
+				c.setup(t, e, conn)
+			}
+			user := c.user
+			if user == 0 {
+				user = buyerID
+			}
+			target := c.target
+			if target == "" {
+				target = "/l/guide"
+			}
+			headers := e.signedIn(user, c.session)
+			if c.reason != "" {
+				headers["X-Go-Web-Dry-Run"] = e.dryRun(host, target, testNow)["X-Go-Web-Dry-Run"]
+			}
+			w := e.get(host, target, headers)
+			if c.reason != "" {
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Fatalf("%d %q, want fallback %q", w.Code, w.Header().Get("X-Go-Web-Fallback"), c.reason)
+				}
+				return
+			}
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+			}
+			e.wantAll(t, html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]), c.wants, 1_796_701)
+		})
+	}
+}
+
+func mustExec(t *testing.T, conn *sql.DB, query string, args ...any) {
+	t.Helper()
+	if _, err := conn.Exec(query, args...); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A seller with completed payouts gets the agent once their sales, as seller and as affiliate,
+// reach the minimum: the seller's sums are Floats truncated after adding, the affiliate's each.
+func TestAStoreAgentSeller(t *testing.T) {
+	var bodies []string
+	fee := "1000.4"
+	search := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(body))
+		if r.URL.Path != "/purchases/_search" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(string(body), `"price_cents_total"`) {
+			io.WriteString(w, `{"aggregations":{"price_cents_total":{"value":10000.7},"fee_cents_total":{"value":`+fee+`},`+
+				`"amount_refunded_cents_total":{"value":0.0},"fee_refunded_cents_total":{"value":0.0},"affiliate_credit_amount_cents_total":{"value":0.0},`+
+				`"affiliate_credit_amount_partially_refunded_cents_total":{"value":0.0},"direct_affiliate_credit_amount_cents_total":{"value":0.0},`+
+				`"direct_affiliate_credit_amount_partially_refunded_cents_total":{"value":0.0}}}`)
+			return
+		}
+		io.WriteString(w, `{"aggregations":{"affiliate_credit_amount_cents_own":{"total":{"value":999.9}},`+
+			`"direct_affiliate_credit_amount_cents_own":{"total":{"value":0.9}},"affiliate_credit_amount_partially_refunded_cents_own":{"total":{"value":0.0}},`+
+			`"direct_affiliate_credit_amount_partially_refunded_cents_own":{"total":{"value":0.0}}}}`)
+	}))
+	defer search.Close()
+	// 10000.7 - fee truncates after the subtraction, then the affiliate's 999.9 and 0.9 each
+	// truncate to 999 and 0: a 1000.4 fee leaves 9999, a 999.6 one 10000.
+	for _, c := range []struct {
+		fee  string
+		want string
+	}{{"1000.4", `"use_store_agent":false`}, {"999.6", `"use_store_agent":true`}} {
+		t.Run(c.fee, func(t *testing.T) {
+			bodies, fee = nil, c.fee
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			addBuyer(t, conn, nil)
+			testdb.Insert(t, conn, "payments", map[string]any{"id": int64(1_797_501), "user_id": buyerID, "state": "completed",
+				"created_at": testNow, "updated_at": testNow})
+			client, err := elastic.NewWithClient(search.URL, search.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.config.Page.Search = client
+			w := e.get(host, "/l/guide", e.signedIn(buyerID, nil))
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+			if !strings.Contains(page, c.want) {
+				t.Errorf("want %s", c.want)
+			}
+			if len(bodies) != 2 || !strings.Contains(bodies[0], `"seller_id":[1796001]`) ||
+				!strings.Contains(bodies[1], `"minimum_should_match":1`) || !strings.Contains(bodies[1], `"affiliate_credit_affiliate_user_id":1796001`) {
+				t.Errorf("bodies %v", bodies)
+			}
+		})
+	}
+}

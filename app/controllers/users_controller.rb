@@ -99,7 +99,11 @@ class UsersController < ApplicationController
 
   def coffee
     if params[:purchase_email].present?
-      flash[:notice] = "Your purchase was successful! We sent a receipt to #{params[:purchase_email]}."
+      flash[:notice] = if params[:purchase_free] == "true"
+        "You're in! Your free signup with #{@user.name_or_username} is confirmed. We sent a confirmation to #{params[:purchase_email]}."
+      else
+        "Your purchase was successful! We sent a receipt to #{params[:purchase_email]}."
+      end
       return redirect_to request.path
     end
 

@@ -7,8 +7,9 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
-// productProps adds ProductPresenter::ProductProps#props for a signed-out visitor, in its key
-// order, for the product shapes unportedShape lets through.
+// productProps adds ProductPresenter::ProductProps#props, in its key order, for the product shapes
+// unportedShape lets through and a visitor with no part in the product: can_edit and purchase
+// assume it.
 func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *view) {
 	ids, seller := h.c.IDs, p.seller
 	externalID := ids.Encrypt(prod.id)
@@ -109,7 +110,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("sale_label", v.discount.label).
 		Sym("selection_discounts", selectionDiscounts(prod, v, discountCode)).
 		Sym("purchase", nil).
-		Sym("wishlists", []any{})
+		Sym("wishlists", v.wishlists)
 }
 
 // pwywDefault is pwyw_default_price_cents.
@@ -249,7 +250,7 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 		profile.Sym("reputation", v.profileReputation)
 	}
 	return rails.NewRHash().
-		Sym("currency_code", "usd").
+		Sym("currency_code", viewerCurrency(p)).
 		Sym("show_ratings_filter", v.showRatingsFilter).
 		Sym("creator_profile", profile).
 		Sym("sections", []any{})

@@ -186,13 +186,16 @@ module CheckoutHelpers
       if error.present?
         expect(page).to have_alert(text: error) if error != true
       else
+        buyer_email = logged_in_user&.email&.downcase || email&.downcase
         if gift.present? || product.is_in_preorder_state
           # Specific cases where we show the receipt instead of the product content
-          expect(page).to have_text("Your purchase was successful!", wait: 60)
-          expect(page).to have_text(logged_in_user&.email&.downcase || email&.downcase)
+          expect(page).to have_text(is_free ? "Your free signup with #{product.user.name_or_username} is confirmed!" : "Your purchase was successful!", wait: 60)
+          expect(page).to have_text(buyer_email)
+        elsif is_free
+          expect(page).to have_alert(text: "You're in! Your free signup with #{product.user.name_or_username} is confirmed. We sent a confirmation to #{buyer_email}", visible: :all, wait: 60)
         else
           # The alert show/hide timing can cause specs to be flaky
-          expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{logged_in_user&.email&.downcase || email&.downcase}", visible: :all, wait: 60)
+          expect(page).to have_alert(text: "Your purchase was successful! We sent a receipt to #{buyer_email}", visible: :all, wait: 60)
         end
 
         expect(page).to have_text("You bought this for #{gift[:email] || gift[:name]}") if gift&.dig(:email).present? || gift&.dig(:name).present?
