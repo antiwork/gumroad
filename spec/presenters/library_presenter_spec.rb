@@ -28,6 +28,7 @@ describe LibraryPresenter do
           avatar_url: ActionController::Base.helpers.image_url("gumroad-default-avatar-5.png")
         },
         thumbnail_url: nil,
+        preview_images: [],
         native_type: "membership",
       }
     end
@@ -61,6 +62,15 @@ describe LibraryPresenter do
         show_archived_only: false,
         subscriptions_only: false
       )
+    end
+
+    it "lists only the live image previews, in order, as the product page carousel does" do
+      first = create(:asset_preview, link: product)
+      create(:asset_preview_mov, link: product)
+      deleted = create(:asset_preview, link: product)
+      deleted.mark_deleted!
+
+      expect(results[0][:product][:preview_images]).to eq([first.as_json])
     end
 
     it "does not return the URL of a deleted thumbnail" do

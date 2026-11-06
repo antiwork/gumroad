@@ -204,6 +204,7 @@ class LibraryPresenter
             name: product.name,
             creator: product_seller_data[product.user.id],
             thumbnail_url: product.thumbnail_or_cover_url,
+            preview_images: product.display_asset_previews.select(&:image_url?).map(&:as_json),
             native_type: product.native_type,
           },
           purchase: {
