@@ -262,6 +262,32 @@ describe("Checkout cart editing", () => {
   });
 });
 
+describe("Checkout PWYW edit hint with a discount code", () => {
+  it("hints the suggested amount before the code, since the cart stores that amount", () => {
+    const product = cartProduct({ price_cents: 2_400, pwyw: { suggested_price_cents: 2_400 }, has_offer_codes: true });
+    const discount = {
+      type: "percent" as const,
+      percents: 30,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    };
+    const cart: CartState = {
+      items: [cartItem({ product, price: 2_400 })],
+      discountCodes: [{ code: "SAVE30", products: { prod: discount }, fromUrl: false }],
+    };
+
+    const view = renderCheckout(buildState({ products: [stateProduct({ price: 2_400 })] }), cart);
+    const [editButton] = view.getAllByText("Edit");
+    if (!editButton) throw new Error("Expected an edit button");
+    fireEvent.click(editButton);
+
+    expect(view.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("24+");
+  });
+});
+
 describe("Checkout buyer-currency line amounts", () => {
   // The PR's odd-cent example: 334 + 667 cents at a 1.25 CAD rate. Rounding each line in
   // the browser renders CA$4.18 + CA$8.34 = CA$12.52 while the locked/charged total is

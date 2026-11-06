@@ -18,7 +18,8 @@ class ReceiptPresenter::ItemInfo
   # the buyer's currency would sit under a USD total. Left undecided by the mails that
   # render a single item section with no receipt around it (the upcoming-call reminder),
   # which then decide from this purchase alone.
-  def initialize(purchase, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED)
+  def initialize(purchase, presentment_currency: BuyerPresentmentDisplay::PRESENTMENT_CURRENCY_UNDECIDED, screen_seller_text: true)
+    @screen_seller_text = screen_seller_text
     @product = purchase.link
     @purchase = purchase
     @seller = purchase.link.user
@@ -68,7 +69,10 @@ class ReceiptPresenter::ItemInfo
     end
 
     def custom_receipt_note
-      product.custom_receipt_text.presence
+      text = product.custom_receipt_text.presence
+      return text unless @screen_seller_text
+
+      ContentModeration::SellerMailTextGuard.screen(text, seller:, source: "receipt custom text on product ##{product.id}")
     end
 
     def free_trial_purchase_note

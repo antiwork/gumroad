@@ -166,10 +166,6 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 		// nil is the virtual default-products section.
 		sections = []*productsSection{nil}
 	}
-	if p.hasAutoApplyCode {
-		// Cards price through the seller's auto-applied code and label its sale.
-		return nil, fallback("catalog auto-apply")
-	}
 	searches, err := h.railsCatalogSearches(p, sections)
 	if err != nil {
 		return nil, err
@@ -266,6 +262,9 @@ func (h *handler) productsSectionsProps(p *page, omit *product, sections []*prod
 		built[i] = sectionCards{total, shown}
 	}
 	if err := h.cardThumbnails(p, allShown); err != nil {
+		return nil, err
+	}
+	if err := h.cardOffers(p, allShown); err != nil {
 		return nil, err
 	}
 	out := make([]any, 0, len(sections))
@@ -472,6 +471,9 @@ type card struct {
 	thumbnailURL         any
 	// tiers are a tiered membership's preloaded tiers, with their alive buy prices.
 	tiers []*variantOption
+	// offer is effective_default_offer_code; onSale is whether it's the seller's sale.
+	offer  *offerCode
+	onSale bool
 }
 
 // loadCards is section_props' Link.find of the hits, in hit order, for the shapes whose card
@@ -637,10 +639,8 @@ func unportedCard(sellerID int64, prod *product, hasSku bool) string {
 	case prod.userID != sellerID:
 		// url_for_product_page and the seller's auto-apply code are the subdomain seller's.
 		return "seller"
-	case !prod.purchaseType.Valid || prod.purchaseType.Int64 != purchaseTypeBuyOnly:
-		return "rental"
-	case prod.defaultOfferCodeID.Valid:
-		return "default offer code"
+	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
+		return "purchase type"
 	case hasSku:
 		return "skus"
 	case !prod.priceCurrencyType.Valid || !known:
@@ -681,7 +681,8 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 				rows = append(rows, r)
 			}
 		}
-		last, agreed := lastPrice(buyPrices(prod, rows))
+		// default_price_cents: a rent-only product's is its rental price.
+		last, agreed := lastPrice(pricesForCurrency(prod, rows, prod.rentOnly()))
 		if !agreed {
 			return nil, fallback("catalog price")
 		}
@@ -698,14 +699,21 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 			break
 		}
 	}
+	base := price
+	price, err := cardPriceCents(c, base, p.Req.Now)
+	if err != nil {
+		return nil, err
+	}
 	ratings := cardRatings(prod, c.stat)
 	pc := prod.productCurrency()
 	var display *currencyDisplay
 	if buyer != nil {
-		var err error
 		if display, err = h.currencyDisplayFor(p, prod, c.hasPlan, *buyer, &price); err != nil {
 			return nil, err
 		}
+	}
+	if display != nil && price < base {
+		display.setOriginal(base, pc)
 	}
 	externalID := h.c.IDs.Encrypt(prod.id)
 	props := rails.NewRHash().
@@ -724,11 +732,18 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 	buyerLocalPriceProps(props, pc, display)
 	// url_for_product_page on the seller's own subdomain, whose port declined() rules out.
 	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) + "?layout=profile"
-	return props.
-		Sym("is_pay_what_you_want", pwyw).
+	props.Sym("is_pay_what_you_want", pwyw).
 		Sym("url", url).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).
-		Sym("recurrence", recurrence), nil
+		Sym("recurrence", recurrence)
+	if price < base {
+		props.Sym("original_price_cents", base)
+		// auto_apply_sale_label.
+		if c.onSale {
+			props.Sym("sale_label", c.offer.displayedSaleLabel())
+		}
+	}
+	return props, nil
 }
 
 // cardThumbnails is thumbnail_or_cover_url for each card: thumbnail_alive&.url, else the

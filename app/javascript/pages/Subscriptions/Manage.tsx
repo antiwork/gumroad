@@ -9,6 +9,7 @@ import {
   initialSubscriptionUnitPrice,
   selectedSubscriptionTotal,
   planChangeDiscount,
+  subscriptionPriceIncludesDiscount,
   subscriptionPWYWMinimumUnitPrice,
   withOncePerCartMinimum,
 } from "$app/pages/Subscriptions/price";
@@ -514,6 +515,7 @@ export default function SubscriptionsManage() {
             discountForSelection={(previewSelection) =>
               planChangeDiscount(optionDiscounts, pricingDiscount, previewSelection)
             }
+            pwywAmountIsAfterDiscount={subscriptionPriceIncludesDiscount(pricingDiscount)}
             pwywMinimumPriceCents={subscriptionPWYWMinimumUnitPrice(priceCents, discountedPriceCents, pricingDiscount)}
           />
         </CardContent>

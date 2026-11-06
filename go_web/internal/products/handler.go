@@ -74,6 +74,7 @@ type page struct {
 	hasAutoApplyCode   bool
 	hasProductSections bool
 	settleable         *settleability
+	autoApply          *offerCode
 	// flags holds pageFlag's reads.
 	flags       map[string]bool
 	productsKey string
