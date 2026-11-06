@@ -280,6 +280,12 @@ func insertOfferCode(t *testing.T, conn *sql.DB, id int64, columns map[string]an
 	testdb.Insert(t, conn, "offer_codes", row)
 }
 
+// insertExcludedProduct leaves product out of the code.
+func insertExcludedProduct(t *testing.T, conn *sql.DB, id, code, product int64) {
+	testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": id, "offer_code_id": code,
+		"product_id": product, "created_at": testNow, "updated_at": testNow})
+}
+
 // insertPlatformAccount adds MerchantAccount.gumroad("stripe").
 func insertPlatformAccount(t *testing.T, conn *sql.DB, currency, jsonData string) {
 	testdb.Insert(t, conn, "merchant_accounts", map[string]any{"id": int64(1_790_901), "charge_processor_id": "stripe",
@@ -990,10 +996,7 @@ func TestDefaultOfferCodes(t *testing.T) {
 		}
 	}
 	saleEntry := `{"discount_code":` + sale20 + `,"sale_label":"Sale"}`
-	exclude := func(t *testing.T, conn *sql.DB, id, code, product int64) {
-		testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": id, "offer_code_id": code,
-			"product_id": product, "created_at": testNow, "updated_at": testNow})
-	}
+	exclude := insertExcludedProduct
 	// otherID is another product of the seller's, which wantAll's %[4]s names.
 	const otherID = int64(1_795_801)
 	otherProduct := func(t *testing.T, conn *sql.DB, id int64, permalink string) {
@@ -1214,8 +1217,7 @@ func TestURLOfferCodes(t *testing.T) {
 		{name: "a code that leaves this product out", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
-				testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": int64(1_796_101), "offer_code_id": codeID,
-					"product_id": productID, "created_at": testNow, "updated_at": testNow})
+				insertExcludedProduct(t, conn, 1_796_101, codeID, productID)
 			}},
 		{name: "a fixed code in another currency", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
