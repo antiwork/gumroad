@@ -2,13 +2,16 @@ package products
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -54,111 +57,244 @@ func bucketsProps(buckets []catalogBucket) []any {
 // sections of its own (unportedShape) and isn't the Discover layout (a declined param).
 func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) }
 
+// productsSection is a saved SellerProfileProductsSection on the seller's profile.
+type productsSection struct {
+	id            int64
+	header        any
+	shownProducts []int64
+	sort          string
+	showFilters   bool
+	// version moves with the row, for the search's cache key.
+	version string
+}
+
+// sectionHiddenHeader is SellerProfileSection's hide_header flag.
+const sectionHiddenHeader = 1 << 1
+
+// savedProductsSections is seller_profile_products_sections.on_profile, in id order as the
+// seller_id index returns them. json_data off the section schema goes to Rails.
+func (h *handler) savedProductsSections(ctx context.Context, sellerID int64) ([]*productsSection, error) {
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT seller_profile_sections.id, seller_profile_sections.header,"+
+		" seller_profile_sections.flags, seller_profile_sections.json_data, seller_profile_sections.updated_at"+
+		" FROM seller_profile_sections WHERE seller_profile_sections.seller_id = ? AND seller_profile_sections.type = ?"+
+		" AND seller_profile_sections.product_id IS NULL ORDER BY seller_profile_sections.id", sellerID, profileProductsSectionType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*productsSection
+	for rows.Next() {
+		var s productsSection
+		var header, data sql.NullString
+		var flags int64
+		var updatedAt db.NullTime
+		if err := rows.Scan(&s.id, &header, &flags, &data, &updatedAt); err != nil {
+			return nil, err
+		}
+		j, ok := parseJSONData(data)
+		sort, sortOK := j.get("default_product_sort").(string)
+		showFilters, filtersOK := j.get("show_filters").(bool)
+		shown, shownOK := j.get("shown_products").([]any)
+		if _, known := sectionSortClauses[sort]; !ok || !sortOK || !known || !filtersOK || !shownOK {
+			return nil, fallback("storefront section json_data")
+		}
+		if sort == "highest_rated" || sort == "most_reviewed" {
+			// A review moves these orders without touching links.updated_at, so go_web's cache and
+			// Rails' can each hold a different one.
+			return nil, fallback("storefront section review sort")
+		}
+		s.shownProducts = make([]int64, 0, len(shown))
+		for _, v := range shown {
+			n, _ := v.(json.Number)
+			id, ok := jsonInt(n)
+			if !ok {
+				return nil, fallback("storefront section json_data")
+			}
+			s.shownProducts = append(s.shownProducts, id)
+		}
+		s.sort, s.showFilters = sort, showFilters
+		if flags&sectionHiddenHeader == 0 {
+			s.header = nullString(header)
+		}
+		s.version = itoa(s.id) + "-" + updatedAt.Time.UTC().Format(time.RFC3339Nano)
+		out = append(out, &s)
+	}
+	return out, rows.Err()
+}
+
 // loadCatalog is ProductPresenter#product_page_props' storefront sections:
-// ProfileSectionsPresenter#props over the seller's profile products sections, with the virtual
-// default-products section and omit_product.
+// ProfileSectionsPresenter#props over the seller's profile products sections, with omit_product,
+// or the virtual default-products section when there are none.
 func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, error) {
 	ctx, seller := p.Ctx, p.seller
-	saved, err := h.exists(ctx, "SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.seller_id = ?"+
-		" AND seller_profile_sections.type = ? AND seller_profile_sections.product_id IS NULL LIMIT 1", seller.id, profileProductsSectionType)
-	if err != nil || saved {
-		return nil, firstErr(err, fallback("storefront sections"))
+	saved, err := h.savedProductsSections(ctx, seller.id)
+	if err != nil {
+		return nil, err
 	}
-	// default_products_section_available?
-	listed, err := h.exists(ctx, "SELECT 1 FROM links WHERE links.user_id = ? AND links.purchase_disabled_at IS NULL"+
-		" AND links.banned_at IS NULL AND links.deleted_at IS NULL AND (links.flags & ?) = 0 LIMIT 1", seller.id, productArchived)
-	if err != nil || !listed {
-		return []any{}, err
+	sections := saved
+	if len(saved) == 0 {
+		// default_products_section_available?
+		listed, err := h.exists(ctx, "SELECT 1 FROM links WHERE links.user_id = ? AND links.purchase_disabled_at IS NULL"+
+			" AND links.banned_at IS NULL AND links.deleted_at IS NULL AND (links.flags & ?) = 0 LIMIT 1", seller.id, productArchived)
+		if err != nil || !listed {
+			return []any{}, err
+		}
+		// nil is the virtual default-products section.
+		sections = []*productsSection{nil}
 	}
 	if p.hasAutoApplyCode {
 		// Cards price through the seller's auto-applied code and label its sale.
 		return nil, fallback("catalog auto-apply")
 	}
-	s, err := h.cachedCatalog(p)
+	searches, err := h.cachedCatalog(p, sections)
 	if err != nil {
 		return nil, err
 	}
-	cards, err := h.loadCards(p, s.IDs)
-	if err != nil {
-		return nil, err
-	}
-	total := s.Total
-	kept := make([]*card, 0, len(cards))
-	for _, c := range cards {
-		if c.prod.id != prod.id {
-			kept = append(kept, c)
+	// Every section's cards load together; a product in several sections loads once.
+	var ids []int64
+	for _, search := range searches {
+		for _, id := range search.IDs {
+			if !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
 		}
 	}
-	// omit_product: one fewer whether it was on the page or only counted beyond it.
-	if len(kept) < len(cards) || prod.alive() && !prod.is(productArchived) && prod.userID == seller.id {
-		total--
+	loaded, err := h.loadCards(p, ids)
+	if err != nil {
+		return nil, err
 	}
-	shown := make([]*card, 0, len(kept))
-	for _, c := range kept {
-		if c.prod.is(productHideSoldOutVariants) {
-			soldOut, err := h.cardSoldOut(p, c)
+	byID := make(map[int64]*card, len(loaded))
+	for _, c := range loaded {
+		byID[c.prod.id] = c
+	}
+	soldOut := map[int64]bool{}
+	type sectionCards struct {
+		total int64
+		shown []*card
+	}
+	built := make([]sectionCards, len(sections))
+	var allShown []*card
+	for i, s := range sections {
+		search := searches[i]
+		total, omitted := search.Total, false
+		var kept []*card
+		for _, id := range search.IDs {
+			if id == prod.id {
+				omitted = true
+				continue
+			}
+			kept = append(kept, byID[id])
+		}
+		// omit_product: one fewer whether it was on the page or only counted beyond it, when the
+		// section's search counted it.
+		counted := prod.userID == seller.id
+		if s != nil {
+			counted = slices.Contains(s.shownProducts, prod.id)
+		}
+		if omitted || prod.alive() && !prod.is(productArchived) && counted {
+			total--
+		}
+		shown := make([]*card, 0, len(kept))
+		for _, c := range kept {
+			if c.prod.is(productHideSoldOutVariants) {
+				out, seen := soldOut[c.prod.id]
+				if !seen {
+					if out, err = h.cardSoldOut(p, c); err != nil {
+						return nil, err
+					}
+					soldOut[c.prod.id] = out
+				}
+				if out {
+					total--
+					continue
+				}
+			}
+			shown = append(shown, c)
+			if !slices.Contains(allShown, c) {
+				allShown = append(allShown, c)
+			}
+		}
+		built[i] = sectionCards{total, shown}
+	}
+	if err := h.cardThumbnails(p, allShown); err != nil {
+		return nil, err
+	}
+	out := make([]any, 0, len(sections))
+	for i, s := range sections {
+		products := make([]any, 0, len(built[i].shown))
+		for _, c := range built[i].shown {
+			props, err := h.cardProps(p, c, buyer)
 			if err != nil {
 				return nil, err
 			}
-			if soldOut {
-				total--
-				continue
-			}
+			products = append(products, props)
 		}
-		shown = append(shown, c)
+		out = append(out, h.catalogSection(p, prod, s, searches[i], built[i].total, products))
 	}
-	if err := h.cardThumbnails(p, shown); err != nil {
-		return nil, err
-	}
-	products := make([]any, 0, len(shown))
-	for _, c := range shown {
-		props, err := h.cardProps(p, c, buyer)
-		if err != nil {
-			return nil, err
-		}
-		products = append(products, props)
-	}
-	results := rails.NewRHash().
-		Sym("total", total).
-		Sym("tags_data", bucketsProps(s.Tags)).
-		Sym("filetypes_data", bucketsProps(s.Filetypes)).
-		Sym("taxonomy_attributes_data", []any{}).
-		Sym("products", products)
-	return []any{rails.NewRHash().
-		Sym("id", defaultProductsSectionID).
-		Sym("header", "More from "+nameOrUsername(seller)).
-		Sym("type", profileProductsSectionType).
-		Sym("show_filters", false).
-		Sym("default_product_sort", pageLayoutSort).
-		Sym("search_results", results).
-		Sym("exclude_ids", []any{h.c.IDs.Encrypt(prod.id)})}, nil
+	return out, nil
 }
 
-// cachedCatalog is cached_default_products_section's search, under a key of go_web's own that
-// moves with the seller's products as Rails' does. Rails never reads it, so it's written even
-// when the page then goes to Rails.
-func (h *handler) cachedCatalog(p *page) (*catalogSearch, error) {
+// catalogSection is section_props' hash for a saved products section, or for the virtual one
+// when s is nil.
+func (h *handler) catalogSection(p *page, prod *product, s *productsSection, search *catalogSearch, total int64, products []any) *rails.RHash {
+	results := rails.NewRHash().
+		Sym("total", total).
+		Sym("tags_data", bucketsProps(search.Tags)).
+		Sym("filetypes_data", bucketsProps(search.Filetypes)).
+		Sym("taxonomy_attributes_data", []any{}).
+		Sym("products", products)
+	section := rails.NewRHash()
+	if s == nil {
+		section.Sym("id", defaultProductsSectionID).
+			Sym("header", "More from "+nameOrUsername(p.seller)).
+			Sym("type", profileProductsSectionType).
+			Sym("show_filters", false).
+			Sym("default_product_sort", pageLayoutSort)
+	} else {
+		section.Sym("id", h.c.IDs.Encrypt(s.id)).
+			Sym("header", s.header).
+			Sym("type", profileProductsSectionType).
+			Sym("show_filters", s.showFilters).
+			Sym("default_product_sort", s.sort)
+	}
+	return section.Sym("search_results", results).Sym("exclude_ids", []any{h.c.IDs.Encrypt(prod.id)})
+}
+
+// cachedCatalog is cached_sections' or cached_default_products_section's searches, under one key
+// of go_web's own that moves with the seller's products and with every section, as Rails' does.
+// Rails never reads it, so it's written even when the page then goes to Rails.
+func (h *handler) cachedCatalog(p *page, sections []*productsSection) ([]*catalogSearch, error) {
 	productsKey, err := h.productsCacheKey(p)
 	if err != nil {
 		return nil, err
 	}
 	key := "go-web:storefront-catalog_" + productsKey
+	if sections[0] != nil {
+		var versions []string
+		for _, s := range sections {
+			versions = append(versions, s.version)
+		}
+		sum := sha256.Sum256([]byte(strings.Join(versions, "\n")))
+		key += "_" + hex.EncodeToString(sum[:16])
+	}
 	cached, found, err := h.readCache(p.Ctx, key)
 	if err != nil {
 		return nil, err
 	}
 	if found {
-		var s catalogSearch
-		if text, ok := cached.(string); !ok || json.Unmarshal([]byte(text), &s) != nil {
+		var searches []*catalogSearch
+		if text, ok := cached.(string); !ok || json.Unmarshal([]byte(text), &searches) != nil || len(searches) != len(sections) {
 			return nil, fallback("cached catalog")
 		}
-		return &s, nil
+		return searches, nil
 	}
-	s, err := h.searchCatalog(p)
-	if err != nil {
-		return nil, err
+	searches := make([]*catalogSearch, len(sections))
+	for i, s := range sections {
+		if searches[i], err = h.searchCatalog(p, s); err != nil {
+			return nil, err
+		}
 	}
-	text, err := json.Marshal(s)
+	text, err := json.Marshal(searches)
 	if err != nil {
 		return nil, err
 	}
@@ -167,15 +303,46 @@ func (h *handler) cachedCatalog(p *page) (*catalogSearch, error) {
 			web.Logger(p.Req.HTTP).Warn("catalog cache write failed", "error", err.Error())
 		}
 	}
-	return s, nil
+	return searches, nil
 }
 
-// searchCatalog is Link.filetype_options' and Link.search_options' searches for the virtual
-// section. They share a query, so one request carries both facets.
-func (h *handler) searchCatalog(p *page) (*catalogSearch, error) {
+// sectionSortClauses is search_options' sort for a section's default_product_sort: page_layout
+// orders by the boosts on shown_products, and every other key ties on created_at.
+var sectionSortClauses = map[string][]any{
+	pageLayoutSort:  {},
+	"newest":        {desc("created_at"), desc("created_at")},
+	"highest_rated": {desc("average_rating"), desc("reviews_count"), desc("created_at")},
+	"most_reviewed": {desc("reviews_count"), desc("created_at")},
+	"price_asc":     {map[string]any{"available_price_cents": map[string]any{"order": "asc", "mode": "min"}}, desc("created_at")},
+	"price_desc":    {map[string]any{"available_price_cents": map[string]any{"order": "desc", "mode": "min"}}, desc("created_at")},
+}
+
+func desc(field string) map[string]any { return map[string]any{field: map[string]any{"order": "desc"}} }
+
+// searchCatalog is Link.filetype_options' and Link.search_options' searches for a section. They
+// share a query, so one request carries both facets.
+func (h *handler) searchCatalog(p *page, section *productsSection) (*catalogSearch, error) {
 	terms := func(field string, size int) map[string]any {
 		return map[string]any{"terms": map[string]any{"field": field, "size": size}}
 	}
+	must := []any{
+		map[string]any{"terms": map[string]any{"user_id": []int64{p.seller.id}}},
+		map[string]any{"term": map[string]any{"is_alive_on_profile": true}},
+	}
+	boolQuery := map[string]any{}
+	sort := []any{desc("created_at")}
+	if section != nil {
+		must = append(must, map[string]any{"terms": map[string]any{"_id": section.shownProducts}})
+		sort = sectionSortClauses[section.sort]
+		if section.sort == pageLayoutSort {
+			should := make([]any, len(section.shownProducts))
+			for i, id := range section.shownProducts {
+				should[i] = map[string]any{"term": map[string]any{"_id": map[string]any{"value": id, "boost": len(section.shownProducts) - i}}}
+			}
+			boolQuery["should"] = should
+		}
+	}
+	boolQuery["must"] = must
 	var products struct {
 		Hits struct {
 			Total struct {
@@ -183,8 +350,9 @@ func (h *handler) searchCatalog(p *page) (*catalogSearch, error) {
 				Relation string `json:"relation"`
 			} `json:"total"`
 			Hits []struct {
-				ID   string            `json:"_id"`
-				Sort []json.RawMessage `json:"sort"`
+				ID    string            `json:"_id"`
+				Score json.RawMessage   `json:"_score"`
+				Sort  []json.RawMessage `json:"sort"`
 			} `json:"hits"`
 		} `json:"hits"`
 		Aggregations struct {
@@ -197,15 +365,11 @@ func (h *handler) searchCatalog(p *page) (*catalogSearch, error) {
 		} `json:"aggregations"`
 	}
 	err := h.c.Page.Search.Search(p.Ctx, "products", map[string]any{
-		"query": map[string]any{"bool": map[string]any{"must": []any{
-			map[string]any{"terms": map[string]any{"user_id": []int64{p.seller.id}}},
-			map[string]any{"term": map[string]any{"is_alive_on_profile": true}},
-		}}},
+		"query": map[string]any{"bool": boolQuery},
 		"aggregations": map[string]any{"tags.keyword": terms("tags.keyword", catalogTagFacetSize),
 			"filetypes.keyword": terms("filetypes.keyword", catalogFiletypeFacetSize)},
 		// One hit past the page shows whether its last one ties with the next.
-		"sort": []any{map[string]any{"created_at": map[string]any{"order": "desc"}}}, "size": catalogPageSize + 1, "from": 0,
-		"_source": false, "track_total_hits": true}, &products)
+		"sort": sort, "size": catalogPageSize + 1, "from": 0, "_source": false, "track_total_hits": true}, &products)
 	if err != nil {
 		return nil, searchFailed(p, "catalog", err)
 	}
@@ -217,15 +381,19 @@ func (h *handler) searchCatalog(p *page) (*catalogSearch, error) {
 	var last string
 	for _, hit := range products.Hits.Hits {
 		id, err := strconv.ParseInt(hit.ID, 10, 64)
-		if err != nil || len(hit.Sort) != 1 {
+		key := string(hit.Score)
+		if len(sort) > 0 {
+			raw, _ := json.Marshal(hit.Sort)
+			key = string(raw)
+		}
+		if err != nil || key == "" || len(hit.Sort) != len(sort) {
 			return nil, fallback("catalog hit")
 		}
-		if sort := string(hit.Sort[0]); sort == last {
-			// Hits tied on created_at come back in whichever order a shard copy keeps them.
+		if key == last {
+			// Tied hits come back in whichever order a shard copy keeps them.
 			return nil, fallback("catalog order")
-		} else {
-			last = sort
 		}
+		last = key
 		s.IDs = append(s.IDs, id)
 	}
 	if len(s.IDs) > catalogPageSize {
