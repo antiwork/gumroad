@@ -6,11 +6,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/redis/go-redis/v9"
 
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
 	"github.com/antiwork/gumroad/go_web/internal/downloads"
@@ -18,6 +21,9 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
+	"github.com/antiwork/gumroad/go_web/internal/products"
+	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -128,4 +134,74 @@ func (e s3Exister) Exists(ctx context.Context, key string) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// memcacheTimeout is Dalli's socket timeout, which Rails.cache uses.
+const memcacheTimeout = time.Second
+
+// productPageConfig is what the product page reads beyond the shared page config, or
+// errPagesOff. Its Rails.cache reads and writes use go_web's own REVISION namespace: what it
+// reads there it computes from the database under keys that capture every change, or leaves a
+// miss to Rails.
+func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, error) {
+	if b.pages == nil {
+		return nil, fmt.Errorf("%w: download page config", errPagesOff)
+	}
+	servers := getenv("MEMCACHE_SERVERS")
+	if servers == "" || d.env.Revision == "" {
+		return nil, fmt.Errorf("%w: MEMCACHE_SERVERS or REVISION is not set", errPagesOff)
+	}
+	cache, err := railscache.New(strings.Split(servers, ","), d.env.Revision, memcacheTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errPagesOff, err)
+	}
+	d.closers = append(d.closers, func() error { cache.Close(); return nil })
+	geo, err := d.geoIP()
+	if err != nil {
+		return nil, err
+	}
+	env := d.env
+	recaptcha := d.globalConfig("RECAPTCHA_FOLLOW_SITE_KEY", "")
+	if rails.Blank(recaptcha) {
+		recaptcha = d.globalConfig("RECAPTCHA_MONEY_SITE_KEY", "")
+	}
+	s3Endpoint := d.globalConfig("AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
+	flags := &flagSet{redis: d.redis, flags: map[string]*flipper.Flag{}}
+	return &products.PageConfig{
+		Layout:  b.pages.Layout,
+		CSP:     b.pages.CSP,
+		Shared:  b.pages.Shared,
+		Avatars: b.pages.Avatars,
+		Cache:   cache,
+		Redis:   d.redis,
+		GeoIP:   geo,
+		Flag:    flags.flag,
+		// CDN_URL_MAP in production.
+		CDNMap: [][2]string{
+			{s3Endpoint + "/gumroad/", env.S3ProxyHost + "/res/gumroad/"},
+			{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
+		},
+		PublicStorageURL: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
+		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
+		RecaptchaSiteKey: recaptcha,
+		NewNonce:         newNonce,
+	}, nil
+}
+
+// flagSet keeps one Flipper flag reader per name.
+type flagSet struct {
+	redis *redis.Client
+	mu    sync.Mutex
+	flags map[string]*flipper.Flag
+}
+
+func (s *flagSet) flag(name string) *flipper.Flag {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f, ok := s.flags[name]
+	if !ok {
+		f = flipper.New(s.redis, name)
+		s.flags[name] = f
+	}
+	return f
 }

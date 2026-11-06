@@ -24,6 +24,12 @@ func HostWithPort(r *http.Request) string {
 	return raw
 }
 
+// ForwardedPort is the last X-Forwarded-Port entry, which Rack takes as the port when the
+// host carries none.
+func ForwardedPort(r *http.Request) string {
+	return lastListEntry(r.Header.Values("X-Forwarded-Port"))
+}
+
 func rawHostWithPort(r *http.Request) string {
 	if forwarded := lastListEntry(r.Header.Values("X-Forwarded-Host")); forwarded != "" {
 		return forwarded

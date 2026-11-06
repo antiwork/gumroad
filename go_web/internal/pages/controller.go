@@ -288,12 +288,16 @@ func setSignupReferrer(p *Visit, rootDomain string) {
 	}
 }
 
-// DeclinedHeaders is what Rails reads from Inertia's headers that a full-page render here
-// leaves to Rails: any Inertia visit or partial reload, which inertia_rails reads without
-// checking X-Inertia.
+// DeclinedHeaders is what Rails reads from the headers that a full-page render here leaves
+// to Rails: any Inertia visit or partial reload, which inertia_rails reads without checking
+// X-Inertia, and a Forwarded header.
 func DeclinedHeaders(r *http.Request) string {
 	if r.Header.Get("X-Inertia") != "" {
 		return "inertia visit"
+	}
+	// Rack reads the host, scheme and port from Forwarded before the X-Forwarded headers.
+	if _, ok := r.Header["Forwarded"]; ok {
+		return "forwarded header"
 	}
 	for _, h := range []string{"X-Inertia-Partial-Component", "X-Inertia-Partial-Data", "X-Inertia-Partial-Except",
 		"X-Inertia-Reset", "X-Inertia-Version", "X-Inertia-Error-Bag"} {
