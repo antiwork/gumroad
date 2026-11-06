@@ -34,10 +34,6 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		}
 		pwyw = rails.NewRHash().Sym("suggested_price_cents", suggested).Sym("default_price_cents", pwywDefault(prod, v.priceCents, v.variants))
 	}
-	var durationInMonths any
-	if prod.durationInMonths.Valid {
-		durationInMonths = prod.durationInMonths.Int64
-	}
 
 	product := rails.NewRHash().
 		Sym("id", externalID).
@@ -68,13 +64,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("currency_code", currencyCode(prod)).
 		Sym("price_cents", intOrNil(v.priceCents)).
 		Sym("buyer_currency_display", buyerCurrencyDisplay(externalID, productCurrency, v.currency))
-	if c := v.currency; c != nil {
-		// buyer_local_price_props; buyer_local_original_price_cents needs a discount, which is Rails'.
-		product.Sym("buyer_currency", c.buyer).
-			Sym("buyer_local_currency_rate", minorUnitRate(c.rate, productCurrency, c.buyer)).
-			Sym("buyer_local_currency_subunit_to_unit", unitScalingFactor(c.buyer)).
-			Sym("buyer_local_price_cents", c.localCents)
-	}
+	buyerLocalPriceProps(product, productCurrency, v.currency)
 	product.
 		Sym("rental_price_cents", nil).
 		Sym("pwyw", pwyw).
@@ -91,7 +81,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("hide_sold_out_variants", prod.is(productHideSoldOutVariants)).
 		Sym("native_type", prod.nativeType).
 		Sym("preorder", nil).
-		Sym("duration_in_months", durationInMonths).
+		Sym("duration_in_months", nullInt(prod.durationInMonths)).
 		Sym("rental", nil).
 		Sym("is_quantity_enabled", prod.is(productQuantityEnabled)).
 		Sym("free_trial", nil).
@@ -279,4 +269,15 @@ func buyerCurrencyDisplay(productID, productCurrency string, c *currencyDisplay)
 		Sym("buyer_local_price_cents", c.localCents).
 		Sym("rate", c.rate).
 		Sym("display_mode", "buyer_local")
+}
+
+// buyerLocalPriceProps is buyer_local_price_props without an original price: a discount is Rails'.
+func buyerLocalPriceProps(props *rails.RHash, productCurrency string, c *currencyDisplay) {
+	if c == nil {
+		return
+	}
+	props.Sym("buyer_currency", c.buyer).
+		Sym("buyer_local_currency_rate", minorUnitRate(c.rate, productCurrency, c.buyer)).
+		Sym("buyer_local_currency_subunit_to_unit", unitScalingFactor(c.buyer)).
+		Sym("buyer_local_price_cents", c.localCents)
 }
