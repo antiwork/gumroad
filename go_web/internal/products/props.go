@@ -104,7 +104,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("public_files", v.publicFiles).
 		Sym("file_summaries", v.fileSummaries)
 
-	discountCode := v.discount.resultProps(externalID)
+	discountCode := v.discount.resultProps()
 	props.Sym("product", product).
 		Sym("discount_code", discountCode).
 		Sym("sale_label", v.discount.label).
