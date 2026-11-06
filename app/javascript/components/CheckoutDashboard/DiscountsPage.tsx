@@ -1112,9 +1112,11 @@ const Form = ({
         return [];
       }
       const id = `${productId}:${optionId}`;
-      const name = details.name === "Untitled" ? productName : details.name;
-      ownershipScopeTargets[id] = { productId, optionIds: [optionId], kind: details.deleted ? "deleted" : "option" };
-      return [{ id, label: details.deleted ? `${productName} (${name}, deleted)` : `${productName} (${name})` }];
+      // A deleted product keeps its options alive, but they can't be picked again either.
+      const deleted = details.deleted || !product;
+      const name = details.name === "Untitled" && product ? product.name : details.name;
+      ownershipScopeTargets[id] = { productId, optionIds: [optionId], kind: deleted ? "deleted" : "option" };
+      return [{ id, label: deleted ? `${productName} (${name}, deleted)` : `${productName} (${name})` }];
     });
     if (unnamedOptionIds.length === 0) return rows;
     const id = `${productId}:deleted`;

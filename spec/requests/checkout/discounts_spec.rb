@@ -566,8 +566,11 @@ describe("Checkout discounts page", type: :system, js: true) do
         signed = create(:variant, variant_category: edition, name: "Signed")
         retired = create(:variant, variant_category: edition, name: "Retired")
         oak = create(:variant, variant_category: create(:variant_category, link: product2, title: "Frame"), name: "Oak")
-        offer_code2.update!(existing_customers_only: true, ownership_variants: [signed, retired, oak])
+        old_print = create(:product, name: "Old print", user: seller)
+        first_run = create(:variant, variant_category: create(:variant_category, link: old_print), name: "First run")
+        offer_code2.update!(existing_customers_only: true, ownership_variants: [signed, retired, oak, first_run])
         retired.mark_deleted!
+        old_print.mark_deleted!
 
         visit checkout_discounts_path
         within(find(:table_row, { "Discount" => "Discount 2" })) { click_on "Edit" }
@@ -577,6 +580,7 @@ describe("Checkout discounts page", type: :system, js: true) do
           expect(page).to have_button("Product 2 (Retired, deleted)")
           # Oak is alive but in a second category, which the products' option lists leave out.
           expect(page).to have_button("Product 2 (Oak)")
+          expect(page).to have_button("Deleted product (First run, deleted)")
           expect(page).not_to have_text("deleted options")
           click_on "Product 2 (Signed)"
           expect(page).not_to have_button("Product 2 (Signed)")
@@ -586,7 +590,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         page.scroll_to find_button("Save changes"), align: :center
         click_on "Save changes"
         expect(page).to have_alert(text: "Successfully updated discount!")
-        expect(offer_code2.reload.ownership_variants).to contain_exactly(retired, oak)
+        expect(offer_code2.reload.ownership_variants).to contain_exactly(retired, oak, first_run)
 
         visit checkout_discounts_path
         within(find(:table_row, { "Discount" => "Discount 2" })) { click_on "Edit" }
@@ -594,6 +598,7 @@ describe("Checkout discounts page", type: :system, js: true) do
         within(picker) do
           expect(page).to have_button("Product 2 (Retired, deleted)")
           expect(page).to have_button("Product 2 (Oak)")
+          expect(page).to have_button("Deleted product (First run, deleted)")
           click_on "Clear value"
           expect(page).not_to have_button("Product 2 (Retired, deleted)")
           expect(page).not_to have_button("Product 2 (Oak)")
@@ -656,6 +661,9 @@ describe("Checkout discounts page", type: :system, js: true) do
             expect(geometry["rows"]).to be > 1, "#{width}px: #{geometry}" if mobile
           end
         end
+      ensure
+        # The emulation override outlives the session reset, so later examples would keep this phone viewport.
+        page.driver.browser.execute_cdp("Emulation.clearDeviceMetricsOverride")
       end
 
       it "persists ownership products and tiers when combining both toggles, hiding the top-level Type input" do
