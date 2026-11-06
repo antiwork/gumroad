@@ -2,11 +2,11 @@ package products
 
 import (
 	"database/sql"
+	"regexp"
 
 	"github.com/antiwork/gumroad/go_web/internal/description"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
-	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 )
 
 // productMeta is the meta tags in the order the before_actions and the action set them:
@@ -42,12 +42,11 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 	set("", "", "", inertia.Pairs("property", "product:retailer_item_id", "content", prod.uniquePermalink.String)...)
 	if v.priceCents != nil && rails.Present(prod.priceCurrencyType.String) {
 		amount := rails.RoundFloat(float64(*v.priceCents)/float64(unitScalingFactor(prod.priceCurrencyType.String)), 2)
-		// Float#to_s, as the tag helper writes a Float attribute.
-		s, err := sidekiq.RubyFloat(amount)
-		if err != nil {
+		content, ok := numberAttr(amount)
+		if !ok {
 			return nil, fallback("price amount")
 		}
-		set("", "", "", inertia.Attr{Key: "property", Value: "product:price:amount"}, inertia.Attr{Key: "content", Value: s, JSON: amount})
+		set("", "", "", inertia.Attr{Key: "property", Value: "product:price:amount"}, content)
 		up, ok := asciiUpcase(prod.priceCurrencyType.String)
 		if !ok {
 			return nil, fallback("currency")
@@ -55,9 +54,23 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		set("", "", "", inertia.Pairs("property", "product:price:currency", "content", up)...)
 	}
 
+	// social_share_image: an image cover's URL, else a player's escaped thumbnail or a video's
+	// poster.
+	var main *cover
 	var shareImage string
 	if len(v.covers) > 0 {
-		shareImage = v.covers[0].url
+		main = v.covers[0]
+		switch {
+		case main.isImage:
+			shareImage = main.url
+		case main.oembed != nil:
+			if main.thumbnail != "" && !addressableUnchanged.MatchString(main.thumbnail) {
+				return nil, fallback("oembed thumbnail escape")
+			}
+			shareImage = main.thumbnail
+		default:
+			shareImage = main.thumbnail
+		}
 	}
 	set("", "", "", inertia.Pairs("property", "og:title", "content", prod.name)...)
 	set("", "", "", inertia.Pairs("property", "og:description", "content", productDescription)...)
@@ -76,11 +89,39 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 			return nil, firstErr(err, fallback("product builds"))
 		}
 	}
-	if len(v.covers) > 0 {
+	switch {
+	case main != nil && main.isImage:
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary_large_image")...)
-		set("", "", "", inertia.Pairs("property", "twitter:image", "content", v.covers[0].url)...)
+		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.url)...)
 		set("", "", "", inertia.Pairs("property", "twitter:image:alt", "content", "")...)
-	} else {
+	case main != nil && main.oembed != nil:
+		if main.thumbnail == "" {
+			return nil, fallback("oembed thumbnail")
+		}
+		width, _ := numberAttr(main.width.toI())
+		height, _ := numberAttr(main.height.toI())
+		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "player")...)
+		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.thumbnail)...)
+		set("", "", "", inertia.Pairs("property", "twitter:player", "content", main.url)...)
+		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
+		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
+	case main != nil && main.isVideo:
+		dw, okW := main.displayWidth()
+		dh, okH := main.displayHeight()
+		if !okW || !okH {
+			return nil, fallback("video cover size")
+		}
+		width, ok := numberAttr(dw.value())
+		if !ok {
+			return nil, fallback("video cover size")
+		}
+		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "player")...)
+		set("", "", "", inertia.Pairs("property", "twitter:image", "content", "https://gumroad.com/assets/icon.png")...)
+		set("", "", "", inertia.Pairs("property", "twitter:player", "content", main.url)...)
+		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
+		height, _ := numberAttr(dh)
+		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
+	default:
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary")...)
 	}
 	set("", "", "", inertia.Pairs("property", "twitter:domain", "content", "Gumroad")...)
@@ -89,7 +130,9 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		set("", "", "", inertia.Pairs("property", "twitter:creator", "content", "@"+seller.twitterHandle.String)...)
 	}
 	for _, c := range v.covers {
-		set("link", "", "", inertia.Pairs("rel", "preload", "as", "image", "href", c.url)...)
+		if c.isImage {
+			set("link", "", "", inertia.Pairs("rel", "preload", "as", "image", "href", c.url)...)
+		}
 	}
 	set("link", "canonical", "", inertia.Pairs("rel", "canonical", "href", canonical)...)
 
@@ -272,3 +315,13 @@ func (h *handler) usdOfferCents(p *page, code string, cents *int64) (int64, bool
 	}
 	return usd, true, nil
 }
+
+// numberAttr is a content attribute holding a Ruby number: to_s in the tag, as the tag helper
+// writes it, and the number in the page's meta.
+func numberAttr(n any) (inertia.Attr, bool) {
+	s, ok := rails.String(n)
+	return inertia.Attr{Key: "content", Value: s, JSON: n}, ok
+}
+
+// addressableUnchanged is a URL Addressable::URI.escape returns as it is.
+var addressableUnchanged = regexp.MustCompile(`\Ahttps?://[a-z0-9.-]+(?:/[A-Za-z0-9\-._~/]*)?(?:\?[A-Za-z0-9\-._~=&]*)?\z`)
