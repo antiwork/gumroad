@@ -560,16 +560,23 @@ export const Checkout = ({
 
   // What the pay button restates. Only a plain one-charge cart gets it: commission deposits, installments
   // and pre-order splits charge less than the total today, and a requoting cart has no settled amount.
-  const hasSplitCharge = commissionCompletionTotal > 0 || futureInstallmentsWithoutTipsTotal > 0;
+  const hasSplitCharge =
+    commissionCompletionTotal > 0 ||
+    futureInstallmentsWithoutTipsTotal > 0 ||
+    state.products.some((item) => item.isPreorder);
   const payRecapAmount =
     total != null && total > 0 && !awaitingBuyerAction && !isRequoting && !hasSplitCharge
       ? localAmounts && localCurrency
         ? formatPresentmentCents(localAmounts.totalCents, localCurrency, { noCentsIfWhole })
         : formatCheckoutPrice(total, localCurrency, { noCentsIfWhole })
       : null;
+  // What each line costs today, after discounts, in the displayed currency.
   const linePrices = cart.items.map((item, index) => {
-    const canonicalCents = convertToUSD(item, hasFreeTrial(item, isGift) ? 0 : item.price * item.quantity);
-    const localCents = localAmounts?.linePriceCents[index];
+    const trial = hasFreeTrial(item, isGift);
+    const discountedPrice = trial ? 0 : getDiscountedPrice(cart, item).price;
+    const allocatedCents = presentmentAmounts ? buyerCurrencyDisplay?.lineAllocations[index]?.price_cents : undefined;
+    const localCents = allocatedCents ?? (listedAmounts ? discountedPrice : undefined);
+    const canonicalCents = convertToUSD(item, discountedPrice);
     return {
       name: item.product.name,
       isFree: (localCents ?? canonicalCents) === 0,
