@@ -49,6 +49,7 @@ beforeAll(() => {
     Routes: {
       custom_domain_coffee_url: url("/coffee"),
       edit_link_path: url("/products/product-permalink/edit"),
+      follow_user_from_embed_form_url: url("/follow_from_embed_form"),
       new_email_path: url("/emails/new"),
       settings_payments_path: url("/settings/payments"),
       short_link_url: url("/l/product-permalink"),

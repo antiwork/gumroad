@@ -28,7 +28,7 @@ export const WaitlistFormEmbed = ({ sellerId, productId }: { sellerId: string; p
   );
 
   return (
-    <>
+    <div className="flex flex-col gap-4">
       <Fieldset>
         <FieldsetTitle>
           <Label htmlFor={FOLLOW_FORM_EMBED_INPUT_ID}>Test your waitlist form with your email</Label>
@@ -47,6 +47,6 @@ export const WaitlistFormEmbed = ({ sellerId, productId }: { sellerId: string; p
           People who join the waitlist also subscribe to you.
         </FieldsetDescription>
       </Fieldset>
-    </>
+    </div>
   );
 };
