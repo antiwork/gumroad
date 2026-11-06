@@ -14,11 +14,11 @@ import (
 // Attr is one tag_data entry, in the order set_meta_tag passed it. Value is what the tag
 // helper writes; JSON, when set, is the value as_json carries instead (a Float), and a
 // script's inner content is its JSON, encoded. Raw inner content is html_safe, written
-// unescaped.
+// unescaped. Nil is a nil value, which the tag helper leaves out and as_json drops as blank.
 type Attr struct {
 	Key, Value string
 	JSON       any
-	Raw        bool
+	Raw, Nil   bool
 }
 
 // MetaTag is InertiaRails::MetaTag.
@@ -105,7 +105,7 @@ func (t MetaTag) JSON() *rails.RHash {
 		if a.JSON != nil {
 			v = a.JSON
 		}
-		if rails.Present(v) {
+		if !a.Nil && rails.Present(v) {
 			h.Sym(camelizeLower(a.Key), v)
 		}
 	}

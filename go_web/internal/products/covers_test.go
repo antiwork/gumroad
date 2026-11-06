@@ -173,6 +173,26 @@ func TestAnOembedCoverRendersItsPlayer(t *testing.T) {
 	}
 }
 
+// A player without a thumbnail sets twitter:image to nil, which the tag leaves out.
+func TestAnOembedCoverWithoutAThumbnailKeepsAContentlessTwitterImage(t *testing.T) {
+	e := newTestEnv(t)
+	testdb.Insert(t, testdb.Open(t), "asset_previews", map[string]any{"id": int64(1_793_501), "link_id": productID, "guid": "player-guid",
+		"position": 0, "oembed": "---\nhtml: <iframe src=\"https://x.example.com/p\"></iframe>\ninfo:\n  width: 200\n  height: 113\n",
+		"created_at": testNow, "updated_at": testNow})
+	body := e.render(t, nil, "")
+	for _, want := range []string{
+		`<meta property="twitter:card" content="player" inertia="meta-property-twitter-card">`,
+		`<meta property="twitter:image" inertia="meta-property-twitter-image">`,
+		`{"tagName":"meta","headKey":"meta-property-twitter-image","property":"twitter:image"}`,
+		`"thumbnail":null,"id":"player-guid","type":"oembed"`,
+		`<meta property="og:image" content="https://assets.gumroad.com/images/opengraph_image.png"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+}
+
 func TestAnOembedCoverThisPortCannotReadGoesToRails(t *testing.T) {
 	for name, raw := range map[string]string{
 		"a Ruby tag":     "--- !ruby/hash:ActiveSupport::HashWithIndifferentAccess\nhtml: x\ninfo:\n  width: 1\n",

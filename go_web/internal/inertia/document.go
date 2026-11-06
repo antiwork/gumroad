@@ -159,11 +159,12 @@ func (t MetaTag) writeHTML(b *strings.Builder) {
 	}
 	var inner Attr
 	for _, a := range t.data {
-		if a.Key == "inner_content" {
+		switch {
+		case a.Key == "inner_content":
 			inner = a
-			continue
+		case !a.Nil:
+			attr(a.Key, a.Value)
 		}
-		attr(a.Key, a.Value)
 	}
 	// The tag builder drops a nil type.
 	if t.typ != "" {

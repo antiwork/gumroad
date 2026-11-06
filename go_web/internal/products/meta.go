@@ -88,13 +88,12 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.url)...)
 		set("", "", "", inertia.Pairs("property", "twitter:image:alt", "content", "")...)
 	case main != nil && main.oembed != nil:
-		if main.thumbnail == "" {
-			return nil, fallback("oembed thumbnail")
-		}
 		width, _ := numberAttr(main.width.toI())
 		height, _ := numberAttr(main.height.toI())
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "player")...)
-		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.thumbnail)...)
+		// Rails still sets the tag; a nil content drops only the attribute.
+		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:image"},
+			inertia.Attr{Key: "content", Value: main.thumbnail, Nil: main.thumbnail == ""})
 		set("", "", "", inertia.Pairs("property", "twitter:player", "content", main.url)...)
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
