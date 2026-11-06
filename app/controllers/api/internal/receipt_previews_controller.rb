@@ -21,7 +21,7 @@ class Api::Internal::ReceiptPreviewsController < Api::Internal::BaseController
 
     # The synthetic preview purchase has no real product id for the recommendation
     # lookup to key off — disable recommendations rather than let it crash.
-    receipt_presenter = ReceiptPresenter.new(purchase_preview, for_email: false, recommendations: false)
+    receipt_presenter = ReceiptPresenter.new(purchase_preview, for_email: false, recommendations: false, screen_seller_text: false)
 
     rendered_html = ApplicationController.renderer.render(
       template: "customer_mailer/receipt",

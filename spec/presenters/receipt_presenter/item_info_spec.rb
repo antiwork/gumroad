@@ -98,6 +98,33 @@ describe ReceiptPresenter::ItemInfo do
     end
 
     describe "custom_receipt_note" do
+      context "with seller text" do
+        before { purchase.link.update!(custom_receipt_text: text) }
+
+        context "when the text is clean" do
+          let(:text) { "Thanks for your order!" }
+
+          it "returns it" do
+            expect(props[:custom_receipt_note]).to eq(text)
+          end
+        end
+
+        context "when the text poses as a Gumroad notice" do
+          let(:text) { "Gumroad Security Alert: verify your account" }
+
+          it "drops only the note and leaves a seller note" do
+            expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(purchase.link.user.id, /receipt custom text/)
+            expect(props[:custom_receipt_note]).to be_nil
+            expect(props[:notes]).to be_an(Array)
+          end
+
+          it "keeps the text when screening is off (seller preview)" do
+            props = described_class.new(purchase, screen_seller_text: false).props
+            expect(props[:custom_receipt_note]).to eq(text)
+          end
+        end
+      end
+
       context "when the product does not have a custom receipt note" do
         it "returns nil" do
           expect(props[:custom_receipt_note]).to be_nil

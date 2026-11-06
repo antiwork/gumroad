@@ -6,7 +6,8 @@ class ReceiptPresenter
   attr_reader :for_email
 
   # chargeable is either a Purchase or a Charge
-  def initialize(chargeable, for_email:, recommendations: true)
+  def initialize(chargeable, for_email:, recommendations: true, screen_seller_text: true)
+    @screen_seller_text = screen_seller_text
     @for_email = for_email
     @chargeable = chargeable
     @recommendations = recommendations
@@ -31,7 +32,7 @@ class ReceiptPresenter
 
   def items_infos
     chargeable.unbundled_purchases.map do |purchase_item|
-      ReceiptPresenter::ItemInfo.new(purchase_item, presentment_currency:)
+      ReceiptPresenter::ItemInfo.new(purchase_item, presentment_currency:, screen_seller_text: @screen_seller_text)
     end
   end
 
