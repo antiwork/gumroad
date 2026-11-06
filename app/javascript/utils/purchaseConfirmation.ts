@@ -10,7 +10,7 @@ export const purchaseConfirmationMessage = ({
   email: string;
 }) =>
   free
-    ? `You're in! Your free signup${sellerName ? ` with ${sellerName}` : ""} is confirmed. We sent a confirmation to ${email}.`
+    ? `You signed up${sellerName ? ` with ${sellerName}` : ""} for free. We emailed the details to ${email}.`
     : `Your purchase was successful! We sent a receipt to ${email}.`;
 
 export const freeSignupSummary = (results: { result: LineItemResult }[]) => {

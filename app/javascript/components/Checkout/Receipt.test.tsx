@@ -195,14 +195,14 @@ describe("Receipt header", () => {
       </DomainSettingsProvider>,
     );
 
-  it("confirms a free signup with the seller when every purchase is free", () => {
+  it("says the buyer signed up with the seller for free when every purchase is free", () => {
     renderReceipt([
       { item: item("Starter Pack"), result: succeeded({}) },
       { item: item("Bonus Pack"), result: succeeded({ id: "purchase-2" }) },
     ]);
 
-    expect(screen.getByRole("heading", { name: "Your free signup with Ana is confirmed!" })).toBeTruthy();
-    expect(screen.getByText("We sent a confirmation to repeat.buyer@example.com")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "You signed up with Ana for free" })).toBeTruthy();
+    expect(screen.getByText("We emailed the details to repeat.buyer@example.com")).toBeTruthy();
   });
 
   it("keeps the purchase heading when the checkout includes a paid item", () => {

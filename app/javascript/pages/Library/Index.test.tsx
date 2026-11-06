@@ -554,11 +554,11 @@ describe("receipt alert", () => {
   });
   afterEach(() => window.history.replaceState(null, "", "/"));
 
-  it("confirms a free signup with the seller when every purchase is free", () => {
+  it("says the buyer signed up with the seller for free when every purchase is free", () => {
     renderPage({ ...defaultProps(), receipt_purchases: [receiptPurchase("r1", true), receiptPurchase("r2", true)] });
 
     expect(showAlert).toHaveBeenCalledWith(
-      "You're in! Your free signup with Ana is confirmed. We sent a confirmation to buyer@example.com.",
+      "You signed up with Ana for free. We emailed the details to buyer@example.com.",
       "success",
     );
   });
