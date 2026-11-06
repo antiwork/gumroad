@@ -128,7 +128,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		return err
 	}
 	hdr := w.Header()
-	if !prod.alive() {
+	if !prod.alive() || p.urlCode != "" {
 		hdr.Set("X-Robots-Tag", "noindex")
 	}
 	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))

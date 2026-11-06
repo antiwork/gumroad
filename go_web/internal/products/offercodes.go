@@ -123,14 +123,20 @@ func (c *offerCode) inactive(now time.Time) bool {
 	return c.validAt.Valid && c.validAt.Time.After(now) || c.expiresAt.Valid && c.expiresAt.Time.Before(now)
 }
 
-// offerDiscount is what BestOfferCodeService#result gives a signed-out visitor with no code
-// in the URL, and its sale label.
+// offerDiscount is what BestOfferCodeService#result gives a signed-out visitor, and its sale
+// label.
 type offerDiscount struct {
 	// listed is whether default_offer_codes is non-empty, which selection_discounts reads.
 	listed bool
-	// code is the default code that applies, nil for none.
-	code  *offerCode
-	label any
+	// urlCode is the code in the URL, as typed; "" for none.
+	urlCode string
+	// code is the code that applies, nil for none, and resultCode the string its result
+	// echoes: the URL's as typed, else the stored one.
+	code       *offerCode
+	resultCode string
+	// invalid is the URL code's error_code when no code applies.
+	invalid string
+	label   any
 }
 
 func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product) (*offerDiscount, error) {
@@ -187,8 +193,26 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 			return nil, err
 		}
 		if valid {
-			d.code = c
+			d.code, d.resultCode = c, c.code.String
 			break
+		}
+	}
+	if d.urlCode = p.urlCode; d.urlCode != "" {
+		if d.code != nil && strings.EqualFold(d.urlCode, d.code.code.String) {
+			// The URL names the default that applies, so both would.
+			return nil, fallback("offer code comparison")
+		}
+		fromURL, errorCode, err := h.evaluateURLCode(ctx, prod, d.urlCode, now)
+		switch {
+		case err != nil:
+			return nil, err
+		case fromURL != nil && d.code != nil:
+			// met_discount_conditions? and comparison_amount weigh the two.
+			return nil, fallback("offer code comparison")
+		case fromURL != nil:
+			d.code, d.resultCode = fromURL, d.urlCode
+		case d.code == nil:
+			d.invalid = errorCode
 		}
 	}
 	if d.code != nil && auto != nil {
@@ -196,7 +220,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 		if !permalinkParam.MatchString(auto.code.String) {
 			return nil, fallback("offer code characters")
 		}
-		if strings.EqualFold(d.code.code.String, auto.code.String) {
+		if strings.EqualFold(d.resultCode, auto.code.String) {
 			d.label = defaultSaleLabel
 			if rails.Present(auto.saleLabel.String) {
 				d.label = auto.saleLabel.String
@@ -216,8 +240,53 @@ func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offer
 	if reason := c.unportedDiscount(); reason != "" && !c.existingOnly {
 		return false, fallback(reason)
 	}
-	code := strings.ToLower(c.code.String)
-	// find_offer_code: the product's codes, then the seller's universal ones; neither is ordered.
+	id, err := h.findOfferCode(ctx, prod, c.code.String)
+	switch {
+	case err != nil || id == 0:
+		return false, err
+	case id != c.id:
+		return false, fallback("offer code lookup")
+	}
+	return c.applicable(prod) && c.currencyValid(prod) && !c.existingOnly && !c.inactive(now), nil
+}
+
+// evaluateURLCode is BestOfferCodeService#evaluate_code for the URL's code: the code that
+// gives this visitor a discount, else the error_code it gets.
+func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed string, now time.Time) (*offerCode, string, error) {
+	id, err := h.findOfferCode(ctx, prod, typed)
+	if err != nil || id == 0 {
+		return nil, "invalid_offer", err
+	}
+	c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", id)
+	switch {
+	case err != nil:
+		return nil, "", err
+	case c == nil || !c.applicable(prod) || !c.currencyValid(prod):
+		return nil, "invalid_offer", nil
+	}
+	if reason := c.unportedLookup(prod); reason != "" {
+		return nil, "", fallback(reason)
+	}
+	switch {
+	case c.inactive(now):
+		return nil, "inactive", nil
+	case c.hasVariants:
+		// The options' quotes check each one against the code's scope.
+		return nil, "", fallback("offer code variants")
+	case c.existingOnly:
+		return nil, "not_existing_customer", nil
+	}
+	if reason := c.unportedDiscount(); reason != "" {
+		return nil, "", fallback(reason)
+	}
+	return c, "", nil
+}
+
+// findOfferCode is find_offer_code's row for a code, 0 for none: the product's codes, then
+// the seller's universal ones, neither ordered. OfferCodeDiscountComputingService then finds the
+// seller's codes by string again, so only a code the seller has once is followed.
+func (h *handler) findOfferCode(ctx context.Context, prod *product, code string) (int64, error) {
+	code = strings.ToLower(code)
 	var id int64
 	n, err := h.scanFirst(ctx, []any{&id}, "SELECT offer_codes.id FROM offer_codes INNER JOIN offer_codes_products"+
 		" ON offer_codes.id = offer_codes_products.offer_code_id WHERE offer_codes_products.product_id = ?"+
@@ -230,30 +299,31 @@ func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offer
 			prod.userID, prod.priceCurrencyType, prod.id, code)
 	}
 	switch {
-	case err != nil:
-		return false, err
-	case n == 0:
-		return false, nil
-	case n > 1 || id != c.id:
-		return false, fallback("offer code lookup")
+	case err != nil || n == 0:
+		return 0, err
+	case n > 1:
+		return 0, fallback("offer code lookup")
 	}
-	// OfferCodeDiscountComputingService finds the seller's codes by string again.
+	found := id
 	n, err = h.scanFirst(ctx, []any{&id}, "SELECT offer_codes.id FROM offer_codes WHERE offer_codes.user_id = ?"+
 		" AND offer_codes.code = ? AND offer_codes.deleted_at IS NULL LIMIT 2", prod.userID, code)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
-	if n != 1 || id != c.id {
-		return false, fallback("offer code lookup")
+	if n != 1 || id != found {
+		return 0, fallback("offer code lookup")
 	}
-	return c.applicable(prod) && c.currencyValid(prod) && !c.existingOnly && !c.inactive(now), nil
+	return found, nil
 }
 
 // resultProps is the discount_code prop: the code that applies and OfferCode#discount.
 func (d *offerDiscount) resultProps(prodExternalID string) any {
 	c := d.code
 	if c == nil {
-		return nil
+		if d.invalid == "" {
+			return nil
+		}
+		return rails.NewRHash().Sym("valid", false).Sym("error_code", d.invalid)
 	}
 	discount := rails.NewRHash()
 	if c.amountCents.Valid {
@@ -270,16 +340,21 @@ func (d *offerDiscount) resultProps(prodExternalID string) any {
 		Sym("minimum_quantity", nullInt(c.minimumQuantity)).
 		Sym("duration_in_billing_cycles", nullInt(c.durationInMonths)).
 		Sym("minimum_amount_cents", nullInt(c.minimumAmountCents))
-	return rails.NewRHash().Sym("valid", true).Sym("code", c.code.String).Sym("discount", discount)
+	if c.newOnly {
+		// Display only; checkout decides.
+		discount.Sym("new_customers_only", true)
+	}
+	return rails.NewRHash().Sym("valid", true).Sym("code", d.resultCode).Sym("discount", discount)
 }
 
-// selectionDiscounts is selection_discounts with no code in the URL. With no default code it
+// selectionDiscounts is selection_discounts. With no code in the URL and no default code it
 // has no options; otherwise each option the buyer can pick, rented or bought, shares the one
-// result, since no code here is scoped to options.
+// result, since no code here is scoped to options and only one can apply.
 func selectionDiscounts(prod *product, v *view, result any) *rails.RHash {
-	s := rails.NewRHash().Sym("url_code", nil).Sym("quantity", int64(1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
+	urlCode := presence(v.discount.urlCode)
+	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", int64(1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
 		Sym("option_id", nil).Sym("price_cents", nil)
-	if !v.discount.listed {
+	if !v.discount.listed && urlCode == nil {
 		return s.Sym("options", rails.NewRHash()).Sym("rent_options", nil)
 	}
 	entry := rails.NewRHash().Sym("discount_code", result).Sym("sale_label", v.discount.label)

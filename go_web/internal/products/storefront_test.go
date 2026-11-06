@@ -313,7 +313,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				}
 				e.config.Page.Search = client
 			}
-			w := e.get(host, "/l/guide", e.withDryRun(c.headers, c.reason))
+			w := e.get(host, "/l/guide", e.withDryRun("/l/guide", c.headers, c.reason))
 			if searches != c.searched {
 				t.Errorf("%d searches, want %d", searches, c.searched)
 			}
