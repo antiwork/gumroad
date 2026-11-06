@@ -18,6 +18,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -53,6 +54,9 @@ type PageConfig struct {
 	// OGNamespace is FACEBOOK_OG_NAMESPACE, and RecaptchaSiteKey FollowRecaptcha.site_key.
 	OGNamespace, RecaptchaSiteKey string
 	NewNonce                      func() string
+	// CustomHTMLAnalytics is vite_typescript_tag("custom_html_analytics"); nil leaves a custom
+	// HTML product page to Rails.
+	CustomHTMLAnalytics *vite.Tags
 }
 
 // cdnURL is cdn_url_for.

@@ -1,6 +1,7 @@
 package products
 
 import (
+	"context"
 	"database/sql"
 	"regexp"
 
@@ -19,9 +20,9 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 	}
 
 	// set_analytics_meta_tags with the product's seller.
-	enabled := "true"
-	if !h.c.Meta.AnalyticsByEnvironment || seller.is(userDisableThirdPartyAnalytics) {
-		enabled = "false"
+	enabled := "false"
+	if h.analyticsEnabled(seller) {
+		enabled = "true"
 	}
 	for _, property := range []string{"gr:google_analytics:enabled", "gr:fb_pixel:enabled", "gr:tiktok_pixel:enabled"} {
 		set("", "", "", inertia.Pairs("property", property, "content", enabled)...)
@@ -54,23 +55,13 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		set("", "", "", inertia.Pairs("property", "product:price:currency", "content", up)...)
 	}
 
-	// social_share_image: an image cover's URL, else a player's escaped thumbnail or a video's
-	// poster.
+	shareImage, err := socialShareImage(v)
+	if err != nil {
+		return nil, err
+	}
 	var main *cover
-	var shareImage string
 	if len(v.covers) > 0 {
 		main = v.covers[0]
-		switch {
-		case main.previewImagePath():
-			shareImage = main.url
-		case main.oembed != nil:
-			if main.thumbnail != "" && !addressableUnchanged.MatchString(main.thumbnail) {
-				return nil, fallback("oembed thumbnail escape")
-			}
-			shareImage = main.thumbnail
-		default:
-			shareImage = main.thumbnail
-		}
 	}
 	set("", "", "", inertia.Pairs("property", "og:title", "content", prod.name)...)
 	set("", "", "", inertia.Pairs("property", "og:description", "content", productDescription)...)
@@ -83,10 +74,8 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 
 	set("", "", "", inertia.Pairs("property", "twitter:title", "content", prod.name)...)
 	if rails.Present(shareImage) {
-		// demo_player_card_meta: the flag is on, and a product with builds may have a demo.
-		has, err := h.exists(p.Ctx, "SELECT 1 FROM product_builds WHERE product_builds.product_id = ? LIMIT 1", prod.id)
-		if err != nil || has {
-			return nil, firstErr(err, fallback("product builds"))
+		if err := h.noProductBuilds(p.Ctx, prod); err != nil {
+			return nil, err
 		}
 	}
 	switch {
@@ -155,6 +144,37 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 	set("link", "shortcut-icon", "", inertia.Pairs("rel", "shortcut icon", "href", v.avatarURL)...)
 	set("link", "apple-touch-icon", "", inertia.Pairs("rel", "apple-touch-icon", "href", v.avatarURL)...)
 	return meta, nil
+}
+
+// analyticsEnabled is analytics_enabled?(seller:) on a page that hasn't disabled them.
+func (h *handler) analyticsEnabled(seller *user) bool {
+	return h.c.Meta.AnalyticsByEnvironment && !seller.is(userDisableThirdPartyAnalytics)
+}
+
+// socialShareImage is social_share_image: an image cover's URL, else a player's escaped
+// thumbnail or a video's poster; "" is nil.
+func socialShareImage(v *view) (string, error) {
+	if len(v.covers) == 0 {
+		return "", nil
+	}
+	main := v.covers[0]
+	switch {
+	case main.previewImagePath():
+		return main.url, nil
+	case main.oembed != nil && main.thumbnail != "" && !addressableUnchanged.MatchString(main.thumbnail):
+		return "", fallback("oembed thumbnail escape")
+	}
+	return main.thumbnail, nil
+}
+
+// noProductBuilds goes to Rails for a product with a build: demo_player_card_meta's flag may
+// be on, and the build may have a demo.
+func (h *handler) noProductBuilds(ctx context.Context, prod *product) error {
+	has, err := h.exists(ctx, "SELECT 1 FROM product_builds WHERE product_builds.product_id = ? LIMIT 1", prod.id)
+	if err != nil || has {
+		return firstErr(err, fallback("product builds"))
+	}
+	return nil
 }
 
 // structuredData is Link#structured_data on the seller's subdomain.
