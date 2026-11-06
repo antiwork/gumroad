@@ -46,6 +46,7 @@ describe AgentOnboardingPresenter do
       muse = props[:clients].last
       expect(muse).to include(label: "Muse", pending_review: true, directory_url: nil, setup: nil)
       expect(muse[:availability]).to eq("Submitted for review. The Gumroad connector is not yet available in Muse.")
+      expect(props[:description]).not_to include("Muse")
     end
 
     it "leaves the directory step out of every card's setup, since the card's button already links it" do

@@ -10,7 +10,8 @@ class AgentOnboardingPresenter
   CLIENT_ORDER = %w[claude chatgpt muse].freeze
 
   TITLE = "Connect your AI to your Gumroad store"
-  DESCRIPTION = "Your own assistant — Claude, ChatGPT or Muse — can read your sales, draft and publish " \
+  # Muse stays out of this line until its listing is approved; its card says it is not available yet.
+  DESCRIPTION = "Your own assistant, such as Claude or ChatGPT, can read your sales, draft and publish " \
                 "products, and check your payouts through Gumroad’s MCP server."
 
   def initialize(pundit_user:)

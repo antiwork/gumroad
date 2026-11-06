@@ -22,7 +22,7 @@ export type AgentClient = {
   directory_url: string | null;
   connect_label: string | null;
   availability: string;
-  // Null when the client has no setup path to offer yet (Muse, under review).
+  // Null when the client has no manual setup step (ChatGPT; Muse while under review).
   setup: string | null;
   endpoint_url: string;
 };
@@ -43,7 +43,7 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
   return (
     <Card asChild>
       <section aria-labelledby={headingId} className="grid lg:row-span-2 lg:grid-rows-subgrid">
-        <CardContent details className="grid gap-4">
+        <CardContent details className="grid content-start gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id={headingId} className="text-lg font-bold">
               {client.label}
@@ -114,7 +114,7 @@ const AgentPage = () => {
           <p className="max-w-3xl">{description}</p>
         </section>
 
-        {/* Row subgrid: the Setup divider sits at the same height on all three cards. */}
+        {/* Row subgrid: any card with a Setup section starts it at the same height as the others. */}
         <section aria-label="AI clients" className="grid gap-4 lg:grid-cols-3 lg:grid-rows-[auto_auto]">
           {clients.map((client) => (
             <ClientCard key={client.key} client={client} />
