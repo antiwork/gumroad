@@ -5,7 +5,6 @@ package inertia
 import (
 	"crypto/md5"
 	"encoding/hex"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -78,7 +77,7 @@ func (t MetaTag) generateHeadKey() string {
 		}
 		for _, key := range []string{"name", "property", "http_equiv"} {
 			if v, ok := t.value(key); ok {
-				return "meta-" + key + "-" + parameterize(v)
+				return "meta-" + key + "-" + rails.Parameterize(v)
 			}
 		}
 	}
@@ -111,19 +110,6 @@ func (t MetaTag) JSON() *rails.RHash {
 		}
 	}
 	return h
-}
-
-var (
-	nonParam  = regexp.MustCompile(`(?i)[^a-z0-9\-_]+`)
-	dashRun   = regexp.MustCompile(`-{2,}`)
-	dashEdges = regexp.MustCompile(`(?i)^-|-$`)
-)
-
-// parameterize is String#parameterize for ASCII input, which every head key here is.
-func parameterize(s string) string {
-	s = nonParam.ReplaceAllString(s, "-")
-	s = dashRun.ReplaceAllString(s, "-")
-	return strings.ToLower(dashEdges.ReplaceAllString(s, ""))
 }
 
 // camelizeLower is to_s.camelize(:lower) for snake_case keys.

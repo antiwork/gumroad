@@ -40,7 +40,7 @@ type listedSection struct {
 // sectionTypes are SellerProfileSection's subclasses.
 var sectionTypes = map[string]bool{
 	profileProductsSectionType: true, profileSubscribeSectionType: true, profileRichTextSectionType: true,
-	profilePostsSectionType: true, profileFeaturedSectionType: true, "SellerProfileWishlistsSection": true,
+	profilePostsSectionType: true, profileFeaturedSectionType: true, profileWishlistsSectionType: true,
 }
 
 // listProductSections reads the sections product_page_props renders, before any search: Rails
@@ -86,8 +86,7 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 		props *rails.RHash
 		ids   []int64
 	}
-	var posts []pending
-	var featured []pending
+	var posts, featured, wishlists []pending
 	for rows.Next() {
 		var r sectionRow
 		if err := rows.Scan(r.dest()...); err != nil {
@@ -112,6 +111,22 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 				return nil, err
 			}
 			featured = append(featured, pending{head, ids})
+			continue
+		}
+		if r.typ == profileWishlistsSectionType {
+			// An unlisted one's cards are built and dropped too.
+			ids, err := shownWishlists(j)
+			if err != nil {
+				return nil, err
+			}
+			if listed {
+				encrypted := make([]any, len(ids))
+				for i, id := range ids {
+					encrypted[i] = h.c.IDs.Encrypt(id)
+				}
+				head.Sym("shown_wishlists", encrypted)
+			}
+			wishlists = append(wishlists, pending{head, ids})
 			continue
 		}
 		if !listed {
@@ -153,6 +168,15 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 			return nil, err
 		}
 		s.props.Sym("posts", list)
+	}
+	for _, s := range wishlists {
+		cards, err := h.wishlistCards(p, s.ids)
+		if err != nil {
+			return nil, err
+		}
+		if s.props != nil {
+			s.props.Sym("wishlists", cards)
+		}
 	}
 	for _, s := range featured {
 		f, err := h.prepareFeatured(p, v, s.ids)
