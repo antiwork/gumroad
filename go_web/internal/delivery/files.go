@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
@@ -44,12 +45,12 @@ type ProductFile struct {
 // AliveProductFiles is UrlRedirect#alive_product_files: the rows and order Rails returns,
 // including the repeats a duplicated base_variants_product_files row gives it. ids decrypts
 // the file embeds in the rich content that picks the files.
-func AliveProductFiles(ctx context.Context, db *sql.DB, r *Redirect, ids *obfuscate.IDs) ([]ProductFile, error) {
-	return newLoader(ctx, db, r, ids).aliveProductFiles()
+func AliveProductFiles(ctx context.Context, conn *sql.DB, r *Redirect, ids *obfuscate.IDs) ([]ProductFile, error) {
+	return newLoader(ctx, conn, r, ids).aliveProductFiles()
 }
 
-func newLoader(ctx context.Context, db *sql.DB, r *Redirect, ids *obfuscate.IDs) *loader {
-	return &loader{ctx: ctx, db: db, r: r, ids: ids, products: map[int64]*product{}, categories: map[int64]*category{},
+func newLoader(ctx context.Context, conn *sql.DB, r *Redirect, ids *obfuscate.IDs) *loader {
+	return &loader{ctx: ctx, conn: conn, r: r, ids: ids, products: map[int64]*product{}, categories: map[int64]*category{},
 		categoryHasFiles: map[int64]bool{}, contents: map[contentOwner][]*RichContent{}}
 }
 
@@ -109,10 +110,10 @@ type contentOwner struct {
 
 // loader reads each row once per call, as UrlRedirect's memoized associations do.
 type loader struct {
-	ctx context.Context
-	db  *sql.DB
-	r   *Redirect
-	ids *obfuscate.IDs
+	ctx  context.Context
+	conn *sql.DB
+	r    *Redirect
+	ids  *obfuscate.IDs
 
 	installment             *installment
 	installmentLoaded       bool
@@ -241,7 +242,7 @@ func (l *loader) purchasedVariantFiles() ([]ProductFile, error) {
 	}
 	var ids []int64
 	for _, v := range variants {
-		rows, err := l.db.QueryContext(l.ctx, "SELECT `product_files`.`id` FROM `product_files`"+variantFilesJoin, v.id)
+		rows, err := l.conn.QueryContext(l.ctx, "SELECT `product_files`.`id` FROM `product_files`"+variantFilesJoin, v.id)
 		if err != nil {
 			return nil, err
 		}
@@ -273,7 +274,7 @@ func (l *loader) files(query string, args ...any) ([]ProductFile, error) {
 	if l.display {
 		return l.displayFiles(strings.Replace(query, fileColumns, displayColumns, 1)+", `product_files`.`position` ASC", args...)
 	}
-	rows, err := l.db.QueryContext(l.ctx, query, args...)
+	rows, err := l.conn.QueryContext(l.ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +366,7 @@ func (l *loader) withProductFiles() (*owner, error) {
 	}
 	// purchase.variant_attributes.order(deleted_at: :asc).first: an alive variant first, and
 	// among several the one MySQL's sort picks for the LIMIT.
-	v, err := l.scanVariant(l.db.QueryRowContext(l.ctx, variantColumns+variantAttributesJoin+
+	v, err := l.scanVariant(l.conn.QueryRowContext(l.ctx, variantColumns+variantAttributesJoin+
 		" ORDER BY `base_variants`.`deleted_at` ASC LIMIT 1", l.purchase.id).Scan, false)
 	if err != nil || v == nil {
 		return nil, err
@@ -434,7 +435,7 @@ func (l *loader) productOrCheapestVariant(entity *owner) (*owner, error) {
 	if !recoverable {
 		// An unloaded relation's first is its own LIMIT 1 query, whose pick among equal prices
 		// can differ from the full sort's.
-		v, err := l.scanVariant(l.db.QueryRowContext(l.ctx, cheapestFirst+" LIMIT 1", product.id).Scan, true)
+		v, err := l.scanVariant(l.conn.QueryRowContext(l.ctx, cheapestFirst+" LIMIT 1", product.id).Scan, true)
 		if err != nil || v == nil {
 			return nil, err
 		}
@@ -546,7 +547,7 @@ func (l *loader) categoryHasVariantWithFiles(categoryID int64) (bool, error) {
 	if has, ok := l.categoryHasFiles[categoryID]; ok {
 		return has, nil
 	}
-	rows, err := l.db.QueryContext(l.ctx, "SELECT `base_variants`.`id`, `base_variants`.`type`, EXISTS (SELECT 1 FROM `product_files`"+
+	rows, err := l.conn.QueryContext(l.ctx, "SELECT `base_variants`.`id`, `base_variants`.`type`, EXISTS (SELECT 1 FROM `product_files`"+
 		" INNER JOIN `base_variants_product_files` ON `product_files`.`id` = `base_variants_product_files`.`product_file_id`"+
 		" WHERE `base_variants_product_files`.`base_variant_id` = `base_variants`.`id` AND `product_files`.`deleted_at` IS NULL)"+
 		" FROM `base_variants` WHERE `base_variants`.`type` = 'Variant' AND `base_variants`.`variant_category_id` = ?"+
@@ -742,7 +743,7 @@ func (l *loader) aliveRichContents(key contentOwner) ([]*RichContent, error) {
 	if contents, ok := l.contents[key]; ok {
 		return contents, nil
 	}
-	rows, err := l.db.QueryContext(l.ctx, "SELECT `rich_contents`.`id`, `rich_contents`.`title`, `rich_contents`.`description`,"+
+	rows, err := l.conn.QueryContext(l.ctx, "SELECT `rich_contents`.`id`, `rich_contents`.`title`, `rich_contents`.`description`,"+
 		" `rich_contents`.`updated_at`, `rich_contents`.`position` FROM `rich_contents`"+
 		" WHERE `rich_contents`.`entity_id` = ? AND `rich_contents`.`entity_type` = ? AND `rich_contents`.`deleted_at` IS NULL", key.id, key.entityType)
 	if err != nil {
@@ -780,7 +781,7 @@ func (l *loader) anyEditorContent(key contentOwner) (bool, error) {
 }
 
 func (l *loader) variants(query string, asVariant bool, args ...any) ([]*variant, error) {
-	rows, err := l.db.QueryContext(l.ctx, query, args...)
+	rows, err := l.conn.QueryContext(l.ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -800,7 +801,7 @@ func (l *loader) variants(query string, asVariant bool, args ...any) ([]*variant
 func (l *loader) scanVariant(scan func(...any) error, asVariant bool) (*variant, error) {
 	v := &variant{}
 	var typ sql.NullString
-	var deletedAt sql.NullTime
+	var deletedAt db.NullTime
 	err := scan(&v.id, &typ, &v.categoryID, &v.productID, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -811,8 +812,7 @@ func (l *loader) scanVariant(scan func(...any) error, asVariant bool) (*variant,
 	if v.class, err = variantClassOf(v.id, typ, asVariant); err != nil {
 		return nil, err
 	}
-	// mysql2 reads a zero datetime as nil.
-	v.deleted = deletedAt.Valid && !deletedAt.Time.IsZero()
+	v.deleted = deletedAt.Valid
 	return v, nil
 }
 
@@ -838,7 +838,7 @@ func variantClassOf(id int64, typ sql.NullString, asVariant bool) (variantClass,
 }
 
 func (l *loader) queryRow(query string, args []any, dest ...any) (bool, error) {
-	err := l.db.QueryRowContext(l.ctx, query, args...).Scan(dest...)
+	err := l.conn.QueryRowContext(l.ctx, query, args...).Scan(dest...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}

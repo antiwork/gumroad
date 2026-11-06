@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 )
@@ -86,7 +87,7 @@ func (s *Store) ByToken(ctx context.Context, token string) (*Token, error) {
 	t := &Token{}
 	var resource sql.NullString
 	var owner session.UserScan
-	targets := append([]any{&t.ID, &t.ResourceOwnerID, &t.Scopes, &t.ExpiresIn, &t.RevokedAt, &t.CreatedAt, &resource, &t.TeamMembershipID},
+	targets := append([]any{&t.ID, &t.ResourceOwnerID, &t.Scopes, &t.ExpiresIn, db.Time(&t.RevokedAt), &t.CreatedAt, &resource, &t.TeamMembershipID},
 		owner.Targets()...)
 	err := s.DB.QueryRowContext(ctx, `SELECT t.id, t.resource_owner_id, COALESCE(t.scopes, ''), t.expires_in, t.revoked_at,
 		t.created_at, t.resource, t.team_membership_id, `+session.UserColumns("u")+`
@@ -160,13 +161,16 @@ func (t *Token) Actor() (*session.User, error) {
 // Authorize is doorkeeper_authorize!(scopes...) with Doorkeeper's default render options:
 // when it returns false it has answered with `head 401` or `head 403` and the error's
 // headers ("no-store, no-cache" is what Rails' Cache-Control merge reduces to "no-store").
+// Api::Mobile::BaseController's valid_doorkeeper_token? also needs a resource owner, so a
+// client-credentials token is answered as an invalid one.
 func Authorize(w http.ResponseWriter, req *rails.Request, token *Token, scopes ...string) bool {
 	now := req.Now
-	if token != nil && token.Accessible(now) && token.IncludesScope(scopes...) {
+	ownerless := token != nil && token.ResourceOwnerID == nil
+	if token != nil && !ownerless && token.Accessible(now) && token.IncludesScope(scopes...) {
 		return true
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	if token != nil && token.Accessible(now) {
+	if token != nil && !ownerless && token.Accessible(now) {
 		rails.Head(w, req, http.StatusForbidden)
 		return false
 	}

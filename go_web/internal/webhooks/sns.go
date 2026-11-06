@@ -96,6 +96,7 @@ type snsVerifier struct {
 	get       certGetter
 	now       func() time.Time
 	downloads chan struct{}
+	joinWait  time.Duration
 
 	mu sync.Mutex
 	// All keyed by the raw SigningCertURL, so a cached one skips URI parsing.
@@ -130,6 +131,7 @@ func newSNSVerifier(get certGetter) *snsVerifier {
 		get:       get,
 		now:       time.Now,
 		downloads: make(chan struct{}, snsMaxDownloads),
+		joinWait:  snsJoinWait,
 		certs:     map[string]*snsCert{},
 		fetches:   map[string]*snsFetch{},
 		failures:  map[string]snsFailure{},
@@ -268,20 +270,32 @@ func (v *snsVerifier) publicKey(ctx context.Context, rawURL string) (key *rsa.Pu
 			<-v.downloads
 			v.settle(rawURL, fetch.err)
 			close(fetch.done)
+			if fetch.err != nil {
+				return nil, "", fetch.err
+			}
+			return fetch.key, fetch.url, nil
 		} else {
 			v.mu.Unlock()
 		}
 	}
+	join := time.NewTimer(v.joinWait)
+	defer join.Stop()
 	select {
 	case <-fetch.done:
 		if fetch.err != nil {
 			return nil, "", fetch.err
 		}
 		return fetch.key, fetch.url, nil
+	case <-join.C:
+		return nil, "", fmt.Errorf("waiting on another signing cert download: %w", errNoDownloadSlot)
 	case <-ctx.Done():
 		return nil, "", ctx.Err()
 	}
 }
+
+// snsJoinWait bounds how long a request waits on another's download: longer would only hold
+// its share of the webhooks' in-flight budget, and SNS redelivers on the 503.
+const snsJoinWait = 2 * time.Second
 
 func (v *snsVerifier) lookup(rawURL string) (*rsa.PublicKey, *snsFetch, bool, error) {
 	v.mu.Lock()
@@ -396,6 +410,11 @@ func certFetchTarget(rawURL string) (string, error) {
 	}
 	if rails.FileExtname(u.path) != ".pem" {
 		return "", errors.New("the SigningCertURL must link to a .pem file")
+	}
+	// AWS serves signing certs on 443 only. Rails would try another port and fail, after a
+	// connect that can hang; refusing it at once answers the same 400.
+	if port, err := strconv.Atoi(u.port); u.port != "" && (err != nil || port != 443) {
+		return "", errors.New("the SigningCertURL must use port 443")
 	}
 	return certFetchURL(u), nil
 }

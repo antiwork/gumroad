@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
@@ -39,12 +40,12 @@ func AudioDurations(files []ProductFile, ids *obfuscate.IDs) *rails.RHash {
 // LatestMediaLocations is UrlRedirectsController#latest_media_locations_data. purchaseID is
 // @url_redirect.purchase's id, nil when that row is missing; hasInstallment is
 // @url_redirect.installment.present?; files come from AliveProductFiles.
-func LatestMediaLocations(ctx context.Context, db *sql.DB, purchaseID *int64, hasInstallment bool, files []ProductFile, ids *obfuscate.IDs) (*rails.RHash, error) {
+func LatestMediaLocations(ctx context.Context, conn *sql.DB, purchaseID *int64, hasInstallment bool, files []ProductFile, ids *obfuscate.IDs) (*rails.RHash, error) {
 	h := rails.NewRHash()
 	if purchaseID == nil || hasInstallment {
 		return h, nil
 	}
-	locations, err := maxConsumedAtByFile(ctx, db, *purchaseID)
+	locations, err := maxConsumedAtByFile(ctx, conn, *purchaseID)
 	if err != nil {
 		return nil, err
 	}
@@ -57,15 +58,15 @@ func LatestMediaLocations(ctx context.Context, db *sql.DB, purchaseID *int64, ha
 type mediaLocation struct {
 	location   int64
 	unit       sql.NullString
-	consumedAt sql.NullTime
+	consumedAt db.NullTime
 }
 
 // maxConsumedAtByFile is MediaLocation.max_consumed_at_by_file(purchase_id:).index_by(&:product_file_id).
 // The query has no ORDER BY, and every row tied at a file's latest consumed_at comes back, so
 // index_by keeps whichever MySQL returns last; both join orders read a purchase's rows in
 // primary-key order, which makes that the highest id.
-func maxConsumedAtByFile(ctx context.Context, db *sql.DB, purchaseID int64) (map[int64]*mediaLocation, error) {
-	rows, err := db.QueryContext(ctx, "SELECT `media_locations`.`product_file_id`, `media_locations`.`location`, `media_locations`.`unit`,"+
+func maxConsumedAtByFile(ctx context.Context, conn *sql.DB, purchaseID int64) (map[int64]*mediaLocation, error) {
+	rows, err := conn.QueryContext(ctx, "SELECT `media_locations`.`product_file_id`, `media_locations`.`location`, `media_locations`.`unit`,"+
 		" `media_locations`.`consumed_at` FROM `media_locations` INNER JOIN (SELECT product_file_id, MAX(consumed_at) AS max_consumed_at"+
 		" FROM `media_locations` WHERE `media_locations`.`purchase_id` = ? GROUP BY `media_locations`.`product_file_id`) AS max_ml"+
 		" ON media_locations.product_file_id = max_ml.product_file_id AND media_locations.consumed_at = max_ml.max_consumed_at"+
@@ -126,8 +127,7 @@ func (f *ProductFile) mediaLocationForDownloadPage(m *mediaLocation) any {
 		return nil
 	}
 	var timestamp any
-	// mysql2 reads a zero datetime as nil.
-	if m.consumedAt.Valid && !m.consumedAt.Time.IsZero() {
+	if m.consumedAt.Valid {
 		timestamp = m.consumedAt.Time.In(time.UTC)
 	}
 	json := rails.NewRHash().Sym("location", m.location).Sym("unit", m.unit.String).Sym("timestamp", timestamp)

@@ -15,7 +15,6 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
-	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -45,29 +44,29 @@ const pageWriteTimeout = 5 * time.Second
 func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) error {
 	pc := h.c.Pages
 	switch {
-	case p.auth.LoggedInUser() != nil:
+	case p.Auth.LoggedInUser() != nil:
 		return fallback("signed in")
 	case p.purchase == nil:
 		return fallback("no purchase")
 	case u.importedCustomerID != nil:
 		// The license prop would create the imported customer's license.
 		return fallback("imported customer")
-	case p.req.Param("folder_id") != nil:
+	case p.Req.Param("folder_id") != nil:
 		// The view event stores params[:folder_id] in its json_data.
 		return fallback("param folder_id")
 	}
 	// The share blocks' checks that need no query come first.
-	if _, ok := pages.Locale(p.req.Header("Accept-Language")); !ok {
+	if _, ok := pages.Locale(p.Req.Header("Accept-Language")); !ok {
 		return fallback("shared props")
 	}
-	if _, err := pages.FlashProps(p.session); err != nil {
+	if _, err := pages.FlashProps(p.Session); err != nil {
 		return fallback("shared props")
 	}
-	d, err := h.loadPageData(p.ctx, p)
+	d, err := h.loadPageData(p.Ctx, p)
 	if err != nil {
 		return err
 	}
-	content := delivery.NewPage(p.ctx, h.c.DB, u.delivery(), h.c.IDs)
+	content := delivery.NewPage(p.Ctx, h.c.DB, u.delivery(), h.c.IDs)
 	owner, err := content.Owner()
 	if err != nil {
 		return unported(err)
@@ -96,7 +95,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if err != nil {
 		return err
 	}
-	avatar, err := pc.Avatars.URL(p.ctx, *owner.SellerID)
+	avatar, err := pc.Avatars.URL(p.Ctx, *owner.SellerID)
 	if errors.Is(err, storage.ErrUnported) {
 		return fallback("avatar")
 	}
@@ -121,9 +120,8 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	meta.Set(inertia.NewMetaTag("", "", "", inertia.Attr{Key: "name", Value: "apple-itunes-app"},
 		inertia.Attr{Key: "content", Value: "app-id=" + pc.IOSAppID + ", app-argument=" + downloadURL}))
 
-	masked, _ := session.MaskedGlobalToken(p.csrf)
-	shared, err := pc.Shared.SignedOut(p.ctx, pages.Request{
-		Req: p.req, Session: p.session, CSRFToken: masked, ScriptNonce: nonce, Title: pageTitle(meta, h.c.Meta.Title),
+	shared, err := pc.Shared.SignedOut(p.Ctx, pages.Request{
+		Req: p.Req, Session: p.Session, CSRFToken: p.MaskedCSRFToken(), ScriptNonce: nonce, Title: pageTitle(meta, h.c.Meta.Title),
 	})
 	if errors.Is(err, pages.ErrUnported) {
 		return fallback("shared props")
@@ -180,7 +178,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("receipt_purchase_id", purchaseID).
 			Sym("email", nullableString(d.email)).
 			Sym("email_digest", emailDigest).
-			Sym("created_at", nullableTime(d.createdAt)).
+			Sym("created_at", d.createdAt.OrNil()).
 			Sym("is_archived", pu.flags&purchaseIsArchived != 0).
 			Sym("has_invoice", d.hasInvoice()).
 			Sym("product_permalink", nullableString(d.uniquePermalink)).
@@ -196,45 +194,45 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("membership", nil).
 			Sym("purchase_custom_fields", []any{}).
 			Sym("call", nil)).
-		Sym("is_mobile_app_web_view", p.req.Param("display") == "mobile_app").
+		Sym("is_mobile_app_web_view", p.Req.Param("display") == "mobile_app").
 		Sym("content_unavailability_reason_code", nil).
 		Sym("add_to_library_option", addToLibrary).
 		Sym("dropbox_api_key", pc.DropboxAPIKey)
 
-	asEmbed, _ := p.req.Params.Get("as_embed")
+	asEmbed, _ := p.Req.Params.Get("as_embed")
 	body := pc.Layout.Render(inertia.Document{
-		Component: component, URL: p.req.FullPath(), Props: props, Meta: meta,
-		UserAgent: p.req.Header("User-Agent"), AsEmbed: rails.Truthy(asEmbed),
-		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.req, Session: p.session}),
+		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta,
+		UserAgent: p.Req.Header("User-Agent"), AsEmbed: rails.Truthy(asEmbed),
+		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
 	})
 
 	// The writes, as the after_actions run: the view event, then the uses, the seen flag and
 	// the confirmation cookie.
 	// A dry run skips only the database writes: its cookies are what a parity check compares
 	// with Rails', and it keeps none of them.
-	if !p.dryRun {
+	if !p.DryRun {
 		if err := h.recordView(p, u, d.productID); err != nil {
 			return err
 		}
 	}
 	value := h.c.Store.Codec.Encrypt(confirmedCookie, []byte(rails.EncodeJSON(u.token)), time.Time{})
-	p.cookies = append(p.cookies, rails.SetCookie{Name: confirmedCookie, Value: value, HTTPOnly: true}.Line(p.secure))
+	p.Cookies = append(p.Cookies, rails.SetCookie{Name: confirmedCookie, Value: value, HTTPOnly: true}.Line(p.Secure))
 	if err := h.finish(w, p); err != nil {
 		return err
 	}
 	hdr := w.Header()
 	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
 	hdr.Set("Link", pc.Layout.LinkHeader())
-	rails.RenderInertiaHTML(w, p.req, body)
+	rails.RenderInertiaHTML(w, p.Req, body)
 	return nil
 }
 
 // recordView is create_download_page_view_consumption_event!, then
 // register_that_user_has_downloaded_product's two writes.
 func (h *handler) recordView(p *page, u *urlRedirect, productID int64) error {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(p.ctx), pageWriteTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(p.Ctx), pageWriteTimeout)
 	defer cancel()
-	ip, _ := p.req.RemoteIP()
+	ip, _ := p.Req.RemoteIP()
 	// serialize :json_data, coder: JSON, after the folder_id and ip_address writers ran.
 	jsonData := `{"folder_id":null,"ip_address":` + rails.EncodeJSON(ip) + `}`
 	now := h.c.Now()
@@ -267,14 +265,6 @@ func unported(err error) error {
 		return fallback("content")
 	}
 	return err
-}
-
-// nullableTime is a DATETIME as mysql2 reads it, for the JSON encoder.
-func nullableTime(t sql.NullTime) any {
-	if at := railsTime(t); at != nil {
-		return *at
-	}
-	return nil
 }
 
 func nullableString(s sql.NullString) any {

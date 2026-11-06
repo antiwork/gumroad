@@ -208,8 +208,10 @@ func (h *handlers) authenticate(c *actionContext) error {
 		if err != nil {
 			return err
 		}
-		if token != nil {
-			c.token = token
+		c.token = token
+		// current_user_from_api_or_web falls back to the session's user when the token has
+		// no owner, since current_api_user is nil then.
+		if token != nil && token.ResourceOwnerID != nil {
 			actor, err := token.Actor()
 			if errors.Is(err, oauth.ErrOwnerNotFound) {
 				return errNotFound

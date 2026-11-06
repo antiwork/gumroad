@@ -6,6 +6,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
 )
 
@@ -52,9 +53,9 @@ func (u *urlRedirect) delivery() *delivery.Redirect {
 }
 
 // findURLRedirect is UrlRedirect.find_by(token:), under the column's case-insensitive collation.
-func findURLRedirect(ctx context.Context, db *sql.DB, token string) (*urlRedirect, error) {
+func findURLRedirect(ctx context.Context, conn *sql.DB, token string) (*urlRedirect, error) {
 	u := &urlRedirect{}
-	err := db.QueryRowContext(ctx, `SELECT id, token, purchase_id, link_id, installment_id, imported_customer_id, flags
+	err := conn.QueryRowContext(ctx, `SELECT id, token, purchase_id, link_id, installment_id, imported_customer_id, flags
 		FROM url_redirects WHERE token = ? LIMIT 1`, token).
 		Scan(&u.id, &u.token, &u.purchaseID, &u.productID, &u.installmentID, &u.importedCustomerID, &u.flags)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -107,12 +108,11 @@ func (p *purchase) testPurchase() (bool, error) {
 }
 
 // findPurchase is url_redirect.purchase.
-func findPurchase(ctx context.Context, db *sql.DB, id int64) (*purchase, error) {
+func findPurchase(ctx context.Context, conn *sql.DB, id int64) (*purchase, error) {
 	p := &purchase{}
 	var refunded, rentalExpired sql.NullBool
 	var productID sql.NullInt64
-	var chargebackDate sql.NullTime
-	err := db.QueryRowContext(ctx, `SELECT purchases.id, purchaser.id, seller.id, purchases.subscription_id,
+	err := conn.QueryRowContext(ctx, `SELECT purchases.id, purchaser.id, seller.id, purchases.subscription_id,
 		purchases.ip_address, purchases.stripe_refunded, purchases.chargeback_date, purchases.rental_expired, purchases.flags,
 		links.id, links.native_type
 		FROM purchases
@@ -120,7 +120,7 @@ func findPurchase(ctx context.Context, db *sql.DB, id int64) (*purchase, error) 
 		LEFT JOIN links ON links.id = purchases.link_id
 		LEFT JOIN users seller ON seller.id = links.user_id
 		WHERE purchases.id = ? LIMIT 1`, id).
-		Scan(&p.id, &p.purchaserID, &p.sellerID, &p.subscriptionID, &p.ipAddress, &refunded, &chargebackDate,
+		Scan(&p.id, &p.purchaserID, &p.sellerID, &p.subscriptionID, &p.ipAddress, &refunded, db.Time(&p.chargebackDate),
 			&rentalExpired, &p.flags, &productID, &p.productNativeType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -129,7 +129,7 @@ func findPurchase(ctx context.Context, db *sql.DB, id int64) (*purchase, error) 
 		return nil, err
 	}
 	p.productMissing = !productID.Valid
-	p.stripeRefunded, p.rentalExpired, p.chargebackDate = refunded.Bool, rentalExpired.Bool, railsTime(chargebackDate)
+	p.stripeRefunded, p.rentalExpired = refunded.Bool, rentalExpired.Bool
 	return p, nil
 }
 
@@ -142,24 +142,22 @@ type subscription struct {
 	blockAccessAfterCancellation   bool
 }
 
-func findSubscription(ctx context.Context, db *sql.DB, id int64) (*subscription, error) {
+func findSubscription(ctx context.Context, conn *sql.DB, id int64) (*subscription, error) {
 	s := &subscription{}
 	var productFlags sql.NullInt64
-	var cancelledAt, failedAt, endedAt sql.NullTime
-	err := db.QueryRowContext(ctx, `SELECT users.id, subscriptions.flags, subscriptions.cancelled_at, subscriptions.failed_at,
+	err := conn.QueryRowContext(ctx, `SELECT users.id, subscriptions.flags, subscriptions.cancelled_at, subscriptions.failed_at,
 		subscriptions.ended_at, links.flags
 		FROM subscriptions
 		LEFT JOIN users ON users.id = subscriptions.user_id
 		LEFT JOIN links ON links.id = subscriptions.link_id
 		WHERE subscriptions.id = ? LIMIT 1`, id).
-		Scan(&s.userID, &s.flags, &cancelledAt, &failedAt, &endedAt, &productFlags)
+		Scan(&s.userID, &s.flags, db.Time(&s.cancelledAt), db.Time(&s.failedAt), db.Time(&s.endedAt), &productFlags)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	s.cancelledAt, s.failedAt, s.endedAt = railsTime(cancelledAt), railsTime(failedAt), railsTime(endedAt)
 	s.productMissing = !productFlags.Valid
 	s.blockAccessAfterCancellation = productFlags.Int64&productBlockAccessAfterCancellation != 0
 	return s, nil
@@ -180,21 +178,13 @@ func (s *subscription) grantAccessToProduct(now time.Time) (bool, error) {
 	return !s.blockAccessAfterCancellation, nil
 }
 
-// railsTime is a DATETIME as mysql2 reads it: a zero date is nil.
-func railsTime(t sql.NullTime) *time.Time {
-	if !t.Valid || t.Time.IsZero() {
-		return nil
-	}
-	return &t.Time
-}
-
 // importedCustomer is url_redirect.imported_customer: whether the row exists, and its
 // product's native_type.
-func importedCustomer(ctx context.Context, db *sql.DB, u *urlRedirect) (present bool, nativeType *string, err error) {
+func importedCustomer(ctx context.Context, conn *sql.DB, u *urlRedirect) (present bool, nativeType *string, err error) {
 	if u.importedCustomerID == nil {
 		return false, nil, nil
 	}
-	err = db.QueryRowContext(ctx, `SELECT links.native_type FROM imported_customers
+	err = conn.QueryRowContext(ctx, `SELECT links.native_type FROM imported_customers
 		LEFT JOIN links ON links.id = imported_customers.link_id WHERE imported_customers.id = ? LIMIT 1`, *u.importedCustomerID).Scan(&nativeType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil, nil
@@ -205,7 +195,7 @@ func importedCustomer(ctx context.Context, db *sql.DB, u *urlRedirect) (present 
 // referencedProductNativeType is url_redirect.referenced_link&.native_type for a redirect with
 // no purchase and no installment: the imported customer's product when there is an imported
 // customer, else the redirect's own.
-func referencedProductNativeType(ctx context.Context, db *sql.DB, u *urlRedirect, importedPresent bool, importedType *string) (*string, error) {
+func referencedProductNativeType(ctx context.Context, conn *sql.DB, u *urlRedirect, importedPresent bool, importedType *string) (*string, error) {
 	if importedPresent {
 		return importedType, nil
 	}
@@ -213,7 +203,7 @@ func referencedProductNativeType(ctx context.Context, db *sql.DB, u *urlRedirect
 		return nil, nil
 	}
 	var nativeType *string
-	err := db.QueryRowContext(ctx, `SELECT native_type FROM links WHERE id = ? LIMIT 1`, *u.productID).Scan(&nativeType)
+	err := conn.QueryRowContext(ctx, `SELECT native_type FROM links WHERE id = ? LIMIT 1`, *u.productID).Scan(&nativeType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

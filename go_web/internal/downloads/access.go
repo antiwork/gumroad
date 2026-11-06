@@ -12,7 +12,7 @@ import (
 // the poll reads when every filter passes.
 func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 	db := h.c.DB
-	u, err := findURLRedirect(p.ctx, db, p.req.Params.Value("id").(string))
+	u, err := findURLRedirect(p.Ctx, db, p.Req.Params.Value("id").(string))
 	if err != nil {
 		return nil, "", err
 	}
@@ -25,7 +25,7 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 	}
 	var purchase *purchase
 	if u.purchaseID != nil {
-		if purchase, err = findPurchase(p.ctx, db, *u.purchaseID); err != nil {
+		if purchase, err = findPurchase(p.Ctx, db, *u.purchaseID); err != nil {
 			return nil, "", err
 		}
 	}
@@ -33,14 +33,14 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 	if purchase != nil && purchase.bundle() {
 		return nil, "", fallback("bundle purchase")
 	}
-	imported, importedType, err := importedCustomer(p.ctx, db, u)
+	imported, importedType, err := importedCustomer(p.Ctx, db, u)
 	if err != nil {
 		return nil, "", err
 	}
 	nativeType := (*string)(nil)
 	if purchase != nil {
 		nativeType = purchase.productNativeType
-	} else if nativeType, err = referencedProductNativeType(p.ctx, db, u, imported, importedType); err != nil {
+	} else if nativeType, err = referencedProductNativeType(p.Ctx, db, u, imported, importedType); err != nil {
 		return nil, "", err
 	}
 	if nativeType != nil && *nativeType == coffeeNativeType {
@@ -57,11 +57,11 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 		return nil, "/r/" + token + "/expired", nil
 	}
 
-	signedIn := p.auth.CurrentUser != nil
-	logged := p.auth.LoggedInUser()
+	signedIn := p.Auth.CurrentUser != nil
+	logged := p.Auth.LoggedInUser()
 	var subscription *subscription
 	if purchase != nil && purchase.subscriptionID != nil {
-		if subscription, err = findSubscription(p.ctx, db, *purchase.subscriptionID); err != nil {
+		if subscription, err = findSubscription(p.Ctx, db, *purchase.subscriptionID); err != nil {
 			return nil, "", err
 		}
 	}
@@ -80,7 +80,7 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 			return nil, "", err
 		}
 		if !test {
-			return nil, "/r/" + token + "/check_purchaser?" + rails.ToQuery([2]string{"next", p.req.Path}), nil
+			return nil, "/r/" + token + "/check_purchaser?" + rails.ToQuery([2]string{"next", p.Req.Path}), nil
 		}
 	}
 	if purchase != nil && purchase.rentalExpired {
@@ -90,7 +90,7 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 		return nil, "/r/" + token + "/expired", nil
 	}
 	if subscription != nil {
-		granted, err := subscription.grantAccessToProduct(p.req.Now)
+		granted, err := subscription.grantAccessToProduct(p.Req.Now)
 		if err != nil {
 			return nil, "", err
 		}
@@ -112,7 +112,7 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 		if signedIn {
 			return nil, "", errNotFound
 		}
-		return nil, h.c.Env.Protocol + "://" + h.c.Env.Domain + "/login?" + rails.ToQuery([2]string{"next", p.req.FullPath()}), nil
+		return nil, h.c.Env.Protocol + "://" + h.c.Env.Domain + "/login?" + rails.ToQuery([2]string{"next", p.Req.FullPath()}), nil
 	}
 
 	// Every check from here lets the poll through except the last, so the cheapest goes first.
@@ -121,7 +121,7 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 		return u, "", nil
 	}
 	query := [][2]string{{"id", token}, {"destination", "download_page"}}
-	if display, _ := p.req.Params.Value("display").(string); rails.Present(display) {
+	if display, _ := p.Req.Params.Value("display").(string); rails.Present(display) {
 		query = append(query, [2]string{"display", display})
 	}
 	return nil, "/confirm?" + rails.ToQuery(query...), nil
@@ -129,7 +129,7 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 
 // confirmedCookie is cookies.encrypted[:confirmed_redirect], "" when absent or unreadable.
 func (h *handler) confirmedCookie(p *page) string {
-	plain, ok := h.c.Store.EncryptedCookie(p.req, confirmedCookie)
+	plain, ok := h.c.Store.EncryptedCookie(p.Req, confirmedCookie)
 	if !ok {
 		return ""
 	}
@@ -144,6 +144,6 @@ func remoteIPMatches(p *page, ip *string) bool {
 	if ip == nil {
 		return false
 	}
-	remote, err := p.req.RemoteIP()
+	remote, err := p.Req.RemoteIP()
 	return err == nil && rails.SecureCompare(*ip, remote)
 }

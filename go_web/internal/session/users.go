@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/antiwork/gumroad/go_web/internal/db"
 )
 
 // isTeamMemberFlag is User's has_flags 28 => :is_team_member.
@@ -61,7 +63,7 @@ type UserScan struct {
 }
 
 func (s *UserScan) Targets() []any {
-	return []any{&s.id, &s.flags, &s.deletedAt, &s.riskState, &s.invalidated, &s.username, &s.externalID}
+	return []any{&s.id, &s.flags, db.Time(&s.deletedAt), &s.riskState, db.Time(&s.invalidated), &s.username, &s.externalID}
 }
 
 // User is the scanned user, or nil when the join found none.

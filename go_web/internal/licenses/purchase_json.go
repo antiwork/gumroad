@@ -55,7 +55,7 @@ func buildPurchaseJSON(g *purchaseGraph, cfg *config, ids idEncoder) (*rails.RHa
 	}
 	payload.Sym("order_number", orderNumber)
 	payload.Sym("sale_id", ids.Encrypt(p.id))
-	payload.Sym("sale_timestamp", nullTime(p.createdAt))
+	payload.Sym("sale_timestamp", p.createdAt.OrNil())
 	if presentString(p.fullName) {
 		payload.Sym("full_name", p.fullName.String)
 	}
@@ -182,9 +182,9 @@ func purchaseAsJSONForLicense(g *purchaseGraph, ids idEncoder) (*rails.RHash, er
 		if g.subscription == nil {
 			return nil, fmt.Errorf("purchase %d of a recurring product: %w (subscription)", p.id, errMissingRecord)
 		}
-		asJSON.Sym("subscription_ended_at", nullTime(g.subscription.endedAt)).
-			Sym("subscription_cancelled_at", nullTime(g.subscription.cancelledAt)).
-			Sym("subscription_failed_at", nullTime(g.subscription.failedAt))
+		asJSON.Sym("subscription_ended_at", g.subscription.endedAt.OrNil()).
+			Sym("subscription_cancelled_at", g.subscription.cancelledAt.OrNil()).
+			Sym("subscription_failed_at", g.subscription.failedAt.OrNil())
 	} else {
 		asJSON.Sym("chargebacked", p.chargebackDate.Valid && !p.is(purchaseChargebackReversed))
 		asJSON.Sym("refunded", refunded)

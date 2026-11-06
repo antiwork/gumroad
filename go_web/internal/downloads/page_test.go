@@ -55,7 +55,7 @@ func newPageEnv(t *testing.T) *testEnv {
 			EmailDigestKey: "digest-key", DropboxAPIKey: "dropbox", IOSAppID: "916819108", AndroidBundleID: "com.gumroad.app",
 			NewNonce: func() string { return "NONCE" },
 		}
-		c.DryRunKey = DryRunKey(testSecretKeyBase)
+		c.DryRunKey = pages.DryRunKey(testSecretKeyBase)
 	})
 	testdb.Insert(t, e.db, "rich_contents", map[string]any{"id": richContentID, "entity_id": productID, "entity_type": "Link",
 		"title": "Welcome", "position": 0, "description": `[{"type": "paragraph", "content": [{"text": "Hello <there>", "type": "text"}]}]`,
@@ -192,10 +192,10 @@ func TestTheFullPageLeavesToRailsWhatItDoesNotPort(t *testing.T) {
 func TestADryRunWritesNothingAndNamesItsFallback(t *testing.T) {
 	e := newPageEnv(t)
 	token := e.purchase(productID, map[string]any{"email": "buyer@example.com", "price_cents": 500}, map[string]any{"flags": 0})
-	sign := func(path string) map[string]string {
-		return map[string]string{dryRunHeader: SignDryRun(DryRunKey(testSecretKeyBase), "GET", path, testNow)}
+	sign := func(path string, at time.Time) map[string]string {
+		return map[string]string{"X-Go-Web-Dry-Run": pages.SignDryRun(pages.DryRunKey(testSecretKeyBase), "GET", "gumroad.com", path, at)}
 	}
-	if w := e.page(token, sign("/d/"+token)); w.Code != http.StatusOK {
+	if w := e.page(token, sign("/d/"+token, testNow)); w.Code != http.StatusOK {
 		t.Fatalf("dry run: %d %s", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 	var events, uses int64
@@ -206,12 +206,26 @@ func TestADryRunWritesNothingAndNamesItsFallback(t *testing.T) {
 	}
 	e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsLicensed, productID)
 	defer e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productIsLicensed, productID)
-	w := e.page(token, sign("/d/"+token))
+	header := sign("/d/"+token, testNow.Add(-time.Second))
+	w := e.page(token, header)
 	if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "licensed product" || e.railsHit != nil {
 		t.Errorf("fallback in a dry run: %d %q rails %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
 	}
+	// A header works once; used again, it is refused without running the page.
+	if w := e.page(token, header); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "dry run refused" || e.railsHit != nil {
+		t.Errorf("a used header: %d %q rails %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	// Nor is one signed for another host, or one too old.
+	other := map[string]string{"X-Go-Web-Dry-Run": pages.SignDryRun(pages.DryRunKey(testSecretKeyBase), "GET", "other.gumroad.com", "/d/"+token, testNow)}
+	if e.page(token, other); e.railsHit == nil {
+		t.Error("a header signed for another host was honored")
+	}
+	old := map[string]string{"X-Go-Web-Dry-Run": pages.SignDryRun(pages.DryRunKey(testSecretKeyBase), "GET", "gumroad.com", "/d/"+token, testNow.Add(-2*time.Minute))}
+	if e.page(token, old); e.railsHit == nil {
+		t.Error("a stale header was honored")
+	}
 	// A header signed for another path, or with another key, is no dry run.
-	if e.page(token, sign("/d/other")); e.railsHit == nil {
+	if e.page(token, sign("/d/other", testNow.Add(-2*time.Second))); e.railsHit == nil {
 		t.Error("a header signed for another path was honored")
 	}
 }
