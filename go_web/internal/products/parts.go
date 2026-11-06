@@ -12,32 +12,48 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 )
 
-// buyPriceCents is Link#price_cents for a buy-only product without recurrence: the last of
-// the alive prices in the product's currency that isn't a rental, as preload_product's
-// alive_prices loads them.
-func (h *handler) buyPriceCents(ctx context.Context, prod *product) (*int64, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`price_cents`, `prices`.`currency`, `prices`.`flags` FROM `prices`"+
-		" WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` = ?", prod.id)
+// prices are Link#buy_price_cents and #rental_price_cents for a product without recurrence:
+// the last alive price of each kind in the product's currency, as preload_product's
+// alive_prices loads them, nil for a kind the purchase type doesn't offer.
+type prices struct{ buy, rental *int64 }
+
+func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error) {
+	pc := prod.priceCurrencyType
+	// sqlMatch is the meta tags' comparison: they run before the preload, in SQL under the
+	// column's collation, where the props compare with Ruby's ==.
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`price_cents`, `prices`.`currency`, `prices`.`flags`, `prices`.`currency` = ?"+
+		" FROM `prices` WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` = ?", pc, prod.id)
 	if err != nil {
-		return nil, err
+		return prices{}, err
 	}
 	defer rows.Close()
-	var last *int64
+	var ps prices
 	for rows.Next() {
-		var cents int64
+		var cents, flags int64
 		var cur sql.NullString
-		var flags int64
-		if err := rows.Scan(&cents, &cur, &flags); err != nil {
-			return nil, err
+		var sqlMatch sql.NullBool
+		if err := rows.Scan(&cents, &cur, &flags, &sqlMatch); err != nil {
+			return prices{}, err
+		}
+		rental := flags&priceIsRental != 0
+		if rental && prod.purchaseType.Int64 == purchaseTypeBuyOnly || !rental && prod.rentOnly() {
+			continue
 		}
 		// prices_for_currency compares with ==, so a NULL currency only matches a NULL one.
-		if cur.Valid != prod.priceCurrencyType.Valid || cur.String != prod.priceCurrencyType.String || flags&1 != 0 {
+		if cur.Valid != pc.Valid || cur.String != pc.String {
+			if sqlMatch.Bool {
+				return prices{}, fallback("price currency collation")
+			}
 			continue
 		}
 		c := cents
-		last = &c
+		if rental {
+			ps.rental = &c
+		} else {
+			ps.buy = &c
+		}
 	}
-	return last, rows.Err()
+	return ps, rows.Err()
 }
 
 // productFile is an alive product_files row, in alive_product_files' order.

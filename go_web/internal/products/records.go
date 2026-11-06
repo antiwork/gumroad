@@ -61,8 +61,13 @@ const (
 
 // Link#purchase_type.
 const (
-	purchaseTypeBuyOnly = 0
+	purchaseTypeBuyOnly    = 0
+	purchaseTypeRentOnly   = 1
+	purchaseTypeBuyAndRent = 2
 )
+
+// Price flag bits.
+const priceIsRental int64 = 1 << 0
 
 // product is the links row.
 type product struct {
@@ -101,6 +106,8 @@ func (p *product) dest() []any {
 }
 
 func (p *product) is(flag int64) bool { return p.flags&flag != 0 }
+
+func (p *product) rentOnly() bool { return p.purchaseType.Int64 == purchaseTypeRentOnly }
 
 // alive is Link#alive?.
 func (p *product) alive() bool {
