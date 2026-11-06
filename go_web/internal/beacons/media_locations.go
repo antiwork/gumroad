@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/oauth"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
@@ -175,7 +176,7 @@ func (h *handlers) readMediaLocation(c *actionContext, urlRedirectID *int64, pur
 		LIMIT 1`,
 		nullableInt(urlRedirectID), purchaseParam, nullableInt(purchaseFromParam), nullableInt(fileID), nullableInt(urlRedirectID), platform).
 		Scan(&rows.redirectFound, &rows.purchaseID, &rows.productID, &rows.fileID, &rows.file.filetype, &rows.file.filegroup,
-			&rows.locationID, &rows.location, &rows.epubCFI, &rows.unit, &rows.consumedAt)
+			&rows.locationID, &rows.location, &rows.epubCFI, &rows.unit, db.Time(&rows.consumedAt))
 	return rows, err
 }
 

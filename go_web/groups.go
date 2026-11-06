@@ -23,6 +23,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/licenses"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
+	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/robots"
 	"github.com/antiwork/gumroad/go_web/internal/session"
@@ -119,7 +120,7 @@ func registerBeacons(app *web.App, d *dependencies) error {
 		SecretKeyBase:    d.config("SECRET_KEY_BASE"),
 		MobileToken:      d.config("MOBILE_TOKEN"),
 		CustomDomain:     getenv("CUSTOM_DOMAIN"),
-		BranchDeployment: getenv("BRANCH_DEPLOYMENT") != "",
+		BranchDeployment: branchDeployment(),
 	})
 }
 
@@ -136,7 +137,13 @@ func registerLicenses(app *web.App, d *dependencies) error {
 	if err != nil {
 		return err
 	}
-	licenses.Register(app, licenses.Deps{Env: d.env, Stack: d.stack, DB: conn, Redis: d.redis, SidekiqRedis: jobs, IDs: ids})
+	// A request with a session cookie goes to Rails, whose session filters aren't ported.
+	proxy := d.railsProxy()
+	if proxy == nil {
+		return fmt.Errorf("RAILS_UPSTREAMS_FILE is not set")
+	}
+	licenses.Register(app, licenses.Deps{Env: d.env, Stack: d.stack, DB: conn, Redis: d.redis, SidekiqRedis: jobs, IDs: ids,
+		Proxy: proxy, SessionCookie: d.sessionCookieName()})
 	return nil
 }
 
@@ -146,8 +153,8 @@ const stripeAPIVersion = "2023-10-16; risk_in_requirements_beta=v1; retrieve_tax
 // registerDownloads serves the download page's polls and hands the rest to Rails, so it
 // needs a Rails upstream list.
 func registerDownloads(app *web.App, d *dependencies) error {
-	upstreams := getenv("RAILS_UPSTREAMS_FILE")
-	if upstreams == "" {
+	proxy := d.railsProxy()
+	if proxy == nil {
 		return fmt.Errorf("RAILS_UPSTREAMS_FILE is not set")
 	}
 	conn, err := d.database()
@@ -181,10 +188,10 @@ func registerDownloads(app *web.App, d *dependencies) error {
 		Env:      d.env,
 		DB:       conn,
 		Stack:    d.stack,
-		Store:    session.NewStore(codec, d.env.Name, d.env.Protocol, getenv("CUSTOM_DOMAIN"), getenv("BRANCH_DEPLOYMENT") != ""),
+		Store:    session.NewStore(codec, d.env.Name, d.env.Protocol, getenv("CUSTOM_DOMAIN"), branchDeployment()),
 		Resolver: &session.Resolver{Users: &session.Users{DB: conn}, Redis: d.redis, Codec: codec},
 		IDs:      ids,
-		Proxy:    web.NewRailsProxy(upstreams),
+		Proxy:    proxy,
 		Meta: inertia.DefaultMeta{
 			Title:                  d.env.PageTitle,
 			Environment:            d.env.Name,
@@ -194,9 +201,10 @@ func registerDownloads(app *web.App, d *dependencies) error {
 			AssetHost:              d.env.AssetHost(),
 			AnalyticsByEnvironment: d.env.Name == "production" || d.env.Name == "staging",
 		},
-		Now:       time.Now,
-		Pages:     pageConfig,
-		DryRunKey: downloads.DryRunKey(d.config("SECRET_KEY_BASE")),
+		Now:        time.Now,
+		Pages:      pageConfig,
+		DryRunKey:  pages.DryRunKey(d.config("SECRET_KEY_BASE")),
+		DryRunOnce: d.redis,
 	})
 	return nil
 }
@@ -233,7 +241,25 @@ type dependencies struct {
 	jobs    *redis.Client
 	conn    *sql.DB
 	ids     *obfuscate.IDs
+	proxy   *web.RailsProxy
 	closers []func() error
+}
+
+// sessionCookieName is session_store.rb's key.
+func (d *dependencies) sessionCookieName() string {
+	return session.CookieName(d.env.Name, getenv("CUSTOM_DOMAIN"), branchDeployment())
+}
+
+func branchDeployment() bool { return getenv("BRANCH_DEPLOYMENT") != "" }
+
+// railsProxy hands requests to Rails, from RAILS_UPSTREAMS_FILE's list; nil without one.
+func (d *dependencies) railsProxy() *web.RailsProxy {
+	if d.proxy == nil {
+		if upstreams := getenv("RAILS_UPSTREAMS_FILE"); upstreams != "" {
+			d.proxy = web.NewRailsProxy(upstreams)
+		}
+	}
+	return d.proxy
 }
 
 // config reads a secret as Rails does, through GlobalConfig.get or secret_key_base: a set

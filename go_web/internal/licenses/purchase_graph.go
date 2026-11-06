@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/antiwork/gumroad/go_web/internal/db"
 )
 
 // purchaseGraph holds every row payload_for_ping_notification and as_json_for_license read for
@@ -45,9 +47,9 @@ type purchaseGraph struct {
 type subscription struct {
 	id          int64
 	flags       int64
-	endedAt     sql.NullTime
-	cancelledAt sql.NullTime
-	failedAt    sql.NullTime
+	endedAt     db.NullTime
+	cancelledAt db.NullTime
+	failedAt    db.NullTime
 	recurrence  sql.NullString
 	// Subscription#recurrence raises when its payment option, price or plan is missing.
 	recurrenceErr error

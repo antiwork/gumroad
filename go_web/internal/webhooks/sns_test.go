@@ -82,8 +82,12 @@ func isVerificationError(err error) bool {
 	return err != nil && !errors.Is(err, errRailsRaises)
 }
 
+// newTestSNSVerifier waits on another request's download as long as a test takes, so a
+// busy machine can't time a join out.
 func newTestSNSVerifier(host *fakeCertHost) *snsVerifier {
-	return newSNSVerifier(host.get)
+	v := newSNSVerifier(host.get)
+	v.joinWait = time.Minute
+	return v
 }
 
 func rubyCertHost() *fakeCertHost {
@@ -146,6 +150,7 @@ func TestSNSVerifierRejectsWhatMessageVerifierRejects(t *testing.T) {
 		"opaque cert URL":         {"SigningCertURL": "https:a.pem"},
 		"empty cert URL":          {"SigningCertURL": ""},
 		"cert not found":          {"SigningCertURL": "https://sns.us-east-1.amazonaws.com/missing.pem"},
+		"port other than 443":     {"SigningCertURL": "https://sns.us-east-1.amazonaws.com:81/a.pem"},
 		"Lambda's key wins":       {"SigningCertUrl": "https://sns.us-east-1.amazonaws.com/missing.pem"},
 	}
 	for name, changes := range cases {
@@ -269,6 +274,23 @@ func TestSNSVerifierCapsConcurrentDownloads(t *testing.T) {
 	}
 	if n := host.fetches.Load(); n != snsMaxDownloads {
 		t.Fatalf("fetched %d times", n)
+	}
+}
+
+func TestSNSVerifierStopsWaitingOnAnotherDownload(t *testing.T) {
+	host := &fakeCertHost{anyURL: true, block: make(chan struct{})}
+	v := newTestSNSVerifier(host)
+	v.joinWait = 10 * time.Millisecond
+	url := "https://sns.us-east-1.amazonaws.com/cert.pem"
+	done := make(chan error, 1)
+	go func() { done <- v.authenticate(context.Background(), messageAt(t, url)) }()
+	waitFor(t, func() bool { return host.fetches.Load() == 1 })
+	if err := v.authenticate(context.Background(), messageAt(t, url)); !errors.Is(err, errNoDownloadSlot) {
+		t.Errorf("a join past the wait: %v, want errNoDownloadSlot", err)
+	}
+	close(host.block)
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 

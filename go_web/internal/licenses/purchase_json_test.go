@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -36,12 +37,12 @@ func testIDs(t *testing.T) *obfuscate.IDs {
 func ns(s string) sql.NullString { return sql.NullString{String: s, Valid: true} }
 func ni(n int64) sql.NullInt64   { return sql.NullInt64{Int64: n, Valid: true} }
 func nb(b bool) sql.NullBool     { return sql.NullBool{Bool: b, Valid: true} }
-func nt(s string) sql.NullTime {
+func nt(s string) db.NullTime {
 	t, err := time.Parse("2006-01-02 15:04:05", s)
 	if err != nil {
 		panic(err)
 	}
-	return sql.NullTime{Time: t, Valid: true}
+	return db.NullTime{Time: t, Valid: true}
 }
 
 // richGraph is TestGoldenRichPurchase's fixture as loadPurchaseGraph reads it.
@@ -62,7 +63,7 @@ func richGraph() *purchaseGraph {
 			requireShipping: nb(true), flags: linkIsRecurringBilling | linkIsLicensed | linkIsPhysical},
 		productUser: seller,
 		purchaser:   seller,
-		subscription: &subscription{id: 2000600, cancelledAt: sql.NullTime{Time: time.Date(2026, 2, 1, 0, 0, 0, 123456000, time.UTC), Valid: true},
+		subscription: &subscription{id: 2000600, cancelledAt: db.NullTime{Time: time.Date(2026, 2, 1, 0, 0, 0, 123456000, time.UTC), Valid: true},
 			recurrence: ns("monthly")},
 		customFields: []customField{
 			{"Company", "text", ns("Acme <Inc>")}, {"Subscribe", "checkbox", ns("1")}, {"email", "terms", ns("0")}, {"Company", "text", ns("Second")},

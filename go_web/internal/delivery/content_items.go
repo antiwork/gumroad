@@ -67,7 +67,7 @@ func (f *displayFile) canSendToKindle() bool {
 // displayFiles runs one of aliveProductFiles' queries with download_attributes' select
 // list, keeping the rows for ContentItems.
 func (l *loader) displayFiles(query string, args ...any) ([]ProductFile, error) {
-	rows, err := l.db.QueryContext(l.ctx, query, args...)
+	rows, err := l.conn.QueryContext(l.ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -141,7 +141,7 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 	}
 	in := "(" + placeholders(len(ids)) + ")"
 	var subtitles, builds, thumbnails bool
-	if err := l.db.QueryRowContext(l.ctx, "SELECT EXISTS(SELECT 1 FROM subtitle_files WHERE product_file_id IN "+in+" AND deleted_at IS NULL),"+
+	if err := l.conn.QueryRowContext(l.ctx, "SELECT EXISTS(SELECT 1 FROM subtitle_files WHERE product_file_id IN "+in+" AND deleted_at IS NULL),"+
 		" EXISTS(SELECT 1 FROM product_builds WHERE product_file_id IN "+in+"),"+
 		" EXISTS(SELECT 1 FROM active_storage_attachments WHERE record_type = 'ProductFile' AND name = 'thumbnail' AND record_id IN "+in+")",
 		append(append(append([]any(nil), ids...), ids...), ids...)...).Scan(&subtitles, &builds, &thumbnails); err != nil {
@@ -158,7 +158,7 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 	var granted map[int64]bool
 	var locations map[int64]*mediaLocation
 	if l.r.PurchaseID != nil {
-		if locations, err = maxConsumedAtByFile(l.ctx, l.db, *l.r.PurchaseID); err != nil {
+		if locations, err = maxConsumedAtByFile(l.ctx, l.conn, *l.r.PurchaseID); err != nil {
 			return nil, err
 		}
 	}
@@ -211,7 +211,7 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 
 // productOwnerExternalIDs is each product's user.external_id, the users column.
 func productOwnerExternalIDs(l *loader, productIDs []any) (map[int64]string, error) {
-	rows, err := l.db.QueryContext(l.ctx, "SELECT links.id, users.external_id FROM links JOIN users ON users.id = links.user_id"+
+	rows, err := l.conn.QueryContext(l.ctx, "SELECT links.id, users.external_id FROM links JOIN users ON users.id = links.user_id"+
 		" WHERE links.id IN ("+placeholders(len(productIDs))+")", productIDs...)
 	if err != nil {
 		return nil, err
@@ -230,7 +230,7 @@ func productOwnerExternalIDs(l *loader, productIDs []any) (map[int64]string, err
 }
 
 func downloadGrants(l *loader, redirectID int64) (map[int64]bool, error) {
-	rows, err := l.db.QueryContext(l.ctx, "SELECT product_file_id FROM product_file_download_grants WHERE url_redirect_id = ?", redirectID)
+	rows, err := l.conn.QueryContext(l.ctx, "SELECT product_file_id FROM product_file_download_grants WHERE url_redirect_id = ?", redirectID)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +261,7 @@ func loadFolders(l *loader, productID *int64, folderIDs []any) (map[int64]bool, 
 		return alive, nil, nil
 	}
 	in := "(" + placeholders(len(folderIDs)) + ")"
-	rows, err := l.db.QueryContext(l.ctx, "SELECT id FROM product_folders WHERE deleted_at IS NULL AND id IN "+in, folderIDs...)
+	rows, err := l.conn.QueryContext(l.ctx, "SELECT id FROM product_folders WHERE deleted_at IS NULL AND id IN "+in, folderIDs...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -277,7 +277,7 @@ func loadFolders(l *loader, productID *int64, folderIDs []any) (map[int64]bool, 
 	if err := rows.Err(); err != nil || productID == nil {
 		return alive, nil, err
 	}
-	rows, err = l.db.QueryContext(l.ctx, "SELECT id, name FROM product_folders WHERE product_id = ? AND deleted_at IS NULL AND id IN "+in+
+	rows, err = l.conn.QueryContext(l.ctx, "SELECT id, name FROM product_folders WHERE product_id = ? AND deleted_at IS NULL AND id IN "+in+
 		" ORDER BY position ASC", append([]any{*productID}, folderIDs...)...)
 	if err != nil {
 		return nil, nil, err

@@ -110,6 +110,8 @@ func newConfiguredTestEnv(t *testing.T, seed func(*miniredis.Miniredis), configu
 		Proxy:    web.NewRailsProxy(upstreams),
 		Meta:     inertia.DefaultMeta{Title: "Gumroad", Environment: "production", AssetHost: "https://assets.gumroad.com", AnalyticsByEnvironment: true},
 		Now:      func() time.Time { return testNow },
+		// DryRunKey stays unset unless a test turns dry runs on.
+		DryRunOnce: redisClient,
 	}
 	if configure != nil {
 		configure(e, c)

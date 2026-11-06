@@ -47,6 +47,11 @@ type Deps struct {
 	Redis        redis.Cmdable
 	SidekiqRedis redis.Cmdable
 	IDs          idDecoder
+	// Proxy takes a request that carries SessionCookie, Rails' session cookie, whose
+	// session filters (sign-out of invalidated sessions, check_suspended) this port leaves
+	// out.
+	Proxy         *web.RailsProxy
+	SessionCookie string
 }
 
 type idDecoder interface {
@@ -71,6 +76,8 @@ func register(app *web.App, deps Deps, now func() time.Time) *handler {
 		sidekiq: &sidekiq.Client{Redis: deps.SidekiqRedis, Now: now},
 		ids:     deps.IDs,
 		now:     now,
+		proxy:   deps.Proxy,
+		session: deps.SessionCookie,
 	}
 	for _, prefix := range []string{"/v2/licenses/", "/api/v2/licenses/"} {
 		app.Handle("POST "+prefix+"verify", action, h)
@@ -96,6 +103,8 @@ type handler struct {
 	sidekiq *sidekiq.Client
 	ids     idDecoder
 	now     func() time.Time
+	proxy   *web.RailsProxy
+	session string
 
 	// LicensesController.last_known_force_product_id_timestamp: per process, nil until read.
 	mu                      sync.Mutex
@@ -107,12 +116,19 @@ var formatFile = regexp.MustCompile(`\Averify\.([^/.?]+)\z`)
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	format, ok := h.route(r)
 	if !ok {
 		h.stack.NotFound().ServeHTTP(w, r)
 		return
 	}
+	// r.Cookie("") would match any cookie.
+	if h.proxy != nil && h.session != "" {
+		if _, err := r.Cookie(h.session); err == nil {
+			h.proxy.Forward(w, r, "session cookie")
+			return
+		}
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	pathParams := [][2]string{{"controller", "api/v2/licenses"}, {"action", "verify"}}
 	if format != "" {
 		pathParams = append(pathParams, [2]string{"format", format})
@@ -261,10 +277,13 @@ func (h *handler) fetchValidLicense(ctx context.Context, w http.ResponseWriter, 
 	var lk *lookup
 	var err error
 	if p.productID != "" {
-		// Link.find_by_external_id: an id that doesn't decrypt finds no product.
-		if id, ok := h.ids.Decrypt(p.productID); ok {
-			lk, err = h.store.findLicense(ctx, &id, p.licenseKey)
+		// Link.find_by_external_id: an id that doesn't decrypt finds no product. It still
+		// queries, so how long the answer takes says nothing about the id's padding.
+		id, ok := h.ids.Decrypt(p.productID)
+		if !ok {
+			id = noProductID
 		}
+		lk, err = h.store.findLicense(ctx, &id, p.licenseKey)
 	} else {
 		lk, err = h.store.findLicense(ctx, nil, p.licenseKey)
 	}
@@ -313,11 +332,23 @@ func (h *handler) fetchValidLicense(ctx context.Context, w http.ResponseWriter, 
 	return lk, false, nil
 }
 
-// matchesPermalink is Link#matches_permalink?; permalinks are [a-zA-Z0-9_-], so EqualFold is
-// String#downcase's comparison.
+// noProductID is an id no product has.
+const noProductID int64 = 0
+
+// matchesPermalink is Link#matches_permalink?, which compares String#downcase of both.
 func matchesPermalink(prod *product, permalink string) bool {
-	return permalink != "" && (strings.EqualFold(permalink, prod.uniquePermalink.String) ||
-		(prod.customPermalink.Valid && strings.EqualFold(permalink, prod.customPermalink.String)))
+	return permalink != "" && (sameDowncase(permalink, prod.uniquePermalink.String) ||
+		(prod.customPermalink.Valid && sameDowncase(permalink, prod.customPermalink.String)))
+}
+
+// sameDowncase is a.downcase == b.downcase. strings.EqualFold would also fold ſ to s, and
+// strings.ToLower differs from downcase only on İ, which downcase makes "i̇".
+func sameDowncase(a, b string) bool {
+	return rubyDowncase(a) == rubyDowncase(b)
+}
+
+func rubyDowncase(s string) string {
+	return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307"))
 }
 
 // productIDFlags reads skip_product_id_check and force_product_id_timestamp in one round trip.

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
@@ -14,7 +15,7 @@ var countsReviewStates = map[string]bool{"successful": true, "gift_receiver_purc
 // pageData is what the download page's props read beyond check_permissions' rows.
 type pageData struct {
 	email, purchaseState, streetAddress, jsonData sql.NullString
-	createdAt                                     sql.NullTime
+	createdAt                                     db.NullTime
 	priceCents, shippingCents                     sql.NullInt64
 	stripePartiallyRefunded                       bool
 

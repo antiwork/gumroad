@@ -226,6 +226,12 @@ func (req *Request) Format() string {
 	return req.Formats[0]
 }
 
+// HasCookie is whether the request carries the cookie.
+func (req *Request) HasCookie(name string) bool {
+	_, ok := req.Cookie(name)
+	return ok
+}
+
 // Cookie is cookies[name]; ok is false when the cookie is absent or valueless (nil).
 func (req *Request) Cookie(name string) (string, bool) {
 	v := req.Cookies[name]

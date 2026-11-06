@@ -69,7 +69,8 @@ func TestAuthorizeRendersDoorkeepersHeadErrors(t *testing.T) {
 	}{
 		"missing":     {nil, 401, "The access token is invalid"},
 		"revoked":     {&Token{CreatedAt: past, RevokedAt: &past, Scopes: "mobile_api"}, 401, "The access token was revoked"},
-		"wrong scope": {&Token{CreatedAt: past, Scopes: "view_sales"}, 403, ""},
+		"wrong scope": {&Token{CreatedAt: past, Scopes: "view_sales", ResourceOwnerID: new(int64)}, 403, ""},
+		"no owner":    {&Token{CreatedAt: past, Scopes: "mobile_api"}, 401, "The access token is invalid"},
 	} {
 		w := httptest.NewRecorder()
 		if Authorize(w, jsonRequest(now), c.token, "mobile_api") {
@@ -86,7 +87,8 @@ func TestAuthorizeRendersDoorkeepersHeadErrors(t *testing.T) {
 			t.Errorf("%s: WWW-Authenticate = %q", name, got)
 		}
 	}
-	if !Authorize(httptest.NewRecorder(), jsonRequest(now), &Token{CreatedAt: past, Scopes: "mobile_api"}, "mobile_api") {
+	owner := int64(1)
+	if !Authorize(httptest.NewRecorder(), jsonRequest(now), &Token{CreatedAt: past, Scopes: "mobile_api", ResourceOwnerID: &owner}, "mobile_api") {
 		t.Error("a live token with the scope passes")
 	}
 }

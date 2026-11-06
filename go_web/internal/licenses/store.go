@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
@@ -44,7 +45,7 @@ type license struct {
 	importedCustomerID sql.NullInt64
 	serial             sql.NullString
 	uses               sql.NullInt64
-	disabledAt         sql.NullTime
+	disabledAt         db.NullTime
 }
 
 type product struct {
@@ -56,7 +57,7 @@ type product struct {
 	priceCurrencyType sql.NullString
 	requireShipping   sql.NullBool
 	flags             int64
-	createdAt         sql.NullTime
+	createdAt         db.NullTime
 }
 
 func (p *product) is(mask int64) bool { return p.flags&mask != 0 }
@@ -65,7 +66,7 @@ type purchase struct {
 	id                   int64
 	sellerID             sql.NullInt64
 	linkID               sql.NullInt64
-	createdAt            sql.NullTime
+	createdAt            db.NullTime
 	feeCents             sql.NullInt64
 	email                sql.NullString
 	priceCents           sql.NullInt64
@@ -79,7 +80,7 @@ type purchase struct {
 	stripeRefunded       sql.NullBool
 	canContact           sql.NullBool
 	referrer             sql.NullString
-	chargebackDate       sql.NullTime
+	chargebackDate       db.NullTime
 	cardType             sql.NullString
 	cardVisual           sql.NullString
 	ipCountry            sql.NullString
@@ -102,8 +103,8 @@ type user struct {
 	email                          sql.NullString
 	unconfirmedEmail               sql.NullString
 	flags                          int64
-	deletedAt                      sql.NullTime
-	lastActiveSessionsInvalidateAt sql.NullTime
+	deletedAt                      db.NullTime
+	lastActiveSessionsInvalidateAt db.NullTime
 }
 
 // formEmail is User#form_email.
@@ -297,7 +298,7 @@ func (s *store) markCLIUser(ctx context.Context, userID int64) error {
 type importedCustomer struct {
 	id           int64
 	email        sql.NullString
-	purchaseDate sql.NullTime
+	purchaseDate db.NullTime
 	createdAt    time.Time
 	linkName     sql.NullString // imported_customer.link&.name
 }
@@ -343,13 +344,6 @@ func nullInt(n sql.NullInt64) any {
 		return nil
 	}
 	return n.Int64
-}
-
-func nullTime(t sql.NullTime) any {
-	if !t.Valid {
-		return nil
-	}
-	return t.Time
 }
 
 func decodeJSON(data []byte) (any, error) {
