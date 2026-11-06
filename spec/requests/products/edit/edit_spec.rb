@@ -714,10 +714,15 @@ describe("Product Edit Scenario", type: :system, js: true) do
     in_preview do
       expect(page).to have_button("Notify me", disabled: true)
     end
+    expect(page).to have_text("Save your changes to get a waitlist form for your website.")
+    expect(page).not_to have_field("Waitlist form embed code")
     expect do
       click_on "Save and continue"
       expect(page).to have_alert(text: "Changes saved!")
     end.to(change { product.reload.waitlist_enabled? }.to(true))
+    click_on "Product"
+    expect(page).to have_field("Waitlist form embed code", with: /name="product_id" value="#{Regexp.escape(product.external_id)}"/)
+    expect(page).not_to have_text("Save your changes to get a waitlist form for your website.")
 
     product.publish!
     visit edit_link_path(product.unique_permalink)

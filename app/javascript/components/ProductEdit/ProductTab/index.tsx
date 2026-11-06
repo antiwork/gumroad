@@ -72,6 +72,7 @@ export const ProductTab = () => {
     aiGenerated,
     customAttributeNameSuggestions,
     seller,
+    savedWaitlistEnabled,
   } = useProductEditContext();
   const [initialProduct] = React.useState(product);
 
@@ -462,7 +463,13 @@ export const ProductTab = () => {
                       value={product.waitlist_enabled}
                       onChange={(waitlist_enabled) => updateProduct({ waitlist_enabled })}
                       label="Let people join a waitlist on your product page"
-                      dropdown={<WaitlistFormEmbed sellerId={seller.id} productId={id} />}
+                      dropdown={
+                        savedWaitlistEnabled ? (
+                          <WaitlistFormEmbed sellerId={seller.id} productId={id} />
+                        ) : (
+                          <p>Save your changes to get a waitlist form for your website.</p>
+                        )
+                      }
                     />
                   )}
                   <Switch
