@@ -16,7 +16,6 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
-	"github.com/antiwork/gumroad/go_web/internal/railscache"
 )
 
 // User::ReputationSummary's constants.
@@ -88,10 +87,8 @@ func (h *handler) loadReputation(ctx context.Context, p *page, prod *product, v 
 		return err
 	}
 	key := "seller_reputation_summary/v2/" + id + "/" + lifecycle + "/" + strconv.FormatInt(version, 10)
-	cached, found, err := h.c.Page.Cache.Read(ctx, key)
+	cached, found, err := h.readCache(ctx, key)
 	switch {
-	case errors.Is(err, railscache.ErrUnported) || errors.Is(err, railscache.ErrServerDown):
-		return fallback("cache")
 	case err != nil:
 		return err
 	case found:

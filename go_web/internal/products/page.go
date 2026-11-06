@@ -10,6 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/geoip"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
@@ -43,6 +44,8 @@ type PageConfig struct {
 	// prefix, "https://<bucket>.s3.amazonaws.com/".
 	CDNMap           [][2]string
 	PublicStorageURL string
+	// Search is EsClient; nil leaves what needs it to Rails.
+	Search *elastic.Client
 	// OGNamespace is FACEBOOK_OG_NAMESPACE, and RecaptchaSiteKey FollowRecaptcha.site_key.
 	OGNamespace, RecaptchaSiteKey string
 	NewNonce                      func() string
@@ -151,6 +154,7 @@ type view struct {
 	refundPolicy            any
 	currency                *currencyDisplay
 	variants                *variants
+	salesCount              any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -252,6 +256,10 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	v.youtubeChannelID = nullString(channel)
 	v.recaptchaRequired = recaptchaRequired(seller, pc.RecaptchaSiteKey)
 	if err := h.loadCustomStyles(ctx, p, v); err != nil {
+		return nil, err
+	}
+	// Last: an Elasticsearch search is the costliest read, and anything above may still fall back.
+	if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
 		return nil, err
 	}
 	v.mainSectionIndex = int64(0)

@@ -61,7 +61,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("is_published", !prod.draft.Bool && prod.alive()).
 		Sym("is_stream_only", false).
 		Sym("streamable", hasFilegroup(v.files, "video")).
-		Sym("sales_count", nil).
+		Sym("sales_count", v.salesCount).
 		Sym("summary", presence(j.get("custom_summary"))).
 		Sym("attributes", v.attributes).
 		Sym("description_html", v.descriptionHTML).
