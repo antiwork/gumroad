@@ -42,4 +42,14 @@ describe ContentModeration::SellerMailTextGuard do
   it "does not hold ordinary mentions of Gumroad or security" do
     expect(screen("Thanks for buying on Gumroad! Security tips are in the PDF.")).to be_present
   end
+
+  it "screens the text recipients actually read, past split tags" do
+    expect(screen("Gum<b></b>road Sec<b></b>urity Alert: ver<b></b>ify your acc<b></b>ount")).to be_nil
+    expect(screen("see https://public-files.gum<i></i>road.com/a.html")).to be_nil
+  end
+
+  it "still drops the text when queueing the admin note fails" do
+    allow(ContentModerationAdminCommentJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+    expect(screen("see https://public-files.gumroad.com/x.html")).to be_nil
+  end
 end

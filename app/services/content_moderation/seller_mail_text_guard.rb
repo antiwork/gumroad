@@ -14,6 +14,8 @@ class ContentModeration::SellerMailTextGuard
     /action (is )?required/i,
   ].freeze
 
+  ADMIN_NOTE_TEXT_LIMIT = 300
+
   def self.screen(text, seller:, source:)
     new(text, seller:, source:).screen
   end
@@ -38,23 +40,30 @@ class ContentModeration::SellerMailTextGuard
   private
     attr_reader :text, :seller, :source
 
+    # Templates strip tags before rendering, so screen what the recipient reads.
+    def rendered_text
+      @rendered_text ||= CGI.unescapeHTML(ActionController::Base.helpers.strip_tags(text))
+    end
+
     def blocked_reason
-      result = ContentModeration::Strategies::BlocklistStrategy.new(text:).perform
+      result = ContentModeration::Strategies::BlocklistStrategy.new(text: rendered_text).perform
       "blocklist: #{result.reasoning.join(", ")}" if result.status == "flagged"
     end
 
     def held_reason
-      return "links to public-files.gumroad.com" if text.match?(PUBLIC_FILES_HOST)
-      return unless text.match?(GUMROAD_NOTICE)
+      return "links to public-files.gumroad.com" if rendered_text.match?(PUBLIC_FILES_HOST)
+      return unless rendered_text.match?(GUMROAD_NOTICE)
 
-      "poses as a Gumroad security or payout notice" if NOTICE_PHRASES.any? { text.match?(_1) }
+      "poses as a Gumroad security or payout notice" if NOTICE_PHRASES.any? { rendered_text.match?(_1) }
     end
 
     def leave_admin_note(reason)
       return if seller.blank?
 
       ContentModerationAdminCommentJob.perform_async(
-        seller.id, "Held seller text from #{source} (not sent): #{reason}. Text: #{text.truncate(300)}"
+        seller.id, "Held seller text from #{source} (not sent): #{reason}. Text: #{text.truncate(ADMIN_NOTE_TEXT_LIMIT)}"
       )
+    rescue StandardError => e
+      Rails.logger.error("SellerMailTextGuard failed to queue admin note: #{e.message}")
     end
 end
