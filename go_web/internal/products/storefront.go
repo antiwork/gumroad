@@ -163,17 +163,9 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 		// nil is the virtual default-products section.
 		sections = []*productsSection{nil}
 	}
-	searches, err := h.railsCatalogSearches(p, sections)
+	searches, err := h.catalogSearches(p, sections)
 	if err != nil {
 		return nil, err
-	}
-	if searches == nil {
-		if reviewSorted(sections) {
-			return nil, fallback("products section review sort")
-		}
-		if searches, err = h.cachedCatalog(p, sections); err != nil {
-			return nil, err
-		}
 	}
 	return h.productsSectionsProps(p, prod, sections, searches, buyer)
 }
@@ -310,6 +302,18 @@ func sectionHead(id string, header any, typ string) *rails.RHash {
 	return rails.NewRHash().Sym("id", id).Sym("header", header).Sym("type", typ)
 }
 
+// searchSections is section_search_results for each section, in order.
+func (h *handler) searchSections(p *page, sections []*productsSection) ([]*catalogSearch, error) {
+	searches := make([]*catalogSearch, len(sections))
+	for i, s := range sections {
+		var err error
+		if searches[i], err = h.searchCatalog(p, s); err != nil {
+			return nil, err
+		}
+	}
+	return searches, nil
+}
+
 // cachedCatalog is cached_sections' or cached_default_products_section's searches, under one key
 // of go_web's own that moves with the seller's products and with every section, as Rails' does.
 // Rails never reads it, so it's written even when the page then goes to Rails.
@@ -338,11 +342,9 @@ func (h *handler) cachedCatalog(p *page, sections []*productsSection) ([]*catalo
 		}
 		return searches, nil
 	}
-	searches := make([]*catalogSearch, len(sections))
-	for i, s := range sections {
-		if searches[i], err = h.searchCatalog(p, s); err != nil {
-			return nil, err
-		}
+	searches, err := h.searchSections(p, sections)
+	if err != nil {
+		return nil, err
 	}
 	text, err := json.Marshal(searches)
 	if err != nil {

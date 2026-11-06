@@ -41,6 +41,13 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		io.WriteString(w, `{"hits":{"total":{"value":`+total+`,"relation":"eq"},"hits":`+hits+`},"aggregations":`+
 			`{"tags.keyword":{"buckets":[{"key":"design","doc_count":2}]},"filetypes.keyword":{"buckets":[{"key":"pdf","doc_count":2}]}}}`)
 	}
+	// written is the entry Rails caches for a section the fake search answers.
+	written := func(id any, sort string, total int64, ids ...int64) railscache.Hash {
+		s := railsCachedSection("", nil, sort, total, ids...)
+		s[0].Value = id
+		s[5].Value.(railscache.Hash)[2].Value = []any{railscache.Hash{{Key: "key", Value: "pdf"}, {Key: "doc_count", Value: int64(2)}}}
+		return s
+	}
 	search := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		searches++
 		body, _ := io.ReadAll(r.Body)
@@ -173,9 +180,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		// when it isn't 3.
 		body, total string
 		respond     func(body map[string]any) (hits, total string)
-		// cachesOnFallback is a search kept although the page goes to Rails.
-		cachesOnFallback bool
-		setup            func(t *testing.T, conn *sql.DB)
+		setup       func(t *testing.T, conn *sql.DB)
 		// prepare sets flags and rates; headers go with the request.
 		prepare func(e *testEnv)
 		headers map[string]string
@@ -199,7 +204,13 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				testdb.Insert(t, conn, "product_review_stats", map[string]any{"id": int64(1_792_401), "link_id": other, "reviews_count": 3,
 					"average_rating": 4.5, "created_at": testNow, "updated_at": testNow})
 			},
-			want: func(e *testEnv) string { return section(e, 2, otherCard(e)) }},
+			want: func(e *testEnv) string { return section(e, 2, otherCard(e)) },
+			check: func(t *testing.T, e *testEnv, _ string) {
+				// Rails reads this back: the virtual section's entry is a lone Hash, its id a UTF-8 literal.
+				if got := e.cache.values[railsSectionsKey(e, true)]; !reflect.DeepEqual(got, written(defaultProductsSectionID, pageLayoutSort, 3, other, productID)) {
+					t.Errorf("entry %#v", got)
+				}
+			}},
 		{name: "this product beyond the page still leaves the total", server: search, searched: 1,
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
 			setup: func(t *testing.T, conn *sql.DB) {
@@ -556,11 +567,26 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				e.cache.values[railsSectionsKey(e, false)] = []any{railsCachedSection(e.ids.Encrypt(1_792_510), "Top", "newest", 0),
 					railsCachedSection(e.ids.Encrypt(1_792_509), "Top", "newest", 0)}
 			}},
-		{name: "a section sorted by reviews", reason: "products section review sort", server: search,
+		// Without Rails' entry, the search runs and its entry is written for both to read.
+		{name: "a section sorted by reviews", server: search, searched: 1, hits: `[]`, total: "0",
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[1]}}]}},`+
+				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
+				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID),
 			setup: func(t *testing.T, conn *sql.DB) {
 				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_505), "seller_id": sellerID,
 					"json_data":  `{"shown_products":[1],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":true}`,
 					"created_at": testNow, "updated_at": testNow})
+			},
+			want: func(e *testEnv) string {
+				return fmt.Sprintf(`"sections":[{"id":"%s","header":null,"type":"SellerProfileProductsSection","show_filters":false,`+
+					`"default_product_sort":"highest_rated","search_results":{"total":0,`, e.ids.Encrypt(1_792_505))
+			},
+			check: func(t *testing.T, e *testEnv, _ string) {
+				want := []any{written(railscache.ASCII(e.ids.Encrypt(1_792_505)), "highest_rated", 0)}
+				if got := e.cache.values[railsSectionsKey(e, false)]; !reflect.DeepEqual(got, want) {
+					t.Errorf("entry %#v", got)
+				}
 			}},
 		{name: "a section json_data off the schema", reason: "products section json_data", server: search,
 			setup: func(t *testing.T, conn *sql.DB) {
@@ -569,7 +595,6 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					"created_at": testNow, "updated_at": testNow})
 			}},
 		{name: "a card this port leaves to Rails", reason: "catalog purchase type", hits: bothHits, server: search, searched: 1,
-			cachesOnFallback: true,
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, map[string]any{"purchase_type": 5})
 			}},
@@ -636,7 +661,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
 		// discounts_lowest_priced_option? weighs the card's options the sale covers.
 		{name: "a sale scoped to one of the card's options", reason: "catalog offer code variants", hits: bothHits, server: search,
-			searched: 1, cachesOnFallback: true,
+			searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				sale(t, conn, nil, nil)
 				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
@@ -703,11 +728,6 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				if len(e.cache.writes) != 0 {
 					t.Errorf("a dry run wrote %v", e.cache.writes)
 				}
-				if c.cachesOnFallback {
-					if e.get(host, "/l/guide", nil); e.railsHit == nil || !strings.HasPrefix(strings.Join(e.cache.writes, " "), "go-web:storefront-catalog_") {
-						t.Errorf("rails %v, cache writes %v", e.railsHit != nil, e.cache.writes)
-					}
-				}
 				return
 			}
 			if w.Code != http.StatusOK {
@@ -726,7 +746,8 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			}
 			var key string
 			for _, k := range e.cache.writes {
-				if strings.HasPrefix(k, "go-web:storefront-catalog_") {
+				// Rails' entry for the catalog, go_web's own for a product's sections.
+				if strings.HasPrefix(k, "profile-sections_") || strings.HasPrefix(k, "go-web:storefront-catalog_") {
 					key = k
 				}
 			}
