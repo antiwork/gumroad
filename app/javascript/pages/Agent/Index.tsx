@@ -43,7 +43,7 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
   return (
     <Card asChild>
       <section aria-labelledby={headingId} className="grid lg:row-span-2 lg:grid-rows-subgrid">
-        <CardContent details className="grid content-start gap-4">
+        <CardContent details className="grid content-start justify-stretch gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id={headingId} className="text-lg font-bold">
               {client.label}
@@ -78,7 +78,7 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
           ) : null}
         </CardContent>
         {client.setup ? (
-          <CardContent details className="grid content-start gap-2">
+          <CardContent details className="grid content-start justify-stretch gap-2">
             <h3 className="font-bold">Setup</h3>
             <p>{client.setup}</p>
             <div className="flex flex-wrap items-start gap-2">
