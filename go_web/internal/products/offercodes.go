@@ -98,9 +98,6 @@ func (c *offerCode) unportedLookup(prod *product) string {
 // unportedDiscount is a code whose evaluation or discount this port doesn't follow.
 func (c *offerCode) unportedDiscount() string {
 	switch {
-	case c.maxPurchaseCount.Valid:
-		// quantity_left counts purchases.
-		return "offer code limit"
 	case c.tiers > 0:
 		return "tiered offer code"
 	case c.amountCents.Valid == c.amountPercentage.Valid:
@@ -143,9 +140,9 @@ func (c *offerCode) applicableTo(prod *product, excludes bool) bool {
 }
 
 // effectiveDefaultCode is effective_default_offer_code, given default_offer_code and
-// auto_apply_offer_code_for. limited: the explicit code wins only while it has uses left,
+// auto_apply_offer_code_for. capped: the explicit code wins only while it has uses left,
 // which counts purchases.
-func effectiveDefaultCode(prod *product, explicit, auto *offerCode, now time.Time) (code *offerCode, limited bool) {
+func effectiveDefaultCode(prod *product, explicit, auto *offerCode, now time.Time) (code *offerCode, capped bool) {
 	if explicit != nil && explicit.newOnly {
 		explicit = nil
 	}
@@ -235,7 +232,6 @@ type offerDiscount struct {
 
 func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product) (*offerDiscount, error) {
 	d := &offerDiscount{}
-	now := p.Req.Now
 	// auto_apply_offer_code_for.
 	var auto *offerCode
 	a, err := h.sellerAutoApply(p, prod)
@@ -252,9 +248,9 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 			return nil, err
 		}
 	}
-	eff, limited := effectiveDefaultCode(prod, explicit, auto, now)
-	if limited {
-		return nil, fallback("offer code limit")
+	eff, err := h.effectiveDefault(p, prod, explicit, auto)
+	if err != nil {
+		return nil, err
 	}
 	var list []*offerCode
 	if explicit != nil && explicit.existingOnly && explicit.currencyValid(prod) {
@@ -268,7 +264,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 		if rails.Blank(c.code.String) {
 			continue
 		}
-		valid, err := h.evaluateOfferCode(ctx, prod, c, p.viewer, now)
+		valid, err := h.evaluateOfferCode(p, prod, c)
 		switch {
 		case err != nil:
 			return nil, err
@@ -284,7 +280,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 			// The URL names the default that applies, so both would.
 			return nil, fallback("offer code comparison")
 		}
-		fromURL, errorCode, err := h.evaluateURLCode(ctx, prod, d.urlCode, p.viewer, now)
+		fromURL, errorCode, err := h.evaluateURLCode(p, prod, d.urlCode)
 		switch {
 		case err != nil:
 			return nil, err
@@ -310,8 +306,9 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 }
 
 // evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: whether it
-// gives buyer a discount. Each lookup by its string must find c and only c.
-func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offerCode, buyer *signedInUser, now time.Time) (bool, error) {
+// gives the visitor a discount. Each lookup by its string must find c and only c.
+func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (bool, error) {
+	ctx, now := p.Ctx, p.Req.Now
 	if reason := c.unportedLookup(prod); reason != "" {
 		return false, fallback(reason)
 	}
@@ -324,19 +321,21 @@ func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offer
 	case !c.applicable(prod) || !c.currencyValid(prod) || c.inactive(now):
 		return false, nil
 	}
-	if resolved, err := h.resolvesForBuyer(ctx, prod, c, buyer); err != nil || !resolved {
+	if resolved, err := h.resolvesForBuyer(ctx, prod, c, p.viewer); err != nil || !resolved {
 		return false, err
 	}
 	// Only a code that gives this buyer something has terms to read.
 	if reason := c.unportedDiscount(); reason != "" {
 		return false, fallback(reason)
 	}
-	return true, nil
+	shortfall, err := h.usesShortfall(p, c)
+	return shortfall == "", err
 }
 
 // evaluateURLCode is BestOfferCodeService#evaluate_code for the URL's code: the code that
-// gives buyer a discount, else the error_code it gets.
-func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed string, buyer *signedInUser, now time.Time) (*offerCode, string, error) {
+// gives the visitor a discount, else the error_code it gets.
+func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerCode, string, error) {
+	ctx, now := p.Ctx, p.Req.Now
 	id, err := h.findOfferCode(ctx, prod, typed)
 	if err != nil || id == 0 {
 		return nil, "invalid_offer", err
@@ -358,7 +357,7 @@ func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed stri
 		// The options' quotes check each one against the code's scope.
 		return nil, "", fallback("offer code variants")
 	}
-	resolved, err := h.resolvesForBuyer(ctx, prod, c, buyer)
+	resolved, err := h.resolvesForBuyer(ctx, prod, c, p.viewer)
 	switch {
 	case err != nil:
 		return nil, "", err
@@ -370,6 +369,9 @@ func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed stri
 	}
 	if reason := c.unportedDiscount(); reason != "" {
 		return nil, "", fallback(reason)
+	}
+	if shortfall, err := h.usesShortfall(p, c); err != nil || shortfall != "" {
+		return nil, shortfall, err
 	}
 	return c, "", nil
 }

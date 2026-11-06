@@ -697,7 +697,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 		}
 	}
 	base := price
-	price, err := cardPriceCents(c, base, p.Req.Now)
+	price, err := h.cardPriceCents(p, c, base)
 	if err != nil {
 		return nil, err
 	}

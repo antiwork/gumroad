@@ -604,23 +604,36 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		{name: "a card whose default code is the sale", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, map[string]any{"default_offer_code_id": saleID}, nil) },
 			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
-		{name: "a card's limited default code over the sale", reason: "catalog default offer code limit", hits: bothHits, server: search,
-			searched: 1, cachesOnFallback: true,
+		{name: "a card's limited default code with uses left over the sale", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
-				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "max_purchase_count": 5})
-			}},
+				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_792_651, 1_792_602, map[string]any{"link_id": other})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 250, `,"original_price_cents":300`)) }},
+		{name: "a card's used-up default code under the sale", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
+				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_792_651, 1_792_602, map[string]any{"link_id": other})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
 		// discounted_price_cents quotes no sale this product alone can't meet.
 		{name: "a sale over the card's price", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, map[string]any{"minimum_amount_cents": 301}) },
 			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
-		// The sale leaves the page's own product out, so only the card reads it.
-		{name: "a sale with uses to count", reason: "catalog offer code limit", hits: bothHits, server: search, searched: 1,
-			cachesOnFallback: true,
+		{name: "a limited sale with uses left on a card", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
-				sale(t, conn, nil, map[string]any{"max_purchase_count": 5})
-				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
-			}},
+				sale(t, conn, nil, map[string]any{"max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_792_651, saleID, nil)
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "a used-up sale on a card", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, nil, map[string]any{"max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_792_651, saleID, nil)
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
 		// discounts_lowest_priced_option? weighs the card's options the sale covers.
 		{name: "a sale scoped to one of the card's options", reason: "catalog offer code variants", hits: bothHits, server: search,
 			searched: 1, cachesOnFallback: true,

@@ -2,7 +2,6 @@ package products
 
 import (
 	"context"
-	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
@@ -13,7 +12,7 @@ func (h *handler) cardOffers(p *page, cards []*card) error {
 	if len(cards) == 0 {
 		return nil
 	}
-	ctx, now := p.Ctx, p.Req.Now
+	ctx := p.Ctx
 	// Only the auto code's own columns hold for every card; which cards it leaves out is read here.
 	auto, err := h.sellerAutoApply(p, cards[0].prod)
 	if err != nil {
@@ -41,9 +40,9 @@ func (h *handler) cardOffers(p *page, cards []*card) error {
 		if auto != nil && rails.Present(auto.code.String) && auto.applicableTo(c.prod, excluded[c.prod.id]) {
 			sale = auto
 		}
-		code, limited := effectiveDefaultCode(c.prod, defaults[c.prod.defaultOfferCodeID.Int64], sale, now)
-		if limited {
-			return fallback("catalog default offer code limit")
+		code, err := h.effectiveDefault(p, c.prod, defaults[c.prod.defaultOfferCodeID.Int64], sale)
+		if err != nil {
+			return err
 		}
 		// A product's default code can be the seller's sale itself.
 		c.offer, c.onSale = code, code != nil && sale != nil && code.id == sale.id
@@ -75,17 +74,16 @@ func (h *handler) excludedCards(ctx context.Context, codeID int64, cards []*card
 }
 
 // cardPriceCents is discounted_price_cents(base) through the card's effective default code.
-func cardPriceCents(c *card, base int64, now time.Time) (int64, error) {
+func (h *handler) cardPriceCents(p *page, c *card, base int64) (int64, error) {
 	code, prod := c.offer, c.prod
-	if code == nil || code.deletedAt.Valid || code.inactive(now) || code.existingOnly || code.newOnly || !code.currencyValid(prod) ||
+	if code == nil || code.deletedAt.Valid || code.inactive(p.Req.Now) || code.existingOnly || code.newOnly || !code.currencyValid(prod) ||
 		code.minimumQuantity.Int64 > 1 || code.minimumAmountCents.Int64 > base {
 		return base, nil
 	}
-	switch {
-	case code.maxPurchaseCount.Valid:
-		// default_offer_code_uses_left? counts purchases.
-		return 0, fallback("catalog offer code limit")
-	case code.hasVariants:
+	if left, err := h.defaultUsesLeft(p, code); err != nil || !left {
+		return base, err
+	}
+	if code.hasVariants {
 		// discounts_lowest_priced_option? reads the options the code covers.
 		return 0, fallback("catalog offer code variants")
 	}
