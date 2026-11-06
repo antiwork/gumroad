@@ -537,7 +537,11 @@ export const DashboardPage = ({
         <h2>Activity</h2>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stats title="Balance" description="Your current balance available for payout" value={balances.balance} />
+          <Stats
+            title="Balance"
+            description="Your current balance available for payout. Sales paid through your connected PayPal account are sent to PayPal at the time of sale and are not part of this balance."
+            value={balances.balance}
+          />
           <Stats
             title="Last 7 days"
             description="Your total sales in the last 7 days"
