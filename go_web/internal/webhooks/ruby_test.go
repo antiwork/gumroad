@@ -56,25 +56,25 @@ func TestRailsBlankIsActiveSupportsBlank(t *testing.T) {
 
 func TestRubyParseURIMatchesURIParse(t *testing.T) {
 	for input, want := range rubyURIResults {
-		got, err := rubyParseURI(input)
+		got, err := rails.ParseURI(input)
 		if want == nil {
 			if err == nil {
-				t.Errorf("rubyParseURI(%q) = %+v, want URI::InvalidURIError", input, got)
+				t.Errorf("rails.ParseURI(%q) = %+v, want URI::InvalidURIError", input, got)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("rubyParseURI(%q) failed: %v", input, err)
+			t.Errorf("rails.ParseURI(%q) failed: %v", input, err)
 			continue
 		}
-		if want.scheme != nil && got.scheme != *want.scheme || want.scheme == nil && got.scheme != "" {
-			t.Errorf("rubyParseURI(%q).scheme = %q, want %v", input, got.scheme, deref(want.scheme))
+		if want.scheme != nil && got.Scheme != *want.scheme || want.scheme == nil && got.Scheme != "" {
+			t.Errorf("rails.ParseURI(%q).scheme = %q, want %v", input, got.Scheme, deref(want.scheme))
 		}
-		if want.host != nil != got.hasHost || want.host != nil && got.host != *want.host {
-			t.Errorf("rubyParseURI(%q).host = %q (%v), want %v", input, got.host, got.hasHost, deref(want.host))
+		if want.host != nil != got.HasHost || want.host != nil && got.Host != *want.host {
+			t.Errorf("rails.ParseURI(%q).host = %q (%v), want %v", input, got.Host, got.HasHost, deref(want.host))
 		}
-		if want.query != nil != (got.query != nil) || want.query != nil && *got.query != *want.query {
-			t.Errorf("rubyParseURI(%q).query = %v, want %v", input, deref(got.query), deref(want.query))
+		if want.query != nil != (got.Query != nil) || want.query != nil && *got.Query != *want.query {
+			t.Errorf("rails.ParseURI(%q).query = %v, want %v", input, deref(got.Query), deref(want.query))
 		}
 		// Only an https URI on an SNS host is ever fetched, from what Net::HTTP requests.
 		if want.scheme != nil && *want.scheme == "https" && want.host != nil && want.path != nil && want.requestURI != nil {

@@ -112,8 +112,13 @@ func Head(w http.ResponseWriter, req *Request, status int) {
 
 // RedirectTo is redirect_to with an absolute location: a 302 with an empty body.
 func RedirectTo(w http.ResponseWriter, req *Request, location string) {
+	RedirectWithStatus(w, req, location, http.StatusFound)
+}
+
+// RedirectWithStatus is redirect_to(location, status:).
+func RedirectWithStatus(w http.ResponseWriter, req *Request, location string, status int) {
 	w.Header().Set("Location", location)
-	writeBody(w, req, http.StatusFound, web.TextHTML, "", "", false, false)
+	writeBody(w, req, status, web.TextHTML, "", "", false, false)
 }
 
 var reasonPhrases = map[int]string{

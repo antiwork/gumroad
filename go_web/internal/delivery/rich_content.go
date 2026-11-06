@@ -205,3 +205,9 @@ func decodeJSON(data []byte) (any, error) {
 	err := decoder.Decode(&v)
 	return v, err
 }
+
+// EmbeddedProductFileIDs is RichContent#embedded_product_file_ids_in_order for a description
+// column's JSON.
+func EmbeddedProductFileIDs(descriptionJSON []byte, ids *obfuscate.IDs) ([]int64, error) {
+	return (&RichContent{DescriptionJSON: descriptionJSON}).embeddedProductFileIDsInOrder(ids)
+}

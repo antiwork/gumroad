@@ -74,6 +74,8 @@ func Blank(v any) bool {
 		return len(v) == 0
 	case *Hash:
 		return v.Len() == 0
+	case *RHash:
+		return len(v.keys) == 0
 	}
 	return false
 }

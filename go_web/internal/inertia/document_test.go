@@ -51,7 +51,7 @@ func TestLayoutMatchesProduction(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := productionMeta.Tags(Viewer{CSRFToken: csrf})
-	meta.Set(NewMetaTag("", "", "", Attr{"title", "Watch-only video - Access expired"}))
+	meta.Set(NewMetaTag("", "", "", Attr{Key: "title", Value: "Watch-only video - Access expired"}))
 	got := layout.Render(Document{
 		Component:      page.Value("component").(string),
 		URL:            page.Value("url").(string),
@@ -107,11 +107,17 @@ var productionMeta = DefaultMeta{
 	AnalyticsByEnvironment: true,
 }
 
-func TestScriptMetaTagsAreNotPorted(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Error("a script meta tag was built")
-		}
-	}()
-	NewMetaTag("script", "", "application/ld+json", Attr{"inner_content", "{}"})
+func TestScriptMetaTagsCarryTheirHashRaw(t *testing.T) {
+	tags := NewMetaTags()
+	tags.Set(NewMetaTag("script", "structured-data", "application/ld+json",
+		Attr{Key: "inner_content", JSON: rails.NewRHash().Str("a", "<b>")}))
+	tags.Set(NewMetaTag("script", "other", "text/javascript", Attr{Key: "inner_content", Value: "<b>"}))
+	if got, want := tags.HTML(), `<script type="application/ld+json" inertia="structured-data">{"a":"\u003cb\u003e"}</script>`+"\n"+
+		`<script type="text/plain" inertia="other">&lt;b&gt;</script>`; got != want {
+		t.Errorf("HTML:\n%s\nwant\n%s", got, want)
+	}
+	if got, want := rails.EncodeJSON(tags.JSON()), `[{"tagName":"script","headKey":"structured-data","type":"application/ld+json",`+
+		`"innerContent":{"a":"\u003cb\u003e"}},{"tagName":"script","headKey":"other","type":"text/plain","innerContent":"\u003cb\u003e"}]`; got != want {
+		t.Errorf("JSON:\n%s\nwant\n%s", got, want)
+	}
 }

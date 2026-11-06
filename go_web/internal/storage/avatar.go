@@ -163,9 +163,15 @@ func (a *Avatars) remember(key string, exists bool, now time.Time) {
 }
 
 // variationDigest is ActiveStorage::Variation#digest for avatar_variant's
-// resize_to_limit: [400, 400] after default_to(default_variant_transformations):
-// SHA1 of Marshal.dump({format:, resize_to_limit: [400, 400]}), Base64.
+// resize_to_limit: [400, 400].
 func variationDigest(filename, contentType string) string {
+	return VariantDigest(filename, contentType, 400, 400)
+}
+
+// VariantDigest is ActiveStorage::Variation#digest for blob.variant(resize_to_limit:
+// [width, height]) after default_to(default_variant_transformations): SHA1 of
+// Marshal.dump({format:, resize_to_limit: [width, height]}), Base64. A negative bound is nil.
+func VariantDigest(filename, contentType string, width, height int) string {
 	var b bytes.Buffer
 	b.WriteString("\x04\x08{")
 	marshalLong(&b, 2)
@@ -188,9 +194,13 @@ func variationDigest(filename, contentType string) string {
 	marshalSymbol(&b, "resize_to_limit")
 	b.WriteByte('[')
 	marshalLong(&b, 2)
-	for range 2 {
+	for _, n := range []int{width, height} {
+		if n < 0 {
+			b.WriteByte('0')
+			continue
+		}
 		b.WriteByte('i')
-		marshalLong(&b, 400)
+		marshalLong(&b, n)
 	}
 	sum := sha1.Sum(b.Bytes())
 	return base64.StdEncoding.EncodeToString(sum[:])
@@ -219,7 +229,7 @@ func marshalSymbol(b *bytes.Buffer, s string) {
 	b.WriteString(s)
 }
 
-// marshalLong is Marshal's w_long for the non-negative values written here.
+// marshalLong is Marshal's w_long for the non-negative values below 65,536 written here.
 func marshalLong(b *bytes.Buffer, n int) {
 	switch {
 	case n == 0:
