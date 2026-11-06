@@ -122,3 +122,18 @@ func TestAFailedUTMVisitPushGoesToRails(t *testing.T) {
 		t.Errorf("rails %v, cache writes %v", e.railsHit != nil, e.cache.writes)
 	}
 }
+
+// wanted=true's redirect to checkout follows the before_action, so it records the visit too.
+func TestAUTMTaggedVisitThatGoesToCheckout(t *testing.T) {
+	e := newTestEnv(t)
+	testdb.Open(t)
+	jobs := miniredis.RunT(t)
+	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr()}), RedisVersion: "7.2.4"}
+	w := e.get(host, "/l/guide?wanted=true&utm_source=a&utm_medium=b&utm_campaign=c", map[string]string{"Cookie": "_gumroad_guid=guid-1"})
+	if w.Code != http.StatusFound || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if queued, _ := jobs.List("queue:default"); len(queued) != 1 || !strings.Contains(queued[0], `"class":"RecordUtmLinkVisitJob"`) {
+		t.Errorf("queued %v", queued)
+	}
+}

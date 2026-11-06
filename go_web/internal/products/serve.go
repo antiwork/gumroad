@@ -91,7 +91,8 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	seller := logged != nil && logged.ID == prod.userID
 	if present, err := customHTMLPresent(ctx, conn, prod.id); err != nil {
 		return err
-	} else if present && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
+	} else if present && !p.wanted && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
+		// ?wanted=true goes on to show, which sends the buyer to checkout.
 		on, err := h.flag(ctx, "custom_html_pages", p.seller.id)
 		switch {
 		case err != nil:

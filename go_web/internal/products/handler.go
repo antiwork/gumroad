@@ -102,6 +102,8 @@ type page struct {
 	visitorSearch bool
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
+	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
+	wanted bool
 	// parent is the page's own view when this one renders a featured section's product within it.
 	parent *view
 }
@@ -186,6 +188,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		p.visitorSearch = true
 	}
 	p.iframe = rails.Truthy(v.Req.Param("overlay")) || rails.Truthy(v.Req.Param("embed"))
+	p.wanted = v.Req.Param("wanted") == "true"
 	return p, nil
 }
 
@@ -218,7 +221,7 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"wanted", "offer_code", "quantity", "purchase_id",
+	"offer_code", "quantity", "purchase_id",
 	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
 	"query", "autocomplete",
 	// The sections' search filters.

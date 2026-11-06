@@ -167,6 +167,19 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		return strings.Replace(card, `"recurrence":null}`, `"recurrence":null`+tail+`}`, 1)
 	}
 	const onSale = `,"original_price_cents":300,"sale_label":"Sale"`
+	// scopedSale is a sale, left off this product, scoped to the other product's option at index
+	// scoped among options with the price differences diffs.
+	scopedSale := func(t *testing.T, conn *sql.DB, scoped int, diffs ...any) {
+		sale(t, conn, nil, nil)
+		insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": other, "title": "Size"})
+		for i, diff := range diffs {
+			testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_792_631 + i), "type": "Variant", "variant_category_id": category,
+				"name": "V", "price_difference_cents": diff, "created_at": testNow, "updated_at": testNow})
+		}
+		testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
+			"variant_id": int64(1_792_631 + scoped)})
+	}
 	legacyCard := func(e *testEnv) string {
 		card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
 		card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
@@ -715,17 +728,37 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				insertCodeUse(t, conn, 1_792_651, saleID, nil)
 			},
 			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
-		// discounts_lowest_priced_option? weighs the card's options the sale covers.
-		{name: "a sale scoped to one of the card's options", reason: "catalog offer code variants", hits: bothHits, server: search,
-			searched: 1,
+		// discounts_lowest_priced_option?: the sale covers the card's cheapest option, one without a
+		// difference, which the nil minimum equals.
+		{name: "a sale scoped to the card's cheapest option", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 0, nil) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "a sale scoped to the cheaper of two options", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 0, 0, 100) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// restricted_variants_for finds none of this product's, so the sale applies.
+		{name: "a sale scoped to another product's option", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				sale(t, conn, nil, nil)
 				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
-				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": other, "title": "Size"})
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Size"})
 				testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_792_631), "type": "Variant", "variant_category_id": category,
-					"name": "Large", "created_at": testNow, "updated_at": testNow})
+					"name": "V", "created_at": testNow, "updated_at": testNow})
 				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
 					"variant_id": int64(1_792_631)})
+			},
+			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// It covers only a pricier option, so the card quotes the cheapest undiscounted.
+		{name: "a sale scoped to a pricier option", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { scopedSale(t, conn, 1, 0, 100) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
+		{name: "a sale scoped to a tier", reason: "catalog offer code tiers", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) {
+				tieredOther(t, conn)
+				insertOfferCode(t, conn, saleID, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true})
+				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
+					"variant_id": category + 1})
 			}},
 		// 270 and 300 cents through 0.92345.
 		{name: "a card's sale in the buyer's currency", hits: bothHits, server: search, searched: 1, headers: eurCookie,
