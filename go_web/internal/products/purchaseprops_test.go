@@ -115,9 +115,6 @@ func TestAVisitorsPurchaseGoesToRails(t *testing.T) {
 			addPurchase(t, conn, 1_797_801, map[string]any{"purchaser_id": buyerID, "flags": purchaseIsGiftReceiver,
 				"purchase_state": "gift_receiver_purchase_successful"})
 		}},
-		{"a bundle", "bundle purchase", func(t *testing.T, conn *sql.DB) {
-			addPurchase(t, conn, 1_797_801, map[string]any{"purchaser_id": buyerID, "flags": purchaseIsBundle})
-		}},
 		{"a price in the buyer's currency", "purchase presentment or shipment", func(t *testing.T, conn *sql.DB) {
 			addPurchase(t, conn, 1_797_801, map[string]any{"purchaser_id": buyerID})
 			testdb.Insert(t, conn, "purchase_presentments", map[string]any{"id": int64(1_797_811), "purchase_id": int64(1_797_801),
@@ -250,6 +247,8 @@ func TestAReviewRemindersPurchase(t *testing.T) {
 	}{
 		{name: "its own digest", shown: true},
 		{name: "an expired rental", columns: map[string]any{"rental_expired": true}, shown: true},
+		// purchase_props drops purchase_info's bundle_products, so a bundle's renders like any other.
+		{name: "a bundle's", columns: map[string]any{"flags": purchaseIsBundle}, shown: true},
 		{name: "another digest", digest: func(e *testEnv) string {
 			return rails.EmailDigest(e.config.Page.EmailDigestKey, purchaseID, "x@example.com").(string)
 		}},
