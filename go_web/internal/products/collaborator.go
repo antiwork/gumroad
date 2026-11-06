@@ -67,6 +67,5 @@ func (h *handler) collaboratorByline(ctx context.Context, p *page, prod *product
 	if err != nil {
 		return nil, err
 	}
-	// User#profile_url is subdomain_with_protocol, without a trailing slash.
-	return bylineProps(u, avatar, h.c.Env.Protocol+"://"+h.userSubdomain(u)), nil
+	return bylineProps(u, avatar, h.userProfileURL(u)), nil
 }
