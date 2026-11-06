@@ -1,8 +1,11 @@
 package products
 
 import (
+	"fmt"
 	"html"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"strconv"
@@ -10,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/session/sessiontest"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
@@ -68,7 +72,18 @@ func TestATeamMemberActingAsAnotherSeller(t *testing.T) {
 			addBuyer(t, conn, nil)
 			mustExec(t, conn, "UPDATE users SET email = 'seller@example.com', confirmed_at = ?, timezone = 'Pacific Time (US & Canada)',"+
 				" flags = flags | ? WHERE id = ?", testNow, userProductPageStorefrontEnabled, sellerID)
-			ownSearch(t, e)
+			// The storefront's default section, newest first: one sort value per hit.
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				io.WriteString(w, fmt.Sprintf(`{"hits":{"total":{"value":2,"relation":"eq"},"hits":[{"_id":"%d","sort":[1762430000000]},`+
+					`{"_id":"%d","sort":[1762420000000]}]},"aggregations":{"tags.keyword":{"buckets":[]},"filetypes.keyword":{"buckets":[]}}}`,
+					ownOther, productID))
+			}))
+			t.Cleanup(server.Close)
+			client, err := elastic.NewWithClient(server.URL, server.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.config.Page.Search = client
 			testdb.Insert(t, conn, "links", map[string]any{"id": ownOther, "user_id": sellerID, "name": "Other", "unique_permalink": "gowebown2",
 				"price_cents": 300, "created_at": testNow, "updated_at": testNow})
 			testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_799_002), "link_id": ownOther, "price_cents": 300, "currency": "usd",
@@ -91,7 +106,8 @@ func TestATeamMemberActingAsAnotherSeller(t *testing.T) {
 			headers := e.actingAs(e.signedIn(member, map[string]any{"prompt_passkey_setup": member}), team)
 			w := e.get(host, "/l/guide", headers)
 			if w.Code != http.StatusOK || e.railsHit != nil {
-				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				dry := e.get(host, "/l/guide", e.withDryRun("/l/guide", headers, "any"))
+				t.Fatalf("%d, dry run %q", w.Code, dry.Header().Get("X-Go-Web-Fallback"))
 			}
 			component := productComponent
 			teamEmail, teamExternal, published := "seller@example.com", "1790001", "true"
