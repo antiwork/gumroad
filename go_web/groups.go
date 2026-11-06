@@ -24,6 +24,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/licenses"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
+	"github.com/antiwork/gumroad/go_web/internal/products"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/robots"
 	"github.com/antiwork/gumroad/go_web/internal/session"
@@ -41,6 +42,7 @@ var routeGroups = map[string]func(*web.App, *dependencies) error{
 	"licenses":  registerLicenses,
 	"webhooks":  registerWebhooks,
 	"downloads": registerDownloads,
+	"products":  registerProducts,
 }
 
 const (
@@ -101,13 +103,9 @@ func registerBeacons(app *web.App, d *dependencies) error {
 	if err != nil {
 		return err
 	}
-	// GEOIP is nil in Rails when the mmdb is missing; a path that is set must open.
-	var geo *geoip.Reader
-	if path := getenv("GEOIP_DATABASE_PATH"); path != "" {
-		if geo, err = geoip.Open(path); err != nil {
-			return fmt.Errorf("GEOIP_DATABASE_PATH: %w", err)
-		}
-		d.closers = append(d.closers, geo.Close)
+	geo, err := d.geoIP()
+	if err != nil {
+		return err
 	}
 	return beacons.Register(app, beacons.Deps{
 		Env:              d.env,
@@ -150,24 +148,37 @@ func registerLicenses(app *web.App, d *dependencies) error {
 // stripeAPIVersion is config/initializers/003_stripe.rb's Stripe.api_version outside test.
 const stripeAPIVersion = "2023-10-16; risk_in_requirements_beta=v1; retrieve_tax_forms_beta=v1;"
 
-// registerDownloads serves the download page's polls and hands the rest to Rails, so it
-// needs a Rails upstream list.
-func registerDownloads(app *web.App, d *dependencies) error {
+// pageBase is what every page group shares: the request lifecycle's pieces and the full
+// pages' layout, which is nil (with errPagesOff logged) when their config is missing.
+type pageBase struct {
+	conn     *sql.DB
+	ids      *obfuscate.IDs
+	store    *session.Store
+	resolver *session.Resolver
+	proxy    *web.RailsProxy
+	meta     inertia.DefaultMeta
+	pages    *downloads.PageConfig
+}
+
+func (d *dependencies) pageBase() (*pageBase, error) {
+	if d.pages != nil {
+		return d.pages, nil
+	}
 	proxy := d.railsProxy()
 	if proxy == nil {
-		return fmt.Errorf("RAILS_UPSTREAMS_FILE is not set")
+		return nil, fmt.Errorf("RAILS_UPSTREAMS_FILE is not set")
 	}
 	conn, err := d.database()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	ids, err := d.obfuscatedIDs()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	codec, err := session.NewCodec(d.config("SECRET_KEY_BASE"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// 003_stripe.rb's GlobalConfig.get with its default.
 	stripePublicKey := d.globalConfig("STRIPE_PUBLIC_KEY_PROD", "pk_live_Db80xIzLPWhKo1byPrnERmym")
@@ -176,23 +187,21 @@ func registerDownloads(app *web.App, d *dependencies) error {
 	}
 	awsCfg, err := d.awsConfig()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	pageConfig, err := d.pageConfig(s3.NewFromConfig(awsCfg), ids)
 	if errors.Is(err, errPagesOff) {
-		d.logger.Info("download pages left to Rails", "reason", err.Error())
+		d.logger.Info("full pages left to Rails", "reason", err.Error())
 	} else if err != nil {
-		return err
+		return nil, err
 	}
-	downloads.Register(app, &downloads.Config{
-		Env:      d.env,
-		DB:       conn,
-		Stack:    d.stack,
-		Store:    session.NewStore(codec, d.env.Name, d.env.Protocol, getenv("CUSTOM_DOMAIN"), branchDeployment()),
-		Resolver: &session.Resolver{Users: &session.Users{DB: conn}, Redis: d.redis, Codec: codec},
-		IDs:      ids,
-		Proxy:    proxy,
-		Meta: inertia.DefaultMeta{
+	d.pages = &pageBase{
+		conn:     conn,
+		ids:      ids,
+		store:    session.NewStore(codec, d.env.Name, d.env.Protocol, getenv("CUSTOM_DOMAIN"), branchDeployment()),
+		resolver: &session.Resolver{Users: &session.Users{DB: conn}, Redis: d.redis, Codec: codec},
+		proxy:    proxy,
+		meta: inertia.DefaultMeta{
 			Title:                  d.env.PageTitle,
 			Environment:            d.env.Name,
 			FacebookAppID:          d.config("FACEBOOK_APP_ID"),
@@ -201,10 +210,39 @@ func registerDownloads(app *web.App, d *dependencies) error {
 			AssetHost:              d.env.AssetHost(),
 			AnalyticsByEnvironment: d.env.Name == "production" || d.env.Name == "staging",
 		},
-		Now:        time.Now,
-		Pages:      pageConfig,
-		DryRunKey:  pages.DryRunKey(d.config("SECRET_KEY_BASE")),
-		DryRunOnce: d.redis,
+		pages: pageConfig,
+	}
+	return d.pages, nil
+}
+
+// registerDownloads serves the download page and its polls and hands the rest to Rails.
+func registerDownloads(app *web.App, d *dependencies) error {
+	b, err := d.pageBase()
+	if err != nil {
+		return err
+	}
+	downloads.Register(app, &downloads.Config{
+		Env: d.env, DB: b.conn, Stack: d.stack, Store: b.store, Resolver: b.resolver, IDs: b.ids, Proxy: b.proxy, Meta: b.meta,
+		Now: time.Now, Pages: b.pages, DryRunKey: pages.DryRunKey(d.config("SECRET_KEY_BASE")), DryRunOnce: d.redis,
+	})
+	return nil
+}
+
+// registerProducts serves the product page and hands the rest to Rails.
+func registerProducts(app *web.App, d *dependencies) error {
+	b, err := d.pageBase()
+	if err != nil {
+		return err
+	}
+	page, err := d.productPageConfig(b)
+	if errors.Is(err, errPagesOff) {
+		d.logger.Info("product pages left to Rails", "reason", err.Error())
+	} else if err != nil {
+		return err
+	}
+	products.Register(app, &products.Config{
+		Env: d.env, DB: b.conn, Stack: d.stack, Store: b.store, Resolver: b.resolver, IDs: b.ids, Proxy: b.proxy, Meta: b.meta,
+		Now: time.Now, Page: page, DryRunKey: pages.DryRunKey(d.config("SECRET_KEY_BASE")), DryRunOnce: d.redis,
 	})
 	return nil
 }
@@ -242,7 +280,28 @@ type dependencies struct {
 	conn    *sql.DB
 	ids     *obfuscate.IDs
 	proxy   *web.RailsProxy
+	geo     *geoip.Reader
+	geoRead bool
+	pages   *pageBase
 	closers []func() error
+}
+
+// geoIP is the GEOIP Rails loads: nil when the mmdb is missing, and a path that is set
+// must open.
+func (d *dependencies) geoIP() (*geoip.Reader, error) {
+	if d.geoRead {
+		return d.geo, nil
+	}
+	if path := getenv("GEOIP_DATABASE_PATH"); path != "" {
+		geo, err := geoip.Open(path)
+		if err != nil {
+			return nil, fmt.Errorf("GEOIP_DATABASE_PATH: %w", err)
+		}
+		d.closers = append(d.closers, geo.Close)
+		d.geo = geo
+	}
+	d.geoRead = true
+	return d.geo, nil
 }
 
 // sessionCookieName is session_store.rb's key.

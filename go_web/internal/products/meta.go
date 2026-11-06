@@ -1,0 +1,208 @@
+package products
+
+import (
+	"database/sql"
+
+	"github.com/antiwork/gumroad/go_web/internal/description"
+	"github.com/antiwork/gumroad/go_web/internal/inertia"
+	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
+)
+
+// productMeta is the meta tags in the order the before_actions and the action set them:
+// ApplicationController's, then prepare_product_page's, then set_favicon_meta_tags.
+func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTags, error) {
+	pc, seller := h.c.Page, p.seller
+	meta := h.ctl.MetaTags(p.Visit)
+	set := func(tagName, headKey, typ string, attrs ...inertia.Attr) {
+		meta.Set(inertia.NewMetaTag(tagName, headKey, typ, attrs...))
+	}
+
+	// set_analytics_meta_tags with the product's seller.
+	enabled := "true"
+	if !h.c.Meta.AnalyticsByEnvironment || seller.is(userDisableThirdPartyAnalytics) {
+		enabled = "false"
+	}
+	for _, property := range []string{"gr:google_analytics:enabled", "gr:fb_pixel:enabled", "gr:tiktok_pixel:enabled"} {
+		set("", "", "", inertia.Pairs("property", property, "content", enabled)...)
+	}
+	set("", "", "", inertia.Pairs("property", "gr:logged_in_user:id", "content", "")...)
+	set("", "", "", inertia.Pairs("property", "gr:page:type", "content", "")...)
+	set("", "", "", inertia.Pairs("title", prod.name)...)
+
+	// set_product_page_meta.
+	productDescription := "Available on Gumroad"
+	if v.descriptionPresent {
+		productDescription = v.plaintextDescription
+	}
+	productDescription = description.Snippet(productDescription)
+	canonical := h.c.Env.ProductLongURL(sellerUsername(seller), prod.generalPermalink())
+	set("", "", "", inertia.Pairs("name", "description", "content", productDescription)...)
+	set("", "", "", inertia.Pairs("property", "gr:page:type", "content", "product")...)
+	set("", "", "", inertia.Pairs("property", "product:retailer_item_id", "content", prod.uniquePermalink.String)...)
+	if v.priceCents != nil && rails.Present(prod.priceCurrencyType.String) {
+		amount := rails.RoundFloat(float64(*v.priceCents)/float64(unitScalingFactor(prod.priceCurrencyType.String)), 2)
+		// Float#to_s, as the tag helper writes a Float attribute.
+		s, err := sidekiq.RubyFloat(amount)
+		if err != nil {
+			return nil, fallback("price amount")
+		}
+		set("", "", "", inertia.Attr{Key: "property", Value: "product:price:amount"}, inertia.Attr{Key: "content", Value: s, JSON: amount})
+		up, ok := asciiUpcase(prod.priceCurrencyType.String)
+		if !ok {
+			return nil, fallback("currency")
+		}
+		set("", "", "", inertia.Pairs("property", "product:price:currency", "content", up)...)
+	}
+
+	var shareImage string
+	if len(v.covers) > 0 {
+		shareImage = v.covers[0].url
+	}
+	set("", "", "", inertia.Pairs("property", "og:title", "content", prod.name)...)
+	set("", "", "", inertia.Pairs("property", "og:description", "content", productDescription)...)
+	set("", "", "", inertia.Pairs("property", "og:url", "content", canonical)...)
+	if rails.Present(shareImage) {
+		set("", "", "", inertia.Pairs("property", "og:image", "content", shareImage)...)
+		set("", "", "", inertia.Pairs("property", "og:image:alt", "content", "")...)
+	}
+	set("", "", "", inertia.Pairs("property", "og:type", "content", pc.OGNamespace+":product")...)
+
+	set("", "", "", inertia.Pairs("property", "twitter:title", "content", prod.name)...)
+	if rails.Present(shareImage) {
+		// demo_player_card_meta: the flag is on, and a product with builds may have a demo.
+		has, err := h.exists(p.Ctx, "SELECT 1 FROM product_builds WHERE product_builds.product_id = ? LIMIT 1", prod.id)
+		if err != nil || has {
+			return nil, firstErr(err, fallback("product builds"))
+		}
+	}
+	if len(v.covers) > 0 {
+		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary_large_image")...)
+		set("", "", "", inertia.Pairs("property", "twitter:image", "content", v.covers[0].url)...)
+		set("", "", "", inertia.Pairs("property", "twitter:image:alt", "content", "")...)
+	} else {
+		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary")...)
+	}
+	set("", "", "", inertia.Pairs("property", "twitter:domain", "content", "Gumroad")...)
+	set("", "", "", inertia.Pairs("property", "twitter:description", "content", description.TwitterDescription(productDescription))...)
+	if rails.Present(seller.twitterHandle.String) {
+		set("", "", "", inertia.Pairs("property", "twitter:creator", "content", "@"+seller.twitterHandle.String)...)
+	}
+	for _, c := range v.covers {
+		set("link", "", "", inertia.Pairs("rel", "preload", "as", "image", "href", c.url)...)
+	}
+	set("link", "canonical", "", inertia.Pairs("rel", "canonical", "href", canonical)...)
+
+	data, err := h.structuredData(p, prod, v, canonical, shareImage)
+	if err != nil {
+		return nil, err
+	}
+	set("script", "structured-data", "application/ld+json", inertia.Attr{Key: "inner_content", JSON: data})
+
+	set("style", "custom_styles", "", inertia.Attr{Key: "inner_content", Value: v.customStyles, Raw: true})
+	if v.fontPreload {
+		set("link", "default_font_preload", "font/woff2", inertia.Pairs("rel", "preload",
+			"href", h.c.Env.AssetHost()+"/fonts/ABCFavorit-Regular.woff2", "as", "font", "crossorigin", "anonymous")...)
+	}
+
+	// set_favicon_meta_tags: avatar_url is always present.
+	set("link", "shortcut-icon", "", inertia.Pairs("rel", "shortcut icon", "href", v.avatarURL)...)
+	set("link", "apple-touch-icon", "", inertia.Pairs("rel", "apple-touch-icon", "href", v.avatarURL)...)
+	return meta, nil
+}
+
+// structuredData is Link#structured_data on the seller's subdomain.
+func (h *handler) structuredData(p *page, prod *product, v *view, url, image string) (*rails.Hash, error) {
+	seller := p.seller
+	d := rails.NewHash()
+	d.Set("@context", "https://schema.org")
+	ebook := prod.nativeType == "ebook"
+	if ebook {
+		d.Set("@type", "Book")
+	} else {
+		d.Set("@type", "Product")
+	}
+	d.Set("name", prod.name)
+	if ebook {
+		author := rails.NewHash()
+		author.Set("@type", "Person")
+		author.Set("name", nullString(seller.name))
+		d.Set("author", author)
+	}
+	if v.structuredDescription != nil {
+		d.Set("description", *v.structuredDescription)
+	}
+	d.Set("url", url)
+	if rails.Present(image) {
+		d.Set("image", image)
+	}
+	d.Set("sku", prod.uniquePermalink.String)
+	if !ebook && rails.Present(seller.name.String) {
+		brand := rails.NewHash()
+		brand.Set("@type", "Brand")
+		brand.Set("name", seller.name.String)
+		d.Set("brand", brand)
+	}
+	if ebook {
+		var examples []any
+		for _, f := range v.files {
+			switch f.filetype.String {
+			case "epub", "pdf", "mobi":
+			default:
+				continue
+			}
+			up, _ := asciiUpcase(f.filetype.String)
+			e := rails.NewHash()
+			e.Set("@type", "Book")
+			e.Set("bookFormat", "EBook")
+			e.Set("name", prod.name+" ("+up+")")
+			if rails.Present(f.isbn.String) {
+				e.Set("isbn", f.isbn.String)
+			}
+			examples = append(examples, e)
+		}
+		if len(examples) > 0 {
+			d.Set("workExample", examples)
+		}
+	}
+	offer, err := h.offerData(p, prod, v, url)
+	if err != nil {
+		return nil, err
+	}
+	d.Set("offers", offer)
+	if prod.is(productDisplayReviews) && v.reviewStat != nil && v.reviewStat.reviewsCount > 0 {
+		r := rails.NewHash()
+		r.Set("@type", "AggregateRating")
+		r.Set("ratingValue", rails.RoundFloat(v.reviewStat.averageRating, 1))
+		r.Set("reviewCount", v.reviewStat.reviewsCount)
+		r.Set("bestRating", int64(5))
+		r.Set("worstRating", int64(1))
+		d.Set("aggregateRating", r)
+	}
+	return d, nil
+}
+
+// offerData is build_offer_data; unportedShape has left only USD products.
+func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails.Hash, error) {
+	offer := rails.NewHash()
+	offer.Set("@type", "Offer")
+	offer.Set("priceCurrency", "USD")
+	availability := "https://schema.org/InStock"
+	if prod.maxPurchaseCount.Valid && prod.maxPurchaseCount.Int64 != 0 {
+		availability = "https://schema.org/LimitedAvailability"
+		if n, ok := v.quantityRemaining.(int64); ok && n == 0 {
+			availability = "https://schema.org/SoldOut"
+		}
+	}
+	offer.Set("availability", availability)
+	offer.Set("url", url)
+	if v.priceCents != nil {
+		var diff sql.NullInt64
+		if err := h.c.DB.QueryRowContext(p.Ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
+			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN (NULL))", prod.id).Scan(&diff); err != nil {
+			return nil, err
+		}
+		offer.Set("price", float64(*v.priceCents+diff.Int64)/100)
+	}
+	return offer, nil
+}
