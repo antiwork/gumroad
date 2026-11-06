@@ -342,7 +342,7 @@ func TestRubyValueSemantics(t *testing.T) {
 	if _, ok := ColumnString([]any{"a"}); ok {
 		t.Error("an array is not a string")
 	}
-	for in, want := range map[string]int64{"  -1_234abc": -1234, "12__3": 12, "_1": 0, "9223372036854775807": 9223372036854775807, "-9223372036854775808": -9223372036854775808} {
+	for in, want := range map[string]int64{"  -1_234abc": -1234, "12__3": 12, "_1": 0, "0d12": 12, "-0D1_2": -12, "0d_12": 0, "0d": 0, "00d12": 0, "0x12": 0, "9223372036854775807": 9223372036854775807, "-9223372036854775808": -9223372036854775808} {
 		if got, ok := StringToI(in); !ok || got != want {
 			t.Errorf("StringToI(%q) = %d %v", in, got, ok)
 		}
