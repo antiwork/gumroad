@@ -70,11 +70,9 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 	}
 	var thumbnailRows []thumbnailRow
 	for _, id := range ids {
-		if len(thumbnails[id]) > 1 {
-			// has_one's preload keeps whichever row MySQL returns first.
-			return nil, fallback("bundle product thumbnails")
+		if t := thumbnails[id]; t != nil {
+			thumbnailRows = append(thumbnailRows, *t)
 		}
-		thumbnailRows = append(thumbnailRows, thumbnails[id]...)
 	}
 	thumbnailURLs, err := h.thumbnailURLs(ctx, thumbnailRows)
 	if err != nil {
@@ -107,8 +105,8 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 			ratings = cardRatings(bp.product, stats[bp.id])
 		}
 		var thumbnail any
-		if t := thumbnails[bp.id]; len(t) == 1 {
-			thumbnail = thumbnailURLs[t[0].id]
+		if t := thumbnails[bp.id]; t != nil {
+			thumbnail = thumbnailURLs[t.id]
 		}
 		// url_for_product_page on the seller's own subdomain: short_link_url on this host.
 		url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(bp.generalPermalink()) + query

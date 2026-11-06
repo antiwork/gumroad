@@ -915,11 +915,13 @@ func TestABundleRendersItsProducts(t *testing.T) {
 			setup(t, conn, true)
 			conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsBundle, ebook)
 		}},
-		{name: "two thumbnails", reason: "bundle product thumbnails", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			setup(t, conn, true)
-			testdb.Insert(t, conn, "thumbnails", map[string]any{"id": int64(1_794_302), "product_id": ebook,
-				"unsplash_url": "https://images.unsplash.com/y", "created_at": testNow, "updated_at": testNow})
-		}},
+		// has_one's preload keeps the first row its statement returns, here the lower id.
+		{name: "two thumbnails", wants: []string{`"thumbnail_url":"https://images.unsplash.com/x","native_type":"ebook"`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				testdb.Insert(t, conn, "thumbnails", map[string]any{"id": int64(1_794_302), "product_id": ebook,
+					"unsplash_url": "https://images.unsplash.com/y", "created_at": testNow, "updated_at": testNow})
+			}},
 		{name: "a missing product", reason: "bundle product missing", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			setup(t, conn, true)
 			conn.Exec("DELETE FROM links WHERE id = ?", ebook)

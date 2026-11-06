@@ -357,6 +357,21 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				card = strings.Replace(card, `"thumbnail_url":null`, `"thumbnail_url":"https://public-files.gumroad.com/thumbnails/600"`, 1)
 				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
 			}},
+		// has_one's preload keeps the first row its statement returns, here the lower id.
+		{name: "a card with two thumbnails", server: search, searched: 1,
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				for i, url := range []string{"https://images.unsplash.com/x", "https://images.unsplash.com/y"} {
+					testdb.Insert(t, conn, "thumbnails", map[string]any{"id": int64(1_792_952 + i), "product_id": other, "unsplash_url": url,
+						"created_at": testNow, "updated_at": testNow})
+				}
+			},
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"thumbnail_url":null`, `"thumbnail_url":"https://images.unsplash.com/x"`, 1)
+				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
+			}},
 		{name: "the default price recurrence of a one-time product", server: search, searched: 1,
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
 			setup: func(t *testing.T, conn *sql.DB) {

@@ -236,7 +236,7 @@ func (h *handler) wishlistThumbnails(p *page, wishlists []*wishlistRow) (map[int
 		if _, ok := nativeTypes[id]; !ok {
 			return nil, fallback("wishlist product")
 		}
-		cards[i] = &card{prod: &product{id: id}, thumbnails: thumbnails[id]}
+		cards[i] = &card{prod: &product{id: id}, thumbnail: thumbnails[id]}
 	}
 	if err := h.cardThumbnails(p, cards); err != nil {
 		return nil, err
