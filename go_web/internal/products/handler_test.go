@@ -1204,6 +1204,9 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 			"updated_at": testNow})
 	}
 	charging := func(e *testEnv) { e.redis.HSet("buyer_currency_charging", "boolean", "true") }
+	linked := func(conn *sql.DB) {
+		conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userCheckMerchantAccountIsLinked, sellerID)
+	}
 	for _, c := range []struct {
 		name, product, cookie, want, reason string
 		setup                               func(t *testing.T, e *testEnv, conn *sql.DB)
@@ -1246,9 +1249,49 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 			platform(t, conn, "usd", `{}`)
 			own(t, conn, "IN", `{}`)
 		}},
-		{"a Connect account", "usd", "EUR", "", "stripe connect account", func(t *testing.T, e *testEnv, conn *sql.DB) {
+		// merchant_migration_enabled? through the linked flag routes charges to the Connect account,
+		// which settles its own quote.
+		{"a linked Connect account holding USD", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
 			charging(e)
+			linked(conn)
 			own(t, conn, "US", `{"meta":{"stripe_connect":"true"}}`)
+		}},
+		{"a linked Connect account holding BRL", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			linked(conn)
+			own(t, conn, "BR", `{"meta":{"stripe_connect":"true"}}`)
+			conn.Exec("UPDATE merchant_accounts SET currency = 'brl' WHERE id = 1790902")
+		}},
+		{"a Connect account's own blanket marker", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			linked(conn)
+			own(t, conn, "US", `{"meta":{"stripe_connect":"true"},"settlement_currency_mismatch_noticed_at":"2026-11-06T06:00:00Z"}`)
+		}},
+		{"a Connect account's fresh marker for the currency", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			linked(conn)
+			own(t, conn, "US", `{"meta":{"stripe_connect":"true"},"settlement_currency_mismatch_map":{"eur":"2026-11-06T06:00:00Z"}}`)
+		}},
+		// The linked Connect account wins over the seller's own Custom account, whose destination
+		// charges would need their flag.
+		{"a linked Connect account beside the seller's own", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			linked(conn)
+			own(t, conn, "US", `{}`)
+			testdb.Insert(t, conn, "merchant_accounts", map[string]any{"id": int64(1_790_903), "user_id": sellerID, "charge_processor_id": "stripe",
+				"country": "US", "currency": "usd", "json_data": `{"meta":{"stripe_connect":"true"}}`, "charge_processor_alive_at": testNow,
+				"created_at": testNow, "updated_at": testNow})
+		}},
+		{"a Connect account routed by compliance country", "usd", "EUR", "", "stripe connect routing", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			e.redis.HSet("merchant_migration", "boolean", "true")
+			own(t, conn, "US", `{"meta":{"stripe_connect":"true"}}`)
+		}},
+		// Without merchant migration the Connect account, and its marker, are skipped for the platform's.
+		{"an unlinked Connect account without merchant migration", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "usd", `{}`)
+			own(t, conn, "US", `{"meta":{"stripe_connect":"true"},"settlement_currency_mismatch_map":{"eur":"2026-11-06T06:00:00Z"}}`)
 		}},
 		{"a USD buyer skips the charging checks", "eur", "USD",
 			display("usd", "eur", "541", "1.0828956630028697", "buyer_local") + `,"buyer_currency":"usd",` +
