@@ -126,12 +126,18 @@ func (h *handler) viewerHasNoPart(p *page, prod *product, userID int64) error {
 	if !p.hasCollaborator {
 		return nil
 	}
-	collaborates, err := h.exists(p.Ctx, "SELECT 1 FROM affiliates INNER JOIN affiliates_links ON affiliates_links.affiliate_id = affiliates.id"+
-		" WHERE affiliates.type = 'Collaborator' AND affiliates.affiliate_user_id = ? AND affiliates_links.link_id = ? LIMIT 1", userID, prod.id)
+	collaborates, err := h.collaborates(p.Ctx, userID, prod.id)
 	if err != nil || collaborates {
 		return firstErr(err, fallback("product's collaborator"))
 	}
 	return nil
+}
+
+// collaborates is whether the user has a Collaborator row on the product, alive or not: more
+// than User#collaborator_for? counts, which only ever sends more to Rails.
+func (h *handler) collaborates(ctx context.Context, userID, productID int64) (bool, error) {
+	return h.exists(ctx, "SELECT 1 FROM affiliates INNER JOIN affiliates_links ON affiliates_links.affiliate_id = affiliates.id"+
+		" WHERE affiliates.type = 'Collaborator' AND affiliates.affiliate_user_id = ? AND affiliates_links.link_id = ? LIMIT 1", userID, productID)
 }
 
 // viewerCurrency is ProfileSectionsPresenter's currency_code: the visitor's currency_type.
@@ -378,55 +384,80 @@ func (h *handler) loggedInUserProps(p *page, u *signedInUser, community, storeAg
 		Sym("lazy_load_offscreen_discover_images", lazyImages), nil
 }
 
-// teamMembershipsProps is UserMembershipsPresenter#props.
+// teamMembershipsProps is UserMembershipsPresenter#props, in Rails' own statement: rows tied on
+// both sort columns come back in whatever order MySQL's plan for it gives.
 func (h *handler) teamMembershipsProps(p *page, u *signedInUser) ([]any, error) {
-	rows, err := h.c.DB.QueryContext(p.Ctx, "SELECT team_memberships.id, team_memberships.seller_id, team_memberships.role"+
-		" FROM team_memberships INNER JOIN users ON users.id = team_memberships.seller_id"+
-		" WHERE team_memberships.user_id = ? AND team_memberships.deleted_at IS NULL AND users.deleted_at IS NULL"+
-		" ORDER BY team_memberships.last_accessed_at DESC, team_memberships.created_at DESC", u.id)
-	if err != nil {
-		return nil, err
-	}
 	type membership struct {
 		id, sellerID int64
-		role         string
+		role         sql.NullString
 	}
-	var list []membership
-	for rows.Next() {
-		var m membership
-		var role sql.NullString
-		if err := rows.Scan(&m.id, &m.sellerID, &role); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		m.role = role.String
-		list = append(list, m)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	var list []*membership
+	err := scanNamed(p.Ctx, h.c.DB, func(cols map[string]any) func() {
+		m := &membership{}
+		cols["id"], cols["seller_id"], cols["role"] = &m.id, &m.sellerID, &m.role
+		return func() { list = append(list, m) }
+	}, "SELECT `team_memberships`.* FROM `team_memberships` INNER JOIN `users` ON `users`.`id` = `team_memberships`.`seller_id`"+
+		" WHERE `team_memberships`.`user_id` = ? AND `team_memberships`.`deleted_at` IS NULL AND `users`.`deleted_at` IS NULL"+
+		" ORDER BY `team_memberships`.`last_accessed_at` DESC, `team_memberships`.`created_at` DESC", u.id)
+	if err != nil {
 		return nil, err
 	}
 	out := []any{}
 	if len(list) == 0 {
 		return out, nil
 	}
-	if !slices.ContainsFunc(list, func(m membership) bool { return m.role == "owner" }) {
+	if !slices.ContainsFunc(list, func(m *membership) bool { return m.role.String == "owner" }) {
 		// Rails notifies about the missing owner row and renders none.
 		web.Logger(p.Req.HTTP).Warn("missing owner team membership", "user_id", u.id)
 		return out, nil
 	}
-	if len(list) > 1 {
-		// Rows tied on both sort columns come back in no defined order.
-		return nil, fallback("team memberships")
+	sellers := map[int64]*signedInUser{u.id: u}
+	var others []int64
+	for _, m := range list {
+		if _, ok := sellers[m.sellerID]; !ok && !slices.Contains(others, m.sellerID) {
+			others = append(others, m.sellerID)
+		}
 	}
-	// The one row is the owner's, whose seller is the visitor.
-	m := list[0]
-	return append(out, rails.NewRHash().
-		Sym("id", h.c.IDs.Encrypt(m.id)).
-		Sym("seller_name", u.displayName(true)).
-		Sym("seller_avatar_url", u.avatarURL).
-		Sym("has_some_read_only_access", m.role != "owner" && m.role != "admin").
-		Sym("is_selected", m.sellerID == u.id)), nil
+	if len(others) > 0 {
+		rows, err := h.c.DB.QueryContext(p.Ctx, "SELECT "+userColumns+", users.email, users.unconfirmed_email FROM users"+
+			" WHERE users.id IN ("+placeholders(len(others))+")", int64Args(others)...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		var loaded []*signedInUser
+		for rows.Next() {
+			s := &signedInUser{}
+			if err := rows.Scan(append(s.user.dest(), &s.email, &s.unconfirmedEmail)...); err != nil {
+				return nil, err
+			}
+			loaded = append(loaded, s)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		rows.Close()
+		for _, s := range loaded {
+			if s.avatarURL, err = h.avatarURL(p.Ctx, s.id); err != nil {
+				return nil, err
+			}
+			sellers[s.id] = s
+		}
+	}
+	for _, m := range list {
+		seller := sellers[m.sellerID]
+		if seller == nil {
+			// Gone since the join found it.
+			return nil, fallback("team membership seller")
+		}
+		out = append(out, rails.NewRHash().
+			Sym("id", h.c.IDs.Encrypt(m.id)).
+			Sym("seller_name", seller.displayName(true)).
+			Sym("seller_avatar_url", seller.avatarURL).
+			Sym("has_some_read_only_access", m.role.String != "owner" && m.role.String != "admin").
+			Sym("is_selected", m.sellerID == u.id))
+	}
+	return out, nil
 }
 
 // eligibleForStoreAgent is User#eligible_for_store_agent?.

@@ -45,6 +45,13 @@ module Product::Validations
       errors.add(:base, "Button: #{pluralize(over_limit, 'character')} over limit (max: #{MAX_VIEW_CONTENT_BUTTON_TEXT_LENGTH})")
     end
 
+    def name_does_not_impersonate_gumroad
+      return unless ContentModeration::GumroadImpersonation.impersonates?(name)
+      return unless ContentModeration::GumroadImpersonation.unproven_seller?(user)
+
+      errors.add(:name, ContentModeration::GumroadImpersonation::MESSAGE)
+    end
+
     def content_has_no_adult_keywords
       [description, name].each do |content|
         if AdultKeywordDetector.adult?(content)

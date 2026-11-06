@@ -75,6 +75,7 @@ class CustomerMailer < ApplicationMailer
 
     # MailSubject calls link_name on the first successful purchase and raises when that set is empty.
     return if @chargeable.successful_purchases.none?
+    return if for_email && suppress_receipt_from_unproven_seller?(@chargeable)
 
     @receipt_presenter = ReceiptPresenter.new(@chargeable, for_email:)
 
@@ -445,6 +446,9 @@ class CustomerMailer < ApplicationMailer
 
         scope = scope.where("purchases.id < ?", window.last.id)
         chargeables = renderable_chargeables((chargeables + window.map { Charge::Chargeable.find_by_purchase_or_charge!(purchase: _1) }).uniq)
+        # Blocked receipts (gp#4366) are the newest ones, so they must not take one of the twenty
+        # slots and crowd the buyer's older receipts out of the window.
+        chargeables = chargeables.reject { suppress_receipt_from_unproven_seller?(_1) }
         break if chargeables.size >= GROUPED_RECEIPT_MAX_CHARGEABLES
       end
 
@@ -523,5 +527,20 @@ class CustomerMailer < ApplicationMailer
     rescue => e
       ErrorNotifier.notify(e)
       true
+    end
+
+    # Free "purchases" from a brand-new seller make Gumroad mail anyone the receipt, with the
+    # seller and product names in the From and subject (gp#4366). Paid orders always send: the
+    # charge itself is the proof. Only the email is skipped; the buyer keeps access.
+    def suppress_receipt_from_unproven_seller?(chargeable)
+      purchases = chargeable.successful_purchases
+      return false if purchases.any? { _1.price_cents.to_i > 0 }
+
+      seller = chargeable.seller
+      return false unless ContentModeration::GumroadImpersonation.unproven_seller?(seller)
+
+      ContentModeration::GumroadImpersonation.gumroad_address?(chargeable.orderable.email) ||
+        ContentModeration::GumroadImpersonation.impersonates?(seller.name) ||
+        purchases.any? { ContentModeration::GumroadImpersonation.impersonates?(_1.link_name) }
     end
 end

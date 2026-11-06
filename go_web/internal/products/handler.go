@@ -88,6 +88,8 @@ type page struct {
 	warmReputation bool
 	// urlCode is params[:code], the path's or the query's, when present.
 	urlCode string
+	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
+	iframe bool
 	// parent is the page's own view when this one renders a featured section's product within it.
 	parent *view
 }
@@ -161,6 +163,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
 	}
+	p.iframe = rails.Truthy(v.Req.Param("overlay")) || rails.Truthy(v.Req.Param("embed"))
 	return p, nil
 }
 
@@ -193,7 +196,7 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"wanted", "layout", "embed", "overlay", "recommended_by", "offer_code", "quantity", "purchase_id",
+	"wanted", "layout", "recommended_by", "offer_code", "quantity", "purchase_id",
 	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
 	"query", "autocomplete",
 	// The sections' search filters.

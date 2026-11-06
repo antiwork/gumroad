@@ -19,6 +19,7 @@ import (
 const (
 	productComponent    = "Products/Show"
 	storefrontComponent = "Products/Profile/Show"
+	iframeComponent     = "Products/Iframe/Show"
 	// ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID and _TYPE, and ProductSortKey::PAGE_LAYOUT.
 	defaultProductsSectionID    = "default-products"
 	profileProductsSectionType  = "SellerProfileProductsSection"

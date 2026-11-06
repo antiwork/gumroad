@@ -111,8 +111,8 @@ func (h *handler) loadReputation(ctx context.Context, p *page, prod *product, v 
 	}
 
 	// The profile's: Rails.cache.fetch keyed by the products' lifecycle and the version. A
-	// featured product's props have no profile.
-	if p.parent != nil {
+	// featured product's props and an iframe's have no profile.
+	if p.parent != nil || p.iframe {
 		return nil
 	}
 	lifecycle, err := h.productsCacheKey(p)

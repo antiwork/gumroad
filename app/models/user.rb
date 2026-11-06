@@ -363,6 +363,7 @@ class User < ApplicationRecord
 
   validates :name, length: { maximum: MAX_LENGTH_NAME, too_long: "Your name is too long. Please try again with a shorter one." },
                    format: { without: INVALID_NAME_FOR_EMAIL_DELIVERY_REGEX, message: "cannot contain colons (:) as it causes email delivery problems. Please remove any colons from your name and try again.", if: :name_changed? }
+  validate :name_does_not_impersonate_gumroad, if: :name_changed?
   validates :facebook_meta_tag, length: { maximum: MAX_LENGTH_FACEBOOK_META_TAG }
   validates :purchasing_power_parity_limit, allow_nil: true, numericality: { greater_than_or_equal_to: 1, less_than_or_equal_to: 100 }
 
@@ -1775,6 +1776,13 @@ class User < ApplicationRecord
     end
 
   private
+    def name_does_not_impersonate_gumroad
+      return unless ContentModeration::GumroadImpersonation.impersonates?(name)
+      return unless ContentModeration::GumroadImpersonation.unproven_seller?(self)
+
+      errors.add(:name, ContentModeration::GumroadImpersonation::MESSAGE)
+    end
+
     def administered_by?(parent)
       seller_memberships.not_deleted.role_admin.exists?(user_id: parent.id)
     end

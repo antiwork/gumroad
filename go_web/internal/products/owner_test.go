@@ -145,8 +145,8 @@ func TestTheSellerPreviewsTheirCustomHTML(t *testing.T) {
 		name, reason  string
 		coffee, buyer bool
 	}{
-		{name: "the seller", reason: "signed-in custom html"},
-		{name: "the seller of a coffee product", reason: "signed-in custom html", coffee: true},
+		{name: "the seller", reason: "custom html preview"},
+		{name: "the seller of a coffee product", reason: "custom html preview", coffee: true},
 		{name: "another visitor", reason: "custom html preview", buyer: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
