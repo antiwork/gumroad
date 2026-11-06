@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { ProductNativeType } from "$app/parsers/product";
+import { freeSignupSummary, purchaseConfirmationMessage } from "$app/utils/purchaseConfirmation";
 
 import type { Creator, Result } from "$app/components/Checkout/cartState";
 import { useState } from "$app/components/Checkout/payment";
@@ -25,7 +26,7 @@ export const TemporaryLibrary = ({ results, canBuyerSignUp }: { results: Result[
   const [state] = useState();
 
   useRunOnce(() => {
-    showAlert(`Your purchase was successful! We sent a receipt to ${state.email}.`, "success");
+    showAlert(purchaseConfirmationMessage({ ...freeSignupSummary(results), email: state.email }), "success");
   });
 
   if (state.status.type !== "finished") return null;
