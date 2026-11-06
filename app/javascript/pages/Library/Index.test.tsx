@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -192,6 +192,21 @@ describe("LibraryPage", () => {
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("returns keyboard focus to the card's gallery button when the gallery closes", async () => {
+    const props = defaultProps();
+    props.results = props.results.map((r, i) =>
+      i === 0 ? { ...r, product: { ...r.product, preview_images: [previewImage("a"), previewImage("b")] } } : r,
+    );
+    renderPage(props);
+
+    const trigger = screen.getByRole("button", { name: "View images for Alpha" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 
   it("renders the server-supplied page verbatim, without re-slicing", () => {

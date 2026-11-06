@@ -64,11 +64,14 @@ export type Result = {
 const PreviewGallery = ({ name, images }: { name: string; images: AssetPreview[] }) => {
   const [open, setOpen] = React.useState(false);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
 
   return (
     <>
       <Button
+        ref={triggerRef}
         size="sm"
+        color="filled"
         className="absolute right-2 bottom-2 z-10"
         aria-label={`View images for ${name}`}
         onClick={() => setOpen(true)}
@@ -76,7 +79,17 @@ const PreviewGallery = ({ name, images }: { name: string; images: AssetPreview[]
         <ImageIcon className="size-4" />
         {images.length}
       </Button>
-      <Modal open={open} onClose={() => setOpen(false)} title={name} className="w-full max-w-4xl">
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        // Modal has no Dialog.Trigger, so Radix would drop focus to the body on close.
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          triggerRef.current?.focus();
+        }}
+        title={name}
+        className="w-full max-w-4xl"
+      >
         <Covers
           covers={images}
           activeCoverId={activeId}

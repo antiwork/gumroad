@@ -13,6 +13,7 @@ export const Modal = ({
   onClose,
   modal = true,
   usePortal = true,
+  onCloseAutoFocus,
   ...props
 }: {
   className?: string;
@@ -22,6 +23,7 @@ export const Modal = ({
   allowClose?: boolean;
   usePortal?: boolean;
   onClose?: () => void;
+  onCloseAutoFocus?: (event: Event) => void;
 } & Omit<React.ComponentProps<typeof Dialog.Root>, "onOpenChange">) => {
   const content = (
     <>
@@ -34,6 +36,7 @@ export const Modal = ({
         onOpenAutoFocus={(e) => {
           if (!modal) e.preventDefault();
         }}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
         {title ? (
           <div className="flex items-start justify-between gap-4">
