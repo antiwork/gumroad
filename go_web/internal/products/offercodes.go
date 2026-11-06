@@ -98,9 +98,6 @@ func (c *offerCode) unportedLookup(prod *product) string {
 // unportedDiscount is a code whose evaluation or discount this port doesn't follow.
 func (c *offerCode) unportedDiscount() string {
 	switch {
-	case c.maxPurchaseCount.Valid:
-		// quantity_left counts purchases.
-		return "offer code limit"
 	case c.tiers > 0:
 		return "tiered offer code"
 	case c.amountCents.Valid == c.amountPercentage.Valid:
@@ -252,9 +249,9 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 			return nil, err
 		}
 	}
-	eff, limited := effectiveDefaultCode(prod, explicit, auto, now)
-	if limited {
-		return nil, fallback("offer code limit")
+	eff, err := h.effectiveDefault(p, prod, explicit, auto)
+	if err != nil {
+		return nil, err
 	}
 	var list []*offerCode
 	if explicit != nil && explicit.existingOnly && explicit.currencyValid(prod) {
@@ -331,7 +328,8 @@ func (h *handler) evaluateOfferCode(ctx context.Context, prod *product, c *offer
 	if reason := c.unportedDiscount(); reason != "" {
 		return false, fallback(reason)
 	}
-	return true, nil
+	shortfall, err := h.sufficientUses(ctx, c, now)
+	return shortfall == "", err
 }
 
 // evaluateURLCode is BestOfferCodeService#evaluate_code for the URL's code: the code that
@@ -370,6 +368,9 @@ func (h *handler) evaluateURLCode(ctx context.Context, prod *product, typed stri
 	}
 	if reason := c.unportedDiscount(); reason != "" {
 		return nil, "", fallback(reason)
+	}
+	if shortfall, err := h.sufficientUses(ctx, c, now); err != nil || shortfall != "" {
+		return nil, shortfall, err
 	}
 	return c, "", nil
 }

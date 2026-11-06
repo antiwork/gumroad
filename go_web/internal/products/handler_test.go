@@ -280,6 +280,14 @@ func insertOfferCode(t *testing.T, conn *sql.DB, id int64, columns map[string]an
 	testdb.Insert(t, conn, "offer_codes", row)
 }
 
+// insertCodeUse adds a successful purchase of the product through the code.
+func insertCodeUse(t *testing.T, conn *sql.DB, id, code int64, columns map[string]any) {
+	row := map[string]any{"id": id, "seller_id": sellerID, "link_id": productID, "offer_code_id": code, "purchase_state": "successful",
+		"quantity": 1, "created_at": testNow, "updated_at": testNow}
+	maps.Copy(row, columns)
+	testdb.Insert(t, conn, "purchases", row)
+}
+
 // insertExcludedProduct leaves product out of the code.
 func insertExcludedProduct(t *testing.T, conn *sql.DB, id, code, product int64) {
 	testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": id, "offer_code_id": code,
@@ -1140,9 +1148,29 @@ func TestDefaultOfferCodes(t *testing.T) {
 				options(t, conn, "Tier", int(baseVariantClosedToNewPurchases))
 				auto(t, conn, nil)
 			}},
-		{name: "a limited sale", reason: "offer code limit", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, map[string]any{"max_purchase_count": 10})
-		}},
+		{name: "a limited sale with uses left", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"max_purchase_count": 10})
+				insertCodeUse(t, conn, 1_795_901, autoID, map[string]any{"quantity": 9})
+			}},
+		{name: "a sold-out sale", wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_795_901, autoID, nil)
+			}},
+		// default_offer_code_uses_left? hands a used-up explicit default's place to the sale.
+		{name: "the sale over a used-up default", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"max_purchase_count": 1})
+				insertCodeUse(t, conn, 1_795_901, explicitID, nil)
+				auto(t, conn, nil)
+			}},
+		{name: "a limited default with uses left over the sale", wants: []string{`"discount_code":` + launch + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				explicit(t, conn, map[string]any{"max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_795_901, explicitID, nil)
+				auto(t, conn, nil)
+			}},
 		{name: "a once-per-cart sale", reason: "once-per-cart offer code", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "flags": 4})
 		}},
@@ -1274,8 +1302,23 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, nil)
 				sale(t, conn)
 			}},
-		{name: "a limited code", target: "/l/guide/SAVE10", reason: "offer code limit",
-			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"max_purchase_count": 5}) }},
+		{name: "a limited code with uses left", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 5})
+				insertCodeUse(t, conn, 1_796_501, codeID, map[string]any{"quantity": 4})
+			}},
+		{name: "a sold-out code", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", invalid("sold_out"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 2})
+				insertCodeUse(t, conn, 1_796_501, codeID, map[string]any{"quantity": 2})
+			}},
+		// The quantity rises to the code's minimum, which the uses left must cover.
+		{name: "a code with fewer uses left than its minimum", target: "/l/guide/SAVE10",
+			wants: []string{quotes("SAVE10", invalid("insufficient_times_of_use"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 5, "minimum_quantity": 3})
+				insertCodeUse(t, conn, 1_796_501, codeID, map[string]any{"quantity": 3})
+			}},
 		{name: "a code for some options", target: "/l/guide/SAVE10", reason: "offer code variants",
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)

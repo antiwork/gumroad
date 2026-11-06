@@ -10,14 +10,16 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
+// notRecurringCharge is Purchase.not_recurring_charge.
+var notRecurringCharge = fmt.Sprintf("(purchases.subscription_id IS NULL OR purchases.flags & %[1]d = %[1]d OR purchases.flags & %[2]d = %[2]d)",
+	purchaseIsOriginalSubscription, purchaseIsGiftReceiver)
+
 // qualifyingPurchases is OfferCode#qualifying_ownership_purchases.
 var qualifyingPurchases = fmt.Sprintf("purchases.purchase_state IN ('preorder_authorization_successful', 'successful',"+
-	" 'not_charged', 'gift_receiver_purchase_successful') AND (purchases.flags & %d) = 0"+
-	" AND (purchases.subscription_id IS NULL OR purchases.flags & %[2]d = %[2]d OR purchases.flags & %[3]d = %[3]d)"+
-	" AND (purchases.flags & %[4]d) = 0 AND (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)"+
-	" AND (purchases.chargeback_date IS NULL OR purchases.flags & %[5]d != 0) AND (purchases.flags & %[6]d) = 0",
-	purchaseIsAdditionalContribution, purchaseIsOriginalSubscription, purchaseIsGiftReceiver, purchaseIsGiftSender,
-	purchaseChargebackReversed, purchaseIsAccessRevoked)
+	" 'not_charged', 'gift_receiver_purchase_successful') AND (purchases.flags & %d) = 0 AND %s AND (purchases.flags & %d) = 0"+
+	" AND (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)"+
+	" AND (purchases.chargeback_date IS NULL OR purchases.flags & %d != 0) AND (purchases.flags & %d) = 0",
+	purchaseIsAdditionalContribution, notRecurringCharge, purchaseIsGiftSender, purchaseChargebackReversed, purchaseIsAccessRevoked)
 
 // resolvesForBuyer is whether OfferCodeDiscountComputingService gives the code a discount for
 // buyer, nil when signed out: evaluate_for_buyer, unless returning_customer?.
