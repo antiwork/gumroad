@@ -107,27 +107,151 @@ func TestRailsProxyForwardsTheRequestAsItArrived(t *testing.T) {
 	}
 }
 
-func TestRailsProxyRetriesAGetOrHeadOnAHostThatRefuses(t *testing.T) {
-	var methods []string
+// A refused dial sent nothing, so any request whose body was kept goes to the next host.
+func TestRailsProxyRetriesOnAHostThatRefuses(t *testing.T) {
+	var seen []string
 	rails := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		methods = append(methods, r.Method)
+		body, _ := io.ReadAll(r.Body)
+		seen = append(seen, r.Method+" "+string(body))
 		io.WriteString(w, "ok")
 	}))
 	defer rails.Close()
-	tp := newTestProxy(t, deadAddr(t), addr(rails))
-	for _, method := range []string{"GET", "HEAD"} {
-		if w := tp.forward(httptest.NewRequest(method, "/x", nil)); w.Code != 200 {
+	dead := deadAddr(t)
+	for _, method := range []string{"GET", "HEAD", "POST"} {
+		tp := newTestProxy(t, dead, addr(rails))
+		var body io.Reader
+		if method == "POST" {
+			body = strings.NewReader("a=1")
+		}
+		if w := tp.forward(httptest.NewRequest(method, "/x", body)); w.Code != 200 {
 			t.Errorf("%s: %d", method, w.Code)
 		}
 	}
-	if w := tp.forward(httptest.NewRequest("POST", "/x", strings.NewReader("a=1"))); w.Code != http.StatusInternalServerError {
-		t.Errorf("a POST must not be sent twice: %d", w.Code)
+	if strings.Join(seen, ",") != "GET ,HEAD ,POST a=1" {
+		t.Errorf("Rails saw %q", seen)
 	}
-	if w := tp.forward(httptest.NewRequest("GET", "/x", strings.NewReader("a=1"))); w.Code != http.StatusInternalServerError {
-		t.Errorf("a GET with a body must not be retried with the closed body: %d", w.Code)
+}
+
+// A body too large to keep can't be sent twice.
+func TestRailsProxyDoesNotRetryABodyItDidNotKeep(t *testing.T) {
+	rails := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer rails.Close()
+	tp := newTestProxy(t, deadAddr(t), addr(rails))
+	if w := tp.forward(httptest.NewRequest("POST", "/x", strings.NewReader(strings.Repeat("a", maxReplayBody+1)))); w.Code != http.StatusInternalServerError {
+		t.Errorf("%d", w.Code)
 	}
-	if strings.Join(methods, ",") != "GET,HEAD" {
-		t.Errorf("Rails saw %v", methods)
+}
+
+// stoppingRails is a Rails host whose nginx answers status while Puma is down, with what it
+// sent Puma in X-Upstream-Bytes-Sent.
+func stoppingRails(t *testing.T, status int, bytesSent string, hits *int) *httptest.Server {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*hits++
+		if bytesSent != "" {
+			w.Header().Set("X-Upstream-Bytes-Sent", bytesSent)
+		}
+		w.WriteHeader(status)
+		io.WriteString(w, "500 page")
+	}))
+	t.Cleanup(s.Close)
+	return s
+}
+
+func TestRailsProxyRetriesWhenNginxSentPumaNothing(t *testing.T) {
+	var bad int
+	var seen []string
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		seen = append(seen, string(body))
+		io.WriteString(w, "ok")
+	}))
+	defer good.Close()
+	tp := newTestProxy(t, addr(stoppingRails(t, http.StatusBadGateway, "0, 0", &bad)), addr(good))
+	for i := range 2 {
+		if w := tp.forward(httptest.NewRequest("POST", "/v2/licenses/verify", strings.NewReader("license_key=k"))); w.Code != 200 || w.Body.String() != "ok" {
+			t.Fatalf("request %d: %d %q", i, w.Code, w.Body.String())
+		}
+	}
+	// The second request skipped the stopping host.
+	if bad != 1 || strings.Join(seen, ",") != "license_key=k,license_key=k" {
+		t.Errorf("stopping host hit %d times, Rails saw %q", bad, seen)
+	}
+	tp.clock = tp.clock.Add(railsUpstreamDownFor)
+	tp.forward(httptest.NewRequest("GET", "/x", nil))
+	if bad != 2 {
+		t.Errorf("the host stayed marked down: %d", bad)
+	}
+}
+
+func TestRailsProxyPassesOnA502ThatMayHaveReachedPuma(t *testing.T) {
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer good.Close()
+	for _, sent := range []string{"163", "0, 163", ""} {
+		var hits int
+		tp := newTestProxy(t, addr(stoppingRails(t, http.StatusBadGateway, sent, &hits)), addr(good))
+		if w := tp.forward(httptest.NewRequest("POST", "/x", strings.NewReader("a=1"))); w.Code != http.StatusBadGateway ||
+			w.Body.String() != "500 page" || hits != 1 {
+			t.Errorf("bytes sent %q: %d %q, %d hits", sent, w.Code, w.Body.String(), hits)
+		}
+	}
+}
+
+// A stopping host that sends its 502's headers and then stalls can't hold up the retry.
+func TestRailsProxyRetriesWithoutWaitingOnAStalledBody(t *testing.T) {
+	release := make(chan struct{})
+	stalled := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Upstream-Bytes-Sent", "0")
+		w.WriteHeader(http.StatusBadGateway)
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer stalled.Close()
+	defer close(release)
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer good.Close()
+	tp := newTestProxy(t, addr(stalled), addr(good))
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() { done <- tp.forward(httptest.NewRequest("GET", "/x", nil)) }()
+	select {
+	case w := <-done:
+		if w.Code != 200 {
+			t.Errorf("%d", w.Code)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the retry waited on the stalled body")
+	}
+}
+
+// nginx's 504 when Puma's accept queue is full and the connect times out.
+func TestRailsProxyRetriesA504ThatSentPumaNothing(t *testing.T) {
+	var hits int
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer good.Close()
+	tp := newTestProxy(t, addr(stoppingRails(t, http.StatusGatewayTimeout, "0", &hits)), addr(good))
+	if w := tp.forward(httptest.NewRequest("POST", "/x", strings.NewReader("a=1"))); w.Code != 200 || hits != 1 {
+		t.Errorf("%d, %d hits", w.Code, hits)
+	}
+}
+
+// With every host marked down, requests still go to them rather than failing.
+func TestRailsProxyUsesDownHostsWhenNoOtherIsLeft(t *testing.T) {
+	var a, b int
+	tp := newTestProxy(t, addr(stoppingRails(t, http.StatusBadGateway, "0", &a)), addr(stoppingRails(t, http.StatusBadGateway, "0", &b)))
+	for range 2 {
+		if w := tp.forward(httptest.NewRequest("GET", "/x", nil)); w.Code != http.StatusBadGateway {
+			t.Fatalf("%d", w.Code)
+		}
+	}
+	if a+b != 4 {
+		t.Errorf("hits %d and %d", a, b)
+	}
+}
+
+func TestRailsProxyKeepsTheOnly502WithoutAnotherHost(t *testing.T) {
+	var hits int
+	tp := newTestProxy(t, addr(stoppingRails(t, http.StatusBadGateway, "0", &hits)))
+	if w := tp.forward(httptest.NewRequest("GET", "/x", nil)); w.Code != http.StatusBadGateway || w.Body.String() != "500 page" {
+		t.Errorf("%d %q", w.Code, w.Body.String())
 	}
 }
 

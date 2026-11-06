@@ -1,8 +1,10 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -24,6 +26,12 @@ const (
 	railsUpstreamsTTL = 5 * time.Second
 	// Fallbacks are a minority of requests, but bursts would otherwise reconnect every time.
 	railsIdleConnsPerHost = 32
+	// A host that refused, or whose nginx couldn't reach Puma, is likely stopping; Consul's
+	// check takes up to its 10s interval, plus the template render, to drop it.
+	railsUpstreamDownFor = 30 * time.Second
+	// nginx's proxy_next_upstream_timeout: a first attempt can spend it before its 504.
+	railsNginxRetryBudget = 10 * time.Second
+	maxReplayBody         = 64 << 10
 )
 
 // RailsProxy hands a request to a Rails web host unchanged, for the cases a ported action
@@ -42,6 +50,9 @@ type RailsProxy struct {
 
 	snapshot   atomic.Pointer[upstreamList]
 	refreshing sync.Mutex
+
+	downMu    sync.Mutex
+	downUntil map[string]time.Time
 }
 
 type upstreamList struct {
@@ -89,12 +100,25 @@ func (p *RailsProxy) Forward(w http.ResponseWriter, r *http.Request, reason stri
 	for k := range w.Header() {
 		delete(w.Header(), k)
 	}
-	if id != "" {
+	keep := r.ContentLength > 0 && r.ContentLength <= maxReplayBody
+	if id != "" || keep {
 		r = r.Clone(r.Context())
+	}
+	if id != "" {
 		r.Header.Set("X-Request-Id", id)
 	}
+	// Kept so a request that never reached Puma can go to another host.
+	if keep {
+		body := make([]byte, r.ContentLength)
+		if _, err := io.ReadFull(r.Body, body); err != nil {
+			p.proxy.ErrorHandler(w, r, err)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		r.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
+	}
 	// The server's write timeout would end the response before Rails is done.
-	http.NewResponseController(w).SetWriteDeadline(p.now().Add(railsProxyTimeout + railsDialTimeout*2))
+	http.NewResponseController(w).SetWriteDeadline(p.now().Add(railsProxyTimeout + railsDialTimeout*2 + railsNginxRetryBudget))
 	Logger(r).Info("handing request to Rails", "reason", reason)
 	p.proxy.ServeHTTP(w, r)
 }
@@ -113,8 +137,8 @@ func (p *RailsProxy) rewrite(pr *httputil.ProxyRequest) {
 
 var errNoUpstream = errors.New("no Rails upstream")
 
-// upstream picks a Rails host other than skip. One caller rereads a stale list while the
-// rest keep the last one.
+// upstream picks a Rails host other than skip, preferring hosts not marked down. One caller
+// rereads a stale list while the rest keep the last one.
 func (p *RailsProxy) upstream(skip string) (string, error) {
 	list := p.snapshot.Load()
 	if len(list.hosts) == 0 {
@@ -126,20 +150,55 @@ func (p *RailsProxy) upstream(skip string) (string, error) {
 		list = p.reload(list)
 		p.refreshing.Unlock()
 	}
-	skipAt, n := -1, len(list.hosts)
-	if skip != "" {
-		if skipAt = slices.Index(list.hosts, skip); skipAt >= 0 {
-			n--
+	hosts := list.hosts
+	if down := p.downHosts(); skip != "" || len(down) > 0 {
+		up, rest := make([]string, 0, len(list.hosts)), make([]string, 0, len(list.hosts))
+		for _, h := range list.hosts {
+			if h == skip {
+				continue
+			}
+			rest = append(rest, h)
+			if !down[h] {
+				up = append(up, h)
+			}
+		}
+		// Every host down is likelier a blip on this side than all of Rails stopping.
+		hosts = up
+		if len(up) == 0 {
+			hosts = rest
 		}
 	}
-	if n == 0 {
+	if len(hosts) == 0 {
 		return "", errNoUpstream
 	}
-	i := p.pick(n)
-	if skipAt >= 0 && i >= skipAt {
-		i++
+	return hosts[p.pick(len(hosts))], nil
+}
+
+func (p *RailsProxy) markDown(host string) {
+	p.downMu.Lock()
+	defer p.downMu.Unlock()
+	if p.downUntil == nil {
+		p.downUntil = map[string]time.Time{}
 	}
-	return list.hosts[i], nil
+	p.downUntil[host] = p.now().Add(railsUpstreamDownFor)
+}
+
+// downHosts drops expired marks and returns the hosts still down.
+func (p *RailsProxy) downHosts() map[string]bool {
+	p.downMu.Lock()
+	defer p.downMu.Unlock()
+	if len(p.downUntil) == 0 {
+		return nil
+	}
+	now, down := p.now(), map[string]bool{}
+	for h, until := range p.downUntil {
+		if now.Before(until) {
+			down[h] = true
+		} else {
+			delete(p.downUntil, h)
+		}
+	}
+	return down
 }
 
 // reload rereads the file when it changed; a failed read keeps the last good list.
@@ -166,9 +225,9 @@ func parseUpstreams(data string) []string {
 	return hosts
 }
 
-// retryTransport sends a request to a second Rails host when the first refused the
-// connection: nothing reached Rails, so nothing ran twice. Only a bodiless GET or HEAD
-// retries, since a failed dial closes the request body.
+// retryTransport sends a request to a second Rails host when nothing reached Puma on the
+// first: the dial was refused, or its nginx answered 502 or 504 having sent Puma nothing.
+// Nothing ran, so any method whose body Forward kept can retry.
 type retryTransport struct {
 	next  http.RoundTripper
 	proxy *RailsProxy
@@ -179,30 +238,73 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	res, err := t.send(req, first)
-	if err == nil || !retryable(req, err) {
+	res, err := t.send(req, first, nil)
+	if !replayable(req) || !neverReachedPuma(res, err) {
 		return res, err
 	}
+	t.proxy.markDown(first)
 	second, uerr := t.proxy.upstream(first)
 	if uerr != nil {
-		return nil, err
+		return res, err
 	}
-	return t.send(req, second)
+	if res != nil {
+		// Unread: a host stalling mid-body would hold up the retry, and it's marked down anyway.
+		res.Body.Close()
+	}
+	var body io.ReadCloser
+	if req.GetBody != nil {
+		if body, err = req.GetBody(); err != nil {
+			return nil, err
+		}
+	}
+	res, err = t.send(req, second, body)
+	if neverReachedPuma(res, err) {
+		t.proxy.markDown(second)
+	}
+	return res, err
 }
 
-func retryable(req *http.Request, err error) bool {
-	var dialErr *net.OpError
-	return (req.Method == http.MethodGet || req.Method == http.MethodHead) && (req.Body == nil || req.Body == http.NoBody) &&
-		errors.As(err, &dialErr) && dialErr.Op == "dial" && !errors.Is(err, context.Canceled)
+// replayable is whether the request can be sent again: no body, or one Forward kept.
+func replayable(req *http.Request) bool {
+	return req.Body == nil || req.Body == http.NoBody || req.GetBody != nil
 }
 
-// send aims the outbound request at upstream. ReverseProxy has already cloned it, so a
-// copy with its own URL is enough.
-func (t *retryTransport) send(req *http.Request, upstream string) (*http.Response, error) {
+func neverReachedPuma(res *http.Response, err error) bool {
+	if err != nil {
+		var dialErr *net.OpError
+		return errors.As(err, &dialErr) && dialErr.Op == "dial" && !errors.Is(err, context.Canceled)
+	}
+	return unsent(res)
+}
+
+// unsent is Rails' nginx reporting, in X-Upstream-Bytes-Sent ($upstream_bytes_sent, one
+// value per attempt), that no attempt sent Puma a byte.
+func unsent(res *http.Response) bool {
+	if res.StatusCode != http.StatusBadGateway && res.StatusCode != http.StatusGatewayTimeout {
+		return false
+	}
+	sent := res.Header.Get("X-Upstream-Bytes-Sent")
+	if sent == "" {
+		return false
+	}
+	for _, v := range strings.FieldsFunc(sent, func(r rune) bool { return r == ',' || r == ':' || r == ' ' }) {
+		if v != "0" {
+			return false
+		}
+	}
+	return true
+}
+
+// send aims the outbound request at upstream, with body in place of a spent one. ReverseProxy
+// has already cloned it, so a shallow copy is enough.
+func (t *retryTransport) send(req *http.Request, upstream string, body io.ReadCloser) (*http.Response, error) {
 	out := *req
 	u := *req.URL
 	u.Host = upstream
 	out.URL = &u
+	if body != nil {
+		out.Body = body
+	}
 	return t.next.RoundTrip(&out)
 }
 
