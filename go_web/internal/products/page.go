@@ -129,7 +129,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	h.productProps(props, p, prod, v)
 	props.Merge(h.sectionsProps(p, v))
 	component := productComponent
-	if storefront(p) {
+	if p.layout == productLayoutProfile || storefront(p) {
 		component = storefrontComponent
 	}
 	props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)

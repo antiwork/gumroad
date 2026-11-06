@@ -192,7 +192,8 @@ func analyticsData(u *user, j jsonData) *rails.RHash {
 // authorByline is UserPresenter#author_byline_props with the request's
 // seller_custom_domain_url: on the seller's subdomain that is its root URL.
 func (h *handler) authorByline(p *page, v *view) any {
-	return bylineProps(p.seller, v.avatarURL, h.sellerCustomDomainURL(p))
+	// User#profile_url adds recommended_by as url_for_product_page does.
+	return bylineProps(p.seller, v.avatarURL, h.sellerCustomDomainURL(p)+productPageQuery("", p.recommendedBy))
 }
 
 // bylineProps is UserPresenter#author_byline_props for u, nil without a username.

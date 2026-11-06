@@ -85,6 +85,7 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 			return nil, err
 		}
 	}
+	query := productPageQuery(p.layout, p.recommendedBy)
 	for _, it := range items {
 		bp := it.prod
 		last, agreed := lastPrice(pricesForCurrency(bp.product, prices[bp.id], bp.rentOnly()))
@@ -109,7 +110,7 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 			thumbnail = thumbnailURLs[t[0].id]
 		}
 		// url_for_product_page on the seller's own subdomain: short_link_url on this host.
-		url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(bp.generalPermalink())
+		url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(bp.generalPermalink()) + query
 		b.props = append(b.props, rails.NewRHash().
 			Sym("id", h.c.IDs.Encrypt(bp.id)).
 			Sym("name", bp.name).

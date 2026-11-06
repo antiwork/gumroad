@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -19,6 +20,8 @@ import (
 const (
 	productComponent    = "Products/Show"
 	storefrontComponent = "Products/Profile/Show"
+	// productLayoutProfile is Product::Layout::PROFILE.
+	productLayoutProfile = "profile"
 	// ProfileSectionsPresenter::DEFAULT_PRODUCTS_SECTION_ID and _TYPE, and ProductSortKey::PAGE_LAYOUT.
 	defaultProductsSectionID    = "default-products"
 	profileProductsSectionType  = "SellerProfileProductsSection"
@@ -167,7 +170,32 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 	if err != nil {
 		return nil, err
 	}
+	// section_props searches afresh with any visitor search param, after the cached fetch.
+	if p.visitorSearch {
+		if searches, err = h.searchSections(p, sections); err != nil {
+			return nil, err
+		}
+	}
 	return h.productsSectionsProps(p, prod, sections, searches, buyer)
+}
+
+// productPageQuery is url_for_product_page's query on the seller's own host, which to_query
+// sorts and CGI-escapes as url.Values does.
+func productPageQuery(layout string, recommendedBy *string) string {
+	if layout == "" && recommendedBy == nil {
+		return ""
+	}
+	q := url.Values{}
+	if rails.Present(layout) {
+		q.Set("layout", layout)
+	}
+	if recommendedBy != nil && rails.Present(*recommendedBy) {
+		q.Set("recommended_by", *recommendedBy)
+	}
+	if len(q) == 0 {
+		return ""
+	}
+	return "?" + q.Encode()
 }
 
 // reviewSorted is whether a section is ordered by reviews: a review moves that order without
@@ -730,7 +758,8 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 		Sym("buyer_currency_display", buyerCurrencyDisplay(externalID, pc, display))
 	buyerLocalPriceProps(props, pc, display)
 	// url_for_product_page on the seller's own subdomain, whose port declined() rules out.
-	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) + "?layout=profile"
+	url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(prod.generalPermalink()) +
+		productPageQuery(productLayoutProfile, p.recommendedBy)
 	props.Sym("is_pay_what_you_want", pwyw).
 		Sym("url", url).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).

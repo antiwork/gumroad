@@ -200,7 +200,7 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 	}
 	if len(ps.products) > 0 {
 		switch {
-		case reviewSorted(ps.products):
+		case reviewSorted(ps.products) && !p.visitorSearch:
 			return nil, fallback("products section review sort")
 		case h.c.Page.Search == nil:
 			return nil, fallback("products section search")
@@ -238,7 +238,13 @@ func (h *handler) renderProductSections(p *page, ps *productSections, buyer *str
 	}
 	built := map[*productsSection]any{}
 	if len(ps.products) > 0 {
-		searches, err := h.cachedCatalog(p, ps.products)
+		search := h.cachedCatalog
+		if p.visitorSearch {
+			// section_props replaces the search, so go_web's cache and its review-sort caveat
+			// don't apply.
+			search = h.searchSections
+		}
+		searches, err := search(p, ps.products)
 		if err != nil {
 			return nil, err
 		}
