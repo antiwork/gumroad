@@ -118,7 +118,7 @@ export const Card = ({
 
   return (
     <ProductCard>
-      <ProductCardFigure>
+      <ProductCardFigure className="relative">
         <Thumbnail url={product.thumbnail_url} nativeType={product.native_type} />
         {product.preview_images.length > 0 ? <PreviewGallery name={name} images={product.preview_images} /> : null}
       </ProductCardFigure>

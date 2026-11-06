@@ -65,12 +65,15 @@ describe LibraryPresenter do
     end
 
     it "lists only the live image previews, in order, as the product page carousel does" do
+      second = create(:asset_preview, link: product)
       first = create(:asset_preview, link: product)
+      second.update!(position: 1)
+      first.update!(position: 0)
       create(:asset_preview_mov, link: product)
       deleted = create(:asset_preview, link: product)
       deleted.mark_deleted!
 
-      expect(results[0][:product][:preview_images]).to eq([first.as_json])
+      expect(results[0][:product][:preview_images]).to eq([first.as_json, second.as_json])
     end
 
     it "does not return the URL of a deleted thumbnail" do
