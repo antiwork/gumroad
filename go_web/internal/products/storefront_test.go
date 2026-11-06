@@ -213,6 +213,10 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		return s
 	}
 
+	// cardJobs is the queue a case's prepare gives the page.
+	var cardJobs interface {
+		List(key string) ([]string, error)
+	}
 	for _, c := range []struct {
 		name, reason, hits string
 		server             *httptest.Server
@@ -353,6 +357,31 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
 				card = strings.Replace(card, `"thumbnail_url":null`, `"thumbnail_url":"https://public-files.gumroad.com/covers/retina"`, 1)
 				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
+			}},
+		// url_from_file queues the missing variant and serves the original.
+		{name: "a card's image cover without its retina variant", server: search, searched: 1,
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_792_602), "link_id": other, "guid": "g",
+					"position": 0, "created_at": testNow, "updated_at": testNow})
+				testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_792_702), "key": "covers/1", "filename": "a.jpg",
+					"content_type": "image/jpeg", "metadata": `{"identified":true,"width":2000,"height":1000,"analyzed":true}`,
+					"service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
+				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_802), "name": "file",
+					"record_type": "AssetPreview", "record_id": int64(1_792_602), "blob_id": int64(1_792_702), "created_at": testNow})
+			},
+			prepare: func(e *testEnv) { cardJobs = sidekiqJobs(t, e) },
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"thumbnail_url":null`, `"thumbnail_url":"https://public-files.gumroad.com/covers/1"`, 1)
+				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
+			},
+			check: func(t *testing.T, e *testEnv, _ string) {
+				queued, _ := cardJobs.List("queue:low")
+				if len(queued) != 1 || !strings.Contains(queued[0], `"args":[1792602],"class":"ProcessAssetPreviewRetinaWorker"`) {
+					t.Errorf("queue:low %v", queued)
+				}
 			}},
 		{name: "a card's uploaded thumbnail", server: search, searched: 1,
 			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
