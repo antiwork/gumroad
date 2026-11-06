@@ -446,11 +446,20 @@ func (c *cover) displayHeight() (int64, bool) {
 // previewImagePath is preview_image_path? for the main cover: an image file or an Unsplash photo.
 func (c *cover) previewImagePath() bool { return c.isImage || c.isUnsplash }
 
+// filenameSanitizer is the tr in ActiveStorage::Filename#sanitized.
+var filenameSanitizer = strings.NewReplacer("\u202E", "-", "%", "-", "$", "-", "|", "-", ":", "-", ";", "-", "/", "-", "<", "-",
+	">", "-", "?", "-", "*", "-", `"`, "-", "\t", "-", "\r", "-", "\n", "-", `\`, "-")
+
+// sanitizedFilename is ActiveStorage::Filename#to_s. A blob uploaded from a URL keeps its query
+// string, whose ? and % this rewrites.
+func sanitizedFilename(name string) string { return filenameSanitizer.Replace(rails.Strip(name)) }
+
+// filetype is AssetPreview#filetype.
 func (c *cover) filetype() any {
 	if c.oembed != nil || c.isUnsplash {
 		return nil
 	}
-	if ext := strings.Replace(rails.FileExtname(c.filename), ".", "", 1); ext != "" {
+	if ext := strings.Replace(rails.FileExtname(sanitizedFilename(c.filename)), ".", "", 1); ext != "" {
 		return ext
 	}
 	parts := rails.Split(c.contentType, "/")
