@@ -2,7 +2,9 @@ package products
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -23,6 +25,15 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 	}{
 		{name: "the product", target: "/l/guide?wanted=true",
 			location: base + "&id=guide&price=500&product=gowebp1&rent=false&wanted=true"},
+		// The redirect never reads the profile's reputation rollup, the one cache read on its way.
+		{name: "reputation on, with the cache down", target: "/l/guide?wanted=true",
+			location: base + "&id=guide&price=500&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("seller_reputation_summary", "boolean", "true")
+				e.redis.Set("seller_reputation_summary/v2/snapshot/1790001",
+					`{"aggregate":[3,30,120],"signature":0,"computed_at":`+strconv.FormatInt(testNow.Unix(), 10)+`}`)
+				e.cache.readErr = errors.New("down")
+			}},
 		{name: "other params and the referrer", target: "/l/guide?wanted=true&utm_source=a+b&product=x&affiliate_id=",
 			headers: map[string]string{"Referer": "https://example.com/r?x=1"},
 			// The request's String keys and checkout_url's own Symbol ones both reach the query.
