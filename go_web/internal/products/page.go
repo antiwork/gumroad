@@ -54,6 +54,9 @@ type PageConfig struct {
 	// OGNamespace is FACEBOOK_OG_NAMESPACE, and RecaptchaSiteKey FollowRecaptcha.site_key.
 	OGNamespace, RecaptchaSiteKey string
 	NewNonce                      func() string
+	// GumroadAdminID is GUMROAD_ADMIN_ID, who writes payout setup notes; 0 leaves a page that
+	// reads them to Rails.
+	GumroadAdminID int64
 	// CustomHTMLAnalytics is vite_typescript_tag("custom_html_analytics"); nil leaves a custom
 	// HTML product page to Rails.
 	CustomHTMLAnalytics *vite.Tags
@@ -67,8 +70,9 @@ func (pc *PageConfig) cdnURL(s string) string {
 	return s
 }
 
-// render is LinksController#prepare_product_page and #show for a signed-out visitor, then
-// the after_actions. Everything is read before anything is written.
+// render is LinksController#prepare_product_page and #show for a signed-out visitor, or one
+// signed in with no part in the product, then the after_actions. Everything is read before
+// anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
 	// show sends a coffee product to /coffee, which renders it. Of the before_actions left,
@@ -90,6 +94,9 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if _, err := pages.FlashProps(p.Session); err != nil {
 		return fallback("shared props")
 	}
+	if err := h.loadViewer(p, prod); err != nil {
+		return err
+	}
 
 	v, err := h.loadView(ctx, p, prod)
 	if err != nil {
@@ -109,9 +116,18 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if err != nil {
 		return err
 	}
-	props := shared.
-		Sym("detected_buyer_currency", nullableString(v.detectedCurrency)).
-		Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
+	if p.viewer != nil && v.discount.listed {
+		// Default codes are evaluated for the buyer, whose purchases they can count.
+		return fallback("signed-in offer code")
+	}
+	// The share blocks in order: the signed-in one follows detected_buyer_currency's, and
+	// LinksController's own MobileAppWebView share comes last.
+	props := shared.Sym("detected_buyer_currency", nullableString(v.detectedCurrency))
+	if u := p.viewer; u != nil {
+		props.Sym("logged_in_user", u.loggedIn).Sym("current_seller", u.currentSeller).
+			Sym("current_user", u.currentUser).Sym("prompt_passkey_setup", u.promptPasskey)
+	}
+	props.Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
 	h.productProps(props, p, prod, v)
 	props.Merge(h.sectionsProps(p, v))
 	component := productComponent
@@ -200,6 +216,8 @@ type view struct {
 	ppp *pppDetails
 	// sections are the product's own, or the storefront's catalog when they render none.
 	sections []any
+	// wishlists are the signed-in visitor's, as product_props lists them.
+	wishlists []any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -226,19 +244,12 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	v.detectedCurrency = buyerCurrencyForCountry(countryCode(v.geo))
 
 	// User#avatar_url, the page's own for a featured product.
+	var err error
 	if p.parent != nil {
 		v.avatarURL = p.parent.avatarURL
-	} else {
-		avatar, err := pc.Avatars.URL(ctx, seller.id)
-		if errors.Is(err, storage.ErrUnported) {
-			return nil, fallback("avatar")
-		}
-		if err != nil {
-			return nil, err
-		}
-		v.avatarURL = avatar
+	} else if v.avatarURL, err = h.avatarURL(ctx, seller.id); err != nil {
+		return nil, err
 	}
-	var err error
 
 	if v.prices, err = h.loadPrices(ctx, prod); err != nil {
 		return nil, err
@@ -342,6 +353,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.thirdPartyAnalytics, err = h.hasThirdPartyAnalytics(ctx, prod); err != nil {
 		return nil, err
 	}
+	v.wishlists = h.viewerWishlists(p, prod)
 	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
 		v.recaptchaSiteKey = pc.RecaptchaSiteKey
 	}
@@ -385,6 +397,15 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		v.mainSectionIndex = int64(0)
 	}
 	return v, nil
+}
+
+// avatarURL is User#avatar_url.
+func (h *handler) avatarURL(ctx context.Context, userID int64) (string, error) {
+	avatar, err := h.c.Page.Avatars.URL(ctx, userID)
+	if errors.Is(err, storage.ErrUnported) {
+		return "", fallback("avatar")
+	}
+	return avatar, err
 }
 
 func countryCode(g *geoip.Result) *string {

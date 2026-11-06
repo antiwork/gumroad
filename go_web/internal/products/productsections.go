@@ -286,9 +286,18 @@ func (h *handler) prepareFeatured(p *page, parent *view, ids []int64) (*featured
 	if reason, err := h.unportedShape(p.Ctx, fp, featured); err != nil || reason != "" {
 		return nil, firstErr(err, fallback(reason))
 	}
+	// product_props renders it for the same visitor, whose purchase or collaboration changes it.
+	if fp.viewer != nil {
+		if err := h.viewerHasNoPart(fp, featured, fp.viewer.id); err != nil {
+			return nil, err
+		}
+	}
 	v, err := h.loadView(p.Ctx, fp, featured)
 	if err != nil {
 		return nil, err
+	}
+	if fp.viewer != nil && v.discount.listed {
+		return nil, fallback("signed-in offer code")
 	}
 	p.absorb(fp)
 	return &featuredSection{page: fp, prod: featured, view: v}, nil
@@ -304,7 +313,7 @@ func (p *page) featuredPage(parent *view) *page {
 		p.flags = map[string]bool{}
 	}
 	return &page{Visit: p.Visit, seller: p.seller, rates: p.rates, settleable: p.settleable, flags: p.flags,
-		productsKey: p.productsKey, parent: parent}
+		productsKey: p.productsKey, parent: parent, viewer: p.viewer}
 }
 
 // absorb takes back what a featured page read or queued.

@@ -37,6 +37,10 @@ const customDomainCertificateLifetime = 90 * 24 * time.Hour
 // native, code and purchase_id params declinedParams already left to Rails.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
+	if p.Auth.LoggedInUser() != nil {
+		// can_preview_product_custom_html? and the live reload turn on the visitor.
+		return fallback("signed-in custom html")
+	}
 	if pc.CustomHTMLAnalytics == nil {
 		return fallback("custom html analytics entrypoint")
 	}
