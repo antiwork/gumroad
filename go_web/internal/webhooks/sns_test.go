@@ -151,6 +151,7 @@ func TestSNSVerifierRejectsWhatMessageVerifierRejects(t *testing.T) {
 		"empty cert URL":          {"SigningCertURL": ""},
 		"cert not found":          {"SigningCertURL": "https://sns.us-east-1.amazonaws.com/missing.pem"},
 		"port other than 443":     {"SigningCertURL": "https://sns.us-east-1.amazonaws.com:81/a.pem"},
+		"port 0443's prefix":      {"SigningCertURL": "https://sns.us-east-1.amazonaws.com:04430/a.pem"},
 		"Lambda's key wins":       {"SigningCertUrl": "https://sns.us-east-1.amazonaws.com/missing.pem"},
 	}
 	for name, changes := range cases {
@@ -571,5 +572,16 @@ func waitFor(t *testing.T, condition func() bool) {
 			t.Fatal("timed out")
 		}
 		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestCertFetchTargetReadsThePortAsANumber(t *testing.T) {
+	for _, raw := range []string{"https://sns.us-east-1.amazonaws.com:443/a.pem", "https://sns.us-east-1.amazonaws.com:0443/a.pem"} {
+		if got, err := certFetchTarget(raw); err != nil || got != "https://sns.us-east-1.amazonaws.com/a.pem" {
+			t.Errorf("%s: %q, %v", raw, got, err)
+		}
+	}
+	if _, err := certFetchTarget("https://sns.us-east-1.amazonaws.com:8443/a.pem"); err == nil {
+		t.Error("port 8443 accepted")
 	}
 }

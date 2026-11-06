@@ -413,7 +413,7 @@ func certFetchTarget(rawURL string) (string, error) {
 	}
 	// AWS serves signing certs on 443 only. Rails would try another port and fail, after a
 	// connect that can hang; refusing it at once answers the same 400.
-	if u.port != "" && u.port != "443" {
+	if port, err := strconv.Atoi(u.port); u.port != "" && (err != nil || port != 443) {
 		return "", errors.New("the SigningCertURL must use port 443")
 	}
 	return certFetchURL(u), nil
