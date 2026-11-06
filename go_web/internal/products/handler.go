@@ -72,8 +72,9 @@ type page struct {
 	hasPublicFiles     bool
 	hasBundleProducts  bool
 	hasAutoApplyCode   bool
-	// settleable is buyer_currency_settleable? for the page's seller and buyer currency.
-	settleable  *bool
+	settleable         *settleability
+	// flags holds pageFlag's reads.
+	flags       map[string]bool
 	productsKey string
 	// warmReputation is snapshot_reputation_aggregate's perform_async, made once the page is
 	// certain to render here.

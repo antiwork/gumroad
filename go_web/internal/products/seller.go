@@ -37,6 +37,23 @@ func (h *handler) flag(ctx context.Context, name string, userID int64) (bool, er
 	return on, err
 }
 
+// pageFlag is flag for the page's seller, read once per page: Flipper's memoizer holds a flag
+// for the whole request in Rails, so cards on one page never see it flip.
+func (h *handler) pageFlag(p *page, name string) (bool, error) {
+	if on, ok := p.flags[name]; ok {
+		return on, nil
+	}
+	on, err := h.flag(p.Ctx, name, p.seller.id)
+	if err != nil {
+		return false, err
+	}
+	if p.flags == nil {
+		p.flags = map[string]bool{}
+	}
+	p.flags[name] = on
+	return on, nil
+}
+
 // warmReputationJob is WarmSellerReputationSummaryJob's sidekiq_options.
 var warmReputationJob = sidekiq.Options{Class: "WarmSellerReputationSummaryJob", Queue: "low", Retry: 1}
 
