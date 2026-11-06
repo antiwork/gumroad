@@ -58,11 +58,6 @@ func (h *handler) alivePrices(ctx context.Context, ids []int64) (map[int64][]pri
 	return out, rows.Err()
 }
 
-// buyPrices is prices_for_currency.select(&:is_buy?).
-func buyPrices(prod *product, prices []priceRow) []int64 {
-	return pricesForCurrency(prod, prices, false)
-}
-
 // pricesForCurrency is prices_for_currency's rentals or buy prices, from a preload.
 func pricesForCurrency(prod *product, prices []priceRow, rental bool) []int64 {
 	var out []int64
