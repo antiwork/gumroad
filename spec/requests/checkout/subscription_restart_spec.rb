@@ -45,7 +45,7 @@ describe "Subscription restart at checkout", :js, type: :system do
       expect(page).to have_cart_item(@product.name)
       fill_checkout_form(@product, logged_in_user: @buyer, email: @buyer.email)
 
-      click_on "Pay", exact: true
+      click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
       expect(page).to have_text("Your purchase was successful!")
 
       expect(@subscription.reload).to be_alive
@@ -73,7 +73,7 @@ describe "Subscription restart at checkout", :js, type: :system do
         email: @buyer.email,
         credit_card: { number: "4000003560000123" }
       )
-      click_on "Pay", exact: true
+      click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
 
       failure_message = "We could not verify this card for recurring payments."
       challenge_or_failure = <<~XPATH.squish
@@ -148,7 +148,7 @@ describe "Subscription restart at checkout", :js, type: :system do
       fill_checkout_form(@product, logged_in_user: @buyer, email: @buyer.email,
                                    credit_card: { number: "4000002500003155" })
 
-      click_on "Pay", exact: true
+      click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
       within_sca_frame { click_on "Complete" }
 
       expect(page).to have_text("Your purchase was successful!")
@@ -179,7 +179,7 @@ describe "Subscription restart at checkout", :js, type: :system do
       fill_checkout_form(other_product, logged_in_user: @buyer, email: @buyer.email)
 
       expect do
-        click_on "Pay", exact: true
+        click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
         within_modal "Rejoin the membership" do
           click_on "Add to cart"
         end
@@ -200,7 +200,7 @@ describe "Subscription restart at checkout", :js, type: :system do
       fill_checkout_form(other_product, logged_in_user: @buyer, email: @buyer.email)
 
       expect do
-        click_on "Pay", exact: true
+        click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
         within_modal "Rejoin the membership" do
           click_on "Continue without adding"
         end
@@ -233,7 +233,7 @@ describe "Subscription restart at checkout", :js, type: :system do
       fill_checkout_form(other_product, logged_in_user: @buyer, email: @buyer.email)
 
       expect do
-        click_on "Pay", exact: true
+        click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
         expect(page).to have_selector("[role=alert]", text: "You weren't charged for this membership. To rejoin, visit its product page.", exact_text: true)
       end.to change { other_product.sales.successful.count }.by(1)
 
@@ -269,7 +269,7 @@ describe "Subscription restart at checkout", :js, type: :system do
 
       expect(page).to have_cart_item(@product.name)
       fill_checkout_form(@product, logged_in_user: @buyer, email: @buyer.email)
-      click_on "Pay", exact: true
+      click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
 
       expect(page).to have_text("Your purchase was successful!")
       expect(@subscription.reload).to be_alive

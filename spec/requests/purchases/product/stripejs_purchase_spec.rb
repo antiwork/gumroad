@@ -439,7 +439,7 @@ describe("PurchaseScenario using StripeJs", type: :system, js: true) do
 
     expect do
       fill_checkout_form(product_1, logged_in_user: buyer, payment_element: true)
-      click_on "Pay", exact: true
+      click_on "Pay", text: CheckoutHelpers::PAY_BUTTON_TEXT
       expect(page).to have_alert(text: "Your purchase was successful!", wait: 60)
     end.to change { Purchase.successful.count }.by(2)
 
