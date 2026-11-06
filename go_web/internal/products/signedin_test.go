@@ -115,7 +115,6 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 		session              map[string]any
 		wants                []string
 	}{
-		{name: "the product's seller", reason: "product's seller", user: sellerID},
 		// Their failed purchase is theirs, so the page shows none.
 		{name: "a buyer of the product", wants: []string{`"purchase":null`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_796_401), "link_id": productID, "seller_id": sellerID,

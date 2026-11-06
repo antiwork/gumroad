@@ -1,7 +1,7 @@
 // Package products serves the product page, GET /l/:id (LinksController#show), on a seller's
-// subdomain, for a visitor signed out or signed in with no part in the product: Rails' filters,
-// then Products/Show. Every request whose Rails path this port leaves out goes to Rails before
-// anything is written.
+// subdomain, for a visitor signed out, the seller, or one signed in with no part in the
+// product: Rails' filters, then Products/Show. Every request whose Rails path this port leaves
+// out goes to Rails before anything is written.
 package products
 
 import (

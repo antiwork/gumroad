@@ -59,7 +59,11 @@ func bucketsProps(buckets []catalogBucket) []any {
 
 // storefront is whether the seller's pages render as Products/Profile/Show for a visitor who
 // isn't the seller, off the Discover layout (a declined param).
-func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) }
+func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) && !p.ownView() }
+
+// ownView is whether the visitor is the seller, pundit_user.seller == seller: Rails then renders
+// the sections in the editor's shape.
+func (p *page) ownView() bool { return p.viewer != nil && p.viewer.id == p.seller.id }
 
 // productsSection is a saved SellerProfileProductsSection, on the profile or a product.
 type productsSection struct {
@@ -117,9 +121,12 @@ func (r *sectionRow) dest() []any {
 	return []any{&r.id, &r.typ, &r.header, &r.flags, &r.data, &r.updatedAt}
 }
 
+// hidesHeader is SellerProfileSection#hide_header?.
+func (r *sectionRow) hidesHeader() bool { return r.flags&sectionHiddenHeader != 0 }
+
 // shownHeader is cached_sections' header: nil when hide_header is set.
 func (r *sectionRow) shownHeader() any {
-	if r.flags&sectionHiddenHeader != 0 {
+	if r.hidesHeader() {
 		return nil
 	}
 	return nullString(r.header)
@@ -230,7 +237,8 @@ func (h *handler) productsSectionsProps(p *page, omit *product, sections []*prod
 		}
 		shown := make([]*card, 0, len(kept))
 		for _, c := range kept {
-			if c.prod.is(productHideSoldOutVariants) {
+			// The seller sees their sold-out products.
+			if !p.ownView() && c.prod.is(productHideSoldOutVariants) {
 				out, seen := soldOut[c.prod.id]
 				if !seen {
 					if out, err = h.cardSoldOut(p, c); err != nil {
