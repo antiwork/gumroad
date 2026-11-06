@@ -41,6 +41,9 @@ class CustomerMailer < ApplicationMailer
 
     # Re-check before the claim so a set that cannot be sent does not consume the 24h window.
     @chargeables = @chargeables.select(&:receipt_renderable?)
+    # gp#4366: /charge_data reaches this path too, so a free "purchase" from a brand-new seller
+    # must not carry its staff-looking name into the group's From and subject either.
+    @chargeables = @chargeables.reject { suppress_receipt_from_unproven_seller?(_1) }
     return if @chargeables.empty?
 
     last_chargeable = @chargeables.last
