@@ -26,6 +26,41 @@ describe CustomerMailer do
       expect(mail[:reply_to].value).to eq("bob@gumroad.com")
     end
 
+    context "with a free purchase from a new seller (gp#4366)" do
+      let(:seller) { create(:user, email: "new-seller@example.com", name: "Alex") }
+      let(:product) { create(:product, user: seller, price_cents: 0, name: "Starter Pack") }
+
+      def receipt_for(email:, product_name: nil, seller_name: nil)
+        product.update!(name: product_name) if product_name
+        seller.update_columns(name: seller_name) if seller_name
+        purchase = create(:free_purchase, link: product, seller:, email:)
+        described_class.receipt(purchase.id)
+      end
+
+      it "skips the email to a gumroad.com address" do
+        expect(receipt_for(email: "staff@gumroad.com").message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "skips the email when the seller name poses as Gumroad staff" do
+        expect(receipt_for(email: "buyer@example.com", seller_name: "Gumroad Security Team").message).to be_a(ActionMailer::Base::NullMail)
+      end
+
+      it "sends a normal free receipt to an outside buyer" do
+        expect(receipt_for(email: "buyer@example.com").subject).to eq("You got Starter Pack!")
+      end
+
+      it "sends once the seller is established" do
+        seller.update_columns(created_at: 60.days.ago)
+        expect(receipt_for(email: "staff@gumroad.com").to).to eq(["staff@gumroad.com"])
+      end
+
+      it "always sends a paid receipt" do
+        product.update!(price_cents: 500)
+        purchase = create(:purchase, link: product, seller:, email: "staff@gumroad.com")
+        expect(described_class.receipt(purchase.id).to).to eq(["staff@gumroad.com"])
+      end
+    end
+
     context "when the purchase belongs to a two-purchase charge" do
       let(:seller) { create(:named_seller) }
       let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Paid edition"), seller:, email: "buyer@example.com") }
