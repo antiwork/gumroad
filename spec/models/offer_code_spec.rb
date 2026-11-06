@@ -2082,6 +2082,12 @@ describe OfferCode do
         expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
       end
 
+      it "does not qualify a buyer who owns only the discounted product" do
+        create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents)
+        expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+        expect(offer_code.evaluate_for_buyer(buyer, product: @product)).to be_nil
+      end
+
       it "does not qualify a refunded purchase of that option" do
         create(:purchase, purchaser: buyer, link: versioned_product, seller:, price_cents: versioned_product.price_cents, variant_attributes: [individual], stripe_refunded: true)
         expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
