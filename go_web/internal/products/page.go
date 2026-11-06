@@ -157,6 +157,8 @@ type view struct {
 	variants                *variants
 	collaborator            any
 	salesCount              any
+	recurrences             *recurrences
+	tierRecurrences         map[string]bool
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -200,12 +202,26 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if prod.rentOnly() {
 		v.priceCents = v.prices.rental
 	}
-	if v.priceCents == nil && prod.customizablePrice.Bool {
-		// pwyw_default_price_cents calls zero? on the nil price, and Rails raises.
+	if v.priceCents == nil && prod.customizablePrice.Bool && !prod.is(productIsRecurringBilling) {
+		// pwyw_default_price_cents calls zero? on the nil price, and Rails raises; it returns
+		// before that for a membership.
 		return nil, fallback("no price")
 	}
 	if v.currency, err = h.loadCurrencyDisplay(p, prod, v); err != nil {
 		return nil, err
+	}
+	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled)) {
+		// buyer_currency_unquotable_product? and the India mandate check can only turn a
+		// local price off.
+		return nil, fallback("membership buyer currency")
+	}
+	if v.recurrences, err = h.loadRecurrences(ctx, prod, v.prices); err != nil {
+		return nil, err
+	}
+	if prod.is(productIsTieredMembership) {
+		if v.tierRecurrences, err = tierRecurrences(v.prices); err != nil {
+			return nil, err
+		}
 	}
 	if err := h.checkPPP(ctx, p, prod, v); err != nil {
 		return nil, err

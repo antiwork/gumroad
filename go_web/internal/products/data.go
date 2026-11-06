@@ -24,6 +24,7 @@ func (h *handler) exists(ctx context.Context, query string, args ...any) (bool, 
 // Rails path it doesn't follow. Each runs before anything is written.
 func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (string, error) {
 	seller := p.seller
+	membership := unportedMembership(prod)
 	switch {
 	case prod.nativeType == "coffee":
 		return "coffee product", nil
@@ -31,8 +32,8 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "storefront", nil
 	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
 		return "purchase type", nil
-	case prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership):
-		return "membership", nil
+	case membership != "":
+		return membership, nil
 	case prod.is(productIsInPreorderState):
 		return "preorder", nil
 	case prod.is(productIsBundle):
@@ -40,8 +41,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
 		// FileSummaryService would summarize each SKU.
 		return "skus", nil
-	case prod.is(productFreeTrialEnabled):
-		return "free trial", nil
 	case prod.is(productWaitlistEnabled):
 		return "waitlist", nil
 	case prod.defaultOfferCodeID.Valid:
@@ -52,7 +51,7 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "no unique permalink", nil
 	}
 	switch prod.nativeType {
-	case "call", "commission", "membership", "bundle":
+	case "call", "commission", "bundle":
 		return "native type " + prod.nativeType, nil
 	}
 	// account_level_refund_policy_enabled?: the seller's policy shows unless it's off for all.
@@ -69,9 +68,6 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		reason, query string
 		arg           int64
 	}{
-		// Link#tiers changes quantity_remaining.
-		{"tier category", "SELECT 1 FROM variant_categories WHERE variant_categories.link_id = ? AND variant_categories.deleted_at IS NULL" +
-			" AND variant_categories.title = 'Tier'", prod.id},
 		{"installment plan", "SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = ?" +
 			" AND product_installment_plans.deleted_at IS NULL", prod.id},
 		{"auto-apply offer code", "SELECT 1 FROM offer_codes WHERE offer_codes.user_id = ? AND offer_codes.deleted_at IS NULL" +

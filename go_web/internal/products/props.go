@@ -86,9 +86,9 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("eligible_for_installment_plans", installmentEligible(prod)).
 		Sym("allow_installment_plan", false).
 		Sym("installment_plan", nil).
-		Sym("is_legacy_subscription", false).
-		Sym("is_tiered_membership", false).
-		Sym("is_recurring_billing", false).
+		Sym("is_legacy_subscription", prod.is(productIsRecurringBilling) && !prod.is(productIsTieredMembership)).
+		Sym("is_tiered_membership", prod.is(productIsTieredMembership)).
+		Sym("is_recurring_billing", prod.is(productIsRecurringBilling)).
 		Sym("is_physical", prod.is(productIsPhysical)).
 		Sym("custom_view_content_button_text", presence(j.get("custom_view_content_button_text"))).
 		Sym("is_multiseat_license", prod.is(productIsMultiseatLicense) && prod.nativeType != "call").
@@ -99,9 +99,9 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("duration_in_months", durationInMonths).
 		Sym("rental", rental).
 		Sym("is_quantity_enabled", prod.is(productQuantityEnabled)).
-		Sym("free_trial", nil).
-		Sym("recurrences", nil).
-		Sym("options", h.optionsProps(prod, v.variants)).
+		Sym("free_trial", freeTrialProps(prod)).
+		Sym("recurrences", v.recurrences.props()).
+		Sym("options", h.optionsProps(prod, v.variants, v.tierRecurrences)).
 		Sym("analytics", analyticsData(seller, v.sellerJSON)).
 		Sym("has_third_party_analytics", v.thirdPartyAnalytics).
 		Sym("ppp_details", nil).
@@ -118,7 +118,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("selection_discounts", rails.NewRHash().
 			Sym("url_code", nil).
 			Sym("quantity", int64(1)).
-			Sym("recurrence", nil).
+			Sym("recurrence", v.recurrences.defaultRecurrence()).
 			Sym("option_id", nil).
 			Sym("price_cents", nil).
 			Sym("options", rails.NewRHash()).
@@ -129,7 +129,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 
 // pwywDefault is pwyw_default_price_cents.
 func pwywDefault(prod *product, v *view) any {
-	if v.priceCents == nil || *v.priceCents != 0 || prod.suggestedPriceCents.Int64 != 0 {
+	if prod.is(productIsRecurringBilling) || v.priceCents == nil || *v.priceCents != 0 || prod.suggestedPriceCents.Int64 != 0 {
 		return nil
 	}
 	if r := v.prices.rental; r != nil && *r != 0 {
@@ -143,9 +143,12 @@ func pwywDefault(prod *product, v *view) any {
 	return int64(0)
 }
 
-// installmentEligible is ProductInstallmentPlan.eligible_for_product? for a product that is
-// neither a membership nor a preorder.
+// installmentEligible is ProductInstallmentPlan.eligible_for_product? for a product that isn't
+// a preorder.
 func installmentEligible(prod *product) bool {
+	if prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership) {
+		return false
+	}
 	switch prod.nativeType {
 	case "call", "course", "digital", "ebook", "bundle":
 		return true

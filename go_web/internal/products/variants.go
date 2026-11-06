@@ -3,6 +3,7 @@ package products
 import (
 	"context"
 	"database/sql"
+	"slices"
 	"strings"
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
@@ -21,8 +22,23 @@ type variantOption struct {
 	customizablePrice                  sql.NullBool
 	position                           sql.NullInt64
 	createdAt                          db.NullTime
+	flags                              int64
 	sku                                bool
+	// closed is closed_to_new_buyers?.
+	closed bool
+	// buyPrices are a tier's alive buy VariantPrices, in id order.
+	buyPrices []variantPrice
 }
+
+// variantPrice is a VariantPrice row as recurrence_price_values reads it.
+type variantPrice struct {
+	cents      int64
+	suggested  sql.NullInt64
+	recurrence sql.NullString
+}
+
+// BaseVariant#closed_to_new_purchases.
+const baseVariantClosedToNewPurchases int64 = 1 << 2
 
 // quantityLeft is BaseVariant#quantity_left, with the counter read with the row.
 func (o *variantOption) quantityLeft() *int64 {
@@ -33,20 +49,33 @@ func (o *variantOption) quantityLeft() *int64 {
 	return &n
 }
 
-// variants are the product's alive categories and Variants. Tier categories and memberships
-// are Rails'.
+// available is BaseVariant#available? for an alive Variant.
+func (o *variantOption) available() bool {
+	q := o.quantityLeft()
+	return !o.closed && (q == nil || *q > 0)
+}
+
+// variants are the product's alive categories and Variants.
 type variants struct {
 	categories []int64
 	// options is option_records: the alive SKUs but the default one when SKUs are enabled,
 	// else the first category's Variants, in_order.
 	options []*variantOption
 	all     []*variantOption
+	// tiers is Link#tiers: the Variants of the categories titled Tier.
+	tiers []*variantOption
 }
 
 func (h *handler) loadVariants(ctx context.Context, prod *product) (*variants, error) {
 	vs, err := h.loadCategoryVariants(ctx, prod)
-	if err != nil || !prod.is(productSkusEnabled) {
-		return vs, err
+	if err != nil {
+		return nil, err
+	}
+	if prod.is(productIsTieredMembership) {
+		return vs, h.loadTierPrices(ctx, vs)
+	}
+	if !prod.is(productSkusEnabled) {
+		return vs, nil
 	}
 	// skus_alive_not_default has no order; both its index and the primary key give id order.
 	rows, err := h.c.DB.QueryContext(ctx, "SELECT base_variants.id, base_variants.name, base_variants.description,"+
@@ -72,18 +101,22 @@ func (h *handler) loadVariants(ctx context.Context, prod *product) (*variants, e
 // in MySQL's order, which for this index is id order.
 func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*variants, error) {
 	vs, skus := &variants{}, prod.is(productSkusEnabled)
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT variant_categories.id FROM variant_categories"+
+	// is_tier_category is where(title: "Tier"), so MySQL's collation decides it.
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT variant_categories.id, variant_categories.title = 'Tier' FROM variant_categories"+
 		" WHERE variant_categories.deleted_at IS NULL AND variant_categories.link_id = ? ORDER BY variant_categories.id", prod.id)
 	if err != nil {
 		return nil, err
 	}
+	tierCategories := map[int64]bool{}
 	for rows.Next() {
 		var id int64
-		if err := rows.Scan(&id); err != nil {
+		var tier sql.NullBool
+		if err := rows.Scan(&id, &tier); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		vs.categories = append(vs.categories, id)
+		tierCategories[id] = tier.Bool
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil || len(vs.categories) == 0 {
@@ -92,7 +125,7 @@ func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*var
 	rows, err = h.c.DB.QueryContext(ctx, "SELECT base_variants.id, base_variants.variant_category_id, base_variants.name,"+
 		" base_variants.description, base_variants.max_purchase_count, base_variants.sales_count_for_inventory_cache,"+
 		" base_variants.price_difference_cents, base_variants.duration_in_minutes, base_variants.customizable_price,"+
-		" base_variants.position_in_category, base_variants.created_at FROM base_variants"+
+		" base_variants.position_in_category, base_variants.created_at, base_variants.flags FROM base_variants"+
 		" INNER JOIN variant_categories ON base_variants.variant_category_id = variant_categories.id"+
 		" WHERE base_variants.type = 'Variant' AND variant_categories.link_id = ? AND variant_categories.deleted_at IS NULL"+
 		" AND base_variants.deleted_at IS NULL"+
@@ -104,10 +137,13 @@ func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*var
 	for rows.Next() {
 		o := &variantOption{}
 		if err := rows.Scan(&o.id, &o.categoryID, &o.name, &o.description, &o.maxPurchaseCount, &o.sold, &o.priceDifference,
-			&o.durationInMinutes, &o.customizablePrice, &o.position, &o.createdAt); err != nil {
+			&o.durationInMinutes, &o.customizablePrice, &o.position, &o.createdAt, &o.flags); err != nil {
 			return nil, err
 		}
 		vs.all = append(vs.all, o)
+		if tierCategories[o.categoryID] {
+			vs.tiers = append(vs.tiers, o)
+		}
 		// With SKUs enabled, Rails never orders these.
 		if o.categoryID == vs.categories[0] && !skus {
 			if n := len(vs.options); n > 0 && sameOrder(vs.options[n-1], o) {
@@ -118,7 +154,63 @@ func (h *handler) loadCategoryVariants(ctx context.Context, prod *product) (*var
 			vs.options = append(vs.options, o)
 		}
 	}
-	return vs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return vs, h.markClosedTiers(ctx, prod, vs)
+}
+
+// markClosedTiers sets closed_to_new_buyers?, which only a tiered membership's Variants can be.
+// The flag is read only for a Variant with the bit, as Rails does.
+func (h *handler) markClosedTiers(ctx context.Context, prod *product, vs *variants) error {
+	if !prod.is(productIsTieredMembership) {
+		return nil
+	}
+	on, read := false, false
+	for _, o := range vs.all {
+		if o.flags&baseVariantClosedToNewPurchases == 0 {
+			continue
+		}
+		if !read {
+			var err error
+			if on, err = h.flag(ctx, "close_membership_tier_to_new_buyers", prod.userID); err != nil {
+				return err
+			}
+			read = true
+		}
+		o.closed = on
+	}
+	return nil
+}
+
+// loadTierPrices reads the alive buy VariantPrices of the options and tiers, which
+// recurrence_price_values and lowest_tier_price read.
+func (h *handler) loadTierPrices(ctx context.Context, vs *variants) error {
+	all := slices.Concat(vs.options, vs.tiers)
+	if len(all) == 0 {
+		return nil
+	}
+	byID := map[int64]*variantOption{}
+	for _, o := range all {
+		byID[o.id] = o
+	}
+	ids := variantIDs(all)
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT prices.variant_id, prices.price_cents, prices.suggested_price_cents, prices.recurrence"+
+		" FROM prices WHERE prices.variant_id IN ("+placeholders(len(ids))+") AND prices.deleted_at IS NULL AND (prices.flags & ? = 0)"+
+		" ORDER BY prices.id", append(int64Args(ids), priceIsRental)...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var p variantPrice
+		if err := rows.Scan(&id, &p.cents, &p.suggested, &p.recurrence); err != nil {
+			return err
+		}
+		byID[id].buyPrices = append(byID[id].buyPrices, p)
+	}
+	return rows.Err()
 }
 
 func sameOrder(a, b *variantOption) bool {
@@ -137,7 +229,7 @@ func (vs *variants) available() bool {
 				continue
 			}
 			alive = true
-			if q := o.quantityLeft(); q == nil || *q > 0 {
+			if o.available() {
 				available = true
 			}
 		}
@@ -148,9 +240,9 @@ func (vs *variants) available() bool {
 	return false
 }
 
-// optionsProps is Link#options: to_option for each Variant, without a membership's recurrence
-// prices, or to_option_for_product for each SKU.
-func (h *handler) optionsProps(prod *product, vs *variants) []any {
+// optionsProps is Link#options: to_option for each Variant, or to_option_for_product for each
+// SKU. tierRecurrences is what a tiered membership's tiers read; see tierRecurrences.
+func (h *handler) optionsProps(prod *product, vs *variants, tierRecurrences map[string]bool) []any {
 	out := make([]any, 0, len(vs.options))
 	for _, o := range vs.options {
 		var name any = nullString(o.name)
@@ -161,15 +253,41 @@ func (h *handler) optionsProps(prod *product, vs *variants) []any {
 			}
 			name = n
 		}
+		quantityLeft := intOrNil(o.quantityLeft())
+		if o.closed {
+			quantityLeft = int64(0)
+		}
+		var recurrencePrices any
+		if prod.is(productIsTieredMembership) {
+			recurrencePrices = o.recurrencePriceValues(tierRecurrences)
+		}
 		out = append(out, rails.NewRHash().
 			Sym("id", o.externalID).
 			Sym("name", name).
-			Sym("quantity_left", intOrNil(o.quantityLeft())).
+			Sym("quantity_left", quantityLeft).
 			Sym("description", o.description.String).
 			Sym("price_difference_cents", nullInt(o.priceDifference)).
-			Sym("recurrence_price_values", nil).
+			Sym("recurrence_price_values", recurrencePrices).
 			Sym("is_pwyw", o.customizablePrice.Bool).
 			Sym("duration_in_minutes", nullInt(o.durationInMinutes)))
+	}
+	return out
+}
+
+// recurrencePriceValues is Variant#recurrence_price_values: for each recurrence the product
+// sells at, the tier's first alive buy price there.
+func (o *variantOption) recurrencePriceValues(tierRecurrences map[string]bool) *rails.RHash {
+	out := rails.NewRHash()
+	for _, r := range allRecurrences {
+		if !tierRecurrences[r.name] {
+			continue
+		}
+		for _, p := range o.buyPrices {
+			if p.recurrence.Valid && p.recurrence.String == r.name {
+				out.Str(r.name, rails.NewRHash().Sym("price_cents", p.cents).Sym("suggested_price_cents", nullInt(p.suggested)))
+				break
+			}
+		}
 	}
 	return out
 }

@@ -12,41 +12,67 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 )
 
-// prices are Link#buy_price_cents and #rental_price_cents for a product without recurrence:
-// the last alive price of each kind in the product's currency, as preload_product's
-// alive_prices loads them, nil for a kind the purchase type doesn't offer.
-type prices struct{ buy, rental *int64 }
+// prices are the product's alive prices, as preload_product's alive_prices loads them, and
+// Link#buy_price_cents and #rental_price_cents: the last of each kind in the product's
+// currency, a recurring product's buy price at its subscription duration, and nil for a kind
+// the purchase type doesn't offer.
+type prices struct {
+	buy, rental *int64
+	rows        []linkPrice
+}
+
+// linkPrice is an alive prices row of the product.
+type linkPrice struct {
+	id, cents, flags     int64
+	currency, recurrence sql.NullString
+}
+
+func (r linkPrice) isRental() bool { return r.flags&priceIsRental != 0 }
+
+// minCents is the lower of two prices, either of which may be missing.
+func minCents(a, b *int64) *int64 {
+	if a == nil || b != nil && *b < *a {
+		return b
+	}
+	return a
+}
 
 func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error) {
 	pc := prod.priceCurrencyType
+	duration, _ := prod.subscriptionDurationName()
+	byDuration := prod.is(productIsRecurringBilling) && duration != ""
 	// sqlMatch is the meta tags' comparison: they run before the preload, in SQL under the
 	// column's collation, where the props compare with Ruby's ==.
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`price_cents`, `prices`.`currency`, `prices`.`flags`, `prices`.`currency` = ?"+
-		" FROM `prices` WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` = ?", pc, prod.id)
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`id`, `prices`.`price_cents`, `prices`.`currency`, `prices`.`flags`,"+
+		" `prices`.`recurrence`, `prices`.`currency` = ? FROM `prices` WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` = ?"+
+		" ORDER BY `prices`.`id`", pc, prod.id)
 	if err != nil {
 		return prices{}, err
 	}
 	defer rows.Close()
 	var ps prices
 	for rows.Next() {
-		var cents, flags int64
-		var cur sql.NullString
+		var r linkPrice
 		var sqlMatch sql.NullBool
-		if err := rows.Scan(&cents, &cur, &flags, &sqlMatch); err != nil {
+		if err := rows.Scan(&r.id, &r.cents, &r.currency, &r.flags, &r.recurrence, &sqlMatch); err != nil {
 			return prices{}, err
 		}
-		rental := flags&priceIsRental != 0
+		ps.rows = append(ps.rows, r)
+		rental := r.isRental()
 		if rental && prod.purchaseType.Int64 == purchaseTypeBuyOnly || !rental && prod.rentOnly() {
 			continue
 		}
 		// prices_for_currency compares with ==, so a NULL currency only matches a NULL one.
-		if cur.Valid != pc.Valid || cur.String != pc.String {
+		if r.currency.Valid != pc.Valid || r.currency.String != pc.String {
 			if sqlMatch.Bool {
 				return prices{}, fallback("price currency collation")
 			}
 			continue
 		}
-		c := cents
+		if !rental && byDuration && (!r.recurrence.Valid || r.recurrence.String != duration) {
+			continue
+		}
+		c := r.cents
 		if rental {
 			ps.rental = &c
 		} else {

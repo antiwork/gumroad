@@ -185,12 +185,24 @@ func (h *handler) structuredData(p *page, prod *product, v *view, url, image str
 // offerData is build_offer_data: the offer in USD, through the cached rate when the product's
 // currency isn't, else in that currency.
 func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails.Hash, error) {
-	// lowest_base_price_cents: the lower of the buy and rental prices the product offers.
-	cents := v.prices.buy
-	if r := v.prices.rental; r != nil && (cents == nil || *r < *cents) {
-		cents = r
+	// lowest_base_price_cents: a tiered membership's lowest tier price, without a variant
+	// difference; else the lowest of the buy and rental prices the product offers and, for a
+	// legacy subscription, of every alive buy price.
+	var cents *int64
+	if prod.is(productIsTieredMembership) {
+		c := v.variants.lowestTierPriceCents()
+		cents = &c
+	} else {
+		cents = minCents(v.prices.buy, v.prices.rental)
+		if prod.is(productIsRecurringBilling) {
+			for i, r := range v.prices.rows {
+				if !r.isRental() {
+					cents = minCents(cents, &v.prices.rows[i].cents)
+				}
+			}
+		}
 	}
-	if cents != nil {
+	if !prod.is(productIsTieredMembership) && cents != nil {
 		var diff sql.NullInt64
 		// lowest_variant_price_difference_cents, over every alive category.
 		in, args := "NULL", []any{prod.id}
@@ -221,7 +233,9 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 	offer.Set("@type", "Offer")
 	offer.Set("priceCurrency", currency)
 	availability := "https://schema.org/InStock"
-	if prod.maxPurchaseCount.Valid && prod.maxPurchaseCount.Int64 != 0 {
+	if v.variants.closedToNewBuyers(prod) {
+		availability = "https://schema.org/SoldOut"
+	} else if prod.maxPurchaseCount.Valid && prod.maxPurchaseCount.Int64 != 0 {
 		availability = "https://schema.org/LimitedAvailability"
 		if n, ok := v.quantityRemaining.(int64); ok && n == 0 {
 			availability = "https://schema.org/SoldOut"
