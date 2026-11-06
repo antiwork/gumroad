@@ -561,8 +561,20 @@ describe("Library Scenario", type: :system, js: true) do
 
     before { index_model_records(Link) }
 
+    # Each key starts a smooth scroll, so wait for the track to land on the selected panel before the next key:
+    # overlapping scrolls can be misread by the carousel's debounced scroll handler and move the selection back.
     def expect_selected_cover(number)
       expect(page).to have_selector("[role=dialog] [role=tab][aria-selected=true][aria-label='Show cover #{number}']")
+      tolerance_px = 2
+      page.document.synchronize do
+        distance = page.evaluate_script(<<~JS)
+          (() => {
+            const panel = document.querySelectorAll('[role="dialog"] [role="tabpanel"]')[#{number - 1}];
+            return Math.abs(panel.parentElement.scrollLeft - panel.offsetLeft);
+          })()
+        JS
+        raise Capybara::ExpectationNotMet, "carousel is #{distance}px from cover #{number}" if distance > tolerance_px
+      end
     end
 
     shared_examples "a gallery that leaves the card's actions intact" do
