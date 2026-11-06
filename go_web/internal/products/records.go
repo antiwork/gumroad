@@ -21,8 +21,11 @@ const (
 	purchaseChargebackReversed             int64 = 1 << 9
 	purchaseWasTaxable                     int64 = 1 << 12
 	purchaseIsArchivedOriginalSubscription int64 = 1 << 17
+	purchaseIsFreeTrial                    int64 = 1 << 18
+	purchaseExcludesProductReview          int64 = 1 << 22
 	purchaseIsAccessRevoked                int64 = 1 << 24
 	purchaseIsBundle                       int64 = 1 << 25
+	purchaseIsBundleProduct                int64 = 1 << 26
 	purchaseIsCommissionCompletion         int64 = 1 << 29
 )
 

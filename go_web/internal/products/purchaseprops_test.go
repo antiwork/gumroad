@@ -5,7 +5,9 @@ import (
 	"database/sql"
 	"fmt"
 	"html"
+	"maps"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -233,5 +235,129 @@ func TestAPurchasesFormattedTotal(t *testing.T) {
 	// nil.price raises without a payment option.
 	if _, err := h.formattedTotal(p, usd(0), sub(1_797_953, 0)); err == nil || !strings.Contains(err.Error(), "subscription payment option") {
 		t.Errorf("no payment option: %v", err)
+	}
+}
+
+// A review reminder's purchase id and email digest show its purchase to a signed-out visitor,
+// an expired rental too, among the sales that count reviews; anything else shows none.
+func TestAReviewRemindersPurchase(t *testing.T) {
+	const purchaseID = int64(1_797_801)
+	for _, c := range []struct {
+		name    string
+		columns map[string]any
+		digest  func(e *testEnv) string
+		shown   bool
+	}{
+		{name: "its own digest", shown: true},
+		{name: "an expired rental", columns: map[string]any{"rental_expired": true}, shown: true},
+		{name: "another digest", digest: func(e *testEnv) string {
+			return rails.EmailDigest(e.config.Page.EmailDigestKey, purchaseID, "x@example.com").(string)
+		}},
+		{name: "a refunded sale", columns: map[string]any{"stripe_refunded": true}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			addPurchase(t, conn, purchaseID, c.columns)
+			digest := rails.EmailDigest(e.config.Page.EmailDigestKey, purchaseID, "buyer@example.com").(string)
+			if c.digest != nil {
+				digest = c.digest(e)
+			}
+			w := e.get(host, "/l/guide?purchase_id="+e.ids.Encrypt(purchaseID)+"&purchase_email_digest="+url.QueryEscape(digest), nil)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+			want := `"purchase":null`
+			if c.shown {
+				want = purchaseHead(e, purchaseID, "buyer@example.com")
+			}
+			if !strings.Contains(page, want) {
+				t.Errorf("want %s\nin %s", want, page)
+			}
+		})
+	}
+	// An array id would be looked up as Rails' to_s of it.
+	e := newTestEnv(t)
+	testdb.Open(t)
+	target := "/l/guide?purchase_id[]=x&purchase_email_digest=y"
+	if w := e.get(host, target, e.dryRun(host, target, testNow)); w.Header().Get("X-Go-Web-Fallback") != "param purchase_id" {
+		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+}
+
+// The review link's purchase wins over the visitor's own, a wrong digest falls through to the
+// browser's, another product's purchase is none, and a licensed one goes to Rails as a
+// signed-in buyer's would. A verified link skips the custom HTML page for the review form.
+func TestAReviewLinksPurchaseAmongOthers(t *testing.T) {
+	const linked, other = int64(1_797_821), int64(1_797_822)
+	link := func(e *testEnv, id int64, email string) string {
+		return "/l/guide?purchase_id=" + e.ids.Encrypt(id) + "&purchase_email_digest=" +
+			url.QueryEscape(rails.EmailDigest(e.config.Page.EmailDigestKey, id, email).(string))
+	}
+	for _, c := range []struct {
+		name, want, reason string
+		signedIn           bool
+		target             func(e *testEnv) string
+		setup              func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		{name: "over the visitor's own", signedIn: true, target: func(e *testEnv) string { return link(e, linked, "buyer@example.com") },
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				addPurchase(t, conn, linked, nil)
+				addPurchase(t, conn, other, map[string]any{"purchaser_id": buyerID})
+			}, want: "linked"},
+		{name: "a wrong digest", target: func(e *testEnv) string { return link(e, linked, "x@example.com") },
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				addPurchase(t, conn, linked, nil)
+				addPurchase(t, conn, other, map[string]any{"browser_guid": browserGUID})
+			}, want: "other"},
+		{name: "another product's purchase", target: func(e *testEnv) string { return link(e, linked, "buyer@example.com") },
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_797_831), "user_id": sellerID, "name": "Else",
+					"unique_permalink": "gowebelse", "price_cents": 100, "created_at": testNow, "updated_at": testNow})
+				addPurchase(t, conn, linked, map[string]any{"link_id": int64(1_797_831)})
+			}, want: "none"},
+		{name: "a licensed purchase", reason: "purchase license key", target: func(e *testEnv) string { return link(e, linked, "buyer@example.com") },
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				mustExec(t, conn, "UPDATE links SET flags = flags | ? WHERE id = ?", productIsLicensed, productID)
+				addPurchase(t, conn, linked, nil)
+				testdb.Insert(t, conn, "licenses", map[string]any{"id": int64(1_797_832), "link_id": productID, "purchase_id": linked,
+					"serial": "ABC", "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "on a custom HTML page", target: func(e *testEnv) string { return link(e, linked, "buyer@example.com") },
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				customHTML(t, e, conn)
+				addPurchase(t, conn, linked, nil)
+			}, want: "linked"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			addBuyer(t, conn, nil)
+			c.setup(t, e, conn)
+			target := c.target(e)
+			headers := map[string]string{"Cookie": "_gumroad_guid=" + browserGUID}
+			if c.signedIn {
+				headers = e.signedIn(buyerID, nil)
+			}
+			if c.reason != "" {
+				maps.Copy(headers, e.dryRun(host, target, testNow))
+				if w := e.get(host, target, headers); w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			w := e.get(host, target, headers)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			componentProps(t, w.Body.String(), productComponent)
+			page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+			want := map[string]string{"linked": purchaseHead(e, linked, "buyer@example.com"), "other": purchaseHead(e, other, "buyer@example.com"),
+				"none": `"purchase":null`}[c.want]
+			if !strings.Contains(page, want) {
+				t.Errorf("want %s\nin %s", want, page)
+			}
+		})
 	}
 }
