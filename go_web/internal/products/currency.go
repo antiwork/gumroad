@@ -39,11 +39,9 @@ type currencyDisplay struct {
 	rate       float64
 }
 
-// loadCurrencyDisplay is buyer_currency_display_props for the shapes this port serves, where
-// unquotable products and the India mandate path never arise. Each step that ends in the
-// default display has no side effect, so the cheap ones run first. Rails rescues every error
-// into the default display; whether it would fail too is unknowable here, so errors go to Rails.
-func (h *handler) loadCurrencyDisplay(p *page, prod *product, v *view) (*currencyDisplay, error) {
+// localCurrencyBuyer is the page's buyer currency when a local price may show: the seller has
+// opted in, and the currency cookie or GeoIP names one.
+func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {
 	if raw, ok := v.sellerJSON.present("disable_buyer_local_currency"); ok {
 		if disabled := rails.BooleanCast(raw); disabled != nil && *disabled {
 			return nil, nil
@@ -53,16 +51,23 @@ func (h *handler) loadCurrencyDisplay(p *page, prod *product, v *view) (*currenc
 	if err != nil || !on {
 		return nil, err
 	}
-	pc := prod.productCurrency()
-	buyer := buyerCurrencyPreference(p)
-	if buyer == nil {
-		buyer = v.detectedCurrency
+	if buyer := buyerCurrencyPreference(p); buyer != nil {
+		return buyer, nil
 	}
-	if buyer == nil || *buyer == pc || v.priceCents == nil {
+	return v.detectedCurrency, nil
+}
+
+// currencyDisplayFor is the rest of buyer_currency_display_props for a product priced at price
+// in pc, for the shapes this port serves, where unquotable products and the India mandate path
+// never arise. Each step that ends in the default display has no side effect, so the cheap ones
+// run first. Rails rescues every error into the default display; whether it would fail too is
+// unknowable here, so errors go to Rails.
+func (h *handler) currencyDisplayFor(p *page, buyer, pc string, price *int64) (*currencyDisplay, error) {
+	if buyer == pc || price == nil {
 		// A nil price raises in BigDecimal(""), and the rescue shows the default.
 		return nil, nil
 	}
-	if _, ok := currencies[*buyer]; !ok {
+	if _, ok := currencies[buyer]; !ok {
 		return nil, fallback("buyer currency")
 	}
 	if _, ok := currencies[pc]; !ok {
@@ -72,16 +77,23 @@ func (h *handler) loadCurrencyDisplay(p *page, prod *product, v *view) (*currenc
 	if err != nil || !ok {
 		return nil, err
 	}
-	to, ok, err := h.cachedUSDRate(p, *buyer)
+	to, ok, err := h.cachedUSDRate(p, buyer)
 	if err != nil || !ok {
 		return nil, err
 	}
-	if settleable, err := h.buyerCurrencySettleable(p, *buyer); err != nil || !settleable {
-		return nil, err
+	if p.settleable == nil {
+		settleable, err := h.buyerCurrencySettleable(p, buyer)
+		if err != nil {
+			return nil, err
+		}
+		p.settleable = &settleable
+	}
+	if !*p.settleable {
+		return nil, nil
 	}
 	rate := bigDecimalQuo(to, from)
 	f, _ := rate.Float64()
-	return &currencyDisplay{buyer: *buyer, localCents: localPriceCents(*v.priceCents, pc, *buyer, rate), rate: f}, nil
+	return &currencyDisplay{buyer: buyer, localCents: localPriceCents(*price, pc, buyer, rate), rate: f}, nil
 }
 
 // buyerCurrencySettleable is buyer_currency_settleable? past the checks this shape always
