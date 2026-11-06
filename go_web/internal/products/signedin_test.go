@@ -3,12 +3,15 @@ package products
 import (
 	"database/sql"
 	"html"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/session/sessiontest"
@@ -219,5 +222,63 @@ func mustExec(t *testing.T, conn *sql.DB, query string, args ...any) {
 	t.Helper()
 	if _, err := conn.Exec(query, args...); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A seller with completed payouts gets the agent once their sales, as seller and as affiliate,
+// reach the minimum: the seller's sums are Floats truncated after adding, the affiliate's each.
+func TestAStoreAgentSeller(t *testing.T) {
+	var bodies []string
+	fee := "1000.4"
+	search := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies = append(bodies, string(body))
+		if r.URL.Path != "/purchases/_search" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(string(body), `"price_cents_total"`) {
+			io.WriteString(w, `{"aggregations":{"price_cents_total":{"value":10000.7},"fee_cents_total":{"value":`+fee+`},`+
+				`"amount_refunded_cents_total":{"value":0.0},"fee_refunded_cents_total":{"value":0.0},"affiliate_credit_amount_cents_total":{"value":0.0},`+
+				`"affiliate_credit_amount_partially_refunded_cents_total":{"value":0.0},"direct_affiliate_credit_amount_cents_total":{"value":0.0},`+
+				`"direct_affiliate_credit_amount_partially_refunded_cents_total":{"value":0.0}}}`)
+			return
+		}
+		io.WriteString(w, `{"aggregations":{"affiliate_credit_amount_cents_own":{"total":{"value":999.9}},`+
+			`"direct_affiliate_credit_amount_cents_own":{"total":{"value":0.9}},"affiliate_credit_amount_partially_refunded_cents_own":{"total":{"value":0.0}},`+
+			`"direct_affiliate_credit_amount_partially_refunded_cents_own":{"total":{"value":0.0}}}}`)
+	}))
+	defer search.Close()
+	// 10000.7 - fee truncates after the subtraction, then the affiliate's 999.9 and 0.9 each
+	// truncate to 999 and 0: a 1000.4 fee leaves 9999, a 999.6 one 10000.
+	for _, c := range []struct {
+		fee  string
+		want string
+	}{{"1000.4", `"use_store_agent":false`}, {"999.6", `"use_store_agent":true`}} {
+		t.Run(c.fee, func(t *testing.T) {
+			bodies, fee = nil, c.fee
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			addBuyer(t, conn, nil)
+			testdb.Insert(t, conn, "payments", map[string]any{"id": int64(1_797_501), "user_id": buyerID, "state": "completed",
+				"created_at": testNow, "updated_at": testNow})
+			client, err := elastic.NewWithClient(search.URL, search.Client())
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.config.Page.Search = client
+			w := e.get(host, "/l/guide", e.signedIn(buyerID, nil))
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+			if !strings.Contains(page, c.want) {
+				t.Errorf("want %s", c.want)
+			}
+			if len(bodies) != 2 || !strings.Contains(bodies[0], `"seller_id":[1796001]`) ||
+				!strings.Contains(bodies[1], `"minimum_should_match":1`) || !strings.Contains(bodies[1], `"affiliate_credit_affiliate_user_id":1796001`) {
+				t.Errorf("bodies %v", bodies)
+			}
+		})
 	}
 }
