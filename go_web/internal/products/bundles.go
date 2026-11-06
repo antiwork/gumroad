@@ -1,0 +1,284 @@
+package products
+
+import (
+	"context"
+	"database/sql"
+
+	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/web"
+)
+
+// bundleItem is an alive bundle_products row, with the product and variant it names.
+type bundleItem struct {
+	productID, quantity int64
+	position            sql.NullInt64
+	prod                *bundled
+	// variant is the BaseVariant it names, alive or not; nil without one.
+	variant *bundleVariant
+}
+
+// bundled is a bundle product's links row and its sales_count_for_inventory_cache.
+type bundled struct {
+	*product
+	sold sql.NullInt64
+}
+
+type bundleVariant struct {
+	name                   sql.NullString
+	priceDifference        sql.NullInt64
+	maxPurchaseCount, sold sql.NullInt64
+}
+
+// bundle is what the page reads of its bundle_products.
+type bundle struct {
+	props []any
+	// quantityLeft is remaining_for_sale_count's minimum over the bundle products, for a bundle.
+	quantityLeft *int64
+}
+
+// loadBundle is the bundle_products prop: bundle_product_props for each alive row, in_order.
+func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bundle, error) {
+	b := &bundle{props: []any{}}
+	if !p.hasBundleProducts {
+		return b, nil
+	}
+	items, err := h.bundleItems(ctx, prod)
+	if err != nil || len(items) == 0 {
+		return b, err
+	}
+	ids, reviewed := make([]int64, len(items)), []int64{}
+	for i, it := range items {
+		ids[i] = it.productID
+		if !prod.is(productHideBundleReviews) && it.prod.is(productDisplayReviews) {
+			reviewed = append(reviewed, it.productID)
+		}
+	}
+	prices, err := h.alivePrices(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	stats := map[int64]*reviewStat{}
+	if len(reviewed) > 0 {
+		if stats, err = h.reviewStats(ctx, reviewed); err != nil {
+			return nil, err
+		}
+	}
+	thumbnails, err := h.aliveThumbnails(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	var thumbnailRows []thumbnailRow
+	for _, id := range ids {
+		if len(thumbnails[id]) > 1 {
+			// has_one's preload keeps whichever row MySQL returns first.
+			return nil, fallback("bundle product thumbnails")
+		}
+		thumbnailRows = append(thumbnailRows, thumbnails[id]...)
+	}
+	thumbnailURLs, err := h.thumbnailURLs(ctx, thumbnailRows)
+	if err != nil {
+		return nil, err
+	}
+	var available map[int64]bool
+	if prod.is(productIsBundle) {
+		if available, err = h.bundledVariantsAvailable(ctx, ids); err != nil {
+			return nil, err
+		}
+	}
+	for _, it := range items {
+		bp := it.prod
+		last, agreed := lastPrice(pricesForCurrency(bp.product, prices[bp.id], bp.rentOnly()))
+		switch {
+		case !agreed:
+			return nil, fallback("bundle product prices")
+		case last == nil:
+			// nil + the difference raises.
+			return nil, fallback("bundle product price")
+		}
+		var diff int64
+		var variantName any
+		if it.variant != nil {
+			diff, variantName = it.variant.priceDifference.Int64, nullString(it.variant.name)
+		}
+		var ratings any
+		if !prod.is(productHideBundleReviews) {
+			ratings = cardRatings(bp.product, stats[bp.id])
+		}
+		var thumbnail any
+		if t := thumbnails[bp.id]; len(t) == 1 {
+			thumbnail = thumbnailURLs[t[0].id]
+		}
+		// url_for_product_page on the seller's own subdomain: short_link_url on this host.
+		url := web.Protocol(p.Req.HTTP) + p.Req.Host + "/l/" + web.EscapeSegment(bp.generalPermalink())
+		b.props = append(b.props, rails.NewRHash().
+			Sym("id", h.c.IDs.Encrypt(bp.id)).
+			Sym("name", bp.name).
+			Sym("ratings", ratings).
+			Sym("price", (*last+diff)*it.quantity).
+			Sym("currency_code", currencyCode(bp.product)).
+			Sym("thumbnail_url", thumbnail).
+			Sym("native_type", bp.nativeType).
+			Sym("url", url).
+			Sym("quantity", it.quantity).
+			Sym("variant", variantName))
+		if available != nil {
+			// The bundle product's remaining_for_sale_count, then its variant's quantity_left.
+			remaining := quantityLeft(bp.maxPurchaseCount, bp.sold)
+			if !available[bp.id] {
+				remaining = new(int64)
+			}
+			b.quantityLeft = lowerOf(b.quantityLeft, remaining)
+			if it.variant != nil {
+				b.quantityLeft = lowerOf(b.quantityLeft, quantityLeft(it.variant.maxPurchaseCount, it.variant.sold))
+			}
+		}
+	}
+	return b, nil
+}
+
+// bundleItems reads the alive rows in_order, with their variants, then their products.
+func (h *handler) bundleItems(ctx context.Context, owner *product) ([]*bundleItem, error) {
+	items, err := h.bundleRows(ctx, owner)
+	if err != nil || len(items) == 0 {
+		return nil, err
+	}
+	ids := make([]int64, len(items))
+	for i, it := range items {
+		ids[i] = it.productID
+	}
+	products, err := h.bundledProducts(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if it.prod = products[it.productID]; it.prod == nil {
+			// bundle_product.product is nil, and Rails raises.
+			return nil, fallback("bundle product missing")
+		}
+		if reason := unportedBundled(owner, it.prod.product); reason != "" {
+			return nil, fallback(reason)
+		}
+	}
+	return items, nil
+}
+
+func (h *handler) bundleRows(ctx context.Context, owner *product) ([]*bundleItem, error) {
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT bundle_products.product_id, bundle_products.quantity, bundle_products.position,"+
+		" base_variants.id, base_variants.type, base_variants.name, base_variants.price_difference_cents,"+
+		" base_variants.max_purchase_count, base_variants.sales_count_for_inventory_cache FROM bundle_products"+
+		" LEFT JOIN base_variants ON base_variants.id = bundle_products.variant_id"+
+		" WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL ORDER BY bundle_products.position ASC", owner.id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*bundleItem
+	for rows.Next() {
+		it := &bundleItem{}
+		var variantID sql.NullInt64
+		var kind sql.NullString
+		v := &bundleVariant{}
+		if err := rows.Scan(&it.productID, &it.quantity, &it.position, &variantID, &kind, &v.name, &v.priceDifference,
+			&v.maxPurchaseCount, &v.sold); err != nil {
+			return nil, err
+		}
+		if n := len(items); n > 0 && items[n-1].position == it.position {
+			// in_order leaves ties to MySQL.
+			return nil, fallback("bundle product order")
+		}
+		if variantID.Valid {
+			if kind.String != "Variant" && kind.String != "Sku" {
+				return nil, fallback("bundle product variant type")
+			}
+			it.variant = v
+		}
+		items = append(items, it)
+	}
+	return items, rows.Err()
+}
+
+func (h *handler) bundledProducts(ctx context.Context, ids []int64) (map[int64]*bundled, error) {
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+productColumns+", links.sales_count_for_inventory_cache FROM links"+
+		" WHERE links.id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]*bundled{}
+	for rows.Next() {
+		bp := &bundled{product: &product{}}
+		if err := rows.Scan(append(bp.dest(), &bp.sold)...); err != nil {
+			return nil, err
+		}
+		out[bp.id] = bp
+	}
+	return out, rows.Err()
+}
+
+// unportedBundled is a bundle product whose props this port doesn't follow.
+func unportedBundled(owner, prod *product) string {
+	switch {
+	case prod.userID != owner.userID:
+		// url_for_product_page would be another seller's long_url.
+		return "bundle product seller"
+	case prod.is(productIsBundle):
+		return "nested bundle"
+	case prod.is(productIsRecurringBilling) || prod.is(productIsTieredMembership):
+		return "bundled membership"
+	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
+		return "bundle product purchase type"
+	case rails.Blank(prod.generalPermalink()):
+		return "bundle product permalink"
+	}
+	return ""
+}
+
+// bundledVariantsAvailable is variants_available? for each bundle product, falling back on a
+// Tier category, whose lone tier remaining_for_sale_count would read.
+func (h *handler) bundledVariantsAvailable(ctx context.Context, ids []int64) (map[int64]bool, error) {
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT variant_categories.link_id, variant_categories.id, variant_categories.title = 'Tier',"+
+		" base_variants.id, base_variants.max_purchase_count, base_variants.sales_count_for_inventory_cache FROM variant_categories"+
+		" LEFT JOIN base_variants ON base_variants.variant_category_id = variant_categories.id AND base_variants.type = 'Variant'"+
+		" AND base_variants.deleted_at IS NULL"+
+		" WHERE variant_categories.deleted_at IS NULL AND variant_categories.link_id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	byProduct := map[int64]*variants{}
+	for rows.Next() {
+		var productID int64
+		var tier sql.NullBool
+		var variantID sql.NullInt64
+		o := &variantOption{}
+		if err := rows.Scan(&productID, &o.categoryID, &tier, &variantID, &o.maxPurchaseCount, &o.sold); err != nil {
+			return nil, err
+		}
+		if tier.Bool {
+			return nil, fallback("bundle product tiers")
+		}
+		vs := byProduct[productID]
+		if vs == nil {
+			vs = &variants{}
+			byProduct[productID] = vs
+		}
+		vs.categories = append(vs.categories, o.categoryID)
+		if variantID.Valid {
+			vs.all = append(vs.all, o)
+		}
+	}
+	out := map[int64]bool{}
+	for _, id := range ids {
+		out[id] = byProduct[id] == nil || byProduct[id].available()
+	}
+	return out, rows.Err()
+}
+
+// quantityLeft is [max_purchase_count - sold, 0].max, or nil without a maximum.
+func quantityLeft(maxPurchases, sold sql.NullInt64) *int64 {
+	if !maxPurchases.Valid {
+		return nil
+	}
+	n := max(maxPurchases.Int64-sold.Int64, 0)
+	return &n
+}

@@ -41,13 +41,7 @@ type variantPrice struct {
 const baseVariantClosedToNewPurchases int64 = 1 << 2
 
 // quantityLeft is BaseVariant#quantity_left, with the counter read with the row.
-func (o *variantOption) quantityLeft() *int64 {
-	if !o.maxPurchaseCount.Valid {
-		return nil
-	}
-	n := max(o.maxPurchaseCount.Int64-o.sold.Int64, 0)
-	return &n
-}
+func (o *variantOption) quantityLeft() *int64 { return quantityLeft(o.maxPurchaseCount, o.sold) }
 
 // available is BaseVariant#available? for an alive Variant.
 func (o *variantOption) available() bool {

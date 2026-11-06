@@ -224,6 +224,23 @@ func (e *testEnv) render(t *testing.T, headers map[string]string, reason string)
 	return html.UnescapeString(w.Body.String())
 }
 
+// wantAll fails for each want body lacks, once its %[n]s are the external ids of ids.
+func (e *testEnv) wantAll(t *testing.T, body string, wants []string, ids ...int64) {
+	t.Helper()
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = e.ids.Encrypt(id)
+	}
+	for _, want := range wants {
+		if strings.Contains(want, "%[") {
+			want = fmt.Sprintf(want, args...)
+		}
+		if !strings.Contains(body, want) {
+			t.Errorf("want %s", want)
+		}
+	}
+}
+
 var dataPage = regexp.MustCompile(`data-page="([^"]*)"`)
 
 func pageProps(t *testing.T, body string) map[string]any {
@@ -422,12 +439,6 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "an unknown purchase type", host: host, target: "/l/guide", reason: "purchase type",
 			setup: func() { conn.Exec("UPDATE links SET purchase_type = 3 WHERE id = ?", productID) },
 			undo:  func() { conn.Exec("UPDATE links SET purchase_type = 0 WHERE id = ?", productID) }},
-		{name: "bundle products on a product that isn't a bundle", host: host, target: "/l/guide", reason: "bundle products",
-			setup: func() {
-				testdb.Insert(t, conn, "bundle_products", map[string]any{"id": int64(1_790_351), "bundle_id": productID, "product_id": productID,
-					"quantity": 1, "created_at": testNow, "updated_at": testNow})
-			},
-			undo: func() { conn.Exec("DELETE FROM bundle_products WHERE id = ?", 1_790_351) }},
 		{name: "the seller's refund policy", host: host, target: "/l/guide", reason: "seller refund policy",
 			setup: func() {
 				conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userRefundPolicyEnabled, sellerID)
@@ -749,15 +760,140 @@ func TestAMembershipRendersItsPrices(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
-			body := e.render(t, c.headers, c.reason)
-			for _, want := range c.wants {
-				if strings.Contains(want, "%[") {
-					want = fmt.Sprintf(want, e.ids.Encrypt(priceID), e.ids.Encrypt(yearly), e.ids.Encrypt(quarterly), e.ids.Encrypt(basic), e.ids.Encrypt(pro))
-				}
-				if !strings.Contains(body, want) {
-					t.Errorf("want %s in %s", want, body[strings.Index(body, `"options"`):][:700])
-				}
-			}
+			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, priceID, yearly, quarterly, basic, pro)
+		})
+	}
+}
+
+// The bundle holds an ebook and, first by position, two of a course's Pro variant.
+func TestABundleRendersItsProducts(t *testing.T) {
+	const ebook, course, proVariant, courseCategory = int64(1_794_001), int64(1_794_002), int64(1_794_101), int64(1_794_201)
+	member := func(t *testing.T, conn *sql.DB, id int64, name, permalink, nativeType string, cents int64, flags int64, maxPurchases any) {
+		testdb.Insert(t, conn, "links", map[string]any{"id": id, "user_id": sellerID, "name": name, "unique_permalink": permalink,
+			"native_type": nativeType, "price_cents": cents, "flags": flags, "max_purchase_count": maxPurchases,
+			"sales_count_for_inventory_cache": 4, "created_at": testNow, "updated_at": testNow})
+		testdb.Insert(t, conn, "prices", map[string]any{"id": id + 1000, "link_id": id, "price_cents": cents, "currency": "usd",
+			"created_at": testNow, "updated_at": testNow})
+	}
+	const bundleID = productID
+	item := func(t *testing.T, conn *sql.DB, id, productID int64, variantID any, quantity int, position any) {
+		testdb.Insert(t, conn, "bundle_products", map[string]any{"id": id, "bundle_id": bundleID, "product_id": productID,
+			"variant_id": variantID, "quantity": quantity, "position": position, "created_at": testNow, "updated_at": testNow})
+	}
+	setup := func(t *testing.T, conn *sql.DB, bundleFlag bool) {
+		if bundleFlag {
+			conn.Exec("UPDATE links SET flags = flags | ?, native_type = 'bundle' WHERE id = ?", productIsBundle, productID)
+		}
+		member(t, conn, ebook, "Ebook", "bp1", "ebook", 300, productDisplayReviews, 10)
+		member(t, conn, course, "Course", "bp2", "course", 1000, 0, nil)
+		conn.Exec("UPDATE links SET custom_permalink = 'ebook' WHERE id = ?", ebook)
+		testdb.Insert(t, conn, "product_review_stats", map[string]any{"id": int64(1_794_501), "link_id": ebook, "reviews_count": 2, "average_rating": 4.5,
+			"created_at": testNow, "updated_at": testNow})
+		testdb.Insert(t, conn, "thumbnails", map[string]any{"id": int64(1_794_301), "product_id": ebook,
+			"unsplash_url": "https://images.unsplash.com/x", "created_at": testNow, "updated_at": testNow})
+		testdb.Insert(t, conn, "variant_categories", map[string]any{"id": courseCategory, "link_id": course, "title": "Edition"})
+		testdb.Insert(t, conn, "base_variants", map[string]any{"id": proVariant, "type": "Variant", "variant_category_id": courseCategory,
+			"name": "Pro", "price_difference_cents": 200, "max_purchase_count": 3, "sales_count_for_inventory_cache": 1,
+			"created_at": testNow, "updated_at": testNow})
+		item(t, conn, 1_794_401, ebook, nil, 1, 1)
+		item(t, conn, 1_794_402, course, proVariant, 2, 0)
+	}
+	const products = `"bundle_products":[` +
+		`{"id":"%[2]s","name":"Course","ratings":null,"price":2400,"currency_code":"usd","thumbnail_url":null,"native_type":"course",` +
+		`"url":"https://gowebproductseller.gumroad.com/l/bp2","quantity":2,"variant":"Pro"},` +
+		`{"id":"%[1]s","name":"Ebook","ratings":{"count":2,"average":4.5},"price":300,"currency_code":"usd",` +
+		`"thumbnail_url":"https://images.unsplash.com/x","native_type":"ebook","url":"https://gowebproductseller.gumroad.com/l/ebook",` +
+		`"quantity":1,"variant":null}]`
+	for _, c := range []struct {
+		name   string
+		wants  []string
+		reason string
+		setup  func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		// The Pro variant has the fewest left: 2 of 3, against the ebook's 6 of 10.
+		{name: "a bundle", wants: []string{products, `"quantity_remaining":2,`, `"file_summaries":{"product":null,"options":{}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { setup(t, conn, true) }},
+		{name: "a bundle hiding its products' reviews", wants: []string{`"name":"Ebook","ratings":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productHideBundleReviews, productID)
+			}},
+		{name: "a sold-out bundle product", wants: []string{`"quantity_remaining":0,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("UPDATE links SET sales_count_for_inventory_cache = 10 WHERE id = ?", ebook)
+			}},
+		// Rails lists them on any product; only a bundle counts their inventory.
+		{name: "bundle products on a product that isn't a bundle", wants: []string{products, `"quantity_remaining":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { setup(t, conn, false) }},
+		{name: "bundle products tied in order", reason: "bundle product order", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			conn.Exec("UPDATE bundle_products SET position = NULL WHERE bundle_id = ?", productID)
+		}},
+		{name: "another seller's product", reason: "bundle product seller", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			conn.Exec("UPDATE links SET user_id = ? WHERE id = ?", sellerID+1, ebook)
+		}},
+		{name: "a bundle in the bundle", reason: "nested bundle", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsBundle, ebook)
+		}},
+		{name: "two thumbnails", reason: "bundle product thumbnails", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			testdb.Insert(t, conn, "thumbnails", map[string]any{"id": int64(1_794_302), "product_id": ebook,
+				"unsplash_url": "https://images.unsplash.com/y", "created_at": testNow, "updated_at": testNow})
+		}},
+		{name: "a missing product", reason: "bundle product missing", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			conn.Exec("DELETE FROM links WHERE id = ?", ebook)
+		}},
+		// The row's variant is read alive or not; the course's own variants are all sold out.
+		{name: "a bundle product with no variant in stock", wants: []string{`"quantity":2,"variant":"Pro"}`, `"quantity_remaining":0,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("UPDATE base_variants SET deleted_at = ? WHERE id = ?", testNow, proVariant)
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": proVariant + 1, "type": "Variant", "variant_category_id": courseCategory,
+					"name": "Basic", "max_purchase_count": 1, "sales_count_for_inventory_cache": 1, "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a sold-out bundle with its own limit", wants: []string{`"availability":"https://schema.org/SoldOut"`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("UPDATE links SET max_purchase_count = 5 WHERE id = ?", productID)
+				conn.Exec("UPDATE links SET sales_count_for_inventory_cache = 10 WHERE id = ?", ebook)
+			}},
+		{name: "a rent-only bundle product", wants: []string{`"name":"Ebook","ratings":{"count":2,"average":4.5},"price":150,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				conn.Exec("UPDATE links SET purchase_type = 1 WHERE id = ?", ebook)
+				testdb.Insert(t, conn, "prices", map[string]any{"id": ebook + 2000, "link_id": ebook, "price_cents": 150, "currency": "usd",
+					"flags": 1, "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a deleted bundle product and a bundle file", wants: []string{products, `"attributes":[],`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				setup(t, conn, true)
+				item(t, conn, 1_794_403, ebook, nil, 1, 2)
+				conn.Exec("UPDATE bundle_products SET deleted_at = ? WHERE id = ?", testNow, 1_794_403)
+				testdb.Insert(t, conn, "product_files", map[string]any{"id": int64(1_794_601), "link_id": productID, "filetype": "pdf", "size": 2048,
+					"url": "https://s3.amazonaws.com/gumroad/attachments/x/y/original/a.pdf", "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a bundle product with tiers", reason: "bundle product tiers", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			conn.Exec("UPDATE variant_categories SET title = 'Tier' WHERE id = ?", courseCategory)
+		}},
+		{name: "a variant of another type", reason: "bundle product variant type", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			conn.Exec("UPDATE base_variants SET type = 'Other' WHERE id = ?", proVariant)
+		}},
+		{name: "a bundle product's prices disagreeing", reason: "bundle product prices", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			setup(t, conn, true)
+			testdb.Insert(t, conn, "prices", map[string]any{"id": ebook + 2000, "link_id": ebook, "price_cents": 350, "currency": "usd",
+				"created_at": testNow, "updated_at": testNow})
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			c.setup(t, e, testdb.Open(t))
+			e.wantAll(t, e.render(t, nil, c.reason), c.wants, ebook, course)
 		})
 	}
 }

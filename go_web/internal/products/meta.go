@@ -236,11 +236,11 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 		c := v.variants.lowestTierPriceCents()
 		cents = &c
 	} else {
-		cents = minCents(v.prices.buy, v.prices.rental)
+		cents = lowerOf(v.prices.buy, v.prices.rental)
 		if prod.is(productIsRecurringBilling) {
 			for i, r := range v.prices.rows {
 				if !r.isRental() {
-					cents = minCents(cents, &v.prices.rows[i].cents)
+					cents = lowerOf(cents, &v.prices.rows[i].cents)
 				}
 			}
 		}
