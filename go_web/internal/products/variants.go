@@ -226,18 +226,15 @@ func (h *handler) orderTiedOptions(ctx context.Context, productID, categoryID in
 	for _, o := range options {
 		byID[o.id] = o
 	}
-	var ordered []*variantOption
-	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
-		var id int64
-		cols["id"] = &id
-		return func() {
-			if o := byID[id]; o != nil {
-				ordered = append(ordered, o)
-			}
-		}
-	}, optionRecordsStatement, productID, categoryID)
+	ids, err := h.scanIDs(ctx, optionRecordsStatement, productID, categoryID)
 	if err != nil {
 		return err
+	}
+	var ordered []*variantOption
+	for _, id := range ids {
+		if o := byID[id]; o != nil {
+			ordered = append(ordered, o)
+		}
 	}
 	if len(ordered) != len(options) {
 		// The two reads disagree on which options there are.
