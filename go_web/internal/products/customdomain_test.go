@@ -114,8 +114,6 @@ func TestACustomDomainThisPortLeavesToRails(t *testing.T) {
 			addCustomDomain(t, conn, 1_799_511, shop, nil)
 			mustExec(t, conn, "UPDATE users SET deleted_at = ? WHERE id = ?", testNow, sellerID)
 		}},
-		// A newer suffix list than the gem's could split the host differently.
-		{name: "a private suffix", host: "shop.goweb.github.io", reason: "custom domain suffix"},
 		// Subdomain.subdomain_request?'s unescaped dots take this for a seller's subdomain.
 		{name: "a host Rails reads as a subdomain", host: "mygumroad.com", reason: "host"},
 		// Rack::SSL redirects the raw gumroad.com Host to https before routing.
@@ -145,6 +143,21 @@ func TestACustomDomainThisPortLeavesToRails(t *testing.T) {
 				t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 			}
 		})
+	}
+}
+
+// Under a private suffix, the gem's list decides what the apex is: here goweb.myshopify.com,
+// whose www host reads it.
+func TestACustomDomainUnderAPrivateSuffix(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	addCustomDomain(t, conn, 1_799_501, "goweb.myshopify.com", nil)
+	w := e.get("www.goweb.myshopify.com", "/l/guide", customDomainHeaders(nil))
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if canonical := `<link rel="canonical" href="https://www.goweb.myshopify.com/l/guide"`; !strings.Contains(w.Body.String(), canonical) {
+		t.Errorf("missing %s", canonical)
 	}
 }
 

@@ -6,9 +6,9 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/antiwork/gumroad/go_web/internal/customdomain"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
-	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 // Purchase flag bits (has_flags in purchase.rb).
@@ -254,11 +254,8 @@ type customDomainRow struct {
 // findCustomDomain is CustomDomain.find_by_host: the apex's row, else www's. find_by takes no
 // order, so a second row for the name it finds is one Rails could find instead.
 func findCustomDomain(ctx context.Context, conn *sql.DB, host string) (*customDomainRow, error) {
-	names, ok := web.CustomDomainNames(host)
-	switch {
-	case !ok:
-		return nil, fallback("custom domain suffix")
-	case len(names) == 0:
+	names := customdomain.Names(host)
+	if len(names) == 0 {
 		return nil, nil
 	}
 	rows, err := conn.QueryContext(ctx, "SELECT custom_domains.domain, custom_domains.user_id, custom_domains.product_id FROM custom_domains"+

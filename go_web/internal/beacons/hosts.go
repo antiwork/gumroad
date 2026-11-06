@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/antiwork/gumroad/go_web/internal/customdomain"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -110,7 +111,7 @@ type customDomain struct {
 
 // customDomain is CustomDomain.find_by_host, with the product and owner it points at.
 func (h *hosts) customDomain(ctx context.Context, host string) (*customDomain, error) {
-	names, _ := web.CustomDomainNames(host)
+	names := customdomain.Names(host)
 	if names == nil {
 		return nil, nil
 	}
