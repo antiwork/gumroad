@@ -19,7 +19,7 @@ var utmKeys = []string{"utm_source", "utm_medium", "utm_campaign", "utm_term", "
 const maxUTMParamLength = 200
 
 // utmParams is track_utm_link_visit's utm_params, nil when a required one is blank. reason is a
-// value this port leaves to Rails: anything but an ASCII String, whose downcase is Unicode's.
+// value this port leaves to Rails: anything but a String, whose to_s it doesn't build.
 func utmParams(req *rails.Request) (params sidekiq.Hash, reason string) {
 	for _, key := range utmKeys[:3] {
 		if raw, _ := req.Params.Get(key); !rails.Present(raw) {
@@ -34,7 +34,7 @@ func utmParams(req *rails.Request) (params sidekiq.Hash, reason string) {
 			continue
 		}
 		s, ok := raw.(string)
-		if !ok || !rails.IsASCII(s) {
+		if !ok {
 			return nil, "param " + key
 		}
 		params = append(params, sidekiq.Pair{Key: key, Value: normalizeUTMParam(s)})
@@ -42,22 +42,22 @@ func utmParams(req *rails.Request) (params sidekiq.Hash, reason string) {
 	return params, ""
 }
 
-// normalizeUTMParam is to_s.strip.downcase.gsub(/[^a-z0-9\-_]/u, "-").first(200).presence for an
-// ASCII String.
+// normalizeUTMParam is to_s.strip.downcase.gsub(/[^a-z0-9\-_]/u, "-").first(200).presence for a
+// String: the gsub leaves only ASCII, so the cut counts bytes.
 func normalizeUTMParam(s string) any {
-	b := []byte(strings.ToLower(rails.Strip(s)))
-	for i, c := range b {
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
-			b[i] = '-'
+	out := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+			return r
 		}
+		return '-'
+	}, rails.Downcase(rails.Strip(s)))
+	if len(out) > maxUTMParamLength {
+		out = out[:maxUTMParamLength]
 	}
-	if len(b) > maxUTMParamLength {
-		b = b[:maxUTMParamLength]
-	}
-	if len(b) == 0 {
+	if out == "" {
 		return nil
 	}
-	return string(b)
+	return out
 }
 
 // trackUTMVisit is track_utm_link_visit for the product's page, which Rails records in the

@@ -576,6 +576,11 @@ func TestABannedOrMissingProductIsNotFound(t *testing.T) {
 	if w := e.get(host, "/l/nope", nil); w.Code != http.StatusNotFound || len(w.Header().Values("Set-Cookie")) != 0 {
 		t.Errorf("missing: %d %v", w.Code, w.Header())
 	}
+	// A subdomain without a seller reaches the catch-all route's 404.
+	if w := e.get("nosuchseller.gumroad.com", "/l/guide", nil); w.Code != http.StatusNotFound || e.railsHit != nil ||
+		len(w.Header().Values("Set-Cookie")) != 0 {
+		t.Errorf("no seller: %d %v", w.Code, w.Header())
+	}
 	conn := testdb.Open(t)
 	conn.Exec("UPDATE links SET banned_at = ? WHERE id = ?", testNow, productID)
 	if w := e.get(host, "/l/guide", nil); w.Code != http.StatusNotFound {
@@ -599,7 +604,6 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
 		{name: "a code param the collation could read", host: host, target: "/l/guide?code=caf%C3%A9", reason: "param code"},
 		{name: "a utm visit without Sidekiq", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm visit push"},
-		{name: "a seller without a user", host: "nosuchseller.gumroad.com", target: "/l/guide", reason: "no seller"},
 		{name: "the analytics host's route", host: "gumroad-analytics-com.gumroad.com", target: "/l/guide", reason: "host"},
 		{name: "a Forwarded header", host: host, target: "/l/guide", reason: "forwarded header",
 			headers: map[string]string{"Forwarded": "host=other.gumroad.com"}},
