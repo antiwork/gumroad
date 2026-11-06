@@ -1862,7 +1862,7 @@ describe CustomerMailer do
     it "does not read a purchase's rows again when it carries its own price" do
       expect_any_instance_of(Purchase).not_to receive(:successful_purchases)
 
-      expect(described_class.new.send(:suppress_receipt_from_unproven_seller?, Purchase.new(price_cents: 500))).to be(false)
+      expect(described_class.new.send(:suppress_receipt_from_unproven_seller?, build(:purchase, price_cents: 500))).to be(false)
     end
 
     it "checks at most the twenty receipts it can send" do
