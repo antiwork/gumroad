@@ -12,7 +12,12 @@ const ModalOpenedByButton = ({ onCloseAutoFocus }: { onCloseAutoFocus?: (event: 
   return (
     <>
       <button onClick={() => setOpen(true)}>Open</button>
-      <Modal open={open} onClose={() => setOpen(false)} title="Details" onCloseAutoFocus={onCloseAutoFocus}>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Details"
+        {...(onCloseAutoFocus ? { onCloseAutoFocus } : {})}
+      >
         Body
       </Modal>
     </>
