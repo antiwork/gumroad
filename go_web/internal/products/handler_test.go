@@ -200,8 +200,8 @@ func (e *testEnv) dryRun(hostname, target string, at time.Time) map[string]strin
 	return map[string]string{"X-Go-Web-Dry-Run": pages.SignDryRun(pages.DryRunKey(testSecretKeyBase), "GET", hostname, target, at)}
 }
 
-// withDryRun is headers, plus a dry run's for /l/guide when a fallback reason is expected.
-func (e *testEnv) withDryRun(headers map[string]string, reason string) map[string]string {
+// withDryRun is headers, plus a dry run's for target when a fallback reason is expected.
+func (e *testEnv) withDryRun(target string, headers map[string]string, reason string) map[string]string {
 	headers = maps.Clone(headers)
 	if reason == "" {
 		return headers
@@ -209,7 +209,7 @@ func (e *testEnv) withDryRun(headers map[string]string, reason string) map[strin
 	if headers == nil {
 		headers = map[string]string{}
 	}
-	maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
+	maps.Copy(headers, e.dryRun(host, target, testNow))
 	return headers
 }
 
@@ -217,17 +217,24 @@ func (e *testEnv) withDryRun(headers map[string]string, reason string) map[strin
 // here or goes to Rails for reason. body is the unescaped page, "" after a fallback.
 func (e *testEnv) render(t *testing.T, headers map[string]string, reason string) (body string) {
 	t.Helper()
-	w := e.get(host, "/l/guide", e.withDryRun(headers, reason))
+	body, _ = e.renderAt(t, "/l/guide", headers, reason)
+	return body
+}
+
+// renderAt is render at target, with the response's headers.
+func (e *testEnv) renderAt(t *testing.T, target string, headers map[string]string, reason string) (string, http.Header) {
+	t.Helper()
+	w := e.get(host, target, e.withDryRun(target, headers, reason))
 	if reason != "" {
 		if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != reason {
 			t.Fatalf("%d %q, want fallback %q", w.Code, w.Header().Get("X-Go-Web-Fallback"), reason)
 		}
-		return ""
+		return "", w.Header()
 	}
 	if w.Code != http.StatusOK || e.railsHit != nil {
 		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
 	}
-	return html.UnescapeString(w.Body.String())
+	return html.UnescapeString(w.Body.String()), w.Header()
 }
 
 // wantAll fails for each want body lacks, once its %[n]s are the external ids of ids.
@@ -435,8 +442,11 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		setup, undo                func()
 	}{
 		{name: "app domain", host: "gumroad.com", target: "/l/guide", reason: "host"},
-		{name: "offer code path", host: host, target: "/l/guide/CODE", reason: "offer code path"},
-		{name: "a code param", host: host, target: "/l/guide?code=X", reason: "param code"},
+		{name: "a code path Journey would split", host: host, target: "/l/guide/CO.DE", reason: "offer code path"},
+		{name: "a trailing slash", host: host, target: "/l/guide/", reason: "offer code path"},
+		{name: "an offer_code param", host: host, target: "/l/guide?offer_code=X", reason: "param offer_code"},
+		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
+		{name: "a code param the collation could read", host: host, target: "/l/guide?code=caf%C3%A9", reason: "param code"},
 		{name: "a utm visit", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm link"},
 		{name: "a seller without a user", host: "nosuchseller.gumroad.com", target: "/l/guide", reason: "no seller"},
 		{name: "the analytics host's route", host: "gumroad-analytics-com.gumroad.com", target: "/l/guide", reason: "host"},
@@ -1091,6 +1101,150 @@ func TestDefaultOfferCodes(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
 			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second)
+		})
+	}
+}
+
+// The fixture's price is 500 cents; SAVE10 is the seller's 10% code on every product.
+func TestURLOfferCodes(t *testing.T) {
+	const codeID, autoID = int64(1_796_001), int64(1_796_002)
+	save10 := func(t *testing.T, conn *sql.DB, columns map[string]any) {
+		row := map[string]any{"code": "SAVE10", "amount_percentage": 10, "universal": true}
+		maps.Copy(row, columns)
+		insertOfferCode(t, conn, codeID, row)
+	}
+	sale := func(t *testing.T, conn *sql.DB) {
+		insertOfferCode(t, conn, autoID, map[string]any{"code": "SALE20", "amount_percentage": 20, "universal": true, "auto_apply": true})
+	}
+	valid := func(typed, extra string) string {
+		return `{"valid":true,"code":"` + typed + `","discount":{"type":"percent","percents":10,"product_ids":null,"expires_at":null,` +
+			`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null` + extra + `}}`
+	}
+	invalid := func(errorCode string) string { return `{"valid":false,"error_code":"` + errorCode + `"}` }
+	quotes := func(urlCode, result, label string) string {
+		return `"selection_discounts":{"url_code":"` + urlCode + `","quantity":1,"recurrence":null,"option_id":null,"price_cents":null,` +
+			`"options":{"":{"discount_code":` + result + `,"sale_label":` + label + `}},"rent_options":null}`
+	}
+	past, future := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC)
+	for _, c := range []struct {
+		name, target string
+		wants        []string
+		reason       string
+		headers      map[string]string
+		// indexed is a page without set_x_robots_tag_header's noindex: no code.
+		indexed bool
+		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		// The result echoes the code as typed.
+		{name: "a code in the path", target: "/l/guide/save10",
+			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`, quotes("save10", valid("save10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "an unknown code", target: "/l/guide/NOPE", wants: []string{quotes("NOPE", invalid("invalid_offer"), "null")}},
+		{name: "a deleted code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"deleted_at": past}) }},
+		{name: "a code that leaves this product out", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": int64(1_796_101), "offer_code_id": codeID,
+					"product_id": productID, "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a fixed code in another currency", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 100, "currency_type": "eur"})
+			}},
+		{name: "an expired code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("inactive") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"expires_at": past}) }},
+		{name: "a code not yet started", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("inactive") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"valid_at": future}) }},
+		{name: "a code for existing customers", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("not_existing_customer") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"existing_customers_only": true})
+			}},
+		{name: "an expired code for existing customers", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("inactive") + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"existing_customers_only": true, "expires_at": past})
+			}},
+		{name: "a code for new customers", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + valid("SAVE10", `,"new_customers_only":true`) + `,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"new_customers_only": true})
+			}},
+		{name: "the sale over an unknown code", target: "/l/guide/NOPE",
+			wants: []string{`"discount_code":{"valid":true,"code":"SALE20",`, `"sale_label":"Sale",`, `"selection_discounts":{"url_code":"NOPE",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { sale(t, conn) }},
+		{name: "a code over an expired default", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + valid("SAVE10", "") + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "LAUNCH", "amount_cents": 100, "expires_at": past})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_201), "offer_code_id": autoID, "product_id": productID})
+				conn.Exec("UPDATE links SET default_offer_code_id = ? WHERE id = ?", autoID, productID)
+			}},
+		{name: "a blank code", target: "/l/guide?code=", indexed: true,
+			wants: []string{`"selection_discounts":{"url_code":null,`, `"options":{},"rent_options":null}`}},
+		{name: "a code of spaces", target: "/l/guide?code=%20%20", indexed: true,
+			wants: []string{`"selection_discounts":{"url_code":null,`, `"options":{},"rent_options":null}`}},
+		{name: "the path's code over the query's", target: "/l/guide/SAVE10?code=NOPE", wants: []string{`"selection_discounts":{"url_code":"SAVE10",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		// find_offer_code tries the product's own codes first.
+		{name: "a code for this product", target: "/l/guide/SAVE10",
+			wants: []string{`"discount_code":{"valid":true,"code":"SAVE10","discount":{"type":"percent","percents":10,"product_ids":["%[1]s"],`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"universal": false})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_501), "offer_code_id": codeID, "product_id": productID})
+			}},
+		// 450 and 500 cents through 0.92345.
+		{name: "a local price for the code", target: "/l/guide/SAVE10", headers: eurCookie,
+			wants: []string{`"buyer_local_price_cents":416,"buyer_local_original_price_cents":462,"rental_price_cents"`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("0.92345")
+				save10(t, conn, nil)
+			}},
+		{name: "a code and the sale", target: "/l/guide/SAVE10", reason: "offer code comparison",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				sale(t, conn)
+			}},
+		{name: "a limited code", target: "/l/guide/SAVE10", reason: "offer code limit",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"max_purchase_count": 5}) }},
+		{name: "a code for some options", target: "/l/guide/SAVE10", reason: "offer code variants",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_301), "offer_code_id": codeID, "variant_id": int64(1_796_401)})
+			}},
+		// The collation matches the typed code to both rows.
+		{name: "two codes MySQL can't tell apart", target: "/l/guide/save10", reason: "offer code lookup",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "universal": true})
+			}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			if c.setup != nil {
+				c.setup(t, e, testdb.Open(t))
+			}
+			body, hdr := e.renderAt(t, c.target, c.headers, c.reason)
+			e.wantAll(t, body, c.wants, productID)
+			if c.reason == "" && (hdr.Get("X-Robots-Tag") == "noindex") == c.indexed {
+				t.Errorf("X-Robots-Tag %q", hdr.Get("X-Robots-Tag"))
+			}
+		})
+	}
+}
+
+// check_if_needs_redirect keeps the code, and set_x_robots_tag_header has already run.
+func TestAnOfferCodeRedirectKeepsItsCode(t *testing.T) {
+	for target, want := range map[string]struct{ location, robots string }{
+		"/l/gowebp1/SAVE10":  {"https://gowebproductseller.gumroad.com/l/guide/SAVE10", "noindex"},
+		"/l/gowebp1?code=X1": {"https://gowebproductseller.gumroad.com/l/guide/X1?code=X1", "noindex"},
+		"/l/gowebp1?code=":   {"https://gowebproductseller.gumroad.com/l/guide?code=", ""},
+	} {
+		t.Run(target, func(t *testing.T) {
+			w := newTestEnv(t).get(host, target, nil)
+			if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != want.location || w.Header().Get("X-Robots-Tag") != want.robots {
+				t.Errorf("%d %q %q", w.Code, w.Header().Get("Location"), w.Header().Get("X-Robots-Tag"))
+			}
 		})
 	}
 }

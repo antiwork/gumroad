@@ -48,9 +48,9 @@ func Register(app *web.App, c *Config) {
 		Redirects: app.Redirects(), Meta: c.Meta, Now: c.Now, DryRunKey: c.DryRunKey, DryRunOnce: c.DryRunOnce,
 	}}
 	app.HandlePage("GET /l/{id}", "LinksController#show", h)
-	// /l/:id/:code (an offer code) and a trailing slash.
+	// /l/:id/:code (an offer code), and a trailing slash, whose empty code goes to Rails.
 	app.HandlePage("GET /l/{id}/{rest...}", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ctl.Serve(w, r, "product page", func(*http.Request) (*pages.Visit, error) { return nil, pages.Fallback("offer code path") })
+		h.servePage(w, r, true)
 	}))
 }
 
@@ -78,15 +78,20 @@ type page struct {
 	// warmReputation is snapshot_reputation_aggregate's perform_async, made once the page is
 	// certain to render here.
 	warmReputation bool
+	// urlCode is params[:code], the path's or the query's, when present.
+	urlCode string
 }
 
 type fallback = pages.Fallback
 
-func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) { h.servePage(w, r, false) }
+
+// servePage serves /l/:id, or /l/:id/:code on the code route.
+func (h *handler) servePage(w http.ResponseWriter, r *http.Request, codeRoute bool) {
 	ctx, cancel := context.WithTimeout(r.Context(), readTimeout)
 	defer cancel()
 	h.ctl.Serve(w, r, "product page", func(r *http.Request) (*pages.Visit, error) {
-		p, err := h.prepare(ctx, r)
+		p, err := h.prepare(ctx, r, codeRoute)
 		if err == nil {
 			err = h.serve(w, p)
 		}
@@ -115,14 +120,23 @@ var permalinkParam = regexp.MustCompile(`\A[A-Za-z0-9_-]+\z`)
 
 // prepare parses the request and decides whether this port serves it. Nothing it does is
 // visible outside the process, so any fallback it returns is safe.
-func (h *handler) prepare(ctx context.Context, r *http.Request) (*page, error) {
+func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) (*page, error) {
 	if h.c.Page == nil {
 		return nil, fallback("pages off")
 	}
 	if reason := declined(r, h.c.Env); reason != "" {
 		return nil, fallback(reason)
 	}
-	v, err := h.ctl.Prepare(ctx, r, [][2]string{{"format", "html"}, {"controller", "links"}, {"action", "show"}, {"id", r.PathValue("id")}},
+	route := [][2]string{{"format", "html"}, {"controller", "links"}, {"action", "show"}, {"id", r.PathValue("id")}}
+	if codeRoute {
+		// Anything else needs Journey's segment and format rules.
+		code := r.PathValue("rest")
+		if !permalinkParam.MatchString(code) {
+			return nil, fallback("offer code path")
+		}
+		route = append(route, [2]string{"code", code})
+	}
+	v, err := h.ctl.Prepare(ctx, r, route,
 		func(req *rails.Request) error {
 			if reason := declinedParams(req); reason != "" {
 				return fallback(reason)
@@ -135,7 +149,12 @@ func (h *handler) prepare(ctx context.Context, r *http.Request) (*page, error) {
 	if v.Auth.LoggedInUser() != nil {
 		return nil, fallback("signed in")
 	}
-	return &page{Visit: v}, nil
+	p := &page{Visit: v}
+	// The path's code overrides the query's; a blank one is no code.
+	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
+		p.urlCode = code
+	}
+	return p, nil
 }
 
 // declined is everything decided by the request line and headers alone.
@@ -167,7 +186,7 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"wanted", "layout", "embed", "overlay", "recommended_by", "offer_code", "code", "quantity", "purchase_id",
+	"wanted", "layout", "embed", "overlay", "recommended_by", "offer_code", "quantity", "purchase_id",
 	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
 	"query", "autocomplete",
 	// set_affiliate_cookie and the sections' search filters.
@@ -181,6 +200,13 @@ func declinedParams(req *rails.Request) string {
 	for _, name := range rendererParams {
 		if _, ok := req.Params.Get(name); ok {
 			return "param " + name
+		}
+	}
+	// Only a code whose lookups can't depend on Unicode normalization or the collation is
+	// served here.
+	if raw, ok := req.Params.Get("code"); ok {
+		if code, isString := raw.(string); !isString || !rails.Blank(code) && !permalinkParam.MatchString(code) {
+			return "param code"
 		}
 	}
 	// track_utm_link_visit records a visit when all three are present.
