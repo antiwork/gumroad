@@ -88,13 +88,15 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.url)...)
 		set("", "", "", inertia.Pairs("property", "twitter:image:alt", "content", "")...)
 	case main != nil && main.oembed != nil:
-		if main.thumbnail == "" {
-			return nil, fallback("oembed thumbnail")
-		}
 		width, _ := numberAttr(main.width.toI())
 		height, _ := numberAttr(main.height.toI())
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "player")...)
-		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.thumbnail)...)
+		// A nil thumbnail's tag has no content, which Rails' tag helper and compact_blank! both drop.
+		image := inertia.Pairs("property", "twitter:image")
+		if main.thumbnail != "" {
+			image = inertia.Pairs("property", "twitter:image", "content", main.thumbnail)
+		}
+		set("", "", "", image...)
 		set("", "", "", inertia.Pairs("property", "twitter:player", "content", main.url)...)
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
