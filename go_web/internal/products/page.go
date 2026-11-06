@@ -131,12 +131,17 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	switch {
 	case p.iframe:
 		component, bodyClass = iframeComponent, "iframe"
+	case p.layout == productLayoutDiscover:
+		component = discoverComponent
 	case p.layout == productLayoutProfile || storefront(p):
 		component = storefrontComponent
 	}
 	if !p.iframe {
 		props.Merge(h.sectionsProps(p, v))
 		props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
+		if p.layout == productLayoutDiscover {
+			props.Sym("taxonomy_path", v.taxonomyPath).Sym("taxonomies_for_nav", v.taxonomiesForNav)
+		}
 	}
 
 	// as_embed is a declined param.
@@ -146,13 +151,30 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
 	})
 
+	recordSearch, err := h.recordsDiscoverSearch(p)
+	if err != nil {
+		return err
+	}
+	var taxonomyID sql.NullInt64
+	if recordSearch {
+		if taxonomyID, err = h.productTaxonomyID(ctx, prod); err != nil {
+			return err
+		}
+	}
 	if !p.DryRun {
+		// The push falls back while nothing Rails would repeat is written: its own reputation push
+		// is deduplicated, the search isn't.
 		if p.warmReputation {
 			// Each command has the client's own timeout. A deadline across them could stop between
 			// queue.lua and the handoff, leaving a digest no later push or reaper clears.
 			if _, _, err := pc.Sidekiq.PushUntilExecuted(context.WithoutCancel(ctx), warmReputationJob, p.seller.id); err != nil {
 				web.Logger(p.Req.HTTP).Warn("reputation refresh push failed", "error", err.Error())
 				return fallback("reputation refresh push")
+			}
+		}
+		if recordSearch {
+			if err := h.createDiscoverSearch(ctx, p, prod, v.ip, taxonomyID); err != nil {
+				return err
 			}
 		}
 		h.flushCacheWrites(ctx, p)
@@ -222,6 +244,9 @@ type view struct {
 	// wishlists are the signed-in visitor's, as product_props lists them.
 	wishlists []any
 	purchase  any
+	// taxonomyPath and taxonomiesForNav are layout=discover's discover_props.
+	taxonomyPath     any
+	taxonomiesForNav []any
 	// waitlistCount is waitlist_props' count, nil but for a visitor who can edit the product.
 	waitlistCount any
 	// editor is the editing payload's products, posts and wishlist_options, nil but for the seller.
@@ -390,6 +415,11 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		}
 		return v, nil
 	}
+	if p.layout == productLayoutDiscover {
+		if v.taxonomyPath, v.taxonomiesForNav, err = h.discoverNav(p, prod); err != nil {
+			return nil, err
+		}
+	}
 	if v.showRatingsFilter, err = h.exists(ctx, "SELECT 1 FROM links WHERE links.user_id = ? AND links.purchase_disabled_at IS NULL"+
 		" AND links.banned_at IS NULL AND links.deleted_at IS NULL AND (links.flags & ?) != 0 LIMIT 1", seller.id, productDisplayReviews); err != nil {
 		return nil, err
@@ -424,7 +454,8 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		v.mainSectionIndex = raw
 	}
 	// show_storefront_catalog?
-	if storefront(p) && len(v.sections) == 0 {
+	// show_storefront_catalog?: Discover's layout has none.
+	if storefront(p) && p.layout != productLayoutDiscover && len(v.sections) == 0 {
 		if v.sections, err = h.loadCatalog(p, prod, v.localBuyer); err != nil {
 			return nil, err
 		}
