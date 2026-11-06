@@ -178,6 +178,9 @@ describe LibraryController, :vcr, type: :controller, inertia: true do
                                                           {
                                                             id: purchase.external_id,
                                                             email: purchase.email,
+                                                            free: true,
+                                                            seller_id: purchase.seller.external_id,
+                                                            seller_name: purchase.seller.name_or_username,
                                                             permalink: purchase.link.unique_permalink,
                                                             has_third_party_analytics: false,
                                                           }

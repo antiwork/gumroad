@@ -47,6 +47,8 @@ export type LayoutProps = {
     id: string;
     receipt_purchase_id: string | null;
     email: string | null;
+    free: boolean;
+    seller_name: string;
     email_digest: string;
     is_archived: boolean;
     has_invoice: boolean;
