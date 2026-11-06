@@ -32,7 +32,12 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		if prod.suggestedPriceCents.Valid {
 			suggested = prod.suggestedPriceCents.Int64
 		}
-		pwyw = rails.NewRHash().Sym("suggested_price_cents", suggested).Sym("default_price_cents", pwywDefault(prod, v.priceCents, v.variants))
+		pwyw = rails.NewRHash().Sym("suggested_price_cents", suggested).Sym("default_price_cents", pwywDefault(prod, v))
+	}
+	// Link#rental.
+	var rental any
+	if r := v.prices.rental; r != nil {
+		rental = rails.NewRHash().Sym("price_cents", *r).Sym("rent_only", prod.rentOnly())
 	}
 
 	product := rails.NewRHash().
@@ -66,7 +71,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("buyer_currency_display", buyerCurrencyDisplay(externalID, productCurrency, v.currency))
 	buyerLocalPriceProps(product, productCurrency, v.currency)
 	product.
-		Sym("rental_price_cents", nil).
+		Sym("rental_price_cents", intOrNil(v.prices.rental)).
 		Sym("pwyw", pwyw).
 		Sym("eligible_for_installment_plans", installmentEligible(prod)).
 		Sym("allow_installment_plan", false).
@@ -82,7 +87,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("native_type", prod.nativeType).
 		Sym("preorder", nil).
 		Sym("duration_in_months", nullInt(prod.durationInMonths)).
-		Sym("rental", nil).
+		Sym("rental", rental).
 		Sym("is_quantity_enabled", prod.is(productQuantityEnabled)).
 		Sym("free_trial", nil).
 		Sym("recurrences", nil).
@@ -112,12 +117,15 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("wishlists", []any{})
 }
 
-// pwywDefault is pwyw_default_price_cents without a rental.
-func pwywDefault(prod *product, price *int64, vs *variants) any {
-	if price == nil || *price != 0 || prod.suggestedPriceCents.Int64 != 0 {
+// pwywDefault is pwyw_default_price_cents.
+func pwywDefault(prod *product, v *view) any {
+	if v.priceCents == nil || *v.priceCents != 0 || prod.suggestedPriceCents.Int64 != 0 {
 		return nil
 	}
-	for _, o := range vs.options {
+	if r := v.prices.rental; r != nil && *r != 0 {
+		return nil
+	}
+	for _, o := range v.variants.options {
 		if o.priceDifference.Int64 != 0 {
 			return nil
 		}

@@ -133,6 +133,7 @@ type view struct {
 	ip                      string
 	geo                     *geoip.Result
 	detectedCurrency        *string
+	prices                  prices
 	priceCents              *int64
 	covers                  []*cover
 	thumbnailURL            any
@@ -199,8 +200,13 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	}
 	v.avatarURL = avatar
 
-	if v.priceCents, err = h.buyPriceCents(ctx, prod); err != nil {
+	if v.prices, err = h.loadPrices(ctx, prod); err != nil {
 		return nil, err
+	}
+	// Link#price_cents.
+	v.priceCents = v.prices.buy
+	if prod.rentOnly() {
+		v.priceCents = v.prices.rental
 	}
 	if v.priceCents == nil && prod.customizablePrice.Bool {
 		// pwyw_default_price_cents calls zero? on the nil price, and Rails raises.

@@ -185,8 +185,12 @@ func (h *handler) structuredData(p *page, prod *product, v *view, url, image str
 // offerData is build_offer_data: the offer in USD, through the cached rate when the product's
 // currency isn't, else in that currency.
 func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails.Hash, error) {
-	var cents *int64
-	if v.priceCents != nil {
+	// lowest_base_price_cents: the lower of the buy and rental prices the product offers.
+	cents := v.prices.buy
+	if r := v.prices.rental; r != nil && (cents == nil || *r < *cents) {
+		cents = r
+	}
+	if cents != nil {
 		var diff sql.NullInt64
 		// lowest_variant_price_difference_cents, over every alive category.
 		in, args := "NULL", []any{prod.id}
@@ -197,7 +201,7 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN ("+in+"))", args...).Scan(&diff); err != nil {
 			return nil, err
 		}
-		c := *v.priceCents + diff.Int64
+		c := *cents + diff.Int64
 		cents = &c
 	}
 	currency := "USD"

@@ -395,6 +395,9 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 			undo: func() {
 				conn.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productIsTieredMembership, productID)
 			}},
+		{name: "an unknown purchase type", host: host, target: "/l/guide", reason: "purchase type",
+			setup: func() { conn.Exec("UPDATE links SET purchase_type = 3 WHERE id = ?", productID) },
+			undo:  func() { conn.Exec("UPDATE links SET purchase_type = 0 WHERE id = ?", productID) }},
 		{name: "the seller's refund policy", host: host, target: "/l/guide", reason: "seller refund policy",
 			setup: func() {
 				conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userRefundPolicyEnabled, sellerID)
@@ -494,6 +497,85 @@ func TestANonUSDProductOffersItsPriceInUSD(t *testing.T) {
 			}
 			if !strings.Contains(w.Body.String(), c.want) {
 				t.Errorf("no %s in the JSON-LD", c.want)
+			}
+		})
+	}
+}
+
+// Each case sets the purchase type and the fixture's buy price, then adds price rows. With a
+// reason, the page goes to Rails.
+func TestARentalRendersItsPrices(t *testing.T) {
+	const offer = `"url":"https://gowebproductseller.gumroad.com/l/guide"`
+	priceRow := func(id, cents int64, currency string, flags int) map[string]any {
+		return map[string]any{"id": id, "link_id": productID, "price_cents": cents, "currency": currency, "flags": flags,
+			"created_at": testNow, "updated_at": testNow}
+	}
+	rentalRow := func(id, cents int64) map[string]any { return priceRow(id, cents, "usd", 1) }
+	for _, c := range []struct {
+		name         string
+		purchaseType int
+		pwyw         bool
+		buyCents     int64
+		rows         []map[string]any
+		want         []string
+		missing      string
+		reason       string
+	}{
+		{name: "buy and rent, the rental cheaper", purchaseType: 2, buyCents: 500,
+			rows: []map[string]any{rentalRow(1_790_202, 400), rentalRow(1_790_203, 300)},
+			want: []string{`"price_cents":500,`, `"rental_price_cents":300,`, `"rental":{"price_cents":300,"rent_only":false},`,
+				`content="5.0" inertia="meta-property-product-price-amount"`, offer + `,"price":3.0}`}},
+		{name: "rent only, with a stale buy price", purchaseType: 1, buyCents: 500, rows: []map[string]any{rentalRow(1_790_202, 300)},
+			want: []string{`"price_cents":300,`, `"rental_price_cents":300,`, `"rental":{"price_cents":300,"rent_only":true},`,
+				`content="3.0" inertia="meta-property-product-price-amount"`, offer + `,"price":3.0}`}},
+		{name: "rent only, without a rental price", purchaseType: 1, buyCents: 500,
+			want:    []string{`"price_cents":null,`, `"rental_price_cents":null,`, `"rental":null,`, offer + `}`},
+			missing: "product:price:amount"},
+		{name: "buy only, with a stale rental price", purchaseType: 0, buyCents: 500, rows: []map[string]any{rentalRow(1_790_202, 300)},
+			want: []string{`"price_cents":500,`, `"rental_price_cents":null,`, `"rental":null,`, offer + `,"price":5.0}`}},
+		{name: "pay what you want with a rental price", purchaseType: 2, pwyw: true, buyCents: 0, rows: []map[string]any{rentalRow(1_790_202, 300)},
+			want: []string{`"pwyw":{"suggested_price_cents":null,"default_price_cents":null},`, offer + `,"price":0.0}`}},
+		{name: "pay what you want with a free rental", purchaseType: 2, pwyw: true, buyCents: 0, rows: []map[string]any{rentalRow(1_790_202, 0)},
+			want: []string{`"pwyw":{"suggested_price_cents":null,"default_price_cents":0},`, `"rental":{"price_cents":0,"rent_only":false},`}},
+		// The meta tags read prices in SQL, under the column's collation.
+		{name: "a buy price whose currency matches only under the collation", purchaseType: 0, buyCents: 500,
+			rows: []map[string]any{priceRow(1_790_202, 300, "USD", 0)}, reason: "price currency collation"},
+		{name: "a currency the collation pads with a control character", purchaseType: 0, buyCents: 500,
+			rows: []map[string]any{priceRow(1_790_202, 300, "usd\x01", 0)}, reason: "price currency collation"},
+		{name: "such a rental price on a buy-only product", purchaseType: 0, buyCents: 500,
+			rows: []map[string]any{priceRow(1_790_202, 300, "USD", 1)}, want: []string{`"price_cents":500,`, `"rental":null,`}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			if _, err := conn.Exec("UPDATE links SET purchase_type = ?, customizable_price = ? WHERE id = ?", c.purchaseType, c.pwyw, productID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec("UPDATE prices SET price_cents = ? WHERE id = ?", c.buyCents, priceID); err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range c.rows {
+				testdb.Insert(t, conn, "prices", row)
+			}
+			if c.reason != "" {
+				w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow))
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			w := e.get(host, "/l/guide", nil)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d, Rails hit: %v", w.Code, e.railsHit != nil)
+			}
+			body := html.UnescapeString(w.Body.String())
+			for _, want := range c.want {
+				if !strings.Contains(body, want) {
+					t.Errorf("missing %s", want)
+				}
+			}
+			if c.missing != "" && strings.Contains(body, c.missing) {
+				t.Errorf("has %s", c.missing)
 			}
 		})
 	}

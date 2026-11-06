@@ -14,17 +14,24 @@ import (
 
 // priceRow is an alive prices row.
 type priceRow struct {
+	id         int64
 	cents      int64
 	currency   sql.NullString
 	flags      int64
 	recurrence sql.NullString
+	// sqlMatch is whether its currency matches the product's in SQL, under the column's collation.
+	sqlMatch bool
 }
+
+func (r priceRow) isRental() bool { return r.flags&priceIsRental != 0 }
 
 // alivePrices is each product's alive_prices, as preload_product and the catalog's includes
 // load them.
 func (h *handler) alivePrices(ctx context.Context, ids []int64) (map[int64][]priceRow, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`link_id`, `prices`.`price_cents`, `prices`.`currency`, `prices`.`flags`,"+
-		" `prices`.`recurrence` FROM `prices` WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` IN ("+placeholders(len(ids))+")",
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`link_id`, `prices`.`id`, `prices`.`price_cents`, `prices`.`currency`,"+
+		" `prices`.`flags`, `prices`.`recurrence`, `prices`.`currency` = `links`.`price_currency_type` FROM `prices`"+
+		" INNER JOIN `links` ON `links`.`id` = `prices`.`link_id`"+
+		" WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` IN ("+placeholders(len(ids))+") ORDER BY `prices`.`id`",
 		int64Args(ids)...)
 	if err != nil {
 		return nil, err
@@ -34,9 +41,11 @@ func (h *handler) alivePrices(ctx context.Context, ids []int64) (map[int64][]pri
 	for rows.Next() {
 		var id int64
 		var r priceRow
-		if err := rows.Scan(&id, &r.cents, &r.currency, &r.flags, &r.recurrence); err != nil {
+		var sqlMatch sql.NullBool
+		if err := rows.Scan(&id, &r.id, &r.cents, &r.currency, &r.flags, &r.recurrence, &sqlMatch); err != nil {
 			return nil, err
 		}
+		r.sqlMatch = sqlMatch.Bool
 		out[id] = append(out[id], r)
 	}
 	return out, rows.Err()
@@ -47,25 +56,46 @@ func buyPrices(prod *product, prices []priceRow) []int64 {
 	var out []int64
 	for _, r := range prices {
 		// prices_for_currency compares with ==, so a NULL currency only matches a NULL one.
-		if r.currency.Valid == prod.priceCurrencyType.Valid && r.currency.String == prod.priceCurrencyType.String && r.flags&1 == 0 {
+		if r.currency.Valid == prod.priceCurrencyType.Valid && r.currency.String == prod.priceCurrencyType.String && !r.isRental() {
 			out = append(out, r.cents)
 		}
 	}
 	return out
 }
 
-// buyPriceCents is Link#price_cents for a buy-only product without recurrence: the last of
-// its buy prices.
-func (h *handler) buyPriceCents(ctx context.Context, prod *product) (*int64, error) {
-	prices, err := h.alivePrices(ctx, []int64{prod.id})
+// prices are Link#buy_price_cents and #rental_price_cents for a product without recurrence:
+// the last alive price of each kind in the product's currency, nil for a kind the purchase
+// type doesn't offer.
+type prices struct{ buy, rental *int64 }
+
+func (h *handler) loadPrices(ctx context.Context, prod *product) (prices, error) {
+	byProduct, err := h.alivePrices(ctx, []int64{prod.id})
 	if err != nil {
-		return nil, err
+		return prices{}, err
 	}
-	buy := buyPrices(prod, prices[prod.id])
-	if len(buy) == 0 {
-		return nil, nil
+	pc := prod.priceCurrencyType
+	var ps prices
+	for _, r := range byProduct[prod.id] {
+		rental := r.isRental()
+		if rental && prod.purchaseType.Int64 == purchaseTypeBuyOnly || !rental && prod.rentOnly() {
+			continue
+		}
+		// prices_for_currency compares with ==, so a NULL currency only matches a NULL one.
+		if r.currency.Valid != pc.Valid || r.currency.String != pc.String {
+			// The meta tags read prices before the preload, in SQL.
+			if r.sqlMatch {
+				return prices{}, fallback("price currency collation")
+			}
+			continue
+		}
+		c := r.cents
+		if rental {
+			ps.rental = &c
+		} else {
+			ps.buy = &c
+		}
 	}
-	return &buy[len(buy)-1], nil
+	return ps, nil
 }
 
 // productFile is an alive product_files row, in alive_product_files' order.
