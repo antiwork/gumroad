@@ -40,8 +40,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 			return err
 		}
 		if p.seller == nil {
-			// UserCustomDomainConstraint doesn't route a subdomain without a seller here.
-			return fallback("no seller")
+			// UserCustomDomainConstraint doesn't route it here: the catch-all route's e404_page raises
+			// the same RoutingError after the same filters.
+			return pages.ErrNotFound
 		}
 	}
 	id, _ := req.Param("id").(string)

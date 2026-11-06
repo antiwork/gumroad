@@ -21,6 +21,14 @@ func TestNormalizeUTMParam(t *testing.T) {
 		"news_letter-2":          "news_letter-2",
 		"\x00 ":                  nil,
 		strings.Repeat("a", 250): strings.Repeat("a", 200),
+		// Each other character is a dash, a combining mark too; İ's downcase adds one, and the
+		// Kelvin sign's is a k.
+		"Café Ünïcode":           "caf---n-code",
+		"cafe\u0301":             "cafe-",
+		"İstanbul":               "i-stanbul",
+		"\u212Aelvin":            "kelvin",
+		"日本":                     "--",
+		strings.Repeat("İ", 101): strings.Repeat("i-", 100),
 	} {
 		if got := normalizeUTMParam(in); got != want {
 			t.Errorf("%q: %v, want %v", in, got, want)
@@ -35,7 +43,7 @@ func TestAUTMTaggedVisit(t *testing.T) {
 	testdb.Open(t)
 	jobs := miniredis.RunT(t)
 	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr()}), RedisVersion: "7.2.4"}
-	path := "/l/guide?utm_source=News+Letter&utm_medium=email&utm_campaign=Fall&utm_term="
+	path := "/l/guide?utm_source=News+Letter&utm_medium=email&utm_campaign=Caf%C3%A9&utm_term="
 	queued := func() []string {
 		list, _ := jobs.List("queue:default")
 		return list
@@ -61,7 +69,7 @@ func TestAUTMTaggedVisit(t *testing.T) {
 		t.Fatalf("job %s", q[0])
 	}
 	visit := job.Args[0]
-	want := map[string]any{"utm_source": "news-letter", "utm_medium": "email", "utm_campaign": "fall", "utm_term": nil, "utm_content": nil}
+	want := map[string]any{"utm_source": "news-letter", "utm_medium": "email", "utm_campaign": "caf-", "utm_term": nil, "utm_content": nil}
 	if !reflect.DeepEqual(visit["utm_params"], want) || visit["seller_id"] != float64(sellerID) || visit["target_resource_id"] != float64(productID) ||
 		visit["target_resource_type"] != "product_page" || visit["browser_guid"] != "guid-1" || visit["referrer"] != "https://example.com/r" ||
 		visit["user_agent"] != "UA" || visit["user_id"] != nil || visit["visited_at_us"] != float64(testNow.UnixMicro()) {
@@ -72,12 +80,10 @@ func TestAUTMTaggedVisit(t *testing.T) {
 	}
 }
 
-// The values this port doesn't normalize as Rails does, and a banned product's 404, go to Rails.
+// A value that isn't a String goes to Rails, whose to_s of it this port doesn't build.
 func TestAUTMTaggedVisitGoesToRails(t *testing.T) {
 	for path, reason := range map[string]string{
-		"/l/guide?utm_source=caf%C3%A9&utm_medium=a&utm_campaign=b":    "param utm_source",
-		"/l/guide?utm_source[]=a&utm_medium=a&utm_campaign=b":          "param utm_source",
-		"/l/guide?utm_source=a&utm_medium=a&utm_campaign=b&utm_term=ß": "param utm_term",
+		"/l/guide?utm_source[]=a&utm_medium=a&utm_campaign=b": "param utm_source",
 	} {
 		t.Run(path, func(t *testing.T) {
 			e := newTestEnv(t)
@@ -90,7 +96,7 @@ func TestAUTMTaggedVisitGoesToRails(t *testing.T) {
 	// Without all three, nothing's recorded and the page is go_web's.
 	e := newTestEnv(t)
 	testdb.Open(t)
-	path := "/l/guide?utm_source=caf%C3%A9&utm_medium=a"
+	path := "/l/guide?utm_source=a&utm_medium=a"
 	if w := e.get(host, path, e.dryRun(host, path, testNow)); strings.HasPrefix(w.Header().Get("X-Go-Web-Fallback"), "param utm") {
 		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
