@@ -96,6 +96,51 @@ describe "Web build limits for unproven sellers" do
         expect(build.free_play_allowed?(free)).to be(false)
         expect(build.free_play_allowed?(paid)).to be(true)
       end
+
+      it "plays a bundle buyer's build, reading the charge from the bundle purchase" do
+        # A bundle component is written with a price of 0, so the price resolution is what decides here:
+        # without this stub the seller would already count as proven (see the example below).
+        allow(ContentModeration::GumroadImpersonation).to receive(:unproven_seller?).and_return(true)
+        product.update!(price_cents: 500)
+        bundle = create(:purchase, link: create(:product, user: new_seller, price_cents: 500), price_cents: 500, merchant_account: create(:merchant_account))
+        component = create(:purchase, link: product, price_cents: 0, is_bundle_product_purchase: true)
+        BundleProductPurchase.create!(bundle_purchase: bundle, product_purchase: component)
+
+        expect(build.free_play_allowed?(component.reload)).to be(true)
+      end
+
+      it "still refuses a bundle whose bundle purchase was fully discounted" do
+        allow(ContentModeration::GumroadImpersonation).to receive(:unproven_seller?).and_return(true)
+        product.update!(price_cents: 500)
+        bundle = create(:purchase, link: create(:product, user: new_seller, price_cents: 500), price_cents: 0)
+        component = create(:purchase, link: product, price_cents: 0, is_bundle_product_purchase: true)
+        BundleProductPurchase.create!(bundle_purchase: bundle, product_purchase: component)
+
+        expect(build.free_play_allowed?(component.reload)).to be(false)
+      end
+
+      it "plays a gift receiver's build, reading the charge from the gifter's purchase" do
+        allow(ContentModeration::GumroadImpersonation).to receive(:unproven_seller?).and_return(true)
+        product.update!(price_cents: 500)
+        gifter = create(:purchase, link: product, price_cents: 500, merchant_account: create(:merchant_account))
+        giftee = create(:purchase, link: product, price_cents: 0, is_gift_receiver_purchase: true)
+        create(:gift, link: product, gifter_purchase: gifter, giftee_purchase: giftee)
+
+        expect(build.free_play_allowed?(giftee.reload)).to be(true)
+      end
+
+      # The charged row belongs to the same seller (BundleProductPurchase checks that), so a paid bundle
+      # or gift also makes the seller proven. This pins that coupling: if "proven" ever stops counting
+      # those purchases, the examples above keep the play decision on what was actually paid.
+      it "plays a paid bundle buyer in practice, because the bundle purchase makes the seller proven" do
+        product.update!(price_cents: 500)
+        bundle = create(:purchase, link: create(:product, user: new_seller, price_cents: 500), price_cents: 500, merchant_account: create(:merchant_account))
+        component = create(:purchase, link: product, price_cents: 0, is_bundle_product_purchase: true)
+        BundleProductPurchase.create!(bundle_purchase: bundle, product_purchase: component)
+
+        expect(new_seller.sales.paid.exists?).to be(true)
+        expect(build.free_play_allowed?(component.reload)).to be(true)
+      end
     end
 
     context "with a proven seller" do

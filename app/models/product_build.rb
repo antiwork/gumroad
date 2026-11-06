@@ -116,8 +116,9 @@ class ProductBuild < ApplicationRecord
   def free_play_allowed?(purchase = nil)
     return true unless ContentModeration::GumroadImpersonation.unproven_seller?(product.user)
     return false if free_for_everyone?
+    return true if purchase.nil?
 
-    purchase.nil? || purchase.is_test_purchase? || purchase.price_cents.to_i.positive?
+    charged_purchases(purchase).any? { _1.is_test_purchase? || _1.price_cents.to_i.positive? }
   end
 
   # Whether anyone can play this build with no purchase, from the public demo page and its X player
@@ -270,6 +271,23 @@ class ProductBuild < ApplicationRecord
     # Free only when a buyer of any version can buy it for nothing (BaseVariant#free?, for all versions at
     # once). A rental-only product has no buy price.
     def free_for_everyone? = self.class.free_product?(product)
+
+    # The purchases that could hold this one's charge. A purchase does not always carry the money on
+    # its own row: a bundle component is written with a price of 0 because the bundle purchase was the
+    # one charged (Purchase::CreateBundleProductPurchaseService), and a gift receiver's is 0 because
+    # the gifter paid. Reading only the row in hand would refuse a paid bundle or gift.
+    #
+    # In practice the call above rarely gets this far for those two: the charged row belongs to the
+    # same seller (BundleProductPurchase checks it), so it is a paid sale and the seller counts as
+    # proven at the first return. Following the money anyway keeps the decision about what was paid
+    # rather than about a definition of "proven" that the rest of the codebase does not apply
+    # uniformly (see CreatorHomePresenter, which excludes bundle component purchases from has_sale).
+    def charged_purchases(purchase)
+      charged = [purchase]
+      charged << purchase.bundle_purchase if purchase.is_bundle_product_purchase?
+      charged << purchase.gift_received&.gifter_purchase if purchase.is_gift_receiver_purchase?
+      charged.compact
+    end
 
     def set_public_id
       self.public_id ||= Array.new(PUBLIC_ID_LENGTH) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.size)] }.join
