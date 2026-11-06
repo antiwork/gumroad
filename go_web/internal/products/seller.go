@@ -110,7 +110,11 @@ func (h *handler) loadReputation(ctx context.Context, p *page, prod *product, v 
 		v.snapshotReputation = buildSummary(subtractProduct(agg, prod, v.reviewStat))
 	}
 
-	// The profile's: Rails.cache.fetch keyed by the products' lifecycle and the version.
+	// The profile's: Rails.cache.fetch keyed by the products' lifecycle and the version. A
+	// featured product's props have no profile.
+	if p.parent != nil {
+		return nil
+	}
 	lifecycle, err := h.productsCacheKey(p)
 	if err != nil {
 		return err
@@ -228,6 +232,26 @@ func aggregateOf(nums []json.Number) ([3]int64, bool) {
 		a[i] = v
 	}
 	return a, true
+}
+
+// jsonIDs is a json_data list of integer ids; ok is false for anything else in it.
+func jsonIDs(list []any) ([]int64, bool) {
+	ids := make([]int64, 0, len(list))
+	for _, v := range list {
+		n, _ := v.(json.Number)
+		id, ok := jsonInt(n)
+		if !ok {
+			return nil, false
+		}
+		ids = append(ids, id)
+	}
+	return ids, true
+}
+
+// decimalID is an id in its decimal String form, which Integer#to_s gives back unchanged.
+func decimalID(text string) (int64, bool) {
+	id, err := strconv.ParseInt(text, 10, 64)
+	return id, err == nil && strconv.FormatInt(id, 10) == text
 }
 
 func jsonInt(n json.Number) (int64, bool) {

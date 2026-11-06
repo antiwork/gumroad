@@ -409,10 +409,14 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					`"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[],"products":[%s]}},%s],"main_section_index":1`,
 					subscribeSection(e), e.ids.Encrypt(1_792_602), card, richTextSection(e))
 			}},
-		{name: "a listed featured product section", reason: "product section SellerProfileFeaturedProductSection", server: search,
+		// A featured section naming no product has no props; listed, it replaces the catalog.
+		{name: "a listed featured section without a product", server: search,
 			setup: func(t *testing.T, conn *sql.DB) {
-				addSection(t, conn, 1_792_605, "SellerProfileFeaturedProductSection", "", `{}`)
+				addSection(t, conn, 1_792_605, profileFeaturedSectionType, "", `{}`)
 				listSections(t, conn, `{"sections":[1792605]}`)
+			},
+			want: func(e *testEnv) string {
+				return `"sections":[{"id":"` + e.ids.Encrypt(1_792_605) + `","header":"","type":"SellerProfileFeaturedProductSection","props":null}],"main_section_index":0`
 			}},
 		// Sections that render nothing leave the storefront catalog in place.
 		{name: "listed sections that aren't the product's", hits: bothHits, server: search, searched: 1,
@@ -848,4 +852,110 @@ func railsCachedSection(id string, header any, sort string, total int64, ids ...
 			{Key: railscache.Symbol("products"), Value: products},
 		}},
 	}
+}
+
+// A posts section lists the seller's shown posts that are published on the profile, newest
+// first, ties by id.
+func TestAProductPostsSection(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	post := func(id int64, published any, flags int64, columns map[string]any) {
+		row := map[string]any{"id": id, "seller_id": sellerID, "name": fmt.Sprintf("Post %d", id), "slug": fmt.Sprintf("post-%d", id),
+			"installment_type": "audience", "flags": flags, "published_at": published, "created_at": testNow, "updated_at": testNow}
+		for k, v := range columns {
+			row[k] = v
+		}
+		testdb.Insert(t, conn, "installments", row)
+	}
+	const shown = installmentShownOnProfile
+	post(1_795_501, testNow.Add(-time.Hour), shown, nil)
+	post(1_795_502, testNow, shown, nil)
+	post(1_795_503, testNow, shown, nil)
+	post(1_795_504, nil, shown, nil)
+	post(1_795_505, testNow, 0, nil)
+	post(1_795_506, testNow, shown, map[string]any{"deleted_at": testNow})
+	post(1_795_507, testNow, shown, map[string]any{"installment_type": "follower"})
+	post(1_795_508, testNow, shown, map[string]any{"workflow_id": int64(1)})
+	post(1_795_509, testNow, shown, map[string]any{"seller_id": int64(1)})
+	addSection(t, conn, 1_792_611, profilePostsSectionType, "News",
+		`{"shown_posts":[1795501,1795502,1795503,1795504,1795505,1795506,1795507,1795508,1795509]}`)
+	addSection(t, conn, 1_792_612, profilePostsSectionType, "Empty", `{"shown_posts":[]}`)
+	listSections(t, conn, `{"sections":[1792611,1792612]}`)
+
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+	entry := func(id int64, at string) string {
+		return fmt.Sprintf(`{"id":"%s","name":"Post %d","slug":"post-%d","published_at":"%s"}`, e.ids.Encrypt(id), id, id, at)
+	}
+	want := `"sections":[{"id":"` + e.ids.Encrypt(1_792_611) + `","header":"News","type":"SellerProfilePostsSection","posts":[` +
+		entry(1_795_502, "2026-11-06T12:00:00Z") + "," + entry(1_795_503, "2026-11-06T12:00:00Z") + "," + entry(1_795_501, "2026-11-06T11:00:00Z") +
+		`]},{"id":"` + e.ids.Encrypt(1_792_612) + `","header":"Empty","type":"SellerProfilePostsSection","posts":[]}]`
+	if !strings.Contains(page, want) {
+		t.Errorf("want %s\nin %s", want, page)
+	}
+}
+
+// A featured section renders its product's product_props within the page, as the page renders
+// its own; a product that isn't the seller's alive one renders none.
+func TestAFeaturedProductSection(t *testing.T) {
+	const featured = int64(1_795_601)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "links", map[string]any{"id": featured, "user_id": sellerID, "name": "Featured", "unique_permalink": "gowebfp",
+		"price_cents": 700, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_795_602), "link_id": featured, "price_cents": 700, "currency": "usd",
+		"created_at": testNow, "updated_at": testNow})
+	addSection(t, conn, 1_792_621, profileFeaturedSectionType, "Pick", fmt.Sprintf(`{"featured_product_id":%d}`, featured))
+	addSection(t, conn, 1_792_622, profileFeaturedSectionType, "Gone", `{"featured_product_id":"1795699"}`)
+	// seller.products.alive leaves out a deleted, banned or unpublished product, and another seller's.
+	for i, columns := range []map[string]any{{"deleted_at": testNow}, {"banned_at": testNow}, {"purchase_disabled_at": testNow}, {"user_id": int64(1)}} {
+		id := featured + 10 + int64(i)
+		row := map[string]any{"id": id, "user_id": sellerID, "name": "Hidden", "unique_permalink": fmt.Sprintf("gowebh%d", i),
+			"price_cents": 100, "created_at": testNow, "updated_at": testNow}
+		for k, v := range columns {
+			row[k] = v
+		}
+		testdb.Insert(t, conn, "links", row)
+		addSection(t, conn, 1_792_630+int64(i), profileFeaturedSectionType, "Hidden", fmt.Sprintf(`{"featured_product_id":%d}`, id))
+	}
+	// A decimal String finds the product as the Integer does.
+	addSection(t, conn, 1_792_623, profileFeaturedSectionType, "Again", fmt.Sprintf(`{"featured_product_id":"%d"}`, featured))
+	listSections(t, conn, `{"sections":[1792621,1792622,1792630,1792631,1792632,1792633,1792623]}`)
+
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+	id := e.ids.Encrypt(featured)
+	for _, want := range []string{
+		`"sections":[{"id":"` + e.ids.Encrypt(1_792_621) + `","header":"Pick","type":"SellerProfileFeaturedProductSection",` +
+			`"props":{"product":{"id":"` + id + `","permalink":"gowebfp","name":"Featured",`,
+		`"price_cents":700,`,
+		`"long_url":"https://gowebproductseller.gumroad.com/l/gowebfp",`,
+		`},"discount_code":null,"sale_label":null,`,
+		`"purchase":null,"wishlists":[]}},{"id":"` + e.ids.Encrypt(1_792_622) + `","header":"Gone","type":"SellerProfileFeaturedProductSection","props":null},`,
+		`"header":"Hidden","type":"SellerProfileFeaturedProductSection","props":null},{"id":"` + e.ids.Encrypt(1_792_631),
+		`"header":"Hidden","type":"SellerProfileFeaturedProductSection","props":null},{"id":"` + e.ids.Encrypt(1_792_633) +
+			`","header":"Hidden","type":"SellerProfileFeaturedProductSection","props":null},{"id":"` + e.ids.Encrypt(1_792_623) +
+			`","header":"Again","type":"SellerProfileFeaturedProductSection","props":{"product":{"id":"` + id + `"`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	}
+}
+
+// Rails builds an unlisted featured section's product_props too, so its product's shape counts.
+func TestAnUnlistedFeaturedSectionsProduct(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_795_701), "user_id": sellerID, "name": "Tip jar", "unique_permalink": "gowebtip",
+		"native_type": "coffee", "price_cents": 100, "created_at": testNow, "updated_at": testNow})
+	addSection(t, conn, 1_792_641, profileFeaturedSectionType, "Tip", `{"featured_product_id":1795701}`)
+	listSections(t, conn, `{"sections":[]}`)
+	e.render(t, nil, "coffee product")
 }

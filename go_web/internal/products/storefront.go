@@ -24,6 +24,8 @@ const (
 	profileProductsSectionType  = "SellerProfileProductsSection"
 	profileSubscribeSectionType = "SellerProfileSubscribeSection"
 	profileRichTextSectionType  = "SellerProfileRichTextSection"
+	profilePostsSectionType     = "SellerProfilePostsSection"
+	profileFeaturedSectionType  = "SellerProfileFeaturedProductSection"
 	pageLayoutSort              = "page_layout"
 	catalogPageSize             = 9
 	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
@@ -132,16 +134,11 @@ func (r *sectionRow) productsSection() (*productsSection, error) {
 	if _, known := sectionSortClauses[sort]; !ok || !sortOK || !known || !filtersOK || !shownOK {
 		return nil, fallback("products section json_data")
 	}
-	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters, updatedAt: r.updatedAt,
-		shownProducts: make([]int64, 0, len(shown))}
-	for _, v := range shown {
-		n, _ := v.(json.Number)
-		id, ok := jsonInt(n)
-		if !ok {
-			return nil, fallback("products section json_data")
-		}
-		s.shownProducts = append(s.shownProducts, id)
+	ids, ok := jsonIDs(shown)
+	if !ok {
+		return nil, fallback("products section json_data")
 	}
+	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters, updatedAt: r.updatedAt, shownProducts: ids}
 	s.version = itoa(r.id) + "-" + r.updatedAt.Time.UTC().Format(time.RFC3339Nano)
 	return s, nil
 }

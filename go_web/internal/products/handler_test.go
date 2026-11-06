@@ -2130,3 +2130,18 @@ func defaultStyles(t *testing.T) string {
 	}
 	return css
 }
+
+func TestACoffeeProductRedirectsToCoffee(t *testing.T) {
+	e := newTestEnv(t)
+	if _, err := testdb.Open(t).Exec("UPDATE links SET native_type = 'coffee' WHERE id = ?", productID); err != nil {
+		t.Fatal(err)
+	}
+	for target, robots := range map[string]string{"/l/guide": "", "/l/guide/SAVE10": "noindex"} {
+		w := e.get(host, target, nil)
+		if w.Code != http.StatusFound || w.Header().Get("Location") != "https://"+host+"/coffee" || e.railsHit != nil ||
+			w.Header().Get("X-Robots-Tag") != robots {
+			t.Errorf("%s: %d %q %q %q, Rails hit: %v", target, w.Code, w.Header().Get("Location"), w.Header().Get("X-Robots-Tag"),
+				w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+		}
+	}
+}

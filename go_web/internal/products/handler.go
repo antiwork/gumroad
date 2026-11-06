@@ -87,6 +87,8 @@ type page struct {
 	warmReputation bool
 	// urlCode is params[:code], the path's or the query's, when present.
 	urlCode string
+	// parent is the page's own view when this one renders a featured section's product within it.
+	parent *view
 }
 
 type fallback = pages.Fallback
