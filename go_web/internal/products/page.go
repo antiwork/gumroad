@@ -180,6 +180,7 @@ type view struct {
 	installmentPlan any
 	preorder        any
 	bundle          *bundle
+	discount        *offerDiscount
 	// catalog is the storefront's sections.
 	catalog []any
 }
@@ -230,13 +231,27 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// before that for a membership.
 		return nil, fallback("no price")
 	}
+	if v.discount, err = h.loadOfferDiscount(ctx, p, prod); err != nil {
+		return nil, err
+	}
+	// displayed_price_cents, without PPP, which checkPPP leaves to Rails.
+	displayed := v.priceCents
+	if displayed != nil && v.discount.code != nil {
+		d := v.discount.discountedCents(*displayed)
+		displayed = &d
+	}
 	if v.localBuyer, err = h.localCurrencyBuyer(p, v); err != nil {
 		return nil, err
 	}
 	if v.localBuyer != nil {
-		if v.currency, err = h.currencyDisplayFor(p, *v.localBuyer, prod.productCurrency(), v.priceCents); err != nil {
+		if v.currency, err = h.currencyDisplayFor(p, *v.localBuyer, prod.productCurrency(), displayed); err != nil {
 			return nil, err
 		}
+	}
+	if c := v.currency; c != nil && *displayed < *v.priceCents {
+		// buyer_local_price_props converts the original through the shown Float rate.
+		original := localPriceCents(*v.priceCents, prod.productCurrency(), c.buyer, shortestRat(c.rate))
+		c.originalLocalCents = &original
 	}
 	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled) ||
 		prod.is(productIsInPreorderState) || p.hasInstallmentPlan) {
