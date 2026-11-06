@@ -47,10 +47,10 @@ func (h *handler) preorderProps(ctx context.Context, prod *product) (any, error)
 	return rails.NewRHash().Sym("release_date", releaseAt.OrNil()), nil
 }
 
-// waitlistProps is waitlist_props for a visitor, who never sees the count.
+// waitlistProps is waitlist_props; only the seller sees the count.
 func (h *handler) waitlistProps(prod *product, v *view) any {
 	if !prod.acceptsWaitlistSignups() {
 		return nil
 	}
-	return rails.NewRHash().Sym("recaptcha_site_key", v.recaptchaSiteKey).Sym("count", nil)
+	return rails.NewRHash().Sym("recaptcha_site_key", v.recaptchaSiteKey).Sym("count", v.waitlistCount)
 }

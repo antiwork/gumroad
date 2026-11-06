@@ -39,6 +39,7 @@ func TestALayoutOrRecommendationParam(t *testing.T) {
 	for query, reason := range map[string]string{
 		"?layout=discover":               "layout discover",
 		"?layout=embed":                  "param layout",
+		"?layout=profile&embed=true":     "layout with iframe",
 		"?recommended_by=search":         "discover search",
 		"?recommended_by=discover":       "discover search",
 		"?recommended_by[]=wishlist":     "param recommended_by",

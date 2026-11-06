@@ -72,8 +72,8 @@ func (pc *PageConfig) cdnURL(s string) string {
 	return s
 }
 
-// render is LinksController#prepare_product_page and #show for a signed-out visitor, or one
-// signed in with no part in the product, then the after_actions. Everything is read before
+// render is LinksController#prepare_product_page and #show for a signed-out visitor, the seller, or
+// one signed in with no part in the product, then the after_actions. Everything is read before
 // anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
@@ -127,17 +127,22 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	}
 	props.Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
 	h.productProps(props, p, prod, v)
-	props.Merge(h.sectionsProps(p, v))
-	component := productComponent
-	if p.layout == productLayoutProfile || storefront(p) {
+	component, bodyClass := productComponent, ""
+	switch {
+	case p.iframe:
+		component, bodyClass = iframeComponent, "iframe"
+	case p.layout == productLayoutProfile || storefront(p):
 		component = storefrontComponent
 	}
-	props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
+	if !p.iframe {
+		props.Merge(h.sectionsProps(p, v))
+		props.Sym("sections", v.sections).Sym("main_section_index", v.mainSectionIndex)
+	}
 
 	// as_embed is a declined param.
 	body := pc.Layout.Render(inertia.Document{
 		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta,
-		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page",
+		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page", BodyClass: bodyClass,
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
 	})
 
@@ -217,6 +222,10 @@ type view struct {
 	// wishlists are the signed-in visitor's, as product_props lists them.
 	wishlists []any
 	purchase  any
+	// waitlistCount is waitlist_props' count, nil but for the seller.
+	waitlistCount any
+	// editor is the editing payload's products, posts and wishlist_options, nil but for the seller.
+	editor *rails.RHash
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -356,11 +365,29 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.purchase, err = h.purchaseProps(p, prod, v); err != nil {
 		return nil, err
 	}
+	if p.ownView() && prod.acceptsWaitlistSignups() {
+		var n int64
+		if err := h.c.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM waitlist_entries INNER JOIN followers ON followers.id = waitlist_entries.follower_id"+
+			" WHERE waitlist_entries.product_id = ? AND followers.deleted_at IS NULL AND followers.confirmed_at IS NOT NULL", prod.id).Scan(&n); err != nil {
+			return nil, err
+		}
+		v.waitlistCount = n
+	}
 	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
 		v.recaptchaSiteKey = pc.RecaptchaSiteKey
 	}
 	// Past here only the page reads: product_props leaves the sections and the profile alone.
 	if p.parent != nil {
+		return v, nil
+	}
+	if p.iframe {
+		// iframe_product_props is product_props alone; the meta tags still read the styles.
+		if err := h.loadCustomStyles(ctx, p, v); err != nil {
+			return nil, err
+		}
+		if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
+			return nil, err
+		}
 		return v, nil
 	}
 	if v.showRatingsFilter, err = h.exists(ctx, "SELECT 1 FROM links WHERE links.user_id = ? AND links.purchase_disabled_at IS NULL"+
@@ -379,6 +406,11 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	sections, err := h.listProductSections(p, prod, v)
 	if err != nil {
 		return nil, err
+	}
+	if p.ownView() {
+		if v.editor, err = h.editorProps(p); err != nil {
+			return nil, err
+		}
 	}
 	// Last: Elasticsearch searches are the costliest reads, and anything above may still fall back.
 	if err := h.loadSalesCount(ctx, p, prod, v); err != nil {

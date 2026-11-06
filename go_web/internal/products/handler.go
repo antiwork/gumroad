@@ -1,7 +1,7 @@
 // Package products serves the product page, GET /l/:id (LinksController#show), on a seller's
-// subdomain, for a visitor signed out or signed in with no part in the product: Rails' filters,
-// then Products/Show. Every request whose Rails path this port leaves out goes to Rails before
-// anything is written.
+// subdomain, for a visitor signed out, the seller, or one signed in with no part in the
+// product: Rails' filters, then Products/Show. Every request whose Rails path this port leaves
+// out goes to Rails before anything is written.
 package products
 
 import (
@@ -95,6 +95,8 @@ type page struct {
 	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props
 	// search afresh.
 	visitorSearch bool
+	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
+	iframe bool
 	// parent is the page's own view when this one renders a featured section's product within it.
 	parent *view
 }
@@ -175,6 +177,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		p.recommendedBy = &by
 		p.visitorSearch = true
 	}
+	p.iframe = rails.Truthy(v.Req.Param("overlay")) || rails.Truthy(v.Req.Param("embed"))
 	return p, nil
 }
 
@@ -207,7 +210,7 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"wanted", "embed", "overlay", "offer_code", "quantity", "purchase_id",
+	"wanted", "offer_code", "quantity", "purchase_id",
 	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
 	"query", "autocomplete",
 	// set_affiliate_cookie and the sections' search filters.
@@ -231,6 +234,10 @@ func declinedParams(req *rails.Request) string {
 		default:
 			// Its value would go into the bundles' URLs.
 			return "param layout"
+		}
+		// The layout's component with embed's iframe body class is neither port's shape.
+		if raw == productLayoutProfile && (rails.Truthy(req.Param("overlay")) || rails.Truthy(req.Param("embed"))) {
+			return "layout with iframe"
 		}
 	}
 	if raw, ok := req.Params.Get("recommended_by"); ok {

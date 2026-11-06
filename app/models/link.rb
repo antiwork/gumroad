@@ -270,6 +270,7 @@ class Link < ApplicationRecord
   validate :calls_must_have_at_least_one_duration, on: :update
   validate :alive_category_variants_presence, on: :update
   validate :content_has_no_adult_keywords, if: -> { description_changed? || name_changed? }
+  validate :name_does_not_impersonate_gumroad, if: :name_changed?
   validate :custom_view_content_button_text_length
   validates :custom_receipt_text, length: { maximum: Product::Validations::MAX_CUSTOM_RECEIPT_TEXT_LENGTH }
   validates :custom_failed_payment_text, length: { maximum: Product::Validations::MAX_CUSTOM_FAILED_PAYMENT_TEXT_LENGTH }
