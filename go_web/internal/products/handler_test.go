@@ -200,6 +200,30 @@ func (e *testEnv) dryRun(hostname, target string, at time.Time) map[string]strin
 	return map[string]string{"X-Go-Web-Dry-Run": pages.SignDryRun(pages.DryRunKey(testSecretKeyBase), "GET", hostname, target, at)}
 }
 
+// render GETs /l/guide, as a dry run when reason is set, and fails unless the page renders
+// here or goes to Rails for reason. body is the unescaped page, "" after a fallback.
+func (e *testEnv) render(t *testing.T, headers map[string]string, reason string) (body string) {
+	t.Helper()
+	headers = maps.Clone(headers)
+	if reason != "" {
+		if headers == nil {
+			headers = map[string]string{}
+		}
+		maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
+	}
+	w := e.get(host, "/l/guide", headers)
+	if reason != "" {
+		if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != reason {
+			t.Fatalf("%d %q, want fallback %q", w.Code, w.Header().Get("X-Go-Web-Fallback"), reason)
+		}
+		return ""
+	}
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	return html.UnescapeString(w.Body.String())
+}
+
 var dataPage = regexp.MustCompile(`data-page="([^"]*)"`)
 
 func pageProps(t *testing.T, body string) map[string]any {
@@ -703,7 +727,7 @@ func TestAMembershipRendersItsPrices(t *testing.T) {
 			price(t, conn, yearly, 4000, "usd", "yearly")
 			price(t, conn, quarterly, 3500, "eur", "yearly")
 		}},
-		{name: "a local price", reason: "membership buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
+		{name: "a local price", reason: "unquotable buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				e.redis.HSet("buyer_local_currency", "boolean", "true")
 				e.redis.Set("currencies:EUR", "0.92345")
@@ -713,32 +737,111 @@ func TestAMembershipRendersItsPrices(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
-			conn := testdb.Open(t)
-			c.setup(t, e, conn)
-			headers := maps.Clone(c.headers)
-			if c.reason != "" {
-				if headers == nil {
-					headers = map[string]string{}
-				}
-				maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
-			}
-			w := e.get(host, "/l/guide", headers)
-			if c.reason != "" {
-				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
-					t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
-				}
-				return
-			}
-			if w.Code != http.StatusOK || e.railsHit != nil {
-				t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
-			}
-			body := html.UnescapeString(w.Body.String())
+			c.setup(t, e, testdb.Open(t))
+			body := e.render(t, c.headers, c.reason)
 			for _, want := range c.wants {
 				if strings.Contains(want, "%[") {
 					want = fmt.Sprintf(want, e.ids.Encrypt(priceID), e.ids.Encrypt(yearly), e.ids.Encrypt(quarterly), e.ids.Encrypt(basic), e.ids.Encrypt(pro))
 				}
 				if !strings.Contains(body, want) {
 					t.Errorf("want %s in %s", want, body[strings.Index(body, `"options"`):][:700])
+				}
+			}
+		})
+	}
+}
+
+func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
+	plan := func(t *testing.T, conn *sql.DB, id int64, recurrence string, deletedAt any) {
+		testdb.Insert(t, conn, "product_installment_plans", map[string]any{"id": id, "link_id": productID, "number_of_installments": 3,
+			"recurrence": recurrence, "deleted_at": deletedAt, "created_at": testNow, "updated_at": testNow})
+	}
+	preorder := func(conn *sql.DB) {
+		conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsInPreorderState, productID)
+	}
+	waitlist := func(conn *sql.DB, draft bool) {
+		conn.Exec("UPDATE links SET flags = flags | ?, draft = ? WHERE id = ?", productWaitlistEnabled, draft, productID)
+	}
+	for _, c := range []struct {
+		name    string
+		wants   []string
+		reason  string
+		headers map[string]string
+		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		{name: "an installment plan", wants: []string{`"eligible_for_installment_plans":true,"allow_installment_plan":true,` +
+			`"installment_plan":{"number_of_installments":3,"recurrence":"monthly"},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { plan(t, conn, 1_793_001, "monthly", nil) }},
+		{name: "a deleted installment plan", wants: []string{`"allow_installment_plan":false,"installment_plan":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { plan(t, conn, 1_793_001, "monthly", testNow) }},
+		{name: "two installment plans", reason: "several installment plans", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			plan(t, conn, 1_793_001, "monthly", nil)
+			plan(t, conn, 1_793_002, "monthly", nil)
+		}},
+		{name: "a recurrence the enum doesn't map", reason: "installment plan recurrence", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			plan(t, conn, 1_793_001, "weekly", nil)
+		}},
+		{name: "an installment plan with a local price", reason: "unquotable buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("buyer_local_currency", "boolean", "true")
+				e.redis.Set("currencies:EUR", "0.92345")
+				plan(t, conn, 1_793_001, "monthly", nil)
+			}},
+		{name: "a preorder", wants: []string{`"eligible_for_installment_plans":false,`, `"preorder":{"release_date":"2026-12-01T10:00:00Z"},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				preorder(conn)
+				testdb.Insert(t, conn, "preorder_links", map[string]any{"id": int64(1_793_101), "link_id": productID,
+					"release_at": time.Date(2026, 12, 1, 10, 0, 0, 0, time.UTC), "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a preorder without a release date", wants: []string{`"preorder":{"release_date":null},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				preorder(conn)
+				testdb.Insert(t, conn, "preorder_links", map[string]any{"id": int64(1_793_101), "link_id": productID,
+					"created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a preorder without its link", reason: "preorder link", setup: func(t *testing.T, e *testEnv, conn *sql.DB) { preorder(conn) }},
+		{name: "a preorder with a local price", reason: "unquotable buyer currency", headers: map[string]string{"Cookie": "gumroad_buyer_currency=EUR"},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.redis.HSet("buyer_local_currency", "boolean", "true")
+				e.redis.Set("currencies:EUR", "0.92345")
+				preorder(conn)
+			}},
+		{name: "a waitlist on a draft", wants: []string{`"waitlist":{"recaptcha_site_key":null,"count":null},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { waitlist(conn, true) }},
+		{name: "a waitlist from an unreviewed seller", wants: []string{`"waitlist":{"recaptcha_site_key":"site-key","count":null},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.config.Page.RecaptchaSiteKey = "site-key"
+				conn.Exec("UPDATE users SET user_risk_state = 'not_reviewed' WHERE id = ?", sellerID)
+				waitlist(conn, true)
+			}},
+		{name: "a waitlist once published", wants: []string{`"waitlist":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { waitlist(conn, false) }},
+		{name: "a waitlist with purchases disabled", wants: []string{`"waitlist":{"recaptcha_site_key":null,"count":null},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				waitlist(conn, false)
+				conn.Exec("UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
+			}},
+		{name: "a waitlist taken down by an admin", wants: []string{`"waitlist":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				waitlist(conn, true)
+				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productUnpublishedByAdmin, productID)
+			}},
+		// Rails shows the custom page when it holds the waitlist form.
+		{name: "a waitlist with custom HTML", reason: "custom html", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			waitlist(conn, false)
+			conn.Exec("UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
+			e.redis.HSet("custom_html_pages", "boolean", "true")
+			testdb.Insert(t, conn, "pages", map[string]any{"id": int64(1_793_201), "pageable_type": "Link", "pageable_id": productID,
+				"custom_html": "<form data-waitlist></form>", "created_at": testNow, "updated_at": testNow})
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			c.setup(t, e, testdb.Open(t))
+			body := e.render(t, c.headers, c.reason)
+			for _, want := range c.wants {
+				if !strings.Contains(body, want) {
+					t.Errorf("want %s", want)
 				}
 			}
 		})

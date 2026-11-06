@@ -148,17 +148,20 @@ type view struct {
 	thirdPartyAnalytics     bool
 	showRatingsFilter       bool
 	youtubeChannelID        any
-	recaptchaRequired       bool
-	customStyles            string
-	fontPreload             bool
-	mainSectionIndex        any
-	refundPolicy            any
-	currency                *currencyDisplay
-	variants                *variants
-	collaborator            any
-	salesCount              any
-	recurrences             *recurrences
-	tierRecurrences         map[string]bool
+	// recaptchaSiteKey is FollowRecaptcha.site_key when FollowRecaptcha.required?, else nil.
+	recaptchaSiteKey any
+	customStyles     string
+	fontPreload      bool
+	mainSectionIndex any
+	refundPolicy     any
+	currency         *currencyDisplay
+	variants         *variants
+	collaborator     any
+	salesCount       any
+	recurrences      *recurrences
+	tierRecurrences  map[string]bool
+	installmentPlan  any
+	preorder         any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -210,10 +213,17 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.currency, err = h.loadCurrencyDisplay(p, prod, v); err != nil {
 		return nil, err
 	}
-	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled)) {
+	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled) ||
+		prod.is(productIsInPreorderState) || p.hasInstallmentPlan) {
 		// buyer_currency_unquotable_product? and the India mandate check can only turn a
 		// local price off.
-		return nil, fallback("membership buyer currency")
+		return nil, fallback("unquotable buyer currency")
+	}
+	if v.installmentPlan, err = h.installmentPlanProps(ctx, p, prod); err != nil {
+		return nil, err
+	}
+	if v.preorder, err = h.preorderProps(ctx, prod); err != nil {
+		return nil, err
 	}
 	if v.recurrences, err = h.loadRecurrences(ctx, prod, v.prices); err != nil {
 		return nil, err
@@ -280,7 +290,9 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	v.youtubeChannelID = nullString(channel)
-	v.recaptchaRequired = recaptchaRequired(seller, pc.RecaptchaSiteKey)
+	if recaptchaRequired(seller, pc.RecaptchaSiteKey) {
+		v.recaptchaSiteKey = pc.RecaptchaSiteKey
+	}
 	if err := h.loadCustomStyles(ctx, p, v); err != nil {
 		return nil, err
 	}

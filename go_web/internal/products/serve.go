@@ -1,6 +1,7 @@
 package products
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -68,15 +69,34 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return nil
 	}
 
-	// product_custom_html_visible? for a visitor; a waitlist's is Rails' anyway.
+	// product_custom_html_visible? for a visitor. A waitlist page shows it when it holds the
+	// waitlist form, which is Rails' to find.
 	if present, err := customHTMLPresent(ctx, conn, prod.id); err != nil {
 		return err
-	} else if present && prod.alive() {
+	} else if present && (prod.alive() || prod.acceptsWaitlistSignups()) {
 		if on, err := h.flag(ctx, "custom_html_pages", p.seller.id); err != nil || on {
 			return firstErr(err, fallback("custom html"))
 		}
 	}
 	return h.render(w, p, prod)
+}
+
+// scanFirst scans the first row of a LIMIT 2 query into dest; n is how many rows there were,
+// for a has_one Rails takes in no order.
+func (h *handler) scanFirst(ctx context.Context, dest []any, query string, args ...any) (n int, err error) {
+	rows, err := h.c.DB.QueryContext(ctx, query, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		if n++; n == 1 {
+			if err := rows.Scan(dest...); err != nil {
+				return 0, err
+			}
+		}
+	}
+	return n, rows.Err()
 }
 
 func firstErr(err, otherwise error) error {
