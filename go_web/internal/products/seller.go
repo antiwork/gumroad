@@ -169,21 +169,25 @@ func (h *handler) productsCacheKey(p *page) (string, error) {
 
 func (h *handler) readProductsCacheKey(ctx context.Context, sellerID int64) (string, error) {
 	sql := "SELECT `links`.* FROM `links` WHERE `links`.`user_id` = " + strconv.FormatInt(sellerID, 10)
-	sum := sha256.Sum256([]byte(sql))
-	key := "links/query-" + hex.EncodeToString(sum[:])[:32]
 	var size int64
 	var latest db.NullTime
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT COUNT(*), MAX(`links`.`updated_at`) FROM `links` WHERE `links`.`user_id` = ?", sellerID).
 		Scan(&size, &latest); err != nil {
 		return "", err
 	}
+	return relationCacheKey("links", sql, size, latest), nil
+}
+
+// relationCacheKey is a relation's cache_key_with_version: its model's collection, a digest of
+// its to_sql, then its size and latest updated_at to_fs(:usec).
+func relationCacheKey(collection, sql string, size int64, latest db.NullTime) string {
+	sum := sha256.Sum256([]byte(sql))
 	version := strconv.FormatInt(size, 10)
 	if latest.Valid {
-		// to_fs(:usec): %Y%m%d%H%M%S%6N.
 		t := latest.Time.UTC()
 		version += "-" + t.Format("20060102150405") + fmt.Sprintf("%06d", t.Nanosecond()/1000)
 	}
-	return key + "-" + version, nil
+	return collection + "/query-" + hex.EncodeToString(sum[:])[:32] + "-" + version
 }
 
 // subtractProduct is subtract_product: the product's own reviews out of the aggregate, when

@@ -1,6 +1,7 @@
 package products
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,11 +10,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/elastic"
+	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
 
@@ -505,6 +509,49 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					`"default_product_sort":"newest","search_results":{"total":1,%s,"products":[%s]},"exclude_ids":["%s"]}]`,
 					e.ids.Encrypt(1_792_511), facets, card, e.ids.Encrypt(productID), e.ids.Encrypt(1_792_512), facets, card, e.ids.Encrypt(productID))
 			}},
+		// Rails' cached_sections entry is the order Rails renders, so go_web serves it without a
+		// search, a review-sorted section included.
+		{name: "a review-sorted section from Rails' cache", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_509), "seller_id": sellerID, "header": "Top",
+					"json_data":  fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":true}`, other),
+					"created_at": testNow, "updated_at": testNow})
+			},
+			prepare: func(e *testEnv) {
+				e.cache.values[railsSectionsKey(e, false)] = []any{railsCachedSection(e.ids.Encrypt(1_792_509), "Top", "highest_rated", 1, other)}
+			},
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1)
+				return fmt.Sprintf(`"sections":[{"id":"%s","header":"Top","type":"SellerProfileProductsSection","show_filters":false,`+
+					`"default_product_sort":"highest_rated","search_results":{"total":1,"tags_data":[{"key":"design","doc_count":2}],`+
+					`"filetypes_data":[],"taxonomy_attributes_data":[],"products":[%s]},"exclude_ids":["%s"]}],"main_section_index":0`,
+					e.ids.Encrypt(1_792_509), card, e.ids.Encrypt(productID))
+			}},
+		// cached_default_products_section's entry wins over a search too, with this product omitted.
+		{name: "the default section from Rails' cache", server: search,
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			prepare: func(e *testEnv) {
+				e.cache.values[railsSectionsKey(e, true)] = railsCachedSection(defaultProductsSectionID, nil, pageLayoutSort, 2, other, productID)
+			},
+			want: func(e *testEnv) string {
+				return `"search_results":{"total":1,"tags_data":[{"key":"design","doc_count":2}],"filetypes_data":[],` +
+					`"taxonomy_attributes_data":[],"products":[{"id":"` + e.ids.Encrypt(other) + `","permalink":"gowebp2"`
+			}},
+		// Rails would render its entry's sections, in its order; a different list goes to Rails.
+		{name: "Rails' cached sections in another order", reason: "cached sections", server: search,
+			setup: func(t *testing.T, conn *sql.DB) {
+				for _, id := range []int64{1_792_509, 1_792_510} {
+					testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": id, "seller_id": sellerID, "header": "Top",
+						"json_data":  `{"shown_products":[],"default_product_sort":"newest","show_filters":false,"add_new_products":true}`,
+						"created_at": testNow, "updated_at": testNow})
+				}
+			},
+			prepare: func(e *testEnv) {
+				e.cache.values[railsSectionsKey(e, false)] = []any{railsCachedSection(e.ids.Encrypt(1_792_510), "Top", "newest", 0),
+					railsCachedSection(e.ids.Encrypt(1_792_509), "Top", "newest", 0)}
+			}},
 		{name: "a section sorted by reviews", reason: "products section review sort", server: search,
 			setup: func(t *testing.T, conn *sql.DB) {
 				testdb.Insert(t, conn, "seller_profile_sections", map[string]any{"id": int64(1_792_505), "seller_id": sellerID,
@@ -732,4 +779,60 @@ func TestTheProductsOwnSections(t *testing.T) {
 	addSection(t, testdb.Open(t), 1_792_602, profileProductsSectionType, "More",
 		`{"shown_products":[],"default_product_sort":"newest","show_filters":false,"add_new_products":false}`)
 	e.render(t, nil, "products section search")
+}
+
+func railsSectionsKey(e *testEnv, virtual bool) string {
+	h := &handler{c: e.config}
+	ctx := context.Background()
+	products, err := h.readProductsCacheKey(ctx, sellerID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if virtual {
+		return "profile-sections_default_test-" + products
+	}
+	sections, err := h.savedProductsSections(ctx, sellerID)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	return "profile-sections_test-" + products + "-" + profileSectionsCacheKey(sellerID, sections)
+}
+
+// The key Rails gave a production seller's two sections, the later saved at 19:58:07.957624.
+func TestProfileSectionsCacheKey(t *testing.T) {
+	at := func(s string) db.NullTime {
+		v, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return db.NullTime{Time: v, Valid: true}
+	}
+	sections := []*productsSection{{updatedAt: at("2026-11-04T19:58:07.957624Z")}, {updatedAt: at("2026-10-01T08:00:00Z")}}
+	want := "seller_profile_products_sections/query-72c9c98aeb41f680791a94a5f360b55c-2-20261104195807957624"
+	if got := profileSectionsCacheKey(7499319, sections); got != want {
+		t.Errorf("got %s, want %s", got, want)
+	}
+}
+
+// railsCachedSection is a products section as cached_sections Marshals it: an external id is
+// US-ASCII, as Base64 leaves it.
+func railsCachedSection(id string, header any, sort string, total int64, ids ...int64) railscache.Hash {
+	products := make([]any, len(ids))
+	for i, id := range ids {
+		products[i] = strconv.FormatInt(id, 10)
+	}
+	return railscache.Hash{
+		{Key: railscache.Symbol("id"), Value: railscache.ASCII(id)},
+		{Key: railscache.Symbol("header"), Value: header},
+		{Key: railscache.Symbol("type"), Value: profileProductsSectionType},
+		{Key: railscache.Symbol("show_filters"), Value: false},
+		{Key: railscache.Symbol("default_product_sort"), Value: sort},
+		{Key: railscache.Symbol("search_results"), Value: railscache.Hash{
+			{Key: railscache.Symbol("total"), Value: total},
+			{Key: railscache.Symbol("tags_data"), Value: []any{railscache.Hash{{Key: "key", Value: "design"}, {Key: "doc_count", Value: int64(2)}}}},
+			{Key: railscache.Symbol("filetypes_data"), Value: []any{}},
+			{Key: railscache.Symbol("taxonomy_attributes_data"), Value: []any{}},
+			{Key: railscache.Symbol("products"), Value: products},
+		}},
+	}
 }

@@ -109,6 +109,8 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 	}
 	if len(ps.products) > 0 {
 		switch {
+		case reviewSorted(ps.products):
+			return nil, fallback("products section review sort")
 		case h.c.Page.Search == nil:
 			return nil, fallback("products section search")
 		case p.hasAutoApplyCode:
@@ -123,7 +125,11 @@ func (h *handler) listProductSections(p *page, prod *product, v *view) (*product
 func (h *handler) renderProductSections(p *page, ps *productSections, buyer *string) ([]any, error) {
 	built := map[*productsSection]any{}
 	if len(ps.products) > 0 {
-		props, err := h.productsSectionsProps(p, nil, ps.products, buyer)
+		searches, err := h.cachedCatalog(p, ps.products)
+		if err != nil {
+			return nil, err
+		}
+		props, err := h.productsSectionsProps(p, nil, ps.products, searches, buyer)
 		if err != nil {
 			return nil, err
 		}

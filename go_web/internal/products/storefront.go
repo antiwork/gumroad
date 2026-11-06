@@ -66,6 +66,7 @@ type productsSection struct {
 	shownProducts []int64
 	sort          string
 	showFilters   bool
+	updatedAt     db.NullTime
 	// version moves with the row, for the search's cache key.
 	version string
 }
@@ -131,12 +132,7 @@ func (r *sectionRow) productsSection() (*productsSection, error) {
 	if _, known := sectionSortClauses[sort]; !ok || !sortOK || !known || !filtersOK || !shownOK {
 		return nil, fallback("products section json_data")
 	}
-	if sort == "highest_rated" || sort == "most_reviewed" {
-		// A review moves these orders without touching links.updated_at, so go_web's cache and
-		// Rails' can each hold a different one.
-		return nil, fallback("products section review sort")
-	}
-	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters,
+	s := &productsSection{id: r.id, header: r.shownHeader(), sort: sort, showFilters: showFilters, updatedAt: r.updatedAt,
 		shownProducts: make([]int64, 0, len(shown))}
 	for _, v := range shown {
 		n, _ := v.(json.Number)
@@ -170,17 +166,33 @@ func (h *handler) loadCatalog(p *page, prod *product, buyer *string) ([]any, err
 		// nil is the virtual default-products section.
 		sections = []*productsSection{nil}
 	}
-	return h.productsSectionsProps(p, prod, sections, buyer)
+	searches, err := h.railsCatalogSearches(p, sections)
+	if err != nil {
+		return nil, err
+	}
+	if searches == nil {
+		if reviewSorted(sections) {
+			return nil, fallback("products section review sort")
+		}
+		if searches, err = h.cachedCatalog(p, sections); err != nil {
+			return nil, err
+		}
+	}
+	return h.productsSectionsProps(p, prod, sections, searches, buyer)
+}
+
+// reviewSorted is whether a section is ordered by reviews: a review moves that order without
+// touching links.updated_at, so a search of go_web's own can differ from Rails' cache.
+func reviewSorted(sections []*productsSection) bool {
+	return slices.ContainsFunc(sections, func(s *productsSection) bool {
+		return s != nil && (s.sort == "highest_rated" || s.sort == "most_reviewed")
+	})
 }
 
 // productsSectionsProps is section_props for products sections, with omit_product unless omit
 // is nil.
-func (h *handler) productsSectionsProps(p *page, omit *product, sections []*productsSection, buyer *string) ([]any, error) {
+func (h *handler) productsSectionsProps(p *page, omit *product, sections []*productsSection, searches []*catalogSearch, buyer *string) ([]any, error) {
 	seller := p.seller
-	searches, err := h.cachedCatalog(p, sections)
-	if err != nil {
-		return nil, err
-	}
 	// Every section's cards load together; a product in several sections loads once.
 	var ids []int64
 	for _, search := range searches {
