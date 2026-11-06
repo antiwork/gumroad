@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +45,7 @@ const result = (id: string, name: string): Result => ({
     name,
     creator: { name: `${name} creator`, profile_url: `https://example.com/${id}`, avatar_url: null },
     thumbnail_url: null,
+    preview_images: [],
     native_type: "digital",
   },
   purchase: { id, is_archived: false, download_url: `https://example.com/d/${id}`, variants: null },
@@ -157,7 +158,57 @@ const lastGetParams = (): Record<string, string> => {
   return Object.fromEntries(Object.entries(params).map(([key, value]) => [key, String(value)]));
 };
 
+const previewImage = (id: string) => ({
+  type: "image" as const,
+  filetype: "png",
+  id,
+  url: `https://example.com/${id}.png`,
+  original_url: `https://example.com/${id}-original.png`,
+  thumbnail: null,
+  width: 800,
+  height: 600,
+  native_width: 800,
+  native_height: 600,
+});
+
 describe("LibraryPage", () => {
+  it("opens a full-size gallery of a purchase's preview images and keeps the purchase link", () => {
+    const props = defaultProps();
+    props.results = props.results.map((r, i) =>
+      i === 0 ? { ...r, product: { ...r.product, preview_images: [previewImage("a"), previewImage("b")] } } : r,
+    );
+    renderPage(props);
+
+    expect(screen.queryByRole("button", { name: /images? for Beta$/u })).toBeNull();
+    const trigger = screen.getByRole("button", { name: "View 2 images for Alpha" });
+    expect(screen.getByRole("link", { name: "Alpha" }).getAttribute("href")).toBe("https://example.com/d/p1");
+
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.querySelectorAll('[role="tabpanel"]')).toHaveLength(2);
+    fireEvent.click(screen.getByRole("tab", { name: "Show cover 2" }));
+    expect(screen.getByRole("tab", { name: "Show cover 2" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("button", { name: "Close" })).toBeTruthy();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("returns keyboard focus to the card's gallery button when the gallery closes", async () => {
+    const props = defaultProps();
+    props.results = props.results.map((r, i) =>
+      i === 0 ? { ...r, product: { ...r.product, preview_images: [previewImage("a"), previewImage("b")] } } : r,
+    );
+    renderPage(props);
+
+    const trigger = screen.getByRole("button", { name: "View 2 images for Alpha" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
   it("renders the server-supplied page verbatim, without re-slicing", () => {
     const props = defaultProps();
     // A page-2-shaped payload: the counts say there are 6 products, but only these two were

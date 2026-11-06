@@ -552,6 +552,99 @@ describe("Library Scenario", type: :system, js: true) do
     expect_to_show_purchases_in_order([purchase_3, purchase_2, purchase_1])
   end
 
+  describe "preview image gallery" do
+    let(:product) { create(:product, name: "Gallery product") }
+    let!(:square_preview) { create(:asset_preview_jpg, link: product) }
+    let!(:wide_preview) { create(:asset_preview, link: product) }
+    let!(:purchase) { create(:purchase, link: product, purchaser: @user).tap(&:create_url_redirect!) }
+    let(:gallery_button) { "View 2 images for Gallery product" }
+
+    before { index_model_records(Link) }
+
+    # Each key starts a smooth scroll, so wait for the track to land on the selected panel before the next key:
+    # overlapping scrolls can be misread by the carousel's debounced scroll handler and move the selection back.
+    def expect_selected_cover(number)
+      expect(page).to have_selector("[role=dialog] [role=tab][aria-selected=true][aria-label='Show cover #{number}']")
+      tolerance_px = 2
+      page.document.synchronize do
+        distance = page.evaluate_script(<<~JS)
+          (() => {
+            const panel = document.querySelectorAll('[role="dialog"] [role="tabpanel"]')[#{number - 1}];
+            return Math.abs(panel.parentElement.scrollLeft - panel.offsetLeft);
+          })()
+        JS
+        raise Capybara::ExpectationNotMet, "carousel is #{distance}px from cover #{number}" if distance > tolerance_px
+      end
+    end
+
+    shared_examples "a gallery that leaves the card's actions intact" do
+      it "opens the current images in place, steps through them by keyboard, and returns focus to the card" do
+        visit library_path
+        library_url = page.current_url
+        card = find_product_card(product)
+        expect(card).to have_link("Gallery product", href: purchase.url_redirect.download_page_url)
+
+        card.click_button(gallery_button)
+        within("[role=dialog]", text: "Gallery product") do
+          panels = all("[role=tabpanel]", count: 2)
+          [square_preview, wide_preview].zip(panels).each do |preview, panel|
+            expect(panel.find("img", visible: :all)[:src]).to be_in([preview.url, preview.url(style: :original)])
+          end
+        end
+        expect(page).to have_current_path(library_url, url: true)
+
+        expect_selected_cover(1)
+        find("[role=dialog] [role=tab][aria-selected=true]").send_keys(:right)
+        expect_selected_cover(2)
+        page.active_element.send_keys(:home)
+        expect_selected_cover(1)
+        page.active_element.send_keys(:end)
+        expect_selected_cover(2)
+
+        page.active_element.send_keys(:escape)
+        expect(page).not_to have_selector("[role=dialog]")
+        # Radix restores focus in a timeout after the dialog unmounts, so wait for it.
+        expect(page).to have_selector("button[aria-label='#{gallery_button}']:focus")
+
+        card.find("[aria-label='Open product action menu']").click
+        expect(page).to have_selector("[role=menuitem]", text: "Archive")
+        expect(page).to have_selector("[role=menuitem]", text: "Remove from library")
+        page.active_element.send_keys(:escape)
+        expect(page).not_to have_selector("[role=menu]")
+
+        card.click_link("Gallery product")
+        expect(page).to have_current_path(purchase.url_redirect.download_page_url, url: true)
+      end
+    end
+
+    context "on desktop" do
+      it_behaves_like "a gallery that leaves the card's actions intact"
+
+      it "shows the whole of a cover taller than the window, scrolling the dialog instead of cropping it" do
+        visit library_path
+        find_product_card(product).click_button(gallery_button)
+        expect_selected_cover(1)
+
+        sizes = page.evaluate_script(<<~JS)
+          (() => {
+            const dialog = document.querySelector('[role="dialog"]');
+            const figure = dialog.querySelector("figure");
+            const frame = figure.querySelector('[style*="aspect-ratio"]');
+            return { frame: frame.getBoundingClientRect().height, shown: figure.clientHeight, dialogScrolls: dialog.scrollHeight > dialog.clientHeight };
+          })()
+        JS
+        # The square cover spans the dialog's width, which is taller than the 900px window allows.
+        expect(sizes["frame"]).to be > 700
+        expect(sizes["shown"]).to be >= sizes["frame"].floor
+        expect(sizes["dialogScrolls"]).to be(true)
+      end
+    end
+
+    context "on a phone", :mobile_view do
+      it_behaves_like "a gallery that leaves the card's actions intact"
+    end
+  end
+
   describe("Search, sort and filtering") do
     before do
       @creator = create(:user, name: "A user")
