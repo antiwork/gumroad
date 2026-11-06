@@ -21,6 +21,9 @@ const (
 	profileProductsSectionType = "SellerProfileProductsSection"
 	pageLayoutSort             = "page_layout"
 	catalogPageSize            = 9
+	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
+	catalogTagFacetSize      = 200
+	catalogFiletypeFacetSize = 8
 	// cached_default_products_section's expires_in.
 	catalogTTL = 10 * time.Minute
 )
@@ -194,7 +197,8 @@ func (h *handler) searchCatalog(p *page) (*catalogSearch, error) {
 			map[string]any{"terms": map[string]any{"user_id": []int64{p.seller.id}}},
 			map[string]any{"term": map[string]any{"is_alive_on_profile": true}},
 		}}},
-		"aggregations": map[string]any{"tags.keyword": terms("tags.keyword", 200), "filetypes.keyword": terms("filetypes.keyword", 8)},
+		"aggregations": map[string]any{"tags.keyword": terms("tags.keyword", catalogTagFacetSize),
+			"filetypes.keyword": terms("filetypes.keyword", catalogFiletypeFacetSize)},
 		// One hit past the page shows whether its last one ties with the next.
 		"sort": []any{map[string]any{"created_at": map[string]any{"order": "desc"}}}, "size": catalogPageSize + 1, "from": 0,
 		"_source": false, "track_total_hits": true}, &products)
@@ -456,22 +460,24 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 // cardThumbnails is thumbnail_or_cover_url for each card: thumbnail_alive&.url, else the
 // first image cover's url.
 func (h *handler) cardThumbnails(p *page, cards []*card) error {
-	var uncovered []int64
+	var thumbnails []thumbnailRow
 	for _, c := range cards {
-		switch len(c.thumbnails) {
-		case 0:
-		case 1:
-			url, err := h.thumbnailRowURL(p.Ctx, c.thumbnails[0])
-			if err != nil {
-				return err
-			}
-			if url != nil {
-				c.thumbnailURL = url
-				continue
-			}
-		default:
+		if len(c.thumbnails) > 1 {
 			// has_one's preload keeps whichever row MySQL returns first.
 			return fallback("catalog thumbnails")
+		}
+		thumbnails = append(thumbnails, c.thumbnails...)
+	}
+	thumbnailURLs, err := h.thumbnailURLs(p.Ctx, thumbnails)
+	if err != nil {
+		return err
+	}
+	var uncovered []int64
+	for _, c := range cards {
+		if len(c.thumbnails) == 1 {
+			if c.thumbnailURL = thumbnailURLs[c.thumbnails[0].id]; c.thumbnailURL != nil {
+				continue
+			}
 		}
 		uncovered = append(uncovered, c.prod.id)
 	}
@@ -506,7 +512,7 @@ func (h *handler) firstImageCoverURLs(p *page, ids []int64) (map[int64]string, e
 		return nil, err
 	}
 	type preview struct {
-		id, link             int64
+		id, productID        int64
 		order                coverOrder
 		unsplash             sql.NullString
 		oembed               bool
@@ -517,7 +523,7 @@ func (h *handler) firstImageCoverURLs(p *page, ids []int64) (map[int64]string, e
 	var previews []preview
 	for rows.Next() {
 		var r preview
-		if err := rows.Scan(&r.link, &r.id, &r.order.position, &r.order.createdAt, &r.unsplash, &r.oembed, &r.attID, &r.blobID,
+		if err := rows.Scan(&r.productID, &r.id, &r.order.position, &r.order.createdAt, &r.unsplash, &r.oembed, &r.attID, &r.blobID,
 			&r.key, &r.filename, &r.ctype, &r.metadata); err != nil {
 			rows.Close()
 			return nil, err
@@ -537,17 +543,17 @@ func (h *handler) firstImageCoverURLs(p *page, ids []int64) (map[int64]string, e
 	}
 	urls := map[int64]string{}
 	for _, r := range previews {
-		if _, done := urls[r.link]; done || !imageURL(r) {
+		if _, done := urls[r.productID]; done || !imageURL(r) {
 			continue
 		}
 		for _, o := range previews {
-			if o.link == r.link && o.id != r.id && o.order == r.order && imageURL(o) {
+			if o.productID == r.productID && o.id != r.id && o.order == r.order && imageURL(o) {
 				return nil, fallback("cover order")
 			}
 		}
 		switch {
 		case rails.Present(r.unsplash.String):
-			urls[r.link] = r.unsplash.String
+			urls[r.productID] = r.unsplash.String
 			continue
 		case r.oembed:
 			return nil, fallback("oembed cover")
@@ -566,7 +572,7 @@ func (h *handler) firstImageCoverURLs(p *page, ids []int64) (map[int64]string, e
 		if err != nil {
 			return nil, err
 		}
-		urls[r.link] = url
+		urls[r.productID] = url
 	}
 	return urls, nil
 }

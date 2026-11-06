@@ -233,44 +233,110 @@ type thumbnailRow struct {
 
 // thumbnailRowURL is Thumbnail#url.
 func (h *handler) thumbnailRowURL(ctx context.Context, t thumbnailRow) (any, error) {
-	if rails.Present(t.unsplash.String) {
-		return t.unsplash.String, nil
+	urls, err := h.thumbnailURLs(ctx, []thumbnailRow{t})
+	return urls[t.id], err
+}
+
+// thumbnailURLs is Thumbnail#url for each row, by thumbnail id, in two queries for all of them.
+func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) (map[int64]any, error) {
+	urls := map[int64]any{}
+	var ids []int64
+	for _, t := range thumbnails {
+		if rails.Present(t.unsplash.String) {
+			urls[t.id] = t.unsplash.String
+		} else {
+			ids = append(ids, t.id)
+		}
 	}
-	var blobID sql.NullInt64
-	var key, filename, contentType sql.NullString
-	err := h.c.DB.QueryRowContext(ctx, `SELECT blobs.id, blobs.key, blobs.filename, blobs.content_type FROM active_storage_attachments att
-		LEFT JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
-		WHERE att.record_type = 'Thumbnail' AND att.record_id = ? AND att.name = 'file' LIMIT 1`, t.id).Scan(&blobID, &key, &filename, &contentType)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+	if len(ids) == 0 {
+		return urls, nil
 	}
+	type file struct {
+		blobID                     sql.NullInt64
+		key, filename, contentType sql.NullString
+	}
+	files := map[int64]file{}
+	rows, err := h.c.DB.QueryContext(ctx, `SELECT att.record_id, blobs.id, blobs.key, blobs.filename, blobs.content_type
+		FROM active_storage_attachments att LEFT JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
+		WHERE att.record_type = 'Thumbnail' AND att.record_id IN (`+placeholders(len(ids))+`) AND att.name = 'file'`, int64Args(ids)...)
 	if err != nil {
 		return nil, err
 	}
-	if !blobID.Valid {
-		return nil, fallback("thumbnail blob")
+	for rows.Next() {
+		var id int64
+		var f file
+		if err := rows.Scan(&id, &f.blobID, &f.key, &f.filename, &f.contentType); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		if _, dup := files[id]; dup {
+			rows.Close()
+			return nil, fallback("thumbnail attachment")
+		}
+		files[id] = f
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	pc := h.c.Page
-	if strings.Contains(contentType.String, "gif") {
-		return pc.cdnURL(pc.PublicStorageURL + key.String), nil
+	type variant struct {
+		blobID int64
+		digest string
 	}
-	// thumbnail_variant.processed would resize an unprocessed one.
-	digest := storage.VariantDigest(filename.String, contentType.String, 600, 600)
-	var variantKey sql.NullString
-	err = h.c.DB.QueryRowContext(ctx, `SELECT variant_blobs.key FROM active_storage_variant_records
+	wanted := map[int64]variant{}
+	var args []any
+	for _, id := range ids {
+		f, ok := files[id]
+		switch {
+		case !ok:
+			urls[id] = nil
+		case !f.blobID.Valid:
+			return nil, fallback("thumbnail blob")
+		case strings.Contains(f.contentType.String, "gif"):
+			urls[id] = pc.cdnURL(pc.PublicStorageURL + f.key.String)
+		default:
+			// thumbnail_variant.processed would resize an unprocessed one.
+			v := variant{f.blobID.Int64, storage.VariantDigest(f.filename.String, f.contentType.String, 600, 600)}
+			wanted[id] = v
+			args = append(args, v.blobID, v.digest)
+		}
+	}
+	if len(wanted) == 0 {
+		return urls, nil
+	}
+	rows, err = h.c.DB.QueryContext(ctx, `SELECT active_storage_variant_records.blob_id, active_storage_variant_records.variation_digest,
+		variant_blobs.key FROM active_storage_variant_records
 		LEFT JOIN active_storage_attachments variant_images ON variant_images.record_type = 'ActiveStorage::VariantRecord'
 			AND variant_images.record_id = active_storage_variant_records.id AND variant_images.name = 'image'
 		LEFT JOIN active_storage_blobs variant_blobs ON variant_blobs.id = variant_images.blob_id
-		WHERE active_storage_variant_records.blob_id = ? AND active_storage_variant_records.variation_digest = ? LIMIT 1`,
-		blobID.Int64, digest).Scan(&variantKey)
-	if errors.Is(err, sql.ErrNoRows) || err == nil && !variantKey.Valid {
-		return nil, fallback("thumbnail variant")
-	}
+		WHERE (active_storage_variant_records.blob_id, active_storage_variant_records.variation_digest) IN (`+
+		strings.TrimSuffix(strings.Repeat("(?, ?), ", len(wanted)), ", ")+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
-	if !slices.Contains(variableTypes, contentType.String) {
-		return nil, fallback("invariable thumbnail")
+	defer rows.Close()
+	keys := map[variant]sql.NullString{}
+	for rows.Next() {
+		var v variant
+		var key sql.NullString
+		if err := rows.Scan(&v.blobID, &v.digest, &key); err != nil {
+			return nil, err
+		}
+		keys[v] = key
 	}
-	return pc.cdnURL(pc.PublicStorageURL + variantKey.String), nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for id, v := range wanted {
+		key := keys[v]
+		if !key.Valid {
+			return nil, fallback("thumbnail variant")
+		}
+		if !slices.Contains(variableTypes, files[id].contentType.String) {
+			return nil, fallback("invariable thumbnail")
+		}
+		urls[id] = pc.cdnURL(pc.PublicStorageURL + key.String)
+	}
+	return urls, nil
 }
