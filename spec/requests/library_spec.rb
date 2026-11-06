@@ -591,7 +591,8 @@ describe("Library Scenario", type: :system, js: true) do
 
         page.active_element.send_keys(:escape)
         expect(page).not_to have_selector("[role=dialog]")
-        expect(page.active_element[:"aria-label"]).to eq(gallery_button)
+        # Radix restores focus in a timeout after the dialog unmounts, so wait for it.
+        expect(page).to have_selector("button[aria-label='#{gallery_button}']:focus")
 
         card.find("[aria-label='Open product action menu']").click
         expect(page).to have_selector("[role=menuitem]", text: "Archive")
