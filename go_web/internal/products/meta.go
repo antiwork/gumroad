@@ -2,6 +2,9 @@ package products
 
 import (
 	"database/sql"
+	"errors"
+
+	"github.com/redis/go-redis/v9"
 
 	"github.com/antiwork/gumroad/go_web/internal/description"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
@@ -182,11 +185,35 @@ func (h *handler) structuredData(p *page, prod *product, v *view, url, image str
 	return d, nil
 }
 
-// offerData is build_offer_data; unportedShape has left only USD products.
+// offerData is build_offer_data: the offer in USD, through the cached rate when the product's
+// currency isn't, else in that currency.
 func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails.Hash, error) {
+	var cents *int64
+	if v.priceCents != nil {
+		var diff sql.NullInt64
+		if err := h.c.DB.QueryRowContext(p.Ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
+			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN (NULL))", prod.id).Scan(&diff); err != nil {
+			return nil, err
+		}
+		c := *v.priceCents + diff.Int64
+		cents = &c
+	}
+	currency := "USD"
+	if code := prod.priceCurrencyType.String; code != "usd" {
+		usd, ok, err := h.usdOfferCents(p, code, cents)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			cents = &usd
+		} else if currency, ok = asciiUpcase(code); !ok || rails.Blank(currency) {
+			// Rails drops a blank currency, and the price with it.
+			return nil, fallback("offer currency")
+		}
+	}
 	offer := rails.NewHash()
 	offer.Set("@type", "Offer")
-	offer.Set("priceCurrency", "USD")
+	offer.Set("priceCurrency", currency)
 	availability := "https://schema.org/InStock"
 	if prod.maxPurchaseCount.Valid && prod.maxPurchaseCount.Int64 != 0 {
 		availability = "https://schema.org/LimitedAvailability"
@@ -196,13 +223,40 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 	}
 	offer.Set("availability", availability)
 	offer.Set("url", url)
-	if v.priceCents != nil {
-		var diff sql.NullInt64
-		if err := h.c.DB.QueryRowContext(p.Ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
-			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN (NULL))", prod.id).Scan(&diff); err != nil {
-			return nil, err
-		}
-		offer.Set("price", float64(*v.priceCents+diff.Int64)/100)
+	if cents != nil {
+		offer.Set("price", float64(*cents)/float64(unitScalingFactor(currency)))
 	}
 	return offer, nil
+}
+
+// usdOfferCents is usd_offer_price_cents for a non-USD product: ok is false when Rails
+// finds no usable rate in $redis (currencies:<CODE>) and shows the product's own currency.
+func (h *handler) usdOfferCents(p *page, code string, cents *int64) (int64, bool, error) {
+	if cents == nil {
+		return 0, false, nil
+	}
+	upper, ok := asciiUpcase(code)
+	if !ok {
+		return 0, false, fallback("offer currency")
+	}
+	raw, err := h.c.Page.Redis.Get(p.Ctx, "currencies:"+upper).Result()
+	if errors.Is(err, redis.Nil) {
+		return 0, false, nil
+	}
+	if err != nil {
+		// Rails reads a failed get as no rate; whether it would fail too is unknowable here.
+		return 0, false, fallback("currency rate")
+	}
+	rate, exact := rails.StringToF(raw)
+	if !exact {
+		return 0, false, fallback("currency rate")
+	}
+	if rate <= 0 {
+		return 0, false, nil
+	}
+	usd, ok := usdCents(*cents, rate, currencyFor(code).singleUnit)
+	if !ok {
+		return 0, false, fallback("usd offer price")
+	}
+	return usd, true, nil
 }
