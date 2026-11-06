@@ -116,7 +116,8 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 		wants                []string
 	}{
 		{name: "the product's seller", reason: "product's seller", user: sellerID},
-		{name: "a buyer of the product", reason: "signed-in purchase", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+		// Their failed purchase is theirs, so the page shows none.
+		{name: "a buyer of the product", wants: []string{`"purchase":null`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_796_401), "link_id": productID, "seller_id": sellerID,
 				"purchaser_id": buyerID, "price_cents": 500, "purchase_state": "failed", "email": "buyer@example.com",
 				"created_at": testNow, "updated_at": testNow})
@@ -164,14 +165,17 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 				"created_at": testNow, "updated_at": testNow})
 		}, wants: []string{`"can_publish_products":false,"publish_blocked_reason":"payout_setup_rejected",`}},
 		// A featured section renders its product for the same visitor, so their purchase of it counts.
-		{name: "a featured product the visitor bought", reason: "signed-in purchase", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+		{name: "a featured product the visitor bought", wants: []string{`"review_account_name":"Buyer","should_show_receipt":true,` +
+			`"was_paid":true,"is_gift_receiver_purchase":false,"show_view_content_button_on_product_page":false,` +
+			`"total_price_including_tax_and_shipping":"$7","content_url":null,`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_796_901), "user_id": sellerID, "name": "Featured",
 				"unique_permalink": "gowebsf", "price_cents": 700, "created_at": testNow, "updated_at": testNow})
 			testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_796_902), "link_id": int64(1_796_901), "price_cents": 700,
 				"currency": "usd", "created_at": testNow, "updated_at": testNow})
 			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_796_903), "link_id": int64(1_796_901), "seller_id": sellerID,
 				"purchaser_id": buyerID, "price_cents": 700, "purchase_state": "successful", "email": "buyer@example.com",
-				"created_at": testNow, "updated_at": testNow})
+				"displayed_price_currency_type": "usd", "total_transaction_cents": 700, "gumroad_tax_cents": 0, "created_at": testNow,
+				"updated_at": testNow})
 			addSection(t, conn, 1_796_904, profileFeaturedSectionType, "Pick", `{"featured_product_id":1796901}`)
 			listSections(t, conn, `{"sections":[1796904]}`)
 		}},
