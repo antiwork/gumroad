@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -164,8 +165,7 @@ func TestADiscoverSearchClickWithAQuery(t *testing.T) {
 }
 
 // layout=discover renders the page in Discover's component with the product's taxonomy path and
-// Rails' cached nav, and no storefront catalog; a visitor whose cart or purchases would reorder
-// the nav goes to Rails, as does a nav Rails hasn't cached.
+// Rails' cached nav, and no storefront catalog; a nav Rails hasn't cached goes to Rails.
 func TestTheDiscoverLayout(t *testing.T) {
 	nav := []any{
 		railscache.Hash{{Key: railscache.Symbol("key"), Value: railscache.ASCII("1795911")}, {Key: railscache.Symbol("label"), Value: "Design"},
@@ -214,36 +214,148 @@ func TestTheDiscoverLayout(t *testing.T) {
 			t.Errorf("want %s\nin %s", want, page)
 		}
 	})
-	for _, c := range []struct {
-		name, reason string
-		prepare      func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string
-	}{
-		{"an uncached nav", "taxonomies for nav", func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string { return nil }},
-		{"a signed-in visitor", "discover recommendations", func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string {
-			e.cache.values["taxonomies_for_nav"] = nav
-			addBuyer(t, conn, nil)
-			return e.signedIn(buyerID, nil)
-		}},
-		{"a guest cart", "discover recommendations", func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string {
-			e.cache.values["taxonomies_for_nav"] = nav
-			testdb.Insert(t, conn, "carts", map[string]any{"id": int64(1_795_921), "browser_guid": "guid-cart", "created_at": testNow, "updated_at": testNow})
-			testdb.Insert(t, conn, "cart_products", map[string]any{"id": int64(1_795_922), "cart_id": int64(1_795_921), "product_id": productID,
+	t.Run("an uncached nav", func(t *testing.T) {
+		e := newTestEnv(t)
+		conn := testdb.Open(t)
+		setup(t, e, conn)
+		headers := e.dryRun(host, "/l/guide?layout=discover", testNow)
+		if w := e.get(host, "/l/guide?layout=discover", headers); w.Code != http.StatusNoContent ||
+			w.Header().Get("X-Go-Web-Fallback") != "taxonomies for nav" {
+			t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+	})
+}
+
+// A visitor's cart or purchases reorder the Discover nav: the root taxonomies of the products
+// bought with them come first, leaving out what they already have, what their bundles hold,
+// and adult products.
+func TestCuratedProductsReorderTheDiscoverNav(t *testing.T) {
+	const (
+		audio, music, rootless              = int64(1_795_913), int64(1_795_914), int64(1_795_915)
+		loops, explicit, drums, bundle, odd = int64(1_795_931), int64(1_795_932), int64(1_795_934), int64(1_795_936), int64(1_795_937)
+		beats, sketch                       = int64(1_795_938), int64(1_795_939)
+	)
+	entry := func(id int64, label any, slug string, parent any) railscache.Hash {
+		return railscache.Hash{{Key: railscache.Symbol("key"), Value: railscache.ASCII(strconv.FormatInt(id, 10))},
+			{Key: railscache.Symbol("label"), Value: label}, {Key: railscache.Symbol("slug"), Value: slug}, {Key: railscache.Symbol("parent_key"), Value: parent}}
+	}
+	setup := func(t *testing.T, e *testEnv, conn *sql.DB) {
+		e.cache.values["taxonomies_for_nav"] = []any{entry(1_795_911, "Design", "design", nil),
+			entry(1_795_912, nil, "icons", railscache.ASCII("1795911")), entry(audio, "Audio", "audio", nil), entry(music, "Music", "music", nil)}
+		t.Cleanup(func() {
+			conn.Exec("DELETE FROM taxonomy_hierarchies WHERE descendant_id IN (?, ?, ?, ?)", 1_795_911, 1_795_912, audio, music)
+		})
+		for _, root := range []struct {
+			id   int64
+			slug string
+		}{{1_795_911, "design"}, {audio, "audio"}, {music, "music"}, {rootless, "rootless"}} {
+			testdb.Insert(t, conn, "taxonomies", map[string]any{"id": root.id, "slug": root.slug})
+			if root.id != rootless {
+				mustExec(t, conn, "INSERT INTO taxonomy_hierarchies (ancestor_id, descendant_id, generations) VALUES (?, ?, 0)", root.id, root.id)
+			}
+		}
+		testdb.Insert(t, conn, "taxonomies", map[string]any{"id": int64(1_795_912), "parent_id": int64(1_795_911), "slug": "icons"})
+		mustExec(t, conn, "INSERT INTO taxonomy_hierarchies (ancestor_id, descendant_id, generations) VALUES (?, ?, 0), (?, ?, 1)",
+			1_795_912, 1_795_912, 1_795_911, 1_795_912)
+		for _, p := range []struct {
+			id, taxonomy int64
+			name         string
+		}{{loops, audio, "Loops"}, {explicit, music, "NSFW sketches"}, {drums, music, "Drums"}, {bundle, music, "Kit"}, {odd, rootless, "Odd"},
+			{beats, 1_795_912, "Beats"}, {sketch, 1_795_911, "Sketch"}} {
+			testdb.Insert(t, conn, "links", map[string]any{"id": p.id, "user_id": sellerID, "name": p.name, "taxonomy_id": p.taxonomy,
+				"unique_permalink": "gowebrec" + strconv.FormatInt(p.id%100, 10), "price_cents": 100, "created_at": testNow, "updated_at": testNow})
+		}
+		testdb.Insert(t, conn, "bundle_products", map[string]any{"id": int64(1_795_941), "bundle_id": bundle, "product_id": drums,
+			"quantity": 1, "created_at": testNow, "updated_at": testNow})
+	}
+	related := func(t *testing.T, conn *sql.DB, counts string) {
+		testdb.Insert(t, conn, "cached_sales_related_products_infos", map[string]any{"id": int64(1_795_951), "product_id": productID,
+			"counts": counts, "created_at": testNow, "updated_at": testNow})
+	}
+	cart := func(t *testing.T, conn *sql.DB, products ...int64) map[string]string {
+		testdb.Insert(t, conn, "carts", map[string]any{"id": int64(1_795_921), "browser_guid": "guid-cart", "created_at": testNow, "updated_at": testNow})
+		for i, id := range products {
+			testdb.Insert(t, conn, "cart_products", map[string]any{"id": int64(1_795_922 + i), "cart_id": int64(1_795_921), "product_id": id,
 				"price": 500, "quantity": 1, "referrer": "", "created_at": testNow, "updated_at": testNow})
-			return map[string]string{"Cookie": "_gumroad_guid=guid-cart"}
-		}},
+		}
+		return map[string]string{"Cookie": "_gumroad_guid=guid-cart"}
+	}
+	// Drums sold most with the product but the bundle holds it, and the next is adult. Then
+	// icons, audio and design itself: design scores first and keeps it.
+	const counts = `{"1795934": 9, "1795932": 7, "1795938": 5, "1795931": 3, "1795939": 2}`
+	const (
+		design = `{"key":"1795911","label":"Design","slug":"design","parent_key":null}`
+		icons  = `{"key":"1795912","label":null,"slug":"icons","parent_key":"1795911"}`
+		audioJ = `{"key":"1795913","label":"Audio","slug":"audio","parent_key":null}`
+		musicJ = `{"key":"1795914","label":"Music","slug":"music","parent_key":null}`
+	)
+	reordered := `"taxonomies_for_nav":[` + design + `,` + audioJ + `,` + icons + `,` + musicJ + `]`
+	for _, c := range []struct {
+		name    string
+		prepare func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string
+		want    string
+	}{
+		{"a guest cart", func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string {
+			related(t, conn, counts)
+			return cart(t, conn, productID, bundle)
+		}, reordered},
+		{"a signed-in visitor's purchases", func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string {
+			related(t, conn, counts)
+			addBuyer(t, conn, nil)
+			addPurchase(t, conn, 1_795_961, map[string]any{"purchaser_id": buyerID, "succeeded_at": testNow})
+			addPurchase(t, conn, 1_795_962, map[string]any{"purchaser_id": buyerID, "succeeded_at": testNow, "link_id": bundle})
+			return e.signedIn(buyerID, nil)
+		}, reordered},
+		// The limit leaves the bundle out of the seed, but not out of what's excluded.
+		{"purchases past the associated ids limit", func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string {
+			e.redis.Set(associatedProductIDsLimitKey, "1")
+			related(t, conn, counts)
+			addBuyer(t, conn, nil)
+			addPurchase(t, conn, 1_795_961, map[string]any{"purchaser_id": buyerID, "succeeded_at": testNow})
+			addPurchase(t, conn, 1_795_962, map[string]any{"purchaser_id": buyerID, "succeeded_at": testNow.AddDate(0, 0, -1), "link_id": bundle})
+			return e.signedIn(buyerID, nil)
+		}, reordered},
+		// Integer#+ raises on a String, and curated_products rescues it into no products.
+		{"a count Ruby can't add", func(t *testing.T, e *testEnv, conn *sql.DB) map[string]string {
+			related(t, conn, `{"1795931": 3, "1795938": "5"}`)
+			return cart(t, conn, productID)
+		}, `"taxonomies_for_nav":[` + design + `,` + icons + `,` + audioJ + `,` + musicJ + `]`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			conn := testdb.Open(t)
 			setup(t, e, conn)
-			headers := c.prepare(t, e, conn)
-			if headers == nil {
-				headers = map[string]string{}
+			w := e.get(host, "/l/guide?layout=discover", c.prepare(t, e, conn))
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 			}
-			headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide?layout=discover", testNow)["X-Go-Web-Dry-Run"]
-			if w := e.get(host, "/l/guide?layout=discover", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
-				t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, c.want) {
+				t.Errorf("want %s\nin %s", c.want, page)
 			}
 		})
+	}
+	t.Run("a curated taxonomy without a root", func(t *testing.T) {
+		e := newTestEnv(t)
+		conn := testdb.Open(t)
+		setup(t, e, conn)
+		related(t, conn, `{"1795937": 1}`)
+		headers := cart(t, conn, productID)
+		headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide?layout=discover", testNow)["X-Go-Web-Dry-Run"]
+		if w := e.get(host, "/l/guide?layout=discover", headers); w.Code != http.StatusNoContent ||
+			w.Header().Get("X-Go-Web-Fallback") != "curated taxonomy root" {
+			t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+	})
+}
+
+// adultText tokenizes as AdultKeywordDetector does; each case is what production's Ruby answered.
+func TestAdultText(t *testing.T) {
+	for text, want := range map[string]bool{
+		"nsfwé": false, "NSFWart": true, "ÉNSFW": false, "kinky": false, "kink!": true, "Breast\nInflation": true,
+		"lewds": true, "abs  punch": true, "": false,
+	} {
+		if got := adultText(text); got != want {
+			t.Errorf("%q: %v", text, got)
+		}
 	}
 }
