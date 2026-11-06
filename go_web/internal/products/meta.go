@@ -41,7 +41,7 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		productDescription = v.plaintextDescription
 	}
 	productDescription = description.Snippet(productDescription)
-	canonical := h.c.Env.ProductLongURL(sellerUsername(seller), prod.generalPermalink())
+	canonical := h.canonicalURL(p, prod)
 	set("", "", "", inertia.Pairs("name", "description", "content", productDescription)...)
 	set("", "", "", inertia.Pairs("property", "gr:page:type", "content", "product")...)
 	set("", "", "", inertia.Pairs("property", "product:retailer_item_id", "content", prod.uniquePermalink.String)...)
@@ -181,7 +181,7 @@ func (h *handler) noProductBuilds(ctx context.Context, prod *product) error {
 	return nil
 }
 
-// structuredData is Link#structured_data on the seller's subdomain.
+// structuredData is Link#structured_data at url, the canonical URL.
 func (h *handler) structuredData(p *page, prod *product, v *view, url, image string) (*rails.Hash, error) {
 	seller := p.seller
 	d := rails.NewHash()
