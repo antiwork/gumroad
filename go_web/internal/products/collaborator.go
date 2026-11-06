@@ -23,24 +23,14 @@ func (h *handler) collaboratorByline(ctx context.Context, p *page, prod *product
 	if !p.hasCollaborator {
 		return nil, nil
 	}
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT affiliates.flags, affiliates.affiliate_user_id, affiliates_links.flags FROM affiliates"+
-		" INNER JOIN affiliates_links ON affiliates.id = affiliates_links.affiliate_id"+
+	var flags, linkFlags int64
+	var userID sql.NullInt64
+	n, err := h.scanFirst(ctx, []any{&flags, &userID, &linkFlags}, "SELECT affiliates.flags, affiliates.affiliate_user_id, affiliates_links.flags"+
+		" FROM affiliates INNER JOIN affiliates_links ON affiliates.id = affiliates_links.affiliate_id"+
 		" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator' AND affiliates.deleted_at IS NULL"+
 		" AND NOT EXISTS (SELECT 1 FROM collaborator_invitations WHERE collaborator_invitations.collaborator_id = affiliates.id)"+
 		" LIMIT 2", prod.id)
 	if err != nil {
-		return nil, err
-	}
-	var flags, linkFlags int64
-	var userID sql.NullInt64
-	n := 0
-	for rows.Next() {
-		if n++; n == 1 {
-			err = rows.Scan(&flags, &userID, &linkFlags)
-		}
-	}
-	rows.Close()
-	if err = firstErr(err, rows.Err()); err != nil {
 		return nil, err
 	}
 	switch {

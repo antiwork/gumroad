@@ -34,15 +34,11 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "purchase type", nil
 	case membership != "":
 		return membership, nil
-	case prod.is(productIsInPreorderState):
-		return "preorder", nil
 	case prod.is(productIsBundle):
 		return "bundle", nil
 	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
 		// FileSummaryService would summarize each SKU.
 		return "skus", nil
-	case prod.is(productWaitlistEnabled):
-		return "waitlist", nil
 	case prod.defaultOfferCodeID.Valid:
 		return "default offer code", nil
 	case prod.is(productShouldShowSalesCount) && h.c.Page.Search == nil:
@@ -68,26 +64,34 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		reason, query string
 		arg           int64
 	}{
-		{"installment plan", "SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = ?" +
-			" AND product_installment_plans.deleted_at IS NULL", prod.id},
 		{"auto-apply offer code", "SELECT 1 FROM offer_codes WHERE offer_codes.user_id = ? AND offer_codes.deleted_at IS NULL" +
 			" AND offer_codes.universal = 1 AND offer_codes.auto_apply = 1", seller.id},
 		{"product sections", "SELECT 1 FROM seller_profile_sections WHERE seller_profile_sections.product_id = ?", prod.id},
 		{"public files", "SELECT 1 FROM public_files WHERE public_files.resource_type = 'Link' AND public_files.resource_id = ?" +
 			" AND public_files.deleted_at IS NULL", prod.id},
+		// bundle_products renders them whether or not the product is still a bundle.
+		{"bundle products", "SELECT 1 FROM bundle_products WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL", prod.id},
 	}
-	// One round trip; each EXISTS stops at its first row. The last one isn't a fallback: it
-	// spares the collaborator lookup on products that have none.
-	exprs := make([]string, len(checks), len(checks)+1)
-	args := make([]any, len(checks), len(checks)+1)
+	// These aren't fallbacks: they spare a lookup on products that have none.
+	gates := []struct {
+		query string
+		dest  *bool
+	}{
+		{"SELECT 1 FROM affiliates_links INNER JOIN affiliates ON affiliates.id = affiliates_links.affiliate_id" +
+			" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator'", &p.hasCollaborator},
+		{"SELECT 1 FROM product_installment_plans WHERE product_installment_plans.link_id = ?" +
+			" AND product_installment_plans.deleted_at IS NULL", &p.hasInstallmentPlan},
+	}
+	// One round trip; each EXISTS stops at its first row.
+	n := len(checks) + len(gates)
+	exprs, args, dest := make([]string, 0, n), make([]any, 0, n), make([]any, 0, n)
 	found := make([]bool, len(checks))
-	dest := make([]any, len(checks), len(checks)+1)
 	for i, c := range checks {
-		exprs[i], args[i], dest[i] = "EXISTS("+c.query+")", c.arg, &found[i]
+		exprs, args, dest = append(exprs, "EXISTS("+c.query+")"), append(args, c.arg), append(dest, &found[i])
 	}
-	exprs = append(exprs, "EXISTS(SELECT 1 FROM affiliates_links INNER JOIN affiliates ON affiliates.id = affiliates_links.affiliate_id"+
-		" WHERE affiliates_links.link_id = ? AND affiliates.type = 'Collaborator')")
-	args, dest = append(args, prod.id), append(dest, &p.hasCollaborator)
+	for _, g := range gates {
+		exprs, args, dest = append(exprs, "EXISTS("+g.query+")"), append(args, prod.id), append(dest, g.dest)
+	}
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT "+strings.Join(exprs, ", "), args...).Scan(dest...); err != nil {
 		return "", err
 	}
