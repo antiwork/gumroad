@@ -17,7 +17,7 @@
   <p>Run it with your own AI agent, such as Claude Code, Cursor, or Codex. The prompt asks it to build the page and publish it with the <a href="https://gumroad.com/api#api-cli" target="_blank">Gumroad command line tool</a>: <code>gumroad products page preview</code> to check the page without publishing, <code>gumroad products page publish</code> to put it live, <code>gumroad products page url</code> to get the public link, and <code>gumroad products page clear</code> to remove it. You can run those commands yourself if you prefer.</p>
   <p>Only the latest version of the page is stored, and there is no version history, so keep the source file with your own work if you want to be able to go back to an earlier design.</p>
   <h3 id="Keep-the-page-buyable-Lw2kS">Keep the page buyable</h3>
-  <p>Because the page replaces Gumroad's own buy button, your HTML has to give buyers a way into checkout or your product cannot be bought. The prompt in the Share tab covers this, and both the command line tool and the Agent tab warn you when a page has no way to buy, but it is worth checking yourself after publishing.</p>
+  <p>Because the page replaces Gumroad's own buy button, your HTML has to give buyers a way into checkout or your product cannot be bought. The prompt in the Share tab covers this, and the command line tool warns you when a page has no way to buy, but it is worth checking yourself after publishing.</p>
   <p>Mark an element with <code>data-gumroad-action="buy"</code> to open Gumroad's checkout, on any tag:</p>
   <ul>
     <li><code>&lt;a data-gumroad-action="buy"&gt;Buy now&lt;/a&gt;</code></li>

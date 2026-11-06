@@ -50,7 +50,7 @@ const props: AgentPageProps = {
       directory_url: "https://chatgpt.com/plugins/plugin_x",
       connect_label: "Add Gumroad to ChatGPT",
       availability: "Add Gumroad from ChatGPT’s plugin directory.",
-      setup: "If you cannot add plugins, ask your workspace administrator.",
+      setup: null,
       endpoint_url: "https://gumroad.com/chatgpt/v1/mcp",
     }),
     client({
@@ -144,7 +144,7 @@ describe("Agent/Index", () => {
     expect(within(muse).queryByRole("button", { name: "Copy Muse connector URL" })).toBeNull();
   });
 
-  it("keeps the review note but drops the disabled button once the client under review is connected", () => {
+  it("shows only the status once the client under review is connected", () => {
     mocks.usePage.mockReturnValue({
       props: {
         ...props,
@@ -159,15 +159,19 @@ describe("Agent/Index", () => {
     expect(within(muse).getByText("Connected October 5, 2026")).toBeTruthy();
     expect(within(muse).queryByRole("button", { name: "Add Gumroad to Muse" })).toBeNull();
     expect(
-      within(muse).getByText("Submitted for review. The Gumroad connector is not yet available in Muse."),
-    ).toBeTruthy();
+      within(muse).queryByText("Submitted for review. The Gumroad connector is not yet available in Muse."),
+    ).toBeNull();
   });
 
-  it("shows each connector URL with a labelled copy button", () => {
+  it("shows the connector URL with a labelled copy button only where Setup has a manual step", () => {
     renderPage();
 
+    const claude = screen.getByRole("region", { name: "Claude" });
+    expect(within(claude).getByText("https://gumroad.com/claude/v1/mcp")).toBeTruthy();
+    expect(within(claude).getByRole("button", { name: "Copy Claude connector URL" })).toBeTruthy();
+
     const chatgpt = screen.getByRole("region", { name: "ChatGPT" });
-    expect(within(chatgpt).getByText("https://gumroad.com/chatgpt/v1/mcp")).toBeTruthy();
-    expect(within(chatgpt).getByRole("button", { name: "Copy ChatGPT connector URL" })).toBeTruthy();
+    expect(within(chatgpt).queryByRole("heading", { name: "Setup" })).toBeNull();
+    expect(within(chatgpt).queryByText("https://gumroad.com/chatgpt/v1/mcp")).toBeNull();
   });
 });

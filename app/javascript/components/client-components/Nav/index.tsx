@@ -173,8 +173,7 @@ export const Nav = (props: Props) => {
     },
     {
       key: "agent",
-      // Role, not eligibility: a seller under the earned-access bar keeps the tab and is told why
-      // it is locked when they open it, rather than watching it disappear.
+      // Role only: connecting an AI through MCP is open to every seller, so there is no eligibility bar.
       visible: !!loggedInUser?.policies.user.view_store_agent,
       text: "Agent",
       icon: <MessageBubbleDots pack="filled" className="size-5" />,

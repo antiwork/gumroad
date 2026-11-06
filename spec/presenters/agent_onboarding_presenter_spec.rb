@@ -41,7 +41,7 @@ describe AgentOnboardingPresenter do
       expect(claude).not_to have_key(:capability)
 
       chatgpt = props[:clients].second
-      expect(chatgpt[:setup]).to eq("If you cannot add plugins, ask your workspace administrator.")
+      expect(chatgpt[:setup]).to be_nil
 
       muse = props[:clients].last
       expect(muse).to include(label: "Muse", pending_review: true, directory_url: nil, setup: nil)

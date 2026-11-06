@@ -9,8 +9,9 @@ module Mcp
   #
   # `setup` is the marketing pages' full instructions. `manual_setup` is the Agent tab's Setup
   # section, which sits under the directory button and the `availability` note, so it leaves out
-  # the directory step and the plan note those already give. Muse has none: it is under review, and
-  # creators get no Muse setup path until it is listed.
+  # the directory step and the plan note those already give. A client without one gets no Setup
+  # section: ChatGPT has no manual path in this copy, and Muse is under review, so creators get no
+  # Muse setup path until it is listed.
   module ConnectorCopy
     CLIENTS = {
       "muse" => {
@@ -35,7 +36,6 @@ module Mcp
         listing_notice: "Listed in ChatGPT’s plugin directory.",
         connect_label: "Add Gumroad to ChatGPT",
         setup: "Open Gumroad in ChatGPT’s plugin directory and connect it. If you cannot add plugins, ask your workspace administrator.",
-        manual_setup: "If you cannot add plugins, ask your workspace administrator.",
         availability: "Add Gumroad from ChatGPT’s plugin directory."
       }
     }.freeze

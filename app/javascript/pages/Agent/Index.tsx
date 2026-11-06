@@ -58,19 +58,17 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
               <Pill size="small">Not connected</Pill>
             )}
           </div>
-          {/* Once connected, the status pill is the card's state; no add button to repeat it. */}
-          {client.pending_review ? (
+          {/* Once connected, the status pill is the card's state: no add button or install note. */}
+          {client.connected ? null : client.pending_review ? (
             <div className="grid gap-2">
-              {client.connected ? null : (
-                <Button disabled aria-describedby={`${headingId}-availability`}>
-                  {`Add Gumroad to ${client.label}`}
-                </Button>
-              )}
+              <Button disabled aria-describedby={`${headingId}-availability`}>
+                {`Add Gumroad to ${client.label}`}
+              </Button>
               <p id={`${headingId}-availability`} className="text-muted">
                 {client.availability}
               </p>
             </div>
-          ) : client.directory_url && !client.connected ? (
+          ) : client.directory_url ? (
             <div className="grid gap-2">
               <NavigationButton color="accent" href={client.directory_url} target="_blank" rel="noopener noreferrer">
                 {client.connect_label ?? `Add Gumroad to ${client.label}`}
