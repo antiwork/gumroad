@@ -25,6 +25,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/products"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -175,6 +176,18 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 			d.logger.Warn("product page searches left to Rails", "reason", err.Error())
 		}
 	}
+	var jobs *sidekiq.Client
+	if conn, err := d.sidekiqRedis(); err != nil {
+		d.logger.Warn("product page jobs left to Rails", "reason", err.Error())
+	} else {
+		jobs = &sidekiq.Client{Redis: conn}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := jobs.LoadRedisVersion(ctx); err != nil {
+			// The unique-jobs scripts take the version without reading it.
+			d.logger.Warn("Sidekiq Redis version unread", "reason", err.Error())
+		}
+		cancel()
+	}
 	return &products.PageConfig{
 		Layout:  b.pages.Layout,
 		CSP:     b.pages.CSP,
@@ -193,6 +206,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,
 		Search:           search,
+		Sidekiq:          jobs,
 		NewNonce:         newNonce,
 	}, nil
 }
