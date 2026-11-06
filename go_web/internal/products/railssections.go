@@ -7,10 +7,9 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 )
 
-// railsCatalogSearches is the searches in Rails' cached_sections entry for the seller's profile
-// products sections, or cached_default_products_section's: serving the order Rails cached
-// rather than a fresher search. nil on a miss.
-func (h *handler) railsCatalogSearches(p *page, sections []*productsSection) ([]*catalogSearch, error) {
+// catalogSearches is cached_sections' fetch, or cached_default_products_section's: Rails' entry,
+// or the searches and the entry Rails would write for them, so both serve one cached order.
+func (h *handler) catalogSearches(p *page, sections []*productsSection) ([]*catalogSearch, error) {
 	productsKey, err := h.productsCacheKey(p)
 	if err != nil {
 		return nil, err
@@ -21,8 +20,16 @@ func (h *handler) railsCatalogSearches(p *page, sections []*productsSection) ([]
 		key = "profile-sections_" + rev + "-" + productsKey + "-" + profileSectionsCacheKey(p.seller.id, sections)
 	}
 	cached, found, err := h.readCache(p.Ctx, key)
-	if err != nil || !found {
+	if err != nil {
 		return nil, err
+	}
+	if !found {
+		searches, err := h.searchSections(p, sections)
+		if err != nil {
+			return nil, err
+		}
+		p.cacheWrites = append(p.cacheWrites, pendingWrite{key, h.railsSectionsEntry(sections, searches), catalogTTL})
+		return searches, nil
 	}
 	entries, ok := cached.([]any)
 	if sections[0] == nil {
@@ -41,6 +48,52 @@ func (h *handler) railsCatalogSearches(p *page, sections []*productsSection) ([]
 		searches[i] = c.search
 	}
 	return searches, nil
+}
+
+// railsSectionsEntry is the value cached_sections, or cached_default_products_section for the
+// virtual section, caches: Ruby's types, as Marshal keeps them.
+func (h *handler) railsSectionsEntry(sections []*productsSection, searches []*catalogSearch) any {
+	entries := make([]any, len(sections))
+	for i, s := range sections {
+		search := searches[i]
+		ids := make([]any, len(search.IDs))
+		for j, id := range search.IDs {
+			ids[j] = strconv.FormatInt(id, 10)
+		}
+		results := railscache.Hash{
+			{Key: railscache.Symbol("total"), Value: search.Total},
+			{Key: railscache.Symbol("tags_data"), Value: railsBuckets(search.Tags)},
+			{Key: railscache.Symbol("filetypes_data"), Value: railsBuckets(search.Filetypes)},
+			{Key: railscache.Symbol("taxonomy_attributes_data"), Value: []any{}},
+			{Key: railscache.Symbol("products"), Value: ids},
+		}
+		// ObfuscateIds' Base64 is US-ASCII.
+		var id, header any = defaultProductsSectionID, nil
+		showFilters, sort := false, pageLayoutSort
+		if s != nil {
+			id, header, showFilters, sort = railscache.ASCII(h.c.IDs.Encrypt(s.id)), s.header, s.showFilters, s.sort
+		}
+		entries[i] = railscache.Hash{
+			{Key: railscache.Symbol("id"), Value: id},
+			{Key: railscache.Symbol("header"), Value: header},
+			{Key: railscache.Symbol("type"), Value: profileProductsSectionType},
+			{Key: railscache.Symbol("show_filters"), Value: showFilters},
+			{Key: railscache.Symbol("default_product_sort"), Value: sort},
+			{Key: railscache.Symbol("search_results"), Value: results},
+		}
+	}
+	if sections[0] == nil {
+		return entries[0]
+	}
+	return entries
+}
+
+func railsBuckets(buckets []catalogBucket) []any {
+	out := make([]any, len(buckets))
+	for i, b := range buckets {
+		out[i] = railscache.Hash{{Key: "key", Value: b.Key}, {Key: "doc_count", Value: b.DocCount}}
+	}
+	return out
 }
 
 // profileSectionsCacheKey is seller_profile_products_sections.on_profile's
