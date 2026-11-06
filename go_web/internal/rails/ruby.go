@@ -82,6 +82,11 @@ func Blank(v any) bool {
 
 func Present(v any) bool { return !Blank(v) }
 
+// Downcase is String#downcase: strings.ToLower except İ, whose full lowercase mapping is "i̇".
+func Downcase(s string) string {
+	return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307"))
+}
+
 // Truthy is Ruby truthiness: everything but nil and false.
 func Truthy(v any) bool {
 	b, isBool := v.(bool)

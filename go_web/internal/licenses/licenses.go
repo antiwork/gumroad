@@ -344,11 +344,7 @@ func matchesPermalink(prod *product, permalink string) bool {
 // sameDowncase is a.downcase == b.downcase. strings.EqualFold would also fold ſ to s, and
 // strings.ToLower differs from downcase only on İ, which downcase makes "i̇".
 func sameDowncase(a, b string) bool {
-	return rubyDowncase(a) == rubyDowncase(b)
-}
-
-func rubyDowncase(s string) string {
-	return strings.ToLower(strings.ReplaceAll(s, "\u0130", "i\u0307"))
+	return rails.Downcase(a) == rails.Downcase(b)
 }
 
 // productIDFlags reads skip_product_id_check and force_product_id_timestamp in one round trip.

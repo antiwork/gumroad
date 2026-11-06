@@ -167,6 +167,14 @@ func (m *MetaTags) Title() string {
 	return v
 }
 
+// PageTitle is PageMeta::Base#page_title: Title, else the default.
+func (m *MetaTags) PageTitle(fallback string) string {
+	if t := m.Title(); rails.Present(t) {
+		return t
+	}
+	return fallback
+}
+
 // JSON is the _inertia_meta prop.
 func (m *MetaTags) JSON() []any {
 	out := make([]any, len(m.keys))

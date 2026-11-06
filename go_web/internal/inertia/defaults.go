@@ -28,9 +28,9 @@ type Viewer struct {
 // default title, the CSRF tags, the default tags and the analytics tags.
 func (m DefaultMeta) Tags(v Viewer) *MetaTags {
 	tags := NewMetaTags()
-	meta := func(attrs ...string) { tags.Set(NewMetaTag("", "", "", pairs(attrs)...)) }
+	meta := func(attrs ...string) { tags.Set(NewMetaTag("", "", "", Pairs(attrs...)...)) }
 	link := func(headKey, typ string, attrs ...string) {
-		tags.Set(NewMetaTag("link", headKey, typ, pairs(attrs)...))
+		tags.Set(NewMetaTag("link", headKey, typ, Pairs(attrs...)...))
 	}
 
 	meta("title", m.Title)
@@ -65,7 +65,8 @@ func (m DefaultMeta) Tags(v Viewer) *MetaTags {
 	return tags
 }
 
-func pairs(kv []string) []Attr {
+// Pairs is attributes from alternating keys and values.
+func Pairs(kv ...string) []Attr {
 	attrs := make([]Attr, 0, len(kv)/2)
 	for i := 0; i+1 < len(kv); i += 2 {
 		attrs = append(attrs, Attr{Key: kv[i], Value: kv[i+1]})
