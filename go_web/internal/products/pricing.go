@@ -13,29 +13,6 @@ import (
 // productCurrency is product.price_currency_type.to_s.downcase.
 func (p *product) productCurrency() string { return rails.Downcase(p.priceCurrencyType.String) }
 
-// checkCurrencyDisplay is the part of buyer_currency_display_props this port renders: the
-// default display, when the seller hasn't opted in or the buyer's currency is the product's.
-// A local price goes to Rails, whose settleability checks it leaves out.
-func (h *handler) checkCurrencyDisplay(ctx context.Context, p *page, prod *product, v *view) error {
-	if raw, ok := v.sellerJSON.present("disable_buyer_local_currency"); ok {
-		if disabled := rails.BooleanCast(raw); disabled != nil && *disabled {
-			return nil
-		}
-	}
-	on, err := h.flag(ctx, "buyer_local_currency", p.seller.id)
-	if err != nil || !on {
-		return err
-	}
-	buyer := buyerCurrencyPreference(p)
-	if buyer == nil {
-		buyer = v.detectedCurrency
-	}
-	if buyer != nil && *buyer != prod.productCurrency() {
-		return fallback("buyer local currency")
-	}
-	return nil
-}
-
 // buyerCurrencyPreference is buyer_currency_preference: the currency cookie the footer
 // selector writes; prepare has left a ?currency= param to Rails.
 func buyerCurrencyPreference(p *page) *string {

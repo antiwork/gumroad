@@ -2,7 +2,9 @@ package products
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"html"
 	"io"
 	"log/slog"
@@ -473,6 +475,121 @@ func TestANonUSDProductOffersItsPriceInUSD(t *testing.T) {
 			}
 			if !strings.Contains(w.Body.String(), c.want) {
 				t.Errorf("no %s in the JSON-LD", c.want)
+			}
+		})
+	}
+}
+
+// buyer_currency_display and buyer_local_price_props for a visitor whose currency cookie
+// differs from the product's, at the cached rates.
+func TestABuyerSeesTheLocalPrice(t *testing.T) {
+	display := func(shown, product, local, rate, mode string) string {
+		return `"buyer_currency_display":{"product_id":"%s","buyer_currency_shown":"` + shown + `","product_currency":"` + product +
+			`","buyer_local_price_cents":` + local + `,"rate":` + rate + `,"display_mode":"` + mode + `"}`
+	}
+	eurLocal := display("eur", "usd", "462", "0.92345", "buyer_local") + `,"buyer_currency":"eur","buyer_local_currency_rate":0.92345,` +
+		`"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":462,"rental_price_cents":`
+	usdDefault := display("usd", "usd", "null", "null", "default") + `,"rental_price_cents":`
+	platform := func(t *testing.T, conn *sql.DB, currency, jsonData string) {
+		testdb.Insert(t, conn, "merchant_accounts", map[string]any{"id": int64(1_790_901), "charge_processor_id": "stripe",
+			"currency": currency, "json_data": jsonData, "created_at": testNow, "updated_at": testNow})
+	}
+	own := func(t *testing.T, conn *sql.DB, country, jsonData string) {
+		testdb.Insert(t, conn, "merchant_accounts", map[string]any{"id": int64(1_790_902), "user_id": sellerID, "charge_processor_id": "stripe",
+			"country": country, "currency": "usd", "json_data": jsonData, "charge_processor_alive_at": testNow, "created_at": testNow,
+			"updated_at": testNow})
+	}
+	charging := func(e *testEnv) { e.redis.HSet("buyer_currency_charging", "boolean", "true") }
+	for _, c := range []struct {
+		name, product, cookie, want, reason string
+		setup                               func(t *testing.T, e *testEnv, conn *sql.DB)
+	}{
+		{"charging off", "usd", "EUR", eurLocal, "", nil},
+		{"charging on, platform settles in USD", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "usd", `{}`)
+		}},
+		{"an old mismatch marker", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "usd", `{"settlement_currency_mismatch_map":{"eur":"2026-11-04T12:00:00Z"}}`)
+		}},
+		{"a fresh mismatch marker", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "usd", `{"settlement_currency_mismatch_map":{"eur":"2026-11-06T06:00:00Z"}}`)
+		}},
+		{"a marker Time.zone.parse reads loosely", "usd", "EUR", "", "settlement currency mismatch", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "usd", `{"settlement_currency_mismatch_map":{"eur":"Nov 6 2026"}}`)
+		}},
+		{"no platform account", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) { charging(e) }},
+		{"a platform not holding USD", "usd", "EUR", "", "platform settlement currency", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "eur", `{}`)
+		}},
+		{"the seller's account without destination charges", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "usd", `{}`)
+			own(t, conn, "US", `{}`)
+		}},
+		{"the seller's account with destination charges", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			e.redis.HSet("buyer_currency_destination_charges", "boolean", "true")
+			platform(t, conn, "usd", `{}`)
+			own(t, conn, "US", `{}`)
+		}},
+		{"a cross-border account charges through the platform", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			platform(t, conn, "usd", `{}`)
+			own(t, conn, "IN", `{}`)
+		}},
+		{"a Connect account", "usd", "EUR", "", "stripe connect account", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			charging(e)
+			own(t, conn, "US", `{"meta":{"stripe_connect":"true"}}`)
+		}},
+		{"a USD buyer skips the charging checks", "eur", "USD",
+			display("usd", "eur", "541", "1.0828956630028697", "buyer_local") + `,"buyer_currency":"usd",` +
+				`"buyer_local_currency_rate":1.0828956630028697,"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":541,"rental_price_cents":`,
+			"", func(t *testing.T, e *testEnv, conn *sql.DB) { charging(e) }},
+		{"a single-unit buyer currency", "usd", "JPY",
+			display("jpy", "usd", "776", "155.1234", "buyer_local") + `,"buyer_currency":"jpy",` +
+				`"buyer_local_currency_rate":1.551234,"buyer_local_currency_subunit_to_unit":1,"buyer_local_price_cents":776,"rental_price_cents":`,
+			"", nil},
+		{"no rate", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) { e.redis.Del("currencies:EUR") }},
+		{"a rate String#to_d reads loosely", "usd", "EUR", "", "currency rate", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			e.redis.Set("currencies:EUR", "0.9_2")
+		}},
+		{"seller turned it off", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE users SET json_data = '{\"disable_buyer_local_currency\":true}' WHERE id = ?", sellerID)
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			conn.Exec("UPDATE links SET price_currency_type = ? WHERE id = ?", c.product, productID)
+			conn.Exec("UPDATE prices SET currency = ? WHERE id = ?", c.product, priceID)
+			e.redis.HSet("buyer_local_currency", "boolean", "true")
+			e.redis.Set("currencies:EUR", "0.92345")
+			e.redis.Set("currencies:JPY", "155.1234")
+			if c.setup != nil {
+				c.setup(t, e, conn)
+			}
+			headers := map[string]string{"Cookie": "gumroad_buyer_currency=" + c.cookie}
+			if c.reason != "" {
+				maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
+			}
+			w := e.get(host, "/l/guide", headers)
+			if c.reason != "" {
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+			}
+			page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+			if want := fmt.Sprintf(c.want, e.ids.Encrypt(productID)); !strings.Contains(page, want) {
+				t.Errorf("want %s in %s", want, page[strings.Index(page, `"buyer_currency_display"`):][:420])
 			}
 		})
 	}

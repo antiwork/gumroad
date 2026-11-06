@@ -67,13 +67,15 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("description_html", v.descriptionHTML).
 		Sym("currency_code", currencyCode(prod)).
 		Sym("price_cents", intOrNil(v.priceCents)).
-		Sym("buyer_currency_display", rails.NewRHash().
-			Sym("product_id", externalID).
-			Sym("buyer_currency_shown", productCurrency).
-			Sym("product_currency", productCurrency).
-			Sym("buyer_local_price_cents", nil).
-			Sym("rate", nil).
-			Sym("display_mode", "default")).
+		Sym("buyer_currency_display", buyerCurrencyDisplay(externalID, productCurrency, v.currency))
+	if c := v.currency; c != nil {
+		// buyer_local_price_props; buyer_local_original_price_cents needs a discount, which is Rails'.
+		product.Sym("buyer_currency", c.buyer).
+			Sym("buyer_local_currency_rate", minorUnitRate(c.rate, productCurrency, c.buyer)).
+			Sym("buyer_local_currency_subunit_to_unit", unitScalingFactor(c.buyer)).
+			Sym("buyer_local_price_cents", c.localCents)
+	}
+	product.
 		Sym("rental_price_cents", nil).
 		Sym("pwyw", pwyw).
 		Sym("eligible_for_installment_plans", installmentEligible(prod)).
@@ -247,4 +249,21 @@ func (h *handler) sectionsProps(p *page, v *view) *rails.RHash {
 		Sym("show_ratings_filter", v.showRatingsFilter).
 		Sym("creator_profile", profile).
 		Sym("sections", []any{})
+}
+
+// buyerCurrencyDisplay is buyer_currency_display_props' hash.
+func buyerCurrencyDisplay(productID, productCurrency string, c *currencyDisplay) *rails.RHash {
+	d := rails.NewRHash().Sym("product_id", productID)
+	if c == nil {
+		return d.Sym("buyer_currency_shown", productCurrency).
+			Sym("product_currency", productCurrency).
+			Sym("buyer_local_price_cents", nil).
+			Sym("rate", nil).
+			Sym("display_mode", "default")
+	}
+	return d.Sym("buyer_currency_shown", c.buyer).
+		Sym("product_currency", productCurrency).
+		Sym("buyer_local_price_cents", c.localCents).
+		Sym("rate", c.rate).
+		Sym("display_mode", "buyer_local")
 }

@@ -149,6 +149,7 @@ type view struct {
 	fontPreload             bool
 	mainSectionIndex        any
 	refundPolicy            any
+	currency                *currencyDisplay
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -191,7 +192,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// pwyw_default_price_cents calls zero? on the nil price, and Rails raises.
 		return nil, fallback("no price")
 	}
-	if err := h.checkCurrencyDisplay(ctx, p, prod, v); err != nil {
+	if v.currency, err = h.loadCurrencyDisplay(p, prod, v); err != nil {
 		return nil, err
 	}
 	if err := h.checkPPP(ctx, p, prod, v); err != nil {
