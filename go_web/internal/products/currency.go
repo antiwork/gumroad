@@ -107,11 +107,29 @@ func (h *handler) buyerCurrencySettleable(p *page, buyer string) (bool, error) {
 	if on, err := h.flag(p.Ctx, "buyer_currency_charging", p.seller.id); err != nil || !on {
 		return true, err
 	}
-	own, err := h.sellerHasStripeAccount(p.Ctx, p.seller.id)
+	account, err := h.sellerStripeAccount(p)
 	if err != nil {
 		return false, err
 	}
-	if own {
+	if account != nil && account.connect {
+		// A Connect account is supported and mints its own quote, so it must hold USD and carry no
+		// fresh marker: eur_native_charging_shape? needs the platform account.
+		if c := account.currency.String; !rails.Blank(c) && rails.Downcase(c) != "usd" {
+			return false, nil
+		}
+		mismatches, err := mismatchMap(account.data)
+		if err != nil {
+			return false, err
+		}
+		if fresh, err := freshMismatch(mismatches, buyer, p.Req.Now); err != nil || fresh {
+			return false, err
+		}
+		// The pre-map blanket marker counts on a seller's own account.
+		noticed, _ := account.data.present("settlement_currency_mismatch_noticed_at")
+		fresh, err := freshTimestamp(noticed, p.Req.Now)
+		return !fresh, err
+	}
+	if account != nil {
 		// supported_merchant_account? for a seller's own Custom account.
 		if on, err := h.flag(p.Ctx, "buyer_currency_destination_charges", p.seller.id); err != nil || !on {
 			return false, err
@@ -122,7 +140,7 @@ func (h *handler) buyerCurrencySettleable(p *page, buyer string) (bool, error) {
 	if err != nil || platform == nil {
 		return false, err
 	}
-	if c := platform.currency.String; c != "" && rails.Downcase(c) != "usd" {
+	if c := platform.currency.String; !rails.Blank(c) && rails.Downcase(c) != "usd" {
 		return false, fallback("platform settlement currency")
 	}
 	fresh, err := freshMismatch(platform.mismatches, buyer, p.Req.Now)
@@ -139,13 +157,17 @@ func (h *handler) buyerCurrencySettleable(p *page, buyer string) (bool, error) {
 // iso8601 is Time#iso8601, which record_settlement_currency_mismatch! writes.
 var iso8601 = regexp.MustCompile(`\A\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})\z`)
 
-// freshMismatch is fresh_mismatch_timestamp? on the map's entry for currency. Anything but
-// what Time#iso8601 writes goes to Rails, which reads it with Time.zone.parse.
+// freshMismatch is fresh_mismatch_timestamp? on the map's entry for currency.
 func freshMismatch(mismatches *rails.Hash, currency string, now time.Time) (bool, error) {
 	if mismatches == nil {
 		return false, nil
 	}
-	raw := mismatches.Value(currency)
+	return freshTimestamp(mismatches.Value(currency), now)
+}
+
+// freshTimestamp is fresh_mismatch_timestamp? for one marker. Anything but what Time#iso8601
+// writes goes to Rails, which reads it with Time.zone.parse.
+func freshTimestamp(raw any, now time.Time) (bool, error) {
 	if !rails.Present(raw) {
 		return false, nil
 	}
@@ -160,40 +182,63 @@ func freshMismatch(mismatches *rails.Hash, currency string, now time.Time) (bool
 	return at.After(now.Add(-settlementMismatchTTL)), nil
 }
 
-// sellerHasStripeAccount is whether User#merchant_account("stripe") is the seller's own: an
-// alive, charge-processor-alive Stripe account whose country can take charges. A Connect
-// account goes to Rails: merchant_migration_enabled? reads compliance info.
-func (h *handler) sellerHasStripeAccount(ctx context.Context, sellerID int64) (bool, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT merchant_accounts.json_data, merchant_accounts.country FROM merchant_accounts"+
-		" WHERE merchant_accounts.user_id = ? AND merchant_accounts.deleted_at IS NULL"+
+// stripeAccount is the seller's own Stripe account that User#merchant_account("stripe") picks.
+type stripeAccount struct {
+	connect  bool
+	currency sql.NullString
+	data     jsonData
+}
+
+// sellerStripeAccount is User#merchant_account("stripe") among the seller's alive,
+// charge-processor-alive Stripe accounts: the first Connect one when merchant_migration_enabled?,
+// else the first other one whose country can take charges; nil is MerchantAccount.gumroad.
+func (h *handler) sellerStripeAccount(p *page) (*stripeAccount, error) {
+	rows, err := h.c.DB.QueryContext(p.Ctx, "SELECT merchant_accounts.json_data, merchant_accounts.country, merchant_accounts.currency"+
+		" FROM merchant_accounts WHERE merchant_accounts.user_id = ? AND merchant_accounts.deleted_at IS NULL"+
 		" AND merchant_accounts.charge_processor_alive_at IS NOT NULL AND merchant_accounts.charge_processor_deleted_at IS NULL"+
-		" AND merchant_accounts.charge_processor_id = 'stripe'", sellerID)
+		" AND merchant_accounts.charge_processor_id = 'stripe' ORDER BY merchant_accounts.id", p.seller.id)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer rows.Close()
-	own := false
+	var connect, own *stripeAccount
 	for rows.Next() {
 		var raw, country sql.NullString
-		if err := rows.Scan(&raw, &country); err != nil {
-			return false, err
+		a := &stripeAccount{}
+		if err := rows.Scan(&raw, &country, &a.currency); err != nil {
+			return nil, err
 		}
-		data, ok := parseJSONData(raw)
-		if !ok {
-			return false, fallback("merchant account json_data")
+		var ok bool
+		if a.data, ok = parseJSONData(raw); !ok {
+			return nil, fallback("merchant account json_data")
 		}
-		switch meta := data.get("meta").(type) {
+		switch meta := a.data.get("meta").(type) {
 		case nil:
 		case *rails.Hash:
-			if meta.Value("stripe_connect") == "true" {
-				return false, fallback("stripe connect account")
-			}
+			a.connect = meta.Value("stripe_connect") == "true"
 		default:
-			return false, fallback("merchant account json_data")
+			return nil, fallback("merchant account json_data")
 		}
-		own = own || !crossBorderCountries[country.String]
+		switch {
+		case a.connect && connect == nil:
+			connect = a
+		case !a.connect && own == nil && !crossBorderCountries[country.String]:
+			own = a
+		}
 	}
-	return own, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if connect != nil {
+		if p.seller.is(userCheckMerchantAccountIsLinked) {
+			return connect, nil
+		}
+		// merchant_migration_enabled? without the linked flag: the feature, then the compliance country.
+		if on, err := h.flag(p.Ctx, "merchant_migration", p.seller.id); err != nil || on {
+			return nil, firstErr(err, fallback("stripe connect routing"))
+		}
+	}
+	return own, nil
 }
 
 type platformAccount struct {
@@ -218,14 +263,23 @@ func (h *handler) platformStripeAccount(ctx context.Context) (*platformAccount, 
 	if !ok {
 		return nil, fallback("merchant account json_data")
 	}
-	switch m, _ := data.present("settlement_currency_mismatch_map"); m := m.(type) {
-	case nil:
-	case *rails.Hash:
-		a.mismatches = m
-	default:
-		return nil, fallback("settlement currency mismatch")
+	if a.mismatches, err = mismatchMap(data); err != nil {
+		return nil, err
 	}
 	return a, nil
+}
+
+// mismatchMap is settlement_currency_mismatch_map, nil when blank; anything else but a Hash
+// goes to Rails.
+func mismatchMap(data jsonData) (*rails.Hash, error) {
+	m, present := data.present("settlement_currency_mismatch_map")
+	if !present {
+		return nil, nil
+	}
+	if h, ok := m.(*rails.Hash); ok {
+		return h, nil
+	}
+	return nil, fallback("settlement currency mismatch")
 }
 
 // cachedUSDRate is cached_usd_rate: currencies:<CODE> as String#to_d, absent unless positive.
