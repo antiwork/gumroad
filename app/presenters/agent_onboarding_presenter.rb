@@ -3,8 +3,8 @@
 # Builds the props for the Agent dashboard tab, which onboards a creator's own AI assistant
 # (Claude, ChatGPT or Muse) onto the store through Gumroad's MCP server.
 #
-# Must stay cheap for every seller: one indexed query on oauth_access_tokens by the current user's
-# id, nothing from Elasticsearch, no eligibility bar (MCP is open to every seller).
+# Must stay cheap for every seller: one indexed query on oauth_access_tokens by the selected
+# account's id, nothing from Elasticsearch, no eligibility bar (MCP is open to every seller).
 class AgentOnboardingPresenter
   # Order the tab shows the clients in. Keys must exist in Mcp::ConnectorCopy::CLIENTS.
   CLIENT_ORDER = %w[claude chatgpt muse].freeze
@@ -23,7 +23,7 @@ class AgentOnboardingPresenter
 
   def initialize(pundit_user:)
     @pundit_user = pundit_user
-    @user = pundit_user.user
+    @seller = pundit_user.seller
   end
 
   def index_props
@@ -38,15 +38,18 @@ class AgentOnboardingPresenter
     }
   end
 
-  # { "claude" => { connected:, first_connected_at:, last_used_at: }, ... } for the current USER
-  # (MCP tokens belong to the person who authorized the client, not the seller account).
+  # { "claude" => { connected:, first_connected_at:, last_used_at: }, ... } for the SELECTED account.
+  # MCP consent binds the grant to the account chosen in the switcher, not to the signed-in user
+  # (Oauth::AuthorizationsController#current_resource_owner), so a brand's tokens carry the brand's
+  # id even when a team member authorized the client. A revoked token keeps its history (first
+  # connect, last activity) but does not count as connected.
   # One query, bounded by resource_owner_id (indexed); grouped in Ruby by the client path segment,
   # the same match the MCP metrics use.
   def connection_status_by_client
     status = CLIENT_ORDER.index_with { { connected: false, first_connected_at: nil, last_used_at: nil } }
 
     Doorkeeper::AccessToken
-      .where(resource_owner_id: user.id)
+      .where(resource_owner_id: seller.id)
       .where.not(resource: nil)
       .pluck(:resource, :created_at, :revoked_at)
       .each do |resource, created_at, revoked_at|
@@ -54,7 +57,7 @@ class AgentOnboardingPresenter
         next if key.nil?
 
         entry = status[key]
-        entry[:connected] = true
+        entry[:connected] = true if revoked_at.nil?
         entry[:first_connected_at] = [entry[:first_connected_at], created_at].compact.min
         # Doorkeeper tokens carry no last-used stamp; the newest token (or its revocation) is the
         # latest activity we can state honestly.
@@ -70,7 +73,7 @@ class AgentOnboardingPresenter
   end
 
   private
-    attr_reader :pundit_user, :user
+    attr_reader :pundit_user, :seller
 
     def client_props(key, status)
       copy = Mcp::ConnectorCopy::CLIENTS.fetch(key)
@@ -87,7 +90,7 @@ class AgentOnboardingPresenter
         connect_label: copy[:connect_label],
         availability: copy[:availability],
         setup: copy[:setup],
-        endpoint_url: Mcp::ConnectorCopy.endpoint_url(key),
+        endpoint_url: Mcp::ConnectorCopy.endpoint_for(key),
       }
     end
 end

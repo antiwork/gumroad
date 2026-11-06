@@ -31,7 +31,7 @@ describe AgentController, type: :controller, inertia: true do
       expect(inertia.props[:help_article_url]).to eq(Mcp::ConnectorCopy::SETUP_GUIDE_URL)
     end
 
-    it "marks a client connected when the current user holds an MCP token for it" do
+    it "marks a client connected when the selected account holds an MCP token for it" do
       app = create(:oauth_application, owner: seller)
       create("doorkeeper/access_token",
              application: app,

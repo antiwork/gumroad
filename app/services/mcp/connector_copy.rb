@@ -43,8 +43,9 @@ module Mcp
       { prompt: "Check my latest payouts.", description: "Check recent payout amounts and their status." },
     ].freeze
 
-    # The remote MCP server URL a creator pastes into a client's custom-connector form.
-    def self.endpoint_url(client_key)
+    # The remote MCP server URL a creator pastes into a client's custom-connector form. Not named
+    # `*_url`: CONTRIBUTING.md reserves that suffix for generated route helpers.
+    def self.endpoint_for(client_key)
       "#{PROTOCOL}://#{DOMAIN}/#{client_key}/v1/mcp"
     end
   end

@@ -70,14 +70,26 @@ describe AgentOnboardingPresenter do
       expect(presenter.index_props[:clients].map { _1[:connected] }).to eq([false, false, false])
     end
 
-    it "reads status for the acting user, not the seller account" do
+    it "reads status for the selected account, not the signed-in user" do
       admin = create(:user)
       create(:team_membership, user: admin, seller:, role: TeamMembership::ROLE_ADMIN)
       mcp_token(admin, "chatgpt", created_at: 1.day.ago)
 
-      clients = described_class.new(pundit_user: SellerContext.new(user: admin, seller:)).index_props[:clients]
-      expect(clients.map { _1[:connected] }).to eq([false, true, false])
-      expect(presenter.index_props[:clients].map { _1[:connected] }).to eq([false, false, false])
+      admin_context = SellerContext.new(user: admin, seller:)
+      expect(described_class.new(pundit_user: admin_context).index_props[:clients].map { _1[:connected] }).to eq([false, false, false])
+
+      mcp_token(seller, "chatgpt", created_at: 2.days.ago)
+      expect(described_class.new(pundit_user: admin_context).index_props[:clients].map { _1[:connected] }).to eq([false, true, false])
+    end
+
+    it "reports a client whose tokens are all revoked as not connected, keeping the connect history" do
+      mcp_token(seller, "claude", created_at: Time.zone.parse("2026-09-01 10:00"), revoked_at: Time.zone.parse("2026-09-15 10:00"))
+
+      claude = presenter.index_props[:clients].first
+
+      expect(claude[:connected]).to eq(false)
+      expect(claude[:first_connected_at]).to eq(Time.zone.parse("2026-09-01 10:00").iso8601)
+      expect(claude[:last_used_at]).to eq(Time.zone.parse("2026-09-15 10:00").iso8601)
     end
 
     it "never touches the Elasticsearch sales aggregation" do
