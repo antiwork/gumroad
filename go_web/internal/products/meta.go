@@ -61,7 +61,7 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 	if len(v.covers) > 0 {
 		main = v.covers[0]
 		switch {
-		case main.isImage:
+		case main.previewImagePath():
 			shareImage = main.url
 		case main.oembed != nil:
 			if main.thumbnail != "" && !addressableUnchanged.MatchString(main.thumbnail) {
@@ -90,7 +90,7 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		}
 	}
 	switch {
-	case main != nil && main.isImage:
+	case main != nil && main.previewImagePath():
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary_large_image")...)
 		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.url)...)
 		set("", "", "", inertia.Pairs("property", "twitter:image:alt", "content", "")...)

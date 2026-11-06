@@ -74,7 +74,7 @@ func TestContentItemsMapFilesAndFolders(t *testing.T) {
 
 func TestContentItemsHonorDownloadGrants(t *testing.T) {
 	e, r := newPageEnv(t)
-	e.file(pageFile, map[string]any{"link_id": pageProduct, "position": 0, "flags": fileStreamOnly})
+	e.file(pageFile, map[string]any{"link_id": pageProduct, "position": 0, "flags": FileStreamOnly})
 	download := func() any {
 		items, err := e.items(r, ContentRedirect{Token: "tok"})
 		if err != nil {

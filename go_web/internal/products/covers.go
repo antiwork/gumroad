@@ -43,6 +43,7 @@ type cover struct {
 	width, height                 *dimension
 	url, originalURL              string
 	isImage, isVideo, postProcess bool
+	isUnsplash                    bool
 	// oembed is an embedded player's column, as OEmbedFinder stores it.
 	oembed *oembedData
 	// thumbnail is thumbnail_url: a video's poster or a player's thumbnail; "" is nil.
@@ -89,7 +90,7 @@ type coverOrder struct {
 }
 
 // loadCovers is display_asset_previews with each one's URLs. Any other cover goes to Rails:
-// an Unsplash one, a video without a persisted poster (Rails may enqueue one), or an image
+// an Unsplash one with a file or player, a video without a persisted poster (Rails may enqueue one), or an image
 // whose retina variant isn't processed yet (url_from_file enqueues it).
 func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*cover, error) {
 	// One row per attachment, through the attachments' unique index; a preview on two rows
@@ -102,7 +103,7 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 			AND att.name = 'file'
 		LEFT JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
 		WHERE asset_previews.link_id = ? AND asset_previews.deleted_at IS NULL
-		ORDER BY asset_previews.position ASC, asset_previews.created_at ASC, asset_previews.id ASC`, productID)
+		ORDER BY asset_previews.position ASC, asset_previews.created_at ASC, asset_previews.id ASC, att.blob_id ASC`, productID)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +123,11 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 		}
 		switch {
 		case unsplash.Valid:
-			return nil, fallback("unsplash cover")
+			// url answers the Unsplash URL when present; width and height read the file or oembed.
+			if !rails.Present(unsplash.String) || oembed.Valid || attID.Valid {
+				return nil, fallback("unsplash cover")
+			}
+			c.isUnsplash, c.url, c.originalURL = true, unsplash.String, unsplash.String
 		case oembed.Valid && attID.Valid:
 			return nil, fallback("oembed cover with a file")
 		case oembed.Valid:
@@ -138,7 +143,10 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 			}
 		case !attID.Valid:
 			return nil, fallback("cover without a file")
-		case previewID == lastPreviewID || !blobID.Valid:
+		case previewID == lastPreviewID:
+			// has_one's query reads the attachments' unique index, so the lowest blob_id wins.
+			continue
+		case !blobID.Valid:
 			return nil, fallback("cover attachment")
 		default:
 			lastPreviewID = previewID
@@ -212,6 +220,9 @@ func blobDimensions(metadata string) (width, height *dimension, err error) {
 
 // coverURLs is url and url(style: :original), through cdn_url_for, and thumbnail_url.
 func (h *handler) coverURLs(ctx context.Context, p *page, c *cover) error {
+	if c.isUnsplash {
+		return nil
+	}
 	if o := c.oembed; o != nil {
 		url, err := o.url()
 		if err != nil {
@@ -395,6 +406,8 @@ func (c *cover) json() *rails.RHash {
 	}
 	typ := "image"
 	switch {
+	case c.isUnsplash:
+		typ = "unsplash"
 	case c.oembed != nil:
 		typ = "oembed"
 	case c.isVideo:
@@ -430,8 +443,11 @@ func (c *cover) displayHeight() (int64, bool) {
 	return int64(float64(c.height.toI()) * (float64(dw.toI()) / c.width.n)), true
 }
 
+// previewImagePath is preview_image_path? for the main cover: an image file or an Unsplash photo.
+func (c *cover) previewImagePath() bool { return c.isImage || c.isUnsplash }
+
 func (c *cover) filetype() any {
-	if c.oembed != nil {
+	if c.oembed != nil || c.isUnsplash {
 		return nil
 	}
 	if ext := strings.Replace(rails.FileExtname(c.filename), ".", "", 1); ext != "" {

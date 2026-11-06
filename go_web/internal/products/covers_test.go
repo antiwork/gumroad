@@ -169,3 +169,53 @@ func TestAnOembedCoverThisPortCannotReadGoesToRails(t *testing.T) {
 		})
 	}
 }
+
+func TestAnUnsplashCoverRendersItsURL(t *testing.T) {
+	e := newTestEnv(t)
+	const photo = "https://images.unsplash.com/photo-1?w=1080"
+	testdb.Insert(t, testdb.Open(t), "asset_previews", map[string]any{"id": int64(1_793_601), "link_id": productID, "guid": "photo-guid",
+		"position": 0, "unsplash_url": photo, "created_at": testNow, "updated_at": testNow})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d, fallback %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	body := w.Body.String()
+	page := html.UnescapeString(dataPage.FindStringSubmatch(body)[1])
+	if want := `"covers":[{"url":"` + photo + `","original_url":"` + photo + `","thumbnail":null,"id":"photo-guid","type":"unsplash",` +
+		`"filetype":null,"width":null,"height":null,"native_width":null,"native_height":null}]`; !strings.Contains(page, want) {
+		t.Errorf("want %s\nin %s", want, page)
+	}
+	for _, want := range []string{
+		`<meta property="og:image" content="` + html.EscapeString(photo) + `"`,
+		`<meta property="twitter:card" content="summary_large_image"`,
+		`<meta property="twitter:image" content="` + html.EscapeString(photo) + `"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	// file.image? is nil without a file, so nothing is preloaded.
+	if strings.Contains(body, `rel="preload" as="image"`) {
+		t.Error("an Unsplash cover is preloaded")
+	}
+}
+
+func TestACoverWithTwoFilesUsesTheLowerBlob(t *testing.T) {
+	e := newTestEnv(t)
+	addCover(t, true)
+	conn := testdb.Open(t)
+	// A second, later attachment of the same preview: has_one keeps the lower blob_id.
+	testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_790_509), "key": "covers/other", "filename": "b.jpg",
+		"content_type": "image/jpeg", "metadata": `{"width":10,"height":10}`, "service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
+	// Its attachment id is lower, so only blob_id order keeps the first file.
+	testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_790_600), "name": "file",
+		"record_type": "AssetPreview", "record_id": int64(1_790_401), "blob_id": int64(1_790_509), "created_at": testNow})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d, fallback %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, `"covers":[{"url":"https://public-files.gumroad.com/covers/retina"`) ||
+		strings.Contains(page, "covers/other") {
+		t.Errorf("covers %s", page)
+	}
+}
