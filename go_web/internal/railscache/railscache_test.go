@@ -315,14 +315,20 @@ func TestWriteMatchesStoreWrite(t *testing.T) {
 			expiresIn = time.Duration(*c.ExpiresInNs)
 		}
 		data, extras, err := encodeWrite(build(t, c.Value), expiresIn, time.Unix(c.Now[0], c.Now[1]))
-		if c.Compressed {
-			if !errors.Is(err, ErrUnported) {
-				t.Errorf("%s: Rails deflates this, so it must be ErrUnported; got %v", c.Name, err)
-			}
-			continue
-		}
 		if err != nil {
 			t.Errorf("%s: %v", c.Name, err)
+			continue
+		}
+		if c.Compressed {
+			// Ruby's deflate bytes aren't Go's, so check what Rails' read of them would give.
+			e, err := decodeStored(binary.BigEndian.Uint32(extras[:4]), data)
+			if err != nil || e.typ&typeCompressed == 0 {
+				t.Errorf("%s: %v, type %#x", c.Name, err, e.typ)
+				continue
+			}
+			if got, err := e.value(); err != nil || !same(got, build(t, c.Value)) {
+				t.Errorf("%s: read back %#v %v", c.Name, got, err)
+			}
 			continue
 		}
 		flags, ttl := binary.BigEndian.Uint32(extras[:4]), int64(binary.BigEndian.Uint32(extras[4:]))

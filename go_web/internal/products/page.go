@@ -20,8 +20,6 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
-const component = "Products/Show"
-
 // Cache is Rails.cache, as railscache.Store reads and writes it.
 type Cache interface {
 	Read(ctx context.Context, key string) (any, bool, error)
@@ -97,7 +95,13 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
 	h.productProps(props, p, prod, v)
 	props.Merge(h.sectionsProps(p, v))
-	props.Sym("sections", []any{}).Sym("main_section_index", v.mainSectionIndex)
+	component := productComponent
+	if storefront(p) {
+		component = storefrontComponent
+		props.Sym("sections", v.catalog).Sym("main_section_index", int64(0))
+	} else {
+		props.Sym("sections", []any{}).Sym("main_section_index", v.mainSectionIndex)
+	}
 
 	// as_embed is a declined param.
 	body := pc.Layout.Render(inertia.Document{
@@ -154,11 +158,15 @@ type view struct {
 	mainSectionIndex        any
 	refundPolicy            any
 	currency                *currencyDisplay
-	variants                *variants
-	collaborator            any
-	salesCount              any
-	recurrences             *recurrences
-	tierRecurrences         map[string]bool
+	// localBuyer is the buyer currency a local price may show in, before settlement checks.
+	localBuyer      *string
+	variants        *variants
+	collaborator    any
+	salesCount      any
+	recurrences     *recurrences
+	tierRecurrences map[string]bool
+	// catalog is the storefront's sections.
+	catalog []any
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {
@@ -207,8 +215,13 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// before that for a membership.
 		return nil, fallback("no price")
 	}
-	if v.currency, err = h.loadCurrencyDisplay(p, prod, v); err != nil {
+	if v.localBuyer, err = h.localCurrencyBuyer(p, v); err != nil {
 		return nil, err
+	}
+	if v.localBuyer != nil {
+		if v.currency, err = h.currencyDisplayFor(p, *v.localBuyer, prod.productCurrency(), v.priceCents); err != nil {
+			return nil, err
+		}
 	}
 	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled)) {
 		// buyer_currency_unquotable_product? and the India mandate check can only turn a
@@ -284,9 +297,14 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if err := h.loadCustomStyles(ctx, p, v); err != nil {
 		return nil, err
 	}
-	// Last: an Elasticsearch search is the costliest read, and anything above may still fall back.
+	// Last: Elasticsearch searches are the costliest reads, and anything above may still fall back.
 	if err := h.loadSalesCount(ctx, p, prod, v); err != nil {
 		return nil, err
+	}
+	if storefront(p) {
+		if v.catalog, err = h.loadCatalog(p, prod, v.localBuyer); err != nil {
+			return nil, err
+		}
 	}
 	v.mainSectionIndex = int64(0)
 	if raw, ok := v.productJSON.present("main_section_index"); ok {
