@@ -72,8 +72,8 @@ func (pc *PageConfig) cdnURL(s string) string {
 	return s
 }
 
-// render is LinksController#prepare_product_page and #show for a signed-out visitor, the seller, or
-// one signed in with no part in the product, then the after_actions. Everything is read before
+// render is LinksController#prepare_product_page and #show for a visitor signed out or signed in as
+// themselves, then the after_actions. Everything is read before
 // anything is written.
 func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx := h.c.Page, p.Ctx
@@ -237,7 +237,7 @@ type view struct {
 	// wishlists are the signed-in visitor's, as product_props lists them.
 	wishlists []any
 	purchase  any
-	// waitlistCount is waitlist_props' count, nil but for the seller.
+	// waitlistCount is waitlist_props' count, nil but for a visitor who can edit the product.
 	waitlistCount any
 	// editor is the editing payload's products, posts and wishlist_options, nil but for the seller.
 	editor *rails.RHash
@@ -380,7 +380,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.purchase, err = h.purchaseProps(p, prod, v); err != nil {
 		return nil, err
 	}
-	if p.ownView() && prod.acceptsWaitlistSignups() {
+	if p.canEdit() && prod.acceptsWaitlistSignups() {
 		var n int64
 		if err := h.c.DB.QueryRowContext(ctx, "SELECT COUNT(*) FROM waitlist_entries INNER JOIN followers ON followers.id = waitlist_entries.follower_id"+
 			" WHERE waitlist_entries.product_id = ? AND followers.deleted_at IS NULL AND followers.confirmed_at IS NOT NULL", prod.id).Scan(&n); err != nil {

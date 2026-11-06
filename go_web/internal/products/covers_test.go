@@ -11,16 +11,24 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
 
+func addBlob(t *testing.T, conn *sql.DB, id int64, key, filename, contentType, metadata string) {
+	testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": id, "key": key, "filename": filename,
+		"content_type": contentType, "metadata": metadata, "service_name": "amazon", "byte_size": 1, "created_at": testNow})
+}
+
+func addAttachment(t *testing.T, conn *sql.DB, id int64, name, recordType string, recordID, blobID int64) {
+	testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": id, "name": name, "record_type": recordType,
+		"record_id": recordID, "blob_id": blobID, "created_at": testNow})
+}
+
 // addVideoCover gives the product an uploaded video cover whose analyzer metadata is metadata,
 // with a preview image whose resized copy for digest is processed when poster is true.
 func addVideoCover(t *testing.T, conn *sql.DB, metadata, digest string, poster bool) {
 	blob := func(id int64, key, filename, contentType, metadata string) {
-		testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": id, "key": key, "filename": filename,
-			"content_type": contentType, "metadata": metadata, "service_name": "amazon", "byte_size": 1, "created_at": testNow})
+		addBlob(t, conn, id, key, filename, contentType, metadata)
 	}
 	attach := func(id int64, name, recordType string, recordID, blobID int64) {
-		testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": id, "name": name, "record_type": recordType,
-			"record_id": recordID, "blob_id": blobID, "created_at": testNow})
+		addAttachment(t, conn, id, name, recordType, recordID, blobID)
 	}
 	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_793_101), "link_id": productID, "guid": "video-guid",
 		"position": 0, "created_at": testNow, "updated_at": testNow})
@@ -84,6 +92,23 @@ func TestAVideoCoverRendersWithItsPoster(t *testing.T) {
 				t.Errorf("cache writes %v", e.cache.writes)
 			}
 		})
+	}
+}
+
+// A blob with two preview images takes the one Rails' has_one statement returns first: the
+// uniqueness index's first, by blob, not the lowest attachment id.
+func TestAVideoCoverWithTwoPreviewImages(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	addVideoCover(t, conn, `{"width":1920.0,"height":1080.0}`, "WX6OQ3hf/g9WoAI2n/sUdFF1vxA=", true)
+	addBlob(t, conn, 1_793_204, "posters/other", "other.jpg", "image/jpeg", "{}")
+	addAttachment(t, conn, 1_793_300, "preview_image", "ActiveStorage::Blob", 1_793_201, 1_793_204)
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if !strings.Contains(html.UnescapeString(w.Body.String()), `"thumbnail":"https://public-files.gumroad.com/posters/retina","id":"video-guid"`) {
+		t.Error("poster")
 	}
 }
 

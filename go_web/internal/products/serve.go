@@ -92,7 +92,8 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		case err != nil:
 			return err
 		case on && !prod.alive() && logged != nil && !seller:
-			// Whether they collaborate on it is Rails' to tell.
+			// A collaborator previews it, which renderCustomHTML leaves to Rails; anyone else gets the
+			// page, which isn't ported for an unpublished product here.
 			return fallback("custom html preview")
 		case on && !prod.alive() && !seller:
 			return fallback("custom html waitlist")

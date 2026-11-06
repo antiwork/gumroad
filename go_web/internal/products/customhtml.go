@@ -43,7 +43,7 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		if logged.ID == prod.userID {
 			return fallback("custom html preview")
 		}
-		collaborates, err := h.collaborates(ctx, logged.ID, prod.id)
+		collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
 		if err != nil || collaborates {
 			return firstErr(err, fallback("custom html preview"))
 		}

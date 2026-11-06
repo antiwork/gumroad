@@ -103,9 +103,6 @@ func (h *handler) loadViewer(p *page, prod *product) error {
 	case p.Auth.CurrentSeller == nil || p.Auth.CurrentSeller.ID != logged.ID:
 		return fallback("signed in as another seller")
 	}
-	if err := h.viewerHasNoPart(p, prod, logged.ID); err != nil {
-		return err
-	}
 	u, err := h.loadSignedInUser(p.Ctx, logged.ID)
 	if err != nil {
 		return err
@@ -117,27 +114,27 @@ func (h *handler) loadViewer(p *page, prod *product) error {
 		return err
 	}
 	p.viewer = u
-	return nil
+	return h.viewerCollaborates(p, prod)
 }
 
-// viewerHasNoPart goes to Rails for a product the visitor collaborates on: collaborator_for?
-// opens the editor's props.
-func (h *handler) viewerHasNoPart(p *page, prod *product, userID int64) error {
-	if !p.hasCollaborator {
+// collaboratorFor is User#collaborator_for?.
+func (h *handler) collaboratorFor(ctx context.Context, userID, productID int64) (bool, error) {
+	return h.exists(ctx, "SELECT 1 FROM links INNER JOIN affiliates_links ON links.id = affiliates_links.link_id"+
+		" INNER JOIN affiliates ON affiliates_links.affiliate_id = affiliates.id"+
+		" LEFT OUTER JOIN collaborator_invitations ON collaborator_invitations.collaborator_id = affiliates.id"+
+		" WHERE affiliates.type = 'Collaborator' AND affiliates.affiliate_user_id = ? AND collaborator_invitations.id IS NULL"+
+		" AND affiliates.deleted_at IS NULL AND links.id = ? LIMIT 1", userID, productID)
+}
+
+// viewerCollaborates sets p.collaborates for the page's product. It reads unportedShape's
+// hasCollaborator gate, so it must run after it, or it finds no collaborator.
+func (h *handler) viewerCollaborates(p *page, prod *product) error {
+	if p.viewer == nil || !p.hasCollaborator {
 		return nil
 	}
-	collaborates, err := h.collaborates(p.Ctx, userID, prod.id)
-	if err != nil || collaborates {
-		return firstErr(err, fallback("product's collaborator"))
-	}
-	return nil
-}
-
-// collaborates is whether the user has a Collaborator row on the product, alive or not: more
-// than User#collaborator_for? counts, which only ever sends more to Rails.
-func (h *handler) collaborates(ctx context.Context, userID, productID int64) (bool, error) {
-	return h.exists(ctx, "SELECT 1 FROM affiliates INNER JOIN affiliates_links ON affiliates_links.affiliate_id = affiliates.id"+
-		" WHERE affiliates.type = 'Collaborator' AND affiliates.affiliate_user_id = ? AND affiliates_links.link_id = ? LIMIT 1", userID, productID)
+	var err error
+	p.collaborates, err = h.collaboratorFor(p.Ctx, p.viewer.id, prod.id)
+	return err
 }
 
 // viewerCurrency is ProfileSectionsPresenter's currency_code: the visitor's currency_type.

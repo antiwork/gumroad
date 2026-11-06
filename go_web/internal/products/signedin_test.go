@@ -122,11 +122,26 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 				"purchaser_id": buyerID, "price_cents": 500, "purchase_state": "failed", "email": "buyer@example.com",
 				"created_at": testNow, "updated_at": testNow})
 		}},
-		{name: "a collaborator on the product", reason: "product's collaborator", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			testdb.Insert(t, conn, "affiliates", map[string]any{"id": int64(1_796_501), "type": "Collaborator", "seller_id": sellerID,
-				"affiliate_user_id": buyerID, "created_at": testNow, "updated_at": testNow})
-			testdb.Insert(t, conn, "affiliates_links", map[string]any{"id": int64(1_796_502), "affiliate_id": int64(1_796_501),
-				"link_id": productID, "created_at": testNow, "updated_at": testNow})
+		// LinkPolicy#edit? lets a collaborator edit the product; nothing else changes.
+		{name: "a collaborator on the product", wants: []string{`"can_edit":true,"waitlist":null,`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			collaborator(t, conn, productID, nil)
+		}},
+		{name: "a collaborator on a waitlist product", wants: []string{`"can_edit":true,"waitlist":{"recaptcha_site_key":null,"count":1},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				collaborator(t, conn, productID, nil)
+				mustExec(t, conn, "UPDATE links SET flags = flags | ?, draft = true WHERE id = ?", productWaitlistEnabled, productID)
+				testdb.Insert(t, conn, "followers", map[string]any{"id": int64(1_796_511), "followed_id": sellerID, "email": "f@example.com",
+					"confirmed_at": testNow, "created_at": testNow, "updated_at": testNow})
+				testdb.Insert(t, conn, "waitlist_entries", map[string]any{"id": int64(1_796_512), "follower_id": int64(1_796_511),
+					"product_id": productID, "created_at": testNow, "updated_at": testNow})
+			}},
+		{name: "a collaborator yet to accept", wants: []string{`"can_edit":false,"waitlist":null,`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			collaborator(t, conn, productID, nil)
+			testdb.Insert(t, conn, "collaborator_invitations", map[string]any{"id": int64(1_796_503), "collaborator_id": int64(1_796_501),
+				"created_at": testNow, "updated_at": testNow})
+		}},
+		{name: "a collaborator removed", wants: []string{`"can_edit":false,"waitlist":null,`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			collaborator(t, conn, productID, testNow)
 		}},
 		// The code is evaluated for the buyer; one that doesn't exist is invalid for anyone.
 		{name: "a code in the URL", target: "/l/guide/NOPE", wants: []string{`"discount_code":{"valid":false,`}},
@@ -179,6 +194,16 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 			addSection(t, conn, 1_796_904, profileFeaturedSectionType, "Pick", `{"featured_product_id":1796901}`)
 			listSections(t, conn, `{"sections":[1796904]}`)
 		}},
+		// A featured product's props are for the same visitor, who can edit one they collaborate on.
+		{name: "a featured product the visitor collaborates on", wants: []string{`"can_edit":false,"waitlist":null,`, `"can_edit":true`}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_796_901), "user_id": sellerID, "name": "Featured",
+				"unique_permalink": "gowebsf", "price_cents": 700, "created_at": testNow, "updated_at": testNow})
+			testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_796_902), "link_id": int64(1_796_901), "price_cents": 700,
+				"currency": "usd", "created_at": testNow, "updated_at": testNow})
+			collaborator(t, conn, 1_796_901, nil)
+			addSection(t, conn, 1_796_904, profileFeaturedSectionType, "Pick", `{"featured_product_id":1796901}`)
+			listSections(t, conn, `{"sections":[1796904]}`)
+		}},
 		{name: "a passkey prompt", session: map[string]any{"prompt_passkey_setup": buyerID},
 			wants: []string{`"prompt_passkey_setup":true,`}},
 		{name: "a name with a colon and a team", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
@@ -220,6 +245,13 @@ func TestASignedInVisitorsShapes(t *testing.T) {
 			e.wantAll(t, html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]), c.wants, 1_796_701)
 		})
 	}
+}
+
+func collaborator(t *testing.T, conn *sql.DB, productID int64, deletedAt any) {
+	testdb.Insert(t, conn, "affiliates", map[string]any{"id": int64(1_796_501), "type": "Collaborator", "seller_id": sellerID,
+		"affiliate_user_id": buyerID, "deleted_at": deletedAt, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "affiliates_links", map[string]any{"id": int64(1_796_502), "affiliate_id": int64(1_796_501),
+		"link_id": productID, "created_at": testNow, "updated_at": testNow})
 }
 
 func mustExec(t *testing.T, conn *sql.DB, query string, args ...any) {
