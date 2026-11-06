@@ -87,7 +87,17 @@ func TestAUTMTaggedVisitGoesToRails(t *testing.T) {
 			}
 		})
 	}
-	// A banned product's visit is recorded before check_banned's 404, and a visit needs Sidekiq.
+	// Without all three, nothing's recorded and the page is go_web's.
+	e := newTestEnv(t)
+	testdb.Open(t)
+	path := "/l/guide?utm_source=caf%C3%A9&utm_medium=a"
+	if w := e.get(host, path, e.dryRun(host, path, testNow)); strings.HasPrefix(w.Header().Get("X-Go-Web-Fallback"), "param utm") {
+		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+}
+
+// A banned product's visit is recorded before check_banned's 404, and a visit needs Sidekiq.
+func TestAUTMVisitThisPortCantRecord(t *testing.T) {
 	const tagged = "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c"
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
@@ -98,14 +108,6 @@ func TestAUTMTaggedVisitGoesToRails(t *testing.T) {
 	mustExec(t, conn, "UPDATE links SET banned_at = ? WHERE id = ?", testNow, productID)
 	if w := e.get(host, tagged, e.dryRun(host, tagged, testNow.Add(time.Second))); w.Header().Get("X-Go-Web-Fallback") != "utm visit on a banned product" {
 		t.Errorf("banned: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
-	}
-
-	// Without all three, nothing's recorded and the page is go_web's.
-	e = newTestEnv(t)
-	testdb.Open(t)
-	path := "/l/guide?utm_source=caf%C3%A9&utm_medium=a"
-	if w := e.get(host, path, e.dryRun(host, path, testNow)); strings.HasPrefix(w.Header().Get("X-Go-Web-Fallback"), "param utm") {
-		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 }
 

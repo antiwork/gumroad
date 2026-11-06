@@ -18,6 +18,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -93,7 +94,7 @@ type page struct {
 	layout        string
 	recommendedBy *string
 	// utm is track_utm_link_visit's utm_params, nil when it records nothing.
-	utm map[string]any
+	utm sidekiq.Hash
 	// collaborates is whether the visitor is collaborator_for? this page's product.
 	collaborates bool
 	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props

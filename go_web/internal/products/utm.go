@@ -20,24 +20,24 @@ const maxUTMParamLength = 200
 
 // utmParams is track_utm_link_visit's utm_params, nil when a required one is blank. reason is a
 // value this port leaves to Rails: anything but an ASCII String, whose downcase is Unicode's.
-func utmParams(req *rails.Request) (params map[string]any, reason string) {
+func utmParams(req *rails.Request) (params sidekiq.Hash, reason string) {
 	for _, key := range utmKeys[:3] {
 		if raw, _ := req.Params.Get(key); !rails.Present(raw) {
 			return nil, ""
 		}
 	}
-	params = map[string]any{}
+	params = sidekiq.Hash{}
 	for _, key := range utmKeys {
 		raw, _ := req.Params.Get(key)
 		if !rails.Present(raw) {
-			params[key] = nil
+			params = append(params, sidekiq.Pair{Key: key, Value: nil})
 			continue
 		}
 		s, ok := raw.(string)
 		if !ok || !rails.IsASCII(s) {
 			return nil, "param " + key
 		}
-		params[key] = normalizeUTMParam(s)
+		params = append(params, sidekiq.Pair{Key: key, Value: normalizeUTMParam(s)})
 	}
 	return params, ""
 }
@@ -75,19 +75,19 @@ func (h *handler) trackUTMVisit(w http.ResponseWriter, p *page, prod *product) e
 	if u := p.Auth.CurrentUser; u != nil {
 		userID = u.ID
 	}
-	visit := map[string]any{
-		"seller_id":            p.seller.id,
-		"target_resource_type": "product_page",
-		"target_resource_id":   prod.id,
-		"utm_params":           p.utm,
-		"user_id":              userID,
-		"referrer":             stringOrNil(req.Referrer()),
-		"ip_address":           ip,
-		"user_agent":           stringOrNil(req.UserAgent()),
-		"browser_guid":         p.GUID,
-		"visited_at_us":        req.Now.UnixMicro(),
-		"paper_trail": map[string]any{"remote_ip": ip, "request_path": req.Path,
-			"request_uuid": w.Header().Get("X-Request-Id")},
+	visit := sidekiq.Hash{
+		{Key: "seller_id", Value: p.seller.id},
+		{Key: "target_resource_type", Value: "product_page"},
+		{Key: "target_resource_id", Value: prod.id},
+		{Key: "utm_params", Value: p.utm},
+		{Key: "user_id", Value: userID},
+		{Key: "referrer", Value: stringOrNil(req.Referrer())},
+		{Key: "ip_address", Value: ip},
+		{Key: "user_agent", Value: stringOrNil(req.UserAgent())},
+		{Key: "browser_guid", Value: p.GUID},
+		{Key: "visited_at_us", Value: req.Now.UnixMicro()},
+		{Key: "paper_trail", Value: sidekiq.Hash{{Key: "remote_ip", Value: ip}, {Key: "request_path", Value: req.Path},
+			{Key: "request_uuid", Value: w.Header().Get("X-Request-Id")}}},
 	}
 	if _, err := h.c.Page.Sidekiq.Push(context.WithoutCancel(p.Ctx), recordUTMVisitJob, visit); err != nil {
 		return fallback("utm visit push")
