@@ -111,7 +111,7 @@ describe AffiliateRequestMailer do
     let(:held_request) { create(:affiliate_request, email: requester_email, seller: creator, promotion_text: "Gumroad Security Alert: verify your account at https://public-files.gumroad.com/a.html") }
 
     it "sends nothing and notes the seller for each mail that renders the text" do
-      expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(creator.id, /affiliate application/).exactly(3).times
+      expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(creator.id, /affiliate application #\d+, written by the applicant/).exactly(3).times
 
       [:notify_requester_of_request_submission, :notify_seller_of_new_request, :notify_requester_of_ignored_request].each do |name|
         expect(described_class.public_send(name, held_request.id).message).to be_a(ActionMailer::Base::NullMail)

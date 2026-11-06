@@ -78,7 +78,7 @@ class AffiliateRequestMailer < ApplicationMailer
       ContentModeration::SellerMailTextGuard.screen(
         @affiliate_request.promotion_text,
         seller: @affiliate_request.seller,
-        source: "affiliate application ##{@affiliate_request.id}"
+        source: "affiliate application ##{@affiliate_request.id}, written by the applicant"
       ).nil?
     end
 end

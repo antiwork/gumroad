@@ -1088,6 +1088,20 @@ describe CustomerMailer do
       end
     end
 
+    context "when the guard holds the product's custom receipt text" do
+      let(:purchase) { create(:purchase, link: create(:product, custom_receipt_text: "Gumroad Security Alert: verify your account")) }
+
+      before { purchase.create_url_redirect! }
+
+      it "sends the receipt without that text even if the admin note fails to queue" do
+        allow(ContentModerationAdminCommentJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+
+        mail = CustomerMailer.receipt(purchase.id)
+        expect(mail.body.sanitized).to have_text(purchase.link.name)
+        expect(mail.body.sanitized).not_to have_text("Security Alert")
+      end
+    end
+
     describe "gift_receiver_receipt" do
       let(:product) { create(:product, name: "Digital product") }
       let(:gift) { create(:gift, gift_note: "Happy birthday!", giftee_email: "giftee@example.com", gifter_email: "gifter@example.com", link: product) }

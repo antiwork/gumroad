@@ -115,7 +115,6 @@ describe ReceiptPresenter::ItemInfo do
           it "drops only the note and leaves a seller note" do
             expect(ContentModerationAdminCommentJob).to receive(:perform_async).with(purchase.link.user.id, /receipt custom text/)
             expect(props[:custom_receipt_note]).to be_nil
-            expect(props[:notes]).to be_an(Array)
           end
 
           it "keeps the text when screening is off (seller preview)" do

@@ -48,6 +48,28 @@ describe ContentModeration::SellerMailTextGuard do
     expect(screen("see https://public-files.gum<i></i>road.com/a.html")).to be_nil
   end
 
+  it "screens past named entities, invisible characters and whitespace runs" do
+    expect(screen("Gum&shy;road Security Alert: log in to continue")).to be_nil
+    expect(screen("Gum\u200Broad Security Alert: log in to continue")).to be_nil
+    expect(screen("Gumroad Security\u00A0 Alert: log in to continue")).to be_nil
+    expect(screen("Gumroad<br>Security<br>alert: log in to continue")).to be_nil
+  end
+
+  it "holds a public-files.gumroad.com link hidden in an href" do
+    expect(screen(%(Your files: <a href="https://public-files.gumroad.com/a.html">Download</a>))).to be_nil
+    expect(screen(%(<a href="https://public-files%2Egumroad.com/a.html">Download</a>))).to be_nil
+    expect(screen(%(<a href="https://ｐｕｂｌｉｃ-files\u3002gum&shy;road．com/a.html">Download</a>))).to be_nil
+  end
+
+  it "drops a blocklisted link hidden in an href" do
+    allow(ContentModeration::Strategies::BlocklistStrategy).to receive(:yaml_words).and_return(["phishword"])
+    expect(screen(%(<a href="https://phishword.example/a">Download</a>))).to be_nil
+  end
+
+  it "passes a clean link with a malformed escape" do
+    expect(screen(%(<a href="https://example.com/%FF">Download</a>))).to be_present
+  end
+
   it "still drops the text when queueing the admin note fails" do
     allow(ContentModerationAdminCommentJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
     expect(screen("see https://public-files.gumroad.com/x.html")).to be_nil
