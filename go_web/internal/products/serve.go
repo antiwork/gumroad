@@ -83,6 +83,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 			// set_x_robots_tag_header runs before check_if_needs_redirect.
 			w.Header().Set("X-Robots-Tag", "noindex")
 		}
+		if p.json {
+			target += ".json"
+		}
 		if rawQuery != "" {
 			target += "?" + rawQuery
 		}
@@ -96,6 +99,10 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return nil
 	}
 
+	if p.json {
+		// render_custom_html_if_present only intercepts HTML.
+		return h.renderJSON(w, p, prod)
+	}
 	if p.reviewPurchase, err = h.digestPurchase(p, prod); err != nil {
 		return err
 	}
