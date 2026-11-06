@@ -785,6 +785,7 @@ export const ConfigurationSelector = React.forwardRef<
   const selectedOption = product.options.find(({ id }) => id === selection.optionId) ?? null;
   const {
     basePriceCents,
+    applicableDiscount,
     discountedPriceCents,
     isPWYW,
     maxQuantity,
@@ -796,10 +797,14 @@ export const ConfigurationSelector = React.forwardRef<
     discountConditionsVerified: !!discountForSelection,
     preserveOncePerCartAllocation: !!discountForSelection,
   });
-  const suggestedPriceCents = Math.max(
+  // The box holds the amount after the code, so the hint is discounted too.
+  const configuredSuggestedPriceCents =
     (selectedOption && selection.recurrence
       ? selectedOption.recurrence_price_values?.[selection.recurrence]?.suggested_price_cents
-      : product.pwyw?.suggested_price_cents) ?? 0,
+      : product.pwyw?.suggested_price_cents) ?? 0;
+  const suggestedPriceCents = Math.max(
+    computeSelectionDiscountedPrice(configuredSuggestedPriceCents, applicableDiscount, product, selection.quantity)
+      .value,
     pwywMinimumPriceCents ?? discountedPriceCents,
   );
   const usePreexistingPrice =

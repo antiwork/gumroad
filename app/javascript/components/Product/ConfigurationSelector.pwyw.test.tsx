@@ -233,3 +233,37 @@ describe("PWYW minimum while the discount is being quoted", () => {
     expect(blurWith("6").getAttribute("aria-invalid")).toBe("true");
   });
 });
+
+describe("PWYW suggested amount with a discount code", () => {
+  const product: Product = { ...pwywProduct, price_cents: 2400, pwyw: { suggested_price_cents: 2400 } };
+  const sale: Discount = {
+    type: "percent",
+    percents: 30,
+    product_ids: null,
+    expires_at: null,
+    minimum_quantity: null,
+    duration_in_billing_cycles: null,
+    minimum_amount_cents: null,
+  };
+  const renderWith = (discount: Discount | null) =>
+    render(
+      <ConfigurationSelector
+        product={product}
+        selection={initialSelection}
+        setSelection={() => {}}
+        discount={discount}
+      />,
+    );
+
+  it("hints the discounted amount, since the box holds the amount after the code", () => {
+    renderWith(sale);
+
+    expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("16.80+");
+  });
+
+  it("hints the suggested amount when no code applies", () => {
+    renderWith(null);
+
+    expect(screen.getByLabelText("Name a fair price:").getAttribute("placeholder")).toBe("24+");
+  });
+});
