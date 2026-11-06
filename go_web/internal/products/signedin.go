@@ -52,6 +52,8 @@ type signedInUser struct {
 	// bank is active_bank_account's STI type, "" without one.
 	bank      string
 	wishlists []*viewerWishlist
+	// memberships are the visitor's own, which the role and team_memberships read.
+	memberships []*teamMembership
 	// The signed-in share's props, in the order the page sets them.
 	loggedIn, currentSeller, currentUser *rails.RHash
 	promptPasskey                        bool
@@ -93,28 +95,68 @@ func (u *signedInUser) displayName(preferEmail bool) any {
 	return formEmail()
 }
 
-// loadViewer loads the signed-in visitor viewing the product as themselves, and the signed-in
-// share's props. Prepare has sent staff, and with them impersonation, to Rails.
+// loadViewer loads the signed-in visitor, the seller they view the product as, and the
+// signed-in share's props. Prepare has sent staff, and with them impersonation, to Rails.
 func (h *handler) loadViewer(p *page, prod *product) error {
 	logged := p.Auth.LoggedInUser()
 	switch {
 	case logged == nil:
 		return nil
-	case p.Auth.CurrentSeller == nil || p.Auth.CurrentSeller.ID != logged.ID:
-		return fallback("signed in as another seller")
+	case p.Auth.CurrentSeller == nil:
+		// Only without a Devise session, which signs no one in here.
+		return fallback("no current seller")
 	}
 	u, err := h.loadSignedInUser(p.Ctx, logged.ID)
 	if err != nil {
 		return err
 	}
-	if err := h.signedInProps(p, u); err != nil {
+	if u.memberships, err = h.loadMemberships(p.Ctx, u.id); err != nil {
 		return err
 	}
-	if u.wishlists, err = h.loadViewerWishlists(p.Ctx, u.id); err != nil {
+	seller := u
+	if p.Auth.CurrentSeller.ID != u.id {
+		if p.Auth.CurrentSeller.IsTeamMember() {
+			// can_publish_products? starts with is_team_member?.
+			return fallback("staff current seller")
+		}
+		if seller, err = h.loadSignedInUser(p.Ctx, p.Auth.CurrentSeller.ID); err != nil {
+			return err
+		}
+		// find_user_membership_for_seller!: the first of the same list team_memberships renders.
+		i := slices.IndexFunc(u.memberships, func(m *teamMembership) bool { return m.sellerID == seller.id })
+		if i < 0 {
+			return fallback("team membership")
+		}
+		p.teamRole = u.memberships[i].role.String
+	}
+	p.viewer, p.currentSeller = u, seller
+	if err := h.signedInProps(p); err != nil {
 		return err
 	}
-	p.viewer = u
+	if seller.wishlists, err = h.loadViewerWishlists(p.Ctx, seller.id); err != nil {
+		return err
+	}
 	return h.viewerCollaborates(p, prod)
+}
+
+// teamMembership is one of user_memberships_not_deleted_and_ordered.
+type teamMembership struct {
+	id, sellerID int64
+	role         sql.NullString
+}
+
+// loadMemberships is user_memberships_not_deleted_and_ordered, in Rails' own statement: rows tied
+// on both sort columns come back in whatever order MySQL's plan for it gives.
+func (h *handler) loadMemberships(ctx context.Context, userID int64) ([]*teamMembership, error) {
+	var list []*teamMembership
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		m := &teamMembership{}
+		cols["id"], cols["seller_id"], cols["role"] = &m.id, &m.sellerID, &m.role
+		return func() { list = append(list, m) }
+	}, "SELECT `team_memberships`.* FROM `team_memberships` INNER JOIN `users` ON `users`.`id` = `team_memberships`.`seller_id`"+
+		" WHERE `team_memberships`.`user_id` = ? AND `team_memberships`.`deleted_at` IS NULL AND `users`.`deleted_at` IS NULL"+
+		" ORDER BY `team_memberships`.`last_accessed_at` DESC, `team_memberships`.`created_at` DESC", userID)
+	return list, err
 }
 
 // collaboratorFor is User#collaborator_for?.
@@ -145,7 +187,7 @@ func viewerCurrency(p *page) any {
 	return "usd"
 }
 
-// viewerWishlist is one of the visitor's alive wishlists and its alive items.
+// viewerWishlist is one of the current seller's alive wishlists and its alive items.
 type viewerWishlist struct {
 	id    int64
 	name  sql.NullString
@@ -218,14 +260,14 @@ func scanNamed(ctx context.Context, conn *sql.DB, bind func(cols map[string]any)
 	return rows.Err()
 }
 
-// viewerWishlists is product_props' wishlists: each of the visitor's wishlists, with what it
+// viewerWishlists is product_props' wishlists: each of pundit_user.seller's wishlists, with what it
 // holds of the product.
 func (h *handler) viewerWishlists(p *page, prod *product) []any {
 	out := []any{}
-	if p.viewer == nil {
+	if p.currentSeller == nil {
 		return out
 	}
-	for _, w := range p.viewer.wishlists {
+	for _, w := range p.currentSeller.wishlists {
 		selections := []any{}
 		for _, it := range w.items {
 			if it.productID != prod.id {
@@ -247,17 +289,21 @@ func (h *handler) viewerWishlists(p *page, prod *product) []any {
 	return out
 }
 
-// signedInProps builds the signed-in share: logged_in_user and current_seller, which
-// RenderingExtension builds for the visitor as their own seller, then current_user and
+// signedInProps builds the signed-in share: logged_in_user, current_seller, current_user and
 // prompt_passkey_setup. Whatever goes to Rails is read first.
-func (h *handler) signedInProps(p *page, u *signedInUser) error {
+func (h *handler) signedInProps(p *page) error {
 	ctx := p.Ctx
-	storeAgent, err := h.eligibleForStoreAgent(ctx, u)
-	if err != nil {
-		return err
-	}
-	if _, ok := timeZoneMapping[u.timezone.String]; !ok {
+	u, seller := p.viewer, p.currentSeller
+	if _, ok := timeZoneMapping[seller.timezone.String]; !ok {
 		return fallback("time zone")
+	}
+	// use_store_agent?: view_store_agent?, then the seller's eligible_for_store_agent?.
+	var storeAgent bool
+	var err error
+	if p.hasRole(teamAdmin, teamMarketing) {
+		if storeAgent, err = h.eligibleForStoreAgent(ctx, seller); err != nil {
+			return err
+		}
 	}
 	var sells, published, bought, passkeys, ownCommunity, purchasedCommunity bool
 	const chatEnabled = "communities.deleted_at IS NULL AND links.purchase_disabled_at IS NULL AND links.banned_at IS NULL" +
@@ -271,7 +317,7 @@ func (h *handler) signedInProps(p *page, u *signedInUser) error {
 		" EXISTS(SELECT 1 FROM purchases WHERE purchases.purchaser_id = ? AND purchases.purchase_state = 'successful'),"+
 		" EXISTS(SELECT 1 FROM webauthn_credentials WHERE webauthn_credentials.user_id = ?),"+
 		" EXISTS(SELECT 1"+communities+" WHERE communities.seller_id = ? AND "+chatEnabled+"),"+
-		" EXISTS(SELECT 1"+purchased+" AND purchases.purchaser_id = ?)", u.id, u.id, u.id, u.id, u.id, u.id).
+		" EXISTS(SELECT 1"+purchased+" AND purchases.purchaser_id = ?)", seller.id, seller.id, seller.id, u.id, u.id, u.id).
 		Scan(&sells, &published, &bought, &passkeys, &ownCommunity, &purchasedCommunity); err != nil {
 		return err
 	}
@@ -283,21 +329,30 @@ func (h *handler) signedInProps(p *page, u *signedInUser) error {
 			return err
 		}
 	}
-	if u.info, err = h.complianceInfo(ctx, u.id); err != nil {
-		return err
+	// logged_in_user's payout keys read the visitor's compliance info and bank account,
+	// current_seller's props the seller's.
+	users := []*signedInUser{u}
+	if seller != u {
+		users = append(users, seller)
 	}
-	if u.bank, err = h.activeBankAccountType(ctx, u.id); err != nil {
-		return err
+	for _, x := range users {
+		if x.info, err = h.complianceInfo(ctx, x.id); err != nil {
+			return err
+		}
+		if x.bank, err = h.activeBankAccountType(ctx, x.id); err != nil {
+			return err
+		}
 	}
 	if u.loggedIn, err = h.loggedInUserProps(p, u, community, storeAgent); err != nil {
 		return err
 	}
-	if u.currentSeller, err = h.currentSellerProps(p, u, sells, published, bought); err != nil {
+	if u.currentSeller, err = h.currentSellerProps(p, seller, sells, published, bought); err != nil {
 		return err
 	}
 	u.currentUser = rails.NewRHash().Sym("name", u.displayName(false)).Sym("avatar_url", u.avatarURL).Sym("impersonated_user", nil)
-	// show_passkey_setup_prompt?: not the mobile app, and the sign-in asked for it.
-	if c, ok := p.Req.Cookie("is_gumroad_mobile_app"); !ok || rails.Blank(c) {
+	// show_passkey_setup_prompt?: the visitor's own account, not the mobile app, and the sign-in
+	// asked for it.
+	if c, ok := p.Req.Cookie("is_gumroad_mobile_app"); seller == u && (!ok || rails.Blank(c)) {
 		match, err := sessionInt(p.Session.Get("prompt_passkey_setup"), u.id)
 		if err != nil {
 			return err
@@ -307,8 +362,8 @@ func (h *handler) signedInProps(p *page, u *signedInUser) error {
 	return nil
 }
 
-// loggedInUserProps is RenderingExtension#logged_in_user_props for the visitor as their own
-// seller, for whom every role check passes.
+// loggedInUserProps is RenderingExtension#logged_in_user_props: the visitor's own keys, and the
+// policies their role on the current seller allows.
 func (h *handler) loggedInUserProps(p *page, u *signedInUser, community, storeAgent bool) (*rails.RHash, error) {
 	ctx := p.Ctx
 	memberships, err := h.teamMembershipsProps(p, u)
@@ -337,34 +392,37 @@ func (h *handler) loggedInUserProps(p *page, u *signedInUser, community, storeAg
 	if err != nil {
 		return nil, err
 	}
-	yes := func(keys ...string) *rails.RHash {
+	// Each action's policy method, as the roles it lets in besides the owner.
+	allowed := func(keys []string, roles ...string) *rails.RHash {
 		r := rails.NewRHash()
 		for _, k := range keys {
-			r.Sym(k, true)
+			r.Sym(k, p.hasRole(roles...))
 		}
 		return r
 	}
+	all := []string{teamAccountant, teamAdmin, teamMarketing, teamSupport}
+	write := []string{teamAdmin, teamMarketing}
 	policies := rails.NewRHash().
-		Sym("affiliate_requests_onboarding_form", yes("update")).
-		Sym("direct_affiliate", yes("create", "update")).
-		Sym("collaborator", yes("create", "update")).
-		Sym("product", yes("create")).
-		Sym("product_review_response", yes("update")).
-		Sym("balance", yes("index", "export")).
-		Sym("checkout_offer_code", yes("create")).
-		Sym("checkout_form", yes("update")).
-		Sym("upsell", yes("create")).
-		Sym("settings_payments_user", yes("show")).
-		Sym("settings_main_user", yes("update_username")).
-		Sym("settings_profile", yes("manage_social_connections", "update")).
-		Sym("settings_third_party_analytics_user", yes("update")).
-		Sym("installment", yes("create")).
-		Sym("workflow", yes("create")).
-		Sym("utm_link", yes("index")).
+		Sym("affiliate_requests_onboarding_form", allowed([]string{"update"}, write...)).
+		Sym("direct_affiliate", allowed([]string{"create", "update"}, write...)).
+		Sym("collaborator", allowed([]string{"create", "update"}, teamAdmin)).
+		Sym("product", allowed([]string{"create"}, write...)).
+		Sym("product_review_response", allowed([]string{"update"}, teamAdmin, teamSupport)).
+		Sym("balance", allowed([]string{"index", "export"}, teamAccountant, teamAdmin, teamSupport)).
+		Sym("checkout_offer_code", allowed([]string{"create"}, write...)).
+		Sym("checkout_form", allowed([]string{"update"}, write...)).
+		Sym("upsell", allowed([]string{"create"}, write...)).
+		Sym("settings_payments_user", allowed([]string{"show"}, teamAdmin)).
+		Sym("settings_main_user", allowed([]string{"update_username"})).
+		Sym("settings_profile", rails.NewRHash().Sym("manage_social_connections", p.hasRole()).Sym("update", p.hasRole(write...))).
+		Sym("settings_third_party_analytics_user", allowed([]string{"update"}, teamAdmin)).
+		Sym("installment", allowed([]string{"create"}, write...)).
+		Sym("workflow", allowed([]string{"create"}, write...)).
+		Sym("utm_link", allowed([]string{"index"}, all...)).
 		Sym("community", rails.NewRHash().Sym("index", community)).
-		Sym("churn", yes("show")).
-		Sym("page", yes("index", "create")).
-		Sym("user", rails.NewRHash().Sym("view_store_agent", true).Sym("use_store_agent", storeAgent))
+		Sym("churn", allowed([]string{"show"}, all...)).
+		Sym("page", rails.NewRHash().Sym("index", p.hasRole(all...)).Sym("create", p.hasRole(write...))).
+		Sym("user", rails.NewRHash().Sym("view_store_agent", p.hasRole(write...)).Sym("use_store_agent", storeAgent))
 	return rails.NewRHash().
 		Sym("id", nullString(u.externalID)).
 		Sym("email", nullString(u.email)).
@@ -381,34 +439,19 @@ func (h *handler) loggedInUserProps(p *page, u *signedInUser, community, storeAg
 		Sym("lazy_load_offscreen_discover_images", lazyImages), nil
 }
 
-// teamMembershipsProps is UserMembershipsPresenter#props, in Rails' own statement: rows tied on
-// both sort columns come back in whatever order MySQL's plan for it gives.
+// teamMembershipsProps is UserMembershipsPresenter#props over the visitor's memberships.
 func (h *handler) teamMembershipsProps(p *page, u *signedInUser) ([]any, error) {
-	type membership struct {
-		id, sellerID int64
-		role         sql.NullString
-	}
-	var list []*membership
-	err := scanNamed(p.Ctx, h.c.DB, func(cols map[string]any) func() {
-		m := &membership{}
-		cols["id"], cols["seller_id"], cols["role"] = &m.id, &m.sellerID, &m.role
-		return func() { list = append(list, m) }
-	}, "SELECT `team_memberships`.* FROM `team_memberships` INNER JOIN `users` ON `users`.`id` = `team_memberships`.`seller_id`"+
-		" WHERE `team_memberships`.`user_id` = ? AND `team_memberships`.`deleted_at` IS NULL AND `users`.`deleted_at` IS NULL"+
-		" ORDER BY `team_memberships`.`last_accessed_at` DESC, `team_memberships`.`created_at` DESC", u.id)
-	if err != nil {
-		return nil, err
-	}
+	list := u.memberships
 	out := []any{}
 	if len(list) == 0 {
 		return out, nil
 	}
-	if !slices.ContainsFunc(list, func(m *membership) bool { return m.role.String == "owner" }) {
+	if !slices.ContainsFunc(list, func(m *teamMembership) bool { return m.role.String == teamOwner }) {
 		// Rails notifies about the missing owner row and renders none.
 		web.Logger(p.Req.HTTP).Warn("missing owner team membership", "user_id", u.id)
 		return out, nil
 	}
-	sellers := map[int64]*signedInUser{u.id: u}
+	sellers := map[int64]*signedInUser{u.id: u, p.currentSeller.id: p.currentSeller}
 	var others []int64
 	for _, m := range list {
 		if _, ok := sellers[m.sellerID]; !ok && !slices.Contains(others, m.sellerID) {
@@ -451,8 +494,8 @@ func (h *handler) teamMembershipsProps(p *page, u *signedInUser) ([]any, error) 
 			Sym("id", h.c.IDs.Encrypt(m.id)).
 			Sym("seller_name", seller.displayName(true)).
 			Sym("seller_avatar_url", seller.avatarURL).
-			Sym("has_some_read_only_access", m.role.String != "owner" && m.role.String != "admin").
-			Sym("is_selected", m.sellerID == u.id))
+			Sym("has_some_read_only_access", m.role.String != teamOwner && m.role.String != teamAdmin).
+			Sym("is_selected", m.sellerID == p.currentSeller.id))
 	}
 	return out, nil
 }
@@ -609,7 +652,7 @@ func sessionInt(v any, id int64) (bool, error) {
 	return string(n) == strconv.FormatInt(id, 10), nil
 }
 
-// currentSellerProps is UserPresenter#as_current_seller for the visitor's own account.
+// currentSellerProps is UserPresenter#as_current_seller for the current seller, u.
 func (h *handler) currentSellerProps(p *page, u *signedInUser, sells, published, bought bool) (*rails.RHash, error) {
 	ctx := p.Ctx
 	zone, offset, err := railsTimeZone(u.timezone.String, p.Req.Now)
@@ -688,7 +731,7 @@ func railsTimeZone(name string, now time.Time) (string, int, error) {
 	return id, offset, nil
 }
 
-// canPublishProducts is User#can_publish_products? for a visitor who isn't staff.
+// canPublishProducts is User#can_publish_products? for a seller who isn't staff.
 func (h *handler) canPublishProducts(ctx context.Context, u *signedInUser) (bool, error) {
 	rows, err := h.c.DB.QueryContext(ctx, "SELECT merchant_accounts.charge_processor_id, merchant_accounts.json_data FROM merchant_accounts"+
 		" WHERE merchant_accounts.user_id = ? AND merchant_accounts.deleted_at IS NULL AND merchant_accounts.charge_processor_alive_at IS NOT NULL"+

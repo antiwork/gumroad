@@ -391,9 +391,9 @@ func (h *handler) editorProps(p *page) (*rails.RHash, error) {
 	if err != nil {
 		return nil, err
 	}
-	// seller.wishlists.alive are the visitor's own.
-	options := make([]any, len(p.viewer.wishlists))
-	for i, w := range p.viewer.wishlists {
+	// seller.wishlists.alive: the editor's current seller is the product's.
+	options := make([]any, len(p.currentSeller.wishlists))
+	for i, w := range p.currentSeller.wishlists {
 		options[i] = rails.NewRHash().Sym("id", h.c.IDs.Encrypt(w.id)).Sym("name", nullString(w.name))
 	}
 	return rails.NewRHash().Sym("products", products).Sym("posts", posts).Sym("wishlist_options", options), nil
@@ -441,7 +441,7 @@ func (p *page) featuredPage(parent *view) *page {
 		p.flags = map[string]bool{}
 	}
 	return &page{Visit: p.Visit, seller: p.seller, rates: p.rates, settleable: p.settleable, flags: p.flags,
-		productsKey: p.productsKey, parent: parent, viewer: p.viewer}
+		productsKey: p.productsKey, parent: parent, viewer: p.viewer, currentSeller: p.currentSeller, teamRole: p.teamRole}
 }
 
 // absorb takes back what a featured page read or queued.
