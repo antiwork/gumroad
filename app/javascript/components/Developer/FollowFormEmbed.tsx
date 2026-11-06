@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { followFromEmbed } from "$app/data/follow_embed";
+import { followFromEmbed, FollowFromEmbedError } from "$app/data/follow_embed";
 import { asyncVoid } from "$app/utils/promise";
 import { assertResponseError } from "$app/utils/request";
 import { getAppliedStyles } from "$app/utils/styles";
@@ -12,7 +12,15 @@ import { Input } from "$app/components/ui/Input";
 
 export const FOLLOW_FORM_EMBED_INPUT_ID = "gumroad-follow-form-embed-input";
 
-export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; preview?: boolean }) => {
+export const FollowFormEmbed = ({
+  sellerId,
+  productId,
+  preview,
+}: {
+  sellerId: string;
+  productId?: string | undefined;
+  preview?: boolean;
+}) => {
   const [email, setEmail] = React.useState("");
   const appDomain = useAppDomain();
   const followFormRef = React.useRef<HTMLDivElement & HTMLFormElement>(null);
@@ -48,6 +56,7 @@ export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; previ
         id="gumroad-follow-form-embed"
       >
         <input type="hidden" name="seller_id" value={sellerId} />
+        {productId ? <input type="hidden" name="product_id" value={productId} /> : null}
         <Input
           id={FOLLOW_FORM_EMBED_INPUT_ID}
           type="email"
@@ -67,15 +76,18 @@ export const FollowFormEmbed = ({ sellerId, preview }: { sellerId: string; previ
             try {
               // The server's own outcome copy, so the preview a seller tests with
               // reads exactly like the page a real subscriber lands on.
-              const { message } = await followFromEmbed(sellerId, email);
+              const { message } = await followFromEmbed(sellerId, email, productId);
               showAlert(message, "success");
             } catch (e) {
               assertResponseError(e);
-              showAlert("Sorry, something went wrong. Please try again.", "error");
+              showAlert(
+                e instanceof FollowFromEmbedError ? e.message : "Sorry, something went wrong. Please try again.",
+                "error",
+              );
             }
           })}
         >
-          Follow
+          {productId ? "Notify me" : "Follow"}
         </Button>
       </FollowForm>
     </>

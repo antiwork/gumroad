@@ -317,6 +317,8 @@ export const ProductEditContext = React.createContext<{
   successfulSalesCount: number;
   ratings: RatingsWithPercentages;
   seller: Seller;
+  // Whether the waitlist is on in the last successful save. The waitlist form only works once it is.
+  savedWaitlistEnabled: boolean;
   // The external id the S3 signature endpoint authorizes, so uploads are keyed under the
   // account doing the editing rather than under `seller` (the product owner).
   currentSellerExternalId: string;
