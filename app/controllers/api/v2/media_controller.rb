@@ -7,10 +7,9 @@
 # renders broken there — this endpoint is how a file becomes displayable: upload it here, then
 # embed the returned `url` in the page HTML.
 #
-# This is also the store agent's image/media ingestion path (upload_media / list_media /
-# delete_media in Ai::StoreAgentApiCatalog). The agent can't do a multipart upload from a chat tool
-# call, so `create` accepts a remote `url` the server downloads itself — SSRF-guarded, magic-byte
-# type-checked, size-capped, and content-moderated in CreatePublicMediaService.
+# This is also an AI agent's image/media ingestion path. An agent can't do a multipart upload from
+# a chat tool call, so `create` accepts a remote `url` the server downloads itself — SSRF-guarded,
+# magic-byte type-checked, size-capped, and content-moderated in CreatePublicMediaService.
 #
 # Files are scoped to the creator (PublicFile with resource = the seller), distinct from the
 # per-product public files the product editor manages.

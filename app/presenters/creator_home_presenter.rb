@@ -34,6 +34,7 @@ class CreatorHomePresenter
         "first_payout" => seller.has_payout_information?,
         "first_email" => seller.installments.not_workflow_installment.send_emails.exists?,
         "used_cli" => seller.has_used_cli?,
+        "connected_ai" => Doorkeeper::AccessToken.where(resource_owner_id: seller.id, revoked_at: nil, resource: Mcp::DynamicClientOauth.resource_identifiers).exists?,
       }
     end
 

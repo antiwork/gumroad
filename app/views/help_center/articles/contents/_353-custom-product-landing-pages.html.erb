@@ -14,14 +14,10 @@
   <p>Nothing else about the product changes. Your files, versions, price, discount codes, receipts, and checkout all keep working the way they did, and the checkout itself is still Gumroad's.</p>
   <h3 id="Build-the-page-with-an-agent-Rt8pD">Build the page with an agent</h3>
   <p>Open the product in your dashboard, click Share, and find the Landing page section. Click Copy prompt to copy a ready-made prompt for the page, or Show prompt to read it first. The prompt already contains the rules an agent needs to follow, so you can paste it as-is and then describe what you want the page to look like.</p>
-  <p>You have two ways to run it:</p>
-  <ul>
-    <li>Your own AI agent, such as Claude Code, Cursor, or Codex. The prompt asks it to build the page and publish it with the <a href="https://gumroad.com/api#api-cli" target="_blank">Gumroad command line tool</a>: <code>gumroad products page preview</code> to check the page without publishing, <code>gumroad products page publish</code> to put it live, <code>gumroad products page url</code> to get the public link, and <code>gumroad products page clear</code> to remove it. You can run those commands yourself if you prefer.</li>
-    <li>The Agent tab in your Gumroad navigation. It can read your product, write the page, and publish it for you. It always shows you the change and asks you to confirm before anything goes live. Account owners and team members with the admin or marketing role can use it.</li>
-  </ul>
+  <p>Run it with your own AI agent, such as Claude Code, Cursor, or Codex. The prompt asks it to build the page and publish it with the <a href="https://gumroad.com/api#api-cli" target="_blank">Gumroad command line tool</a>: <code>gumroad products page preview</code> to check the page without publishing, <code>gumroad products page publish</code> to put it live, <code>gumroad products page url</code> to get the public link, and <code>gumroad products page clear</code> to remove it. You can run those commands yourself if you prefer.</p>
   <p>Only the latest version of the page is stored, and there is no version history, so keep the source file with your own work if you want to be able to go back to an earlier design.</p>
   <h3 id="Keep-the-page-buyable-Lw2kS">Keep the page buyable</h3>
-  <p>Because the page replaces Gumroad's own buy button, your HTML has to give buyers a way into checkout or your product cannot be bought. The prompt in the Share tab covers this, and both the command line tool and the Agent tab warn you when a page has no way to buy, but it is worth checking yourself after publishing.</p>
+  <p>Because the page replaces Gumroad's own buy button, your HTML has to give buyers a way into checkout or your product cannot be bought. The prompt in the Share tab covers this, and the command line tool warns you when a page has no way to buy, but it is worth checking yourself after publishing.</p>
   <p>Mark an element with <code>data-gumroad-action="buy"</code> to open Gumroad's checkout, on any tag:</p>
   <ul>
     <li><code>&lt;a data-gumroad-action="buy"&gt;Buy now&lt;/a&gt;</code></li>

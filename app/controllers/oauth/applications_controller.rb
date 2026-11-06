@@ -131,7 +131,7 @@ class Oauth::ApplicationsController < Doorkeeper::ApplicationsController
 
       OauthApplication.connection.select_value(
         OauthApplication.sanitize_sql_array(
-          ["SELECT ? = ? COLLATE utf8mb4_unicode_ci", name, Ai::StoreAgentApiClient::AGENT_APP_NAME]
+          ["SELECT ? = ? COLLATE utf8mb4_unicode_ci", name, OauthApplication::FIRST_PARTY_AGENT_APP_NAME]
         )
       ) == 1
     end

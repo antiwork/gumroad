@@ -116,8 +116,46 @@ describe CreatorHomePresenter do
           "first_product" => false,
           "first_sale" => false,
           "used_cli" => false,
+          "connected_ai" => false,
         }
       )
+    end
+
+    describe "connected_ai" do
+      def mcp_token(owner: seller, path: "/claude/v1/mcp", revoked_at: nil)
+        create("doorkeeper/access_token",
+               application: create(:oauth_application, owner: create(:user)),
+               resource_owner_id: owner.id,
+               scopes: "view_sales",
+               resource: Mcp::DynamicClientOauth.resource_identifier(path),
+               revoked_at:)
+      end
+
+      def connected_ai = presenter.creator_home_props[:getting_started_stats]["connected_ai"]
+
+      it "is true when the seller has an active MCP token" do
+        mcp_token(path: "/chatgpt/v1/mcp")
+
+        expect(connected_ai).to eq(true)
+      end
+
+      it "is false when the seller's only MCP token is revoked" do
+        mcp_token(revoked_at: 1.day.ago)
+
+        expect(connected_ai).to eq(false)
+      end
+
+      it "is false when the MCP token belongs to another seller" do
+        mcp_token(owner: create(:user))
+
+        expect(connected_ai).to eq(false)
+      end
+
+      it "is false for a token that is not bound to an MCP resource" do
+        create("doorkeeper/access_token", application: create(:oauth_application, owner: create(:user)), resource_owner_id: seller.id, scopes: "view_sales")
+
+        expect(connected_ai).to eq(false)
+      end
     end
 
     it "doesn't consider workflow installments for first_email" do
@@ -146,6 +184,7 @@ describe CreatorHomePresenter do
           "first_product" => true,
           "first_sale" => true,
           "used_cli" => false,
+          "connected_ai" => false,
         }
       )
     end

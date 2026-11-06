@@ -109,6 +109,12 @@ describe PiracyReports::CreateService do
       expect(call(seller:, product:).errors).to include(PiracyReports::Eligibility.store_agent_gate_error)
     end
 
+    it "states the earned-access steps without sending the seller to the Agent tab" do
+      expect(PiracyReports::Eligibility.store_agent_gate_error).to eq(
+        "Piracy reports unlock once you confirm your email, complete a payout and reach $100 in sales"
+      )
+    end
+
     it "rejects a seller with no completed payout" do
       seller = create(:user)
       create(:user_compliance_info, user: seller)

@@ -78,7 +78,7 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
     it "rejects the reserved Store Agent name" do
       reserved_params = {
         oauth_application: {
-          name: Ai::StoreAgentApiClient::AGENT_APP_NAME,
+          name: OauthApplication::FIRST_PARTY_AGENT_APP_NAME,
           redirect_uri: "http://hi"
         }
       }
@@ -93,7 +93,7 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
     it "rejects the reserved Store Agent name case-insensitively with surrounding whitespace" do
       reserved_params = {
         oauth_application: {
-          name: "  #{Ai::StoreAgentApiClient::AGENT_APP_NAME.downcase}  ",
+          name: "  #{OauthApplication::FIRST_PARTY_AGENT_APP_NAME.downcase}  ",
           redirect_uri: "http://hi"
         }
       }
@@ -311,7 +311,7 @@ describe Oauth::ApplicationsController, type: :controller, inertia: true do
         reserved_params = {
           id: app.external_id,
           oauth_application: {
-            name: " #{Ai::StoreAgentApiClient::AGENT_APP_NAME} "
+            name: " #{OauthApplication::FIRST_PARTY_AGENT_APP_NAME} "
           }
         }
 

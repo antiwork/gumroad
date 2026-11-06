@@ -29,6 +29,7 @@ vi.hoisted(() => {
       dashboard_path: url("/dashboard"),
       edit_link_url: url("/links/:id/edit"),
       followers_path: url("/followers"),
+      mcp_path: url("/mcp"),
       new_product_path: url("/products/new"),
       posts_path: url("/posts"),
       profile_path: url("/profile"),
@@ -73,7 +74,6 @@ const loggedInUser: LoggedInUser = {
     community: { index: false },
     churn: { show: false },
     page: { index: false, create: false },
-    user: { view_store_agent: false, use_store_agent: false },
   },
   promotedNavItems: [],
   lazyLoadOffscreenDiscoverImages: false,
@@ -113,9 +113,13 @@ const props: DashboardPageProps = {
   tax_center_enabled: false,
 };
 
-const renderDashboard = (currentSeller: CurrentSeller) =>
+const renderDashboard = (
+  currentSeller: CurrentSeller,
+  overrides: Partial<DashboardPageProps> = {},
+  user: LoggedInUser = loggedInUser,
+) =>
   render(
-    <LoggedInUserProvider value={loggedInUser}>
+    <LoggedInUserProvider value={user}>
       <CurrentSellerProvider value={currentSeller}>
         <DomainSettingsProvider
           value={{
@@ -129,7 +133,7 @@ const renderDashboard = (currentSeller: CurrentSeller) =>
           }}
         >
           <UserAgentProvider value={{ isMobile: false, locale: "en-US" }}>
-            <DashboardPage {...props} />
+            <DashboardPage {...props} {...overrides} />
           </UserAgentProvider>
         </DomainSettingsProvider>
       </CurrentSellerProvider>
@@ -157,5 +161,40 @@ describe("DashboardPage under-18 banner", () => {
     expect(screen.getByText(/a parent or guardian needs to be added to your account/u)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Add a guardian" }).getAttribute("href")).toBe("/settings/payments");
     expect(screen.queryByText(/cannot verify a seller under 18/u)).toBeNull();
+  });
+});
+
+describe("DashboardPage getting started", () => {
+  const adult: CurrentSeller = { ...minor, legalGuardianRequirementMet: true };
+  const owner: LoggedInUser = {
+    ...loggedInUser,
+    policies: { ...loggedInUser.policies, settings_payments_user: { show: true } },
+  };
+  // The checklist only renders while at least one item is still open.
+  const renderChecklist = (stats: DashboardPageProps["getting_started_stats"]) =>
+    renderDashboard(
+      adult,
+      { getting_started_dismissed: false, getting_started_stats: { first_sale: false, ...stats } },
+      owner,
+    );
+  const bringYourAi = () => screen.getByText("Bring your AI").closest("[data-status]");
+
+  it("sends a seller with no AI connection to the MCP page", () => {
+    renderChecklist({});
+
+    expect(bringYourAi()?.getAttribute("data-status")).toBe("pending");
+    expect(bringYourAi()?.getAttribute("href")).toBe("/mcp");
+  });
+
+  it("marks the item done once the seller has connected an assistant", () => {
+    renderChecklist({ connected_ai: true });
+
+    expect(bringYourAi()?.getAttribute("data-status")).toBe("completed");
+  });
+
+  it("still counts command line use as done", () => {
+    renderChecklist({ used_cli: true });
+
+    expect(bringYourAi()?.getAttribute("data-status")).toBe("completed");
   });
 });

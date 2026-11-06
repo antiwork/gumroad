@@ -4,12 +4,12 @@
 # marked-up HTML under app/views/help_center/articles/contents/ — into plain text a program can
 # read.
 #
-# Why this exists: the store agent (see Ai::StoreAgentService) used to have no way to look up how
-# Gumroad actually works, so when a creator asked about something the agent had no API endpoint
-# for, it answered from its own guesses and sometimes told the creator a supported feature did not
-# exist at all. The help center is the documentation the support team keeps accurate, so giving
-# the agent read access to it is the cheapest way to stop those wrong answers. The v2 endpoints in
-# Api::V2::HelpArticlesController expose this text; the agent reads it like any other API.
+# Why this exists: an AI agent driving the API used to have no way to look up how Gumroad actually
+# works, so when a creator asked about something the agent had no API endpoint for, it answered
+# from its own guesses and sometimes told the creator a supported feature did not exist at all. The
+# help center is the documentation the support team keeps accurate, so giving an agent read access
+# to it is the cheapest way to stop those wrong answers. The v2 endpoints in
+# Api::V2::HelpArticlesController expose this text; an agent reads it like any other API.
 #
 # The HTML is stripped rather than passed through because the articles are written for browsers:
 # they carry navigation lists, anchor markup, and screenshots (some inlined as base64 data URLs
@@ -29,8 +29,8 @@ module HelpCenter::ArticleText
   # Where the article partials live. Used to date them for the cache key (see #cache_version).
   CONTENTS_GLOB = "app/views/help_center/articles/contents/*.html.erb"
 
-  # Words dropped from a query before matching. Callers here are programs writing questions — the
-  # store agent is told to search the help center in the creator's own words — and a question
+  # Words dropped from a query before matching. Callers here are programs writing questions — an
+  # AI agent tends to search the help center in the creator's own words — and a question
   # carries function words that say nothing about the topic. Because a result has to match EVERY
   # term (see #search), one such word that happens to be absent from an article's text rules the
   # article out: "how do I change my store colors" found nothing while "change store colors" found
