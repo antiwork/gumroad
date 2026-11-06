@@ -35,6 +35,7 @@ class ProductBuildPlayerFilesController < ApplicationController
     # Module scripts, fetch and wasm from the frame are CORS requests with `Origin: null`, and the
     # browser checks a redirect as well as the response it leads to.
     response.set_header("Access-Control-Allow-Origin", "*")
+    response.set_header("X-Robots-Tag", "noindex, nofollow")
     return serve_file if SERVED_EXTENSIONS.include?(extension)
 
     expires_in CACHE_MAX_AGE, public: false
@@ -130,7 +131,6 @@ class ProductBuildPlayerFilesController < ApplicationController
       response.set_header("Content-Security-Policy", ProductBuilds::PlayerDocument.content_security_policy(request_origin: request.base_url, cdn_origin:, frame_ancestors:))
       # The path holds the content-page token and the grant, so it must not reach the CDN or a game's server.
       response.set_header("Referrer-Policy", "no-referrer")
-      response.set_header("X-Robots-Tag", "noindex, nofollow")
       page ? serve_page(s3, head) : stream_file(s3, head)
     rescue Aws::S3::Errors::NotFound, Aws::S3::Errors::NoSuchKey
       e404

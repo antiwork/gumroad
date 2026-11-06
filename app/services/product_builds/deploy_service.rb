@@ -24,7 +24,7 @@ class ProductBuilds::DeployService
     existing = @product.product_builds.find_by(source_url: @url)
     return existing if existing
 
-    check_unproven_seller_limits!
+    check_free_product_allowed!
 
     source_key = @url.delete_prefix(S3_BASE_URL)
     head = Aws::S3::Client.new.head_object(bucket: S3_BUCKET, key: source_key)
@@ -32,15 +32,17 @@ class ProductBuilds::DeployService
 
     # Checks and the copy happen under the product lock so concurrent deploys cannot pass the
     # limit together or copy the same upload twice.
-    build = @product.with_lock do
-      existing = @product.product_builds.find_by(source_url: @url)
-      next existing if existing
-      next if @product.product_builds.count >= ProductBuild::MAX_BUILDS_PER_PRODUCT
+    build = with_seller_limits do
+      @product.with_lock do
+        existing = @product.product_builds.find_by(source_url: @url)
+        next existing if existing
+        next if @product.product_builds.count >= ProductBuild::MAX_BUILDS_PER_PRODUCT
 
-      number = (@product.product_builds.maximum(:number) || 0) + 1
-      key = ProductBuild.storage_key_for(@product.id, number)
-      Aws::S3::Client.new.copy_object(bucket: S3_BUCKET, key:, copy_source: "#{S3_BUCKET}/#{Seahorse::Util.uri_path_escape(source_key)}", metadata_directive: "REPLACE", content_type: "application/zip")
-      @product.product_builds.create!(number:, source_url: @url, storage_key: key, byte_size: head.content_length)
+        number = (@product.product_builds.maximum(:number) || 0) + 1
+        key = ProductBuild.storage_key_for(@product.id, number)
+        Aws::S3::Client.new.copy_object(bucket: S3_BUCKET, key:, copy_source: "#{S3_BUCKET}/#{Seahorse::Util.uri_path_escape(source_key)}", metadata_directive: "REPLACE", content_type: "application/zip")
+        @product.product_builds.create!(number:, source_url: @url, storage_key: key, byte_size: head.content_length)
+      end
     end
     raise DeployError, "This product already has #{ProductBuild::MAX_BUILDS_PER_PRODUCT} builds." unless build
 
@@ -50,19 +52,26 @@ class ProductBuilds::DeployService
   end
 
   private
-    # New accounts were used to probe the player with throwaway free builds. They can still deploy to
-    # a paid product, a few a day, until they are proven.
-    def check_unproven_seller_limits!
+    # An unproven seller gets paid products only, and a daily cap across all their products. The
+    # count and the create share the seller's row lock so concurrent deploys cannot both pass it.
+    def with_seller_limits
       owner = @product.user
-      return unless ContentModeration::GumroadImpersonation.unproven_seller?(owner)
+      return yield unless ContentModeration::GumroadImpersonation.unproven_seller?(owner)
 
-      if @product.price_cents.to_i.zero?
-        raise DeployError, "Web builds on free products are available once your account is #{ContentModeration::GumroadImpersonation::PROVEN_ACCOUNT_AGE.in_days.to_i} days old or has made a paid sale. You can add a build to a paid product now."
+      owner.with_lock do
+        recent = ProductBuild.joins(:product).where(links: { user_id: owner.id }).where("product_builds.created_at > ?", 1.day.ago).count
+        if recent >= ProductBuild::MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER
+          raise DeployError, "New accounts can upload #{ProductBuild::MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER} builds a day. Try again tomorrow."
+        end
+
+        yield
       end
+    end
 
-      recent = ProductBuild.joins(:product).where(links: { user_id: owner.id }).where("product_builds.created_at > ?", 1.day.ago).count
-      return if recent < ProductBuild::MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER
+    def check_free_product_allowed!
+      return unless ContentModeration::GumroadImpersonation.unproven_seller?(@product.user)
+      return unless ProductBuild.free_product?(@product)
 
-      raise DeployError, "New accounts can upload #{ProductBuild::MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER} builds a day. Try again tomorrow."
+      raise DeployError, "Web builds on free products are available once your account is #{ContentModeration::GumroadImpersonation::PROVEN_ACCOUNT_AGE.in_days.to_i} days old or has made a paid sale. You can add a build to a paid product now."
     end
 end

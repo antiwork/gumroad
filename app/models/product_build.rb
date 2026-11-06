@@ -7,8 +7,7 @@ class ProductBuild < ApplicationRecord
   include TimestampStateFields
   STATUSES = %w[uploaded live superseded].freeze
   MAX_BUILDS_PER_PRODUCT = 50
-  # An unproven seller (ContentModeration::GumroadImpersonation.unproven_seller?) may deploy this many
-  # builds a day across all their products. Probe accounts deployed a dozen in minutes.
+  # Per unproven seller (ContentModeration::GumroadImpersonation.unproven_seller?), across all their products.
   MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER = 10
   MAX_BYTE_SIZE = 2.gigabytes
   # Limits on what a zip may unpack to. The zip itself is capped at MAX_BYTE_SIZE, but a small
@@ -112,10 +111,13 @@ class ProductBuild < ApplicationRecord
   # Whether buyers get a Play action for this build on the content page.
   def playable? = live? && site_ready? && player_enabled? && free_play_allowed?
 
-  # A free build runs seller code in front of anyone with no charge to check, so only a proven seller
-  # gets one. A paid product is fine either way: the charge is the check.
-  def free_play_allowed?
-    !free_for_everyone? || !ContentModeration::GumroadImpersonation.unproven_seller?(product.user)
+  # A free build has no charge to check, so only a proven seller gets one. Pass the buyer's purchase
+  # to also refuse a fully discounted one.
+  def free_play_allowed?(purchase = nil)
+    return true unless ContentModeration::GumroadImpersonation.unproven_seller?(product.user)
+    return false if free_for_everyone?
+
+    purchase.nil? || purchase.is_test_purchase? || purchase.price_cents.to_i.positive?
   end
 
   # Whether anyone can play this build with no purchase, from the public demo page and its X player
@@ -129,6 +131,14 @@ class ProductBuild < ApplicationRecord
     return !purchased_version? if demo_selected?
 
     live? && free_for_everyone? && !product.product_builds.demo_selected.exists?
+  end
+
+  def self.free_product?(product)
+    return false if product.rent_only? || product.is_recurring_billing || product.price_cents != 0
+
+    variants = product.alive_variants
+    variants.where("price_difference_cents > 0").none? &&
+      VariantPrice.alive.is_buy.where(variant_id: variants.select(:id)).where("price_cents > 0").none?
   end
 
   # What buyers of a paid product get, which never becomes public.
@@ -213,7 +223,7 @@ class ProductBuild < ApplicationRecord
 
   # What the API and the editor's version history show of a build.
   def as_json(*)
-    { id: public_id, number:, status:, byte_size:, created_at:, promoted_at:, demo: demo_selected? }
+    { id: public_id, number:, status:, byte_size:, created_at:, promoted_at:, demo: demo_selected?, unpack_error: site_unpack_error.presence }
   end
 
   # Makes this build the one buyers get, superseding the current one. Promoting the live build again
@@ -259,13 +269,7 @@ class ProductBuild < ApplicationRecord
 
     # Free only when a buyer of any version can buy it for nothing (BaseVariant#free?, for all versions at
     # once). A rental-only product has no buy price.
-    def free_for_everyone?
-      return false if product.rent_only? || product.is_recurring_billing || product.price_cents != 0
-
-      variants = product.alive_variants
-      variants.where("price_difference_cents > 0").none? &&
-        VariantPrice.alive.is_buy.where(variant_id: variants.select(:id)).where("price_cents > 0").none?
-    end
+    def free_for_everyone? = self.class.free_product?(product)
 
     def set_public_id
       self.public_id ||= Array.new(PUBLIC_ID_LENGTH) { PUBLIC_ID_ALPHABET[SecureRandom.random_number(PUBLIC_ID_ALPHABET.size)] }.join

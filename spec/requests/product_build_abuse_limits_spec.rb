@@ -49,6 +49,11 @@ describe "Web build limits for unproven sellers" do
       expect { deploy(products[2]) }.to raise_error(ProductBuilds::DeployService::DeployError, /2 builds a day/)
     end
 
+    it "keeps the build list showing why a held build is not live" do
+      build = create(:product_build, product: create(:product, user: new_seller), site_unpack_error: "held")
+      expect(build.as_json[:unpack_error]).to eq("held")
+    end
+
     it "does not cap a proven seller" do
       stub_const("ProductBuild::MAX_DAILY_BUILDS_FOR_UNPROVEN_SELLER", 1)
       products = create_list(:product, 2, user: proven_seller, price_cents: 500)
@@ -78,6 +83,18 @@ describe "Web build limits for unproven sellers" do
         product.update!(price_cents: 500)
         build.update!(demo_selected_at: Time.current, status: "uploaded")
         expect(build.reload.demo?).to be(false)
+      end
+    end
+
+    context "with a new seller and a paid product" do
+      let(:seller) { new_seller }
+
+      it "refuses play to a fully discounted purchase" do
+        product.update!(price_cents: 500)
+        free = create(:purchase, link: product, price_cents: 0)
+        paid = build_stubbed(:purchase, link: product, price_cents: 500)
+        expect(build.free_play_allowed?(free)).to be(false)
+        expect(build.free_play_allowed?(paid)).to be(true)
       end
     end
 
@@ -118,6 +135,11 @@ describe "Web build limits for unproven sellers" do
 
     it "holds a new seller's email field next to payout wording" do
       _, run = unpack(new_seller, { "index.html" => %(<p>Verify your payout</p><input type="email">) })
+      expect { run.call }.to raise_error(described_class::UnpackError, /needs a quick review/)
+    end
+
+    it "holds a password field whose type is written with character references" do
+      _, run = unpack(new_seller, { "index.html" => %(<input type="pass&#119;ord">) })
       expect { run.call }.to raise_error(described_class::UnpackError, /needs a quick review/)
     end
 

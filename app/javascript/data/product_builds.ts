@@ -8,6 +8,7 @@ export type ProductBuild = {
   byte_size: number;
   created_at: string;
   promoted_at: string | null;
+  unpack_error?: string | null;
 };
 
 export const getProductBuilds = async (productPermalink: string) => {

@@ -22,11 +22,7 @@ class ProductBuilds::UnpackSiteService
   S3_KEY_MAX_BYTES = 1_024
   UNREADABLE_ARCHIVE = "The zip could not be read, so there is nothing to play."
   FINDER_METADATA_FOLDER = "__MACOSX"
-  # A page that asks for a password, or for an email next to sign-in or payout wording, is how a
-  # phishing kit looks. From a seller who is not proven yet, such a build is held: it is not served
-  # until support has looked at it and asked the seller to upload again. Proven sellers are not checked.
-  CREDENTIAL_FIELD = /<input\b[^>]*\btype\s*=\s*["']?password\b/i
-  EMAIL_FIELD = /<input\b[^>]*\btype\s*=\s*["']?email\b/i
+  # Unproven sellers' builds with these pages are held for support review.
   PHISHING_WORDS = /\b(log\s*in|sign\s*in|verify|verification|payouts?|wallet|seed phrase|recovery phrase|bank account|paypal)\b/i
   CREDENTIAL_PAGE_HELD = "This build has a page that asks for a password or sign-in details, so it needs a quick review before it can go live. Contact support and we'll take a look."
 
@@ -374,10 +370,15 @@ class ProductBuilds::UnpackSiteService
 
       file.rewind
       page = file.read.force_encoding(Encoding::UTF_8).scrub
-      return unless page.match?(CREDENTIAL_FIELD) || (page.match?(EMAIL_FIELD) && page.match?(PHISHING_WORDS))
+      return unless credential_page?(page)
 
       Rails.logger.info("[ProductBuildCredentialPage] #{{ build_id: build.id, product_id: build.product_id, seller_id: build.product.user_id, path: }.to_json}")
       raise UnpackError, CREDENTIAL_PAGE_HELD
+    end
+
+    def credential_page?(page)
+      types = Nokogiri::HTML(page).css("input").map { _1["type"].to_s.strip.downcase }
+      types.include?("password") || (types.include?("email") && page.match?(PHISHING_WORDS))
     end
 
     def credential_check_applies?
