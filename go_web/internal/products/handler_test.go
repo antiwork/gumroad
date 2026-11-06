@@ -162,6 +162,7 @@ func newTestEnv(t *testing.T) *testEnv {
 			PublicStorageURL: "https://gumroad-public-storage.s3.amazonaws.com/",
 			OGNamespace:      "gumroad",
 			NewNonce:         func() string { return "NONCE" },
+			GumroadAdminID:   767082,
 			CustomHTMLAnalytics: &vite.Tags{HTML: `<script src="` + testAnalyticsScript + `" crossorigin="" type="module"></script>`,
 				Links: []string{"<" + testAnalyticsScript + ">; rel=modulepreload; as=script; crossorigin=; nopush"}},
 		},

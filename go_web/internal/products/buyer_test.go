@@ -16,10 +16,10 @@ import (
 // through the evaluators the product page calls.
 func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 	const buyerID, codeID, otherID = int64(1_797_001), int64(1_797_101), int64(1_797_201)
-	confirmed := &signedInUser{id: buyerID, email: sql.NullString{String: "buyer@example.com", Valid: true},
+	confirmed := &signedInUser{user: user{id: buyerID}, email: sql.NullString{String: "buyer@example.com", Valid: true},
 		confirmedAt: db.NullTime{Time: testNow, Valid: true}}
-	unconfirmed := &signedInUser{id: buyerID, email: confirmed.email}
-	blank := &signedInUser{id: buyerID, email: sql.NullString{Valid: true}, confirmedAt: confirmed.confirmedAt}
+	unconfirmed := &signedInUser{user: user{id: buyerID}, email: confirmed.email}
+	blank := &signedInUser{user: user{id: buyerID}, email: sql.NullString{Valid: true}, confirmedAt: confirmed.confirmedAt}
 	purchase := func(t *testing.T, conn *sql.DB, id int64, columns map[string]any) {
 		row := map[string]any{"id": id, "seller_id": sellerID, "link_id": productID, "purchaser_id": buyerID,
 			"email": "buyer@example.com", "purchase_state": "successful", "created_at": testNow.AddDate(0, -2, 0), "updated_at": testNow}
@@ -170,7 +170,7 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 // then weighs against the sale.
 func TestABuyersExistingCustomerDefault(t *testing.T) {
 	const loyalID, saleID = int64(1_797_111), int64(1_797_112)
-	buyer := &signedInUser{id: 1_797_001}
+	buyer := &signedInUser{user: user{id: 1_797_001}}
 	for _, c := range []struct {
 		name, reason, code string
 		sale               bool

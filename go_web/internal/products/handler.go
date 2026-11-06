@@ -1,6 +1,7 @@
-// Package products serves the product page, GET /l/:id (LinksController#show), for a
-// signed-out visitor on a seller's subdomain: Rails' filters, then Products/Show. Every
-// request whose Rails path this port leaves out goes to Rails before anything is written.
+// Package products serves the product page, GET /l/:id (LinksController#show), on a seller's
+// subdomain, for a visitor signed out or signed in with no part in the product: Rails' filters,
+// then Products/Show. Every request whose Rails path this port leaves out goes to Rails before
+// anything is written.
 package products
 
 import (
@@ -154,9 +155,6 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		})
 	if err != nil {
 		return nil, err
-	}
-	if v.Auth.LoggedInUser() != nil {
-		return nil, fallback("signed in")
 	}
 	p := &page{Visit: v}
 	// The path's code overrides the query's; a blank one is no code.
