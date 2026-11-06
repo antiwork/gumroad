@@ -11,7 +11,7 @@ import (
 
 // ProductFile flags (has_flags 1 => :is_transcoded_for_hls ...).
 const (
-	fileStreamOnly              = 1 << 3
+	FileStreamOnly              = 1 << 3
 	filePDFStampEnabled         = 1 << 4
 	fileHideKindleAndReadButton = 1 << 5
 )
@@ -58,7 +58,14 @@ func (f *displayFile) browserReadable() bool {
 	return f.pdf() || f.epub() && (!f.size.Valid || f.size.Int64 <= maxEPUBReaderSize)
 }
 func (f *displayFile) streamOnly() bool {
-	return (f.streamable() || f.browserReadable()) && f.is(fileStreamOnly)
+	return StreamOnly(f.Filetype, f.Filegroup, f.size, f.flags)
+}
+
+// StreamOnly is ProductFile#stream_only? for a file's columns, NULL strings as "": the flag,
+// on a file that can_disable_downloads? (a video, or a PDF or small EPUB the browser reads).
+func StreamOnly(filetype, filegroup string, size sql.NullInt64, flags int64) bool {
+	f := displayFile{ProductFile: ProductFile{Filetype: filetype, Filegroup: filegroup}, size: size, flags: flags}
+	return (f.streamable() || f.browserReadable()) && f.is(FileStreamOnly)
 }
 func (f *displayFile) canSendToKindle() bool {
 	return (f.pdf() || f.epub()) && f.size.Valid && f.size.Int64 < maxKindleSize

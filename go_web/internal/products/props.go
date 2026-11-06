@@ -1,6 +1,7 @@
 package products
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
@@ -60,7 +61,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("custom_button_text_option", j.get("custom_button_text_option")).
 		Sym("is_compliance_blocked", complianceBlocked(v.geo)).
 		Sym("is_published", !prod.draft.Bool && prod.alive()).
-		Sym("is_stream_only", false).
+		Sym("is_stream_only", slices.ContainsFunc(v.files, productFile.streamOnly)).
 		Sym("streamable", hasFilegroup(v.files, "video")).
 		Sym("sales_count", v.salesCount).
 		Sym("summary", presence(j.get("custom_summary"))).
@@ -99,7 +100,7 @@ func (h *handler) productProps(props *rails.RHash, p *page, prod *product, v *vi
 		Sym("waitlist", h.waitlistProps(prod, v)).
 		Sym("refund_policy", v.refundPolicy).
 		Sym("bundle_products", v.bundle.props).
-		Sym("public_files", []any{}).
+		Sym("public_files", v.publicFiles).
 		Sym("file_summaries", v.fileSummaries)
 
 	discountCode := v.discount.resultProps(externalID)
