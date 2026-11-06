@@ -19,9 +19,13 @@ func init() {
 	allowedCSSProperties["position"] = true
 }
 
+// maxStyleBytes leaves larger styles to Rails: tokenizing allocates a few hundred bytes per
+// byte of input.
+const maxStyleBytes = 16 << 10
+
 // ScrubCSS is Loofah::HTML5::Scrub.scrub_css(style).
 func ScrubCSS(style string) (string, error) {
-	if !utf8.ValidString(style) {
+	if len(style) > maxStyleBytes || !utf8.ValidString(style) {
 		return "", ErrUnported
 	}
 	p, items, err := parseProperties(style)

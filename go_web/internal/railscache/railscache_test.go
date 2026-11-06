@@ -256,9 +256,9 @@ func TestDumpMatchesRubyMarshal(t *testing.T) {
 	f := loadFixtures(t)
 	for _, c := range f.Marshal {
 		v := build(t, c.Value)
-		got, err := dump(v)
+		got, err := Dump(v)
 		if err != nil || hex.EncodeToString(got) != c.Hex {
-			t.Errorf("dump(%s)\n got %x %v\nwant %s", c.Value, got, err, c.Hex)
+			t.Errorf("Dump(%s)\n got %x %v\nwant %s", c.Value, got, err, c.Hex)
 		}
 		loaded, err := load(unhex(t, c.Hex))
 		if err != nil || !same(loaded, v) {
@@ -285,8 +285,8 @@ func TestLoadFollowsLinksAndRefusesOtherObjects(t *testing.T) {
 
 func TestDumpRefusesValuesRubyCantHold(t *testing.T) {
 	for _, v := range []any{map[string]any{"a": 1}, []byte("x"), Symbol("\xff"), struct{}{}, []any{(*big.Int)(nil)}} {
-		if _, err := dump(v); !errors.Is(err, ErrUnported) {
-			t.Errorf("dump(%#v) = %v", v, err)
+		if _, err := Dump(v); !errors.Is(err, ErrUnported) {
+			t.Errorf("Dump(%#v) = %v", v, err)
 		}
 	}
 	if got, want := mustDump(t, []int{3, 41, 187}), mustDump(t, []any{3, 41, 187}); !bytes.Equal(got, want) {
@@ -296,7 +296,7 @@ func TestDumpRefusesValuesRubyCantHold(t *testing.T) {
 
 func mustDump(t *testing.T, v any) []byte {
 	t.Helper()
-	b, err := dump(v)
+	b, err := Dump(v)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -386,5 +386,14 @@ func TestWriteRefusesANegativeExpiry(t *testing.T) {
 	}
 	if err := s.Write(t.Context(), "k", 1, -time.Second); err == nil {
 		t.Error("raise_on_invalid_cache_expiration_time raises on a negative expires_in")
+	}
+}
+
+// An encoding ivar whose value is another ivar-wrapped string counts toward the nesting cap.
+func TestNestedEncodingValuesHitTheDepthLimit(t *testing.T) {
+	data := "\x04\x08" + strings.Repeat("I\"\x00\x06:\x06E", 1000) + "T"
+	// Without the limit the innermost value is read as a non-boolean encoding instead.
+	if _, err := load([]byte(data)); !errors.Is(err, ErrUnported) || !strings.Contains(err.Error(), "nesting too deep") {
+		t.Fatalf("got %v", err)
 	}
 }

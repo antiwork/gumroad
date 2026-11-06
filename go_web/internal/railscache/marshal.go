@@ -154,9 +154,9 @@ func (l *loader) object(depth int) (any, error) {
 		l.entry(v)
 		return v, nil
 	case 'I':
-		return l.ivar()
+		return l.ivar(depth)
 	case ':':
-		return l.symbol(false)
+		return l.symbol(false, depth)
 	case ';':
 		n, err := l.long()
 		if err != nil {
@@ -285,14 +285,14 @@ func (l *loader) float() (any, error) {
 
 // ivar is an 'I'-wrapped String or Symbol whose one ivar is its encoding (sym2encidx).
 // Any other ivar, or an encoding other than UTF-8 or US-ASCII, is unported.
-func (l *loader) ivar() (any, error) {
+func (l *loader) ivar(depth int) (any, error) {
 	t, err := l.byte()
 	if err != nil {
 		return nil, err
 	}
 	switch t {
 	case ':':
-		return l.symbol(true)
+		return l.symbol(true, depth)
 	case '"':
 	default:
 		return nil, l.unported("ivars on type %q", t)
@@ -302,7 +302,7 @@ func (l *loader) ivar() (any, error) {
 		return nil, err
 	}
 	idx := l.entry(Binary(b))
-	isUTF8, err := l.encoding()
+	isUTF8, err := l.encoding(depth)
 	if err != nil {
 		return nil, err
 	}
@@ -315,7 +315,7 @@ func (l *loader) ivar() (any, error) {
 }
 
 // encoding reads r_ivar's count and the single :E ivar; true is UTF-8, false US-ASCII.
-func (l *loader) encoding() (bool, error) {
+func (l *loader) encoding(depth int) (bool, error) {
 	n, err := l.long()
 	if err != nil {
 		return false, err
@@ -330,10 +330,10 @@ func (l *loader) encoding() (bool, error) {
 	var name any
 	switch t {
 	case ':':
-		name, err = l.symbol(false)
+		name, err = l.symbol(false, depth+1)
 	case ';':
 		l.pos--
-		name, err = l.object(0)
+		name, err = l.object(depth + 1)
 	default:
 		return false, l.unported("ivar name type %q", t)
 	}
@@ -343,7 +343,7 @@ func (l *loader) encoding() (bool, error) {
 	if name != Symbol("E") {
 		return false, l.unported("ivar %v", name)
 	}
-	v, err := l.object(0)
+	v, err := l.object(depth + 1)
 	if err != nil {
 		return false, err
 	}
@@ -355,7 +355,7 @@ func (l *loader) encoding() (bool, error) {
 }
 
 // symbol is r_symreal: the symbol takes its index before its encoding ivar is read.
-func (l *loader) symbol(ivar bool) (any, error) {
+func (l *loader) symbol(ivar bool, depth int) (any, error) {
 	b, err := l.bytes()
 	if err != nil {
 		return nil, err
@@ -363,7 +363,7 @@ func (l *loader) symbol(ivar bool) (any, error) {
 	s := Symbol(b)
 	l.syms = append(l.syms, s)
 	if ivar {
-		isUTF8, err := l.encoding()
+		isUTF8, err := l.encoding(depth)
 		if err != nil {
 			return nil, err
 		}
@@ -376,10 +376,10 @@ func (l *loader) symbol(ivar bool) (any, error) {
 	return s, nil
 }
 
-// dump is Marshal.dump for the types load returns. Like Ruby it links repeated symbols,
+// Dump is Marshal.dump for the types load returns. Like Ruby it links repeated symbols,
 // repeated flonums, and repeated String keys of Hashes (Hash#[]= interns those, so equal
 // keys are one object). Other Strings and Floats are taken to be distinct objects.
-func dump(v any) ([]byte, error) {
+func Dump(v any) ([]byte, error) {
 	d := &dumper{buf: []byte{4, 8}, syms: map[Symbol]int{}, keys: map[any]int{}, flonums: map[uint64]int{}}
 	if err := d.object(v, false, 0); err != nil {
 		return nil, err

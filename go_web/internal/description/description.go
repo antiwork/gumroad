@@ -134,8 +134,13 @@ func cdnMapped(description string, c Config) (string, error) {
 type scrubber struct {
 	c Config
 	// reviews caches ReviewExists by reviewid for one description.
-	reviews map[string]bool
+	reviews    map[string]bool
+	styleBytes int
 }
+
+// maxStyleBudget bounds the style bytes one description scrubs: CSS scrubbing allocates a
+// few hundred bytes per byte.
+const maxStyleBudget = 128 << 10
 
 func (s *scrubber) traverse(n *html4.Node) error {
 	removed, err := s.scrub(n)
@@ -197,7 +202,7 @@ func (s *scrubber) scrub(n *html4.Node) (removed bool, err error) {
 			n.Remove()
 			return true, nil
 		}
-		if err := scrubAttributes(n); err != nil {
+		if err := s.scrubAttributes(n); err != nil {
 			return false, err
 		}
 	case "upsell-card":
@@ -214,7 +219,7 @@ func (s *scrubber) scrub(n *html4.Node) (removed bool, err error) {
 			return true, nil
 		}
 	default:
-		if err := scrubAttributes(n); err != nil {
+		if err := s.scrubAttributes(n); err != nil {
 			return false, err
 		}
 	}
@@ -227,12 +232,19 @@ func (s *scrubber) scrub(n *html4.Node) (removed bool, err error) {
 	return false, nil
 }
 
+// maxReviewLookups bounds the queries one description makes; a forged reviewid can decrypt to
+// a real id, so distinct strings are not distinct reviews.
+const maxReviewLookups = 20
+
 func (s *scrubber) reviewExists(id string) (bool, error) {
 	if s.c.ReviewExists == nil {
 		return false, ErrUnported
 	}
 	if exists, ok := s.reviews[id]; ok {
 		return exists, nil
+	}
+	if len(s.reviews) >= maxReviewLookups {
+		return false, ErrUnported
 	}
 	exists, err := s.c.ReviewExists(id)
 	if err != nil {
@@ -323,7 +335,7 @@ func isNotSpace(r rune) bool { return !unicode.IsSpace(r) }
 
 // scrubAttributes is Loofah::HTML5::Scrub.scrub_attributes on one of the allowed elements,
 // none of which is in SVG_ALLOW_LOCAL_HREF.
-func scrubAttributes(n *html4.Node) error {
+func (s *scrubber) scrubAttributes(n *html4.Node) error {
 	kept := make([]html4.Attr, 0, len(n.Attrs))
 	for _, a := range n.Attrs {
 		if !dataAttribute(a.Name) {
@@ -349,6 +361,9 @@ func scrubAttributes(n *html4.Node) error {
 	n.Attrs = kept
 
 	if style, ok := n.Attr("style"); ok {
+		if s.styleBytes += len(style); s.styleBytes > maxStyleBudget {
+			return ErrUnported
+		}
 		scrubbed, err := csssan.ScrubCSS(style)
 		if err != nil {
 			return ErrUnported

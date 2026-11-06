@@ -285,7 +285,7 @@ func encodeWrite(value any, expiresIn time.Duration, now time.Time) ([]byte, []b
 	if err != nil {
 		return nil, nil, err
 	}
-	data, _ := dump(Binary(coded))
+	data, _ := Dump(Binary(coded))
 	extras := make([]byte, 8)
 	binary.BigEndian.PutUint32(extras, flagSerialized)
 	binary.BigEndian.PutUint32(extras[4:], uint32(ttl))
@@ -306,7 +306,7 @@ func encodeEntry(value any, expiresAt float64) ([]byte, error) {
 		typ, payload = typeBinary, []byte(v)
 	default:
 		var err error
-		if payload, err = dump(value); err != nil {
+		if payload, err = Dump(value); err != nil {
 			return nil, err
 		}
 		typ = typeObject

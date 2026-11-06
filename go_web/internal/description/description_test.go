@@ -307,7 +307,7 @@ func TestLargeAdversarialDescriptions(t *testing.T) {
 		"50k paragraphs":              strings.Repeat("<p>x</p>", 50_000),
 		"40k links to autolink":       strings.Repeat("https://example.com/a ", 40_000),
 		"10k iframes":                 strings.Repeat(`<iframe src="https://cdn.iframe.ly/x" style="position: absolute"></iframe>`, 10_000),
-		"long style attribute":        `<p style="` + strings.Repeat("color: red; ", 20_000) + `">x</p>`,
+		"styles up to the budget":     strings.Repeat(`<p style="`+budgetStyle+`">x</p>`, maxStyleBudget/len(budgetStyle)),
 	}
 	c := Config{Protocol: "https", ReviewExists: func(string) (bool, error) { return true, nil }}
 	for name, input := range inputs {
@@ -330,5 +330,45 @@ func TestLargeAdversarialDescriptions(t *testing.T) {
 			t.Errorf("%s (%d bytes) took %v", name, len(input), elapsed)
 		}
 		t.Logf("%s: %d bytes in %v", name, len(input), elapsed)
+	}
+}
+
+func TestManyDistinctReviewCardsAreRails(t *testing.T) {
+	cards := func(n int) string {
+		var b strings.Builder
+		for i := range n {
+			b.WriteString(`<review-card reviewid="r` + strconv.Itoa(i) + `"></review-card>`)
+		}
+		return b.String()
+	}
+	lookups := 0
+	c := Config{Protocol: "https", ReviewExists: func(string) (bool, error) { lookups++; return true, nil }}
+	if _, _, err := HTML(cards(maxReviewLookups), c); err != nil {
+		t.Fatalf("%d cards: %v", maxReviewLookups, err)
+	}
+	lookups = 0
+	if _, _, err := HTML(cards(maxReviewLookups+1), c); !errors.Is(err, ErrUnported) {
+		t.Fatalf("%d cards: err = %v, want ErrUnported", maxReviewLookups+1, err)
+	}
+	if lookups != maxReviewLookups {
+		t.Errorf("lookups = %d, want %d", lookups, maxReviewLookups)
+	}
+}
+
+// budgetStyle is under csssan's cap for one style.
+var budgetStyle = strings.Repeat("color: red; ", 1_000)
+
+func TestStylesOverTheBudgetAreRails(t *testing.T) {
+	input := strings.Repeat(`<p style="`+budgetStyle+`">x</p>`, maxStyleBudget/len(budgetStyle)+1)
+	if b := HTMLAndPlaintext(input, Config{Protocol: "https"}); !errors.Is(b.HTMLErr, ErrUnported) {
+		t.Fatalf("HTMLErr = %v, want ErrUnported", b.HTMLErr)
+	}
+}
+
+func TestAStyleOverCSSsansCapIsRails(t *testing.T) {
+	input := `<p style="` + strings.Repeat("color: red; ", 20_000) + `">x</p>`
+	b := HTMLAndPlaintext(input, Config{Protocol: "https"})
+	if !errors.Is(b.HTMLErr, ErrUnported) {
+		t.Fatalf("HTMLErr = %v, want ErrUnported", b.HTMLErr)
 	}
 }

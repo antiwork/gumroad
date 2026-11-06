@@ -2,7 +2,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1"
 	"database/sql"
@@ -17,6 +16,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/railscache"
 )
 
 // ErrUnported is an avatar whose URL only Rails can give: one it would resize first, or
@@ -172,37 +172,28 @@ func variationDigest(filename, contentType string) string {
 // [width, height]) after default_to(default_variant_transformations): SHA1 of
 // Marshal.dump({format:, resize_to_limit: [width, height]}), Base64. A negative bound is nil.
 func VariantDigest(filename, contentType string, width, height int) string {
-	var b bytes.Buffer
-	b.WriteString("\x04\x08{")
-	marshalLong(&b, 2)
-	marshalSymbol(&b, "format")
+	var format any = railscache.Symbol("png")
 	if web, ok := webImageTypes[contentType]; ok {
-		format := web.first
+		format = web.first
 		if ext := strings.TrimPrefix(rails.FileExtname(filename), "."); ext != "" && matchesExtension(web.extensions, ext) {
 			format = ext
 		}
-		// A UTF-8 String: its bytes, then the encoding ivar E => true. :E is the second symbol.
-		b.WriteString(`I"`)
-		marshalLong(&b, len(format))
-		b.WriteString(format)
-		marshalLong(&b, 1)
-		marshalSymbol(&b, "E")
-		b.WriteByte('T')
-	} else {
-		marshalSymbol(&b, "png")
 	}
-	marshalSymbol(&b, "resize_to_limit")
-	b.WriteByte('[')
-	marshalLong(&b, 2)
-	for _, n := range []int{width, height} {
+	bound := func(n int) any {
 		if n < 0 {
-			b.WriteByte('0')
-			continue
+			return nil
 		}
-		b.WriteByte('i')
-		marshalLong(&b, n)
+		return n
 	}
-	sum := sha1.Sum(b.Bytes())
+	data, err := railscache.Dump(railscache.Hash{
+		{Key: railscache.Symbol("format"), Value: format},
+		{Key: railscache.Symbol("resize_to_limit"), Value: []any{bound(width), bound(height)}},
+	})
+	if err != nil {
+		// Only a non-UTF-8 symbol or an unsupported type fails, and these are neither.
+		panic(err)
+	}
+	sum := sha1.Sum(data)
 	return base64.StdEncoding.EncodeToString(sum[:])
 }
 
@@ -221,27 +212,4 @@ func matchesExtension(extensions []string, ext string) bool {
 		}
 	}
 	return false
-}
-
-func marshalSymbol(b *bytes.Buffer, s string) {
-	b.WriteByte(':')
-	marshalLong(b, len(s))
-	b.WriteString(s)
-}
-
-// marshalLong is Marshal's w_long for the non-negative values below 65,536 written here.
-func marshalLong(b *bytes.Buffer, n int) {
-	switch {
-	case n == 0:
-		b.WriteByte(0)
-	case n < 123:
-		b.WriteByte(byte(n + 5))
-	case n < 256:
-		b.WriteByte(1)
-		b.WriteByte(byte(n))
-	default:
-		b.WriteByte(2)
-		b.WriteByte(byte(n))
-		b.WriteByte(byte(n >> 8))
-	}
 }
