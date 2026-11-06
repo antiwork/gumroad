@@ -118,6 +118,8 @@ type page struct {
 	iframe bool
 	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
 	wanted bool
+	// json is params[:format] == "json": ProductPresenter::PublicApiProps instead of the page.
+	json bool
 	// parent is the page's own view when this one renders a featured section's product within it.
 	parent *view
 }
@@ -159,7 +161,7 @@ var railsSubdomainHost = web.SubdomainRequestPattern("gumroad.com")
 var analyticsHost = regexp.MustCompile(`gumroad-analytics.com`)
 
 // permalinkParam is what a custom or unique permalink can be. Anything else needs Rails'
-// path decoding or would carry a format.
+// path decoding.
 var permalinkParam = regexp.MustCompile(`\A[A-Za-z0-9_-]+\z`)
 
 // prepare parses the request and decides whether this port serves it. Nothing it does is
@@ -168,10 +170,17 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if h.c.Page == nil {
 		return nil, fallback("pages off")
 	}
-	if reason := declined(r, h.c.Env); reason != "" {
+	id, format := r.PathValue("id"), "html"
+	if !codeRoute {
+		var reason string
+		if id, format, reason = splitFormat(r); reason != "" {
+			return nil, fallback(reason)
+		}
+	}
+	if reason := declined(r, h.c.Env, id); reason != "" {
 		return nil, fallback(reason)
 	}
-	route := [][2]string{{"format", "html"}, {"controller", "links"}, {"action", "show"}, {"id", r.PathValue("id")}}
+	route := [][2]string{{"format", format}, {"controller", "links"}, {"action", "show"}, {"id", id}}
 	if codeRoute {
 		// Anything else needs Journey's segment and format rules.
 		code := r.PathValue("rest")
@@ -190,7 +199,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if err != nil {
 		return nil, err
 	}
-	p := &page{Visit: v}
+	p := &page{Visit: v, json: format == "json"}
 	// The path's code overrides the query's; a blank one is no code.
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
@@ -213,8 +222,25 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	return p, nil
 }
 
+// splitFormat is /l/:id(.:format): Journey's segments stop at a dot, and an empty format
+// matches no route. An escaped dot stays in the id, which then isn't a permalink.
+func splitFormat(r *http.Request) (id, format, reason string) {
+	id = r.PathValue("id")
+	if r.URL.RawPath != "" {
+		return id, "html", ""
+	}
+	id, format, found := strings.Cut(id, ".")
+	switch {
+	case !found:
+		return id, "html", ""
+	case format != "json":
+		return id, format, "format"
+	}
+	return id, format, ""
+}
+
 // declined is everything decided by the request line and headers alone.
-func declined(r *http.Request, env *web.Environment) string {
+func declined(r *http.Request, env *web.Environment, id string) string {
 	host := web.Host(r)
 	m := subdomainHost.FindStringSubmatch(host)
 	subdomain := m != nil
@@ -233,7 +259,7 @@ func declined(r *http.Request, env *web.Environment) string {
 	case !subdomain && r.Host == env.Domain:
 		// Rack::SSL redirects a raw gumroad.com Host to https before routing.
 		return "host"
-	case !permalinkParam.MatchString(r.PathValue("id")):
+	case !permalinkParam.MatchString(id):
 		return "permalink"
 	case r.Header.Get("X-Forwarded-Ssl") != "" || r.Header.Get("X-Forwarded-Scheme") != "":
 		// Rack's scheme reads these; SecureHeaders' doesn't.

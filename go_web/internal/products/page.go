@@ -80,17 +80,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	// :native); native is declined. Of the before_actions left, prepare_product_page only sets
 	// meta tags and set_x_robots_tag_header marks a code.
 	if prod.nativeType == "coffee" {
-		if p.urlCode != "" {
-			w.Header().Set("X-Robots-Tag", "noindex")
-		}
-		if err := h.trackUTMVisit(w, p, prod); err != nil {
-			return err
-		}
-		location := "/coffee"
-		if wanted, ok := p.Req.Param("wanted").(string); ok {
-			location += "?" + rails.ToQuery([2]string{"wanted", wanted})
-		}
-		return h.ctl.Redirect(w, p.Visit, location)
+		return h.redirectCoffee(w, p, prod)
 	}
 	if reason, err := h.unportedShape(ctx, p, prod); err != nil || reason != "" {
 		return firstErr(err, fallback(reason))
@@ -177,6 +167,20 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
 	})
 
+	if err := h.finishShow(w, p, prod, v.ip); err != nil {
+		return err
+	}
+	hdr := w.Header()
+	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
+	hdr.Set("Link", pc.Layout.LinkHeader())
+	rails.RenderInertiaHTML(w, p.Req, body)
+	return nil
+}
+
+// finishShow is what show writes once it renders here, unless in a dry run, then the session
+// and set_noindex_header's header.
+func (h *handler) finishShow(w http.ResponseWriter, p *page, prod *product, ip string) error {
+	ctx, pc := p.Ctx, h.c.Page
 	recordSearch, err := h.recordsDiscoverSearch(p)
 	if err != nil {
 		return err
@@ -205,7 +209,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 			return err
 		}
 		if recordSearch {
-			if err := h.createDiscoverSearch(ctx, p, prod, v.ip, taxonomyID); err != nil {
+			if err := h.createDiscoverSearch(ctx, p, prod, ip, taxonomyID); err != nil {
 				return err
 			}
 		}
@@ -214,14 +218,25 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if err := h.ctl.Finish(w, p.Visit); err != nil {
 		return err
 	}
-	hdr := w.Header()
 	if !prod.alive() || p.urlCode != "" {
-		hdr.Set("X-Robots-Tag", "noindex")
+		w.Header().Set("X-Robots-Tag", "noindex")
 	}
-	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
-	hdr.Set("Link", pc.Layout.LinkHeader())
-	rails.RenderInertiaHTML(w, p.Req, body)
 	return nil
+}
+
+// redirectCoffee is show's redirect of a coffee product to /coffee.
+func (h *handler) redirectCoffee(w http.ResponseWriter, p *page, prod *product) error {
+	if p.urlCode != "" {
+		w.Header().Set("X-Robots-Tag", "noindex")
+	}
+	if err := h.trackUTMVisit(w, p, prod); err != nil {
+		return err
+	}
+	location := "/coffee"
+	if wanted, ok := p.Req.Param("wanted").(string); ok {
+		location += "?" + rails.ToQuery([2]string{"wanted", wanted})
+	}
+	return h.ctl.Redirect(w, p.Visit, location)
 }
 
 // view is everything the page reads beyond the product and seller rows.
