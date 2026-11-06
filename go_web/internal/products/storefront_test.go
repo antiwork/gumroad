@@ -127,17 +127,26 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				"currency": "usd", "recurrence": p.recurrence, "created_at": testNow, "updated_at": testNow})
 		}
 	}
-	// sale is the seller's auto-applied 10% sale.
-	sale := func(t *testing.T, conn *sql.DB, columns map[string]any) {
+	const saleID = int64(1_792_601)
+	// sale makes the other product a plain card, with otherColumns, and gives the seller an
+	// auto-applied 10% sale, with saleColumns.
+	sale := func(t *testing.T, conn *sql.DB, otherColumns, saleColumns map[string]any) {
+		columns := map[string]any{"flags": 0}
+		for k, v := range otherColumns {
+			columns[k] = v
+		}
+		addOther(t, conn, columns)
 		row := map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true}
-		for k, v := range columns {
+		for k, v := range saleColumns {
 			row[k] = v
 		}
-		insertOfferCode(t, conn, 1_792_601, row)
+		insertOfferCode(t, conn, saleID, row)
 	}
-	saleExcludes := func(t *testing.T, conn *sql.DB, product int64) {
-		testdb.Insert(t, conn, "offer_codes_excluded_products", map[string]any{"id": int64(1_792_611), "offer_code_id": int64(1_792_601),
-			"product_id": product, "created_at": testNow, "updated_at": testNow})
+	// rentable makes the other product a plain card of purchaseType, which also rents at 150.
+	rentable := func(t *testing.T, conn *sql.DB, purchaseType int) {
+		addOther(t, conn, map[string]any{"flags": 0, "purchase_type": purchaseType})
+		testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1, "link_id": other, "price_cents": 150, "currency": "usd",
+			"flags": priceIsRental, "created_at": testNow, "updated_at": testNow})
 	}
 	// saleCard is the other product's card at price, ending in tail.
 	saleCard := func(e *testEnv, price int, tail string) string {
@@ -514,71 +523,68 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				addOther(t, conn, map[string]any{"purchase_type": 5})
 			}},
 		{name: "the seller's sale on a card", hits: bothHits, server: search, searched: 1,
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				sale(t, conn, nil)
-			},
-			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, nil) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
 		{name: "the sale's own label", hits: bothHits, server: search, searched: 1,
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				sale(t, conn, map[string]any{"sale_label": "Black Friday"})
-			},
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, map[string]any{"sale_label": "Black Friday"}) },
 			want: func(e *testEnv) string {
 				return section(e, 2, saleCard(e, 270, `,"original_price_cents":300,"sale_label":"Black Friday"`))
 			}},
 		{name: "a card the sale leaves out", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				sale(t, conn, nil)
-				saleExcludes(t, conn, other)
+				sale(t, conn, nil, nil)
+				insertExcludedProduct(t, conn, 1_792_611, saleID, other)
 			},
 			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
 		// A live default code of the card's own wins over the sale, and carries no sale label.
 		{name: "a card's default code over the sale", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0, "default_offer_code_id": 1_792_602})
-				sale(t, conn, nil)
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
 				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50})
 			},
 			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 250, `,"original_price_cents":300`)) }},
 		{name: "a card's expired default code under the sale", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0, "default_offer_code_id": 1_792_602})
-				sale(t, conn, nil)
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
 				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "expires_at": testNow.Add(-time.Hour)})
 			},
 			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		// The default code is the sale itself, loaded twice; Rails compares them as records.
+		{name: "a card whose default code is the sale", hits: bothHits, server: search, searched: 1,
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, map[string]any{"default_offer_code_id": saleID}, nil) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) }},
+		{name: "a card's limited default code over the sale", reason: "catalog default offer code limit", hits: bothHits, server: search,
+			searched: 1, cachesOnFallback: true,
+			setup: func(t *testing.T, conn *sql.DB) {
+				sale(t, conn, map[string]any{"default_offer_code_id": 1_792_602}, nil)
+				insertOfferCode(t, conn, 1_792_602, map[string]any{"code": "LAUNCH", "amount_cents": 50, "max_purchase_count": 5})
+			}},
 		// discounted_price_cents quotes no sale this product alone can't meet.
 		{name: "a sale over the card's price", hits: bothHits, server: search, searched: 1,
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				sale(t, conn, map[string]any{"minimum_amount_cents": 301})
-			},
-			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
+			setup: func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, map[string]any{"minimum_amount_cents": 301}) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
 		// The sale leaves the page's own product out, so only the card reads it.
 		{name: "a sale with uses to count", reason: "catalog offer code limit", hits: bothHits, server: search, searched: 1,
 			cachesOnFallback: true,
 			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				sale(t, conn, map[string]any{"max_purchase_count": 5})
-				saleExcludes(t, conn, productID)
+				sale(t, conn, nil, map[string]any{"max_purchase_count": 5})
+				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
 			}},
-		{name: "a sale scoped to options", reason: "catalog offer code variants", hits: bothHits, server: search, searched: 1,
-			cachesOnFallback: true,
+		// discounts_lowest_priced_option? weighs the card's options the sale covers.
+		{name: "a sale scoped to one of the card's options", reason: "catalog offer code variants", hits: bothHits, server: search,
+			searched: 1, cachesOnFallback: true,
 			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				sale(t, conn, nil)
-				saleExcludes(t, conn, productID)
-				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": int64(1_792_601),
+				sale(t, conn, nil, nil)
+				insertExcludedProduct(t, conn, 1_792_611, saleID, productID)
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": other, "title": "Size"})
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_792_631), "type": "Variant", "variant_category_id": category,
+					"name": "Large", "created_at": testNow, "updated_at": testNow})
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_792_621), "offer_code_id": saleID,
 					"variant_id": int64(1_792_631)})
 			}},
 		// 270 and 300 cents through 0.92345.
 		{name: "a card's sale in the buyer's currency", hits: bothHits, server: search, searched: 1, headers: eurCookie,
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				sale(t, conn, nil)
-			},
+			setup:   func(t *testing.T, conn *sql.DB) { sale(t, conn, nil, nil) },
 			prepare: func(e *testEnv) { e.localEUR("0.92345") },
 			want: func(e *testEnv) string {
 				return strings.Replace(saleCard(e, 270, onSale), `"buyer_currency_shown":"usd","product_currency":"usd",`+
@@ -587,19 +593,11 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					`"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":249,"buyer_local_original_price_cents":277`, 1)
 			}},
 		{name: "a rental card", hits: bothHits, server: search, searched: 1,
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0, "purchase_type": 1})
-				testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1, "link_id": other, "price_cents": 150, "currency": "usd",
-					"flags": priceIsRental, "created_at": testNow, "updated_at": testNow})
-			},
-			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 150, "")) }},
+			setup: func(t *testing.T, conn *sql.DB) { rentable(t, conn, 1) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 150, "")) }},
 		{name: "a card to buy or rent", hits: bothHits, server: search, searched: 1,
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0, "purchase_type": 2})
-				testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1, "link_id": other, "price_cents": 150, "currency": "usd",
-					"flags": priceIsRental, "created_at": testNow, "updated_at": testNow})
-			},
-			want: func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
+			setup: func(t *testing.T, conn *sql.DB) { rentable(t, conn, 2) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 300, "")) }},
 		{name: "a hit with no row", reason: "catalog product missing", hits: bothHits, server: search, searched: 1},
 		{name: "a failed search", reason: "catalog search", server: failing, searched: 1},
 		{name: "no search client", reason: "storefront"},

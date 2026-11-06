@@ -252,6 +252,9 @@ func (h *handler) productsSectionsProps(p *page, omit *product, sections []*prod
 	if err := h.cardThumbnails(p, allShown); err != nil {
 		return nil, err
 	}
+	if err := h.cardOffers(p, allShown); err != nil {
+		return nil, err
+	}
 	out := make([]any, 0, len(sections))
 	for i, s := range sections {
 		products := make([]any, 0, len(built[i].shown))
@@ -530,7 +533,7 @@ func (h *handler) loadCards(p *page, ids []int64) ([]*card, error) {
 	for id, c := range byID {
 		c.prices, c.stat, c.minVariantDifference, c.thumbnails, c.tiers = prices[id], stats[id], floors[id], thumbnails[id], tiers[id]
 	}
-	return cards, h.cardOffers(p, cards)
+	return cards, nil
 }
 
 // cardTiers is the tiers preload for the tiered memberships among the cards: each alive
@@ -698,9 +701,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 		}
 	}
 	if display != nil && price < base {
-		// buyer_local_price_props converts the original through the shown Float rate.
-		original := localPriceCents(base, pc, display.buyer, shortestRat(display.rate))
-		display.originalLocalCents = &original
+		display.setOriginal(base, pc)
 	}
 	externalID := h.c.IDs.Encrypt(prod.id)
 	props := rails.NewRHash().

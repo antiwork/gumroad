@@ -10,20 +10,30 @@ import (
 // cardOffers sets each card's effective_default_offer_code from what ProductPresenter::Card
 // preloads: its default_offer_code and the seller's auto_apply_offer_code.
 func (h *handler) cardOffers(p *page, cards []*card) error {
+	if len(cards) == 0 {
+		return nil
+	}
 	ctx, now := p.Ctx, p.Req.Now
-	var auto *offerCode
+	// Only the auto code's own columns hold for every card; which cards it leaves out is read here.
+	auto, err := h.sellerAutoApply(p, cards[0].prod)
+	if err != nil {
+		return err
+	}
 	var excluded map[int64]bool
-	if p.hasAutoApplyCode && len(cards) > 0 {
-		var err error
-		// Loaded for the first card; which cards it leaves out is read for all of them below.
-		if auto, err = h.loadOfferCode(ctx, cards[0].prod, autoApplyCodes+" ORDER BY offer_codes.id ASC LIMIT 1", p.seller.id); err != nil {
+	if auto != nil && auto.anyExcluded {
+		if excluded, err = h.excludedCards(ctx, auto.id, cards); err != nil {
 			return err
 		}
-		if auto != nil {
-			if excluded, err = h.excludedCards(ctx, auto.id, cards); err != nil {
-				return err
-			}
+	}
+	var ids []int64
+	for _, c := range cards {
+		if id := c.prod.defaultOfferCodeID; id.Valid {
+			ids = append(ids, id.Int64)
 		}
+	}
+	defaults, err := h.offerCodesByID(ctx, ids)
+	if err != nil {
+		return err
 	}
 	for _, c := range cards {
 		// auto_apply_offer_code_for.
@@ -31,18 +41,12 @@ func (h *handler) cardOffers(p *page, cards []*card) error {
 		if auto != nil && rails.Present(auto.code.String) && auto.applicableTo(c.prod, excluded[c.prod.id]) {
 			sale = auto
 		}
-		var explicit *offerCode
-		if id := c.prod.defaultOfferCodeID; id.Valid {
-			var err error
-			if explicit, err = h.loadOfferCode(ctx, c.prod, "offer_codes.id = ? LIMIT 1", id.Int64); err != nil {
-				return err
-			}
-		}
-		code, limited := effectiveDefaultCode(c.prod, explicit, sale, now)
+		code, limited := effectiveDefaultCode(c.prod, defaults[c.prod.defaultOfferCodeID.Int64], sale, now)
 		if limited {
-			return fallback("catalog offer code limit")
+			return fallback("catalog default offer code limit")
 		}
-		c.offer, c.onSale = code, code != nil && code == sale
+		// A product's default code can be the seller's sale itself.
+		c.offer, c.onSale = code, code != nil && sale != nil && code.id == sale.id
 	}
 	return nil
 }

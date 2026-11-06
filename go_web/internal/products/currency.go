@@ -42,6 +42,13 @@ type currencyDisplay struct {
 	originalLocalCents *int64
 }
 
+// setOriginal sets buyer_local_original_price_cents for original, in productCurrency.
+func (c *currencyDisplay) setOriginal(original int64, productCurrency string) {
+	// buyer_local_price_props converts the original through the shown Float rate.
+	local := localPriceCents(original, productCurrency, c.buyer, shortestRat(c.rate))
+	c.originalLocalCents = &local
+}
+
 // localCurrencyBuyer is the page's buyer currency when a local price may show: the seller has
 // opted in, and the currency cookie or GeoIP names one.
 func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {

@@ -264,9 +264,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		}
 	}
 	if c := v.currency; c != nil && *displayed < *v.priceCents {
-		// buyer_local_price_props converts the original through the shown Float rate.
-		original := localPriceCents(*v.priceCents, prod.productCurrency(), c.buyer, shortestRat(c.rate))
-		c.originalLocalCents = &original
+		c.setOriginal(*v.priceCents, prod.productCurrency())
 	}
 	if v.installmentPlan, err = h.installmentPlanProps(ctx, p, prod); err != nil {
 		return nil, err

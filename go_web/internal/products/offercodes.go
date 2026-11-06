@@ -28,8 +28,8 @@ type offerCode struct {
 	hasVariants, excludesProduct, forProduct bool
 	products                                 int64
 	// excluded is the one excluded product's external id; manyExcluded is more than one.
-	excluded     string
-	manyExcluded bool
+	excluded                  string
+	anyExcluded, manyExcluded bool
 }
 
 // OfferCode's once_per_cart flag bit.
@@ -42,6 +42,20 @@ const defaultSaleLabel = "Sale"
 const autoApplyCodes = "offer_codes.user_id = ? AND offer_codes.deleted_at IS NULL AND offer_codes.universal = 1" +
 	" AND offer_codes.auto_apply = 1 AND offer_codes.new_customers_only = 0"
 
+// offerCodeColumns are a code's own columns, which ownDest scans.
+const offerCodeColumns = "offer_codes.id, offer_codes.code, offer_codes.currency_type, offer_codes.sale_label," +
+	" offer_codes.amount_cents, offer_codes.amount_percentage, offer_codes.max_purchase_count, offer_codes.minimum_quantity," +
+	" offer_codes.duration_in_months, offer_codes.minimum_amount_cents, offer_codes.universal, offer_codes.existing_customers_only," +
+	" offer_codes.new_customers_only, offer_codes.valid_at, offer_codes.expires_at, offer_codes.deleted_at, offer_codes.flags," +
+	" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0)," +
+	" EXISTS(SELECT 1 FROM offer_codes_variants v WHERE v.offer_code_id = offer_codes.id)"
+
+func (c *offerCode) ownDest() []any {
+	return []any{&c.id, &c.code, &c.currencyType, &c.saleLabel, &c.amountCents, &c.amountPercentage, &c.maxPurchaseCount,
+		&c.minimumQuantity, &c.durationInMonths, &c.minimumAmountCents, &c.universal, &c.existingOnly, &c.newOnly, &c.validAt,
+		&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &c.hasVariants}
+}
+
 // loadOfferCode reads the row a condition finds first, nil for none.
 func (h *handler) loadOfferCode(ctx context.Context, prod *product, condition string, args ...any) (*offerCode, error) {
 	c := &offerCode{}
@@ -50,24 +64,17 @@ func (h *handler) loadOfferCode(ctx context.Context, prod *product, condition st
 	// excluded_products skips a join row whose product is gone.
 	const excludedFrom = " FROM offer_codes_excluded_products x INNER JOIN links ON links.id = x.product_id" +
 		" WHERE x.offer_code_id = offer_codes.id ORDER BY x.product_id LIMIT 1"
-	err := h.c.DB.QueryRowContext(ctx, "SELECT offer_codes.id, offer_codes.code, offer_codes.currency_type, offer_codes.sale_label,"+
-		" offer_codes.amount_cents, offer_codes.amount_percentage, offer_codes.max_purchase_count, offer_codes.minimum_quantity,"+
-		" offer_codes.duration_in_months, offer_codes.minimum_amount_cents, offer_codes.universal, offer_codes.existing_customers_only,"+
-		" offer_codes.new_customers_only, offer_codes.valid_at, offer_codes.expires_at, offer_codes.deleted_at, offer_codes.flags,"+
-		" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0), offer_codes.currency_type = ?,"+
-		" EXISTS(SELECT 1 FROM offer_codes_variants v WHERE v.offer_code_id = offer_codes.id),"+
+	err := h.c.DB.QueryRowContext(ctx, "SELECT "+offerCodeColumns+", offer_codes.currency_type = ?,"+
 		" (SELECT x.product_id"+excludedFrom+"), (SELECT x.product_id"+excludedFrom+" OFFSET 1) IS NOT NULL,"+
 		" EXISTS(SELECT 1 FROM offer_codes_excluded_products x WHERE x.offer_code_id = offer_codes.id AND x.product_id = ?),"+
 		" EXISTS(SELECT 1 FROM offer_codes_products j WHERE j.offer_code_id = offer_codes.id AND j.product_id = ?),"+
 		" (SELECT COUNT(*) FROM offer_codes_products j WHERE j.offer_code_id = offer_codes.id)"+
 		" FROM offer_codes WHERE "+condition, append([]any{prod.priceCurrencyType, prod.id, prod.id}, args...)...).
-		Scan(&c.id, &c.code, &c.currencyType, &c.saleLabel, &c.amountCents, &c.amountPercentage, &c.maxPurchaseCount,
-			&c.minimumQuantity, &c.durationInMonths, &c.minimumAmountCents, &c.universal, &c.existingOnly, &c.newOnly, &c.validAt,
-			&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &sqlCurrency, &c.hasVariants, &excluded, &c.manyExcluded, &c.excludesProduct,
-			&c.forProduct, &c.products)
+		Scan(append(c.ownDest(), &sqlCurrency, &excluded, &c.manyExcluded, &c.excludesProduct, &c.forProduct, &c.products)...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
+	c.anyExcluded = excluded.Valid
 	c.sqlCurrency = sqlCurrency.Bool
 	if excluded.Valid && !c.manyExcluded {
 		c.excluded = h.c.IDs.Encrypt(excluded.Int64)
@@ -136,8 +143,8 @@ func (c *offerCode) applicableTo(prod *product, excludes bool) bool {
 }
 
 // effectiveDefaultCode is effective_default_offer_code, given default_offer_code and
-// auto_apply_offer_code_for. limited is a winning explicit code whose uses left, which
-// default_offer_code_uses_left? counts in purchases, decide it.
+// auto_apply_offer_code_for. limited: the explicit code wins only while it has uses left,
+// which counts purchases.
 func effectiveDefaultCode(prod *product, explicit, auto *offerCode, now time.Time) (code *offerCode, limited bool) {
 	if explicit != nil && explicit.newOnly {
 		explicit = nil
@@ -150,6 +157,41 @@ func effectiveDefaultCode(prod *product, explicit, auto *offerCode, now time.Tim
 		return auto, false
 	}
 	return explicit, explicit.maxPurchaseCount.Valid
+}
+
+// sellerAutoApply is User#auto_apply_offer_code, read once per page. Its per-product fields
+// are for prod, the first product it's read for.
+func (h *handler) sellerAutoApply(p *page, prod *product) (*offerCode, error) {
+	if p.autoApply == nil && p.hasAutoApplyCode {
+		a, err := h.loadOfferCode(p.Ctx, prod, autoApplyCodes+" ORDER BY offer_codes.id ASC LIMIT 1", p.seller.id)
+		if err != nil {
+			return nil, err
+		}
+		p.autoApply = a
+	}
+	return p.autoApply, nil
+}
+
+// offerCodesByID is the codes with these ids, by id, with only their own columns.
+func (h *handler) offerCodesByID(ctx context.Context, ids []int64) (map[int64]*offerCode, error) {
+	out := map[int64]*offerCode{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT "+offerCodeColumns+" FROM offer_codes WHERE offer_codes.id IN ("+placeholders(len(ids))+")",
+		int64Args(ids)...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		c := &offerCode{}
+		if err := rows.Scan(c.ownDest()...); err != nil {
+			return nil, err
+		}
+		out[c.id] = c
+	}
+	return out, rows.Err()
 }
 
 // displayedSaleLabel is sale_label.presence || OfferCode::DEFAULT_SALE_LABEL.
@@ -197,14 +239,12 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product)
 	now := p.Req.Now
 	// auto_apply_offer_code_for.
 	var auto *offerCode
-	if p.hasAutoApplyCode {
-		a, err := h.loadOfferCode(ctx, prod, autoApplyCodes+" ORDER BY offer_codes.id ASC LIMIT 1", p.seller.id)
-		if err != nil {
-			return nil, err
-		}
-		if a != nil && rails.Present(a.code.String) && a.applicable(prod) {
-			auto = a
-		}
+	a, err := h.sellerAutoApply(p, prod)
+	if err != nil {
+		return nil, err
+	}
+	if a != nil && rails.Present(a.code.String) && a.applicable(prod) {
+		auto = a
 	}
 	var explicit *offerCode
 	if prod.defaultOfferCodeID.Valid {
@@ -426,7 +466,7 @@ func (d *offerDiscount) discountedCents(price int64) int64 {
 		return price
 	}
 	if c.amountCents.Valid {
-		return max(price-c.amountOff(price), 0)
+		return max(price-c.amountCents.Int64, 0)
 	}
-	return price - c.amountOff(price)
+	return price - int64(math.Round(float64(price)*(float64(c.amountPercentage.Int64)/100.0)))
 }
