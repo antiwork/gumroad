@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_25_000005) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_25_000006) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -190,7 +190,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_25_000005) do
     t.index ["workflow_schedule_token"], name: "index_affiliates_links_on_workflow_schedule_token"
   end
 
-  create_table "ai_conversations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+  create_table "ai_conversations_archived_20261106", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "seller_id", null: false
     t.string "title"
     t.datetime "deleted_at"
@@ -200,7 +200,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_25_000005) do
     t.index ["seller_id"], name: "index_ai_conversations_on_seller_id"
   end
 
-  create_table "ai_messages", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+  create_table "ai_messages_archived_20261106", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.bigint "ai_conversation_id", null: false
     t.string "role", null: false
     t.text "content", size: :medium, null: false
