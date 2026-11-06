@@ -35,6 +35,9 @@ func (h *handler) resolvesForBuyer(ctx context.Context, prod *product, c *offerC
 	if !c.existingOnly {
 		return true, nil
 	}
+	if c.hasOwnershipVariants {
+		return false, fallback("offer code ownership variants")
+	}
 	return h.buyerOwns(ctx, buyer, c.id, prod)
 }
 

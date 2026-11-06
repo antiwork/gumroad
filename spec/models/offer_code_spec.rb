@@ -2045,6 +2045,14 @@ describe OfferCode do
       expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
     end
 
+    it "does not qualify a buyer whose oldest purchase of the product has no date, matching the product page" do
+      offer_code = create(:offer_code, :for_existing_customers, products: [@product], amount_cents: nil, amount_percentage: 30, currency_type: nil, user: seller)
+      create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents)
+      create(:purchase, purchaser: buyer, link: @product, seller:, price_cents: @product.price_cents).update_column(:created_at, nil)
+
+      expect(offer_code.evaluate_for_buyer(buyer)).to be_nil
+    end
+
     context "when the ownership requirement names a single option" do
       let(:versioned_product) { create(:product_with_digital_versions, user: seller, price_cents: 1000) }
       let(:individual) { versioned_product.alive_variants.find_by(name: "Untitled 1") }

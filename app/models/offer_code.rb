@@ -504,8 +504,8 @@ class OfferCode < ApplicationRecord
     # An option row counts only purchases of that option, so owning a sibling option of the same
     # product does not qualify. Both branches are the same qualifying set, on different indexes.
     oldest = [
-      (qualifying_ownership_purchases.where(link_id: product_ids).where(*ownership_condition).minimum(:created_at) if product_ids.any?),
-      (qualifying_ownership_purchases.joins(:variant_attributes).where(base_variants: { id: variants.map(&:id) }).where(*ownership_condition).minimum(:created_at) if variants.any?),
+      (qualifying_ownership_purchases.where(link_id: product_ids).where(*ownership_condition).order(:created_at).pick(:created_at) if product_ids.any?),
+      (qualifying_ownership_purchases.joins(:variant_attributes).where(base_variants: { id: variants.map(&:id) }).where(*ownership_condition).order(:created_at).pick(:created_at) if variants.any?),
     ].compact.min
     months_since(oldest)
   end
