@@ -17,6 +17,40 @@ class ProductBuild < ApplicationRecord
   # own. Every other file is streamed.
   PAGE_EXTENSIONS = %w[html htm].freeze
   MAX_PAGE_BYTE_SIZE = 10.megabytes
+  # What the browser needs to run a build's files without sniffing them, by extension. The player
+  # serves files with these, never with the type stored on the object.
+  CONTENT_TYPES = {
+    "html" => "text/html",
+    "htm" => "text/html",
+    "js" => "text/javascript",
+    "mjs" => "text/javascript",
+    "cjs" => "text/javascript",
+    "css" => "text/css",
+    "json" => "application/json",
+    "wasm" => "application/wasm",
+    "txt" => "text/plain",
+    "xml" => "application/xml",
+    "svg" => "image/svg+xml",
+    "png" => "image/png",
+    "jpg" => "image/jpeg",
+    "jpeg" => "image/jpeg",
+    "gif" => "image/gif",
+    "webp" => "image/webp",
+    "avif" => "image/avif",
+    "ico" => "image/vnd.microsoft.icon",
+    "mp3" => "audio/mpeg",
+    "ogg" => "audio/ogg",
+    "oga" => "audio/ogg",
+    "wav" => "audio/wav",
+    "m4a" => "audio/mp4",
+    "mp4" => "video/mp4",
+    "webm" => "video/webm",
+    "woff" => "font/woff",
+    "woff2" => "font/woff2",
+    "ttf" => "font/ttf",
+    "otf" => "font/otf",
+  }.freeze
+  DEFAULT_CONTENT_TYPE = "application/octet-stream"
   PUBLIC_ID_LENGTH = 21
   DISPLAY_NAME_MAX_LENGTH = 200
   STORAGE_PREFIX = "builds"
@@ -56,6 +90,8 @@ class ProductBuild < ApplicationRecord
   def self.storage_key_for(product_id, number)
     "#{STORAGE_PREFIX}/#{product_id}/#{number}/build.zip"
   end
+
+  def self.content_type_for(path) = CONTENT_TYPES[File.extname(path).delete_prefix(".").downcase] || DEFAULT_CONTENT_TYPE
 
   # Where the player serves this build's files from. The zip stays next to it as build.zip.
   def site_prefix

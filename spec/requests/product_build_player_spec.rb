@@ -381,6 +381,17 @@ describe "Web build player", type: :request, inertia: true do
       expect(response.body).to eq("console.log(1)")
     end
 
+    it "serves a file with the type its path names and the sandbox CSP, whatever type it was stored with" do
+      s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/game.js", body: "console.log(1)", content_type: "text/html")
+
+      get "#{frame_path}game.js"
+
+      expect(response).to have_http_status(:ok)
+      expect(response.media_type).to eq("text/javascript")
+      expect(response.headers["Content-Security-Policy"]).to start_with("sandbox allow-scripts allow-pointer-lock;")
+      expect(response.headers["X-Content-Type-Options"]).to eq("nosniff")
+    end
+
     it "streams a script far larger than any page, since only pages are read into memory" do
       script = "x" * (ProductBuild::MAX_PAGE_BYTE_SIZE * 3)
       s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/engine.js", body: script, content_type: "text/javascript")

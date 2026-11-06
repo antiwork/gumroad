@@ -215,11 +215,17 @@ describe "Web build demo", type: :request, inertia: true do
       expect(config).to include("save" => {}, "saveUrl" => nil)
     end
 
-    it "serves the build's other files under the demo grant" do
+    it "serves the build's other files under the demo grant, sandboxed and with the type their path names" do
+      s3.put_object(bucket: S3_BUCKET, key: "#{build.site_prefix}/game.js", body: "console.log(1)", content_type: "text/html")
+
       get "#{frame_path}game.js"
 
       expect(response).to have_http_status(:ok)
       expect(response.body).to eq("console.log(1)")
+      expect(response.media_type).to eq("text/javascript")
+      csp = response.headers["Content-Security-Policy"]
+      expect(csp).to start_with("sandbox allow-scripts allow-pointer-lock;")
+      expect(csp).to include("frame-ancestors #{request.base_url} https://x.com")
     end
 
     it "stops serving files an hour after the demo page loaded" do

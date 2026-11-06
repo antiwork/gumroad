@@ -17,39 +17,6 @@
 class ProductBuilds::UnpackSiteService
   class UnpackError < StandardError; end
 
-  # What the browser needs to run a build's files without sniffing them.
-  CONTENT_TYPES = {
-    "html" => "text/html",
-    "htm" => "text/html",
-    "js" => "text/javascript",
-    "mjs" => "text/javascript",
-    "cjs" => "text/javascript",
-    "css" => "text/css",
-    "json" => "application/json",
-    "wasm" => "application/wasm",
-    "txt" => "text/plain",
-    "xml" => "application/xml",
-    "svg" => "image/svg+xml",
-    "png" => "image/png",
-    "jpg" => "image/jpeg",
-    "jpeg" => "image/jpeg",
-    "gif" => "image/gif",
-    "webp" => "image/webp",
-    "avif" => "image/avif",
-    "ico" => "image/vnd.microsoft.icon",
-    "mp3" => "audio/mpeg",
-    "ogg" => "audio/ogg",
-    "oga" => "audio/ogg",
-    "wav" => "audio/wav",
-    "m4a" => "audio/mp4",
-    "mp4" => "video/mp4",
-    "webm" => "video/webm",
-    "woff" => "font/woff",
-    "woff2" => "font/woff2",
-    "ttf" => "font/ttf",
-    "otf" => "font/otf",
-  }.freeze
-  DEFAULT_CONTENT_TYPE = "application/octet-stream"
   ENTRY_NAME_MAX_LENGTH = 100
   S3_DELETE_BATCH_SIZE = 1_000
   S3_KEY_MAX_BYTES = 1_024
@@ -333,7 +300,7 @@ class ProductBuilds::UnpackSiteService
           key:,
           body: file,
           content_length: copied,
-          content_type: content_type_for(path),
+          content_type: ProductBuild.content_type_for(path),
         )
         copied
       end
@@ -391,10 +358,6 @@ class ProductBuilds::UnpackSiteService
       end
 
       segments.join("/")
-    end
-
-    def content_type_for(path)
-      CONTENT_TYPES[File.extname(path).delete_prefix(".").downcase] || DEFAULT_CONTENT_TYPE
     end
 
     def shown(name)
