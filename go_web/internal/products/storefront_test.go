@@ -182,13 +182,30 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		body, total string
 		respond     func(body map[string]any) (hits, total string)
 		setup       func(t *testing.T, conn *sql.DB)
-		// prepare sets flags and rates; headers go with the request.
+		// prepare sets flags and rates; headers and query go with the request.
 		prepare func(e *testEnv)
 		headers map[string]string
-		want    func(e *testEnv) string
+		query   string
+		// searchedAgain is the searches after a second view, when it differs from searched;
+		// uncached is a search nothing caches.
+		searchedAgain int
+		uncached      bool
+		want          func(e *testEnv) string
 		// check makes assertions want can't.
 		check func(t *testing.T, e *testEnv, page string)
 	}{
+		// A visitor search param searches afresh after the cached fetch, on every view, and goes into
+		// the cards' URLs and the byline's.
+		{name: "a recommendation", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?recommended_by=more_like_this",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			want: func(e *testEnv) string {
+				return `"url":"https://` + host + `/l/gowebp2?layout=profile\u0026recommended_by=more_like_this"`
+			},
+			check: func(t *testing.T, e *testEnv, page string) {
+				if want := `"profile_url":"https://` + host + `/?recommended_by=more_like_this"`; !strings.Contains(page, want) {
+					t.Errorf("want %s", want)
+				}
+			}},
 		{name: "the rest of the catalog, without this product", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, nil)
@@ -441,6 +458,23 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					`"default_product_sort":"newest","search_results":{"total":1,"tags_data":[{"key":"design","doc_count":2}],`+
 					`"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[],"products":[%s]}},%s],"main_section_index":1`,
 					subscribeSection(e), e.ids.Encrypt(1_792_602), card, richTextSection(e))
+			}},
+		// A visitor search param searches a product's own section afresh, a review sort too.
+		{name: "the product's own review-sorted section with a recommendation", server: search, searched: 1, searchedAgain: 2,
+			uncached: true, total: "1", query: "?recommended_by=wishlist",
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[4.5,3,1762430000000]}]`, other),
+			body: fmt.Sprintf(`{"query":{"bool":{"must":[{"terms":{"user_id":[%d]}},{"term":{"is_alive_on_profile":true}},{"terms":{"_id":[%d]}}]}},`+
+				`"aggregations":{"tags.keyword":{"terms":{"field":"tags.keyword","size":200}},"filetypes.keyword":{"terms":{"field":"filetypes.keyword","size":8}}},`+
+				`"sort":[{"average_rating":{"order":"desc"}},{"reviews_count":{"order":"desc"}},{"created_at":{"order":"desc"}}],`+
+				`"size":10,"from":0,"_source":false,"track_total_hits":true}`, sellerID, other),
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				addSection(t, conn, 1_792_602, profileProductsSectionType, "More",
+					fmt.Sprintf(`{"shown_products":[%d],"default_product_sort":"highest_rated","show_filters":false,"add_new_products":false}`, other))
+				listSections(t, conn, `{"sections":[1792602]}`)
+			},
+			want: func(e *testEnv) string {
+				return `"url":"https://` + host + `/l/gowebp2?layout=profile\u0026recommended_by=wishlist"`
 			}},
 		// A featured section naming no product has no props; listed, it replaces the catalog.
 		{name: "a listed featured section without a product", server: search,
@@ -739,7 +773,8 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				}
 				e.config.Page.Search = client
 			}
-			w := e.get(host, "/l/guide", e.withDryRun("/l/guide", c.headers, c.reason))
+			path := "/l/guide" + c.query
+			w := e.get(host, path, e.withDryRun(path, c.headers, c.reason))
 			if searches != c.searched {
 				t.Errorf("%d searches, want %d", searches, c.searched)
 			}
@@ -773,13 +808,17 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					key = k
 				}
 			}
-			if key == "" || e.cache.ttls[key] != 10*time.Minute {
+			if c.uncached != (key == "") || !c.uncached && e.cache.ttls[key] != 10*time.Minute {
 				t.Fatalf("cache writes %v", e.cache.writes)
 			}
 			// The next view reads the search from the cache.
-			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, "/l/guide", c.headers).Body.String())[1])
-			if searches != c.searched || !strings.Contains(again, c.want(e)) {
-				t.Errorf("%d searches, want %d; same catalog %v", searches, c.searched, strings.Contains(again, c.want(e)))
+			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, path, c.headers).Body.String())[1])
+			wantSearches := c.searched
+			if c.searchedAgain != 0 {
+				wantSearches = c.searchedAgain
+			}
+			if searches != wantSearches || !strings.Contains(again, c.want(e)) {
+				t.Errorf("%d searches, want %d; same catalog %v", searches, wantSearches, strings.Contains(again, c.want(e)))
 			}
 		})
 	}

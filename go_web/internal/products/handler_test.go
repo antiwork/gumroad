@@ -965,6 +965,19 @@ func TestABundleRendersItsProducts(t *testing.T) {
 			e.wantAll(t, e.render(t, nil, c.reason), c.wants, ebook, course)
 		})
 	}
+	// url_for_product_page carries the page's layout and recommended_by, sorted and CGI-escaped.
+	t.Run("a layout and a recommendation", func(t *testing.T) {
+		e := newTestEnv(t)
+		setup(t, testdb.Open(t), true)
+		w := e.get(host, "/l/guide?recommended_by=a+b%26c&layout=profile", nil)
+		if w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		want := `"url":"https://gowebproductseller.gumroad.com/l/bp2?layout=profile\u0026recommended_by=a+b%26c"`
+		if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	})
 }
 
 // The fixture's price is 500 cents; each code is the seller's, with these columns set.

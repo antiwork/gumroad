@@ -88,6 +88,13 @@ type page struct {
 	warmReputation bool
 	// urlCode is params[:code], the path's or the query's, when present.
 	urlCode string
+	// layout is params[:layout], and recommendedBy params[:recommended_by] when given: the page's
+	// own, never a featured product's.
+	layout        string
+	recommendedBy *string
+	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props
+	// search afresh.
+	visitorSearch bool
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
 	// parent is the page's own view when this one renders a featured section's product within it.
@@ -163,6 +170,13 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
 	}
+	p.layout, _ = v.Req.Param("layout").(string)
+	// A bare key is nil, which still counts as a visitor search param.
+	if raw, ok := v.Req.Params.Get("recommended_by"); ok {
+		by, _ := raw.(string)
+		p.recommendedBy = &by
+		p.visitorSearch = true
+	}
 	p.iframe = rails.Truthy(v.Req.Param("overlay")) || rails.Truthy(v.Req.Param("embed"))
 	return p, nil
 }
@@ -196,7 +210,7 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"wanted", "layout", "recommended_by", "offer_code", "quantity", "purchase_id",
+	"wanted", "offer_code", "quantity", "purchase_id",
 	"purchase_email_digest", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
 	"query", "autocomplete",
 	// The sections' search filters.
@@ -210,6 +224,29 @@ func declinedParams(req *rails.Request) string {
 	for _, name := range rendererParams {
 		if _, ok := req.Params.Get(name); ok {
 			return "param " + name
+		}
+	}
+	if raw, ok := req.Params.Get("layout"); ok {
+		switch raw {
+		case nil, "", productLayoutProfile:
+		case "discover":
+			return "layout discover"
+		default:
+			// Its value would go into the bundles' URLs.
+			return "param layout"
+		}
+		// The layout's component with embed's iframe body class is neither port's shape.
+		if raw == productLayoutProfile && (rails.Truthy(req.Param("overlay")) || rails.Truthy(req.Param("embed"))) {
+			return "layout with iframe"
+		}
+	}
+	if raw, ok := req.Params.Get("recommended_by"); ok {
+		switch by, isString := raw.(string); {
+		case !isString && raw != nil:
+			return "param recommended_by"
+		case by == "search" || by == "discover":
+			// create_discover_search! writes the click.
+			return "discover search"
 		}
 	}
 	// Only a code whose lookups can't depend on Unicode normalization or the collation is

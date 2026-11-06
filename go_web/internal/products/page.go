@@ -131,7 +131,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	switch {
 	case p.iframe:
 		component, bodyClass = iframeComponent, "iframe"
-	case storefront(p):
+	case p.layout == productLayoutProfile || storefront(p):
 		component = storefrontComponent
 	}
 	if !p.iframe {
