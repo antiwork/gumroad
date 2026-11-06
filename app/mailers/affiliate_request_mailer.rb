@@ -8,6 +8,7 @@ class AffiliateRequestMailer < ApplicationMailer
 
   def notify_requester_of_request_submission(affiliate_request_id)
     @affiliate_request = AffiliateRequest.find(affiliate_request_id)
+    return if promotion_text_held?
 
     @subject = "Your application request to #{@affiliate_request.seller.display_name} was submitted!"
     @requester_has_existing_account = User.exists?(email: @affiliate_request.email)
@@ -43,6 +44,7 @@ class AffiliateRequestMailer < ApplicationMailer
 
   def notify_requester_of_ignored_request(affiliate_request_id)
     @affiliate_request = AffiliateRequest.find(affiliate_request_id)
+    return if promotion_text_held?
 
     @subject = "Your affiliate request to #{@affiliate_request.seller.display_name} was not approved"
     mail to: @affiliate_request.email,
@@ -62,6 +64,7 @@ class AffiliateRequestMailer < ApplicationMailer
 
   def notify_seller_of_new_request(affiliate_request_id)
     @affiliate_request = AffiliateRequest.find(affiliate_request_id)
+    return if promotion_text_held?
 
     @subject = "#{@affiliate_request.name} has applied to be an affiliate"
 
@@ -69,4 +72,13 @@ class AffiliateRequestMailer < ApplicationMailer
          subject: @subject,
          delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @affiliate_request.seller, to: @affiliate_request.seller.email)
   end
+
+  private
+    def promotion_text_held?
+      ContentModeration::SellerMailTextGuard.screen(
+        @affiliate_request.promotion_text,
+        seller: @affiliate_request.seller,
+        source: "affiliate application ##{@affiliate_request.id}, written by the applicant"
+      ).nil?
+    end
 end
