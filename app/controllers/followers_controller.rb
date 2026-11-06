@@ -109,23 +109,24 @@ class FollowersController < ApplicationController
       # external id when the column is empty, so a seller with no name and no
       # claimed profile URL still names themselves by id here.
       message = "Please subscribe from #{followed_user.name_or_username}'s subscribe page so we can confirm you're not a bot."
+      waitlist_product = waitlist_product_from_params(followed_user)
+      if waitlist_product
+        # The native waitlist page runs the challenge; the custom page cannot.
+        native_url = waitlist_product.long_url
+        waitlist_url = "#{native_url}#{native_url.include?("?") ? "&" : "?"}native=true"
+        message = "Please join the waitlist from the product page so we can confirm you're not a bot."
+      end
       # The JSON callers render the message as plain text with no link element:
       # the custom-HTML follow bridge relays it into a sandboxed page that can't
       # be handed markup. Put the destination in the sentence for them, or the
       # visitor is told to go somewhere without being told where.
       if request.format.json?
-        waitlist_product = waitlist_product_from_params(followed_user)
-        if waitlist_product
-          # The native waitlist page runs the challenge; the custom page cannot.
-          native_url = waitlist_product.long_url
-          message = "Please join the waitlist from the product page so we can confirm you're not a bot: #{native_url}#{native_url.include?("?") ? "&" : "?"}native=true"
-        elsif subscribe_url.present?
-          message = "#{message} #{subscribe_url}"
-        end
+        destination = waitlist_url || subscribe_url
+        message = "#{message} #{destination}" if destination.present?
         return render json: { success: false, message: }, status: :unprocessable_entity
       end
 
-      return render inertia: "Followers/FromEmbedForm", props: { success: false, message:, subscribe_url: }
+      return render inertia: "Followers/FromEmbedForm", props: { success: false, message:, subscribe_url:, waitlist_url: }
     end
 
     @follower = create_follower(params, source: Follower::From::EMBED_FORM)

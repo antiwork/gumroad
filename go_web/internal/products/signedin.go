@@ -93,8 +93,8 @@ func (u *signedInUser) displayName(preferEmail bool) any {
 	return formEmail()
 }
 
-// loadViewer loads the signed-in visitor viewing someone else's product as themselves, and the
-// signed-in share's props. Prepare has sent staff, and with them impersonation, to Rails.
+// loadViewer loads the signed-in visitor viewing the product as themselves, and the signed-in
+// share's props. Prepare has sent staff, and with them impersonation, to Rails.
 func (h *handler) loadViewer(p *page, prod *product) error {
 	logged := p.Auth.LoggedInUser()
 	switch {
@@ -102,9 +102,6 @@ func (h *handler) loadViewer(p *page, prod *product) error {
 		return nil
 	case p.Auth.CurrentSeller == nil || p.Auth.CurrentSeller.ID != logged.ID:
 		return fallback("signed in as another seller")
-	case prod.userID == logged.ID:
-		// The seller's own view: can_edit, the waitlist and the editing-shaped sections.
-		return fallback("product's seller")
 	}
 	if err := h.viewerHasNoPart(p, prod, logged.ID); err != nil {
 		return err

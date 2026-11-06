@@ -74,16 +74,22 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return nil
 	}
 
-	// product_custom_html_visible? for a visitor. A waitlist page shows it when it holds the
-	// waitlist form, which is Rails' to find.
+	// product_custom_html_visible?: the seller and collaborators preview it whatever the
+	// product's state, and a waitlist page shows it when it holds the waitlist form, which is
+	// Rails' to find. Either way it renders before show's coffee redirect.
+	logged := p.Auth.LoggedInUser()
+	seller := logged != nil && logged.ID == prod.userID
 	if present, err := customHTMLPresent(ctx, conn, prod.id); err != nil {
 		return err
-	} else if present && (prod.alive() || prod.acceptsWaitlistSignups()) {
+	} else if present && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
 		on, err := h.flag(ctx, "custom_html_pages", p.seller.id)
 		switch {
 		case err != nil:
 			return err
-		case on && !prod.alive():
+		case on && !prod.alive() && logged != nil && !seller:
+			// Whether they collaborate on it is Rails' to tell.
+			return fallback("custom html preview")
+		case on && !prod.alive() && !seller:
 			return fallback("custom html waitlist")
 		case on:
 			return h.renderCustomHTML(w, p, prod)
