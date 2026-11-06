@@ -17,6 +17,7 @@ import (
 
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
 	"github.com/antiwork/gumroad/go_web/internal/downloads"
+	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
@@ -167,6 +168,13 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 	}
 	s3Endpoint := d.globalConfig("AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
 	flags := &flagSet{redis: d.redis, flags: map[string]*flipper.Flag{}}
+	var search *elastic.Client
+	if host := getenv("ELASTICSEARCH_HOST"); host != "" {
+		// Only what needs a search goes to Rails without it.
+		if search, err = elastic.New(host); err != nil {
+			d.logger.Warn("product page searches left to Rails", "reason", err.Error())
+		}
+	}
 	return &products.PageConfig{
 		Layout:  b.pages.Layout,
 		CSP:     b.pages.CSP,
@@ -184,6 +192,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		PublicStorageURL: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,
+		Search:           search,
 		NewNonce:         newNonce,
 	}, nil
 }

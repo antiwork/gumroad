@@ -195,11 +195,8 @@ func (h *handler) coverURLs(ctx context.Context, p *page, c *cover) error {
 // cachedURL is Rails.cache.fetch(key) { computed } for a URL string: the cached value, or
 // computed, written as Rails writes it (except in a dry run).
 func (h *handler) cachedURL(ctx context.Context, p *page, key, computed string) (string, error) {
-	cache := h.c.Page.Cache
-	v, found, err := cache.Read(ctx, key)
+	v, found, err := h.readCache(ctx, key)
 	switch {
-	case errors.Is(err, railscache.ErrUnported) || errors.Is(err, railscache.ErrServerDown):
-		return "", fallback("cache")
 	case err != nil:
 		return "", err
 	case found:
@@ -269,3 +266,12 @@ func nullString(s sql.NullString) any {
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
+
+// readCache is Rails.cache.read; an entry this port can't read, or a server down, is Rails'.
+func (h *handler) readCache(ctx context.Context, key string) (any, bool, error) {
+	v, found, err := h.c.Page.Cache.Read(ctx, key)
+	if errors.Is(err, railscache.ErrUnported) || errors.Is(err, railscache.ErrServerDown) {
+		return nil, false, fallback("cache")
+	}
+	return v, found, err
+}

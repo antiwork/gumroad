@@ -47,12 +47,10 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "waitlist", nil
 	case prod.defaultOfferCodeID.Valid:
 		return "default offer code", nil
+	case prod.is(productShouldShowSalesCount) && h.c.Page.Search == nil:
+		return "sales count", nil
 	case !prod.uniquePermalink.Valid:
 		return "no unique permalink", nil
-	case prod.is(productShouldShowSalesCount):
-		// Rails' cached count lives a minute under its own REVISION, and a miss counts in
-		// Elasticsearch.
-		return "sales count", nil
 	}
 	switch prod.nativeType {
 	case "call", "commission", "membership", "bundle", "physical":

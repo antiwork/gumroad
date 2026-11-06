@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -25,11 +26,13 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/antiwork/gumroad/go_web/internal/customstyles"
+	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/obfuscate"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
@@ -53,22 +56,31 @@ func (presentFiles) Exists(context.Context, string) (bool, error) { return true,
 
 // fakeCache is Rails.cache in memory.
 type fakeCache struct {
-	mu     sync.Mutex
-	values map[string]any
-	writes []string
+	mu      sync.Mutex
+	values  map[string]any
+	ttls    map[string]time.Duration
+	writes  []string
+	readErr error
 }
 
 func (c *fakeCache) Read(_ context.Context, key string) (any, bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.readErr != nil {
+		return nil, false, c.readErr
+	}
 	v, ok := c.values[key]
 	return v, ok, nil
 }
 
-func (c *fakeCache) Write(_ context.Context, key string, value any, _ time.Duration) error {
+func (c *fakeCache) Write(_ context.Context, key string, value any, ttl time.Duration) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.values[key] = value
+	if c.ttls == nil {
+		c.ttls = map[string]time.Duration{}
+	}
+	c.ttls[key] = ttl
 	c.writes = append(c.writes, key)
 	return nil
 }
@@ -80,6 +92,7 @@ type testEnv struct {
 	cache    *fakeCache
 	redis    *miniredis.Miniredis
 	railsHit *http.Request
+	config   *Config
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -120,7 +133,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	}
 	flags := map[string]*flipper.Flag{}
 	app := web.NewApp(env, slog.New(slog.NewTextHandler(testLog(), nil)), redisClient)
-	Register(app, &Config{
+	e.config = &Config{
 		Env:      env,
 		DB:       conn,
 		Stack:    rails.NewStack(env, ""),
@@ -151,7 +164,8 @@ func newTestEnv(t *testing.T) *testEnv {
 		},
 		DryRunKey:  pages.DryRunKey(testSecretKeyBase),
 		DryRunOnce: redisClient,
-	})
+	}
+	Register(app, e.config)
 	e.handler = app
 
 	testdb.User(t, conn, sellerID, map[string]any{"username": "gowebproductseller", "external_id": "1790001", "name": "Seller",
@@ -713,6 +727,98 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 				if !strings.Contains(page, want) && !strings.Contains(body, want) {
 					t.Errorf("want %s", want)
 				}
+			}
+		})
+	}
+}
+
+// sales_count comes from Rails.cache, else Elasticsearch, written back for a minute.
+func TestTheSalesCount(t *testing.T) {
+	const latestPurchase = int64(1_791_501)
+	// PurchaseSearchService's body for Purchase::ACTIVE_SALES_SEARCH_OPTIONS, as production builds it.
+	wantBody := fmt.Sprintf(`{"query":{"bool":{"filter":[{"terms":{"product_id":[%d]}},{"term":{"not_refunded_except_subscriptions":true}},`+
+		`{"term":{"not_chargedback_or_chargedback_reversed":true}},{"term":{"not_subscription_or_original_subscription_purchase":true}},`+
+		`{"terms":{"purchase_state":["preorder_authorization_successful","successful","not_charged"]}}],"must_not":[{"exists":{"field":"subscription_deactivated_at"}},`+
+		`{"term":{"selected_flags":"is_bundle_product_purchase"}},{"term":{"selected_flags":"is_commission_completion_purchase"}}]}},`+
+		`"from":0,"size":0,"_source":false,"aggs":{},"track_total_hits":true}`, productID)
+	var want any
+	if err := json.Unmarshal([]byte(wantBody), &want); err != nil {
+		t.Fatal(err)
+	}
+	var searches int
+	search := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		searches++
+		var got any
+		body, _ := io.ReadAll(r.Body)
+		if json.Unmarshal(body, &got) != nil || r.URL.Path != "/purchases/_search" || !reflect.DeepEqual(got, want) {
+			t.Errorf("search %s %s", r.URL.Path, body)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		io.WriteString(w, `{"hits":{"total":{"value":17,"relation":"eq"},"hits":[]}}`)
+	}))
+	defer search.Close()
+	failing := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		searches++
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer failing.Close()
+	price := int64(500)
+	key := salesCountKey(productID, &price, sql.NullInt64{Int64: latestPurchase, Valid: true})
+	for _, c := range []struct {
+		name, reason string
+		server       *httptest.Server
+		cached       any
+		readErr      error
+		want         string
+		searched     int
+	}{
+		{"counted and cached", "", search, nil, nil, `"sales_count":17,`, 1},
+		{"read from the cache", "", search, int64(9), nil, `"sales_count":9,`, 0},
+		{"a cached value this port can't read", "cached sales count", search, "9", nil, "", 0},
+		{"the cache down", "cache", search, nil, railscache.ErrServerDown, "", 0},
+		{"a failed search", "sales count search", failing, nil, nil, "", 1},
+		{"no search client", "sales count", nil, nil, nil, "", 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			searches = 0
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productShouldShowSalesCount, productID)
+			testdb.Insert(t, conn, "purchases", map[string]any{"id": latestPurchase, "link_id": productID, "created_at": testNow})
+			if c.server != nil {
+				client, err := elastic.NewWithClient(c.server.URL, c.server.Client())
+				if err != nil {
+					t.Fatal(err)
+				}
+				e.config.Page.Search = client
+			}
+			if c.cached != nil {
+				e.cache.values[key] = c.cached
+			}
+			e.cache.readErr = c.readErr
+			var headers map[string]string
+			if c.reason != "" {
+				headers = e.dryRun(host, "/l/guide", testNow)
+			}
+			w := e.get(host, "/l/guide", headers)
+			if searches != c.searched {
+				t.Errorf("%d searches, want %d", searches, c.searched)
+			}
+			if c.reason != "" {
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			if w.Code != http.StatusOK {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, c.want) {
+				t.Errorf("want %s", c.want)
+			}
+			if wrote := slices.Contains(e.cache.writes, key); wrote != (c.searched > 0) || wrote && e.cache.ttls[key] != time.Minute {
+				t.Errorf("cache writes %v, ttl %v", e.cache.writes, e.cache.ttls[key])
 			}
 		})
 	}
