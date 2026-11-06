@@ -69,6 +69,9 @@ const (
 // Price flag bits.
 const priceIsRental int64 = 1 << 0
 
+// BaseVariant flag bits.
+const baseVariantIsDefaultSku int64 = 1 << 0
+
 // product is the links row.
 type product struct {
 	id, userID          int64

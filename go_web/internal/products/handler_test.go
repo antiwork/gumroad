@@ -699,6 +699,15 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 func TestVariantsRenderAsOptions(t *testing.T) {
 	const size, color = int64(1_791_001), int64(1_791_002)
 	const small, large, red = int64(1_791_101), int64(1_791_102), int64(1_791_103)
+	const sku1, sku2, defaultSku, deletedSku = int64(1_791_501), int64(1_791_502), int64(1_791_503), int64(1_791_504)
+	sku := func(id int64, name any, flags int, deletedAt any, maxPurchases, diff any) map[string]any {
+		return map[string]any{"id": id, "type": "Sku", "link_id": productID, "name": name, "flags": flags, "deleted_at": deletedAt,
+			"max_purchase_count": maxPurchases, "sales_count_for_inventory_cache": 2, "price_difference_cents": diff,
+			"customizable_price": 1, "created_at": testNow, "updated_at": testNow}
+	}
+	physical := func(conn *sql.DB, flags int64) {
+		conn.Exec("UPDATE links SET flags = flags | ?, native_type = 'physical', require_shipping = 1 WHERE id = ?", flags, productID)
+	}
 	// Rails leaves a Variant's link_id NULL; it belongs through its category.
 	variant := func(id, category int64, name string, position, maxPurchases, sold, diff any) map[string]any {
 		if sold == nil {
@@ -785,6 +794,31 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", nil, nil, nil, 0))
 			testdb.Insert(t, conn, "base_variants", variant(large, size, "Large", nil, nil, nil, 0))
 		}},
+		{"a physical product's options, without file summaries", []string{`"is_physical":true,`, `"native_type":"physical",`,
+			`"options":[{"id":"%[1]s","name":"Small",`, `"file_summaries":{"product":null,"options":{}}`},
+			"", func(t *testing.T, conn *sql.DB) {
+				physical(conn, productIsPhysical)
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+				file(t, conn, 1_791_201, small)
+			}},
+		// The SKUs' names stay raw, and they're never pay what you want; the Variants' order is moot.
+		{"a physical product's SKUs, in id order, without the default or deleted ones", []string{`"options":[` +
+			`{"id":"%[3]s","name":null,"quantity_left":3,"description":"","price_difference_cents":200,"recurrence_price_values":null,"is_pwyw":false,"duration_in_minutes":null},` +
+			`{"id":"%[4]s","name":"Untitled","quantity_left":null,"description":"","price_difference_cents":0,"recurrence_price_values":null,"is_pwyw":false,"duration_in_minutes":null}]`,
+			`"quantity_remaining":0,`},
+			"", func(t *testing.T, conn *sql.DB) {
+				// Sold-out Variants still make the product sold out; the SKUs' stock doesn't count.
+				physical(conn, productIsPhysical|productSkusEnabled)
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", nil, 1, 1, 0))
+				testdb.Insert(t, conn, "base_variants", variant(large, size, "Large", nil, 1, 1, 0))
+				testdb.Insert(t, conn, "base_variants", sku(sku2, "Untitled", 0, nil, nil, 0))
+				testdb.Insert(t, conn, "base_variants", sku(sku1, nil, 0, nil, 5, 200))
+				testdb.Insert(t, conn, "base_variants", sku(defaultSku, "Default", 1, nil, nil, 0))
+				testdb.Insert(t, conn, "base_variants", sku(deletedSku, "Gone", 0, testNow, nil, 0))
+			}},
+		{"SKUs without the physical flag", nil, "skus", func(t *testing.T, conn *sql.DB) {
+			conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productSkusEnabled, productID)
+		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
@@ -809,7 +843,7 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 			page := html.UnescapeString(dataPage.FindStringSubmatch(body)[1])
 			for _, want := range c.wants {
 				if strings.Contains(want, "%[") {
-					want = fmt.Sprintf(want, e.ids.Encrypt(small), e.ids.Encrypt(large))
+					want = fmt.Sprintf(want, e.ids.Encrypt(small), e.ids.Encrypt(large), e.ids.Encrypt(sku1), e.ids.Encrypt(sku2))
 				}
 				if !strings.Contains(page, want) && !strings.Contains(body, want) {
 					t.Errorf("want %s", want)

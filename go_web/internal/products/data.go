@@ -37,9 +37,8 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "preorder", nil
 	case prod.is(productIsBundle):
 		return "bundle", nil
-	case prod.is(productIsPhysical):
-		return "physical", nil
-	case prod.is(productSkusEnabled):
+	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
+		// FileSummaryService would summarize each SKU.
 		return "skus", nil
 	case prod.is(productFreeTrialEnabled):
 		return "free trial", nil
@@ -53,7 +52,7 @@ func (h *handler) unportedShape(ctx context.Context, p *page, prod *product) (st
 		return "no unique permalink", nil
 	}
 	switch prod.nativeType {
-	case "call", "commission", "membership", "bundle", "physical":
+	case "call", "commission", "membership", "bundle":
 		return "native type " + prod.nativeType, nil
 	}
 	// account_level_refund_policy_enabled?: the seller's policy shows unless it's off for all.
