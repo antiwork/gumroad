@@ -19,10 +19,15 @@ func TestTheProfileLayout(t *testing.T) {
 		t.Fatalf("%d %d %q", plain.Code, profile.Code, profile.Header().Get("X-Go-Web-Fallback"))
 	}
 	want, got := componentProps(t, plain.Body.String(), productComponent), componentProps(t, profile.Body.String(), storefrontComponent)
-	// Each request has its own session.
+	// Each request has its own session, and with it its own CSRF token.
 	for _, props := range []map[string]any{want, got} {
 		delete(props, "authenticity_token")
 		delete(props, "csp_nonce")
+		for _, tag := range props["_inertia_meta"].([]any) {
+			if tag := tag.(map[string]any); tag["headKey"] == "meta-name-csrf-token" {
+				tag["content"] = ""
+			}
+		}
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("profile props %v\nwant %v", got, want)
