@@ -156,6 +156,7 @@ func newTestEnv(t *testing.T) *testEnv {
 				}
 				return flags[name]
 			},
+			CalendarHref: calendarHref(t, manifest),
 			CDNMap: [][2]string{{"https://s3.amazonaws.com/gumroad/", "https://static-2.gumroad.com/res/gumroad/"},
 				{"https://gumroad-public-storage.s3.amazonaws.com/", "https://public-files.gumroad.com/"}},
 			PublicStorageURL: "https://gumroad-public-storage.s3.amazonaws.com/",
@@ -254,6 +255,14 @@ func (e *testEnv) wantAll(t *testing.T, body string, wants []string, ids ...int6
 			t.Errorf("want %s", want)
 		}
 	}
+}
+
+func calendarHref(t *testing.T, manifest *vite.Manifest) string {
+	href, err := manifest.AssetPath("components/ui/Calendar.tsx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return href
 }
 
 // eurCookie asks for prices in euros, which localEUR shows at rate euros to the dollar.
@@ -1239,6 +1248,69 @@ func TestAnOfferCodeRedirectKeepsItsCode(t *testing.T) {
 			w := newTestEnv(t).get(host, target, nil)
 			if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != want.location || w.Header().Get("X-Robots-Tag") != want.robots {
 				t.Errorf("%d %q %q", w.Code, w.Header().Get("Location"), w.Header().Get("X-Robots-Tag"))
+			}
+		})
+	}
+}
+
+// A call's page differs only by the calendar's preload; its availabilities load later. A
+// commission's differs only in the local price Rails may withhold.
+func TestCallsAndCommissions(t *testing.T) {
+	const category = int64(1_797_001)
+	call := func(conn *sql.DB) {
+		conn.Exec("UPDATE links SET native_type = 'call', flags = flags | ? WHERE id = ?", productIsMultiseatLicense, productID)
+	}
+	for _, c := range []struct {
+		name    string
+		reason  string
+		headers map[string]string
+		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+		check   func(t *testing.T, e *testEnv, body string)
+	}{
+		{name: "a call", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			call(conn)
+			testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Duration"})
+			for i, minutes := range []int{30, 60} {
+				testdb.Insert(t, conn, "base_variants", map[string]any{"id": category + 1 + int64(i), "type": "Variant", "variant_category_id": category,
+					"name": fmt.Sprint(minutes, " minutes"), "position_in_category": i, "duration_in_minutes": minutes, "created_at": testNow, "updated_at": testNow})
+			}
+		}, check: func(t *testing.T, e *testEnv, body string) {
+			// set_product_page_meta adds it right before the canonical link.
+			preload := `<link rel="modulepreload" crossorigin="anonymous" href="` + e.config.Page.CalendarHref + `" inertia="call-calendar">`
+			if !strings.Contains(body, preload+"\n<link rel=\"canonical\"") {
+				t.Errorf("no %s right before the canonical link", preload)
+			}
+			e.wantAll(t, body, []string{`"headKey":"call-calendar"`, `"duration_in_minutes":30}`, `"is_multiseat_license":false,`,
+				`"eligible_for_installment_plans":true,`})
+		}},
+		{name: "a product that isn't a call", check: func(t *testing.T, e *testEnv, body string) {
+			if strings.Contains(body, "call-calendar") {
+				t.Error("a calendar preload")
+			}
+		}},
+		{name: "a call without the calendar in the manifest", reason: "call calendar asset", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			call(conn)
+			e.config.Page.CalendarHref = ""
+		}},
+		{name: "a commission", check: func(t *testing.T, e *testEnv, body string) {
+			e.wantAll(t, body, []string{`"native_type":"commission",`, `"eligible_for_installment_plans":false,`})
+		}, setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+			conn.Exec("UPDATE links SET native_type = 'commission' WHERE id = ?", productID)
+		}},
+		{name: "a commission with a local price", reason: "unquotable buyer currency", headers: eurCookie,
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("0.92345")
+				conn.Exec("UPDATE links SET native_type = 'commission' WHERE id = ?", productID)
+			}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			if c.setup != nil {
+				c.setup(t, e, testdb.Open(t))
+			}
+			body := e.render(t, c.headers, c.reason)
+			if c.check != nil {
+				c.check(t, e, body)
 			}
 		})
 	}
