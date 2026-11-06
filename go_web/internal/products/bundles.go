@@ -77,12 +77,6 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 	if err != nil {
 		return nil, err
 	}
-	var available map[int64]bool
-	if prod.is(productIsBundle) {
-		if available, err = h.bundledVariantsAvailable(ctx, ids); err != nil {
-			return nil, err
-		}
-	}
 	query := productPageQuery(p.layout, p.recommendedBy)
 	for _, it := range items {
 		bp := it.prod
@@ -119,23 +113,66 @@ func (h *handler) loadBundle(ctx context.Context, p *page, prod *product) (*bund
 			Sym("url", url).
 			Sym("quantity", it.quantity).
 			Sym("variant", variantName))
-		if available != nil {
-			// The bundle product's remaining_for_sale_count, then its variant's quantity_left.
-			remaining := quantityLeft(bp.maxPurchaseCount, bp.sold)
-			if !available[bp.id] {
-				remaining = new(int64)
-			}
-			b.quantityLeft = lowerOf(b.quantityLeft, remaining)
-			if it.variant != nil {
-				b.quantityLeft = lowerOf(b.quantityLeft, quantityLeft(it.variant.maxPurchaseCount, it.variant.sold))
-			}
+	}
+	if prod.is(productIsBundle) {
+		b.quantityLeft, err = h.bundleQuantityLeft(ctx, items)
+	}
+	return b, err
+}
+
+// bundleQuantityLeft is remaining_for_sale_count's minimum over a bundle's alive products: each
+// one's own count, then its variant's quantity_left.
+func (h *handler) bundleQuantityLeft(ctx context.Context, items []*bundleItem) (*int64, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, len(items))
+	for i, it := range items {
+		ids[i] = it.productID
+	}
+	available, err := h.bundledVariantsAvailable(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	var left *int64
+	for _, it := range items {
+		switch {
+		case it.prod.is(productIsBundle):
+			// Its own count would take its bundle products' in turn.
+			return nil, fallback("nested bundle")
+		case it.prod.is(productIsTieredMembership):
+			// Closed tiers count against variants_available?, which this doesn't read.
+			return nil, fallback("bundled membership")
+		}
+		remaining := quantityLeft(it.prod.maxPurchaseCount, it.prod.sold)
+		if !available[it.productID] {
+			remaining = new(int64)
+		}
+		left = lowerOf(left, remaining)
+		if it.variant != nil {
+			left = lowerOf(left, quantityLeft(it.variant.maxPurchaseCount, it.variant.sold))
 		}
 	}
-	return b, nil
+	return left, nil
 }
 
 // bundleItems reads the alive rows in_order, with their variants, then their products.
 func (h *handler) bundleItems(ctx context.Context, owner *product) ([]*bundleItem, error) {
+	items, err := h.loadBundleItems(ctx, owner)
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if reason := unportedBundled(owner, it.prod.product); reason != "" {
+			return nil, fallback(reason)
+		}
+	}
+	return items, nil
+}
+
+// loadBundleItems is bundleItems without the props' shape checks, which remaining_for_sale_count
+// doesn't need.
+func (h *handler) loadBundleItems(ctx context.Context, owner *product) ([]*bundleItem, error) {
 	items, err := h.bundleRows(ctx, owner)
 	if err != nil || len(items) == 0 {
 		return nil, err
@@ -152,9 +189,6 @@ func (h *handler) bundleItems(ctx context.Context, owner *product) ([]*bundleIte
 		if it.prod = products[it.productID]; it.prod == nil {
 			// bundle_product.product is nil, and Rails raises.
 			return nil, fallback("bundle product missing")
-		}
-		if reason := unportedBundled(owner, it.prod.product); reason != "" {
-			return nil, fallback(reason)
 		}
 	}
 	return items, nil
