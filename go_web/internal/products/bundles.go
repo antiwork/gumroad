@@ -11,9 +11,10 @@ import (
 // bundleItem is an alive bundle_products row, with the product and variant it names.
 type bundleItem struct {
 	productID, quantity int64
-	position            sql.NullInt64
+	position, variantID sql.NullInt64
 	prod                *bundled
-	// variant is the BaseVariant it names, alive or not; nil without one.
+	// variant is the BaseVariant variantID names, alive or not; nil without one, or when the row
+	// is gone, as belongs_to reads it.
 	variant *bundleVariant
 }
 
@@ -163,39 +164,64 @@ func (h *handler) bundleItems(ctx context.Context, owner *product) ([]*bundleIte
 	return items, nil
 }
 
+// bundleRowsStatement is product_props' bundle_products statement as Rails writes it. in_order
+// sets no tiebreak, so running the same statement leaves MySQL to order ties as it does for Rails.
+const bundleRowsStatement = "SELECT `bundle_products`.* FROM `bundle_products` WHERE `bundle_products`.`bundle_id` = ?" +
+	" AND `bundle_products`.`deleted_at` IS NULL ORDER BY `bundle_products`.`position` ASC"
+
 func (h *handler) bundleRows(ctx context.Context, owner *product) ([]*bundleItem, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT bundle_products.product_id, bundle_products.quantity, bundle_products.position,"+
-		" base_variants.id, base_variants.type, base_variants.name, base_variants.price_difference_cents,"+
-		" base_variants.max_purchase_count, base_variants.sales_count_for_inventory_cache FROM bundle_products"+
-		" LEFT JOIN base_variants ON base_variants.id = bundle_products.variant_id"+
-		" WHERE bundle_products.bundle_id = ? AND bundle_products.deleted_at IS NULL ORDER BY bundle_products.position ASC", owner.id)
+	var items []*bundleItem
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		it := &bundleItem{}
+		cols["product_id"], cols["quantity"], cols["position"], cols["variant_id"] = &it.productID, &it.quantity, &it.position, &it.variantID
+		return func() { items = append(items, it) }
+	}, bundleRowsStatement, owner.id)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	for _, it := range items {
+		if it.variantID.Valid {
+			ids = append(ids, it.variantID.Int64)
+		}
+	}
+	variants, err := h.bundleVariants(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, it := range items {
+		if it.variantID.Valid {
+			it.variant = variants[it.variantID.Int64]
+		}
+	}
+	return items, nil
+}
+
+// bundleVariants is the :variant preload: the BaseVariants by id, alive or not.
+func (h *handler) bundleVariants(ctx context.Context, ids []int64) (map[int64]*bundleVariant, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT id, type, name, price_difference_cents, max_purchase_count, sales_count_for_inventory_cache"+
+		" FROM base_variants WHERE id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*bundleItem
+	out := map[int64]*bundleVariant{}
 	for rows.Next() {
-		it := &bundleItem{}
-		var variantID sql.NullInt64
+		var id int64
 		var kind sql.NullString
 		v := &bundleVariant{}
-		if err := rows.Scan(&it.productID, &it.quantity, &it.position, &variantID, &kind, &v.name, &v.priceDifference,
-			&v.maxPurchaseCount, &v.sold); err != nil {
+		if err := rows.Scan(&id, &kind, &v.name, &v.priceDifference, &v.maxPurchaseCount, &v.sold); err != nil {
 			return nil, err
 		}
-		if n := len(items); n > 0 && items[n-1].position == it.position {
-			// in_order leaves ties to MySQL.
-			return nil, fallback("bundle product order")
+		if kind.String != "Variant" && kind.String != "Sku" {
+			return nil, fallback("bundle product variant type")
 		}
-		if variantID.Valid {
-			if kind.String != "Variant" && kind.String != "Sku" {
-				return nil, fallback("bundle product variant type")
-			}
-			it.variant = v
-		}
-		items = append(items, it)
+		out[id] = v
 	}
-	return items, rows.Err()
+	return out, rows.Err()
 }
 
 func (h *handler) bundledProducts(ctx context.Context, ids []int64) (map[int64]*bundled, error) {
