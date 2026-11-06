@@ -2542,6 +2542,16 @@ describe Purchase::Blockable do
       expect { purchase.block_buyer_based_on_chargeback_count! }.not_to change { PlatformBlock.count }
     end
 
+    it "still blocks the card and browser when the email is already blocked and has 5 chargebacks" do
+      chargeback_rows(5, stripe_fingerprint: "fp_repeat", browser_guid: "guid-repeat")
+      5.times { create(:purchase).update_columns(chargeback_date: Time.current, email: purchase.email) }
+      purchase.block_by_email!(by_user_id: nil)
+
+      expect { purchase.block_buyer_based_on_chargeback_count! }.to change { PlatformBlock.count }.by(2)
+      expect(purchase.blocked_by_charge_processor_fingerprint?).to be true
+      expect(purchase.blocked_by_browser_guid?).to be true
+    end
+
     it "does not block again or comment twice once the card and browser are blocked" do
       chargeback_rows(5, stripe_fingerprint: "fp_repeat", browser_guid: "guid-repeat")
       purchase.block_buyer_based_on_chargeback_count!

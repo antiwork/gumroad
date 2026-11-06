@@ -547,9 +547,7 @@ module Purchase::Blockable
     purchaser_cb_count = purchaser_id.present? ? chargebacked.where(purchaser_id: purchaser_id).count : 0
     chargeback_count = [email_cb_count, purchaser_cb_count].max
 
-    if chargeback_count >= MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK
-      return if buyer_blocked?
-
+    if chargeback_count >= MAX_BUYER_CHARGEBACKS_BEFORE_BLOCK && !buyer_blocked?
       return block_buyer!(
         blocking_user_id: GUMROAD_ADMIN_ID,
         comment_content: "Auto-blocked: buyer has #{chargeback_count} chargebacks (#{email_cb_count} by email, #{purchaser_cb_count} by account)"
