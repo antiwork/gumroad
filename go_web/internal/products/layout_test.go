@@ -41,17 +41,20 @@ func TestTheProfileLayout(t *testing.T) {
 	}
 }
 
-// layout and recommended_by values this port leaves to Rails, and bare keys it doesn't.
+// layout, recommended_by and query values this port leaves to Rails, and bare keys it doesn't.
 func TestALayoutOrRecommendationParam(t *testing.T) {
 	for query, reason := range map[string]string{
-		"?layout=embed":                  "param layout",
-		"?layout=profile&embed=true":     "layout with iframe",
-		"?layout=discover&overlay=true":  "layout with iframe",
-		"?recommended_by=search":         "",
-		"?recommended_by=discover":       "",
-		"?recommended_by[]=wishlist":     "param recommended_by",
-		"?layout=profile&recommended_by": "",
-		"?layout":                        "",
+		"?layout=embed":                     "param layout",
+		"?layout=profile&embed=true":        "layout with iframe",
+		"?layout=discover&overlay=true":     "layout with iframe",
+		"?recommended_by=search":            "",
+		"?recommended_by=discover":          "",
+		"?recommended_by[]=wishlist":        "param recommended_by",
+		"?layout=profile&recommended_by":    "",
+		"?layout":                           "",
+		"?query[]=pens":                     "param query",
+		"?query=pens&recommended_by=search": "",
+		"?query":                            "",
 	} {
 		t.Run(query, func(t *testing.T) {
 			e := newTestEnv(t)
@@ -116,6 +119,47 @@ func TestADiscoverSearchClick(t *testing.T) {
 	blank["Cookie"] = "_gumroad_guid="
 	if w := e.get(host, path, blank); w.Header().Get("X-Go-Web-Fallback") != "blank guid" {
 		t.Errorf("blank guid: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+}
+
+// A click from a typed search records its query and a suggestion, an autocompleted or blank one
+// no suggestion. A query past the column's 255 characters is truncated, as Rails' sql_mode does.
+func TestADiscoverSearchClickWithAQuery(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	e.redis.HSet("store_discover_searches", "boolean", "true")
+	// Cleanups run last first, so the suggestions go while their searches remain.
+	testdb.CleanupWhere(t, conn, "discover_searches", "clicked_resource_id = ?", productID)
+	testdb.CleanupWhere(t, conn, "discover_search_suggestions",
+		"discover_search_id IN (SELECT id FROM discover_searches WHERE clicked_resource_id = ?)", productID)
+	for _, c := range []struct {
+		guid, params            string
+		query                   sql.NullString
+		autocomplete, suggested bool
+	}{
+		{"guid-q1", "&query=pen+set", sql.NullString{String: "pen set", Valid: true}, false, true},
+		{"guid-q2", "&query=pen+set&autocomplete=true", sql.NullString{String: "pen set", Valid: true}, true, false},
+		{"guid-q3", "&query=pen&autocomplete[]=true", sql.NullString{String: "pen", Valid: true}, false, true},
+		{"guid-q4", "&query=+", sql.NullString{String: " ", Valid: true}, false, false},
+		{"guid-q5", "&query", sql.NullString{}, false, false},
+		{"guid-q6", "&query=" + strings.Repeat("%C3%A9", 256), sql.NullString{String: strings.Repeat("é", 255), Valid: true}, false, true},
+	} {
+		path := "/l/guide?recommended_by=search" + c.params
+		if w := e.get(host, path, map[string]string{"Cookie": "_gumroad_guid=" + c.guid}); w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("%s: %d %q", c.guid, w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		var query sql.NullString
+		var autocomplete bool
+		var suggestions int
+		if err := conn.QueryRow("SELECT discover_searches.query, discover_searches.autocomplete, COUNT(discover_search_suggestions.id)"+
+			" FROM discover_searches LEFT JOIN discover_search_suggestions ON discover_search_suggestions.discover_search_id = discover_searches.id"+
+			" AND discover_search_suggestions.deleted_at IS NULL WHERE discover_searches.browser_guid = ? GROUP BY discover_searches.id", c.guid).
+			Scan(&query, &autocomplete, &suggestions); err != nil {
+			t.Fatal(err)
+		}
+		if query != c.query || autocomplete != c.autocomplete || (suggestions == 1) != c.suggested {
+			t.Errorf("%s: %v %v %d", c.guid, query, autocomplete, suggestions)
+		}
 	}
 }
 

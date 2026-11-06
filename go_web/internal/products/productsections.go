@@ -277,7 +277,7 @@ func (h *handler) renderProductSections(p *page, ps *productSections, buyer *str
 		if p.visitorSearch {
 			// section_props replaces the search, so go_web's cache and its review-sort caveat
 			// don't apply.
-			search = h.searchSections
+			search = h.visitorSearchSections
 		}
 		searches, err := search(p, ps.products)
 		if err != nil {

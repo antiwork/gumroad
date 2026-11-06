@@ -119,6 +119,11 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			`"filetypes_data":[{"key":"pdf","doc_count":2}],"taxonomy_attributes_data":[],"products":[%s]},"exclude_ids":["%s"]}],"main_section_index":0`,
 			total, products, e.ids.Encrypt(productID))
 	}
+	// results is the default section's search results up to its first card, the other product's.
+	results := func(e *testEnv, total int) string {
+		return fmt.Sprintf(`"search_results":{"total":%d,"tags_data":[{"key":"design","doc_count":2}],"filetypes_data":[{"key":"pdf","doc_count":2}],`+
+			`"taxonomy_attributes_data":[],"products":[{"id":"%s",`, total, e.ids.Encrypt(other))
+	}
 	otherCard := func(e *testEnv) string {
 		id := e.ids.Encrypt(other)
 		return `{"id":"` + id + `","permalink":"gowebp2","name":"Other","seller":null,"ratings":{"count":3,"average":4.5},"thumbnail_url":null,` +
@@ -219,6 +224,32 @@ func TestTheStorefrontCatalog(t *testing.T) {
 					t.Errorf("want %s", want)
 				}
 			}},
+		// A visitor's query narrows section_props' fresh search, never the cached one.
+		{name: "a visitor query", server: search, searched: 2, searchedAgain: 3, query: "?query=pen+set",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			respond: func(body map[string]any) (string, string) {
+				must := body["query"].(map[string]any)["bool"].(map[string]any)["must"].([]any)
+				// The first is the cached fetch, whose entry is keyed without the query.
+				if searches == 1 && len(must) != 2 {
+					t.Errorf("the cached search carried the query: %v", must)
+				}
+				match := map[string]any{"simple_query_string": map[string]any{"query": "pen set",
+					"fields": []any{"name", "creator_name", "description", "tags"}, "default_operator": "and"}}
+				switch {
+				case len(must) == 2:
+					return bothHits, "3"
+				case len(must) == 3 && reflect.DeepEqual(must[0], match):
+					return fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other), "1"
+				}
+				return `[]`, "0"
+			},
+			// omit_product_in_search_total? drops the viewed product from the default section's total
+			// whether or not it matches the query.
+			want: func(e *testEnv) string { return results(e, 0) }},
+		// A blank one still searches afresh, with no clause.
+		{name: "a blank visitor query", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?query=+",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			want:  func(e *testEnv) string { return results(e, 2) }},
 		{name: "the rest of the catalog, without this product", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, nil)
