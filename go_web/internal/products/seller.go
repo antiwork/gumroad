@@ -82,7 +82,7 @@ func (h *handler) loadReputation(ctx context.Context, p *page, prod *product, v 
 	v.snapshotReputation = buildSummary(subtractProduct(agg, prod, v.reviewStat))
 
 	// The profile's: Rails.cache.fetch keyed by the products' lifecycle and the version.
-	lifecycle, err := h.productsCacheKey(ctx, seller.id)
+	lifecycle, err := h.productsCacheKey(p)
 	if err != nil {
 		return err
 	}
@@ -126,8 +126,19 @@ func (h *handler) reputationAggregate(ctx context.Context, sellerID int64) ([3]i
 	return [3]int64{count.Int64, total.Int64, weighted.Int64}, err
 }
 
-// productsCacheKey is seller.products.cache_key_with_version.
-func (h *handler) productsCacheKey(ctx context.Context, sellerID int64) (string, error) {
+// productsCacheKey is seller.products.cache_key_with_version, read once per page.
+func (h *handler) productsCacheKey(p *page) (string, error) {
+	if p.productsKey == "" {
+		key, err := h.readProductsCacheKey(p.Ctx, p.seller.id)
+		if err != nil {
+			return "", err
+		}
+		p.productsKey = key
+	}
+	return p.productsKey, nil
+}
+
+func (h *handler) readProductsCacheKey(ctx context.Context, sellerID int64) (string, error) {
 	sql := "SELECT `links`.* FROM `links` WHERE `links`.`user_id` = " + strconv.FormatInt(sellerID, 10)
 	sum := sha256.Sum256([]byte(sql))
 	key := "links/query-" + hex.EncodeToString(sum[:])[:32]

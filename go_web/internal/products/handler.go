@@ -67,6 +67,9 @@ type page struct {
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
 	cacheWrites []pendingWrite
 	rates       map[string]rateRead
+	// settleable is buyer_currency_settleable? for the page's seller and buyer currency.
+	settleable  *bool
+	productsKey string
 }
 
 type fallback = pages.Fallback

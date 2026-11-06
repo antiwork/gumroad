@@ -181,8 +181,7 @@ func (s *Store) Read(ctx context.Context, name string) (any, bool, error) {
 }
 
 // Write is Rails.cache.write(name, value, expires_in:). An expiresIn of 0 means no
-// expires_in, not Ruby's expires_in: 0 (an entry that is born expired). A value whose
-// payload reaches 1KB is ErrUnported, since Rails would deflate it.
+// expires_in, not Ruby's expires_in: 0 (an entry that is born expired).
 func (s *Store) Write(ctx context.Context, name string, value any, expiresIn time.Duration) error {
 	if expiresIn < 0 {
 		// raise_on_invalid_cache_expiration_time is on (new_framework_defaults_7_1.rb).
@@ -312,8 +311,15 @@ func encodeEntry(value any, expiresAt float64) ([]byte, error) {
 		typ = typeObject
 	}
 	if len(payload) >= compressThreshold {
-		// Coder#try_compress would deflate this with zlib, whose output Go can't reproduce.
-		return nil, fmt.Errorf("%w: %d-byte payload reaches compress_threshold", ErrUnported, len(payload))
+		// Coder#try_compress. Go's zlib bytes differ from Ruby's, but Coder#load inflates either.
+		var buf bytes.Buffer
+		w := zlib.NewWriter(&buf)
+		w.Write(payload)
+		w.Close()
+		if buf.Len() < len(payload) {
+			typ |= typeCompressed
+			payload = buf.Bytes()
+		}
 	}
 	b := make([]byte, headerLen, headerLen+len(payload))
 	copy(b, signature)

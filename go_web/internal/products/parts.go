@@ -12,32 +12,60 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 )
 
-// buyPriceCents is Link#price_cents for a buy-only product without recurrence: the last of
-// the alive prices in the product's currency that isn't a rental, as preload_product's
-// alive_prices loads them.
-func (h *handler) buyPriceCents(ctx context.Context, prod *product) (*int64, error) {
-	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`price_cents`, `prices`.`currency`, `prices`.`flags` FROM `prices`"+
-		" WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` = ?", prod.id)
+// priceRow is an alive prices row.
+type priceRow struct {
+	cents      int64
+	currency   sql.NullString
+	flags      int64
+	recurrence sql.NullString
+}
+
+// alivePrices is each product's alive_prices, as preload_product and the catalog's includes
+// load them.
+func (h *handler) alivePrices(ctx context.Context, ids []int64) (map[int64][]priceRow, error) {
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT `prices`.`link_id`, `prices`.`price_cents`, `prices`.`currency`, `prices`.`flags`,"+
+		" `prices`.`recurrence` FROM `prices` WHERE `prices`.`deleted_at` IS NULL AND `prices`.`link_id` IN ("+placeholders(len(ids))+")",
+		int64Args(ids)...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var last *int64
+	out := map[int64][]priceRow{}
 	for rows.Next() {
-		var cents int64
-		var cur sql.NullString
-		var flags int64
-		if err := rows.Scan(&cents, &cur, &flags); err != nil {
+		var id int64
+		var r priceRow
+		if err := rows.Scan(&id, &r.cents, &r.currency, &r.flags, &r.recurrence); err != nil {
 			return nil, err
 		}
-		// prices_for_currency compares with ==, so a NULL currency only matches a NULL one.
-		if cur.Valid != prod.priceCurrencyType.Valid || cur.String != prod.priceCurrencyType.String || flags&1 != 0 {
-			continue
-		}
-		c := cents
-		last = &c
+		out[id] = append(out[id], r)
 	}
-	return last, rows.Err()
+	return out, rows.Err()
+}
+
+// buyPrices is prices_for_currency.select(&:is_buy?).
+func buyPrices(prod *product, prices []priceRow) []int64 {
+	var out []int64
+	for _, r := range prices {
+		// prices_for_currency compares with ==, so a NULL currency only matches a NULL one.
+		if r.currency.Valid == prod.priceCurrencyType.Valid && r.currency.String == prod.priceCurrencyType.String && r.flags&1 == 0 {
+			out = append(out, r.cents)
+		}
+	}
+	return out
+}
+
+// buyPriceCents is Link#price_cents for a buy-only product without recurrence: the last of
+// its buy prices.
+func (h *handler) buyPriceCents(ctx context.Context, prod *product) (*int64, error) {
+	prices, err := h.alivePrices(ctx, []int64{prod.id})
+	if err != nil {
+		return nil, err
+	}
+	buy := buyPrices(prod, prices[prod.id])
+	if len(buy) == 0 {
+		return nil, nil
+	}
+	return &buy[len(buy)-1], nil
 }
 
 // productFile is an alive product_files row, in alive_product_files' order.
@@ -87,36 +115,53 @@ type reviewStat struct {
 }
 
 func (h *handler) loadReviewStat(ctx context.Context, productID int64) (*reviewStat, error) {
-	var s reviewStat
-	var average string
-	var counts [5]sql.NullInt64
-	err := h.c.DB.QueryRowContext(ctx, "SELECT reviews_count, average_rating, ratings_of_one_count, ratings_of_two_count,"+
-		" ratings_of_three_count, ratings_of_four_count, ratings_of_five_count FROM product_review_stats WHERE link_id = ? LIMIT 1",
-		productID).Scan(&s.reviewsCount, &average, &counts[0], &counts[1], &counts[2], &counts[3], &counts[4])
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
+	stats, err := h.reviewStats(ctx, []int64{productID})
+	return stats[productID], err
+}
+
+// reviewStats is each product's product_review_stat; link_id is unique.
+func (h *handler) reviewStats(ctx context.Context, ids []int64) (map[int64]*reviewStat, error) {
+	rows, err := h.c.DB.QueryContext(ctx, "SELECT link_id, reviews_count, average_rating, ratings_of_one_count, ratings_of_two_count,"+
+		" ratings_of_three_count, ratings_of_four_count, ratings_of_five_count FROM product_review_stats WHERE link_id IN ("+
+		placeholders(len(ids))+")", int64Args(ids)...)
 	if err != nil {
 		return nil, err
 	}
-	// mysql2 parses the FLOAT column's text, as Float() does.
-	f, exact := rails.StringToF(average)
-	if !exact {
-		return nil, fallback("average rating")
+	defer rows.Close()
+	out := map[int64]*reviewStat{}
+	for rows.Next() {
+		var id int64
+		var s reviewStat
+		var average string
+		var counts [5]sql.NullInt64
+		if err := rows.Scan(&id, &s.reviewsCount, &average, &counts[0], &counts[1], &counts[2], &counts[3], &counts[4]); err != nil {
+			return nil, err
+		}
+		// mysql2 parses the FLOAT column's text, as Float() does.
+		f, exact := rails.StringToF(average)
+		if !exact {
+			return nil, fallback("average rating")
+		}
+		s.averageRating = f
+		for i, c := range counts {
+			s.counts[i] = c.Int64
+		}
+		out[id] = &s
 	}
-	s.averageRating = f
-	for i, c := range counts {
-		s.counts[i] = c.Int64
+	return out, rows.Err()
+}
+
+// orTemplate is review_stat_proxy: the row, or ProductReviewStat::TEMPLATE's zeros.
+func (s *reviewStat) orTemplate() reviewStat {
+	if s == nil {
+		return reviewStat{}
 	}
-	return &s, nil
+	return *s
 }
 
 // ratingStats is Product::ReviewStat#rating_stats.
 func (s *reviewStat) ratingStats() *rails.RHash {
-	var stat reviewStat
-	if s != nil {
-		stat = *s
-	}
+	stat := s.orTemplate()
 	return rails.NewRHash().
 		Sym("count", stat.reviewsCount).
 		Sym("average", stat.averageRating).
@@ -177,14 +222,25 @@ func (h *handler) thumbnailURL(ctx context.Context, productID int64) (any, error
 	if err != nil {
 		return nil, err
 	}
-	if rails.Present(unsplash.String) {
-		return unsplash.String, nil
+	return h.thumbnailRowURL(ctx, thumbnailRow{id, unsplash})
+}
+
+// thumbnailRow is a thumbnails row as Thumbnail#url reads it.
+type thumbnailRow struct {
+	id       int64
+	unsplash sql.NullString
+}
+
+// thumbnailRowURL is Thumbnail#url.
+func (h *handler) thumbnailRowURL(ctx context.Context, t thumbnailRow) (any, error) {
+	if rails.Present(t.unsplash.String) {
+		return t.unsplash.String, nil
 	}
 	var blobID sql.NullInt64
 	var key, filename, contentType sql.NullString
-	err = h.c.DB.QueryRowContext(ctx, `SELECT blobs.id, blobs.key, blobs.filename, blobs.content_type FROM active_storage_attachments att
+	err := h.c.DB.QueryRowContext(ctx, `SELECT blobs.id, blobs.key, blobs.filename, blobs.content_type FROM active_storage_attachments att
 		LEFT JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
-		WHERE att.record_type = 'Thumbnail' AND att.record_id = ? AND att.name = 'file' LIMIT 1`, id).Scan(&blobID, &key, &filename, &contentType)
+		WHERE att.record_type = 'Thumbnail' AND att.record_id = ? AND att.name = 'file' LIMIT 1`, t.id).Scan(&blobID, &key, &filename, &contentType)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
