@@ -42,7 +42,7 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
 
   return (
     <Card asChild>
-      <section aria-labelledby={headingId} className="grid lg:row-span-2 lg:grid-rows-subgrid">
+      <section aria-labelledby={headingId} className="grid gap-0 lg:row-span-2 lg:grid-rows-subgrid">
         <CardContent details className="grid content-start justify-stretch gap-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id={headingId} className="text-lg font-bold">
