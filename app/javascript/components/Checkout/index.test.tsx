@@ -1749,7 +1749,9 @@ describe("Checkout pay recap", () => {
     expect(recapOf(renderCheckout(state, mixedCart()))).toBeNull();
   });
 
-  it("keeps the plain label while a failed requote still shows the previous quote", () => {
+  const pendingRecap = { amount: null, paidLines: [{ name: "Course", price: null }] };
+
+  it("keeps the plain label and drops the line while a failed requote still shows the previous quote", () => {
     const loaded = surcharges(4_900);
     if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
     const state = mixedState({
@@ -1760,7 +1762,65 @@ describe("Checkout pay recap", () => {
     expect(recapOf(renderCheckout(state, mixedCart()))).toBeNull();
   });
 
-  it("keeps the plain label while the payment setup is being refreshed", () => {
-    expect(recapOf(renderCheckout(mixedState({ checkoutPaymentStale: true }), mixedCart()))).toBeNull();
+  it("keeps the plain label and pending prices while the payment setup is being refreshed", () => {
+    expect(recapOf(renderCheckout(mixedState({ checkoutPaymentStale: true }), mixedCart()))).toEqual(pendingRecap);
+  });
+
+  it("keeps naming the paid item, without its old price, while the cart is requoted", () => {
+    const loaded = surcharges(4_900);
+    if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
+    const state = mixedState({
+      surcharges: { type: "pending" },
+      buyerCurrencyRemint: { previousCurrency: null, surcharges: loaded.result },
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toEqual(pendingRecap);
+  });
+
+  it("drops an item from the line as soon as a discount makes it free, before the requote lands", () => {
+    const loaded = surcharges(4_900);
+    if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
+    const cart: CartState = {
+      ...mixedCart(),
+      discountCodes: [
+        {
+          code: "FREE",
+          products: {
+            paid: {
+              type: "percent",
+              percents: 100,
+              product_ids: null,
+              expires_at: null,
+              minimum_quantity: null,
+              duration_in_billing_cycles: null,
+              minimum_amount_cents: null,
+            },
+          },
+          fromUrl: false,
+        },
+      ],
+    };
+    const state = mixedState({
+      surcharges: { type: "pending" },
+      buyerCurrencyRemint: { previousCurrency: null, surcharges: loaded.result },
+    });
+
+    expect(recapOf(renderCheckout(state, cart))).toBeNull();
+  });
+
+  it("lists shipping, which a free physical item can carry", () => {
+    const loaded = surcharges(4_900);
+    if (loaded.type !== "loaded") throw new Error("expected a loaded quote");
+    const state = mixedState({
+      surcharges: { type: "loaded", result: { ...loaded.result, shipping_rate_cents: 500 } },
+    });
+
+    expect(recapOf(renderCheckout(state, mixedCart()))).toEqual({
+      amount: "US$54",
+      paidLines: [
+        { name: "Course", price: "US$49" },
+        { name: "Shipping", price: "US$5" },
+      ],
+    });
   });
 });

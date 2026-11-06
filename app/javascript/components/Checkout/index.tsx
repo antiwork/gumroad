@@ -573,7 +573,8 @@ export const Checkout = ({
         ? formatPresentmentCents(localAmounts.totalCents, localCurrency, { noCentsIfWhole })
         : formatCheckoutPrice(total, localCurrency, { noCentsIfWhole })
       : null;
-  // What each line costs today, after discounts, in the displayed currency.
+  // What each line costs today, after discounts, in the displayed currency. Whether a line is free comes
+  // from the cart itself, so it is already current while a requote is in flight.
   const linePrices = cart.items.map((item, index) => {
     const trial = hasFreeTrial(item, isGift);
     const discountedPrice = trial ? 0 : getDiscountedPrice(cart, item).price;
@@ -582,20 +583,45 @@ export const Checkout = ({
     const canonicalCents = convertToUSD(item, discountedPrice);
     return {
       name: item.product.name,
-      isFree: (localCents ?? canonicalCents) === 0,
+      isFree: discountedPrice === 0,
       price:
         localCents != null && localCurrency
           ? formatPresentmentCents(localCents, localCurrency, { noCentsIfWhole })
           : formatCheckoutPrice(canonicalCents, localCurrency, { noCentsIfWhole }),
     };
   });
-  const paidLines = linePrices.some((line) => line.isFree)
-    ? linePrices.filter((line) => !line.isFree).map(({ name, price }) => ({ name, price }))
+  // A mixed free and paid cart names what is paid for. The line stays put while the cart is requoted so the
+  // pay button doesn't jump, but its prices are only shown alongside a settled amount (null means pending),
+  // so it never shows a stale price. A failed quote has nothing coming, so the line goes rather than spin.
+  // Shipping is listed too, since a free physical item can carry it. The line names what is bought, not a
+  // breakdown of the total: tax and tip keep their own rows in the summary just above.
+  const showsPaidLines =
+    !hasSplitCharge &&
+    !awaitingBuyerAction &&
+    (state.surcharges.type === "loaded" || quoteInFlight) &&
+    linePrices.some((line) => line.isFree) &&
+    linePrices.some((line) => !line.isFree);
+  const shippingCents = summarySurcharges?.shipping_rate_cents ?? 0;
+  const paidLines = showsPaidLines
+    ? [
+        ...linePrices.filter((line) => !line.isFree).map(({ name, price }) => ({ name, price })),
+        ...(shippingCents > 0
+          ? [
+              {
+                name: "Shipping",
+                price:
+                  localAmounts && localCurrency
+                    ? formatPresentmentCents(localAmounts.shippingCents, localCurrency, { noCentsIfWhole })
+                    : formatCheckoutPrice(shippingCents, localCurrency, { noCentsIfWhole }),
+              },
+            ]
+          : []),
+      ].map((line) => ({ name: line.name, price: payRecapAmount == null ? null : line.price }))
     : [];
-  const paidLinesKey = paidLines.map((line) => `${line.name}\u0000${line.price}`).join("\u0001");
+  const paidLinesKey = paidLines.map((line) => `${line.name}\u0000${line.price ?? ""}`).join("\u0001");
   // Keyed on the content so the context value only changes when the recap does.
   const payRecap = React.useMemo(
-    () => (payRecapAmount == null ? null : { amount: payRecapAmount, paidLines }),
+    () => (payRecapAmount == null && paidLines.length === 0 ? null : { amount: payRecapAmount, paidLines }),
     [payRecapAmount, paidLinesKey],
   );
 

@@ -556,8 +556,9 @@ type Action =
   | { type: "surcharges-fetch-failed"; requestId: number };
 
 // Display-ready recap of what the buyer is about to pay, supplied by the checkout summary (which owns
-// currency formatting). `null` means no amount is known yet, so the button keeps its plain label.
-export type PayRecap = { amount: string; paidLines: { name: string; price: string }[] };
+// currency formatting). A null `amount` means no amount is settled yet, so the button keeps its plain label;
+// a null line `price` is pending for the same reason.
+export type PayRecap = { amount: string | null; paidLines: { name: string; price: string | null }[] };
 export const PayRecapContext = React.createContext<PayRecap | null>(null);
 
 export function getPayLabel(state: State, recap: PayRecap | null = null) {
@@ -566,7 +567,7 @@ export function getPayLabel(state: State, recap: PayRecap | null = null) {
   if (isProcessing(state) && !state.awaitingBuyerConfirmation) return "Processing...";
   if (state.payLabel) return state.payLabel;
   if (!requiresPayment(state)) return "Get";
-  return recap ? `Pay ${recap.amount}` : "Pay";
+  return recap?.amount ? `Pay ${recap.amount}` : "Pay";
 }
 
 export function usePayLabel() {

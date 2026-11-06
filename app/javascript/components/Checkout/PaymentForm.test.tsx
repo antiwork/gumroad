@@ -1391,6 +1391,22 @@ describe("pay recap", () => {
     expect(screen.queryByText(/You are paying for/u)).toBeNull();
   });
 
+  it("keeps the line in place with pending prices while no amount is settled", () => {
+    renderWithRecap({
+      amount: null,
+      paidLines: [
+        { name: "Lifetime Membership", price: null },
+        { name: "Shipping", price: null },
+      ],
+    });
+
+    expect(screen.getByRole("button", { name: "Pay" })).toBeTruthy();
+    const line = screen.getByText(/You are paying for:/u);
+    expect(line.textContent).toBe("You are paying for: Lifetime Membership , Shipping ");
+    expect(line.getAttribute("aria-busy")).toBe("true");
+    expect(line.querySelectorAll('[data-slot="skeleton"]')).toHaveLength(2);
+  });
+
   it("names each paid item above the native PayPal button too", async () => {
     paypalMock.render.mockReset();
     paypalMock.loadScript.mockResolvedValue({ Buttons: () => ({ render: paypalMock.render }) });

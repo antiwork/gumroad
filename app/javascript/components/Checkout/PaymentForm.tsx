@@ -81,6 +81,7 @@ import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Popover, PopoverAnchor, PopoverContent } from "$app/components/Popover";
 import { showAlert } from "$app/components/server-components/Alert";
+import { Skeleton } from "$app/components/Skeleton";
 import { Alert } from "$app/components/ui/Alert";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Checkbox } from "$app/components/ui/Checkbox";
@@ -1270,10 +1271,22 @@ const CreditCardContent = ({
 const PayRecapLines = () => {
   const recap = React.useContext(PayRecapContext);
   if (!recap || recap.paidLines.length === 0) return null;
+  const pending = recap.paidLines.some((line) => line.price == null);
   return (
-    <p className="text-sm" data-checkout-pay-recap="true">
-      You are paying for: {recap.paidLines.map((line) => `${line.name} (${line.price})`).join(", ")}
-    </p>
+    <div className="text-sm" data-checkout-pay-recap="true" aria-busy={pending}>
+      You are paying for:{" "}
+      {recap.paidLines.map((line, index) => (
+        <React.Fragment key={index}>
+          {index > 0 ? ", " : null}
+          {line.name}{" "}
+          {line.price != null ? (
+            `(${line.price})`
+          ) : (
+            <Skeleton className="inline-block w-10 align-middle" aria-hidden="true" />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
   );
 };
 
