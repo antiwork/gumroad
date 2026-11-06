@@ -27,7 +27,6 @@ vi.mock("$app/components/WithTooltip", () => ({
 const client = (overrides: Partial<AgentClient>): AgentClient => ({
   key: "claude",
   label: "Claude",
-  capability: "Ask Claude about your sales, draft products, and check payouts.",
   connected: false,
   first_connected_at: null,
   last_used_at: null,
@@ -35,7 +34,7 @@ const client = (overrides: Partial<AgentClient>): AgentClient => ({
   directory_url: "https://claude.ai/directory/gumroad",
   connect_label: "Add Gumroad to Claude",
   availability: "Add Gumroad from Claude’s connector directory.",
-  setup: "Open Gumroad in Claude’s connector directory and connect it.",
+  setup: "Open Settings > Connectors in Claude, choose Add custom connector, and enter the URL below.",
   endpoint_url: "https://gumroad.com/claude/v1/mcp",
   ...overrides,
 });
@@ -48,22 +47,20 @@ const props: AgentPageProps = {
     client({
       key: "chatgpt",
       label: "ChatGPT",
-      capability: "Ask ChatGPT about your sales, draft products, and check payouts.",
       directory_url: "https://chatgpt.com/plugins/plugin_x",
       connect_label: "Add Gumroad to ChatGPT",
       availability: "Add Gumroad from ChatGPT’s plugin directory.",
-      setup: "Open Gumroad in ChatGPT’s plugin directory and connect it.",
+      setup: "If you cannot add plugins, ask your workspace administrator.",
       endpoint_url: "https://gumroad.com/chatgpt/v1/mcp",
     }),
     client({
       key: "muse",
       label: "Muse",
-      capability: "Ask Muse about your sales, draft products, and check payouts.",
       pending_review: true,
       directory_url: null,
       connect_label: null,
       availability: "Submitted for review. The Gumroad connector is not yet available in Muse.",
-      setup: "Add a remote MCP server in your client using the URL below.",
+      setup: null,
       endpoint_url: "https://gumroad.com/muse/v1/mcp",
     }),
   ],
@@ -113,13 +110,24 @@ describe("Agent/Index", () => {
     expect(within(chatgpt).getByText("Not connected")).toBeTruthy();
   });
 
-  it("links the directory CTA for listed clients and disables it for the client under review", () => {
+  it("links the directory CTA only for a listed client that is not connected yet", () => {
     renderPage();
 
-    const claude = screen.getByRole("region", { name: "Claude" });
-    expect(within(claude).getByRole("link", { name: "Add Gumroad to Claude" }).getAttribute("href")).toBe(
-      "https://claude.ai/directory/gumroad",
+    const chatgpt = screen.getByRole("region", { name: "ChatGPT" });
+    expect(within(chatgpt).getByRole("link", { name: "Add Gumroad to ChatGPT" }).getAttribute("href")).toBe(
+      "https://chatgpt.com/plugins/plugin_x",
     );
+    expect(within(chatgpt).getByText("Add Gumroad from ChatGPT’s plugin directory.")).toBeTruthy();
+
+    const claude = screen.getByRole("region", { name: "Claude" });
+    expect(within(claude).queryByRole("link", { name: /Add Gumroad/u })).toBeNull();
+    expect(within(claude).queryByText("Add Gumroad from Claude’s connector directory.")).toBeNull();
+    expect(within(claude).getByRole("heading", { name: "Setup" })).toBeTruthy();
+    expect(within(claude).getByText("https://gumroad.com/claude/v1/mcp")).toBeTruthy();
+  });
+
+  it("disables the add button for the client under review and offers no setup path for it", () => {
+    renderPage();
 
     const muse = screen.getByRole("region", { name: "Muse" });
     const museButton = within(muse).getByRole("button", { name: "Add Gumroad to Muse" });
@@ -131,6 +139,28 @@ describe("Agent/Index", () => {
       }),
     ).toBe(museButton);
     expect(within(muse).queryByRole("link", { name: /Add Gumroad/u })).toBeNull();
+    expect(within(muse).queryByRole("heading", { name: "Setup" })).toBeNull();
+    expect(within(muse).queryByText("https://gumroad.com/muse/v1/mcp")).toBeNull();
+    expect(within(muse).queryByRole("button", { name: "Copy Muse connector URL" })).toBeNull();
+  });
+
+  it("keeps the review note but drops the disabled button once the client under review is connected", () => {
+    mocks.usePage.mockReturnValue({
+      props: {
+        ...props,
+        clients: props.clients.map((c) =>
+          c.key === "muse" ? { ...c, connected: true, first_connected_at: "2026-10-05T10:00:00Z" } : c,
+        ),
+      },
+    });
+    renderPage();
+
+    const muse = screen.getByRole("region", { name: "Muse" });
+    expect(within(muse).getByText("Connected October 5, 2026")).toBeTruthy();
+    expect(within(muse).queryByRole("button", { name: "Add Gumroad to Muse" })).toBeNull();
+    expect(
+      within(muse).getByText("Submitted for review. The Gumroad connector is not yet available in Muse."),
+    ).toBeTruthy();
   });
 
   it("shows each connector URL with a labelled copy button", () => {

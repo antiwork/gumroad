@@ -17,6 +17,9 @@ describe Api::Mobile::AgentController do
       expect(response).to be_successful
       expect(response.parsed_body).to eq(
         "success" => true,
+        "enabled" => false,
+        "greeting" => "",
+        "suggestions" => [],
         "available" => false,
         "notice" => "The Agent tab moved to the Gumroad web app. Connect your AI at gumroad.com/agent.",
       )

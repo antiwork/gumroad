@@ -2,8 +2,10 @@
 
 # Tombstone for the mobile app's old "Agent" chat tab. Shipped app builds still call
 # GET /api/mobile/agent/meta when the tab mounts, so this endpoint stays and tells them the chat is
-# gone instead of returning a routing error. The tab itself is removed in the next app release, after
-# which this controller can go too.
+# gone instead of returning a routing error. Shipped builds read `enabled`, `greeting` and `suggestions`
+# and, with `enabled` false, show their own "isn't available" state; `available` and `notice` are for
+# builds that know them.
+# The tab itself is removed in the next app release, after which this controller can go too.
 class Api::Mobile::AgentController < Api::Mobile::BaseController
   NOTICE = "The Agent tab moved to the Gumroad web app. Connect your AI at gumroad.com/agent."
 
@@ -11,6 +13,6 @@ class Api::Mobile::AgentController < Api::Mobile::BaseController
 
   # GET /mobile/agent/meta
   def meta
-    render json: { success: true, available: false, notice: NOTICE }
+    render json: { success: true, enabled: false, greeting: "", suggestions: [], available: false, notice: NOTICE }
   end
 end

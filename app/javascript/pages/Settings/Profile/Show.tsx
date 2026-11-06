@@ -655,7 +655,7 @@ export default function SettingsPage() {
               <section className="grid gap-8 p-4! md:p-8!">
                 <Alert role="status" variant="info">
                   Use this editor to lay out your profile with sections. You can also build a fully custom page with
-                  your own agent or Gumroad's Agent tab. Open your{" "}
+                  your own agent. Open your{" "}
                   <Link href={Routes.edit_page_path("profile")} className="underline">
                     Home page under Pages
                   </Link>{" "}

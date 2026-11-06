@@ -15,7 +15,6 @@ import { useUserAgentInfo } from "$app/components/UserAgent";
 export type AgentClient = {
   key: string;
   label: string;
-  capability: string;
   connected: boolean;
   first_connected_at: string | null;
   last_used_at: string | null;
@@ -23,7 +22,8 @@ export type AgentClient = {
   directory_url: string | null;
   connect_label: string | null;
   availability: string;
-  setup: string;
+  // Null when the client has no setup path to offer yet (Muse, under review).
+  setup: string | null;
   endpoint_url: string;
 };
 
@@ -58,17 +58,19 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
               <Pill size="small">Not connected</Pill>
             )}
           </div>
-          <p>{client.capability}</p>
+          {/* Once connected, the status pill is the card's state; no add button to repeat it. */}
           {client.pending_review ? (
             <div className="grid gap-2">
-              <Button disabled aria-describedby={`${headingId}-availability`}>
-                {`Add Gumroad to ${client.label}`}
-              </Button>
+              {client.connected ? null : (
+                <Button disabled aria-describedby={`${headingId}-availability`}>
+                  {`Add Gumroad to ${client.label}`}
+                </Button>
+              )}
               <p id={`${headingId}-availability`} className="text-muted">
                 {client.availability}
               </p>
             </div>
-          ) : client.directory_url ? (
+          ) : client.directory_url && !client.connected ? (
             <div className="grid gap-2">
               <NavigationButton color="accent" href={client.directory_url} target="_blank" rel="noopener noreferrer">
                 {client.connect_label ?? `Add Gumroad to ${client.label}`}
@@ -77,22 +79,24 @@ const ClientCard = ({ client }: { client: AgentClient }) => {
             </div>
           ) : null}
         </CardContent>
-        <CardContent details className="grid content-start gap-2">
-          <h3 className="font-bold">Setup</h3>
-          <p>{client.setup}</p>
-          <div className="flex flex-wrap items-start gap-2">
-            <div id={endpointId} className="min-w-0 grow">
-              <CodeSnippet>{client.endpoint_url}</CodeSnippet>
+        {client.setup ? (
+          <CardContent details className="grid content-start gap-2">
+            <h3 className="font-bold">Setup</h3>
+            <p>{client.setup}</p>
+            <div className="flex flex-wrap items-start gap-2">
+              <div id={endpointId} className="min-w-0 grow">
+                <CodeSnippet>{client.endpoint_url}</CodeSnippet>
+              </div>
+              <div className="shrink-0">
+                <CopyToClipboard text={client.endpoint_url}>
+                  <Button size="sm" aria-label={`Copy ${client.label} connector URL`} aria-describedby={endpointId}>
+                    Copy
+                  </Button>
+                </CopyToClipboard>
+              </div>
             </div>
-            <div className="shrink-0">
-              <CopyToClipboard text={client.endpoint_url}>
-                <Button size="sm" aria-label={`Copy ${client.label} connector URL`} aria-describedby={endpointId}>
-                  Copy
-                </Button>
-              </CopyToClipboard>
-            </div>
-          </div>
-        </CardContent>
+          </CardContent>
+        ) : null}
       </section>
     </Card>
   );

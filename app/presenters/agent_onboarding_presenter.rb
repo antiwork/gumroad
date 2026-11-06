@@ -13,14 +13,6 @@ class AgentOnboardingPresenter
   DESCRIPTION = "Your own assistant — Claude, ChatGPT or Muse — can read your sales, draft and publish " \
                 "products, and check your payouts through Gumroad’s MCP server."
 
-  # Shown on each card under the label. Keyed by client; the connect copy itself comes from
-  # Mcp::ConnectorCopy so it matches the marketing pages.
-  CAPABILITY = {
-    "claude" => "Ask Claude about your sales, draft products, and check payouts.",
-    "chatgpt" => "Ask ChatGPT about your sales, draft products, and check payouts.",
-    "muse" => "Ask Muse about your sales, draft products, and check payouts.",
-  }.freeze
-
   def initialize(pundit_user:)
     @pundit_user = pundit_user
     @seller = pundit_user.seller
@@ -46,9 +38,9 @@ class AgentOnboardingPresenter
   # A brand token also stops working the moment the consenting member's sessions are invalidated
   # (MobileAccountToken.valid?, which the API applies to every request), so it must not read as
   # connected either.
-  # One indexed query on oauth_access_tokens by resource_owner_id, plus the membership lookup the API
-  # would do anyway for a token that carries one; grouped in Ruby by the client path segment, the
-  # same match the MCP metrics use.
+  # One indexed query on oauth_access_tokens by resource_owner_id, plus a membership lookup for each
+  # unrevoked brand token until its client reads as connected; grouped in Ruby by the client path
+  # segment, the same match the MCP metrics use.
   def connection_status_by_client
     status = CLIENT_ORDER.index_with { { connected: false, first_connected_at: nil, last_used_at: nil } }
 
@@ -60,7 +52,7 @@ class AgentOnboardingPresenter
         next if key.nil?
 
         entry = status[key]
-        entry[:connected] = true if token.revoked_at.nil? && MobileAccountToken.valid?(token)
+        entry[:connected] ||= token.revoked_at.nil? && MobileAccountToken.valid?(token)
         entry[:first_connected_at] = [entry[:first_connected_at], token.created_at].compact.min
         # Doorkeeper tokens carry no last-used stamp; the newest token (or its revocation) is the
         # latest activity we can state honestly.
@@ -84,7 +76,6 @@ class AgentOnboardingPresenter
       {
         key:,
         label: copy[:label],
-        capability: CAPABILITY.fetch(key),
         connected: status[:connected],
         first_connected_at: status[:first_connected_at]&.iso8601,
         last_used_at: status[:last_used_at]&.iso8601,
@@ -92,7 +83,7 @@ class AgentOnboardingPresenter
         directory_url: copy[:directory_url],
         connect_label: copy[:connect_label],
         availability: copy[:availability],
-        setup: copy[:setup],
+        setup: copy[:manual_setup],
         endpoint_url: Mcp::ConnectorCopy.endpoint_for(key),
       }
     end

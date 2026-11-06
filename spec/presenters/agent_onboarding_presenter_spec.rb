@@ -33,14 +33,25 @@ describe AgentOnboardingPresenter do
         label: "Claude",
         directory_url: "https://claude.ai/directory/gumroad",
         connect_label: "Add Gumroad to Claude",
-        setup: Mcp::ConnectorCopy::CLIENTS["claude"][:setup],
+        setup: "Open Settings > Connectors in Claude, choose Add custom connector, and enter the URL below.",
         endpoint_url: "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
         pending_review: false,
       )
 
+      expect(claude).not_to have_key(:capability)
+
+      chatgpt = props[:clients].second
+      expect(chatgpt[:setup]).to eq("If you cannot add plugins, ask your workspace administrator.")
+
       muse = props[:clients].last
-      expect(muse).to include(label: "Muse", pending_review: true, directory_url: nil)
+      expect(muse).to include(label: "Muse", pending_review: true, directory_url: nil, setup: nil)
       expect(muse[:availability]).to eq("Submitted for review. The Gumroad connector is not yet available in Muse.")
+    end
+
+    it "leaves the directory step out of every card's setup, since the card's button already links it" do
+      presenter.index_props[:clients].filter_map { _1[:setup] }.each do |setup|
+        expect(setup).not_to include("directory")
+      end
     end
 
     it "reports every client as not connected for a user with no MCP tokens" do
@@ -109,6 +120,16 @@ describe AgentOnboardingPresenter do
       claude = presenter.index_props[:clients].first
       expect(claude[:connected]).to eq(false)
       expect(claude[:first_connected_at]).to eq(connected_at.iso8601)
+    end
+
+    it "stops checking a client's tokens once one of them reads as connected" do
+      admin = create(:user)
+      membership = create(:team_membership, user: admin, seller:, role: TeamMembership::ROLE_ADMIN)
+      3.times { |i| mcp_token(admin, "claude", created_at: Time.zone.parse("2026-10-0#{i + 1} 10:00"), resource_owner: seller, team_membership: membership) }
+
+      expect(MobileAccountToken).to receive(:valid?).once.and_call_original
+
+      expect(presenter.index_props[:clients].first[:connected]).to eq(true)
     end
 
     it "never touches the Elasticsearch sales aggregation" do
