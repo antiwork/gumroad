@@ -645,13 +645,8 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 	pc := prod.productCurrency()
 	var display *currencyDisplay
 	if buyer != nil {
-		if *buyer != pc && *buyer != "usd" && (prod.is(productFreeTrialEnabled) || prod.is(productIsInPreorderState) ||
-			prod.nativeType == "commission" || c.hasPlan || prod.is(productIsRecurringBilling)) {
-			// buyer_currency_unquotable_product? may turn the local price off.
-			return nil, fallback("catalog unquotable product")
-		}
 		var err error
-		if display, err = h.currencyDisplayFor(p, *buyer, pc, &price); err != nil {
+		if display, err = h.currencyDisplayFor(p, prod, c.hasPlan, *buyer, &price); err != nil {
 			return nil, err
 		}
 	}

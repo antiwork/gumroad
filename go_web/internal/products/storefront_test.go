@@ -116,6 +116,22 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			`"duration_in_months":null,"recurrence":null}`
 	}
 	bothHits := fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]},{"_id":"%d","sort":[1762420000000]}]`, other, productID)
+	// legacyOther makes the other product a legacy subscription at 500 a month, whose card legacyCard is.
+	legacyOther := func(t *testing.T, conn *sql.DB) {
+		addOther(t, conn, map[string]any{"flags": productIsRecurringBilling, "subscription_duration": 0})
+		for i, p := range []struct {
+			cents      int
+			recurrence string
+		}{{500, "monthly"}, {4000, "yearly"}} {
+			testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1 + int64(i), "link_id": other, "price_cents": p.cents,
+				"currency": "usd", "recurrence": p.recurrence, "created_at": testNow, "updated_at": testNow})
+		}
+	}
+	legacyCard := func(e *testEnv) string {
+		card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+		card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
+		return strings.Replace(card, `"price_cents":400`, `"price_cents":500`, 1)
+	}
 
 	for _, c := range []struct {
 		name, reason, hits string
@@ -248,33 +264,39 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":100`, 1))
 			}},
 		{name: "a legacy subscription's card", server: search, searched: 1,
-			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": productIsRecurringBilling, "subscription_duration": 0})
-				for i, p := range []struct {
-					cents      int
-					recurrence string
-				}{{500, "monthly"}, {4000, "yearly"}} {
-					testdb.Insert(t, conn, "prices", map[string]any{"id": otherPrice + 1 + int64(i), "link_id": other, "price_cents": p.cents,
-						"currency": "usd", "recurrence": p.recurrence, "created_at": testNow, "updated_at": testNow})
-				}
-			},
-			want: func(e *testEnv) string {
-				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
-				card = strings.Replace(card, `"recurrence":null`, `"recurrence":"monthly"`, 1)
-				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":500`, 1))
-			}},
+			hits:  fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
+			setup: legacyOther,
+			want:  func(e *testEnv) string { return section(e, 2, legacyCard(e)) }},
 		{name: "a tiered membership without a duration", reason: "catalog subscription duration", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				tieredOther(t, conn)
 				conn.Exec("UPDATE links SET subscription_duration = NULL WHERE id = ?", other)
 			}},
-		{name: "a membership card with a local price", reason: "catalog unquotable product", hits: bothHits, server: search, searched: 1,
-			headers: eurCookie,
+		{name: "a membership card with a local price", hits: bothHits, server: search, searched: 1, headers: eurCookie,
+			setup:   legacyOther,
+			prepare: func(e *testEnv) { e.localEUR("0.92345") },
+			want: func(e *testEnv) string {
+				return section(e, 2, strings.Replace(legacyCard(e), `"buyer_currency_shown":"usd","product_currency":"usd",`+
+					`"buyer_local_price_cents":null,"rate":null,"display_mode":"default"}`, `"buyer_currency_shown":"eur","product_currency":"usd",`+
+					`"buyer_local_price_cents":462,"rate":0.92345,"display_mode":"buyer_local"},"buyer_currency":"eur","buyer_local_currency_rate":0.92345,`+
+					`"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":462`, 1))
+			}},
+		// The page's own one-time product shows reais, which the India mandate can't take for the
+		// membership card.
+		{name: "a membership card in a currency the mandate doesn't take", hits: bothHits, server: search, searched: 1,
+			headers: map[string]string{"Cookie": "gumroad_buyer_currency=BRL"},
 			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": productIsRecurringBilling, "subscription_duration": 0})
+				legacyOther(t, conn)
+				insertPlatformAccount(t, conn, "usd", `{}`)
 			},
-			prepare: func(e *testEnv) { e.localEUR("0.92345") }},
+			prepare: func(e *testEnv) {
+				e.localEUR("0.92345")
+				e.redis.Set("currencies:BRL", "5.4321")
+				for _, flag := range []string{"buyer_currency_charging", "buyer_currency_subscriptions", "india_card_mandate_reliability"} {
+					e.redis.HSet(flag, "boolean", "true")
+				}
+			},
+			want: func(e *testEnv) string { return section(e, 2, legacyCard(e)) }},
 		{name: "a tie at the page's edge", reason: "catalog order", server: search, searched: 1,
 			hits: func() string {
 				var hs []string
@@ -464,7 +486,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				t.Fatalf("cache writes %v", e.cache.writes)
 			}
 			// The next view reads the search from the cache.
-			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, "/l/guide", nil).Body.String())[1])
+			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, "/l/guide", c.headers).Body.String())[1])
 			if searches != c.searched || !strings.Contains(again, c.want(e)) {
 				t.Errorf("%d searches, want %d; same catalog %v", searches, c.searched, strings.Contains(again, c.want(e)))
 			}

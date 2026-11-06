@@ -261,7 +261,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	if v.localBuyer != nil {
-		if v.currency, err = h.currencyDisplayFor(p, *v.localBuyer, prod.productCurrency(), displayed); err != nil {
+		if v.currency, err = h.currencyDisplayFor(p, prod, p.hasInstallmentPlan, *v.localBuyer, displayed); err != nil {
 			return nil, err
 		}
 	}
@@ -269,12 +269,6 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// buyer_local_price_props converts the original through the shown Float rate.
 		original := localPriceCents(*v.priceCents, prod.productCurrency(), c.buyer, shortestRat(c.rate))
 		c.originalLocalCents = &original
-	}
-	if v.currency != nil && (prod.is(productIsRecurringBilling) || prod.is(productFreeTrialEnabled) ||
-		prod.is(productIsInPreorderState) || p.hasInstallmentPlan || prod.nativeType == "commission") {
-		// buyer_currency_unquotable_product? and the India mandate check can only turn a
-		// local price off.
-		return nil, fallback("unquotable buyer currency")
 	}
 	if v.installmentPlan, err = h.installmentPlanProps(ctx, p, prod); err != nil {
 		return nil, err
