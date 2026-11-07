@@ -57,10 +57,6 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	if reason := unportedProductShape(prod); reason != "" {
 		return fallback(reason)
 	}
-	if prod.nativeType == "coffee" {
-		// Rails renders this before show's /coffee redirect; not yet ported for coffee.
-		return fallback("coffee product")
-	}
 	tracking := h.analyticsEnabled(seller)
 	v, err := h.loadWrapperView(ctx, p, prod, tracking)
 	if err != nil {

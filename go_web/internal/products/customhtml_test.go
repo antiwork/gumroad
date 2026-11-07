@@ -247,10 +247,27 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 	}
 }
 
-func TestACoffeeProductsCustomHTMLGoesToRails(t *testing.T) {
+// render_custom_html_if_present runs before show's /coffee redirect, and its wrapper is any
+// product's.
+func TestACoffeeProductsCustomHTML(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
-	mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
+	// initialize_suggested_amount_if_needed!'s shape: a $0 base, pay what you want, and the
+	// suggested amount as a nameless option, which the JSON-LD offer's price adds.
+	mustExec(t, conn, "UPDATE links SET native_type = 'coffee', price_cents = 0, customizable_price = 1 WHERE id = ?", productID)
+	mustExec(t, conn, "UPDATE prices SET price_cents = 0 WHERE id = ?", priceID)
+	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": int64(1_799_931), "link_id": productID, "title": "Suggested Amounts"})
+	testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_799_932), "type": "Variant", "variant_category_id": int64(1_799_931),
+		"name": "", "price_difference_cents": 300, "created_at": testNow, "updated_at": testNow})
 	customHTML(t, e, conn)
-	e.render(t, nil, "coffee product")
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	e.wantAll(t, w.Body.String(), []string{
+		`<link rel="canonical" href="https://gowebproductseller.gumroad.com/l/guide">`,
+		`"/l/gowebp1?wanted=true"`,
+		`"url":"https://gowebproductseller.gumroad.com/l/guide","price":3.0}`,
+		`"@type":"Product","name":"Guide \u003c1\u003e"`,
+	})
 }
