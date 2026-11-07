@@ -147,14 +147,16 @@ module Mcp
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Cursor, and other MCP clients can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
         clients: {
           muse: "#{base_url}/muse/v1/mcp",
           claude: "#{base_url}/claude/v1/mcp",
-          chatgpt: "#{base_url}/chatgpt/v1/mcp"
+          chatgpt: "#{base_url}/chatgpt/v1/mcp",
+          cursor: "#{base_url}/cursor/v1/mcp",
+          antigravity: "#{base_url}/antigravity/v1/mcp"
         },
         oauth: {
           authorization_endpoint: "#{base_url}/muse/v1/oauth2/authorize",

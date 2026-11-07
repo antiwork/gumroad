@@ -12,7 +12,7 @@ module Mcp
   # the only place the surface says what creators actually DO through an assistant — publishing
   # versus reading sales — because the MCP route logs nothing per request anywhere else.
   module ProtocolTelemetry
-    CONNECTORS = %w[muse claude chatgpt].freeze
+    CONNECTORS = %w[muse claude chatgpt cursor antigravity].freeze
     # Every published revision, so a client declaring one we do not serve is still named.
     VERSIONS = (Server::SUPPORTED_VERSIONS + %w[2024-11-05 2025-06-18 2025-11-25]).uniq.freeze
     # The methods this endpoint dispatches.

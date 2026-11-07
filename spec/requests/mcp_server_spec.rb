@@ -3783,14 +3783,14 @@ describe "MCP server" do
     end
 
     it "counts an undeclared caller apart from one that declares a revision, on every connector path" do
-      %w[muse claude chatgpt].each do |client|
+      %w[muse claude chatgpt cursor antigravity].each do |client|
         post_mcp_on(client, { jsonrpc: "2.0", id: 1, method: "tools/list" })
         post_mcp_on(client, declaring(Mcp::Server::LEGACY_PROTOCOL_VERSION), headers: declare(Mcp::Server::LEGACY_PROTOCOL_VERSION))
         post_mcp_on(client, declaring(Mcp::Server::MODERN_PROTOCOL_VERSION), headers: declare(Mcp::Server::MODERN_PROTOCOL_VERSION))
       end
 
       mix = Mcp::ProtocolTelemetry.mix
-      expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt")
+      expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt", "cursor", "antigravity")
       expect(mix.values).to all(eq(
         "undeclared" => { "tools/list" => 1 },
         "2025-03-26" => { "tools/list" => 1 },

@@ -18,6 +18,18 @@ class McpConnectorsController < ApplicationController
       setup: "Open Gumroad in Claude’s connector directory and connect it. Or open Settings > Connectors in Claude, choose Add custom connector, and enter the URL below. If you cannot add connectors, ask your organization administrator.",
       availability: "Add Gumroad from Claude’s connector directory. On Team and Enterprise plans, your organization’s settings control which connectors you can add."
     },
+    "cursor" => {
+      label: "Cursor",
+      connect_label: "Add Gumroad to Cursor",
+      setup: "Open Settings > Cursor Settings > MCP in Cursor, choose Add new MCP server, and paste the URL below. Choose OAuth when Cursor asks how to authenticate.",
+      availability: "Available today as a custom remote MCP server. Cursor signs in with OAuth, so there is nothing to install."
+    },
+    "antigravity" => {
+      label: "Google Antigravity",
+      connect_label: "Add Gumroad to Antigravity",
+      setup: "Add a remote MCP server in Antigravity and paste the URL below. Antigravity opens a browser to sign in with Gumroad.",
+      availability: "Available today as a custom remote MCP server."
+    },
     "chatgpt" => {
       label: "ChatGPT",
       directory_url: "https://chatgpt.com/plugins/plugin_asdk_app_6adf8e8e7eac8191a9af1b87fdeedb45",
@@ -61,7 +73,7 @@ class McpConnectorsController < ApplicationController
       else
         page_url = "#{PROTOCOL}://#{DOMAIN}/#{@client_key}"
         title = "Gumroad MCP for #{@client[:label]} | Sell digital products"
-        description = @client[:pending_review] ? "The Gumroad connector is submitted for review and is not yet available in Muse. Read the MCP endpoint and OAuth details." : "Connect #{@client[:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
+        description = @client[:pending_review] ? "The Gumroad connector is submitted for review and is not yet available in #{@client[:label]}. Read the MCP endpoint and OAuth details." : "Connect #{@client[:label]} to Gumroad with MCP. Create digital product drafts, publish products, check sales, and track payouts from your AI chat."
       end
 
       set_meta_tag(title:)
