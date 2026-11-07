@@ -124,8 +124,8 @@ type page struct {
 	// search_options' from for params[:from].
 	query      any
 	searchFrom int64
-	// quantity is (params[:quantity] || 1).to_i, which the offer codes are weighed at.
-	quantity int64
+	// quantityParam is params[:quantity].to_i, nil without one; see quantity.
+	quantityParam *int64
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
 	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
@@ -260,12 +260,12 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		}
 		p.searchFrom, p.visitorSearch = min(max(n-1, 0), maxResultWindow-catalogPageSize), true
 	}
-	p.quantity = 1
 	if raw, ok := v.Req.Param("quantity").(string); ok {
-		var fits bool
-		if p.quantity, fits = rails.StringToI(raw); !fits {
+		n, fits := rails.StringToI(raw)
+		if !fits {
 			return nil, fallback("param quantity")
 		}
+		p.quantityParam = &n
 	}
 	return p, nil
 }
@@ -417,4 +417,13 @@ func declinedParams(req *rails.Request) string {
 		}
 	}
 	return ""
+}
+
+// quantity is (params[:quantity] || 1).to_i, which the offer codes are weighed at; a featured
+// product's props take the default.
+func (p *page) quantity() int64 {
+	if p.quantityParam == nil {
+		return 1
+	}
+	return *p.quantityParam
 }

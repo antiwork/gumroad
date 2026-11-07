@@ -414,7 +414,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		list = append(list, eff)
 	}
 	d.listed = len(list) > 0
-	if p.quantity < 1 && (d.listed || p.discountCode != "") {
+	if p.quantity() < 1 && (d.listed || p.discountCode != "") {
 		// discount_code_props weighs the codes at this quantity, selection_discounts at one.
 		return nil, fallback("param quantity")
 	}
@@ -483,7 +483,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 			if price == nil || !known {
 				return nil, fallback("once-per-cart price")
 			}
-			d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(p.quantity), cur.minPrice)
+			d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(p.quantity()), cur.minPrice)
 			d.oncePerCartID = h.c.IDs.Encrypt(c.id)
 		}
 	}
@@ -652,7 +652,7 @@ func (d *offerDiscount) resultProps() any {
 // result, as only one code can apply, unless the option is outside that code's scope.
 func selectionDiscounts(p *page, prod *product, v *view, result any) *rails.RHash {
 	urlCode := presence(v.discount.urlCode)
-	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", max(p.quantity, 1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
+	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", max(p.quantity(), 1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
 		Sym("option_id", nil).Sym("price_cents", nil)
 	if !v.discount.listed && urlCode == nil {
 		return s.Sym("options", rails.NewRHash()).Sym("rent_options", nil)
