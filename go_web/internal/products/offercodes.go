@@ -10,6 +10,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
@@ -219,17 +223,45 @@ func (h *handler) codeProductIDs(ctx context.Context, table string, codeID int64
 	return out, nil
 }
 
-// unportedLookup is a code whose lookups by string this port can't follow: one whose string
-// Unicode normalization or the collation would read differently, or whose currency SQL and
-// Ruby compare differently.
+// unportedLookup is a code whose lookups by string this port can't follow: one with a
+// character outside codeRunes, or whose currency SQL and Ruby compare differently.
 func (c *offerCode) unportedLookup(prod *product) string {
-	switch {
-	case !permalinkParam.MatchString(c.code.String):
+	if _, ok := normalizeCode(c.code.String); !ok {
 		return "offer code characters"
-	case c.currencyType.Valid && c.sqlCurrency != c.currencyMatches(prod):
+	}
+	if c.currencyType.Valid && c.sqlCurrency != c.currencyMatches(prod) {
 		return "offer code currency"
 	}
 	return ""
+}
+
+// normalizeCode is OfferCode.normalize_code, false for a code with a character outside
+// codeRunes, which strip leaves alone. NFC can compose two of them into one outside the set
+// (G and an acute accent are Ǵ), so its result is checked too.
+func normalizeCode(code string) (string, bool) {
+	nfc := norm.NFC.String(code)
+	if !codeRunes(code) || !codeRunes(nfc) {
+		return "", false
+	}
+	return rails.Downcase(nfc), true
+}
+
+// codeRunes is whether s has only the ASCII a code allows, Latin-1 Supplement and Latin
+// Extended-A, combining marks, and the invisible marks pasted links carry: the characters
+// checked against Ruby's NFC, downcase and fold.
+func codeRunes(s string) bool {
+	return !strings.ContainsFunc(s, func(r rune) bool {
+		if r < utf8.RuneSelf {
+			return r != '-' && r != '_' && !('0' <= r && r <= '9') && !('a' <= r && r <= 'z') && !('A' <= r && r <= 'Z')
+		}
+		return !(0xA0 <= r && r <= 0x17F || 0x300 <= r && r <= 0x36F || 0x200B <= r && r <= 0x200F ||
+			0x202A <= r && r <= 0x202E || 0x2060 <= r && r <= 0x2064 || 0x2066 <= r && r <= 0x2069 || r == 0xFEFF)
+	})
+}
+
+// casecmp is String#casecmp?: equal after full Unicode case folding.
+func casecmp(a, b string) bool {
+	return cases.Fold().String(a) == cases.Fold().String(b)
 }
 
 // resolveDiscount is evaluate_for_buyer's discount: a tiered code's is its starting tier's
@@ -577,10 +609,11 @@ func (h *handler) settleDiscount(ctx context.Context, p *page, prod *product, pr
 	}
 	if auto != nil {
 		// sale_label: the winning code is the auto-applied one.
-		if !permalinkParam.MatchString(auto.code.String) {
+		code, ok := normalizeCode(d.resultCode)
+		if !ok || !codeRunes(auto.code.String) {
 			return fallback("offer code characters")
 		}
-		if strings.EqualFold(d.resultCode, auto.code.String) {
+		if casecmp(code, auto.code.String) {
 			d.label = auto.displayedSaleLabel()
 		}
 	}
@@ -687,7 +720,10 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 // OfferCodeDiscountComputingService then applies the first of the seller's codes by that string
 // that suits the product, in its own statement's order; any other row than this goes to Rails.
 func (h *handler) findOfferCode(ctx context.Context, prod *product, code string) (int64, error) {
-	code = strings.ToLower(code)
+	code, ok := normalizeCode(code)
+	if !ok {
+		return 0, fallback("offer code characters")
+	}
 	ids, err := h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` INNER JOIN `offer_codes_products`"+
 		" ON `offer_codes`.`id` = `offer_codes_products`.`offer_code_id` WHERE `offer_codes_products`.`product_id` = ?"+
 		" AND `offer_codes`.`deleted_at` IS NULL AND `offer_codes`.`code` = ? LIMIT 1", prod.id, code)

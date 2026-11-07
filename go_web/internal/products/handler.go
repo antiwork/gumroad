@@ -178,9 +178,6 @@ var railsSubdomainHost = web.SubdomainRequestPattern("gumroad.com")
 // which a subdomain like gumroad-analytics-com.gumroad.com also meets, so Rails 404s it.
 var analyticsHost = regexp.MustCompile(`gumroad-analytics.com`)
 
-// permalinkParam is the shape of a code this port reads; anything else is Rails'.
-var permalinkParam = regexp.MustCompile(`\A[A-Za-z0-9_-]+\z`)
-
 // prepare parses the request and decides whether this port serves it. Nothing it does is
 // visible outside the process, so any fallback it returns is safe.
 func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) (*page, error) {
@@ -399,11 +396,12 @@ func declinedParams(req *rails.Request) string {
 			}
 		}
 	}
-	// Only a code whose lookups can't depend on Unicode normalization or the collation is
-	// served here.
+	// Redirects and props echo the code without looking it up, so one this port wouldn't look up
+	// goes to Rails here.
 	for _, name := range []string{"code", "offer_code"} {
 		if raw, ok := req.Params.Get(name); ok {
-			if code, isString := raw.(string); !isString || !rails.Blank(code) && !permalinkParam.MatchString(code) {
+			code, isString := raw.(string)
+			if _, ported := normalizeCode(code); !isString || rails.Present(code) && !ported {
 				return "param " + name
 			}
 		}
