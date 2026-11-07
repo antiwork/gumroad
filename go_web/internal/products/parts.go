@@ -364,7 +364,8 @@ func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) 
 			urls[id] = nil
 		case !f.blobID.Valid:
 			return nil, fallback("thumbnail blob")
-		case strings.Contains(f.contentType.String, "gif"):
+		case strings.Contains(f.contentType.String, "gif") || !storage.Variable(f.contentType.String):
+			// Thumbnail#url skips a GIF's variant, and rescues the one file.variant can't make.
 			urls[id] = pc.cdnURL(pc.PublicStorageURL + f.key.String)
 		default:
 			// thumbnail_variant.processed would resize an unprocessed one.
@@ -403,9 +404,6 @@ func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) 
 		key := keys[v]
 		if !key.Valid {
 			return nil, fallback("thumbnail variant")
-		}
-		if !storage.Variable(files[id].contentType.String) {
-			return nil, fallback("invariable thumbnail")
 		}
 		urls[id] = pc.cdnURL(pc.PublicStorageURL + key.String)
 	}

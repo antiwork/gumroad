@@ -95,6 +95,26 @@ func TestAVideoCoverRendersWithItsPoster(t *testing.T) {
 	}
 }
 
+// preview_width and preview_height are nil for a video without its size, and their tags have
+// no content.
+func TestAVideoCoverWithoutItsSize(t *testing.T) {
+	e := newTestEnv(t)
+	addVideoCover(t, testdb.Open(t), `{"analyzed":true}`, "WX6OQ3hf/g9WoAI2n/sUdFF1vxA=", true)
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	for _, want := range []string{
+		`<meta property="twitter:player" content="https://public-files.gumroad.com/videos/original"`,
+		`<meta property="twitter:player:width" inertia="meta-property-twitter-player-width">`,
+		`<meta property="twitter:player:height" inertia="meta-property-twitter-player-height">`,
+	} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+}
+
 // A blob with two preview images takes the one Rails' has_one statement returns first: the
 // uniqueness index's first, by blob, not the lowest attachment id.
 func TestAVideoCoverWithTwoPreviewImages(t *testing.T) {

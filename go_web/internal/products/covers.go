@@ -290,8 +290,8 @@ func (h *handler) pushVariants(ctx context.Context, p *page) error {
 func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string, error) {
 	pc := h.c.Page
 	if !storage.Variable(c.contentType) {
-		// retina_variant raises, and url_from_file's rescue answers file.url.
-		return "", fallback("invariable cover")
+		// retina_variant raises, and url_from_file's rescue answers file.url, uncached.
+		return pc.cdnURL(pc.PublicStorageURL + c.key), nil
 	}
 	if c.width == nil {
 		return "", fallback("cover width")
