@@ -98,6 +98,21 @@ func TestTheCustomHTMLWrapper(t *testing.T) {
 	if dry.Code != http.StatusOK || csrfMeta.ReplaceAllString(dry.Body.String(), "") != csrfMeta.ReplaceAllString(body, "") {
 		t.Errorf("dry run: %d %q", dry.Code, dry.Header().Get("X-Go-Web-Fallback"))
 	}
+
+	// Discover's search box asking for suggestions gets the document a visit does.
+	target := "/l/guide?layout=discover&query=pen"
+	plain := e.get(host, target, nil)
+	partial := e.get(host, target, map[string]string{"X-Inertia": "true", "X-Requested-With": "XMLHttpRequest",
+		"X-Inertia-Partial-Component": "Products/Discover/Show", "X-Inertia-Partial-Data": "autocomplete_results"})
+	if partial.Code != http.StatusOK || e.railsHit != nil ||
+		csrfMeta.ReplaceAllString(partial.Body.String(), "") != csrfMeta.ReplaceAllString(plain.Body.String(), "") {
+		t.Fatalf("partial reload: %d %q", partial.Code, partial.Header().Get("X-Go-Web-Fallback"))
+	}
+	for _, name := range []string{"Content-Type", "Link", "Vary", "X-Robots-Tag"} {
+		if got, want := partial.Header().Get(name), plain.Header().Get(name); got != want {
+			t.Errorf("partial reload %s %q, want %q", name, got, want)
+		}
+	}
 }
 
 var csrfMeta = regexp.MustCompile(`"csrf-token" content="[^"]*"`)
