@@ -41,6 +41,31 @@ describe "MCP server" do
     allow_any_instance_of(ActionView::Base).to receive(:vite_typescript_tag).and_return("")
   end
 
+  it "serves a page, a registration endpoint and a status endpoint on each new connector path" do
+    %w[cursor antigravity].each do |client|
+      # The page renders the layout, which asks GitHub for the star count; the route is what this
+      # example is about, so the call is stubbed rather than recorded.
+      allow(GithubStarsController).to receive(:cached_count).and_return(0)
+
+      get "/#{client}", headers: { "HOST" => DOMAIN }
+
+      expect(response).to be_successful
+      expect(response.body).to include("/#{client}/v1/mcp")
+
+      expect do
+        post "/#{client}/v1/oauth2/register",
+             params: { client_name: client.humanize, redirect_uris: ["https://#{client}.example/callback"], token_endpoint_auth_method: "none" }.to_json,
+             headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+      end.to change(OauthApplication, :count).by(1)
+
+      expect(response).to have_http_status(:created)
+
+      get "/#{client}/v1/status", headers: { "HOST" => DOMAIN }
+
+      expect(response).to be_successful
+    end
+  end
+
   it "exposes a public status endpoint" do
     get "/muse/v1/status", headers: { "HOST" => DOMAIN }
 
@@ -61,7 +86,9 @@ describe "MCP server" do
     expect(body["clients"]).to include(
       "muse" => "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp",
       "claude" => "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
-      "chatgpt" => "#{PROTOCOL}://#{DOMAIN}/chatgpt/v1/mcp"
+      "chatgpt" => "#{PROTOCOL}://#{DOMAIN}/chatgpt/v1/mcp",
+      "cursor" => "#{PROTOCOL}://#{DOMAIN}/cursor/v1/mcp",
+      "antigravity" => "#{PROTOCOL}://#{DOMAIN}/antigravity/v1/mcp"
     )
   end
 
@@ -3783,14 +3810,14 @@ describe "MCP server" do
     end
 
     it "counts an undeclared caller apart from one that declares a revision, on every connector path" do
-      %w[muse claude chatgpt].each do |client|
+      %w[muse claude chatgpt cursor antigravity].each do |client|
         post_mcp_on(client, { jsonrpc: "2.0", id: 1, method: "tools/list" })
         post_mcp_on(client, declaring(Mcp::Server::LEGACY_PROTOCOL_VERSION), headers: declare(Mcp::Server::LEGACY_PROTOCOL_VERSION))
         post_mcp_on(client, declaring(Mcp::Server::MODERN_PROTOCOL_VERSION), headers: declare(Mcp::Server::MODERN_PROTOCOL_VERSION))
       end
 
       mix = Mcp::ProtocolTelemetry.mix
-      expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt")
+      expect(mix.keys).to contain_exactly("muse", "claude", "chatgpt", "cursor", "antigravity")
       expect(mix.values).to all(eq(
         "undeclared" => { "tools/list" => 1 },
         "2025-03-26" => { "tools/list" => 1 },

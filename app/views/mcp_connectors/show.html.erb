@@ -6,7 +6,7 @@
       <p class="text-xl">Sell digital products with AI</p>
       <h1 class="text-5xl font-medium leading-none text-balance sm:text-6xl xl:text-7xl">Gumroad MCP<br>for <%= client_name %></h1>
       <% if pending_review %>
-        <p class="max-w-xl text-xl sm:text-2xl">Submitted for review. The Gumroad connector is not yet available in Muse.</p>
+        <p class="max-w-xl text-xl sm:text-2xl"><%= @client[:availability] %></p>
       <% else %>
         <p class="max-w-xl text-xl sm:text-2xl">Connect your Gumroad store to <%= client_name %>. Create product drafts, check sales, and track payouts from your chat.</p>
       <% end %>
