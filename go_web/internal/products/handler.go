@@ -383,10 +383,8 @@ func declinedParams(req *rails.Request) string {
 		}
 	}
 	if raw, ok := req.Params.Get("layout"); ok {
-		switch raw {
-		case nil, "", productLayoutProfile, productLayoutDiscover:
-		default:
-			// Its value would go into the bundles' URLs.
+		if _, isString := raw.(string); !isString && raw != nil {
+			// The bundles' URLs would nest it.
 			return "param layout"
 		}
 		// The layout's component with embed's iframe body class is neither port's shape.

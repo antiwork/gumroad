@@ -45,7 +45,9 @@ func TestTheProfileLayout(t *testing.T) {
 // layout, recommended_by and query values this port leaves to Rails, and bare keys it doesn't.
 func TestALayoutOrRecommendationParam(t *testing.T) {
 	for query, reason := range map[string]string{
-		"?layout=embed":                     "param layout",
+		"?layout=embed":                     "",
+		"?layout=1%27+and+%22":              "",
+		"?layout[]=profile":                 "param layout",
 		"?layout=profile&embed=true":        "layout with iframe",
 		"?layout=discover&overlay=true":     "layout with iframe",
 		"?recommended_by=search":            "",
