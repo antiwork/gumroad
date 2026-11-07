@@ -213,3 +213,17 @@ func TestTierPercentAndMonthsSince(t *testing.T) {
 		}
 	}
 }
+
+// The tier is the buyer's for this product, so it goes on a copy: the seller's cached sale also
+// prices the other cards, whose discounted_price_cents reads the code's own columns.
+func TestResolveDiscountLeavesTheCodeAlone(t *testing.T) {
+	c := &offerCode{tiers: 2, tiersJSON: sql.NullString{String: `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`, Valid: true}}
+	got, reason := c.resolveDiscount(13)
+	if reason != "" || got == c || got.amountPercentage != (sql.NullInt64{Int64: 25, Valid: true}) || c.amountPercentage.Valid {
+		t.Errorf("%q: got %+v, the code %+v", reason, got, c)
+	}
+	plain := &offerCode{amountPercentage: sql.NullInt64{Int64: 5, Valid: true}}
+	if got, reason := plain.resolveDiscount(0); reason != "" || got != plain {
+		t.Errorf("an untiered code: %q %p", reason, got)
+	}
+}

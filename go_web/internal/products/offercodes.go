@@ -226,22 +226,24 @@ func (c *offerCode) unportedLookup(prod *product) string {
 	return ""
 }
 
-// resolveDiscount is evaluate_for_buyer's discount: a tiered code's is the percentage of the
-// tier the buyer's months of ownership reach. A reason is a code whose discount this port
-// doesn't follow.
-func (c *offerCode) resolveDiscount(months int64) string {
+// resolveDiscount is evaluate_for_buyer's discount for this buyer and product: a tiered code's is
+// the percentage of the tier the buyer's months of ownership reach, on a copy, since the code
+// itself also prices the seller's other cards. A reason is a discount this port doesn't follow.
+func (c *offerCode) resolveDiscount(months int64) (*offerCode, string) {
 	if c.tiers > 0 {
 		pct, ok := tierPercent(c.tiersJSON.String, months)
 		if c.amountCents.Valid || !ok {
 			// With no tier reached, the computing service sets no discount and Rails raises.
-			return "tiered offer code"
+			return nil, "tiered offer code"
 		}
-		c.amountPercentage = sql.NullInt64{Int64: pct, Valid: true}
+		resolved := *c
+		resolved.amountPercentage = sql.NullInt64{Int64: pct, Valid: true}
+		c = &resolved
 	}
 	if c.amountCents.Valid == c.amountPercentage.Valid {
-		return "offer code amount"
+		return nil, "offer code amount"
 	}
-	return ""
+	return c, ""
 }
 
 // tierPercent is matching_tier_for(ownership)'s amount_percentage: the tier with the most months
@@ -487,12 +489,12 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		if rails.Blank(c.code.String) {
 			continue
 		}
-		valid, err := h.evaluateOfferCode(p, prod, c)
+		resolved, err := h.evaluateOfferCode(p, prod, c)
 		if err != nil {
 			return nil, err
 		}
-		if valid {
-			defaults = append(defaults, c)
+		if resolved != nil {
+			defaults = append(defaults, resolved)
 		}
 	}
 	var url *offerCode
@@ -594,35 +596,38 @@ func (h *handler) settleDiscount(ctx context.Context, p *page, prod *product, pr
 	return nil
 }
 
-// evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: whether it
-// gives the visitor a discount. Looking c up by its string must land on c.
-func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (bool, error) {
+// evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: c as it discounts
+// for the visitor, nil when it doesn't. Looking c up by its string must land on c.
+func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (*offerCode, error) {
 	ctx, now := p.Ctx, p.Req.Now
 	if reason := c.unportedLookup(prod); reason != "" {
-		return false, fallback(reason)
+		return nil, fallback(reason)
 	}
 	id, err := h.findOfferCode(ctx, prod, c.code.String)
 	switch {
 	case err != nil || id == 0:
-		return false, err
+		return nil, err
 	case id != c.id:
-		return false, fallback("offer code lookup")
+		return nil, fallback("offer code lookup")
 	case !c.applicable(prod) || !c.currencyValid(prod) || c.inactive(now):
-		return false, nil
+		return nil, nil
 	}
 	if resolved, err := h.resolvesForBuyer(ctx, prod, c, p.viewer); err != nil || !resolved {
-		return false, err
+		return nil, err
 	}
 	// Only a code that gives this buyer something has terms to read.
 	months, err := h.ownershipMonths(p, prod, c)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	if reason := c.resolveDiscount(months); reason != "" {
-		return false, fallback(reason)
+	resolved, reason := c.resolveDiscount(months)
+	if reason != "" {
+		return nil, fallback(reason)
 	}
-	shortfall, err := h.usesShortfall(p, c)
-	return shortfall == "", err
+	if shortfall, err := h.usesShortfall(p, resolved); err != nil || shortfall != "" {
+		return nil, err
+	}
+	return resolved, nil
 }
 
 // evaluateURLCode is BestOfferCodeService#evaluate_code for the URL's code: the code that
@@ -661,13 +666,14 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	if err != nil {
 		return nil, "", err
 	}
-	if reason := c.resolveDiscount(months); reason != "" {
+	discounted, reason := c.resolveDiscount(months)
+	if reason != "" {
 		return nil, "", fallback(reason)
 	}
-	if shortfall, err := h.usesShortfall(p, c); err != nil || shortfall != "" {
+	if shortfall, err := h.usesShortfall(p, discounted); err != nil || shortfall != "" {
 		return c, shortfall, err
 	}
-	return c, "", nil
+	return discounted, "", nil
 }
 
 // findOfferCode is find_offer_code's row for a code, 0 for none, by Rails' unordered statements.

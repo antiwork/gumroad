@@ -161,7 +161,7 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if valid, err := h.evaluateOfferCode(p, prod, stored); err != nil || valid != (c.errorCode == "") {
+			if valid, err := h.evaluateOfferCode(p, prod, stored); err != nil || (valid != nil) != (c.errorCode == "") {
 				t.Errorf("default code: %v %v, want %v", valid, err, c.errorCode == "")
 			}
 		})
