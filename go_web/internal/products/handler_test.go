@@ -1869,10 +1869,12 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { plan(t, conn, 1_793_001, "monthly", nil) }},
 		{name: "a deleted installment plan", wants: []string{`"allow_installment_plan":false,"installment_plan":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { plan(t, conn, 1_793_001, "monthly", testNow) }},
-		{name: "two installment plans", reason: "several installment plans", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			plan(t, conn, 1_793_001, "monthly", nil)
-			plan(t, conn, 1_793_002, "monthly", nil)
-		}},
+		// The has_one's unordered statement takes the row MySQL's plan returns, here the lower id's.
+		{name: "two installment plans", wants: []string{`"installment_plan":{"number_of_installments":3,"recurrence":"monthly"},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				plan(t, conn, 1_793_001, "monthly", nil)
+				plan(t, conn, 1_793_002, "weekly", nil)
+			}},
 		// The enum reads a value it doesn't map as nil.
 		{name: "a recurrence the enum doesn't map", wants: []string{`"installment_plan":{"number_of_installments":3,"recurrence":null},`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { plan(t, conn, 1_793_001, "weekly", nil) }},
@@ -2525,9 +2527,10 @@ func TestACollaboratorShowsAsCoCreator(t *testing.T) {
 		{"a direct affiliate", none, "", func(t *testing.T, conn *sql.DB) {
 			affiliate(t, conn, affiliateID, "DirectAffiliate", 0, 0, nil)
 		}},
-		{"two collaborators", "", "several collaborators", func(t *testing.T, conn *sql.DB) {
+		// take's unordered statement returns the lower id's row, which shows; the other doesn't.
+		{"two collaborators", byline, "", func(t *testing.T, conn *sql.DB) {
 			collaborator(t, conn, affiliateID, 0, 0)
-			collaborator(t, conn, otherID, 0, 0)
+			collaborator(t, conn, otherID, 0, 1)
 		}},
 		// The collaborator's own avatar, served as uploaded until it's resized.
 		{"the collaborator's avatar", fmt.Sprintf(byline, "https://gumroad-public-storage.s3.amazonaws.com/avatars/collab"), "", func(t *testing.T, conn *sql.DB) {

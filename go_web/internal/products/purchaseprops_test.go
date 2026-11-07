@@ -134,13 +134,6 @@ func TestAVisitorsPurchaseGoesToRails(t *testing.T) {
 			testdb.Insert(t, conn, "product_review_videos", map[string]any{"id": int64(1_797_812), "product_review_id": int64(1_797_811),
 				"approval_status": "pending_review", "created_at": testNow, "updated_at": testNow})
 		}},
-		{"two download links", "purchase url redirects", func(t *testing.T, conn *sql.DB) {
-			addPurchase(t, conn, 1_797_801, map[string]any{"purchaser_id": buyerID})
-			for i := range int64(2) {
-				testdb.Insert(t, conn, "url_redirects", map[string]any{"id": 1_797_821 + i, "purchase_id": int64(1_797_801),
-					"token": fmt.Sprintf("tok%d", i), "created_at": testNow, "updated_at": testNow})
-			}
-		}},
 		// purchase_info compares these in keys the page doesn't show.
 		{"a NULL shipping amount", "purchase amounts", func(t *testing.T, conn *sql.DB) {
 			addPurchase(t, conn, 1_797_801, map[string]any{"purchaser_id": buyerID, "shipping_cents": nil})
@@ -177,6 +170,27 @@ func TestAVisitorsPurchaseGoesToRails(t *testing.T) {
 
 // formatted_total_transaction_amount adds price_for_recurrence's recurrence, the purchase's
 // price or its subscription's last payment option's, or "once" for a subscription that charges once.
+// has_one :url_redirect's unordered statement takes the row MySQL's plan returns, here the lower
+// id's.
+func TestAPurchaseWithTwoDownloadLinks(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	addBuyer(t, conn, nil)
+	addPurchase(t, conn, 1_797_801, map[string]any{"purchaser_id": buyerID})
+	for i := range int64(2) {
+		testdb.Insert(t, conn, "url_redirects", map[string]any{"id": 1_797_821 + i, "purchase_id": int64(1_797_801),
+			"token": fmt.Sprintf("tok%d", i), "created_at": testNow, "updated_at": testNow})
+	}
+	w := e.get(host, "/l/guide", e.signedIn(buyerID, nil))
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	want := `"content_url":"` + e.config.Env.Protocol + "://" + e.config.Env.Domain + `/d/tok0"`
+	if !strings.Contains(html.UnescapeString(w.Body.String()), want) {
+		t.Errorf("want %s", want)
+	}
+}
+
 func TestAPurchasesFormattedTotal(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)

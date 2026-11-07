@@ -12,16 +12,16 @@ func (h *handler) installmentPlanProps(ctx context.Context, p *page, prod *produ
 	if !p.hasInstallmentPlan {
 		return nil, nil
 	}
+	// The has_one's statement, verbatim: it has no ORDER BY, so MySQL's plan picks the row.
 	var installments int64
 	var recurrence string
-	n, err := h.scanFirst(ctx, []any{&installments, &recurrence}, "SELECT product_installment_plans.number_of_installments,"+
-		" product_installment_plans.recurrence FROM product_installment_plans WHERE product_installment_plans.link_id = ?"+
-		" AND product_installment_plans.deleted_at IS NULL LIMIT 2", prod.id)
-	switch {
-	case err != nil || n == 0:
+	found := false
+	if err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		cols["number_of_installments"], cols["recurrence"] = &installments, &recurrence
+		return func() { found = true }
+	}, "SELECT `product_installment_plans`.* FROM `product_installment_plans` WHERE `product_installment_plans`.`link_id` = ?"+
+		" AND `product_installment_plans`.`deleted_at` IS NULL LIMIT 1", prod.id); err != nil || !found {
 		return nil, err
-	case n > 1:
-		return nil, fallback("several installment plans")
 	}
 	// The enum maps only monthly, and reads any other value as nil.
 	var shown any
@@ -36,13 +36,16 @@ func (h *handler) preorderProps(ctx context.Context, prod *product) (any, error)
 	if !prod.is(productIsInPreorderState) {
 		return nil, nil
 	}
+	// The has_one's statement, verbatim: it has no ORDER BY, so MySQL's plan picks the row.
 	var releaseAt db.NullTime
-	n, err := h.scanFirst(ctx, []any{&releaseAt}, "SELECT preorder_links.release_at FROM preorder_links"+
-		" WHERE preorder_links.link_id = ? LIMIT 2", prod.id)
-	if err != nil {
+	found := false
+	if err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		cols["release_at"] = &releaseAt
+		return func() { found = true }
+	}, "SELECT `preorder_links`.* FROM `preorder_links` WHERE `preorder_links`.`link_id` = ? LIMIT 1", prod.id); err != nil {
 		return nil, err
 	}
-	if n != 1 {
+	if !found {
 		// Without one Rails raises.
 		return nil, fallback("preorder link")
 	}
