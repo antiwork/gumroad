@@ -3,10 +3,8 @@ package products
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
-	"github.com/antiwork/gumroad/go_web/internal/storage"
 )
 
 // Affiliate and ProductAffiliate flag bits (has_flags).
@@ -56,10 +54,7 @@ func (h *handler) collaboratorByline(ctx context.Context, p *page, prod *product
 	if rails.Blank(sellerUsername(u)) {
 		return nil, nil
 	}
-	avatar, err := h.c.Page.Avatars.URL(ctx, u.id)
-	if errors.Is(err, storage.ErrUnported) {
-		return nil, fallback("collaborator avatar")
-	}
+	avatar, err := h.avatarURL(p, u.id)
 	if err != nil {
 		return nil, err
 	}

@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,9 +20,15 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 )
 
-// ErrUnported is an avatar whose URL only Rails can give: one it would resize first, or
-// whose resized file has gone from storage.
+// ErrUnported is an avatar whose URL only Rails can give.
 var ErrUnported = errors.New("an avatar URL this port leaves to Rails")
+
+// variableTypes is ActiveStorage.variable_content_types; anything else raises on variant.
+var variableTypes = []string{"image/png", "image/gif", "image/jpeg", "image/tiff", "image/bmp", "image/vnd.adobe.photoshop",
+	"image/vnd.microsoft.icon", "image/webp", "image/avif", "image/heic", "image/heif"}
+
+// Variable is blob.variable?.
+func Variable(contentType string) bool { return slices.Contains(variableTypes, contentType) }
 
 // User::AVATAR_VARIANT_PRESENCE_CACHE_TTL.
 const presenceTTL = 5 * time.Minute
@@ -35,10 +42,10 @@ type Exister interface {
 type Avatars struct {
 	DB     *sql.DB
 	Exists Exister
-	// AssetHost is config.asset_host, and PublicCDN what CDN_URL_MAP turns the public
-	// service's object URL prefix into.
-	AssetHost, PublicCDN string
-	Now                  func() time.Time
+	// AssetHost is config.asset_host, PublicStorage the public service's object URL prefix,
+	// and PublicCDN what CDN_URL_MAP turns that prefix into.
+	AssetHost, PublicStorage, PublicCDN string
+	Now                                 func() time.Time
 	// Logger hears of a failed lookup, which avatar_variant_file_present? logs and counts as
 	// present.
 	Logger *slog.Logger
@@ -61,9 +68,10 @@ var webImageTypes = map[string]struct {
 	"image/gif":  {[]string{"gif"}, "gif"},
 }
 
-// URL is User#avatar_url for userID.
-func (a *Avatars) URL(ctx context.Context, userID int64) (string, error) {
-	rows, err := a.DB.QueryContext(ctx, `SELECT active_storage_blobs.id, active_storage_blobs.filename, active_storage_blobs.content_type,
+// URL is User#avatar_url for userID. resize is its generate_avatar_variant_later: the
+// variant or its file is missing, so the URL is the upload's own.
+func (a *Avatars) URL(ctx context.Context, userID int64) (url string, resize bool, err error) {
+	rows, err := a.DB.QueryContext(ctx, `SELECT active_storage_blobs.id, active_storage_blobs.key, active_storage_blobs.filename, active_storage_blobs.content_type,
 		active_storage_variant_records.variation_digest, variant_blobs.key
 		FROM active_storage_attachments
 		LEFT JOIN active_storage_blobs ON active_storage_blobs.id = active_storage_attachments.blob_id
@@ -74,24 +82,25 @@ func (a *Avatars) URL(ctx context.Context, userID int64) (string, error) {
 		WHERE active_storage_attachments.record_type = 'User' AND active_storage_attachments.record_id = ?
 		AND active_storage_attachments.name = 'avatar'`, userID)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrUnported, err)
+		return "", false, fmt.Errorf("%w: %v", ErrUnported, err)
 	}
 	defer rows.Close()
 	attached := false
-	var digest string
+	var digest, original, contentType string
 	var key sql.NullString
 	for rows.Next() {
 		var blobID sql.NullInt64
-		var filename, contentType, variation, variantKey sql.NullString
-		if err := rows.Scan(&blobID, &filename, &contentType, &variation, &variantKey); err != nil {
-			return "", fmt.Errorf("%w: %v", ErrUnported, err)
+		var blobKey, filename, blobType, variation, variantKey sql.NullString
+		if err := rows.Scan(&blobID, &blobKey, &filename, &blobType, &variation, &variantKey); err != nil {
+			return "", false, fmt.Errorf("%w: %v", ErrUnported, err)
 		}
 		if !blobID.Valid {
 			// avatar.url raises without a blob, inside avatar_url's own rescue.
-			return "", ErrUnported
+			return "", false, ErrUnported
 		}
 		if !attached {
-			attached, digest = true, variationDigest(filename.String, contentType.String)
+			attached, original, contentType = true, blobKey.String, blobType.String
+			digest = variationDigest(filename.String, contentType)
 		}
 		if variation.String == digest && variantKey.Valid {
 			key = variantKey
@@ -99,21 +108,22 @@ func (a *Avatars) URL(ctx context.Context, userID int64) (string, error) {
 	}
 	if err := rows.Err(); err != nil {
 		// avatar_url rescues everything, so Rails would still answer.
-		return "", fmt.Errorf("%w: %v", ErrUnported, err)
+		return "", false, fmt.Errorf("%w: %v", ErrUnported, err)
 	}
 	if !attached {
-		return a.AssetHost + "/images/gumroad-default-avatar-5.png", nil
+		return a.AssetHost + "/images/gumroad-default-avatar-5.png", false, nil
 	}
-	if !rails.Present(key.String) {
-		// variant.processed would resize the upload and write the variant.
-		return "", ErrUnported
+	// avatar.url, the public service's, which avatar_url serves without cdn_url_for.
+	original = a.PublicStorage + original
+	if !Variable(contentType) {
+		// avatar.variant raises, and avatar_url's rescue answers avatar.url.
+		return original, false, nil
 	}
-	if !a.variantPresent(ctx, key.String) {
-		// stored_avatar_variant destroys the variant and resizes again.
-		return "", ErrUnported
+	if !rails.Present(key.String) || !a.variantPresent(ctx, key.String) {
+		return original, true, nil
 	}
 	// The public service's url, through cdn_url_for.
-	return a.PublicCDN + key.String, nil
+	return a.PublicCDN + key.String, false, nil
 }
 
 // variantPresent is avatar_variant_file_present?: a file found within the TTL Rails' cache

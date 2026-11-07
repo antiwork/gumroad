@@ -14,7 +14,7 @@ describe User::SocialTwitter do
       expect($twitter).to receive(:user).and_return(twitter_user)
 
       twitter_picture_url = @user.twitter_picture_url
-      expect(twitter_picture_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
+      expect(twitter_picture_url).to eq(@user.avatar.url)
 
       picture_response = HTTParty.get(twitter_picture_url)
       expect(picture_response.content_type).to eq("image/png")

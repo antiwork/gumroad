@@ -80,6 +80,8 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 			DB:        conn,
 			Exists:    s3Exister{client: s3Client, bucket: env.PublicStorageBucket},
 			AssetHost: env.AssetHost(),
+			// The public service's url, which avatar.url answers.
+			PublicStorage: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
 			// CDN_URL_MAP's https://<bucket>.s3.amazonaws.com/ => PUBLIC_STORAGE_CDN_S3_PROXY_HOST/.
 			PublicCDN: env.PublicStorageHost + "/",
 			Now:       time.Now,
@@ -219,7 +221,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 			{s3Endpoint + "/gumroad/", env.S3ProxyHost + "/res/gumroad/"},
 			{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
 		},
-		PublicStorageURL: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
+		PublicStorageURL: b.pages.Avatars.PublicStorage,
 		CalendarHref:     calendar,
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,

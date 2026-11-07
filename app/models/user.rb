@@ -629,8 +629,8 @@ class User < ApplicationRecord
 
     variant_url = cached_avatar_variant_url
 
-    # Falling back to the original upload, which is the size the seller
-    # uploaded but is otherwise correct, beats showing no avatar at all.
+    # The original upload, while GenerateAvatarVariantJob resizes it: the size
+    # the seller uploaded but otherwise correct.
     return avatar.url if variant_url.blank?
 
     cdn_url_for(variant_url)
@@ -639,10 +639,10 @@ class User < ApplicationRecord
     avatar.url
   end
 
-  def avatar_variant(verify_storage: false)
+  def avatar_variant
     return unless avatar.attached?
 
-    stored_avatar_variant(verify_storage:, **AVATAR_VARIANT_TRANSFORMATIONS)
+    stored_avatar_variant(**AVATAR_VARIANT_TRANSFORMATIONS)
   end
 
   def username
@@ -1823,15 +1823,17 @@ class User < ApplicationRecord
         return cached[:url]
       end
 
-      # Ask storage directly rather than trusting the presence entry: this URL
-      # is about to be remembered for a day, so it has to be true at the moment
-      # we write it.
-      variant = avatar_variant(verify_storage: true)
-      url = variant&.url.presence
-      # Never cache a blank URL — that would hide the avatar until expiry.
-      if url && variant.key.present?
-        Rails.cache.write(cache_key, { url:, key: variant.key }, expires_in: AVATAR_VARIANT_URL_CACHE_TTL)
+      # A request never resizes: a missing or vanished variant is the job's to
+      # write. Storage is asked directly because this URL is about to be
+      # remembered for a day.
+      variant = avatar.variant(**AVATAR_VARIANT_TRANSFORMATIONS)
+      unless variant.key.present? && avatar_variant_file_present?(variant.key, verify_storage: true)
+        generate_avatar_variant_later
+        return
       end
+
+      url = variant.url
+      Rails.cache.write(cache_key, { url:, key: variant.key }, expires_in: AVATAR_VARIANT_URL_CACHE_TTL)
       url
     end
 
@@ -1839,9 +1841,10 @@ class User < ApplicationRecord
     # exists — it never checks storage. A missing file + surviving row therefore
     # yields a 403 URL with nothing raised. Destroy the stale row and resize
     # from the original.
-    def stored_avatar_variant(verify_storage: false, **transformations)
+    def stored_avatar_variant(**transformations)
       variant = avatar.variant(**transformations).processed
-      return variant if avatar_variant_file_present?(variant.key, verify_storage:)
+      # A record whose image is gone has no key, and would never be rebuilt.
+      return variant if variant.key.present? && avatar_variant_file_present?(variant.key)
 
       Rails.logger.warn("User#stored_avatar_variant (#{id}): variant file missing from storage, regenerating it")
       variant.destroy

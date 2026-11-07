@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -30,10 +29,6 @@ const (
 	coverDisplayWidth = 670
 	coverRetinaWidth  = coverDisplayWidth * 3 / 2
 )
-
-// variableTypes is ActiveStorage.variable_content_types; anything else raises on variant.
-var variableTypes = []string{"image/png", "image/gif", "image/jpeg", "image/tiff", "image/bmp", "image/vnd.adobe.photoshop",
-	"image/vnd.microsoft.icon", "image/webp", "image/avif", "image/heic", "image/heif"}
 
 // cover is one of display_asset_previews: an uploaded image or video, or an embedded player.
 type cover struct {
@@ -264,12 +259,20 @@ func (h *handler) originalCoverURL(ctx context.Context, p *page, c *cover) (stri
 // retinaVariantJob is ProcessAssetPreviewRetinaWorker's sidekiq_options.
 var retinaVariantJob = sidekiq.Options{Class: "ProcessAssetPreviewRetinaWorker", Queue: "low", Retry: 3}
 
-// pushRetinaVariants is enqueue_retina_variant_process for each cover whose URL the page read.
-func (h *handler) pushRetinaVariants(ctx context.Context, p *page) error {
+// pushVariants is enqueue_retina_variant_process for each cover whose URL the page read, and
+// generate_avatar_variant_later for each avatar.
+func (h *handler) pushVariants(ctx context.Context, p *page) error {
+	jobs := h.c.Page.Sidekiq
 	for _, id := range p.retinaPushes {
-		if _, _, err := h.c.Page.Sidekiq.PushUntilExecuted(context.WithoutCancel(ctx), retinaVariantJob, id); err != nil {
+		if _, _, err := jobs.PushUntilExecuted(context.WithoutCancel(ctx), retinaVariantJob, id); err != nil {
 			web.Logger(p.Req.HTTP).Warn("retina variant push failed", "error", err.Error())
 			return fallback("retina variant push")
+		}
+	}
+	for _, id := range p.avatarPushes {
+		if _, _, err := jobs.PushUntilExecuting(context.WithoutCancel(ctx), avatarVariantJob, id); err != nil {
+			web.Logger(p.Req.HTTP).Warn("avatar variant push failed", "error", err.Error())
+			return fallback("avatar variant push")
 		}
 	}
 	return nil
@@ -279,7 +282,7 @@ func (h *handler) pushRetinaVariants(ctx context.Context, p *page) error {
 // processing, which the page pushes once it renders, and serves the original meanwhile.
 func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string, error) {
 	pc := h.c.Page
-	if !slices.Contains(variableTypes, c.contentType) {
+	if !storage.Variable(c.contentType) {
 		// retina_variant raises, and url_from_file's rescue answers file.url.
 		return "", fallback("invariable cover")
 	}
@@ -295,9 +298,7 @@ func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string
 		if h.c.Page.Sidekiq == nil {
 			return "", fallback("retina variant push")
 		}
-		if !slices.Contains(p.retinaPushes, c.previewID) {
-			p.retinaPushes = append(p.retinaPushes, c.previewID)
-		}
+		p.retinaPushes = appendNew(p.retinaPushes, c.previewID)
 		if c.originalURL != "" {
 			return c.originalURL, nil
 		}

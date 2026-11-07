@@ -445,16 +445,23 @@ func (p *page) featuredPage(parent *view) *page {
 		customDomain: p.customDomain, productDomain: p.productDomain}
 }
 
+// appendNew appends each of ids that s lacks.
+func appendNew(s []int64, ids ...int64) []int64 {
+	for _, id := range ids {
+		if !slices.Contains(s, id) {
+			s = append(s, id)
+		}
+	}
+	return s
+}
+
 // absorb takes back what a featured page read or queued.
 func (p *page) absorb(fp *page) {
 	p.cacheWrites = append(p.cacheWrites, fp.cacheWrites...)
 	fp.cacheWrites = nil
 	p.warmReputation = p.warmReputation || fp.warmReputation
-	for _, id := range fp.retinaPushes {
-		if !slices.Contains(p.retinaPushes, id) {
-			p.retinaPushes = append(p.retinaPushes, id)
-		}
-	}
+	p.retinaPushes = appendNew(p.retinaPushes, fp.retinaPushes...)
+	p.avatarPushes = appendNew(p.avatarPushes, fp.avatarPushes...)
 	if p.settleable == nil {
 		p.settleable = fp.settleable
 	}

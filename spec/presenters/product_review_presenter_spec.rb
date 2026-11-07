@@ -98,7 +98,7 @@ describe ProductReviewPresenter do
     end
 
     context "product review is associated with an account" do
-      let(:purchaser) { create(:user, :with_avatar, name: "Reviewer") }
+      let(:purchaser) { create(:user, :with_avatar, name: "Reviewer").tap(&:avatar_variant) }
 
       before do
         product_review.purchase.update!(purchaser:)

@@ -55,7 +55,8 @@ type signedInUser struct {
 	promptPasskey                        bool
 }
 
-func (h *handler) loadSignedInUser(ctx context.Context, id int64) (*signedInUser, error) {
+func (h *handler) loadSignedInUser(p *page, id int64) (*signedInUser, error) {
+	ctx := p.Ctx
 	u := &signedInUser{}
 	dest := append(u.user.dest(), &u.email, &u.unconfirmedEmail, &u.payAddr, &u.timezone, &u.currencyType, &u.confirmedAt)
 	if err := h.c.DB.QueryRowContext(ctx, "SELECT "+userColumns+", users.email, users.unconfirmed_email, users.payment_address,"+
@@ -63,7 +64,7 @@ func (h *handler) loadSignedInUser(ctx context.Context, id int64) (*signedInUser
 		return nil, err
 	}
 	var err error
-	u.avatarURL, err = h.avatarURL(ctx, id)
+	u.avatarURL, err = h.avatarURL(p, id)
 	return u, err
 }
 
@@ -102,7 +103,9 @@ func (h *handler) loadViewer(p *page, prod *product) error {
 		// Only without a Devise session, which signs no one in here.
 		return fallback("no current seller")
 	}
-	u, err := h.loadSignedInUser(p.Ctx, logged.ID)
+	// The page's first avatar reads are these.
+	defer func() { p.viewerPushes, p.avatarPushes = p.avatarPushes, nil }()
+	u, err := h.loadSignedInUser(p, logged.ID)
 	if err != nil {
 		return err
 	}
@@ -115,7 +118,7 @@ func (h *handler) loadViewer(p *page, prod *product) error {
 			// can_publish_products? starts with is_team_member?.
 			return fallback("staff current seller")
 		}
-		if seller, err = h.loadSignedInUser(p.Ctx, p.Auth.CurrentSeller.ID); err != nil {
+		if seller, err = h.loadSignedInUser(p, p.Auth.CurrentSeller.ID); err != nil {
 			return err
 		}
 		// find_user_membership_for_seller!: the first of the same list team_memberships renders.
@@ -466,7 +469,7 @@ func (h *handler) teamMembershipsProps(p *page, u *signedInUser) ([]any, error) 
 		}
 		rows.Close()
 		for _, s := range loaded {
-			if s.avatarURL, err = h.avatarURL(p.Ctx, s.id); err != nil {
+			if s.avatarURL, err = h.avatarURL(p, s.id); err != nil {
 				return nil, err
 			}
 			sellers[s.id] = s

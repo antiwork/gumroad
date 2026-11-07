@@ -107,7 +107,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		}
 		// prepare_product_page's meta tags read the covers' URLs before show redirects.
 		if !p.DryRun {
-			if err := h.pushRetinaVariants(ctx, p); err != nil {
+			if err := h.pushVariants(ctx, p); err != nil {
 				return err
 			}
 		}
@@ -140,6 +140,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if u := p.viewer; u != nil {
 		props.Sym("logged_in_user", u.loggedIn).Sym("current_seller", u.currentSeller).
 			Sym("current_user", u.currentUser).Sym("prompt_passkey_setup", u.promptPasskey)
+		p.avatarPushes = appendNew(p.avatarPushes, p.viewerPushes...)
 	}
 	props.Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
 	h.productProps(props, p, prod, v)
@@ -206,9 +207,9 @@ func (h *handler) showWrites(w http.ResponseWriter, p *page, prod *product, ip s
 		}
 	}
 	if !p.DryRun {
-		// The pushes fall back while nothing Rails would repeat is written: its own retina and
+		// The pushes fall back while nothing Rails would repeat is written: its own variant and
 		// reputation pushes are deduplicated, the UTM visit and the search aren't.
-		if err := h.pushRetinaVariants(ctx, p); err != nil {
+		if err := h.pushVariants(ctx, p); err != nil {
 			return err
 		}
 		if p.warmReputation {
@@ -337,7 +338,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	var err error
 	if p.parent != nil {
 		v.avatarURL = p.parent.avatarURL
-	} else if v.avatarURL, err = h.avatarURL(ctx, seller.id); err != nil {
+	} else if v.avatarURL, err = h.avatarURL(p, seller.id); err != nil {
 		return nil, err
 	}
 
@@ -527,13 +528,24 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	return v, nil
 }
 
-// avatarURL is User#avatar_url.
-func (h *handler) avatarURL(ctx context.Context, userID int64) (string, error) {
-	avatar, err := h.c.Page.Avatars.URL(ctx, userID)
+// avatarVariantJob is GenerateAvatarVariantJob's sidekiq_options.
+var avatarVariantJob = sidekiq.Options{Class: "GenerateAvatarVariantJob", Queue: "low", Retry: 3}
+
+// avatarURL is User#avatar_url. The GenerateAvatarVariantJob it enqueues for an avatar it
+// serves unresized is the page's to push once it renders.
+func (h *handler) avatarURL(p *page, userID int64) (string, error) {
+	avatar, resize, err := h.c.Page.Avatars.URL(p.Ctx, userID)
 	if errors.Is(err, storage.ErrUnported) {
 		return "", fallback("avatar")
 	}
-	return avatar, err
+	if err != nil || !resize {
+		return avatar, err
+	}
+	if h.c.Page.Sidekiq == nil {
+		return "", fallback("avatar variant push")
+	}
+	p.avatarPushes = appendNew(p.avatarPushes, userID)
+	return avatar, nil
 }
 
 func countryCode(g *geoip.Result) *string {
