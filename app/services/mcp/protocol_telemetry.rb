@@ -24,8 +24,8 @@ module Mcp
     TOOLS = %w[
       add_content_link add_cover add_file create_bundle create_discount_code create_draft_product
       expire_discount_code get_account get_analytics get_customers get_product get_sales_totals
-      get_subscriptions list_categories list_files list_payouts list_products list_sales search_products
-      publish_product unpublish_product update_bundle update_discount_code update_product
+      get_subscriptions list_categories list_files list_payouts list_products list_sales
+      publish_product search_products unpublish_product update_bundle update_discount_code update_product
     ].freeze
     OUTCOMES = %w[ok error scope invalid].freeze
     UNDECLARED = "undeclared"

@@ -32,7 +32,9 @@ describe "MCP server product search" do
     found = products.find { _1["name"] == "Learn to draw faces" }
     expect(found).to be_present
     expect(found).to include("price_cents" => 1500, "currency" => "usd", "seller_name" => "Ada")
-    expect(CGI.unescape(found["url"])).to include("#{PROTOCOL}://#{DOMAIN}/mcp")
+    referrer = Rack::Utils.parse_query(URI.parse(found["url"]).query)["referrer"]
+    expect(referrer).to eq("#{PROTOCOL}://#{DOMAIN}/mcp")
+    expect(URI.parse(found["url"]).path).to include(@product.general_permalink)
   end
 
   it "finds a product whose seller is not the connected creator" do
@@ -42,11 +44,36 @@ describe "MCP server product search" do
   end
 
   it "asks for the public scope it needs" do
-    token = create("doorkeeper/access_token", application: @app, resource_owner_id: @creator.id, scopes: "view_sales")
-    post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "search_products", arguments: { query: "draw" } } }.to_json,
-                         headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "Authorization" => "Bearer #{token.token}" }
+    body = call_tool({ query: "draw" }, scopes: "view_sales")
 
-    expect(response.parsed_body.dig("error", "message")).to include("view_public")
+    expect(body.dig("error", "message")).to include("view_public")
+  end
+
+  it "lets a full-account token search too" do
+    body = call_tool({ query: "draw" }, scopes: "account")
+
+    expect(body.dig("result", "structuredContent", "products").map { _1["name"] }).to include("Learn to draw faces")
+  end
+
+  it "leaves out a product that is unpublished, deleted, banned, or rated as adult" do
+    unpublished = create(:product, :recommendable, user: @seller, name: "Drawing drills", price_cents: 500)
+    unpublished.update_column(:purchase_disabled_at, Time.current)
+    deleted = create(:product, :recommendable, user: @seller, name: "Drawing deleted", price_cents: 500)
+    deleted.update_column(:deleted_at, Time.current)
+    banned = create(:product, :recommendable, user: @seller, name: "Drawing banned", price_cents: 500)
+    banned.update_column(:banned_at, Time.current)
+    Link.import(refresh: true, force: true)
+
+    names = call_tool({ query: "draw" }).dig("result", "structuredContent", "products").map { _1["name"] }
+
+    expect(names).to include("Learn to draw faces")
+    expect(names).not_to include("Drawing drills", "Drawing deleted", "Drawing banned")
+  end
+
+  it "treats a query that is only operators as empty" do
+    body = call_tool({ query: "*" })
+
+    expect(body.dig("error", "message")).to include("at least one word")
   end
 
   it "refuses a blank query instead of returning the whole catalogue" do

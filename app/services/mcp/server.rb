@@ -5,6 +5,9 @@ module Mcp
   # Tools are a slim, agent-oriented view of the public v2 API — same auth, same records.
   class Server
     LEGACY_PROTOCOL_VERSION = "2025-03-26"
+    # Characters simple_query_string treats as operators: a query made only of these matches
+    # everything, which is not something an assistant should be able to ask for.
+    QUERY_OPERATOR_CHARACTERS = /[+\-=&|><!(){}\[\]^"~*?:\\\/]/
     # A client on this revision declares its version per request and never handshakes.
     MODERN_PROTOCOL_VERSION = "2026-07-28"
     SUPPORTED_VERSIONS = [LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION].freeze
@@ -491,7 +494,7 @@ module Mcp
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("search_products", "Search Gumroad's catalogue, not just the connected creator's own products. These are the same results the discover page shows. Use it when someone wants to see what exists in a topic, compare prices, or find something to learn a skill from. Each URL carries the assistant's referrer, so a purchase that starts from this result is attributed to it.", {
+          tool("search_products", "Search Gumroad's catalogue, not just the connected creator's own products. These are the same results the discover page shows. Use it when someone wants to see what exists in a topic, compare prices, or find something to learn a skill from. Each URL carries the MCP referrer, so a purchase that starts from this result is attributed to Gumroad's MCP server rather than to a creator's own traffic.", {
                  "query" => { type: "string", description: "What to search for, e.g. \"learn to draw\" or \"tax spreadsheet\"." },
                  "limit" => { type: "integer", description: "Max products to return (1-25, default 10)." }
                }, required: %w[query], read_only: true),
@@ -1525,20 +1528,28 @@ module Mcp
         raise InvalidArguments, "query is required" if query.empty?
         raise InvalidArguments, "query is longer than 200 characters" if query.length > 200
 
+        # An empty query is not the only way to ask for everything: "*" and friends are operators
+        # inside simple_query_string, so the words are all that get sent to the index.
+        words = query.gsub(QUERY_OPERATOR_CHARACTERS, " ").squish
+        raise InvalidArguments, "query needs at least one word" if words.blank?
+
         limit = args["limit"].to_i
         limit = 10 if limit <= 0
         limit = [limit, 25].min
 
-        products = Link.search(Link.search_options(query:, size: limit)).records
+        # The index lags the database: a product unpublished or a seller suspended since the last
+        # reindex still comes back, so every hit is checked against the row before it is offered.
+        products = Link.search(Link.search_options(query: words, size: limit)).records
+          .select { |product| product.alive? && !product.rated_as_adult? }
         {
           products: products.map do |product|
             {
               id: product.external_id,
               name: product.name,
               seller_name: product.user&.name.presence,
-              price_cents: product.price_cents,
+              price_cents: product.display_price_cents,
               currency: product.price_currency_type,
-              thumbnail_url: product.thumbnail&.url,
+              thumbnail_url: product.thumbnail_alive&.url,
               url: with_mcp_referrer(product.long_url)
             }
           end
