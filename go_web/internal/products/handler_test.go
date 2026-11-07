@@ -657,7 +657,8 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "an empty code before a format", host: host, target: "/l/guide/.json", reason: "offer code path"},
 		{name: "an offer_code param that isn't a plain string", host: host, target: "/l/guide?offer_code[]=X", reason: "param offer_code"},
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
-		{name: "a code param the collation could read", host: host, target: "/l/guide?code=caf%C3%A9", reason: "param code"},
+		{name: "a code param in other letters", host: host, target: "/l/guide?code=%CE%A3", reason: "param code"},
+		{name: "a code param with punctuation", host: host, target: "/l/guide?code=SAVE.10", reason: "param code"},
 		{name: "a utm visit without Sidekiq", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm visit push"},
 		{name: "the analytics host's route", host: "gumroad-analytics-com.gumroad.com", target: "/l/guide", reason: "host"},
 		{name: "a Forwarded header", host: host, target: "/l/guide", reason: "forwarded header",
@@ -1568,8 +1569,12 @@ func TestDefaultOfferCodes(t *testing.T) {
 			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
 			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
 		}},
+		{name: "a sale in Latin letters", wants: []string{`"discount_code":` + discount(`"SOLDÉ"`, `{"type":"percent","percents":20,`+
+			`"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}`) +
+			`,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, map[string]any{"code": "SOLDÉ"}) }},
 		{name: "a code in other letters", reason: "offer code characters", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, map[string]any{"code": "SOLDÉ"})
+			auto(t, conn, map[string]any{"code": "ΣALE"})
 		}},
 		// applicable? compares with ==, so no sale.
 		{name: "a sale in a currency only the collation matches", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
@@ -1679,6 +1684,17 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
 			}},
 		{name: "an unknown code", target: "/l/guide/NOPE", wants: []string{quotes("NOPE", invalid("invalid_offer"), "null")}},
+		// normalize_code's NFC and downcase, then the column's collation, which ignores a word
+		// joiner but not a directional isolate.
+		{name: "an accented code typed in capitals", target: "/l/guide?code=CAFE%CC%81",
+			wants: []string{quotes("CAFE\u0301", valid("CAFE\u0301", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"code": "café"}) }},
+		{name: "a code with a word joiner pasted on", target: "/l/guide/SAVE10%E2%81%A0",
+			wants: []string{quotes("SAVE10\u2060", valid("SAVE10\u2060", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "a code with a directional isolate pasted on", target: "/l/guide/SAVE10%E2%81%A9",
+			wants: []string{quotes("SAVE10\u2069", invalid("invalid_offer"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a deleted code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"deleted_at": past}) }},
 		{name: "a code that leaves this product out", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
