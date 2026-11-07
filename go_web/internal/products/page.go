@@ -162,19 +162,24 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	}
 
 	// as_embed is a declined param.
-	body := pc.Layout.Render(inertia.Document{
+	doc := inertia.Document{
 		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta,
 		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page", BodyClass: bodyClass,
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
-	})
+	}
 
 	if err := h.finishShow(w, p, prod, v.ip); err != nil {
 		return err
 	}
 	hdr := w.Header()
 	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
+	if inertiaVisit(p) {
+		// No layout renders, so no preload Link header either.
+		rails.RenderInertiaJSON(w, p.Req, doc.PageJSON())
+		return nil
+	}
 	hdr.Set("Link", pc.Layout.LinkHeader())
-	rails.RenderInertiaHTML(w, p.Req, body)
+	rails.RenderInertiaHTML(w, p.Req, pc.Layout.Render(doc))
 	return nil
 }
 
@@ -578,3 +583,7 @@ func (h *handler) flushCacheWrites(ctx context.Context, p *page) {
 		}
 	}
 }
+
+// inertiaVisit is request.inertia?: an X-Inertia request, which declined has left without a
+// version or a partial reload.
+func inertiaVisit(p *page) bool { return p.Req.Header("X-Inertia") != "" }

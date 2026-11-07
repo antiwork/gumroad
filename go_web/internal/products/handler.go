@@ -320,7 +320,7 @@ func declined(r *http.Request, env *web.Environment) string {
 		// Parsing reads the body, which a fallback after it could no longer send.
 		return "request body"
 	}
-	return pages.DeclinedHeaders(r)
+	return pages.DeclinedVisitHeaders(r)
 }
 
 // rendererParams are the params whose effect on the page this port leaves to Rails.
