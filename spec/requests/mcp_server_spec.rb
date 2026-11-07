@@ -4219,6 +4219,7 @@ describe "MCP server" do
 
       expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
       # The caller still gets the plain error it always got, with no step-up it could not complete.
+      expect(response).to have_http_status(:ok)
       expect(response.headers["WWW-Authenticate"]).to be_nil
       expect(response.parsed_body.first["error"]["message"]).to include("requires the edit_products or account scope")
     end
@@ -4230,6 +4231,7 @@ describe "MCP server" do
       call_tool("create_draft_product", { name: "Needs write access", price_cents: 500 })
 
       expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
+      expect(response).to have_http_status(:ok)
       expect(response.headers["WWW-Authenticate"]).to be_nil
       expect(response.parsed_body["error"]["message"]).to include("requires the edit_products or account scope")
     end
