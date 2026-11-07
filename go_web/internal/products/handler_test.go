@@ -2729,6 +2729,9 @@ func TestAnInertiaVisitGetsThePageObject(t *testing.T) {
 func TestParamsTheShowPageReads(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
+	// Before any request: the flag client caches the first read of buyer_local_currency.
+	e.localEUR("0.92345")
+	e.redis.Set("currencies:GBP", "0.8")
 	const cartOnly = "/l/guide?option=x&variant=y&price=5&recurrence=monthly&rent=true&monthly=true"
 	plain := e.get(host, "/l/guide", nil)
 	w := e.get(host, cartOnly, nil)
@@ -2752,8 +2755,6 @@ func TestParamsTheShowPageReads(t *testing.T) {
 	if body := e.get(host, "/l/guide?as_embed", nil).Body.String(); strings.Contains(body, "background: transparent") {
 		t.Error("a bare as_embed")
 	}
-	e.localEUR("0.92345")
-	e.redis.Set("currencies:GBP", "0.8")
 	gbpCookie := map[string]string{"Cookie": "gumroad_buyer_currency=GBP"}
 	for target, want := range map[string]string{"/l/guide?currency=EUR": "eur", "/l/guide?currency=+": "gbp", "/l/guide?currency=xyz": "usd"} {
 		w := e.get(host, target, gbpCookie)
