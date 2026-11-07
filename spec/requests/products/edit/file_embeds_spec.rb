@@ -637,4 +637,83 @@ describe("File embeds in product content editor", type: :system, js: true) do
     expect(product_file_ids).to include(product.alive_variants.find_by(name: "Untitled 1").alive_rich_contents.sole.description.first["attrs"]["id"])
     expect(product_file_ids).to include(product.alive_variants.find_by(name: "Untitled 2").alive_rich_contents.sole.description.first["attrs"]["id"])
   end
+
+  describe "removing a file from the product" do
+    let(:product) { create(:product_with_digital_versions, user: seller) }
+    # Attaching a file to a second version makes a second product file with the same url, and the
+    # picker's library list is grouped by url, so it carries only one of the two.
+    let!(:workbook) { create(:readable_document, link: product, display_name: "Workbook") }
+    let!(:workbook_copy) { create(:readable_document, link: product, display_name: "Workbook", url: workbook.url) }
+    let!(:orphan) { create(:listenable_audio, link: product, display_name: "Orphan") }
+
+    def embed(file) = [{ "type" => "fileEmbed", "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }]
+
+    def open_existing_files_picker
+      select_disclosure "Upload files"
+      click_on "Existing product files"
+    end
+
+    before do
+      create(:rich_content, entity: product.alive_variants.find_by!(name: "Untitled 1"), description: embed(workbook))
+      create(:rich_content, entity: product.alive_variants.find_by!(name: "Untitled 2"), description: embed(workbook_copy))
+      Feature.activate_user(:product_editor_save_contract, seller)
+    end
+
+    after { Feature.deactivate_user(:product_editor_save_contract, seller) }
+
+    it "picks a file when the seller clicks its name instead of removing it" do
+      visit edit_link_path(product.unique_permalink) + "/content"
+      open_existing_files_picker
+
+      within_modal "Select existing product files" do
+        find("h4", text: "Orphan").click
+        expect(page).to have_checked_field("Orphan")
+        click_on "Cancel"
+      end
+
+      save_change
+      expect(orphan.reload).to be_alive
+    end
+
+    it "detaches the attachment the library list leaves out and a file no page embeds, and keeps them detached" do
+      listed_ids = seller.alive_product_files_preferred_for_product(product).map(&:external_id)
+      unlisted, listed = [workbook, workbook_copy].partition { listed_ids.exclude?(_1.external_id) }.map(&:sole)
+
+      visit edit_link_path(product.unique_permalink) + "/content"
+      open_existing_files_picker
+
+      within_modal "Select existing product files" do
+        expect(page).to have_button("Remove Workbook from this product", count: 2)
+        click_on "Remove Orphan from this product"
+        expect(page).to_not have_text("Orphan")
+        within(:xpath, ".//*[@role='listbox']/following-sibling::*") do
+          click_on "Remove Workbook from this product"
+        end
+        expect(page).to have_button("Remove Workbook from this product", count: 1)
+        click_on "Cancel"
+      end
+
+      save_change
+      expect(product.product_files.alive).to eq([listed])
+      expect(unlisted.reload).to be_deleted
+      expect(orphan.reload).to be_deleted
+      embedded_ids = product.alive_variants.flat_map { _1.alive_rich_contents.flat_map(&:description) }.filter_map { _1.dig("attrs", "id") if _1["type"] == "fileEmbed" }
+      expect(embedded_ids).to eq([listed.external_id])
+
+      # Another editor moves the revision this tab saved under; a save that deletes nothing must still land.
+      listed.touch
+      select_tab "Product"
+      fill_in "Name", with: "Renamed after another save", match: :first
+      save_change
+      expect(product.reload.name).to eq("Renamed after another save")
+      expect(product.product_files.alive).to eq([listed])
+
+      visit edit_link_path(product.unique_permalink) + "/content"
+      open_existing_files_picker
+      within_modal "Select existing product files" do
+        expect(page).to have_button("Remove Workbook from this product", count: 1)
+        expect(page).to_not have_text("Orphan")
+      end
+    end
+  end
 end

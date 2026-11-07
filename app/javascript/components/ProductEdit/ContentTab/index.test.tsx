@@ -2,8 +2,10 @@
 import { cleanup, render, act, fireEvent, screen, waitFor } from "@testing-library/react";
 import type { Editor } from "@tiptap/core";
 import * as React from "react";
-import { afterEach, assert, expect, it, vi } from "vitest";
+import { afterEach, assert, describe, expect, it, vi } from "vitest";
 
+import { buildDeletionOperations } from "$app/data/product_save_contract";
+import { cast } from "$app/utils/cast";
 import { PICKED_FILE_SNAPSHOT_LIMIT_BYTES } from "$app/utils/snapshotPickedFile";
 
 import { ContentTabContent, rawDocContainsNode } from "$app/components/ProductEdit/ContentTab";
@@ -19,7 +21,10 @@ Object.assign(globalThis, { SSR: false });
 
 // The toolbar's `custom` slot holds the real entry points (link, upload, disable-downloads);
 // it stays unrendered everywhere else so a toolbar item can't affect an unrelated assertion.
-const toolbarCustom = vi.hoisted(() => ({ render: false }));
+const toolbarCustom = vi.hoisted((): { render: boolean; openPopover: string | null } => ({
+  render: false,
+  openPopover: null,
+}));
 
 const context = vi.hoisted(() => ({
   id: "product-id",
@@ -45,6 +50,7 @@ vi.mock("$app/components/ProductEdit/state", async (importOriginal) => {
 
 vi.mock("$app/components/RichTextEditor", async (importOriginal) => {
   const mod = await importOriginal<typeof import("$app/components/RichTextEditor")>();
+  const { Popover } = await import("$app/components/Popover");
   return {
     ...mod,
     useRichTextEditor: (options: Parameters<typeof mod.useRichTextEditor>[0]) => {
@@ -53,9 +59,10 @@ vi.mock("$app/components/RichTextEditor", async (importOriginal) => {
       return editor;
     },
     RichTextEditorToolbar: ({ custom }: { custom?: React.ReactNode }) => (toolbarCustom.render ? custom : null),
-    // The sibling toolbar items need the toolbar's own tooltip context, which the mock drops —
-    // only the disable-downloads item is under test when the custom slot renders.
-    PopoverMenuItem: () => null,
+    // The sibling toolbar items need the toolbar's own tooltip context, which the mock drops, so
+    // only the popover named in `openPopover` renders: its real menu, already open.
+    PopoverMenuItem: ({ name, children }: { name: string; children: React.ReactNode }) =>
+      toolbarCustom.openPopover === name ? <Popover open>{children}</Popover> : null,
     useImageUploadSettings: () => ({ isUploading: false, onUpload: () => {}, allowedExtensions: [] }),
   };
 });
@@ -1041,9 +1048,9 @@ it("keeps the mobile page-list summary row out of the Sortable's container", asy
 
 // The result of the bulk disable-downloads action belongs to the content tab, so it is asserted
 // through the real toolbar entry point — a broken callback wiring or Dismiss would fail here.
-const disableDownloads = vi.hoisted((): unknown[] => []);
+const requestResponses = vi.hoisted((): unknown[] => []);
 vi.mock("$app/utils/request", () => ({
-  request: () => Promise.resolve({ ok: true, json: () => Promise.resolve(disableDownloads.shift()) }),
+  request: () => Promise.resolve({ ok: true, json: () => Promise.resolve(requestResponses.shift()) }),
   ResponseError: class ResponseError extends Error {},
 }));
 // The toolbar's link item renders only inside the custom slot, where it has no toolbar context.
@@ -1061,7 +1068,7 @@ it("shows the bulk disable-downloads result in flow and lets the seller dismiss 
   });
   toolbarCustom.render = true;
   context.product = buildProduct([{ id: "variant-paid", name: "Paid", rich_content: [] }]);
-  disableDownloads.push({ disabled_count: 2, disabled_file_ids: [], ineligible_count: 1 });
+  requestResponses.push({ disabled_count: 2, disabled_file_ids: [], ineligible_count: 1 });
 
   try {
     render(<ContentTabContent selectedVariantId="variant-paid" />);
@@ -1079,4 +1086,162 @@ it("shows the bulk disable-downloads result in flow and lets the seller dismiss 
   } finally {
     toolbarCustom.render = false;
   }
+});
+
+describe("removing a file from the existing-files picker", () => {
+  const file = (id: string, display_name: string, url: string) => ({
+    id,
+    display_name,
+    description: null,
+    extension: "PDF",
+    file_size: 1024,
+    is_pdf: true,
+    pdf_stamp_enabled: false,
+    hide_kindle_and_read_buttons: false,
+    is_streamable: false,
+    stream_only: false,
+    is_transcoding_in_progress: false,
+    url,
+    subtitle_files: [],
+    status: { type: "saved" as const },
+    thumbnail: null,
+  });
+  const embedPage = (id: string, fileId: string) =>
+    cast<ReturnType<typeof makePage>>({
+      id,
+      title: null,
+      description: {
+        type: "doc",
+        content: [
+          { type: "fileEmbed", attrs: { id: fileId, uid: `${fileId}-uid` } },
+          { type: "paragraph", content: [{ type: "text", text: `Page ${id}` }] },
+        ],
+      },
+      updated_at: "2026-01-01T00:00:00.000Z",
+    });
+  const embeddedFileIds = (node: unknown): unknown[] => {
+    if (typeof node !== "object" || node === null) return [];
+    const { type, attrs, content } = cast<{ type?: string; attrs?: { id?: unknown }; content?: unknown[] }>(node);
+    return [...(type === "fileEmbed" ? [attrs?.id] : []), ...(content ?? []).flatMap(embeddedFileIds)];
+  };
+
+  // The same upload attached to two versions is two product files with one url; the library list
+  // the picker loads groups by url, so it carries only one of them.
+  const workbook = file("file-workbook", "Workbook", "https://example.com/workbook.pdf");
+  const workbookCopy = file("file-workbook-copy", "Workbook", "https://example.com/workbook.pdf");
+  const orphan = file("file-orphan", "Orphan", "https://example.com/orphan.pdf");
+
+  const openPicker = async ({
+    extraFiles = [],
+    awaitLoad = true,
+  }: { extraFiles?: Product["files"]; awaitLoad?: boolean } = {}) => {
+    const product = buildProduct([
+      { id: "version-a", name: "A", rich_content: [embedPage("page-a", workbook.id)] },
+      { id: "version-b", name: "B", rich_content: [embedPage("page-b", workbookCopy.id)] },
+    ]);
+    product.files = [workbook, workbookCopy, orphan, ...extraFiles];
+    context.product = product;
+    context.updateProduct = (update: unknown) => {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- narrowing the update union for the fixture
+      if (typeof update === "function") (update as (p: Product) => void)(product);
+      else Object.assign(product, update);
+    };
+    context.filesById = new Map(product.files.map((entry) => [entry.id, entry]));
+    Object.assign(globalThis, {
+      Routes: {
+        internal_product_existing_product_files_path: () => "/existing_product_files",
+        download_product_files_path: () => "/download",
+      },
+    });
+    const library = [
+      { ...workbook, attached_product_name: "Product" },
+      { ...orphan, attached_product_name: "Product" },
+      { ...file("file-elsewhere", "Elsewhere", "https://example.com/elsewhere.pdf"), attached_product_name: "Other" },
+    ];
+    Object.assign(context, { existingFiles: library });
+    requestResponses.push({ existing_files: library });
+    toolbarCustom.render = true;
+    toolbarCustom.openPopover = "Upload files";
+
+    render(<ContentTabContent selectedVariantId="version-b" />);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("menuitem", { name: "Existing product files" }));
+    if (awaitLoad) await screen.findByRole("option", { name: /Orphan/u });
+    return product;
+  };
+
+  afterEach(() => {
+    toolbarCustom.render = false;
+    toolbarCustom.openPopover = null;
+    context.filesById = new Map();
+    Object.assign(context, { existingFiles: [] });
+  });
+
+  it("offers every attachment of a url-deduped file, and detaches only the one the seller removes", async () => {
+    const product = await openPicker();
+
+    const removeWorkbook = screen.getAllByRole("button", { name: "Remove Workbook from this product" });
+    expect(removeWorkbook).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Remove Elsewhere from this product" })).toBeNull();
+
+    // The copy is the attachment the library list left out.
+    const copyRemove = removeWorkbook.find((button) => !button.closest('[role="option"]'));
+    if (!copyRemove) throw new Error("The url-deduped attachment has no Remove control");
+    fireEvent.click(copyRemove);
+
+    expect(buildDeletionOperations(product).deleted_ids.files).toEqual([workbookCopy.id]);
+    expect(product.files.find(({ id }) => id === workbook.id)?.status).toEqual({ type: "saved" });
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
+    expect(embeddedFileIds(product.variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
+    expect(embeddedFileIds(product.variants[0]?.rich_content[0]?.description ?? {})).toEqual([workbook.id]);
+
+    // The mounted page was reconciled too, so the seller's next edit does not write the embed back.
+    act(() => {
+      getMountedEditor().chain().focus("end").insertContent(" EDITED").run();
+    });
+    expect(embeddedFileIds(product.variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
+  });
+
+  it("leaves an upload that has not saved to its own embed controls", async () => {
+    const uploading = cast<Product["files"][number]>({
+      ...file("file-uploading", "Uploading", "https://example.com/uploading.pdf"),
+      status: { type: "unsaved", uploadStatus: { type: "uploading", progress: { percent: 10 } }, url: "blob:x" },
+    });
+    await openPicker({ extraFiles: [uploading] });
+
+    expect(screen.queryByRole("button", { name: "Remove Uploading from this product" })).toBeNull();
+  });
+
+  it("lists attachments the library left out only once it has loaded, and only those matching the search", async () => {
+    await openPicker({ awaitLoad: false });
+    expect(screen.queryAllByRole("button", { name: "Remove Workbook from this product" })).toHaveLength(0);
+
+    await screen.findByRole("option", { name: /Orphan/u });
+    expect(screen.getAllByRole("button", { name: "Remove Workbook from this product" })).toHaveLength(2);
+
+    fireEvent.change(screen.getByPlaceholderText("Find your files"), { target: { value: "Orphan" } });
+    expect(screen.queryAllByRole("button", { name: "Remove Workbook from this product" })).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Remove Orphan from this product" })).toBeTruthy();
+  });
+
+  it("picks an attached file when the seller clicks its name, without removing it", async () => {
+    const product = await openPicker();
+
+    fireEvent.click(screen.getByRole("heading", { name: "Orphan" }));
+
+    expect(product.files.find(({ id }) => id === orphan.id)?.status).toEqual({ type: "saved" });
+    expect(screen.getByRole("option", { name: /Orphan/u }).querySelector("input[type=checkbox]")).toHaveProperty(
+      "checked",
+      true,
+    );
+  });
+
+  it("detaches a file no page embeds", async () => {
+    const product = await openPicker();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove Orphan from this product" }));
+
+    expect(buildDeletionOperations(product).deleted_ids.files).toEqual([orphan.id]);
+    expect(screen.queryByRole("option", { name: /Orphan/u })).toBeNull();
+  });
 });

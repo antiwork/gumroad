@@ -63,6 +63,14 @@ describe("filesForSave", () => {
     expect(filesForSave(editorFiles, new Set(["uploaded-id", "failed-id"]), false)).toEqual([uploaded]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([uploaded]);
   });
+
+  it("keeps a file the seller removed out of the keep-all retry", () => {
+    const kept = { id: "kept-id", status: { type: "saved" } };
+    const removed = { id: "removed-id", status: { type: "removed", previousStatus: { type: "saved" } } };
+
+    // The legacy save deletes a file missing from the payload; sending this one would keep it attached.
+    expect(filesForSave([kept, removed], new Set(), true)).toEqual([kept]);
+  });
 });
 
 describe("markFileRemoved and withoutFileEmbeds", () => {

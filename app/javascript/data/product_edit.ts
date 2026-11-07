@@ -170,7 +170,7 @@ export const filesForSave = <
   embeddedFileIds: Set<unknown>,
   keepAllFiles: boolean,
 ) => {
-  const savable = files.filter((file) => !isFailedUpload(file));
+  const savable = files.filter((file) => !isFailedUpload(file) && file.status?.type !== "removed");
   return keepAllFiles ? savable : savable.filter((file) => embeddedFileIds.has(file.id));
 };
 

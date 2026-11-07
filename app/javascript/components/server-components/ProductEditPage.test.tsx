@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   HiddenVariantContentConflictError,
+  markFileRemoved,
   type SaveProductResponse,
   saveProductError,
   UnconfirmedSaveError,
 } from "$app/data/product_edit";
-import { confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
+import { buildDeletionOperations, confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
+import { cast } from "$app/utils/cast";
 
 import { CancellationDiscountSelector } from "$app/components/ProductEdit/ProductTab/CancellationDiscountSelector";
 import { ShippingDestinationsEditor } from "$app/components/ProductEdit/ProductTab/ShippingDestinationsEditor";
@@ -2118,6 +2120,90 @@ it("spends a description marker the completed save carried", async () => {
   });
 
   expect(contextCapture.current?.product.description_changed).toBe(false);
+});
+
+describe("a file removal", () => {
+  const savedFile = (id: string): FileEntry => ({
+    id,
+    display_name: id,
+    description: null,
+    extension: "PDF",
+    file_size: 1024,
+    is_pdf: true,
+    pdf_stamp_enabled: false,
+    hide_kindle_and_read_buttons: false,
+    is_streamable: false,
+    stream_only: false,
+    is_transcoding_in_progress: false,
+    url: `https://example.com/${id}.pdf`,
+    subtitle_files: [],
+    status: { type: "saved" },
+    thumbnail: null,
+  });
+  beforeEach(() => {
+    Object.assign(globalThis, { Routes: { download_product_files_path: () => "/download" } });
+  });
+  const markRemoved = (id: string) =>
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        current.files = markFileRemoved(current.files, id);
+      }),
+    );
+  const sentDeletedFileIds = (call: number) => {
+    const sent = cast<Product | undefined>(saveProductMock.mock.calls[call]?.[2]);
+    return sent ? buildDeletionOperations(sent).deleted_ids.files : undefined;
+  };
+
+  it("is spent by the save that carried it, so a later save states no deletion", async () => {
+    const product = { ...buildTieredProduct([]), files: [savedFile("keep"), savedFile("detach")] };
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    render(<ProductEditPage {...buildTieredProps(product)} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+    markRemoved("detach");
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(sentDeletedFileIds(0)).toEqual(["detach"]);
+
+    // A deletion restated on every later save would trip the server's stale-deletion refusal as soon
+    // as any other edit moved the editor revision, even though there is nothing left to delete.
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(sentDeletedFileIds(1)).toBeUndefined();
+    expect(contextCapture.current?.product.files.map(({ id }) => id)).toEqual(["keep"]);
+  });
+
+  it("made while a save is in flight is still sent by the next save", async () => {
+    const product = { ...buildTieredProduct([]), files: [savedFile("first"), savedFile("second")] };
+    const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+    saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+    render(<ProductEditPage {...buildTieredProps(product)} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+    markRemoved("first");
+    let save: Promise<boolean> | undefined;
+    act(() => {
+      save = contextCapture.current?.save();
+    });
+    await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+    markRemoved("second");
+    await act(async () => {
+      requests[0]?.resolve({});
+      await save;
+    });
+
+    act(() => {
+      save = contextCapture.current?.save();
+    });
+    await waitFor(() => expect(saveProductMock).toHaveBeenCalledTimes(2));
+    expect(sentDeletedFileIds(1)).toEqual(["second"]);
+    await act(async () => {
+      requests[1]?.resolve({});
+      await save;
+    });
+  });
 });
 
 it("shows an unmarked installment-plan clear refusal inline, keeps the seller's edits, and clears it once a save succeeds", async () => {

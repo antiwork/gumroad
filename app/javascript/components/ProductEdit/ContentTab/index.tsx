@@ -723,10 +723,14 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   const attachedFileIds = new Set(
     product.files.filter((file) => file.status.type !== "removed").map((file) => file.id),
   );
-  const attachedFilesMissingFromLibrary = attachmentsWithoutLibraryRow(
-    product.files,
-    existingFiles.map((file) => file.id),
-  );
+  // Read against the library only once it has loaded, or a file saved this session shows here first.
+  const attachedFilesMissingFromLibrary =
+    selectingExistingFiles && !selectingExistingFiles.isLoading
+      ? attachmentsWithoutLibraryRow(
+          product.files,
+          existingFiles.map((file) => file.id),
+        ).filter((file) => new RegExp(escapeRegExp(selectingExistingFiles.query), "iu").test(file.display_name))
+      : [];
   const pendingRemovedFileIds = new Set(
     product.files.filter((file) => file.status.type === "removed").map((file) => file.id),
   );
@@ -1019,7 +1023,8 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             .filter((file) => !pendingRemovedFileIds.has(file.id))
                             .map((file) => (
                               <Row key={file.id} role="option" className="cursor-pointer" asChild>
-                                <Label>
+                                {/* Bound to the checkbox: an unbound label controls its first button, Remove. */}
+                                <Label htmlFor={`${uid}-existing-file-${file.id}`}>
                                   <RowContent>
                                     <FileKindIcon extension={file.extension} />
                                     <div className="flex-1">
@@ -1042,6 +1047,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                                       </Button>
                                     ) : null}
                                     <Checkbox
+                                      id={`${uid}-existing-file-${file.id}`}
                                       checked={selectingExistingFiles.selected.includes(file)}
                                       onChange={() => {
                                         setSelectingExistingFiles({
