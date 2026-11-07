@@ -432,6 +432,24 @@ export const removeFileEmbedsFromRichContent = (description: object, fileIds: Se
   return isRecord(cleaned) ? cleaned : description;
 };
 
+// A file removal is stated, never inferred: the save contract's deleted_ids.files is derived from
+// this status, and nothing in the editor set it, so a file whose content block the seller deleted
+// stayed attached and kept shipping with no way to remove it.
+export const markFileRemoved = (files: Product["files"], fileId: string): Product["files"] =>
+  files.map((file) =>
+    file.id === fileId && file.status.type !== "removed"
+      ? { ...file, status: { type: "removed", previousStatus: file.status } }
+      : file,
+  );
+
+// The file's embeds go with it: one left in the submitted content would name the id in the `files`
+// payload again, and the page would keep a block whose file no longer exists.
+export const withoutFileEmbeds = <T extends { description: object }>(pages: T[], fileId: string): T[] =>
+  pages.map((page) => ({
+    ...page,
+    description: removeFileEmbedsFromRichContent(page.description, new Set([fileId])),
+  }));
+
 export const buildRichContentReconciliationTransaction = (
   state: EditorState,
   removedFileIds: Set<string>,
