@@ -172,6 +172,7 @@ func TestStartingTierPercent(t *testing.T) {
 		`[{"months":0,"amount_percentage":9},{"months":0,"amount_percentage":8}]`:    nil,
 		`[{"months":12,"amount_percentage":25}]`:                                     nil,
 		`[{"months":true,"amount_percentage":25}]`:                                   nil,
+		`[{"months":12,"amount_percentage":25},null]`:                                nil,
 		`[1]`: nil,
 	} {
 		got, ok := tierPercent(raw, 0)

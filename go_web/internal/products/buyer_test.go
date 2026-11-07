@@ -297,3 +297,37 @@ func TestATieredCodeForABuyer(t *testing.T) {
 		})
 	}
 }
+
+// The buyer's tier lands on the product's own copy of the seller's sale: the shared code, which
+// cards read, keeps the percentage it stores.
+func TestATieredSaleKeepsItsStoredPercentage(t *testing.T) {
+	const codeID = int64(1_797_132)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	h := &handler{c: e.config}
+	buyer := &signedInUser{user: user{id: 1_797_003}}
+	now := testNow.Add(time.Hour)
+	insertOfferCode(t, conn, codeID, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true,
+		"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`})
+	testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_312), "seller_id": sellerID, "link_id": productID,
+		"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
+	p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: now}}, seller: &user{id: sellerID}, viewer: buyer,
+		hasAutoApplyCode: true}
+	prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
+	v := &view{}
+	var err error
+	if v.prices, err = h.loadPrices(t.Context(), prod); err != nil {
+		t.Fatal(err)
+	}
+	if v.variants, err = h.loadVariants(t.Context(), prod); err != nil {
+		t.Fatal(err)
+	}
+	v.priceCents = v.prices.buy
+	d, err := h.loadOfferDiscount(t.Context(), p, prod, v)
+	if err != nil || d.code == nil || d.code.amountPercentage.Int64 != 25 {
+		t.Fatalf("got %v, %+v", err, d)
+	}
+	if p.autoApply == nil || p.autoApply.amountPercentage != (sql.NullInt64{Int64: 10, Valid: true}) {
+		t.Errorf("the seller's sale is now %+v", p.autoApply)
+	}
+}

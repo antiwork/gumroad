@@ -259,6 +259,10 @@ func tierPercent(raw string, ownership int64) (int64, bool) {
 	var best, pct int64
 	found, tied := false, false
 	for _, t := range tiers {
+		if t == nil {
+			// A null tier decodes to no map; nil.with_indifferent_access raises.
+			return 0, false
+		}
 		months, ok := jsonToI(t["months"])
 		amount, ok2 := jsonToI(t["amount_percentage"])
 		switch {
