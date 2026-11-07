@@ -7,7 +7,7 @@ describe "MCP server product search" do
     MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
 
-    @creator = create(:user)
+    @seller_tokens = create(:user)
     @seller = create(:recommendable_user, name: "Ada")
     @app = create(:oauth_application, owner: create(:user))
     @product = create(:product, :recommendable, user: @seller, name: "Learn to draw faces", price_cents: 1500)
@@ -16,7 +16,7 @@ describe "MCP server product search" do
   end
 
   def call_tool(arguments, scopes: "view_public")
-    token = create("doorkeeper/access_token", application: @app, resource_owner_id: @creator.id, scopes:)
+    token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller_tokens.id, scopes:)
     payload = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "search_products", arguments: } }
     post "/muse/v1/mcp", params: payload.to_json, headers: {
       "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "ACCEPT" => "application/json",
