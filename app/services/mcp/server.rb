@@ -105,6 +105,8 @@ module Mcp
       @protocol_version_header = protocol_version_header
       @method_header = method_header
       @name_header = name_header
+      # Per-request tool counters, flushed with the protocol counters in `handle`'s ensure.
+      @tool_counts = Hash.new(0)
       @era = :legacy
     end
 
@@ -129,6 +131,7 @@ module Mcp
       handle_message(body)
     ensure
       ProtocolTelemetry.record(@connector, @protocol_counts)
+      ProtocolTelemetry.record_tools(@connector, @tool_counts)
     end
 
     def self.discovery(base_url)
@@ -522,17 +525,35 @@ module Mcp
       def call_tool(params)
         name = params["name"]
         definition = tools.find { |tool| tool[:name] == name }
-        raise Error.new("Unknown tool: #{name}", code: -32602) unless definition
+        unless definition
+          # A retired or misspelled name cannot be attributed to a tool we serve; it is counted as
+          # OTHER so a client stuck on an old tool list still shows up.
+          count_tool(name, "error")
+          raise Error.new("Unknown tool: #{name}", code: -32602)
+        end
 
         arguments = params.fetch("arguments", {})
         raise Error.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
         validate_tool_arguments!(definition[:inputSchema], arguments)
 
         payload = send("tool_#{name}", arguments)
+        count_tool(name, "ok")
         { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+      rescue InsufficientScope
+        # Losing a creator to a missing scope is a funnel step, not an error to bury.
+        count_tool(name, "scope")
+        raise
       rescue ToolError, Link::LinkInvalid, ActiveRecord::RecordInvalid => e
+        count_tool(name, "error")
         message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.to_sentence : e.message
         { content: [{ type: "text", text: message }], isError: true }
+      end
+
+      # One counter per call, best-effort: telemetry never changes what the caller gets back.
+      def count_tool(name, outcome)
+        return if name.blank?
+
+        @tool_counts[ProtocolTelemetry.tool_bucket(name, outcome)] += 1
       end
 
       def validate_tool_arguments!(schema, arguments)
