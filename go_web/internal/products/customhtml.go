@@ -185,7 +185,7 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		"«description»", web.HTMLEscape(text),
 		"«iframe_src»", web.HTMLEscape("/l/"+prod.uniquePermalink.String+"/landing/embed"),
 		"«nonce»", web.HTMLEscape(nonce),
-		"«checkout_url»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"?wanted=true"),
+		"«checkout_url»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"?"+wrapperCheckoutQuery(p)),
 		"«store_hostnames»", rails.EncodeJSON(hostnames),
 		"«nav_hosts»", rails.EncodeJSON(h.c.Env.ValidRequestHosts),
 		"«waitlist_script»", waitlist,
@@ -205,6 +205,10 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	hdr := w.Header()
 	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
 	hdr.Set("Link", vite.LinkHeader(*pc.CustomHTMLAnalytics))
+	if p.urlCode != "" {
+		// set_x_robots_tag_header runs before this before_action.
+		hdr.Set("X-Robots-Tag", "noindex")
+	}
 	rails.RenderHTML(w, p.Req, body)
 	return nil
 }
@@ -331,4 +335,13 @@ func (h *handler) customHTMLStoreHostnames(ctx context.Context, p *page) ([]stri
 		add(domain.String)
 	}
 	return hostnames, nil
+}
+
+// wrapperCheckoutQuery is the wrapper's Rack::Utils.build_query(checkout_params): wanted, then the
+// URL's code when there is one.
+func wrapperCheckoutQuery(p *page) string {
+	if p.wrapperCode == "" {
+		return "wanted=true"
+	}
+	return rails.ToQuery([2]string{"wanted", "true"}, [2]string{"code", p.wrapperCode})
 }

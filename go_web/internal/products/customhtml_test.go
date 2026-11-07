@@ -293,3 +293,25 @@ func TestWaitlistFormFound(t *testing.T) {
 		}
 	}
 }
+
+// The wrapper's checkout carries params[:offer_code].presence || params[:code].presence, and a
+// code noindexes it.
+func TestTheCustomHTMLWrappersCheckoutCode(t *testing.T) {
+	e := newTestEnv(t)
+	customHTML(t, e, testdb.Open(t))
+	for target, want := range map[string]string{
+		"/l/guide":                            `"/l/gowebp1?wanted=true"`,
+		"/l/guide/SAVE10":                     `"/l/gowebp1?wanted=true\u0026code=SAVE10"`,
+		"/l/guide?offer_code=&code=SAVE10":    `"/l/gowebp1?wanted=true\u0026code=SAVE10"`,
+		"/l/guide?offer_code=OFF&code=SAVE10": `"/l/gowebp1?wanted=true\u0026code=OFF"`,
+	} {
+		w := e.get(host, target, nil)
+		if w.Code != http.StatusOK || e.railsHit != nil || !strings.Contains(w.Body.String(), "var BASE_CHECKOUT = "+want+";") {
+			t.Errorf("%s: %d %q, want %s", target, w.Code, w.Header().Get("X-Go-Web-Fallback"), want)
+		}
+		// set_x_robots_tag_header reads params[:code] alone.
+		if noindex := w.Header().Get("X-Robots-Tag") == "noindex"; noindex != strings.Contains(target, "SAVE10") {
+			t.Errorf("%s: X-Robots-Tag %q", target, w.Header().Get("X-Robots-Tag"))
+		}
+	}
+}

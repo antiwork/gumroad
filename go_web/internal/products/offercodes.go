@@ -429,7 +429,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 			d.code, d.resultCode = c, c.code.String
 		}
 	}
-	if d.urlCode = p.urlCode; d.urlCode != "" {
+	if d.urlCode = p.discountCode; d.urlCode != "" {
 		if d.code != nil && strings.EqualFold(d.urlCode, d.code.code.String) {
 			// The URL names the default that applies, so both would.
 			return nil, fallback("offer code comparison")

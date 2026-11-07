@@ -1582,6 +1582,14 @@ func TestURLOfferCodes(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		// (params[:offer_code] || params[:code]).presence: offer_code wins, a blank one hides the code,
+		// and only code noindexes.
+		{name: "an offer_code over a code", target: "/l/guide?offer_code=SAVE10&code=NOPE", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "an offer_code alone", target: "/l/guide?offer_code=SAVE10", indexed: true, wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "a blank offer_code", target: "/l/guide?offer_code=&code=SAVE10", wants: []string{`"discount_code":null,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a once-per-cart code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":{"valid":true,"code":"SAVE10",` +
 			`"discount":{"type":"fixed","cents":500,"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,` +
 			`"minimum_amount_cents":null,"once_per_cart":true,"once_per_cart_id":"%[2]s","once_per_cart_amount_cents":600,` +
