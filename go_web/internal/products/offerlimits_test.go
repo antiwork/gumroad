@@ -161,6 +161,35 @@ func TestQuantityLeftCountsUsesAndReservations(t *testing.T) {
 	}
 }
 
+// Ruby 3.4's normalize_code and casecmp? on each; nothing for a code Rails reads differently.
+func TestNormalizeCodeAndCasecmp(t *testing.T) {
+	for code, want := range map[string]any{
+		"SAVE10":        "save10",
+		"CAFE\u0301":    "café",
+		"Diwali\u2060":  "diwali\u2060",
+		"STRAßE":        "straße",
+		"\u00a0Ŀ\u00a0": "\u00a0ŀ\u00a0",
+		"I\u0307":       "i\u0307",
+		"\u0130":        "i\u0307",
+		"Σ":             nil,
+		"SAVE 10":       nil,
+		"save10\u2028":  nil,
+	} {
+		got, ok := normalizeCode(code)
+		if want == nil && ok || want != nil && (!ok || got != want) {
+			t.Errorf("%+q: %+q %v, want %+q", code, got, ok, want)
+		}
+	}
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{{"straße", "STRASSE", true}, {"café", "CAFÉ", true}, {"café", "CAFE\u0301", false}, {"diwali\u2060", "Diwali", false}} {
+		if casecmp(c.a, c.b) != c.want {
+			t.Errorf("%+q casecmp? %+q: want %v", c.a, c.b, c.want)
+		}
+	}
+}
+
 // matching_tier_for(0) over normalized_ownership_duration_tiers.
 func TestStartingTierPercent(t *testing.T) {
 	for raw, want := range map[string]any{
