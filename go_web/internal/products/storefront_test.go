@@ -434,6 +434,31 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				card = strings.Replace(card, `"thumbnail_url":null`, `"thumbnail_url":"https://public-files.gumroad.com/thumbnails/600"`, 1)
 				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
 			}},
+		// A second file of the same thumbnail, with a lower attachment id: has_one keeps the lower blob_id.
+		{name: "a card's thumbnail with two files", server: search, searched: 1,
+			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
+			setup: func(t *testing.T, conn *sql.DB) {
+				addOther(t, conn, map[string]any{"flags": 0})
+				testdb.Insert(t, conn, "thumbnails", map[string]any{"id": int64(1_792_951), "product_id": other, "guid": "t",
+					"created_at": testNow, "updated_at": testNow})
+				for i, key := range []string{"thumbnails/original", "thumbnails/600", "thumbnails/other"} {
+					testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_792_961 + i), "key": key, "filename": "t.png",
+						"content_type": "image/png", "service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
+				}
+				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_971), "name": "file",
+					"record_type": "Thumbnail", "record_id": int64(1_792_951), "blob_id": int64(1_792_961), "created_at": testNow})
+				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_970), "name": "file",
+					"record_type": "Thumbnail", "record_id": int64(1_792_951), "blob_id": int64(1_792_963), "created_at": testNow})
+				testdb.Insert(t, conn, "active_storage_variant_records", map[string]any{"id": int64(1_792_981), "blob_id": int64(1_792_961),
+					"variation_digest": "Qf43UUrCAHcLMQKl8+06HI/IH0c="})
+				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_972), "name": "image",
+					"record_type": "ActiveStorage::VariantRecord", "record_id": int64(1_792_981), "blob_id": int64(1_792_962), "created_at": testNow})
+			},
+			want: func(e *testEnv) string {
+				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
+				card = strings.Replace(card, `"thumbnail_url":null`, `"thumbnail_url":"https://public-files.gumroad.com/thumbnails/600"`, 1)
+				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
+			}},
 		// file.variant raises for a type ActiveStorage can't resize, and Thumbnail#url rescues
 		// with the upload.
 		{name: "a card's thumbnail ActiveStorage can't resize", server: search, searched: 1,
