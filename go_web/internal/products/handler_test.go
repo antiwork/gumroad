@@ -1594,6 +1594,7 @@ func TestURLOfferCodes(t *testing.T) {
 	}
 	saleResult := `{"valid":true,"code":"SALE20","discount":{"type":"percent","percents":20,"product_ids":null,"expires_at":null,` +
 		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}}`
+	scoped30 := strings.Replace(valid("SAVE10", `,"option_ids_by_product":{"%[1]s":["%[3]s"]}`), `"percents":10`, `"percents":30`, 1)
 	fixed150 := `{"valid":true,"code":"SAVE10","discount":{"type":"fixed","cents":150,"product_ids":null,"expires_at":null,` +
 		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}}`
 	invalid := func(errorCode string) string { return `{"valid":false,"error_code":"` + errorCode + `"}` }
@@ -1731,6 +1732,25 @@ func TestURLOfferCodes(t *testing.T) {
 			}},
 		// $1.50 off beats 20% at 500 cents, so the page and the cheap option quote the code; at the
 		// 2,000-cent option the sale takes more off.
+		// An option outside a code's scope weighs only the codes valid for it; with none, the URL's
+		// code says why.
+		{name: "a scoped code that beats the sale", target: "/l/guide/SAVE10", wants: []string{
+			`"discount_code":` + scoped30 + `,"sale_label":null,`,
+			`"options":{"%[3]s":{"discount_code":` + scoped30 + `,"sale_label":null},"%[4]s":{"discount_code":` + saleResult + `,"sale_label":"Sale"}},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": 30})
+				sale(t, conn)
+				sizes(t, conn, codeID)
+			}},
+		{name: "a scoped code and sale both leaving an option out", target: "/l/guide/SAVE10", wants: []string{
+			`"discount_code":` + scoped30 + `,"sale_label":null,`,
+			`"options":{"%[3]s":{"discount_code":` + scoped30 + `,"sale_label":null},"%[4]s":{"discount_code":` + invalid("option_not_eligible") + `,"sale_label":null}},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": 30})
+				sale(t, conn)
+				sizes(t, conn, codeID)
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_302), "offer_code_id": autoID, "variant_id": small})
+			}},
 		{name: "a code that wins on some options only", target: "/l/guide/SAVE10", wants: []string{
 			`"discount_code":` + fixed150 + `,"sale_label":null,`,
 			`"options":{"%[3]s":{"discount_code":` + fixed150 + `,"sale_label":null},"%[4]s":{"discount_code":` + saleResult + `,"sale_label":"Sale"}},`},
