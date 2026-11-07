@@ -514,6 +514,35 @@ func TestACoverWithoutItsRetinaVariantQueuesIt(t *testing.T) {
 	}
 }
 
+// A blob the analyzer never measured has no retina_width: its variant is resize_to_limit [nil, nil],
+// not processed yet here, so the cover queues it and serves the original, with no sizes.
+func TestAnUnmeasuredCoverQueuesItsRetinaVariant(t *testing.T) {
+	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
+	addCover(t, false)
+	conn := testdb.Open(t)
+	mustExec(t, conn, `UPDATE active_storage_blobs SET metadata = '{"identified":true}' WHERE id = ?`, 1_790_501)
+	// Ruby's digest of {format: "jpg", resize_to_limit: [1005, nil]}, for the measured cover.
+	testdb.Insert(t, conn, "active_storage_variant_records", map[string]any{"id": int64(1_790_701), "blob_id": int64(1_790_501),
+		"variation_digest": "WX6OQ3hf/g9WoAI2n/sUdFF1vxA="})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	cover := pageProps(t, w.Body.String())["product"].(map[string]any)["covers"].([]any)[0].(map[string]any)
+	original := "https://public-files.gumroad.com/covers/original"
+	for key, want := range map[string]any{"url": original, "original_url": original, "width": nil, "height": nil,
+		"native_width": nil, "native_height": nil} {
+		if got := cover[key]; got != want {
+			t.Errorf("cover %s = %#v, want %#v", key, got, want)
+		}
+	}
+	queued, _ := jobs.List("queue:low")
+	if len(queued) != 1 || !strings.Contains(queued[0], `"args":[1790401],"class":"ProcessAssetPreviewRetinaWorker"`) {
+		t.Errorf("queue:low %v", queued)
+	}
+}
+
 // sidekiqJobs gives e a Sidekiq client on a fresh Redis, which it returns.
 func sidekiqJobs(t *testing.T, e *testEnv) *miniredis.Miniredis {
 	jobs := miniredis.RunT(t)
