@@ -36,8 +36,6 @@ func (h *handler) scanIDs(ctx context.Context, query string, args ...any) ([]int
 func unportedProductShape(prod *product) string {
 	membership := unportedMembership(prod)
 	switch {
-	case prod.nativeType == "coffee":
-		return "coffee product"
 	case !prod.purchaseType.Valid || prod.purchaseType.Int64 < purchaseTypeBuyOnly || prod.purchaseType.Int64 > purchaseTypeBuyAndRent:
 		return "purchase type"
 	case membership != "":

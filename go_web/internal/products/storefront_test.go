@@ -1274,13 +1274,40 @@ func TestAFeaturedProductSection(t *testing.T) {
 	}
 }
 
+// A coffee product's props are any product's: only show redirects it, and only as the page.
+func TestAFeaturedCoffeeProduct(t *testing.T) {
+	const coffee, amounts, suggested = int64(1_795_701), int64(1_795_702), int64(1_795_703)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	// initialize_suggested_amount_if_needed!'s shape: a $0 base, pay what you want, and a nameless option.
+	testdb.Insert(t, conn, "links", map[string]any{"id": coffee, "user_id": sellerID, "name": "Tip jar", "unique_permalink": "gowebtip",
+		"native_type": "coffee", "price_cents": 0, "customizable_price": true, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_795_704), "link_id": coffee, "price_cents": 0, "currency": "usd",
+		"created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": amounts, "link_id": coffee, "title": "Suggested Amounts"})
+	testdb.Insert(t, conn, "base_variants", map[string]any{"id": suggested, "type": "Variant", "variant_category_id": amounts, "name": "",
+		"price_difference_cents": 300, "created_at": testNow, "updated_at": testNow})
+	addSection(t, conn, 1_792_641, profileFeaturedSectionType, "Tip", `{"featured_product_id":1795701}`)
+	listSections(t, conn, `{"sections":[1792641]}`)
+	page := e.render(t, nil, "")
+	for _, want := range []string{
+		`"header":"Tip","type":"SellerProfileFeaturedProductSection","props":{"product":{"id":"` + e.ids.Encrypt(coffee) + `","permalink":"gowebtip","name":"Tip jar",`,
+		`"native_type":"coffee",`,
+		`"options":[{"id":"` + e.ids.Encrypt(suggested) + `","name":"","quantity_left":null,"description":"","price_difference_cents":300,`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	}
+}
+
 // Rails builds an unlisted featured section's product_props too, so its product's shape counts.
 func TestAnUnlistedFeaturedSectionsProduct(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
-	testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_795_701), "user_id": sellerID, "name": "Tip jar", "unique_permalink": "gowebtip",
-		"native_type": "coffee", "price_cents": 100, "created_at": testNow, "updated_at": testNow})
-	addSection(t, conn, 1_792_641, profileFeaturedSectionType, "Tip", `{"featured_product_id":1795701}`)
+	testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_795_711), "user_id": sellerID, "name": "Odd", "unique_permalink": "gowebodd",
+		"purchase_type": 3, "price_cents": 100, "created_at": testNow, "updated_at": testNow})
+	addSection(t, conn, 1_792_642, profileFeaturedSectionType, "Odd", `{"featured_product_id":1795711}`)
 	listSections(t, conn, `{"sections":[]}`)
-	e.render(t, nil, "coffee product")
+	e.render(t, nil, "purchase type")
 }

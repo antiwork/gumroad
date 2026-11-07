@@ -246,3 +246,11 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 		})
 	}
 }
+
+func TestACoffeeProductsCustomHTMLGoesToRails(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
+	customHTML(t, e, conn)
+	e.render(t, nil, "coffee product")
+}
