@@ -423,10 +423,10 @@ type offerDiscount struct {
 	entries map[string]entryResult
 }
 
-// entryResult is a selection_discounts entry's own result: d's, else invalid with errorCode.
+// entryResult is a selection_discounts entry's own result: d's, else none valid there, which the
+// URL code's error explains.
 type entryResult struct {
-	d         *offerDiscount
-	errorCode string
+	d *offerDiscount
 }
 
 // oncePerCart is OfferCodeDiscountComputingService#once_per_cart?.
