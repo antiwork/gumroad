@@ -86,8 +86,15 @@ func TestTheDiscoverAutocomplete(t *testing.T) {
 			t.Errorf("page %v %v", page["component"], page["url"])
 		}
 		props := page["props"].(map[string]any)
-		if len(props) != 2 || props["_inertia_meta"] == nil {
+		if errs, ok := props["errors"].(map[string]any); len(props) != 3 || props["_inertia_meta"] == nil || !ok || len(errs) != 0 {
 			t.Errorf("props %v", props)
+		}
+		if csp := w.Header().Get("Content-Security-Policy"); csp == "" || strings.Contains(csp, "nonce-") {
+			t.Errorf("CSP %q", csp)
+		}
+		// errors, the always prop, leads; the meta tags come last.
+		if body := w.Body.String(); !strings.Contains(body, `"props":{"errors":{},"autocomplete_results":{`) {
+			t.Errorf("props order in %.200s", body[strings.Index(body, `"props"`):])
 		}
 		return props[autocompleteData].(map[string]any)
 	}
