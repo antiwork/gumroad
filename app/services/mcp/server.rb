@@ -530,9 +530,9 @@ module Mcp
       def call_tool(params)
         name = params["name"]
         definition = tools.find { |tool| tool[:name] == name }
-        # A retired or misspelled name is counted as OTHER by tool_bucket, so a client stuck on an
-        # old tool list still shows up.
-        raise Error.new("Unknown tool: #{name}", code: -32602) unless definition
+        # A retired or misspelled name is the caller's mistake, and tool_bucket folds it into
+        # OTHER, so a client stuck on an old tool list still shows up.
+        raise InvalidArguments.new("Unknown tool: #{name}", code: -32602) unless definition
 
         arguments = params.fetch("arguments", {})
         raise InvalidArguments.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
@@ -559,6 +559,11 @@ module Mcp
       rescue Error
         # A tool that rejected the call itself (a missing price, an unknown category) is an error
         # the caller saw, so it counts, and the JSON-RPC layer still answers it.
+        count_tool(name, "error")
+        raise
+      rescue StandardError
+        # A tool that crashed is exactly the call the counter must not hide: count it, then let the
+        # exception travel as it did before.
         count_tool(name, "error")
         raise
       end

@@ -4216,7 +4216,19 @@ describe "MCP server" do
       call_tool("retired_tool")
 
       expect(response.parsed_body["error"]).to include("code" => -32602)
-      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("other" => { "error" => 1 })
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("other" => { "invalid" => 1 })
+    end
+
+    it "counts a tool that crashed rather than hiding it" do
+      allow_any_instance_of(Mcp::Server).to receive(:tool_list_products).and_raise(RuntimeError, "boom")
+
+      begin
+        call_tool("list_products")
+      rescue RuntimeError
+        nil
+      end
+
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("list_products" => { "error" => 1 })
     end
   end
 end
