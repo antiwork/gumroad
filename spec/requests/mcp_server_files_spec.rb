@@ -153,7 +153,27 @@ describe "MCP server product files" do
       call_tool("add_file", { id: @product.unique_permalink, content: ["a", "b"], filename: "notes.md" })
 
       expect(response.parsed_body.dig("error", "message")).to include("content must be a string")
+      expect(response.parsed_body.dig("error", "code")).to eq(-32602)
       expect(@stored_objects).to be_empty
+    end
+
+    it "names a storage failure as a storage failure, not a bad download" do
+      allow_any_instance_of(Aws::S3::Client).to receive(:put_object).and_raise(Timeout::Error)
+
+      result = call_tool("add_file", { id: @product.unique_permalink, content: "# hi", filename: "notes.md" })
+
+      expect(result.dig("content", 0, "text")).to include("Could not store that file right now")
+      expect(@product.reload.alive_product_files).to be_empty
+    end
+
+    it "still reports a download failure for the url path" do
+      url = "https://example.com/files/financial-annual-summary-2022.csv"
+      stub_remote_file(url, "financial-annual-summary-2022.csv", "text/csv")
+      allow_any_instance_of(Aws::S3::Client).to receive(:put_object).and_raise(Timeout::Error)
+
+      result = call_tool("add_file", { id: @product.unique_permalink, url: })
+
+      expect(result.dig("content", 0, "text")).to include("Could not download a file from that URL")
     end
 
     it "refuses a filename with a null byte rather than crashing on it" do
