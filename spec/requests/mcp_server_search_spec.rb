@@ -55,14 +55,16 @@ describe "MCP server product search" do
     expect(body.dig("result", "structuredContent", "products").map { _1["name"] }).to include("Learn to draw faces")
   end
 
-  it "leaves out a product that is unpublished, deleted, banned, or rated as adult" do
+  it "drops a product that stopped being visible after the index was written" do
     unpublished = create(:product, :recommendable, user: @seller, name: "Drawing drills", price_cents: 500)
-    unpublished.update_column(:purchase_disabled_at, Time.current)
     deleted = create(:product, :recommendable, user: @seller, name: "Drawing deleted", price_cents: 500)
-    deleted.update_column(:deleted_at, Time.current)
     banned = create(:product, :recommendable, user: @seller, name: "Drawing banned", price_cents: 500)
-    banned.update_column(:banned_at, Time.current)
     Link.import(refresh: true, force: true)
+
+    # The index still holds all three; only the rows change, which is the lag the row check covers.
+    unpublished.update_column(:purchase_disabled_at, Time.current)
+    deleted.update_column(:deleted_at, Time.current)
+    banned.update_column(:banned_at, Time.current)
 
     names = call_tool({ query: "draw" }).dig("result", "structuredContent", "products").map { _1["name"] }
 
