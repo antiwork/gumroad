@@ -620,7 +620,7 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 	}{
 		{name: "app domain", host: "gumroad.com", target: "/l/guide", reason: "host"},
 		{name: "a trailing slash", host: host, target: "/l/guide/", reason: "offer code path"},
-		{name: "an offer_code param", host: host, target: "/l/guide?offer_code=X", reason: "param offer_code"},
+		{name: "an offer_code param that isn't a plain string", host: host, target: "/l/guide?offer_code[]=X", reason: "param offer_code"},
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
 		{name: "a code param the collation could read", host: host, target: "/l/guide?code=caf%C3%A9", reason: "param code"},
 		{name: "a utm visit without Sidekiq", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm visit push"},
@@ -1581,6 +1581,14 @@ func TestURLOfferCodes(t *testing.T) {
 			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`, quotes("save10", valid("save10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		// (params[:offer_code] || params[:code]).presence: offer_code wins, a blank one hides the code,
+		// and only code noindexes.
+		{name: "an offer_code over a code", target: "/l/guide?offer_code=SAVE10&code=NOPE", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "an offer_code alone", target: "/l/guide?offer_code=SAVE10", indexed: true, wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "a blank offer_code", target: "/l/guide?offer_code=&code=SAVE10", wants: []string{`"discount_code":null,"sale_label":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a once-per-cart code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":{"valid":true,"code":"SAVE10",` +
 			`"discount":{"type":"fixed","cents":500,"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,` +

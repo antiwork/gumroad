@@ -99,8 +99,10 @@ type page struct {
 	// avatar_url enqueues GenerateAvatarVariantJob. viewerPushes are the signed-in props'
 	// avatars, which Rails reads only for an Inertia render.
 	retinaPushes, posterPushes, avatarPushes, viewerPushes []int64
-	// urlCode is params[:code], the path's or the query's, when present.
-	urlCode string
+	// urlCode is params[:code], the path's or the query's, when present: the noindex header's
+	// and the permalink redirect's. discountCode is (params[:offer_code] || params[:code]).presence,
+	// the discount's, and wrapperCode params[:offer_code].presence || params[:code].presence.
+	urlCode, discountCode, wrapperCode string
 	// layout is params[:layout], and recommendedBy params[:recommended_by] when given: the page's
 	// own, never a featured product's.
 	layout        string
@@ -223,6 +225,14 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
 	}
+	p.discountCode, p.wrapperCode = p.urlCode, p.urlCode
+	if code, ok := v.Req.Param("offer_code").(string); ok {
+		// A blank offer_code still wins the ||, then reads as no code.
+		p.discountCode = ""
+		if rails.Present(code) {
+			p.discountCode, p.wrapperCode = code, code
+		}
+	}
 	if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
 		return nil, fallback("utm visit push")
 	}
@@ -326,7 +336,7 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"offer_code", "quantity", "debug",
+	"quantity", "debug",
 	// The sections' search filters.
 	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
 }
@@ -370,9 +380,11 @@ func declinedParams(req *rails.Request) string {
 	}
 	// Only a code whose lookups can't depend on Unicode normalization or the collation is
 	// served here.
-	if raw, ok := req.Params.Get("code"); ok {
-		if code, isString := raw.(string); !isString || !rails.Blank(code) && !permalinkParam.MatchString(code) {
-			return "param code"
+	for _, name := range []string{"code", "offer_code"} {
+		if raw, ok := req.Params.Get(name); ok {
+			if code, isString := raw.(string); !isString || !rails.Blank(code) && !permalinkParam.MatchString(code) {
+				return "param " + name
+			}
 		}
 	}
 	if _, reason := utmParams(req); reason != "" {
