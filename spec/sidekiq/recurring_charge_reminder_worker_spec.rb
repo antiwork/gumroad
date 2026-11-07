@@ -117,6 +117,67 @@ describe RecurringChargeReminderWorker, :vcr do
     end
   end
 
+  # A refund ends access at once but leaves the membership alive, and RecurringChargeWorker still bills it.
+  describe "membership whose latest charge was refunded",
+           vcr: { cassette_name: "RecurringChargeReminderWorker/sends_a_reminder_email_about_an_upcoming_charge" } do
+    before do
+      travel_to @original_purchase.succeeded_at + 1.day
+      refunded = @original_purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -@original_purchase.total_transaction_cents), @product.user.id)
+      expect(refunded).to be(true)
+      @subscription.reload
+    end
+
+    it "reminds the buyer once, with the date of the charge that still happens" do
+      charge_job = RecurringChargeWorker.jobs.find { _1["args"] == [@subscription.id] }
+      charges_at = Time.zone.at(charge_job["at"])
+
+      travel_to charges_at - 6.days
+      expect do
+        described_class.new.perform(@subscription.id)
+        travel 1.hour
+        described_class.new.perform(@subscription.id)
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id).once
+      expect(CustomerLowPriorityMailer.subscription_renewal_reminder(@subscription.id).body.encoded).to include(charges_at.strftime("%B %e, %Y"))
+
+      travel_to charges_at
+      expect_any_instance_of(Subscription).to receive(:charge!)
+      RecurringChargeWorker.new.perform(@subscription.id)
+    end
+  end
+
+  describe "installment plan with a charged-back installment",
+           vcr: { cassette_name: "RecurringChargeReminderWorker/sends_a_reminder_email_about_an_upcoming_charge" } do
+    let(:product) { create(:product, :with_installment_plan, user: create(:user)) }
+    let(:subscription) { create(:subscription, user: @user, link: product, is_installment_plan: true, charge_occurrence_count: 3) }
+
+    def create_installment(original:, chargedback:, at:)
+      travel_to(at) do
+        create(:purchase, link: product, purchaser: @user, subscription:, is_original_subscription_purchase: original,
+                          purchase_state: "successful", chargeback_date: chargedback ? Time.current : nil)
+      end
+    end
+
+    def perform_at_lead_time(installment)
+      travel_to installment.succeeded_at + subscription.period - 12.hours
+      expect(subscription.reload.end_time_of_subscription).to be <= Time.current
+      described_class.new.perform(subscription.id)
+    end
+
+    it "reminds the buyer of the next installment RecurringChargeWorker still charges" do
+      create_installment(original: true, chargedback: false, at: 2.months.ago)
+      latest = create_installment(original: false, chargedback: true, at: 1.month.ago)
+
+      expect { perform_at_lead_time(latest) }.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(subscription.id).once
+    end
+
+    it "stays silent when every installment is charged back, since RecurringChargeWorker skips the charge" do
+      create_installment(original: true, chargedback: true, at: 2.months.ago)
+      latest = create_installment(original: false, chargedback: true, at: 1.month.ago)
+
+      expect { perform_at_lead_time(latest) }.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder)
+    end
+  end
+
   # Every example here makes the same Stripe calls in setup_subscription, so they share one cassette.
   describe "advance notice for renewals of 12+ months",
            vcr: { cassette_name: "RecurringChargeReminderWorker/advance_notice_for_renewals_of_12_months/sends_the_advance_notice_once" } do

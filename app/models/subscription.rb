@@ -1163,7 +1163,7 @@ class Subscription < ApplicationRecord
 
   def advance_renewal_reminder_at
     lead = BasePrice::Recurrence.renewal_advance_reminder_email_days(recurrence)
-    end_time_of_subscription - lead if lead
+    renews_at - lead if lead
   end
 
   def send_renewal_reminders?
@@ -1499,7 +1499,15 @@ class Subscription < ApplicationRecord
   end
 
   def send_renewal_reminder_at
-    [end_time_of_subscription - BasePrice::Recurrence.renewal_reminder_email_days(recurrence), Time.current].max
+    [renews_at - BasePrice::Recurrence.renewal_reminder_email_days(recurrence), Time.current].max
+  end
+
+  # The charge date renewal reminders announce. end_time_of_subscription ends access now once the latest
+  # charge is refunded or charged back, but RecurringChargeWorker still bills a period after that charge
+  # unless every installment is disputed.
+  def renews_at
+    billed_after_reversal = purchases.last&.chargedback_not_reversed_or_refunded? && !all_charges_disputed? && last_purchase_at.present?
+    billed_after_reversal ? last_purchase_at + period : end_time_of_subscription
   end
 
   def overdue_for_charge?

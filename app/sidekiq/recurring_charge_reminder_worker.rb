@@ -33,7 +33,7 @@ class RecurringChargeReminderWorker
       lead = kind == ADVANCE ? BasePrice::Recurrence.renewal_advance_reminder_email_days(subscription.recurrence) : final_lead
       return false if lead.nil?
 
-      renews_at = subscription.end_time_of_subscription
+      renews_at = subscription.renews_at
       now = Time.current
       window_ends_at = kind == ADVANCE ? renews_at - final_lead : renews_at
       renews_at - lead <= now && window_ends_at > now
@@ -42,7 +42,7 @@ class RecurringChargeReminderWorker
     def send_once_per_renewal(subscription, kind)
       # A cold replica can still be missing the previous run's marker.
       ApplicationRecord.connected_to(role: :writing) do
-        digest = SentEmailInfo.mailer_key_digest("CustomerLowPriorityMailer", "subscription_renewal_reminder", subscription.id, kind, subscription.end_time_of_subscription.to_i)
+        digest = SentEmailInfo.mailer_key_digest("CustomerLowPriorityMailer", "subscription_renewal_reminder", subscription.id, kind, subscription.renews_at.to_i)
         return if SentEmailInfo.key_exists?(digest)
 
         # A failed enqueue must remain retryable; a crash before the marker can duplicate one reminder.
