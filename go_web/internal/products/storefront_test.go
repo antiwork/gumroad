@@ -20,6 +20,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
+	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 func TestTheStorefrontCatalog(t *testing.T) {
@@ -1341,4 +1342,16 @@ func TestAnUnlistedFeaturedSectionsProduct(t *testing.T) {
 	addSection(t, conn, 1_792_642, profileFeaturedSectionType, "Odd", `{"featured_product_id":1795711}`)
 	listSections(t, conn, `{"sections":[]}`)
 	e.render(t, nil, "purchase type")
+}
+
+// The sections' keys embed the REVISION Rails.cache is namespaced under, which go_web follows.
+func TestSectionsCacheKeyFollowsRailsRevision(t *testing.T) {
+	h := &handler{c: &Config{Env: &web.Environment{Revision: "go"}, Page: &PageConfig{}}}
+	if got := h.sectionsCacheKey("p", "r"); got != "profile-sections_go-p-r" {
+		t.Errorf("before Rails answers: %q", got)
+	}
+	h.c.Page.Revision = func() string { return "rails" }
+	if got := h.sectionsCacheKey("p", "r"); got != "profile-sections_rails-p-r" {
+		t.Errorf("following Rails: %q", got)
+	}
 }
