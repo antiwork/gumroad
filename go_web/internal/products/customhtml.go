@@ -14,6 +14,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/customstyles"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/description"
+	"github.com/antiwork/gumroad/go_web/internal/html4"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -33,6 +34,36 @@ var customHTMLWaitlist string
 
 // customDomainCertificateLifetime is CustomDomain::CERTIFICATE_LIFETIME.
 const customDomainCertificateLifetime = 90 * 24 * time.Hour
+
+// waitlistFormFound is Pages::WaitlistForm.found_in?: the signup message, or a
+// form[data-gumroad-waitlist] anywhere in Loofah's HTML4 fragment parse.
+func waitlistFormFound(html string) (bool, error) {
+	if strings.Contains(html, "gumroad:waitlist") {
+		return true, nil
+	}
+	frag, err := html4.ParseFragment(html)
+	if errors.Is(err, html4.ErrUnported) {
+		return false, fallback("custom html waitlist")
+	}
+	if err != nil {
+		return false, err
+	}
+	var holds func(n *html4.Node) bool
+	holds = func(n *html4.Node) bool {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html4.ElementNode && c.Name == "form" {
+				if _, ok := c.Attr("data-gumroad-waitlist"); ok {
+					return true
+				}
+			}
+			if holds(c) {
+				return true
+			}
+		}
+		return false
+	}
+	return holds(frag), nil
+}
 
 // renderCustomHTML is render_custom_html_if_present, whose wanted and review link serve has
 // checked and whose native and code params declinedParams left to Rails.
