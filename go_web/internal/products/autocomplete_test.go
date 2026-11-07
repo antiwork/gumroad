@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -119,6 +120,23 @@ func TestTheDiscoverAutocomplete(t *testing.T) {
 		must := (*searches)[0].body["query"].(map[string]any)["bool"].(map[string]any)["must"].([]any)
 		if q := must[0].(map[string]any)["simple_query_string"].(map[string]any)["query"]; q != "pen" {
 			t.Errorf("searched %v", q)
+		}
+	})
+	// create_discover_search! records a typed query's suggestion before the presenter reads them.
+	t.Run("a typed query from a search click", func(t *testing.T) {
+		e, conn, _ := setup(t)
+		e.redis.HSet("store_discover_searches", "boolean", "true")
+		t.Cleanup(func() {
+			conn.Exec("DELETE discover_search_suggestions FROM discover_search_suggestions INNER JOIN discover_searches" +
+				" ON discover_searches.id = discover_search_suggestions.discover_search_id WHERE discover_searches.clicked_resource_id = " +
+				strconv.FormatInt(productID, 10))
+			conn.Exec("DELETE FROM discover_searches WHERE clicked_resource_id = ?", productID)
+		})
+		suggest(t, conn, 1_797_031, "guid-c", "pen", false)
+		suggest(t, conn, 1_797_032, "guid-c", "pens", false)
+		got := reload(t, e, "/l/guide?layout=discover&recommended_by=search&query=Pen+Cases", "guid-c")
+		if want := []any{"Pen Cases", "pen"}; !reflect.DeepEqual(got["recent_searches"], want) {
+			t.Errorf("recent searches %v, want %v", got["recent_searches"], want)
 		}
 	})
 	t.Run("a blank query after recent views", func(t *testing.T) {

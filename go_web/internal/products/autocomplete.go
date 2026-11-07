@@ -46,7 +46,17 @@ func (h *handler) renderAutocomplete(w http.ResponseWriter, p *page, prod *produ
 	if err != nil {
 		return err
 	}
-	results, err := h.autocompleteResults(p)
+	// create_discover_search! runs before respond_to, so a typed query's suggestion is the newest
+	// the presenter reads; this port writes it after the reads.
+	record, err := h.recordsDiscoverSearch(p)
+	if err != nil {
+		return err
+	}
+	var pending any
+	if typed, _ := p.query.(string); record && rails.Present(typed) && p.Req.Param("autocomplete") != "true" {
+		pending = typed
+	}
+	results, err := h.autocompleteResults(p, pending)
 	if err != nil {
 		return err
 	}
@@ -118,11 +128,11 @@ func (h *handler) loadMetaView(ctx context.Context, p *page, prod *product) (*vi
 }
 
 // autocompleteResults is Discover::AutocompletePresenter#props for the visitor and
-// params[:query].
-func (h *handler) autocompleteResults(p *page) (*rails.RHash, error) {
+// params[:query]; pending is the suggestion show records first, nil for none.
+func (h *handler) autocompleteResults(p *page, pending any) (*rails.RHash, error) {
 	raw, _ := p.query.(string)
 	query := rails.Downcase(raw)
-	recent, err := h.recentSearches(p, query)
+	recent, err := h.recentSearches(p, query, pending)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +161,7 @@ func (h *handler) autocompleteResults(p *page) (*rails.RHash, error) {
 
 // recentSearches is recent_searches: DiscoverSearchSuggestion.by_user_or_browser's queries,
 // by Rails' own statements, whose DISTINCT and ORDER BY only MySQL can settle.
-func (h *handler) recentSearches(p *page, query string) ([]any, error) {
+func (h *handler) recentSearches(p *page, query string, pending any) ([]any, error) {
 	where, arg := "`discover_searches`.`browser_guid` = ? AND `discover_searches`.`user_id` IS NULL", any(p.GUID)
 	if p.viewer != nil {
 		where, arg = "`discover_searches`.`user_id` = ?", p.viewer.id
@@ -165,6 +175,9 @@ func (h *handler) recentSearches(p *page, query string) ([]any, error) {
 	searches, err := h.pluckQueries(p.Ctx, "SELECT `discover_searches`.`query`"+from+strconv.Itoa(recentSearchLimit), arg)
 	if err != nil {
 		return nil, err
+	}
+	if pending != nil {
+		searches = append([]any{pending}, searches[:min(len(searches), recentSearchLimit-1)]...)
 	}
 	queryWords := asciiFields(query)
 	kept := []any{}
