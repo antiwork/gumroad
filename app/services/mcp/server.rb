@@ -1495,19 +1495,20 @@ module Mcp
       # creator cannot open themselves.
       def tool_list_purchases(args)
         require_scopes!(:view_library, :account)
-        purchases = user.purchases.successful_or_preorder_authorization_successful
+        purchases = user.purchases.all_success_states.not_is_gift_sender_purchase.not_recurring_charge
+          .where.not(link_id: nil)
           .includes(:link, :seller)
           .order(created_at: :desc)
         page, next_cursor = paginate(purchases, args, default: 25, table: "purchases")
         {
-          purchases: page.map do |purchase|
+          purchases: page.select(&:link).map do |purchase|
             {
               id: purchase.external_id,
               product_name: purchase.link.name,
               product_permalink: purchase.link.unique_permalink,
               seller_name: purchase.seller.display_name,
-              price_cents: purchase.price_cents,
-              currency: purchase.link.price_currency_type,
+              price_cents: purchase.displayed_price_cents,
+              currency: purchase.displayed_price_currency_type.to_s,
               purchased_at: purchase.created_at&.iso8601,
               refunded: purchase.refunded?,
               url: "#{PROTOCOL}://#{DOMAIN}/library"
