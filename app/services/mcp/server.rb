@@ -569,9 +569,9 @@ module Mcp
       end
 
       # One counter per call, best-effort: telemetry never changes what the caller gets back.
+      # A call with no name at all still counts, folded into OTHER by tool_bucket, so a malformed
+      # tools/call cannot vanish from the tool counter while it shows up in the protocol counter.
       def count_tool(name, outcome)
-        return if name.blank?
-
         @tool_counts[ProtocolTelemetry.tool_bucket(name, outcome)] += 1
       end
 

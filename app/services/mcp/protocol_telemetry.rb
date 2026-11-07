@@ -92,6 +92,10 @@ module Mcp
 
       # connector => tool => outcome => calls, so the report can say whether creators use the
       # sell-side tools (create, edit, publish) or only the read-side ones (sales, payouts).
+      #
+      # Two caveats when reconciling with `mix`: `error` includes a tool's own argument rejections
+      # (a missing price answers -32602 from inside the tool), and a write that timed out after
+      # Redis applied it leaves the protocol counts without the tool counts. Both are best effort.
       def tool_mix(date: Date.current)
         redis.hgetall(RedisKey.mcp_tool_calls(date)).each_with_object({}) do |(field, count), mix|
           connector, tool, outcome = field.split(SEPARATOR, 3)
