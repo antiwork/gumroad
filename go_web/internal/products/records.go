@@ -215,6 +215,11 @@ func (u *user) dest() []any {
 
 func (u *user) is(flag int64) bool { return u.flags&flag != 0 }
 
+// suspended is User::Risk#suspended?.
+func (u *user) suspended() bool {
+	return u.riskState.String == "suspended_for_tos_violation" || u.riskState.String == "suspended_for_fraud"
+}
+
 // subdomainSeller is Subdomain.find_seller_by_hostname's lookup for the label: an all-digit
 // label is an external id, else the username with dashes as underscores, among alive users.
 func subdomainSeller(ctx context.Context, conn *sql.DB, label string) (*user, error) {

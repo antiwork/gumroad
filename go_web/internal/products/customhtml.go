@@ -13,6 +13,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/customstyles"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/description"
+	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -82,14 +83,18 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	}
 	var shareImageTags string
 	if hasShareImage {
-		// demo_player_card_meta, which is nil without a build.
-		if err := h.noProductBuilds(ctx, prod); err != nil {
+		card, err := h.demoPlayerCard(p, prod, v, shareImage)
+		if err != nil {
 			return err
 		}
-		escaped := web.HTMLEscape(shareImage)
-		shareImageTags = `<meta property="og:image" content="` + escaped + "\">\n    " +
-			`<meta property="twitter:card" content="summary_large_image">` + "\n    " +
-			`<meta property="twitter:image" content="` + escaped + `">`
+		if card == nil {
+			card = []metaProperty{{"twitter:card", inertia.Attr{Value: "summary_large_image"}}, {"twitter:image", inertia.Attr{Value: shareImage}}}
+		}
+		lines := []string{`<meta property="og:image" content="` + web.HTMLEscape(shareImage) + `">`}
+		for _, m := range card {
+			lines = append(lines, `<meta property="`+m.property+`" content="`+web.HTMLEscape(m.content.Value)+`">`)
+		}
+		shareImageTags = strings.Join(lines, "\n    ")
 	}
 
 	text := "Available on Gumroad"
