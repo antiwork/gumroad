@@ -436,10 +436,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.collaborator, err = h.collaboratorByline(ctx, p, prod); err != nil {
 		return nil, err
 	}
-	if v.bundle, err = h.loadBundle(ctx, p, prod); err != nil {
-		return nil, err
-	}
-	if v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod, v.variants, v.bundle.quantityLeft); err != nil {
+	if err := h.loadStock(ctx, p, prod, v); err != nil {
 		return nil, err
 	}
 	if err := h.loadDescription(ctx, prod, v); err != nil {

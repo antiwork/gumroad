@@ -1,6 +1,7 @@
 package products
 
 import (
+	"context"
 	"math"
 	"slices"
 )
@@ -52,6 +53,19 @@ func (q offerQuote) pick(url *offerCode, defaults []*offerCode) (code *offerCode
 	return best, false
 }
 
+// loadStock reads the bundle and remaining_for_sale_count once, whichever needs them first.
+func (h *handler) loadStock(ctx context.Context, p *page, prod *product, v *view) error {
+	if v.bundle != nil {
+		return nil
+	}
+	var err error
+	if v.bundle, err = h.loadBundle(ctx, p, prod); err != nil {
+		return err
+	}
+	v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod, v.variants, v.bundle.quantityLeft)
+	return err
+}
+
 // comparedOffer is the code that applies when more than one could: the page's quote and each of
 // selection_discounts' must agree on it, as this port renders one result for every option.
 func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode, defaults []*offerCode) (*offerCode, bool, error) {
@@ -74,14 +88,10 @@ func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode,
 	if !agreed {
 		return nil, false, fallback("offer code comparison")
 	}
-	bundle, err := h.loadBundle(ctx, p, prod)
-	if err != nil {
+	if err := h.loadStock(ctx, p, prod, v); err != nil {
 		return nil, false, err
 	}
-	remaining, err := h.remainingForSaleCount(ctx, prod, v.variants, bundle.quantityLeft)
-	if err != nil {
-		return nil, false, err
-	}
+	remaining := v.quantityRemaining
 	// comparison_quantity: the quantity, capped by what's left.
 	capped := func(q int64, left *int64) int64 {
 		if n, ok := remaining.(int64); ok {
