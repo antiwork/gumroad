@@ -1724,6 +1724,17 @@ func TestURLOfferCodes(t *testing.T) {
 						"name": fmt.Sprint("Size ", i), "position_in_category": i, "price_difference_cents": diff, "created_at": testNow, "updated_at": testNow})
 				}
 			}},
+		// evaluate_for_buyer gives a signed-out visitor the tier that starts at no months of ownership.
+		{name: "a tiered code", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil,
+					"ownership_duration_tiers": `[{"months":12,"amount_percentage":25},{"months":"0","amount_percentage":10.9}]`})
+			}},
+		// With no tier to start at, BestOfferCodeService reads a discount the computing service never set.
+		{name: "a tiered code with no starting tier", target: "/l/guide/SAVE10", reason: "tiered offer code",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil, "ownership_duration_tiers": `[{"months":12,"amount_percentage":25}]`})
+			}},
 		{name: "a limited code with uses left", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, map[string]any{"max_purchase_count": 5})
