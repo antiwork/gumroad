@@ -109,21 +109,25 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
 	case main != nil && main.isVideo:
-		dw, okW := main.displayWidth()
-		dh, okH := main.displayHeight()
-		if !okW || !okH {
-			return nil, fallback("video cover size")
+		// A nil display size's tag has no content, as for the oembed thumbnail above.
+		width := []inertia.Attr{{Key: "property", Value: "twitter:player:width"}}
+		if dw, ok := main.displayWidth(); ok {
+			attr, ok := numberAttr(dw.value())
+			if !ok {
+				return nil, fallback("video cover size")
+			}
+			width = append(width, attr)
 		}
-		width, ok := numberAttr(dw.value())
-		if !ok {
-			return nil, fallback("video cover size")
+		height := []inertia.Attr{{Key: "property", Value: "twitter:player:height"}}
+		if dh, ok := main.displayHeight(); ok {
+			attr, _ := numberAttr(dh)
+			height = append(height, attr)
 		}
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "player")...)
 		set("", "", "", inertia.Pairs("property", "twitter:image", "content", "https://gumroad.com/assets/icon.png")...)
 		set("", "", "", inertia.Pairs("property", "twitter:player", "content", main.url)...)
-		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
-		height, _ := numberAttr(dh)
-		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
+		set("", "", "", width...)
+		set("", "", "", height...)
 	default:
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary")...)
 	}

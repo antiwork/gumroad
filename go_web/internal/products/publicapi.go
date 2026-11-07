@@ -114,6 +114,9 @@ func keepMetaCoverWrites(p *page, covers []*cover) {
 		if !c.isImage || c.isUnsplash || c.oembed != nil {
 			continue
 		}
+		if c.rescued {
+			continue
+		}
 		if c.retinaRead {
 			keys["attachment_"+itoa(c.attachmentID)+"_retina_url"] = true
 		} else {
