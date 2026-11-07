@@ -10,7 +10,7 @@ import { ResponseError, request } from "$app/utils/request";
 
 import { extensions } from "$app/components/ProductEdit/ContentTab";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
-import { Product, hasPaidVariantPricing } from "$app/components/ProductEdit/state";
+import { Product, Variant, hasPaidVariantPricing } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export type SaveProductResponse = {
@@ -449,6 +449,14 @@ export const withoutFileEmbeds = <T extends { description: object }>(pages: T[],
     ...page,
     description: removeFileEmbedsFromRichContent(page.description, new Set([fileId])),
   }));
+
+// A variant's pages are submitted as their own rich content, so the file's embeds have to leave
+// those too.
+export const withoutFileEmbedsFromVariants = (variants: Variant[], fileId: string): void => {
+  variants.forEach((variant) => {
+    variant.rich_content = withoutFileEmbeds(variant.rich_content, fileId);
+  });
+};
 
 export const buildRichContentReconciliationTransaction = (
   state: EditorState,

@@ -45,6 +45,7 @@ import {
   resolveServerIdMapping,
   scopedRichContentPageKey,
   withoutFileEmbeds,
+  withoutFileEmbedsFromVariants,
 } from "$app/data/product_edit";
 import { reorderRowsPreservingMembership } from "$app/data/product_save_contract";
 import { type Post } from "$app/types/workflow";
@@ -732,10 +733,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     updateProduct((product) => {
       product.files = markFileRemoved(product.files, fileId);
       product.rich_content = withoutFileEmbeds(product.rich_content, fileId);
-      product.variants = product.variants.map((variant) => ({
-        ...variant,
-        rich_content: withoutFileEmbeds(variant.rich_content, fileId),
-      }));
+      withoutFileEmbedsFromVariants(product.variants, fileId);
     });
     setSelectingExistingFiles((current) =>
       current ? { ...current, selected: current.selected.filter((file) => file.id !== fileId) } : null,

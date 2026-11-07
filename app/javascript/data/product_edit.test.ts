@@ -27,6 +27,7 @@ import {
   UnconfirmedSaveError,
   UnmarkedInstallmentPlanClearConflictError,
   withoutFileEmbeds,
+  withoutFileEmbedsFromVariants,
 } from "$app/data/product_edit";
 import { buildDeletionOperations } from "$app/data/product_save_contract";
 import { cast } from "$app/utils/cast";
@@ -72,6 +73,9 @@ describe("markFileRemoved and withoutFileEmbeds", () => {
   const savedFiles = (ids: string[]) =>
     // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs id and status
     ids.map((id) => ({ id, status: { type: "saved" } })) as unknown as Parameters<typeof markFileRemoved>[0];
+  const variantWithPages = (rich_content: { id: string; description: object }[]) =>
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs id and rich_content
+    [{ id: "variant-a", rich_content }] as unknown as Parameters<typeof withoutFileEmbedsFromVariants>[0];
 
   it("states the removal in the save and strips the file's embeds from the content", () => {
     const files = savedFiles(["keep-me", "detach-me"]);
@@ -103,6 +107,16 @@ describe("markFileRemoved and withoutFileEmbeds", () => {
     const files = [file] as unknown as Parameters<typeof markFileRemoved>[0];
 
     expect(markFileRemoved(files, "gone")).toEqual([file]);
+  });
+
+  it("strips the file's embeds from each variant's own pages", () => {
+    const variants = variantWithPages([
+      { id: "page", description: { type: "doc", content: [embedGroup("group", ["detach-me"])] } },
+    ]);
+
+    withoutFileEmbedsFromVariants(variants, "detach-me");
+
+    expect(variants[0]?.rich_content[0]?.description).toEqual({ type: "doc", content: [] });
   });
 });
 
