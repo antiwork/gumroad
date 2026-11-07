@@ -591,7 +591,7 @@ describe Stripe::SetupIntentsController, :vcr do
       allow(service).to receive(:get_chargeable) { service.chargeable = instance_double(Chargeable, get_chargeable_for: stripe_chargeable); nil }
       allow(service).to receive(:charge_user!).and_return(success: true)
 
-      [mandate_options, service.perform]
+      [mandate_options, service.perform, service]
     end
 
     it "accepts a mandate sized for the raised price plus tax" do
@@ -732,17 +732,68 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(@subscription.reload.tier).to eq(@new_tier)
       end
 
-      it "keeps a deferred downgrade's mandate sized for the plan that renews next" do
+      it "accepts a deferred downgrade's replacement card with a mandate sized for the scheduled tier" do
         travel_to(@originally_subscribed_at + 1.month)
+        original_price_cents = @subscription.original_purchase.displayed_price_cents
+        end_time = @subscription.end_time_of_subscription
+        purchase_ids = @subscription.purchases.ids
 
-        options = mint_setup_intent_for_plan(
-          { price_id: @quarterly_product_price.external_id, variants: [@lower_tier.external_id], quantity: 1, perceived_price_cents: 4_00, perceived_upgrade_price_cents: 0 },
-          billing_info: { country: "FR", state: nil, postal_code: nil }
+        mandate_options, result, service = change_plan_with_controller_mandate(
+          price_id: @quarterly_product_price.external_id,
+          variants: [@lower_tier.external_id],
+          quantity: 1,
+          perceived_price_cents: 4_00,
+          perceived_upgrade_price_cents: 0,
         )
 
-        expect(response).to be_successful
-        expect(options.dig(:payment_method_options, :card, :mandate_options)).to include(amount: 7_19)
-        expect(@subscription.reload.tier).to eq(@original_tier)
+        expect(result).to include(success: true, success_message: "Your membership will be updated at the end of your current billing cycle.")
+        expect(mandate_options).to include(amount: 4_80, currency: Currency::USD, interval: "month", interval_count: 3)
+        expect(service).not_to have_received(:charge_user!)
+        @subscription.reload
+        expect(@subscription.tier).to eq(@original_tier)
+        expect(@subscription.original_purchase.displayed_price_cents).to eq(original_price_cents)
+        expect(@subscription.end_time_of_subscription).to eq(end_time)
+        expect(@subscription.purchases.ids).to match_array(purchase_ids)
+        expect(@subscription.credit_card).to eq(replacement_card)
+        plan_change = @subscription.subscription_plan_changes.alive.sole
+        expect(plan_change).to have_attributes(tier: @lower_tier, recurrence: BasePrice::Recurrence::QUARTERLY, perceived_price_cents: 4_00)
+
+        scheduled_terms = nil
+        ActiveRecord::Base.transaction do
+          @subscription.update_current_plan!(
+            new_variants: [plan_change.tier],
+            new_price: @quarterly_product_price,
+            new_quantity: plan_change.quantity,
+            perceived_price_cents: plan_change.perceived_price_cents,
+            is_applying_plan_change: true,
+            skip_preparing_for_charge: true,
+          )
+          scheduled_terms = @subscription.reload.indian_card_mandate_terms
+          raise ActiveRecord::Rollback
+        end
+        expect(scheduled_terms).to eq(mandate_options.slice(:amount, :currency, :interval, :interval_count))
+      end
+
+      it "sizes a restart mandate from the restarted plan when an earlier plan change left another original unarchived" do
+        @original_tier_quarterly_price.update!(price_cents: 6_49)
+        stale_original = @subscription.update_current_plan!(new_variants: [@original_tier], new_price: @quarterly_product_price, skip_preparing_for_charge: true)
+        @original_purchase.update_flag!(:is_archived_original_subscription_purchase, false, true)
+        @original_tier_quarterly_price.update!(price_cents: 5_99)
+        end_membership
+        @subscription.reload
+        unarchived_originals = -> { @subscription.reload.purchases.is_original_subscription_purchase.not_is_archived_original_subscription_purchase.order(:id).to_a }
+        expect(unarchived_originals.call).to eq([@original_purchase, stale_original])
+        plan = { price_id: @quarterly_product_price.external_id, variants: [@new_tier.external_id], quantity: 1, perceived_price_cents: 10_50, perceived_upgrade_price_cents: 10_50 }
+
+        options = mint_setup_intent_for_plan(plan, billing_info: { country: "FR", state: nil, postal_code: nil })
+
+        expect(unarchived_originals.call).to eq([@original_purchase, stale_original])
+        mandate_options, result = update_with_setup_intent_options(options, **plan, contact_info: { country: "FR", zip_code: nil })
+        expect(result).to include(success: true)
+        expect(mandate_options).to include(amount: 12_60)
+        expect(unarchived_originals.call).to eq([@subscription.original_purchase])
+        expect(@subscription.original_purchase.id).not_to be_in([@original_purchase.id, stale_original.id])
+        expect(@subscription.tier).to eq(@new_tier)
       end
 
       it "does not reuse a pending card whose mandate was sized for the current plan" do

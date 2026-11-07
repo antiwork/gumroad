@@ -310,14 +310,13 @@ class Subscription::UpdaterService
 
     self.original_purchase = subscription.original_purchase
     self.original_price = subscription.price
-    self.overdue_for_charge = subscription.overdue_for_charge?
-    self.calculate_upgrade_cost_as_of = Time.current.end_of_day
-    self.prorated_discount_price_cents = subscription.prorated_discount_price_cents(calculate_as_of: calculate_upgrade_cost_as_of)
+    self.is_resubscribing = !subscription.alive?(include_pending_cancellation: false)
     return if same_plan_and_price?
 
     terms_with_rate = nil
     ActiveRecord::Base.transaction do
-      self.new_purchase = subscription.update_current_plan!(
+      archive_other_unarchived_originals! if is_resubscribing
+      subscription.update_current_plan!(
         new_variants: variants,
         new_price: price,
         new_quantity: params[:quantity],
@@ -327,9 +326,7 @@ class Subscription::UpdaterService
         submitted_pre_discount_price_cents: params[:submitted_pre_discount_price_cents] || params[:price_range],
         skip_preparing_for_charge: true,
       )
-      if apply_plan_change_immediately?
-        terms_with_rate = subscription.reload.indian_card_mandate_terms_with_rate(billing_info:, authenticated_offer_code_buyer: logged_in_user)
-      end
+      terms_with_rate = subscription.reload.indian_card_mandate_terms_with_rate(billing_info:, authenticated_offer_code_buyer: logged_in_user)
       raise ActiveRecord::Rollback
     end
     terms_with_rate
