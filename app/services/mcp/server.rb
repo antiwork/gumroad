@@ -491,6 +491,10 @@ module Mcp
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
+          tool("search_products", "Search Gumroad's catalogue, not just the connected creator's own products. These are the same results the discover page shows. Use it when someone wants to see what exists in a topic, compare prices, or find something to learn a skill from. Each URL carries the assistant's referrer, so a purchase that starts from this result is attributed to it.", {
+                 "query" => { type: "string", description: "What to search for, e.g. \"learn to draw\" or \"tax spreadsheet\"." },
+                 "limit" => { type: "integer", description: "Max products to return (1-25, default 10)." }
+               }, required: %w[query], read_only: true),
           tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
                  "name" => { type: "string", description: "Bundle name." },
                  "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
@@ -1511,6 +1515,41 @@ module Mcp
           variant = kept&.variant || product.variants_or_skus.first
           { product_id: product.external_id, variant_id: variant&.external_id, quantity: kept&.quantity || DEFAULT_BUNDLE_MEMBER_QUANTITY, position: }
         end
+      end
+
+      # Search runs over the same index the discover page uses, so results are what a shopper would
+      # see, not a second catalogue that can drift from it.
+      def tool_search_products(args)
+        require_scopes!(:view_public, :account)
+        query = args["query"].to_s.strip
+        raise InvalidArguments, "query is required" if query.empty?
+        raise InvalidArguments, "query is longer than 200 characters" if query.length > 200
+
+        limit = args["limit"].to_i
+        limit = 10 if limit <= 0
+        limit = [limit, 25].min
+
+        products = Link.search(Link.search_options(query:, size: limit)).records
+        {
+          products: products.map do |product|
+            {
+              id: product.external_id,
+              name: product.name,
+              seller_name: product.user&.name.presence,
+              price_cents: product.price_cents,
+              currency: product.price_currency_type,
+              thumbnail_url: product.thumbnail&.url,
+              url: with_mcp_referrer(product.long_url)
+            }
+          end
+        }
+      end
+
+      def with_mcp_referrer(url)
+        uri = URI.parse(url)
+        params = Rack::Utils.parse_nested_query(uri.query.to_s).merge("referrer" => "#{PROTOCOL}://#{DOMAIN}/mcp")
+        uri.query = params.to_query
+        uri.to_s
       end
 
       def tool_create_bundle(args)
