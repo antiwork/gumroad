@@ -41,7 +41,7 @@ describe "MCP server" do
     allow_any_instance_of(ActionView::Base).to receive(:vite_typescript_tag).and_return("")
   end
 
-  it "routes each new connector path to its own page, OAuth and endpoint" do
+  it "serves a page, a registration endpoint and a status endpoint on each new connector path" do
     %w[cursor antigravity].each do |client|
       # The page renders the layout, which asks GitHub for the star count; the route is what this
       # example is about, so the call is stubbed rather than recorded.
@@ -51,6 +51,14 @@ describe "MCP server" do
 
       expect(response).to be_successful
       expect(response.body).to include("/#{client}/v1/mcp")
+
+      expect do
+        post "/#{client}/v1/oauth2/register",
+             params: { client_name: client.humanize, redirect_uris: ["https://#{client}.example/callback"], token_endpoint_auth_method: "none" }.to_json,
+             headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+      end.to change(OauthApplication, :count).by(1)
+
+      expect(response).to have_http_status(:created)
 
       get "/#{client}/v1/status", headers: { "HOST" => DOMAIN }
 

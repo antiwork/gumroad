@@ -261,7 +261,7 @@ class Rack::Attack
   # The MCP connector aliases route to the same tokens controller as /oauth/token. Keyed on IP
   # alone (not the `throttle_by_ip` regex form, which keys per path) so all four share one bucket.
   throttle_with_exponential_backoff(name: "oauth_token/ip", requests: 3000, period: 60.seconds) do |req|
-    req.remote_ip if req.path.match?(%r{\A(?:/oauth/token|/(?:muse|claude|chatgpt)/v1/oauth2/token)(?:\.[^/]+)?\z})
+    req.remote_ip if req.path.match?(%r{\A(?:/oauth/token|/(?:muse|claude|chatgpt|cursor|antigravity)/v1/oauth2/token)(?:\.[^/]+)?\z})
   end
   # Anonymous dynamic client registration inserts an oauth_applications row per call.
   # Initial: 20rpm, Max: 100 requests/9 hours (per IP, shared across the connector aliases)
