@@ -608,6 +608,12 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "a Forwarded header", host: host, target: "/l/guide", reason: "forwarded header",
 			headers: map[string]string{"Forwarded": "host=other.gumroad.com"}},
 		{name: "a forwarded port", host: host, target: "/l/guide", reason: "port", headers: map[string]string{"X-Forwarded-Port": "8443"}},
+		// The middleware reads a blank X-Inertia as no visit, the renderer as one.
+		{name: "a blank X-Inertia", host: host, target: "/l/guide", reason: "inertia visit", headers: map[string]string{"X-Inertia": " "}},
+		{name: "a partial reload", host: host, target: "/l/guide", reason: "inertia header X-Inertia-Partial-Data",
+			headers: map[string]string{"X-Inertia": "true", "X-Inertia-Partial-Component": "Products/Show", "X-Inertia-Partial-Data": "product"}},
+		{name: "a visit with a version", host: host, target: "/l/guide", reason: "inertia header X-Inertia-Version",
+			headers: map[string]string{"X-Inertia": "true", "X-Inertia-Version": "1"}},
 		{name: "storefront", host: host, target: "/l/guide", reason: "storefront",
 			setup: func() {
 				conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userProductPageStorefrontEnabled, sellerID)
@@ -2659,5 +2665,35 @@ func TestASKUSummarizesItsOwnPages(t *testing.T) {
 	want := `"file_summaries":{"product":null,"options":{"` + e.ids.Encrypt(sku) + `":{"formats":["PDF"],"total_size":2048,"count":1}}}`
 	if !strings.Contains(page, want) {
 		t.Errorf("want %s", want)
+	}
+}
+
+var authenticityToken = regexp.MustCompile(`"authenticity_token":"[^"]*"`)
+
+// An Inertia visit gets the page object the document carries, as JSON, and none of the layout's
+// headers; a custom HTML page, which the wrapper answers as HTML, is Rails'.
+func TestAnInertiaVisitGetsThePageObject(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	visitHeaders := map[string]string{"X-Inertia": "true", "X-Requested-With": "XMLHttpRequest"}
+	doc := e.get(host, "/l/guide", nil)
+	visit := e.get(host, "/l/guide", visitHeaders)
+	if visit.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", visit.Code, visit.Header().Get("X-Go-Web-Fallback"))
+	}
+	h := visit.Header()
+	if h.Get("Content-Type") != "application/json; charset=utf-8" || h.Get("X-Inertia") != "true" || h.Get("Vary") != "X-Inertia, Origin" ||
+		h.Get("Link") != "" || h.Get("Content-Security-Policy") != doc.Header().Get("Content-Security-Policy") {
+		t.Errorf("headers %v", h)
+	}
+	page := html.UnescapeString(dataPage.FindStringSubmatch(doc.Body.String())[1])
+	if got, want := authenticityToken.ReplaceAllString(visit.Body.String(), ""), authenticityToken.ReplaceAllString(page, ""); got != want {
+		t.Errorf("page object\n%s\nwant\n%s", got, want)
+	}
+	customHTML(t, e, conn)
+	headers := maps.Clone(visitHeaders)
+	maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
+	if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "inertia visit" {
+		t.Errorf("custom html: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 }

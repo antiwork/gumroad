@@ -300,6 +300,15 @@ func DeclinedHeaders(r *http.Request) string {
 	if r.Header.Get("X-Inertia") != "" {
 		return "inertia visit"
 	}
+	return DeclinedVisitHeaders(r)
+}
+
+// DeclinedVisitHeaders is DeclinedHeaders for a page that answers a plain Inertia visit itself:
+// a blank X-Inertia, which the renderer and the middleware read differently, and the rest.
+func DeclinedVisitHeaders(r *http.Request) string {
+	if v, ok := r.Header["X-Inertia"]; ok && rails.Blank(strings.Join(v, "")) {
+		return "inertia visit"
+	}
 	// Rack reads the host, scheme and port from Forwarded before the X-Forwarded headers.
 	if _, ok := r.Header["Forwarded"]; ok {
 		return "forwarded header"
