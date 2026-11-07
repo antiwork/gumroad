@@ -304,6 +304,18 @@ describe "Product creation", type: :system, js: true do
         expect(seller.links.last.price_cents).to eq(cents)
       end
     end
+
+    it "keeps every digit of a grouped price longer than ten characters" do
+      visit new_product_path
+      fill_in("Name", with: "Comma product")
+      choose("Digital product")
+      select("COL$ (Colombian Peso)", from: "Currency", visible: false)
+      fill_in("Price", with: "1,000,000.50")
+      click_on("Next: Customize")
+
+      expect(page).to have_title("Comma product")
+      expect(seller.links.last.price_cents).to eq(1_000_000_50)
+    end
   end
 
   describe "form validations" do

@@ -51,6 +51,10 @@ const defaultRecurrence: RecurrenceId = "monthly";
 
 const MIN_AI_PROMPT_LENGTH = 10;
 
+// Typed grouping commas count toward the limit, so it must fit the largest storable grouped
+// amount ("21,474,836.47"); a cut-off keystroke otherwise saves a smaller price.
+const MAX_PRICE_INPUT_LENGTH = 15;
+
 // The details come from a language model, which can leave fields out, so they are checked before they
 // reach the form.
 type AiProductDetails = {
@@ -458,7 +462,7 @@ const NewProductPage = () => {
                     id={`price-${formUID}`}
                     type="text"
                     inputMode="decimal"
-                    maxLength={10}
+                    maxLength={MAX_PRICE_INPUT_LENGTH}
                     value={form.data.link.price_range}
                     onChange={(e) => {
                       const newValue = sanitizePriceRangeInput(e.target.value);

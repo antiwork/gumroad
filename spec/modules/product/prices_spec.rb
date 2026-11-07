@@ -21,9 +21,7 @@ describe Product::Prices do
       @product.price_currency_type = "usd"
       expect(@product.clean_price("7,90")).to eq(790)
     end
-  end
 
-  describe "#clean_price one-digit decimal comma" do
     it "reads a comma before one digit as a decimal" do
       @product.price_currency_type = "usd"
       expect(@product.clean_price("7,9")).to eq(790)
