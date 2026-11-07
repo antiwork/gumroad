@@ -18,9 +18,14 @@ import { Pill } from "$app/components/ui/Pill";
 const GROUP_DIGITS = 3;
 const FRACTION_DIGITS = 2;
 
-// A value ending in a separator, or in a group that can still grow a digit ("7,90" is about to
-// become "7,900"), is not settled: rewriting it there turns the grouping into a fraction.
-const UNSETTLED_VALUE = new RegExp(`[.,]\\d{0,${FRACTION_DIGITS}}$`, "u");
+// A value is unsettled while the key that decides what its trailing separator means can still
+// arrive: a comma before fewer than GROUP_DIGITS digits may still grow into a thousands group
+// ("7,90" is about to become "7,900"), and a separator with at most one digit after it may still
+// grow into a fraction. Rewriting there is what turned a grouped amount into a fraction. A comma
+// already spelled out as a group ("7,900") or a completed fraction ("1234.43") is settled, so
+// `1234,.43` — both separators, no more digits that could change either meaning — is written back
+// as `1234.43` rather than left with the grouping comma in it.
+const UNSETTLED_VALUE = new RegExp(`\\.\\d?$|,\\d{0,${FRACTION_DIGITS}}$`, "u");
 
 // A comma followed by exactly GROUP_DIGITS digits groups thousands ("7,900"), which is how
 // `parseCurrencyUnitStringToCents` reads it; any other trailing separator is the decimal point.

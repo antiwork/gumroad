@@ -183,4 +183,17 @@ describe("PriceInput amount typing", () => {
     expect(input.value).toBe("1.99");
     expect(onChange).toHaveBeenLastCalledWith(199);
   });
+
+  // A pasted amount can carry both separators: the comma groups thousands and the fraction after
+  // the decimal point is complete, so neither reading can change with another key and the field
+  // has to settle on the amount instead of keeping the grouping comma in the display. This is
+  // spec/requests/products/show/show_spec.rb "ensures correct price formatting", where `fill_in`
+  // types the keys one at a time.
+  it("settles a typed amount that carries both separators", () => {
+    const { input, onChange, type } = renderAmount("usd");
+    type("-1234,.439");
+
+    expect(input.value).toBe("1234.43");
+    expect(onChange).toHaveBeenLastCalledWith(123_443);
+  });
 });
