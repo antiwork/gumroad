@@ -10,7 +10,7 @@ import { ResponseError, request } from "$app/utils/request";
 
 import { extensions } from "$app/components/ProductEdit/ContentTab";
 import { FileEmbed } from "$app/components/ProductEdit/ContentTab/FileEmbed";
-import { Product, hasPaidVariantPricing } from "$app/components/ProductEdit/state";
+import { Product, Variant, hasPaidVariantPricing } from "$app/components/ProductEdit/state";
 import { baseEditorOptions } from "$app/components/RichTextEditor";
 
 export type SaveProductResponse = {
@@ -431,6 +431,37 @@ export const removeFileEmbedsFromRichContent = (description: object, fileIds: Se
   const cleaned = removeFileEmbeds(description, fileIds);
   return isRecord(cleaned) ? cleaned : description;
 };
+
+// The save contract derives deleted_ids.files from this status, not from missing embeds.
+export const markFileRemoved = (files: Product["files"], fileId: string): Product["files"] =>
+  files.map((file) =>
+    file.id === fileId && file.status.type !== "removed"
+      ? { ...file, status: { type: "removed", previousStatus: file.status } }
+      : file,
+  );
+
+// The file's embeds go with it: one left in the submitted content would name the id in the `files`
+// payload again, and the page would keep a block whose file no longer exists.
+export const withoutFileEmbeds = <T extends { description: object }>(pages: T[], fileId: string): T[] =>
+  pages.map((page) => ({
+    ...page,
+    description: removeFileEmbedsFromRichContent(page.description, new Set([fileId])),
+  }));
+
+// A variant's pages are submitted as their own rich content, so the file's embeds have to leave
+// those too.
+export const withoutFileEmbedsFromVariants = (variants: Variant[], fileId: string): void => {
+  variants.forEach((variant) => {
+    variant.rich_content = withoutFileEmbeds(variant.rich_content, fileId);
+  });
+};
+
+// The library list a picker shows carries one row per url, so a second attachment of the same file
+// has no row of its own — and no way to be removed. Every attachment needs a row.
+export const attachmentsWithoutLibraryRow = (files: Product["files"], libraryFileIds: string[]): Product["files"] =>
+  files.filter(
+    (file) => file.status.type !== "removed" && !file.id.startsWith("drop_") && !libraryFileIds.includes(file.id),
+  );
 
 export const buildRichContentReconciliationTransaction = (
   state: EditorState,

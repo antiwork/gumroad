@@ -21,6 +21,7 @@ import {
   Plus,
   Rename,
   Star,
+  Trash,
   TwitterX,
   X,
 } from "@boxicons/react";
@@ -35,13 +36,17 @@ import { ReactSortable } from "react-sortablejs";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
 import {
+  attachmentsWithoutLibraryRow,
   copyRichContentPages,
+  markFileRemoved,
   prepareRichContentPagesForMove,
   reconcileMountedEditorFileEmbedIds,
   reconcileMountedEditorFileEmbeds,
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
   scopedRichContentPageKey,
+  withoutFileEmbeds,
+  withoutFileEmbedsFromVariants,
 } from "$app/data/product_edit";
 import { reorderRowsPreservingMembership } from "$app/data/product_save_contract";
 import { type Post } from "$app/types/workflow";
@@ -713,6 +718,32 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     return existingFiles.filter((file) => regex.test(file.display_name));
   }, [existingFiles, selectingExistingFiles?.query]);
 
+  // Marking the file removed is what puts it in the save's deleted_ids.files; stripping its embeds
+  // keeps the `files` payload from re-creating it. Nothing is deleted until the seller saves.
+  const attachedFileIds = new Set(
+    product.files.filter((file) => file.status.type !== "removed").map((file) => file.id),
+  );
+  const attachedFilesMissingFromLibrary = attachmentsWithoutLibraryRow(
+    product.files,
+    existingFiles.map((file) => file.id),
+  );
+  const pendingRemovedFileIds = new Set(
+    product.files.filter((file) => file.status.type === "removed").map((file) => file.id),
+  );
+  const removeProductFile = (fileId: string) => {
+    // The mounted doc still holds this page's embed; a state-only strip would not survive the
+    // seller's next edit to the page.
+    if (editor) reconcileMountedEditorFileEmbeds(editor, [fileId]);
+    updateProduct((product) => {
+      product.files = markFileRemoved(product.files, fileId);
+      product.rich_content = withoutFileEmbeds(product.rich_content, fileId);
+      withoutFileEmbedsFromVariants(product.variants, fileId);
+    });
+    setSelectingExistingFiles((current) =>
+      current ? { ...current, selected: current.selected.filter((file) => file.id !== fileId) } : null,
+    );
+  };
+
   const fetchLatestExistingFiles = async () => {
     try {
       const [response] = await Promise.all([
@@ -984,33 +1015,72 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             <LoadingSpinner className="size-8" />
                           </div>
                         ) : (
-                          filteredExistingFiles.map((file) => (
-                            <Row key={file.id} role="option" className="cursor-pointer" asChild>
-                              <Label>
-                                <RowContent>
-                                  <FileKindIcon extension={file.extension} />
-                                  <div className="flex-1">
-                                    <h4>{file.display_name}</h4>
-                                    <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
-                                  </div>
-                                  <Checkbox
-                                    checked={selectingExistingFiles.selected.includes(file)}
-                                    onChange={() => {
-                                      setSelectingExistingFiles({
-                                        ...selectingExistingFiles,
-                                        selected: selectingExistingFiles.selected.includes(file)
-                                          ? selectingExistingFiles.selected.filter((id) => id !== file)
-                                          : [...selectingExistingFiles.selected, file],
-                                      });
-                                    }}
-                                    className="ml-auto"
-                                  />
-                                </RowContent>
-                              </Label>
-                            </Row>
-                          ))
+                          filteredExistingFiles
+                            .filter((file) => !pendingRemovedFileIds.has(file.id))
+                            .map((file) => (
+                              <Row key={file.id} role="option" className="cursor-pointer" asChild>
+                                <Label>
+                                  <RowContent>
+                                    <FileKindIcon extension={file.extension} />
+                                    <div className="flex-1">
+                                      <h4>{file.display_name}</h4>
+                                      <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
+                                    </div>
+                                    {attachedFileIds.has(file.id) ? (
+                                      <Button
+                                        size="icon"
+                                        aria-label={`Remove ${file.display_name} from this product`}
+                                        onClick={(event) => {
+                                          // The row is a label for its checkbox: the click must not
+                                          // also toggle the pick.
+                                          event.stopPropagation();
+                                          event.preventDefault();
+                                          removeProductFile(file.id);
+                                        }}
+                                      >
+                                        <Trash className="size-5" />
+                                      </Button>
+                                    ) : null}
+                                    <Checkbox
+                                      checked={selectingExistingFiles.selected.includes(file)}
+                                      onChange={() => {
+                                        setSelectingExistingFiles({
+                                          ...selectingExistingFiles,
+                                          selected: selectingExistingFiles.selected.includes(file)
+                                            ? selectingExistingFiles.selected.filter((id) => id !== file)
+                                            : [...selectingExistingFiles.selected, file],
+                                        });
+                                      }}
+                                      className="ml-auto"
+                                    />
+                                  </RowContent>
+                                </Label>
+                              </Row>
+                            ))
                         )}
                       </Rows>
+                      {attachedFilesMissingFromLibrary.length > 0 ? (
+                        <Rows className="overflow-auto" style={{ maxHeight: "20rem", textAlign: "initial" }}>
+                          {attachedFilesMissingFromLibrary.map((file) => (
+                            <Row key={file.id}>
+                              <RowContent>
+                                <FileKindIcon extension={file.extension} />
+                                <div className="flex-1">
+                                  <h4>{file.display_name}</h4>
+                                  <span>{`Attached to this product (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
+                                </div>
+                                <Button
+                                  size="icon"
+                                  aria-label={`Remove ${file.display_name} from this product`}
+                                  onClick={() => removeProductFile(file.id)}
+                                >
+                                  <Trash className="size-5" />
+                                </Button>
+                              </RowContent>
+                            </Row>
+                          ))}
+                        </Rows>
+                      ) : null}
                     </div>
                   </Modal>
                 ) : null}

@@ -6,12 +6,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyFileIdMappingsToRichContent,
   applyRichContentPageSaveResponse,
+  attachmentsWithoutLibraryRow,
   buildRichContentFileIdMappingTransaction,
   buildRichContentReconciliationTransaction,
   HiddenVariantContentConflictError,
   canonicalRichContentScope,
   copyRichContentPages,
   filesForSave,
+  markFileRemoved,
   prepareRichContentPagesForMove,
   reconcileConfirmedRemovalIds,
   removeFileEmbedsFromRichContent,
@@ -25,7 +27,10 @@ import {
   StaleDeletionConflictError,
   UnconfirmedSaveError,
   UnmarkedInstallmentPlanClearConflictError,
+  withoutFileEmbeds,
+  withoutFileEmbedsFromVariants,
 } from "$app/data/product_edit";
+import { buildDeletionOperations } from "$app/data/product_save_contract";
 import { cast } from "$app/utils/cast";
 import { ResponseError } from "$app/utils/request";
 
@@ -57,6 +62,71 @@ describe("filesForSave", () => {
 
     expect(filesForSave(editorFiles, new Set(["uploaded-id", "failed-id"]), false)).toEqual([uploaded]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([uploaded]);
+  });
+});
+
+describe("markFileRemoved and withoutFileEmbeds", () => {
+  const embedGroup = (uid: string, ids: string[]) => ({
+    type: "fileEmbedGroup",
+    attrs: { uid },
+    content: ids.map((id) => ({ type: "fileEmbed", attrs: { id, uid: `${id}-uid` } })),
+  });
+  const savedFiles = (ids: string[]) =>
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs id and status
+    ids.map((id) => ({ id, status: { type: "saved" } })) as unknown as Parameters<typeof markFileRemoved>[0];
+  const variantWithPages = (rich_content: { id: string; description: object }[]) =>
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs id and rich_content
+    [{ id: "variant-a", rich_content }] as unknown as Parameters<typeof withoutFileEmbedsFromVariants>[0];
+
+  it("states the removal in the save and strips the file's embeds from the content", () => {
+    const files = savedFiles(["keep-me", "detach-me"]);
+    const pages = [
+      { id: "page-1", description: { type: "doc", content: [embedGroup("group-1", ["detach-me", "keep-me"])] } },
+      { id: "page-2", description: { type: "doc", content: [embedGroup("group-2", ["detach-me"])] } },
+    ];
+
+    const removed = markFileRemoved(files, "detach-me");
+
+    expect(removed).toEqual([
+      { id: "keep-me", status: { type: "saved" } },
+      { id: "detach-me", status: { type: "removed", previousStatus: { type: "saved" } } },
+    ]);
+    // The status is the contract's only client-side way to state a deletion.
+    expect(buildDeletionOperations({ files: removed }).deleted_ids.files).toEqual(["detach-me"]);
+
+    const stripped = withoutFileEmbeds(pages, "detach-me");
+    expect(stripped[0]?.description).toEqual({ type: "doc", content: [embedGroup("group-1", ["keep-me"])] });
+    // A group the removal emptied goes with it.
+    expect(stripped[1]?.description).toEqual({ type: "doc", content: [] });
+    // Nothing embeds the file any more, so the payload cannot re-create it.
+    expect(filesForSave(removed, new Set(["keep-me"]), false)).toEqual([{ id: "keep-me", status: { type: "saved" } }]);
+  });
+
+  it("leaves an already-removed file alone", () => {
+    const file = { id: "gone", status: { type: "removed", previousStatus: { type: "saved" } } };
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs id and status
+    const files = [file] as unknown as Parameters<typeof markFileRemoved>[0];
+
+    expect(markFileRemoved(files, "gone")).toEqual([file]);
+  });
+
+  it("rows an attachment the url-deduped library list does not carry", () => {
+    const files = savedFiles(["attach-a", "attach-b"]);
+
+    // The library list holds one row per url, so a second attachment of the same file arrives here
+    // without one and would otherwise have no way to be removed.
+    expect(attachmentsWithoutLibraryRow(files, ["attach-a"])).toEqual([{ id: "attach-b", status: { type: "saved" } }]);
+    expect(attachmentsWithoutLibraryRow(files, ["attach-a", "attach-b"])).toEqual([]);
+  });
+
+  it("strips the file's embeds from each variant's own pages", () => {
+    const variants = variantWithPages([
+      { id: "page", description: { type: "doc", content: [embedGroup("group", ["detach-me"])] } },
+    ]);
+
+    withoutFileEmbedsFromVariants(variants, "detach-me");
+
+    expect(variants[0]?.rich_content[0]?.description).toEqual({ type: "doc", content: [] });
   });
 });
 
