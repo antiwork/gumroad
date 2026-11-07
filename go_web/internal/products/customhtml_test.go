@@ -271,3 +271,20 @@ func TestACoffeeProductsCustomHTML(t *testing.T) {
 		`"@type":"Product","name":"Guide \u003c1\u003e"`,
 	})
 }
+
+// Pages::WaitlistForm.found_in? reads the message anywhere, and the form only as Loofah parses it.
+func TestWaitlistFormFound(t *testing.T) {
+	for html, want := range map[string]bool{
+		`<form data-gumroad-waitlist><input name="email"></form>`:                             true,
+		`<p>Join</p><div><FORM DATA-GUMROAD-WAITLIST="1"></FORM></div>`:                       true,
+		`<button onclick="parent.postMessage({type: 'gumroad:waitlist'}, '*')">Join</button>`: true,
+		`<form data-waitlist></form>`:                                                         false,
+		`<div data-gumroad-waitlist></div>`:                                                   false,
+		`<!-- <form data-gumroad-waitlist> -->`:                                               false,
+		`<script>var form = "<form data-gumroad-waitlist>";</script>`:                         false,
+	} {
+		if got, err := waitlistFormFound(html); err != nil || got != want {
+			t.Errorf("%s: %v %v", html, got, err)
+		}
+	}
+}

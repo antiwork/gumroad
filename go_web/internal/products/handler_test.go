@@ -1829,6 +1829,14 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 	waitlist := func(conn *sql.DB, draft bool) {
 		conn.Exec("UPDATE links SET flags = flags | ?, draft = ? WHERE id = ?", productWaitlistEnabled, draft, productID)
 	}
+	// waitlistPage is an unpublished product taking waitlist signups, with custom HTML.
+	waitlistPage := func(t *testing.T, e *testEnv, conn *sql.DB, html string) {
+		waitlist(conn, false)
+		conn.Exec("UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
+		e.redis.HSet("custom_html_pages", "boolean", "true")
+		testdb.Insert(t, conn, "pages", map[string]any{"id": int64(1_793_201), "pageable_type": "Link", "pageable_id": productID,
+			"custom_html": html, "created_at": testNow, "updated_at": testNow})
+	}
 	for _, c := range []struct {
 		name    string
 		wants   []string
@@ -1888,14 +1896,13 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 				waitlist(conn, true)
 				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productUnpublishedByAdmin, productID)
 			}},
-		// Rails shows the custom page when it holds the waitlist form.
-		{name: "a waitlist with custom HTML", reason: "custom html waitlist", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			waitlist(conn, false)
-			conn.Exec("UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
-			e.redis.HSet("custom_html_pages", "boolean", "true")
-			testdb.Insert(t, conn, "pages", map[string]any{"id": int64(1_793_201), "pageable_type": "Link", "pageable_id": productID,
-				"custom_html": "<form data-waitlist></form>", "created_at": testNow, "updated_at": testNow})
-		}},
+		// Rails shows the custom page only when it holds the waitlist form.
+		{name: "a waitlist with custom HTML", wants: []string{`"waitlist":{"recaptcha_site_key":null,"count":null},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { waitlistPage(t, e, conn, "<form data-waitlist></form>") }},
+		{name: "a waitlist whose custom HTML holds the form", wants: []string{"data-gumroad-waitlist-wrapper", `var PRODUCT_ID = "`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				waitlistPage(t, e, conn, `<form data-gumroad-waitlist><input name="email"></form>`)
+			}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)

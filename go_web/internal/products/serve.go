@@ -112,34 +112,41 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return err
 	}
 	// product_custom_html_visible?: the seller and collaborators preview it whatever the
-	// product's state, and a waitlist page shows it when it holds the waitlist form, which is
-	// Rails' to find. Either way it renders before show's coffee redirect, unless a review link
-	// needs the standard page's form.
+	// product's state, and a waitlist page shows it when it holds the waitlist form. Either way
+	// it renders before show's coffee redirect, unless a review link needs the standard page's
+	// form.
 	logged := p.Auth.LoggedInUser()
 	seller := logged != nil && logged.ID == prod.userID
-	if present, err := customHTMLPresent(ctx, conn, prod.id); err != nil {
+	pageHTML, err := productCustomHTML(ctx, conn, prod.id)
+	if err != nil {
 		return err
-	} else if present && !p.wanted && p.reviewPurchase == nil && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
+	}
+	if rails.Present(pageHTML) && !p.wanted && p.reviewPurchase == nil && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
 		// ?wanted=true goes on to show, which sends the buyer to checkout.
 		on, err := h.flag(ctx, "custom_html_pages", p.seller.id)
 		switch {
 		case err != nil:
 			return err
-		case on && !prod.alive() && logged != nil && !seller:
+		case on && !prod.alive() && !seller:
 			// can_preview_product_custom_html?: a collaborator previews it, which renderCustomHTML
 			// leaves to Rails, as staff went there already; anyone else gets show's page unless the
 			// custom page collects waitlist signups.
-			collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
-			switch {
-			case err != nil:
-				return err
-			case collaborates:
-				return fallback("custom html preview")
-			case prod.acceptsWaitlistSignups():
-				return fallback("custom html waitlist")
+			if logged != nil {
+				collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
+				if err != nil || collaborates {
+					return firstErr(err, fallback("custom html preview"))
+				}
 			}
-		case on && !prod.alive() && !seller:
-			return fallback("custom html waitlist")
+			if !prod.acceptsWaitlistSignups() {
+				break
+			}
+			found, err := waitlistFormFound(pageHTML)
+			if err != nil {
+				return err
+			}
+			if found {
+				return h.renderCustomHTML(w, p, prod)
+			}
 		case on:
 			return h.renderCustomHTML(w, p, prod)
 		}
