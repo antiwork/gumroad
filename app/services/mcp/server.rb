@@ -1501,7 +1501,9 @@ module Mcp
           .order(created_at: :desc)
         page, next_cursor = paginate(purchases, args, default: 25, table: "purchases")
         {
-          purchases: page.select(&:link).map do |purchase|
+          purchases: page.filter_map do |purchase|
+            next unless purchase.link
+
             {
               id: purchase.external_id,
               product_name: purchase.link.name,
