@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
@@ -136,19 +135,24 @@ func TestTheCustomHTMLWrapperSignedIn(t *testing.T) {
 	mustExec(t, conn, "UPDATE affiliates SET deleted_at = ? WHERE id = ?", testNow, 1_795_451)
 	getsWrapper("a removed collaborator")
 	mustExec(t, conn, "UPDATE affiliates SET deleted_at = NULL WHERE id = ?", 1_795_451)
-	for i, user := range []int64{sellerID, collabID} {
-		headers := e.signedIn(user, nil)
-		// A signature is good for one request.
-		headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide", testNow.Add(time.Duration(i)*time.Second))["X-Go-Web-Dry-Run"]
-		if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "custom html preview" {
+	// The seller and a collaborator preview it: the same page, with the live reload last.
+	script := strings.NewReplacer("«nonce»", "NONCE", "«version_src»", `"/l/gowebp1/landing/version"`,
+		"«poll_interval_ms»", "2000").Replace(customHTMLLiveReload)
+	preview := strings.Replace(csrfMeta.ReplaceAllString(out.Body.String(), ""), "    \n  </body>", "    "+script+"\n  </body>", 1)
+	for _, want := range []string{`var versionUrl = "/l/gowebp1/landing/version";`, "setInterval(poll, 2000);"} {
+		if !strings.Contains(preview, want) {
+			t.Fatalf("no %s", want)
+		}
+	}
+	for _, user := range []int64{sellerID, collabID} {
+		w := e.get(host, "/l/guide", e.signedIn(user, nil))
+		if w.Code != http.StatusOK || e.railsHit != nil || csrfMeta.ReplaceAllString(w.Body.String(), "") != preview {
 			t.Errorf("user %d: %d %q", user, w.Code, w.Header().Get("X-Go-Web-Fallback"))
 		}
 	}
 	// Unpublished, it's still the collaborator's preview, which other visitors don't get.
 	mustExec(t, conn, "UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
-	headers := e.signedIn(collabID, nil)
-	headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide", testNow.Add(-time.Second))["X-Go-Web-Dry-Run"]
-	if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "custom html preview" {
+	if w := e.get(host, "/l/guide", e.signedIn(collabID, nil)); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), script) {
 		t.Errorf("unpublished: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 }

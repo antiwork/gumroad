@@ -1,0 +1,24 @@
+<script nonce="«nonce»" data-cfasync="false">
+  (function () {
+    var frame = document.getElementById("gumroad-landing-frame");
+    var versionUrl = «version_src»;
+    var known = null;
+    function poll() {
+      if (document.hidden) return;
+      fetch(versionUrl, { headers: { "Accept": "application/json" }, cache: "no-store", credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data) return;
+          var current = data.present ? "v" + String(data.version) : "absent";
+          if (known === null) { known = current; return; }
+          if (current === known) return;
+          if (current === "absent") { window.location.reload(); return; }
+          known = current;
+          if (frame) frame.src = frame.src.split("#")[0].split("?")[0] + "?" + encodeURIComponent(current);
+        })
+        .catch(function () {});
+    }
+    setInterval(poll, «poll_interval_ms»);
+    poll();
+  })();
+</script>

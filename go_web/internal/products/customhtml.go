@@ -32,6 +32,14 @@ var customHTMLWrapper string
 //go:embed custom_html_waitlist.html
 var customHTMLWaitlist string
 
+// customHTMLLiveReload is custom_html_live_reload_script's heredoc, filled the same way.
+//
+//go:embed custom_html_live_reload.html
+var customHTMLLiveReload string
+
+// customHTMLPollInterval is RendersCustomHtmlPages::POLL_INTERVAL_MS.
+const customHTMLPollInterval = "2000"
+
 // customDomainCertificateLifetime is CustomDomain::CERTIFICATE_LIFETIME.
 const customDomainCertificateLifetime = 90 * 24 * time.Hour
 
@@ -69,15 +77,15 @@ func waitlistFormFound(html string) (bool, error) {
 // checked and whose native and code params declinedParams left to Rails.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
+	// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
+	// staff went to Rails already.
+	preview := false
 	if logged := p.Auth.LoggedInUser(); logged != nil {
-		// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
-		// staff went to Rails already.
-		if logged.ID == prod.userID {
-			return fallback("custom html preview")
-		}
-		collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
-		if err != nil || collaborates {
-			return firstErr(err, fallback("custom html preview"))
+		if preview = logged.ID == prod.userID; !preview {
+			var err error
+			if preview, err = h.collaboratorFor(ctx, logged.ID, prod.id); err != nil {
+				return err
+			}
 		}
 	}
 	if pc.CustomHTMLAnalytics == nil {
@@ -156,6 +164,14 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 			"«product_id»", rails.EncodeJSON(h.c.IDs.Encrypt(prod.id)),
 		).Replace(customHTMLWaitlist)
 	}
+	liveReload := ""
+	if preview {
+		liveReload = strings.NewReplacer(
+			"«nonce»", web.HTMLEscape(nonce),
+			"«version_src»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"/landing/version"),
+			"«poll_interval_ms»", customHTMLPollInterval,
+		).Replace(customHTMLLiveReload)
+	}
 	title := web.HTMLEscape(prod.name)
 	body := strings.NewReplacer(
 		"«title»", title,
@@ -173,6 +189,7 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		"«store_hostnames»", rails.EncodeJSON(hostnames),
 		"«nav_hosts»", rails.EncodeJSON(h.c.Env.ValidRequestHosts),
 		"«waitlist_script»", waitlist,
+		"«live_reload_script»", liveReload,
 	).Replace(customHTMLWrapper)
 
 	if err := h.trackUTMVisit(w, p, prod); err != nil {

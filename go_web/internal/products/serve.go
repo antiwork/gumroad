@@ -133,8 +133,11 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 			// custom page collects waitlist signups.
 			if logged != nil {
 				collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
-				if err != nil || collaborates {
-					return firstErr(err, fallback("custom html preview"))
+				if err != nil {
+					return err
+				}
+				if collaborates {
+					return h.renderCustomHTML(w, p, prod)
 				}
 			}
 			if !prod.acceptsWaitlistSignups() {
