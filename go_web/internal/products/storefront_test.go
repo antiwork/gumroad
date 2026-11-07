@@ -173,6 +173,18 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		return strings.Replace(card, `"recurrence":null}`, `"recurrence":null`+tail+`}`, 1)
 	}
 	const onSale = `,"original_price_cents":300,"sale_label":"Sale"`
+	// tieredSale makes the sale tiered by ownership, storing its first tier's 10% as the dashboard
+	// does, and has the buyer buy this product months ago.
+	tieredSale := func(t *testing.T, conn *sql.DB, months int) {
+		sale(t, conn, nil, map[string]any{
+			"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":6,"amount_percentage":15},{"months":12,"amount_percentage":25}]`})
+		addBuyer(t, conn, nil)
+		addPurchase(t, conn, 1_792_661, map[string]any{"purchaser_id": buyerID, "created_at": testNow.AddDate(0, -months, 0)})
+	}
+	// tierDiscount is this product's discount_code at the buyer's tier.
+	tierDiscount := func(percents int) string {
+		return fmt.Sprintf(`"discount_code":{"valid":true,"code":"SALE","discount":{"type":"percent","percents":%d,"product_ids":null,`, percents)
+	}
 	// scopedSale is a sale, left off this product, scoped to the other product's option at index
 	// scoped among options with the price differences diffs.
 	scopedSale := func(t *testing.T, conn *sql.DB, scoped int, diffs ...any) {
@@ -227,10 +239,12 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		body, total string
 		respond     func(body map[string]any) (hits, total string)
 		setup       func(t *testing.T, conn *sql.DB)
-		// prepare sets flags and rates; headers and query go with the request.
-		prepare func(e *testEnv)
-		headers map[string]string
-		query   string
+		// prepare sets flags and rates; headers and query go with the request, and signedIn
+		// signs the buyer in in place of headers.
+		prepare  func(e *testEnv)
+		headers  map[string]string
+		signedIn bool
+		query    string
 		// searchedAgain is the searches after a second view, when it differs from searched.
 		searchedAgain int
 		want          func(e *testEnv) string
@@ -880,6 +894,24 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			want: func(e *testEnv) string {
 				return section(e, 2, saleCard(e, 270, `,"original_price_cents":300,"sale_label":"Black Friday"`))
 			}},
+		// The buyer's tier is this product's; discounted_price_cents prices a card through the
+		// sale's stored percentage, whatever the buyer has owned.
+		{name: "a tiered sale for a buyer of 7 months", hits: bothHits, server: search, searched: 1, signedIn: true,
+			setup: func(t *testing.T, conn *sql.DB) { tieredSale(t, conn, 7) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) },
+			check: func(t *testing.T, e *testEnv, page string) {
+				if want := tierDiscount(15); !strings.Contains(page, want) {
+					t.Errorf("want %s", want)
+				}
+			}},
+		{name: "a tiered sale for a buyer of 13 months", hits: bothHits, server: search, searched: 1, signedIn: true,
+			setup: func(t *testing.T, conn *sql.DB) { tieredSale(t, conn, 13) },
+			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) },
+			check: func(t *testing.T, e *testEnv, page string) {
+				if want := tierDiscount(25); !strings.Contains(page, want) {
+					t.Errorf("want %s", want)
+				}
+			}},
 		{name: "a card the sale leaves out", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				sale(t, conn, nil, nil)
@@ -1012,7 +1044,11 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				e.config.Page.Search = client
 			}
 			path := "/l/guide" + c.query
-			w := e.get(host, path, e.withDryRun(path, c.headers, c.reason))
+			headers := c.headers
+			if c.signedIn {
+				headers = e.signedIn(buyerID, nil)
+			}
+			w := e.get(host, path, e.withDryRun(path, headers, c.reason))
 			if searches != c.searched {
 				t.Errorf("%d searches, want %d", searches, c.searched)
 			}
@@ -1053,7 +1089,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				t.Fatalf("cache writes %v", e.cache.writes)
 			}
 			// The next view reads the search from the cache.
-			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, path, c.headers).Body.String())[1])
+			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, path, headers).Body.String())[1])
 			wantSearches := c.searched
 			if c.searchedAgain != 0 {
 				wantSearches = c.searchedAgain

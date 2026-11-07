@@ -201,11 +201,59 @@ func TestStartingTierPercent(t *testing.T) {
 		`[{"months":0,"amount_percentage":9},{"months":0,"amount_percentage":8}]`:    nil,
 		`[{"months":12,"amount_percentage":25}]`:                                     nil,
 		`[{"months":true,"amount_percentage":25}]`:                                   nil,
+		`[{"months":12,"amount_percentage":25},null]`:                                nil,
 		`[1]`: nil,
 	} {
-		got, ok := startingTierPercent(raw)
+		got, ok := tierPercent(raw, 0)
 		if want == nil && ok || want != nil && (!ok || got != want) {
 			t.Errorf("%s: %d %v, want %v", raw, got, ok, want)
 		}
+	}
+}
+
+// matching_tier_for picks the tier the buyer's months reach, and months_since counts whole
+// months in UTC, a short month's end clamping the day.
+func TestTierPercentAndMonthsSince(t *testing.T) {
+	tiers := `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25},{"months":6,"amount_percentage":15}]`
+	for months, want := range map[int64]int64{0: 10, 5: 10, 6: 15, 11: 15, 12: 25, 40: 25} {
+		if got, ok := tierPercent(tiers, months); !ok || got != want {
+			t.Errorf("%d months: %d %v, want %d", months, got, ok, want)
+		}
+	}
+	at := func(s string) time.Time {
+		v, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	for _, c := range []struct {
+		from, to string
+		want     int64
+	}{
+		{"2026-01-15T10:00:00Z", "2026-11-15T10:00:00Z", 10},
+		{"2026-01-15T10:00:00Z", "2026-11-15T09:59:59Z", 9},
+		{"2026-01-31T12:00:00Z", "2026-02-28T12:00:00Z", 1},
+		{"2026-01-31T12:00:00Z", "2026-02-28T11:00:00Z", 0},
+		{"2025-12-01T00:00:00Z", "2026-01-01T00:00:00Z", 1},
+		{"2026-12-01T00:00:00Z", "2026-11-01T00:00:00Z", 0},
+	} {
+		if got := monthsSince(at(c.from), at(c.to)); got != c.want {
+			t.Errorf("%s to %s: %d, want %d", c.from, c.to, got, c.want)
+		}
+	}
+}
+
+// The tier is the buyer's for this product, so it goes on a copy: the seller's cached sale also
+// prices the other cards, whose discounted_price_cents reads the code's own columns.
+func TestResolveDiscountLeavesTheCodeAlone(t *testing.T) {
+	c := &offerCode{tiers: 2, tiersJSON: sql.NullString{String: `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`, Valid: true}}
+	got, reason := c.resolveDiscount(13)
+	if reason != "" || got == c || got.amountPercentage != (sql.NullInt64{Int64: 25, Valid: true}) || c.amountPercentage.Valid {
+		t.Errorf("%q: got %+v, the code %+v", reason, got, c)
+	}
+	plain := &offerCode{amountPercentage: sql.NullInt64{Int64: 5, Valid: true}}
+	if got, reason := plain.resolveDiscount(0); reason != "" || got != plain {
+		t.Errorf("an untiered code: %q %p", reason, got)
 	}
 }
