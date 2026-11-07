@@ -610,7 +610,7 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "a forwarded port", host: host, target: "/l/guide", reason: "port", headers: map[string]string{"X-Forwarded-Port": "8443"}},
 		// The middleware reads a blank X-Inertia as no visit, the renderer as one.
 		{name: "a blank X-Inertia", host: host, target: "/l/guide", reason: "inertia visit", headers: map[string]string{"X-Inertia": " "}},
-		{name: "a partial reload", host: host, target: "/l/guide", reason: "inertia header X-Inertia-Partial-Data",
+		{name: "a partial reload", host: host, target: "/l/guide", reason: "inertia header X-Inertia-Partial-Component",
 			headers: map[string]string{"X-Inertia": "true", "X-Inertia-Partial-Component": "Products/Show", "X-Inertia-Partial-Data": "product"}},
 		{name: "a visit with a version", host: host, target: "/l/guide", reason: "inertia header X-Inertia-Version",
 			headers: map[string]string{"X-Inertia": "true", "X-Inertia-Version": "1"}},
@@ -2668,7 +2668,8 @@ func TestASKUSummarizesItsOwnPages(t *testing.T) {
 	}
 }
 
-var authenticityToken = regexp.MustCompile(`"authenticity_token":"[^"]*"`)
+// authenticityToken is the per-request masked CSRF token, in the shared props and the csrf-token meta tag.
+var authenticityToken = regexp.MustCompile(`"authenticity_token":"[^"]*"|"name":"csrf-token","content":"[^"]*"`)
 
 // An Inertia visit gets the page object the document carries, as JSON, and none of the layout's
 // headers; a custom HTML page, which the wrapper answers as HTML, is Rails'.
