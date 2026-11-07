@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"math"
 	"slices"
 	"strconv"
@@ -24,6 +25,8 @@ type offerCode struct {
 	universal, existingOnly, newOnly     bool
 	validAt, expiresAt, deletedAt        db.NullTime
 	flags, tiers                         int64
+	// tiersJSON is ownership_duration_tiers as stored.
+	tiersJSON sql.NullString
 	// sqlCurrency is whether currency_type matches the product's under the column's collation.
 	sqlCurrency                              bool
 	hasVariants, excludesProduct, forProduct bool
@@ -59,14 +62,14 @@ const offerCodeColumns = "offer_codes.id, offer_codes.code, offer_codes.currency
 	" offer_codes.amount_cents, offer_codes.amount_percentage, offer_codes.max_purchase_count, offer_codes.minimum_quantity," +
 	" offer_codes.duration_in_months, offer_codes.minimum_amount_cents, offer_codes.universal, offer_codes.existing_customers_only," +
 	" offer_codes.new_customers_only, offer_codes.valid_at, offer_codes.expires_at, offer_codes.deleted_at, offer_codes.flags," +
-	" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0)," +
+	" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0), offer_codes.ownership_duration_tiers," +
 	" EXISTS(SELECT 1 FROM offer_codes_variants v WHERE v.offer_code_id = offer_codes.id)," +
 	" EXISTS(SELECT 1 FROM offer_codes_ownership_variants v WHERE v.offer_code_id = offer_codes.id)"
 
 func (c *offerCode) ownDest() []any {
 	return []any{&c.id, &c.code, &c.currencyType, &c.saleLabel, &c.amountCents, &c.amountPercentage, &c.maxPurchaseCount,
 		&c.minimumQuantity, &c.durationInMonths, &c.minimumAmountCents, &c.universal, &c.existingOnly, &c.newOnly, &c.validAt,
-		&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &c.hasVariants, &c.hasOwnershipVariants}
+		&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &c.tiersJSON, &c.hasVariants, &c.hasOwnershipVariants}
 }
 
 // loadOfferCode reads the row a condition finds first, nil for none.
@@ -223,15 +226,70 @@ func (c *offerCode) unportedLookup(prod *product) string {
 	return ""
 }
 
-// unportedDiscount is a code whose evaluation or discount this port doesn't follow.
-func (c *offerCode) unportedDiscount() string {
-	switch {
-	case c.tiers > 0:
-		return "tiered offer code"
-	case c.amountCents.Valid == c.amountPercentage.Valid:
+// resolveDiscount is evaluate_for_buyer's discount: a tiered code's is its starting tier's
+// percentage for a signed-out visitor. A reason is a code whose discount this port doesn't follow.
+func (c *offerCode) resolveDiscount(signedIn bool) string {
+	if c.tiers > 0 {
+		pct, ok := startingTierPercent(c.tiersJSON.String)
+		if signedIn || c.amountCents.Valid || !ok {
+			// A buyer's ownership picks the tier, and with no tier to start at Rails raises.
+			return "tiered offer code"
+		}
+		c.amountPercentage = sql.NullInt64{Int64: pct, Valid: true}
+	}
+	if c.amountCents.Valid == c.amountPercentage.Valid {
 		return "offer code amount"
 	}
 	return ""
+}
+
+// startingTierPercent is matching_tier_for(0)'s amount_percentage: the tier with the most months
+// at or below none, each value read with to_i. ok is false for none, an unreadable tier, or a tie
+// that sort_by could order either way.
+func startingTierPercent(raw string) (int64, bool) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var tiers []map[string]any
+	if err := dec.Decode(&tiers); err != nil {
+		return 0, false
+	}
+	var best, pct int64
+	found, tied := false, false
+	for _, t := range tiers {
+		months, ok := jsonToI(t["months"])
+		amount, ok2 := jsonToI(t["amount_percentage"])
+		switch {
+		case !ok || !ok2:
+			return 0, false
+		case months > 0:
+		case !found || months > best:
+			best, pct, found, tied = months, amount, true, false
+		case months == best && amount != pct:
+			tied = true
+		}
+	}
+	return pct, found && !tied
+}
+
+// jsonToI is #to_i on a JSON value: nil is 0, a Float truncates, a String reads as String#to_i;
+// ok is false where Ruby raises.
+func jsonToI(v any) (int64, bool) {
+	switch v := v.(type) {
+	case nil:
+		return 0, true
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			return n, true
+		}
+		f, err := v.Float64()
+		if err != nil || math.IsInf(f, 0) || math.Abs(f) >= math.MaxInt64 {
+			return 0, false
+		}
+		return int64(f), true
+	case string:
+		return rails.StringToI(v)
+	}
+	return 0, false
 }
 
 // currencyMatches is product.price_currency_type == currency_type.
@@ -510,7 +568,7 @@ func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (bool,
 		return false, err
 	}
 	// Only a code that gives this buyer something has terms to read.
-	if reason := c.unportedDiscount(); reason != "" {
+	if reason := c.resolveDiscount(p.viewer != nil); reason != "" {
 		return false, fallback(reason)
 	}
 	shortfall, err := h.usesShortfall(p, c)
@@ -549,7 +607,7 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	case !resolved:
 		return c, "not_new_customer", nil
 	}
-	if reason := c.unportedDiscount(); reason != "" {
+	if reason := c.resolveDiscount(p.viewer != nil); reason != "" {
 		return nil, "", fallback(reason)
 	}
 	if shortfall, err := h.usesShortfall(p, c); err != nil || shortfall != "" {
