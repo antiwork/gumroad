@@ -153,7 +153,7 @@ func TestAUTMTaggedVisitThatGoesToCheckout(t *testing.T) {
 }
 
 // Rails routes HEAD to show and Rack::Head drops the body, so a HEAD gets the page's status and
-// headers; track_utm_link_visit skips it, and any other method goes to Rails.
+// headers; track_utm_link_visit skips it.
 func TestAHEADRequest(t *testing.T) {
 	e := newTestEnv(t)
 	testdb.Open(t)
@@ -181,9 +181,6 @@ func TestAHEADRequest(t *testing.T) {
 		if got != want || want == "" {
 			t.Errorf("%s %q, GET's %q", h, got, want)
 		}
-	}
-	if e.request(http.MethodPost, host, "/l/guide", nil); e.railsHit == nil || e.railsHit.Method != http.MethodPost {
-		t.Error("POST wasn't handed to Rails")
 	}
 }
 

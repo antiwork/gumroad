@@ -53,7 +53,7 @@ func Register(app *web.App, c *Config) {
 		Redirects: app.Redirects(), Meta: c.Meta, Now: c.Now, DryRunKey: c.DryRunKey, DryRunOnce: c.DryRunOnce,
 	}}
 	app.HandlePage("GET /l/{id}", "LinksController#show", h)
-	// /l/:id/:code (an offer code), and a trailing slash, whose empty code goes to Rails.
+	// /l/:id/:code (an offer code), and /l/:id/, which Journey routes as /l/:id.
 	app.HandlePage("GET /l/{id}/{rest...}", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.servePage(w, r, true)
 	}))
@@ -180,6 +180,10 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if h.c.Page == nil {
 		return nil, fallback("pages off")
 	}
+	if codeRoute && r.PathValue("rest") == "" {
+		// Journey's normalize_path drops the trailing slash; the URL keeps it.
+		codeRoute = false
+	}
 	if codeRoute && r.URL.RawPath != "" && strings.Contains(r.PathValue("rest"), "/") {
 		// An escaped slash stays in Journey's segment, which the mux's rest can't tell.
 		return nil, fallback("offer code path")
@@ -201,7 +205,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	}
 	switch {
 	case codeRoute && rt.code == "":
-		// Journey drops the trailing slash, which this route doesn't.
+		// An empty code before a format.
 		return nil, fallback("offer code path")
 	case !validID(rt.id) || codeRoute && !validID(rt.code):
 		return nil, fallback("permalink")

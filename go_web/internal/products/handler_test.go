@@ -624,7 +624,7 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		setup, undo                func()
 	}{
 		{name: "app domain", host: "gumroad.com", target: "/l/guide", reason: "host"},
-		{name: "a trailing slash", host: host, target: "/l/guide/", reason: "offer code path"},
+		{name: "an empty code before a format", host: host, target: "/l/guide/.json", reason: "offer code path"},
 		{name: "an offer_code param that isn't a plain string", host: host, target: "/l/guide?offer_code[]=X", reason: "param offer_code"},
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
 		{name: "a code param the collation could read", host: host, target: "/l/guide?code=caf%C3%A9", reason: "param code"},
@@ -2782,5 +2782,18 @@ func TestParamsTheShowPageReads(t *testing.T) {
 	customHTML(t, e, conn)
 	if body := e.get(host, "/l/guide?native=true", nil).Body.String(); strings.Contains(body, "gumroad-landing-frame") || !strings.Contains(body, productComponent) {
 		t.Error("native=true")
+	}
+}
+
+// Journey's normalize_path routes /l/:id/ as /l/:id, and the page keeps the URL it was asked for.
+func TestATrailingSlash(t *testing.T) {
+	e := newTestEnv(t)
+	testdb.Open(t)
+	w := e.get(host, "/l/guide/?a=1", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, `"url":"/l/guide/?a=1"`) {
+		t.Errorf("page url in %s", page[strings.LastIndex(page, `"url"`):])
 	}
 }
