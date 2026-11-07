@@ -18,17 +18,12 @@ import { Pill } from "$app/components/ui/Pill";
 const GROUP_DIGITS = 3;
 const FRACTION_DIGITS = 2;
 
-// A value is unsettled while the key that decides what its trailing separator means can still
-// arrive: a comma before fewer than GROUP_DIGITS digits may still grow into a thousands group
-// ("7,90" is about to become "7,900"), and a separator with at most one digit after it may still
-// grow into a fraction. Rewriting there is what turned a grouped amount into a fraction. A comma
-// already spelled out as a group ("7,900") or a completed fraction ("1234.43") is settled, so
-// `1234,.43` — both separators, no more digits that could change either meaning — is written back
-// as `1234.43` rather than left with the grouping comma in it.
+// Unsettled while another key can still change what the trailing separator means ("7,90" may
+// become the group "7,900"); only settled values are written back in canonical form.
 const UNSETTLED_VALUE = new RegExp(`\\.\\d?$|,\\d{0,${FRACTION_DIGITS}}$`, "u");
 
-// A comma followed by exactly GROUP_DIGITS digits groups thousands ("7,900"), which is how
-// `parseCurrencyUnitStringToCents` reads it; any other trailing separator is the decimal point.
+// A comma followed by exactly GROUP_DIGITS digits groups thousands ("7,900"); any other trailing
+// separator is the decimal point. Count digits only, since the parser drops the rest ("7,900 ").
 const normalizeAmountInput = (value: string): string => {
   const decimalIndex = value.indexOf(".");
   if (decimalIndex !== -1) {
@@ -40,7 +35,9 @@ const normalizeAmountInput = (value: string): string => {
   if (commaIndex === -1) return value;
 
   const fraction = value.slice(commaIndex + 1);
-  return fraction.length === GROUP_DIGITS ? value : value.slice(0, commaIndex + 1) + fraction.slice(0, FRACTION_DIGITS);
+  return fraction.replace(/\D/gu, "").length === GROUP_DIGITS
+    ? value
+    : value.slice(0, commaIndex + 1) + fraction.slice(0, FRACTION_DIGITS);
 };
 
 export const PriceInput = React.forwardRef<
@@ -85,8 +82,11 @@ export const PriceInput = React.forwardRef<
     const handleChange = (newValue: string) => {
       newValue = normalizeAmountInput(newValue);
       let cents = parseCurrencyUnitStringToCents(currencyCode, newValue);
-      if (cents != null && (isNaN(cents) || cents < 0)) cents = 0;
-      if (cents != null && !UNSETTLED_VALUE.test(newValue)) {
+      const clamped = cents != null && (isNaN(cents) || cents < 0);
+      if (clamped) cents = 0;
+      // A clamped value is written back even while unsettled: when the parent already holds 0,
+      // the resync from `cents` never fires to replace it.
+      if (cents != null && (clamped || !UNSETTLED_VALUE.test(newValue))) {
         newValue = formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, cents);
       }
       setValue(newValue);
