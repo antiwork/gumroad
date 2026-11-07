@@ -1937,6 +1937,18 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 	linked := func(conn *sql.DB) {
 		conn.Exec("UPDATE users SET flags = flags | ? WHERE id = ?", userCheckMerchantAccountIsLinked, sellerID)
 	}
+	// migrating is a seller with merchant migration on and the compliance info given, if any,
+	// whose unlinked Connect account's fresh marker keeps its own quote, beside the platform's.
+	migrating := func(t *testing.T, e *testEnv, conn *sql.DB, info map[string]any) {
+		charging(e)
+		e.redis.HSet("merchant_migration", "boolean", "true")
+		platform(t, conn, "usd", `{}`)
+		own(t, conn, "US", `{"meta":{"stripe_connect":"true"},"settlement_currency_mismatch_map":{"eur":"2026-11-06T06:00:00Z"}}`)
+		if info != nil {
+			info["id"], info["user_id"], info["created_at"], info["updated_at"] = int64(1_799_961), sellerID, testNow, testNow
+			testdb.Insert(t, conn, "user_compliance_info", info)
+		}
+	}
 	brlLocal := display("brl", "usd", "2716", "5.4321", "buyer_local") + `,"buyer_currency":"brl","buyer_local_currency_rate":5.4321,` +
 		`"buyer_local_currency_subunit_to_unit":100,"buyer_local_price_cents":2716,"rental_price_cents":`
 	// shape makes the product's flags and native type, charged on the platform account.
@@ -2027,10 +2039,23 @@ func TestABuyerSeesTheLocalPrice(t *testing.T) {
 				"country": "US", "currency": "usd", "json_data": `{"meta":{"stripe_connect":"true"}}`, "charge_processor_alive_at": testNow,
 				"created_at": testNow, "updated_at": testNow})
 		}},
-		{"a Connect account routed by compliance country", "usd", "EUR", "", "stripe connect routing", func(t *testing.T, e *testEnv, conn *sql.DB) {
-			charging(e)
-			e.redis.HSet("merchant_migration", "boolean", "true")
-			own(t, conn, "US", `{"meta":{"stripe_connect":"true"}}`)
+		// Without the linked flag, merchant_migration_enabled? is the feature and a compliance
+		// country Stripe Connect supports.
+		{"a Connect account routed by compliance country", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			migrating(t, e, conn, map[string]any{"country": "United States"})
+		}},
+		{"a compliance country Stripe Connect doesn't take", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			migrating(t, e, conn, map[string]any{"country": "India"})
+		}},
+		{"merchant migration without compliance info", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			migrating(t, e, conn, nil)
+		}},
+		{"a business routed by its legal entity's country", "usd", "EUR", usdDefault, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			e.redis.HSet("stripe_connect_routing_by_legal_entity_country", "boolean", "true")
+			migrating(t, e, conn, map[string]any{"country": "India", "business_country": "United Kingdom", "is_business": true})
+		}},
+		{"a business routed by its individual country", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
+			migrating(t, e, conn, map[string]any{"country": "India", "business_country": "United Kingdom", "is_business": true})
 		}},
 		// Without merchant migration the Connect account, and its marker, are skipped for the platform's.
 		{"an unlinked Connect account without merchant migration", "usd", "EUR", eurLocal, "", func(t *testing.T, e *testEnv, conn *sql.DB) {
