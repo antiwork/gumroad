@@ -65,6 +65,58 @@ describe RecurringChargeReminderWorker, :vcr do
     end.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id)
   end
 
+  describe "final reminder", vcr: { cassette_name: "RecurringChargeReminderWorker/sends_a_reminder_email_about_an_upcoming_charge" } do
+    def perform_final
+      described_class.new.perform(@subscription.id)
+    end
+
+    it "sends one reminder for each renewal" do
+      expect do
+        2.times { perform_final }
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id).once
+
+      next_renewal = @subscription.end_time_of_subscription + 3.months
+      allow_any_instance_of(Subscription).to receive(:end_time_of_subscription).and_return(next_renewal)
+      travel_to next_renewal - 6.days
+
+      expect do
+        2.times { perform_final }
+      end.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).with(@subscription.id).once
+    end
+
+    it "skips a job scheduled for an earlier renewal date" do
+      travel_to @subscription.end_time_of_subscription - 20.days
+      expect { perform_final }.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder)
+
+      travel_to @subscription.end_time_of_subscription - 6.days
+      expect { perform_final }.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).once
+    end
+
+    it "skips the reminder once the renewal date has passed" do
+      travel_to @subscription.end_time_of_subscription + 1.day
+
+      expect { perform_final }.not_to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder)
+    end
+
+    it "treats an enqueue that returns nothing as a failure so a retry can send" do
+      allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_return(nil)
+
+      expect { perform_final }.to raise_error(described_class::EmailNotEnqueuedError)
+      allow_any_instance_of(ActionMailer::MessageDelivery).to receive(:deliver_later).and_call_original
+
+      expect { perform_final }.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).once
+    end
+
+    it "still sends after the advance notice for the same renewal" do
+      allow_any_instance_of(Subscription).to receive(:recurrence).and_return("yearly")
+      travel_to @subscription.end_time_of_subscription - 29.days
+      expect { described_class.new.perform(@subscription.id, described_class::ADVANCE) }.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).once
+
+      travel_to @subscription.end_time_of_subscription - 6.days
+      expect { perform_final }.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).once
+    end
+  end
+
   # Every example here makes the same Stripe calls in setup_subscription, so they share one cassette.
   describe "advance notice for renewals of 12+ months",
            vcr: { cassette_name: "RecurringChargeReminderWorker/advance_notice_for_renewals_of_12_months/sends_the_advance_notice_once" } do
@@ -183,7 +235,8 @@ describe RecurringChargeReminderWorker, :vcr do
           original.call(job)
         end
 
-        expect { run_job(first_job, "default") }.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).twice
+        # The final reminder runs unblocked but is not due 29 days out, so only the advance notice is sent.
+        expect { run_job(first_job, "default") }.to have_enqueued_mail(CustomerLowPriorityMailer, :subscription_renewal_reminder).once
         expect { run_job(second_job, "low") }.not_to have_enqueued_mail(CustomerLowPriorityMailer)
       end
     end

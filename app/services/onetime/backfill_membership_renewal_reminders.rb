@@ -4,10 +4,13 @@
 # membership_renewal_reminders flip; later purchases already scheduled their own, so
 # including them would email the buyer twice.
 #
-# Not idempotent per row, so progress lives in a Redis cursor: a retry resumes after the
-# last row handled and a finished run is a no-op on rerun.
+# RecurringChargeReminderWorker sends one final reminder per renewal, so scheduling a row twice
+# costs a redundant job, not a second email. Progress still lives in a Redis cursor so a retry
+# resumes after the last row handled and a finished run is a no-op on rerun.
 module Onetime
   class BackfillMembershipRenewalReminders
+    class EnqueueFailed < StandardError; end
+
     BATCH_SIZE = 500
     CURSOR_KEY = "onetime:backfill_membership_renewal_reminders:cursor"
     RUNNING_KEY = "onetime:backfill_membership_renewal_reminders:running"
@@ -75,7 +78,8 @@ module Onetime
         end
         return if @dry_run
 
-        RecurringChargeReminderWorker.perform_at(remind_at, subscription.id)
+        enqueued = RecurringChargeReminderWorker.perform_at(remind_at, subscription.id)
+        raise EnqueueFailed, "perform_at returned #{enqueued.inspect}" unless enqueued
         counts[:scheduled] += 1
       end
 
@@ -88,7 +92,8 @@ module Onetime
           subscription.alive?(include_pending_cancellation: false) &&
           !subscription.in_free_trial? &&
           !subscription.charges_completed? &&
-          !(subscription.renewal_disabled_due_to_indian_card_mandate? && subscription.india_card_mandate_reliability_enabled?)
+          !(subscription.renewal_disabled_due_to_indian_card_mandate? && subscription.india_card_mandate_reliability_enabled?) &&
+          !subscription.overdue_for_charge?
       end
 
       def claim!

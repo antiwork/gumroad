@@ -3,6 +3,8 @@
 require "test_helper"
 
 class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
+  include ActionMailer::TestHelper
+
   CURSOR_KEY = Onetime::BackfillMembershipRenewalReminders::CURSOR_KEY
   RUNNING_KEY = Onetime::BackfillMembershipRenewalReminders::RUNNING_KEY
 
@@ -82,6 +84,19 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     assert_sidekiq_enqueued(RecurringChargeReminderWorker, args: [subscription.id])
   end
 
+  test "a rerun after the cursor is lost emails the buyer once" do
+    subscription = create_eligible_subscription
+    run_backfill
+    $redis.del(CURSOR_KEY)
+    run_backfill
+
+    jobs = RecurringChargeReminderWorker.jobs.select { |j| j["args"] == [subscription.id] }
+    assert_equal 2, jobs.size
+    travel_to(Time.zone.at(jobs.map { |j| j["at"] }.max)) do
+      assert_enqueued_emails(1) { jobs.each { |j| RecurringChargeReminderWorker.new.perform(*j["args"]) } }
+    end
+  end
+
   test "a rerun after a finished run schedules nothing" do
     create_eligible_subscription
     run_backfill
@@ -133,6 +148,19 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     end
   end
 
+  test "skips a subscription whose renewal date has already passed" do
+    subscription = create_eligible_subscription
+
+    travel_to(subscription.end_time_of_subscription + 1.day) do
+      summary = run_backfill
+
+      assert_equal 1, summary[:considered]
+      assert_equal 0, summary[:eligible]
+      assert_equal 1, summary[:skipped]
+      assert_equal 0, RecurringChargeReminderWorker.jobs.size
+    end
+  end
+
   test "skips subscriptions whose seller does not have the flag" do
     create_eligible_subscription
     Feature.deactivate(:membership_renewal_reminders)
@@ -171,6 +199,16 @@ class Onetime::BackfillMembershipRenewalRemindersTest < ActiveSupport::TestCase
     summary = run_backfill
 
     assert_equal 1, summary[:considered]
+    assert_equal 0, summary[:scheduled]
+    assert_equal 1, summary[:errors]
+  end
+
+  test "counts an enqueue that returns no job id as an error, not as scheduled" do
+    create_eligible_subscription
+    RecurringChargeReminderWorker.stubs(:perform_at).returns(nil)
+
+    summary = run_backfill
+
     assert_equal 0, summary[:scheduled]
     assert_equal 1, summary[:errors]
   end
