@@ -247,10 +247,20 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 	}
 }
 
-func TestACoffeeProductsCustomHTMLGoesToRails(t *testing.T) {
+// render_custom_html_if_present runs before show's /coffee redirect, and its wrapper is any
+// product's.
+func TestACoffeeProductsCustomHTML(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
 	mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
 	customHTML(t, e, conn)
-	e.render(t, nil, "coffee product")
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	e.wantAll(t, w.Body.String(), []string{
+		`<link rel="canonical" href="https://gowebproductseller.gumroad.com/l/guide">`,
+		`"/l/gowebp1?wanted=true"`,
+		`"@type":"Product","name":"Guide \u003c1\u003e"`,
+	})
 }
