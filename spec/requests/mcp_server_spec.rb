@@ -4218,6 +4218,20 @@ describe "MCP server" do
       post_mcp([{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Needs write access", price_cents: 500 } } }])
 
       expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
+      # The caller still gets the plain error it always got, with no step-up it could not complete.
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body.first["error"]["message"]).to include("requires the edit_products or account scope")
+    end
+
+    it "counts a missing scope when the client registered none of the accepted scopes" do
+      narrow_app = create(:oauth_application, owner: @seller, scopes: "view_public")
+      @token = create("doorkeeper/access_token", application: narrow_app, resource_owner_id: @seller.id, scopes: "view_public")
+
+      call_tool("create_draft_product", { name: "Needs write access", price_cents: 500 })
+
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body["error"]["message"]).to include("requires the edit_products or account scope")
     end
 
     it "counts a name the server does not serve under other" do
