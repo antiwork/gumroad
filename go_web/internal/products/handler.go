@@ -233,8 +233,11 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 			p.discountCode, p.wrapperCode = code, code
 		}
 	}
-	if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
-		return nil, fallback("utm visit push")
+	// track_utm_link_visit returns unless request.get?, so a HEAD request records no visit.
+	if r.Method == http.MethodGet {
+		if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
+			return nil, fallback("utm visit push")
+		}
 	}
 	p.layout, _ = v.Req.Param("layout").(string)
 	// A bare key is nil, which still counts as a visitor search param.
@@ -309,7 +312,8 @@ func declined(r *http.Request, env *web.Environment) string {
 		port, protocol = "80", "http://"
 	}
 	switch {
-	case r.Method != http.MethodGet:
+	case r.Method != http.MethodGet && r.Method != http.MethodHead:
+		// Rails routes HEAD to show, and Rack::Head drops the body.
 		return "method"
 	case env.RootDomain != "gumroad.com" || env.IsGumroadHost(host) || analyticsHost.MatchString(host):
 		return "host"

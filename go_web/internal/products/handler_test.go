@@ -186,8 +186,13 @@ func newTestEnv(t *testing.T) *testEnv {
 
 func (e *testEnv) get(hostname, target string, headers map[string]string) *httptest.ResponseRecorder {
 	e.t.Helper()
+	return e.request(http.MethodGet, hostname, target, headers)
+}
+
+func (e *testEnv) request(method, hostname, target string, headers map[string]string) *httptest.ResponseRecorder {
+	e.t.Helper()
 	e.railsHit = nil
-	r := httptest.NewRequest("GET", target, nil)
+	r := httptest.NewRequest(method, target, nil)
 	r.Host = hostname
 	r.RemoteAddr = "10.1.0.9:5000"
 	r.Header.Set("X-Forwarded-Proto", "https")
