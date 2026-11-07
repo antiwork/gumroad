@@ -142,7 +142,7 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 			Sym("current_user", u.currentUser).Sym("prompt_passkey_setup", u.promptPasskey)
 		p.avatarPushes = appendNew(p.avatarPushes, p.viewerPushes...)
 	}
-	props.Sym("is_mobile_app_web_view", p.Session.Get("mobile_app_web_view") == true)
+	props.Sym("is_mobile_app_web_view", p.Req.Param("display") == "mobile_app" || p.Session.Get("mobile_app_web_view") == true)
 	h.productProps(props, p, prod, v)
 	component, bodyClass := productComponent, ""
 	switch {
@@ -161,9 +161,9 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		}
 	}
 
-	// as_embed is a declined param.
+	asEmbed, _ := p.Req.Params.Get("as_embed")
 	doc := inertia.Document{
-		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta,
+		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta, AsEmbed: asEmbed != nil,
 		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page", BodyClass: bodyClass,
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
 	}
@@ -246,9 +246,16 @@ func (h *handler) redirectCoffee(w http.ResponseWriter, p *page, prod *product) 
 	if err := h.trackUTMVisit(w, p, prod); err != nil {
 		return err
 	}
+	// params.permit(:wanted, :native), in to_query's sorted order.
+	var query [][2]string
+	for _, name := range []string{"native", "wanted"} {
+		if v, ok := p.Req.Param(name).(string); ok {
+			query = append(query, [2]string{name, v})
+		}
+	}
 	location := "/coffee"
-	if wanted, ok := p.Req.Param("wanted").(string); ok {
-		location += "?" + rails.ToQuery([2]string{"wanted", wanted})
+	if len(query) > 0 {
+		location += "?" + rails.ToQuery(query...)
 	}
 	return h.ctl.Redirect(w, p.Visit, location)
 }

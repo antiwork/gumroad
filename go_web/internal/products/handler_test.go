@@ -2722,3 +2722,37 @@ func TestAnInertiaVisitGetsThePageObject(t *testing.T) {
 		t.Errorf("custom html: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 }
+
+// Only ?wanted=true's cart_item reads these, so any other view ignores them; display and as_embed
+// reach the shared props and the layout, and native=true skips a custom HTML page.
+func TestParamsTheShowPageReads(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	const cartOnly = "/l/guide?option=x&variant=y&price=5&recurrence=monthly&rent=true&currency=eur&monthly=true"
+	plain := e.get(host, "/l/guide", nil)
+	w := e.get(host, cartOnly, nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("cart params: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	page := func(body string) string {
+		return strings.Replace(authenticityToken.ReplaceAllString(html.UnescapeString(dataPage.FindStringSubmatch(body)[1]), ""),
+			strings.ReplaceAll(cartOnly, "&", `\u0026`), "/l/guide", 1)
+	}
+	if page(w.Body.String()) != page(plain.Body.String()) {
+		t.Error("the cart's params changed the page")
+	}
+	if body := e.get(host, "/l/guide?display=mobile_app", nil).Body.String(); !strings.Contains(html.UnescapeString(body), `"is_mobile_app_web_view":true`) {
+		t.Error("display=mobile_app")
+	}
+	if body := e.get(host, "/l/guide?as_embed=1", nil).Body.String(); !strings.Contains(body, `style="background: transparent"`) {
+		t.Error("as_embed=1")
+	}
+	// A bare key is nil, which the layout reads as false.
+	if body := e.get(host, "/l/guide?as_embed", nil).Body.String(); strings.Contains(body, "background: transparent") {
+		t.Error("a bare as_embed")
+	}
+	customHTML(t, e, conn)
+	if body := e.get(host, "/l/guide?native=true", nil).Body.String(); strings.Contains(body, "gumroad-landing-frame") || !strings.Contains(body, productComponent) {
+		t.Error("native=true")
+	}
+}
