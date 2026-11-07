@@ -160,3 +160,23 @@ func TestQuantityLeftCountsUsesAndReservations(t *testing.T) {
 		})
 	}
 }
+
+// matching_tier_for(0) over normalized_ownership_duration_tiers.
+func TestStartingTierPercent(t *testing.T) {
+	for raw, want := range map[string]any{
+		`[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`: int64(10),
+		`[{"months":"0","amount_percentage":"15"}]`:                                  int64(15),
+		`[{"amount_percentage":7.9}]`:                                                int64(7),
+		`[{"months":-1,"amount_percentage":5},{"months":0,"amount_percentage":9}]`:   int64(9),
+		`[{"months":0,"amount_percentage":9},{"months":0,"amount_percentage":9}]`:    int64(9),
+		`[{"months":0,"amount_percentage":9},{"months":0,"amount_percentage":8}]`:    nil,
+		`[{"months":12,"amount_percentage":25}]`:                                     nil,
+		`[{"months":true,"amount_percentage":25}]`:                                   nil,
+		`[1]`: nil,
+	} {
+		got, ok := startingTierPercent(raw)
+		if want == nil && ok || want != nil && (!ok || got != want) {
+			t.Errorf("%s: %d %v, want %v", raw, got, ok, want)
+		}
+	}
+}
