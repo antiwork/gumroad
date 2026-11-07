@@ -361,7 +361,7 @@ func declinedParams(req *rails.Request) string {
 			return "layout with iframe"
 		}
 	}
-	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest"} {
+	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest", "currency"} {
 		if raw, ok := req.Params.Get(name); ok {
 			if _, isString := raw.(string); !isString && raw != nil {
 				return "param " + name
