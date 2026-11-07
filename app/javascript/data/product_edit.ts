@@ -432,9 +432,7 @@ export const removeFileEmbedsFromRichContent = (description: object, fileIds: Se
   return isRecord(cleaned) ? cleaned : description;
 };
 
-// A file removal is stated, never inferred: the save contract's deleted_ids.files is derived from
-// this status, and nothing in the editor set it, so a file whose content block the seller deleted
-// stayed attached and kept shipping with no way to remove it.
+// The save contract derives deleted_ids.files from this status, not from missing embeds.
 export const markFileRemoved = (files: Product["files"], fileId: string): Product["files"] =>
   files.map((file) =>
     file.id === fileId && file.status.type !== "removed"
@@ -457,6 +455,13 @@ export const withoutFileEmbedsFromVariants = (variants: Variant[], fileId: strin
     variant.rich_content = withoutFileEmbeds(variant.rich_content, fileId);
   });
 };
+
+// The library list a picker shows carries one row per url, so a second attachment of the same file
+// has no row of its own — and no way to be removed. Every attachment needs a row.
+export const attachmentsWithoutLibraryRow = (files: Product["files"], libraryFileIds: string[]): Product["files"] =>
+  files.filter(
+    (file) => file.status.type !== "removed" && !file.id.startsWith("drop_") && !libraryFileIds.includes(file.id),
+  );
 
 export const buildRichContentReconciliationTransaction = (
   state: EditorState,

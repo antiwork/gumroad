@@ -36,6 +36,7 @@ import { ReactSortable } from "react-sortablejs";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
 import {
+  attachmentsWithoutLibraryRow,
   copyRichContentPages,
   markFileRemoved,
   prepareRichContentPagesForMove,
@@ -717,11 +718,14 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     return existingFiles.filter((file) => regex.test(file.display_name));
   }, [existingFiles, selectingExistingFiles?.query]);
 
-  // A removal is stated, not inferred: marking the file removed is what puts it in the save's
-  // deleted_ids.files, and stripping its embeds keeps the `files` payload from re-creating it.
-  // Nothing is deleted until the seller saves.
+  // Marking the file removed is what puts it in the save's deleted_ids.files; stripping its embeds
+  // keeps the `files` payload from re-creating it. Nothing is deleted until the seller saves.
   const attachedFileIds = new Set(
     product.files.filter((file) => file.status.type !== "removed").map((file) => file.id),
+  );
+  const attachedFilesMissingFromLibrary = attachmentsWithoutLibraryRow(
+    product.files,
+    existingFiles.map((file) => file.id),
   );
   const pendingRemovedFileIds = new Set(
     product.files.filter((file) => file.status.type === "removed").map((file) => file.id),
@@ -1055,6 +1059,28 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             ))
                         )}
                       </Rows>
+                      {attachedFilesMissingFromLibrary.length > 0 ? (
+                        <Rows className="overflow-auto" style={{ maxHeight: "20rem", textAlign: "initial" }}>
+                          {attachedFilesMissingFromLibrary.map((file) => (
+                            <Row key={file.id}>
+                              <RowContent>
+                                <FileKindIcon extension={file.extension} />
+                                <div className="flex-1">
+                                  <h4>{file.display_name}</h4>
+                                  <span>{`Attached to this product (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
+                                </div>
+                                <Button
+                                  size="icon"
+                                  aria-label={`Remove ${file.display_name} from this product`}
+                                  onClick={() => removeProductFile(file.id)}
+                                >
+                                  <Trash className="size-5" />
+                                </Button>
+                              </RowContent>
+                            </Row>
+                          ))}
+                        </Rows>
+                      ) : null}
                     </div>
                   </Modal>
                 ) : null}
