@@ -55,19 +55,21 @@ describe "MCP server product search" do
     expect(body.dig("result", "structuredContent", "products").map { _1["name"] }).to include("Learn to draw faces")
   end
 
-  it "leaves out a product that is unpublished, deleted, banned, or rated as adult" do
-    unpublished = create(:product, :recommendable, user: @seller, name: "Drawing drills", price_cents: 500)
-    unpublished.update_column(:purchase_disabled_at, Time.current)
-    deleted = create(:product, :recommendable, user: @seller, name: "Drawing deleted", price_cents: 500)
-    deleted.update_column(:deleted_at, Time.current)
-    banned = create(:product, :recommendable, user: @seller, name: "Drawing banned", price_cents: 500)
-    banned.update_column(:banned_at, Time.current)
+  it "drops a product that stopped being visible after the index was written" do
+    unpublished = create(:product, :recommendable, user: @seller, name: "Draw drills", price_cents: 500)
+    deleted = create(:product, :recommendable, user: @seller, name: "Draw deleted", price_cents: 500)
+    banned = create(:product, :recommendable, user: @seller, name: "Draw banned", price_cents: 500)
     Link.import(refresh: true, force: true)
+
+    # The index still holds all three; only the rows change, which is the lag the row check covers.
+    unpublished.update_column(:purchase_disabled_at, Time.current)
+    deleted.update_column(:deleted_at, Time.current)
+    banned.update_column(:banned_at, Time.current)
 
     names = call_tool({ query: "draw" }).dig("result", "structuredContent", "products").map { _1["name"] }
 
     expect(names).to include("Learn to draw faces")
-    expect(names).not_to include("Drawing drills", "Drawing deleted", "Drawing banned")
+    expect(names).not_to include("Draw drills", "Draw deleted", "Draw banned")
   end
 
   it "treats a query that is only operators as empty" do
