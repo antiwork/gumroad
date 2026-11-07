@@ -43,7 +43,7 @@ func teamPolicies(role string) string {
 		`"settings_profile":{"manage_social_connections":` + is() + `,"update":` + write + `},` +
 		`"settings_third_party_analytics_user":{"update":` + is(teamAdmin) + `},"installment":{"create":` + write + `},` +
 		`"workflow":{"create":` + write + `},"utm_link":{"index":` + all + `},"community":{"index":false},"churn":{"show":` + all + `},` +
-		`"page":{"index":` + all + `,"create":` + write + `},"user":{"view_store_agent":` + write + `,"use_store_agent":false}}`
+		`"page":{"index":` + all + `,"create":` + write + `}}`
 }
 
 // A team member viewing a product as the seller they switched to: their role decides can_edit

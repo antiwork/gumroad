@@ -334,6 +334,27 @@ func TestCuratedProductsReorderTheDiscoverNav(t *testing.T) {
 			}
 		})
 	}
+	// Sampling picks half of four or more at random; a dry run takes the first half, so a parity
+	// run can make Rails' sample match. The product leads the cart, so every run reorders.
+	t.Run("a dry run's sample", func(t *testing.T) {
+		e := newTestEnv(t)
+		conn := testdb.Open(t)
+		setup(t, e, conn)
+		related(t, conn, counts)
+		cookie := cart(t, conn, productID, bundle, 1_795_971, 1_795_972)
+		for i := range 10 {
+			// Each signature is single-use.
+			headers := e.dryRun(host, "/l/guide?layout=discover", testNow.Add(-time.Duration(i)*time.Second))
+			headers["Cookie"] = cookie["Cookie"]
+			w := e.get(host, "/l/guide?layout=discover", headers)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, reordered) {
+				t.Fatalf("want %s\nin %s", reordered, page)
+			}
+		}
+	})
 	t.Run("a curated taxonomy without a root", func(t *testing.T) {
 		e := newTestEnv(t)
 		conn := testdb.Open(t)

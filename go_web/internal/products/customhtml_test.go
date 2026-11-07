@@ -144,6 +144,13 @@ func TestTheCustomHTMLWrapperSignedIn(t *testing.T) {
 			t.Errorf("user %d: %d %q", user, w.Code, w.Header().Get("X-Go-Web-Fallback"))
 		}
 	}
+	// Unpublished, it's still the collaborator's preview, which other visitors don't get.
+	mustExec(t, conn, "UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
+	headers := e.signedIn(collabID, nil)
+	headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide", testNow.Add(-time.Second))["X-Go-Web-Dry-Run"]
+	if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "custom html preview" {
+		t.Errorf("unpublished: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
 }
 
 func TestTheCustomHTMLWrapperShapes(t *testing.T) {
