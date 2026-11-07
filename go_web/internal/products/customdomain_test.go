@@ -157,6 +157,7 @@ func TestADeletedSellersCustomDomain(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
+			jobs := sidekiqJobs(t, e)
 			conn := testdb.Open(t)
 			c.setup(t, conn)
 			mustExec(t, conn, "UPDATE users SET deleted_at = ? WHERE id = ?", testNow, sellerID)
@@ -173,6 +174,12 @@ func TestADeletedSellersCustomDomain(t *testing.T) {
 			}
 			if w.Code != http.StatusNotFound || e.railsHit != nil {
 				t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			// Nor is a UTM visit recorded on a product's domain.
+			for _, queue := range []string{"queue:default", "queue:low"} {
+				if queued, _ := jobs.List(queue); len(queued) != 0 {
+					t.Errorf("%s %v", queue, queued)
+				}
 			}
 		})
 	}

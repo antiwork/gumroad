@@ -253,6 +253,7 @@ func (h *handler) productDomainProduct(p *page, productID int64) (*product, erro
 		return nil, fallback("product custom domain seller deleted")
 	case seller.deletedAt.Valid:
 		// ensure_seller_is_not_deleted's 404, with no UTM visit recorded on a product's domain.
+		p.utm = nil
 		return nil, pages.ErrNotFound
 	}
 	p.seller, p.productDomain, p.utm = seller, true, nil
