@@ -8,8 +8,28 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
+
+// price_cents_from_units reads a plain decimal in the currency's units.
+func TestPriceCentsFromUnits(t *testing.T) {
+	for _, c := range []struct {
+		in    string
+		scale int64
+		want  int64
+		ok    bool
+	}{
+		{"5", 100, 500, true}, {"5.", 100, 500, true}, {".5", 100, 50, true}, {"+1.005", 100, 101, true}, {"1.004", 100, 100, true},
+		{"-0", 100, 0, true}, {"-1", 100, 0, false}, {"1e3", 100, 0, false}, {" 5", 100, 0, false}, {"5,00", 100, 0, false},
+		{"1500.6", 1, 1501, true}, {"21474836.47", 100, 2147483647, true}, {"21474836.48", 100, 0, false}, {"", 100, 0, false},
+	} {
+		got, ok := priceCentsFromUnits(c.in, c.scale)
+		if got != c.want || ok != c.ok {
+			t.Errorf("%q: %d %v, want %d %v", c.in, got, ok, c.want, c.ok)
+		}
+	}
+}
 
 // show's wanted=true sends the visitor to checkout with every param but the code, the cart
 // item's product, rent and price, the code that applies, and the referrer. A pay-what-you-want
@@ -54,10 +74,19 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 		tier(t, conn, basic, 0, basicMax, basicPWYW, [2]any{300, "monthly"}, [2]any{3000, "yearly"})
 		tier(t, conn, pro, 1, nil, false, [2]any{900, "monthly"}, [2]any{1000, "quarterly"})
 	}
+	// rental adds a 300-cent rental price to the fixture.
+	rental := func(t *testing.T, conn *sql.DB, purchaseType int) {
+		mustExec(t, conn, "UPDATE links SET purchase_type = ? WHERE id = ?", purchaseType, productID)
+		testdb.Insert(t, conn, "prices", map[string]any{"id": int64(1_799_351), "link_id": productID, "price_cents": 300, "currency": "usd",
+			"flags": priceIsRental, "created_at": testNow, "updated_at": testNow})
+	}
 	for _, c := range []struct {
 		name, target, location, reason string
-		headers                        map[string]string
-		setup                          func(t *testing.T, e *testEnv, conn *sql.DB)
+		// targetFor and locationFor are the target and location when they name an option's
+		// external id.
+		targetFor, locationFor func(e *testEnv) string
+		headers                map[string]string
+		setup                  func(t *testing.T, e *testEnv, conn *sql.DB)
 	}{
 		{name: "the product", target: "/l/guide?wanted=true",
 			location: base + "&id=guide&price=500&product=gowebp1&rent=false&wanted=true"},
@@ -198,13 +227,88 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
 			}},
-		{name: "a param only the cart reads", target: "/l/guide?wanted=true&option=x", reason: "param option"},
-		{name: "a recurrence the cart reads", target: "/l/guide?wanted=true&yearly=true", reason: "param yearly"},
+		// show fills in params[:option] from the variant's name, and the redirect carries it.
+		{name: "a variant by name", target: "/l/guide?wanted=true&variant=Medium",
+			locationFor: func(e *testEnv) string {
+				return base + "&id=guide&option=" + rails.CGIEscape(e.ids.Encrypt(medium)) + "&price=700&product=gowebp1&rent=false&variant=Medium&wanted=true"
+			},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				sizes(t, conn, false)
+				mustExec(t, conn, "UPDATE base_variants SET name = 'Medium' WHERE id = ?", medium)
+			}},
+		{name: "a variant no option has", target: "/l/guide?wanted=true&variant=Large",
+			location: base + "&id=guide&price=500&product=gowebp1&rent=false&variant=Large&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { sizes(t, conn, false) }},
+		// A blank option isn't nil, so the variant doesn't replace it, and it names no option.
+		{name: "a blank option", target: "/l/guide?wanted=true&option=&variant=Size",
+			location: base + "&id=guide&option=&price=700&product=gowebp1&rent=false&variant=Size&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				sizes(t, conn, false)
+				mustExec(t, conn, "UPDATE base_variants SET max_purchase_count = 1 WHERE id = ?", small)
+			}},
+		// A requested option need not have any left.
+		{name: "a sold-out option by id",
+			targetFor: func(e *testEnv) string { return "/l/guide?wanted=true&option=" + rails.CGIEscape(e.ids.Encrypt(small)) },
+			locationFor: func(e *testEnv) string {
+				return base + "&id=guide&option=" + rails.CGIEscape(e.ids.Encrypt(small)) + "&price=500&product=gowebp1&rent=false&wanted=true"
+			},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				sizes(t, conn, false)
+				mustExec(t, conn, "UPDATE base_variants SET max_purchase_count = 1 WHERE id = ?", small)
+			}},
+		{name: "a tier by id",
+			targetFor: func(e *testEnv) string { return "/l/guide?wanted=true&option=" + rails.CGIEscape(e.ids.Encrypt(pro)) },
+			locationFor: func(e *testEnv) string {
+				return base + "&id=guide&option=" + rails.CGIEscape(e.ids.Encrypt(pro)) + "&price=900&product=gowebp1&recurrence=monthly&rent=false&wanted=true"
+			},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { tiers(t, conn, 0, nil, false) }},
+		// The first recurrence flagged true fills in params[:recurrence], which wins over the duration.
+		{name: "a recurrence flag", target: "/l/guide?wanted=true&quarterly=false&monthly=true&yearly=true",
+			location: base + "&id=guide&monthly=true&price=500&product=gowebp1&quarterly=false&recurrence=monthly&recurrence=monthly&rent=false&wanted=true&yearly=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { membership(t, conn, 0, 1) }},
+		{name: "a recurrence over a flag", target: "/l/guide?wanted=true&recurrence=monthly&yearly=true",
+			location: base + "&id=guide&price=500&product=gowebp1&recurrence=monthly&recurrence=monthly&rent=false&wanted=true&yearly=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { membership(t, conn, 0, 1) }},
+		{name: "a recurrence the product has no price at", target: "/l/guide?wanted=true&recurrence=quarterly",
+			location: base + "&id=guide&price=4000&product=gowebp1&recurrence=quarterly&recurrence=yearly&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { membership(t, conn, 0, 1) }},
+		// price_cents_from_units: a pay-what-you-want price that covers the product's goes to
+		// checkout, in cents both times.
+		{name: "a pay-what-you-want price", target: "/l/guide?wanted=true&price=7.505",
+			location: base + "&id=guide&price=751&price=751&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				mustExec(t, conn, "UPDATE links SET customizable_price = TRUE WHERE id = ?", productID)
+			}},
+		{name: "a pay-what-you-want price under the product's", target: "/l/guide?wanted=true&price=4",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				mustExec(t, conn, "UPDATE links SET customizable_price = TRUE WHERE id = ?", productID)
+			}},
+		{name: "a pay-what-you-want option's price", target: "/l/guide?wanted=true&price=6",
+			location: base + "&id=guide&price=600&price=600&product=gowebp1&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { sizes(t, conn, true) }},
+		// An unreadable price is nil, which url_for drops; only pay what you want reads it.
+		{name: "an unreadable price", target: "/l/guide?wanted=true&price=5%2C00",
+			location: base + "&id=guide&price=500&product=gowebp1&rent=false&wanted=true"},
+		{name: "a price that isn't pay what you want", target: "/l/guide?wanted=true&price=9",
+			location: base + "&id=guide&price=500&price=900&product=gowebp1&rent=false&wanted=true"},
+		{name: "a blank price", target: "/l/guide?wanted=true&price=",
+			location: base + "&id=guide&price=&price=500&product=gowebp1&rent=false&wanted=true"},
+		// !!params[:rent], so any value but a bare key rents what rents.
+		{name: "a rental", target: "/l/guide?wanted=true&rent=false",
+			location: base + "&id=guide&price=300&product=gowebp1&rent=false&rent=true&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { rental(t, conn, purchaseTypeBuyAndRent) }},
+		{name: "a rental of what only sells", target: "/l/guide?wanted=true&rent=1",
+			location: base + "&id=guide&price=500&product=gowebp1&rent=1&rent=false&wanted=true",
+			setup:    func(t *testing.T, e *testEnv, conn *sql.DB) { rental(t, conn, purchaseTypeBuyOnly) }},
+		{name: "an Array option", target: "/l/guide?wanted=true&option[]=x", reason: "wanted params"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			if c.setup != nil {
 				c.setup(t, e, testdb.Open(t))
+			}
+			if c.targetFor != nil {
+				c.target = c.targetFor(e)
 			}
 			if c.reason != "" {
 				e.renderAt(t, c.target, c.headers, c.reason)
@@ -213,6 +317,9 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 			w := e.get(host, c.target, c.headers)
 			if e.railsHit != nil {
 				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			if c.locationFor != nil {
+				c.location = c.locationFor(e)
 			}
 			if c.location == "" {
 				if w.Code != http.StatusOK {

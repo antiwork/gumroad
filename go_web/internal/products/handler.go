@@ -360,22 +360,11 @@ var rendererParams = []string{
 	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "size",
 }
 
-// cartParams are the params only ?wanted=true's cart_item reads, which this port leaves to Rails.
-var cartParams = []string{"currency", "option", "variant", "price", "recurrence", "rent"}
-
 // declinedParams is a param this port leaves to Rails.
 func declinedParams(req *rails.Request) string {
 	for _, name := range rendererParams {
 		if _, ok := req.Params.Get(name); ok {
 			return "param " + name
-		}
-	}
-	wanted := req.Param("wanted") == "true"
-	if wanted {
-		for _, name := range cartParams {
-			if _, ok := req.Params.Get(name); ok {
-				return "param " + name
-			}
 		}
 	}
 	if raw, ok := req.Params.Get("layout"); ok {
@@ -408,13 +397,6 @@ func declinedParams(req *rails.Request) string {
 	}
 	if _, reason := utmParams(req); reason != "" {
 		return reason
-	}
-	for _, key := range req.Params.Keys() {
-		if wanted && (strings.HasPrefix(key, "monthly") || strings.HasPrefix(key, "quarterly") || strings.HasPrefix(key, "biannually") ||
-			strings.HasPrefix(key, "yearly") || strings.HasPrefix(key, "every_two_years")) {
-			// BasePrice::Recurrence params that ?wanted=true reads.
-			return "param " + key
-		}
 	}
 	return ""
 }
