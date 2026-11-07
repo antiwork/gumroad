@@ -95,10 +95,10 @@ func TestTheSellersOwnView(t *testing.T) {
 	addSection(t, conn, 1_799_051, profileProductsSectionType, "More", fmt.Sprintf(
 		`{"shown_products":[%d,%d],"default_product_sort":"newest","show_filters":false,"add_new_products":true}`, ownOther, productID))
 	addSection(t, conn, 1_799_052, profilePostsSectionType, "", `{"shown_posts":[1799031,1799032,1799033]}`)
-	// The editor names a featured product without loading it, so a coffee one, whose props go to
-	// Rails, is no fallback.
-	testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_799_006), "user_id": sellerID, "name": "Coffee", "unique_permalink": "gowebownc",
-		"native_type": "coffee", "price_cents": 100, "created_at": testNow, "updated_at": testNow})
+	// The editor names a featured product without loading it, so one whose props go to Rails is no
+	// fallback.
+	testdb.Insert(t, conn, "links", map[string]any{"id": int64(1_799_006), "user_id": sellerID, "name": "Odd", "unique_permalink": "gowebownc",
+		"purchase_type": 3, "price_cents": 100, "created_at": testNow, "updated_at": testNow})
 	addSection(t, conn, 1_799_053, profileFeaturedSectionType, "Pick", `{"featured_product_id":1799006}`)
 	addSection(t, conn, 1_799_054, profileRichTextSectionType, "About", `{"text":{"type":"doc","content":[]}}`)
 	addSection(t, conn, 1_799_055, profileWishlistsSectionType, "Lists", `{"shown_wishlists":[]}`)
@@ -131,7 +131,7 @@ func TestTheSellersOwnView(t *testing.T) {
 			`{"id":"%[9]s","header":"About","type":"SellerProfileRichTextSection","text":{"type":"doc","content":[]},"hide_header":true},` +
 			`{"id":"%[10]s","header":"Lists","type":"SellerProfileWishlistsSection","shown_wishlists":[],"hide_header":false,"wishlists":[]},` +
 			`{"id":"%[12]s","header":"Join","type":"SellerProfileSubscribeSection","button_label":"Subscribe","hide_header":false}],` +
-			`"products":[{"id":"%[3]s","name":"Guide \u003c1\u003e"},{"id":"%[2]s","name":"Other"},{"id":"%[8]s","name":"Coffee"}],` +
+			`"products":[{"id":"%[3]s","name":"Guide \u003c1\u003e"},{"id":"%[2]s","name":"Other"},{"id":"%[8]s","name":"Odd"}],` +
 			`"posts":[` + entry(1_799_032, "2026-11-06T12:00:00Z") + `,` + entry(1_799_031, "2026-11-06T11:00:00Z") + `],` +
 			`"wishlist_options":[{"id":"%[11]s","name":"Gifts"}],"main_section_index":0`,
 	}, 1_799_051, ownOther, productID, 1_799_052, 1_799_032, 1_799_031, 1_799_053, 1_799_006, 1_799_054, 1_799_055, 1_799_041, 1_799_056)
