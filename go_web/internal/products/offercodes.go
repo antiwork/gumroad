@@ -441,9 +441,10 @@ func oncePerCartCents(amount, full, minPrice int64) int64 {
 	return allocated
 }
 
-// loadOfferDiscount's price is Link#price_cents, which a once-per-cart code allocates against.
-func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product, price *int64) (*offerDiscount, error) {
-	d := &offerDiscount{}
+// loadOfferDiscount reads v's prices, variants and recurrences; Link#price_cents is what a
+// once-per-cart code allocates against.
+func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product, v *view) (*offerDiscount, error) {
+	d, price := &offerDiscount{}, v.priceCents
 	// auto_apply_offer_code_for.
 	var auto *offerCode
 	a, err := h.sellerAutoApply(p, prod)
@@ -476,37 +477,44 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		// discount_code_props weighs the codes at this quantity, selection_discounts at one.
 		return nil, fallback("param quantity")
 	}
+	var defaults []*offerCode
 	for _, c := range list {
 		if rails.Blank(c.code.String) {
 			continue
 		}
 		valid, err := h.evaluateOfferCode(p, prod, c)
-		switch {
-		case err != nil:
+		if err != nil {
 			return nil, err
-		case valid && d.code != nil:
-			// best_default_code_result weighs a buyer's existing-customer default against the sale.
-			return nil, fallback("offer code comparison")
-		case valid:
-			d.code, d.resultCode = c, c.code.String
+		}
+		if valid {
+			defaults = append(defaults, c)
 		}
 	}
+	var url *offerCode
 	if d.urlCode = p.discountCode; d.urlCode != "" {
-		if d.code != nil && strings.EqualFold(d.urlCode, d.code.code.String) {
-			// The URL names the default that applies, so both would.
-			return nil, fallback("offer code comparison")
-		}
 		fromURL, errorCode, err := h.evaluateURLCode(p, prod, d.urlCode)
-		switch {
-		case err != nil:
+		if err != nil {
 			return nil, err
-		case errorCode == "" && d.code != nil:
-			// met_discount_conditions? and comparison_amount weigh the two.
-			return nil, fallback("offer code comparison")
-		case errorCode == "":
-			d.code, d.resultCode = fromURL, d.urlCode
 		}
 		d.urlError, d.urlRow = errorCode, fromURL
+		if errorCode == "" {
+			url = fromURL
+		}
+	}
+	switch {
+	case url != nil && len(defaults) > 0, len(defaults) > 1:
+		code, fromURL, err := h.comparedOffer(p, prod, v, url, defaults)
+		if err != nil {
+			return nil, err
+		}
+		d.code, d.resultCode = code, code.code.String
+		if fromURL {
+			d.resultCode = d.urlCode
+		}
+	case url != nil:
+		d.code, d.resultCode = url, d.urlCode
+	case len(defaults) == 1:
+		d.code, d.resultCode = defaults[0], defaults[0].code.String
 	}
 	if d.code != nil && auto != nil {
 		// sale_label: the winning code is the auto-applied one.

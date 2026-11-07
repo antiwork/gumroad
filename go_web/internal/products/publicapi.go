@@ -81,7 +81,7 @@ func (h *handler) renderFormat(w http.ResponseWriter, p *page, prod *product) er
 // wantedRedirect is show's ?wanted=true checkout redirect, which comes before respond_to;
 // done is false when show goes on to render.
 func (h *handler) wantedRedirect(w http.ResponseWriter, p *page, prod *product, v *view) (done bool, err error) {
-	if v.discount, err = h.loadOfferDiscount(p.Ctx, p, prod, v.priceCents); err != nil {
+	if v.discount, err = h.loadOfferDiscount(p.Ctx, p, prod, v); err != nil {
 		return false, err
 	}
 	if v.wanted, err = wantedCartItem(p, prod, v); err != nil || v.wanted == nil {
