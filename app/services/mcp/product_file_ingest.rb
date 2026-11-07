@@ -73,7 +73,7 @@ module Mcp
       # words: the key-safe form is only for the object key.
       content_type = content_type_for(filename)
       key_filename = safe_filename(filename)
-      @display_name ||= display_stem(filename)
+      @display_name = display_name || display_stem(filename)
       with_cleanup { store(inline_tempfile(content), content_type, key_filename) }
     end
 
@@ -237,7 +237,7 @@ module Mcp
       def display_stem(filename)
         base = File.basename(checked_filename(filename))
         stem = base.delete_suffix(File.extname(base))
-        ActiveStorage::Filename.new(stem).sanitized.presence || "file"
+        ActiveStorage::Filename.new(stem).sanitized.truncate(INLINE_MAX_FILENAME_BYTES).presence || "file"
       end
 
       # File.extname and File.basename raise ArgumentError on a NUL byte, which would reach the

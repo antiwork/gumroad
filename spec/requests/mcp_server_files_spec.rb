@@ -149,6 +149,13 @@ describe "MCP server product files" do
       expect(key).to match(%r{\Aattachments/#{@seller.external_id}/[0-9a-f]{32}/original/my-notes--1\.md\z})
     end
 
+    it "refuses content that is not text at all" do
+      call_tool("add_file", { id: @product.unique_permalink, content: ["a", "b"], filename: "notes.md" })
+
+      expect(response.parsed_body.dig("error", "message")).to include("content must be a string")
+      expect(@stored_objects).to be_empty
+    end
+
     it "refuses a filename with a null byte rather than crashing on it" do
       call_tool("add_file", { id: @product.unique_permalink, content: "notes", filename: "notes\0.md" })
 

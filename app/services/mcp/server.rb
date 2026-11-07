@@ -997,8 +997,9 @@ module Mcp
         product = find_product!(args["id"])
         url = args["url"].to_s.strip
         content = args["content"]
+        raise Error.new("content must be a string", code: -32602) unless content.nil? || content.is_a?(String)
         # An empty string is a caller that meant to pass nothing, not a file of zero bytes.
-        has_content = content.to_s.present?
+        has_content = content.present?
         raise Error.new("Pass url or content, not both", code: -32602) if url.present? && has_content
         raise Error.new("url is required, or pass content and filename to write the file out here", code: -32602) if url.blank? && !has_content
 
@@ -1019,7 +1020,11 @@ module Mcp
           action = inline ? "can write out here" : "can fetch"
           raise ToolError, "That file is larger than #{limit} MB, which is the most this tool #{action}. Upload it in the product editor instead: #{product.long_url}/edit"
         rescue Mcp::ProductFileIngest::InvalidUrl, *INTERNET_EXCEPTIONS
-          raise ToolError, "Could not download a file from that URL. Use a public https link to the file itself."
+          raise ToolError, if inline
+            "Could not store that file right now. Try again, or upload it in the product editor."
+          else
+            "Could not download a file from that URL. Use a public https link to the file itself."
+          end
         rescue Mcp::ProductFileIngest::DownloadFailed
           raise ToolError, "That link did not return a file. Use a public https link to the file itself."
         rescue Aws::S3::Errors::ServiceError
