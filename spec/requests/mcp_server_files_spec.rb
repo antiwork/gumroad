@@ -136,6 +136,12 @@ describe "MCP server product files" do
       expect(@stored_objects).to be_empty
     end
 
+    it "keeps the creator's own words as the buyer-visible name" do
+      call_tool("add_file", { id: @product.unique_permalink, content: "notes", filename: "Field Notes #1.md" })
+
+      expect(@product.reload.alive_product_files.sole.name_displayable).to eq("Field Notes #1")
+    end
+
     it "reduces a filename to a key-safe basename" do
       call_tool("add_file", { id: @product.unique_permalink, content: "notes", filename: "../../etc/my notes #1.md" })
 

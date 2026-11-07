@@ -69,9 +69,12 @@ module Mcp
     # somewhere to host it first. The content is the whole file: no conversion is attempted.
     # @return [ProductFile] the file now attached to the product
     def perform_inline(content:, filename:)
-      with_cleanup do
-        store(inline_tempfile(content), content_type_for(filename), safe_filename(filename))
-      end
+      # Validated before a tempfile exists, and the buyer-visible name keeps the creator's own
+      # words: the key-safe form is only for the object key.
+      content_type = content_type_for(filename)
+      key_filename = safe_filename(filename)
+      @display_name ||= display_stem(filename)
+      with_cleanup { store(inline_tempfile(content), content_type, key_filename) }
     end
 
     private
@@ -228,6 +231,13 @@ module Mcp
         stem = name.delete_suffix(extension).gsub(/[^A-Za-z0-9._-]/, "-").presence || "file"
         stem = stem.byteslice(0, INLINE_MAX_FILENAME_BYTES).to_s
         "#{stem}#{extension}"
+      end
+
+      # What the buyer sees when the creator did not name the file: their own stem, not the key form.
+      def display_stem(filename)
+        base = File.basename(checked_filename(filename))
+        stem = base.delete_suffix(File.extname(base))
+        ActiveStorage::Filename.new(stem).sanitized.presence || "file"
       end
 
       # File.extname and File.basename raise ArgumentError on a NUL byte, which would reach the
