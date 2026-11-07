@@ -15,6 +15,34 @@ import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
 
+const GROUP_DIGITS = 3;
+const FRACTION_DIGITS = 2;
+
+// A value is unsettled while the key that decides what its trailing separator means can still
+// arrive: a comma before fewer than GROUP_DIGITS digits may still grow into a thousands group
+// ("7,90" is about to become "7,900"), and a separator with at most one digit after it may still
+// grow into a fraction. Rewriting there is what turned a grouped amount into a fraction. A comma
+// already spelled out as a group ("7,900") or a completed fraction ("1234.43") is settled, so
+// `1234,.43` — both separators, no more digits that could change either meaning — is written back
+// as `1234.43` rather than left with the grouping comma in it.
+const UNSETTLED_VALUE = new RegExp(`\\.\\d?$|,\\d{0,${FRACTION_DIGITS}}$`, "u");
+
+// A comma followed by exactly GROUP_DIGITS digits groups thousands ("7,900"), which is how
+// `parseCurrencyUnitStringToCents` reads it; any other trailing separator is the decimal point.
+const normalizeAmountInput = (value: string): string => {
+  const decimalIndex = value.indexOf(".");
+  if (decimalIndex !== -1) {
+    const fraction = value.slice(decimalIndex + 1).replace(/[.,]/gu, "");
+    return value.slice(0, decimalIndex + 1) + fraction.slice(0, FRACTION_DIGITS);
+  }
+
+  const commaIndex = value.lastIndexOf(",");
+  if (commaIndex === -1) return value;
+
+  const fraction = value.slice(commaIndex + 1);
+  return fraction.length === GROUP_DIGITS ? value : value.slice(0, commaIndex + 1) + fraction.slice(0, FRACTION_DIGITS);
+};
+
 export const PriceInput = React.forwardRef<
   HTMLInputElement,
   {
@@ -55,10 +83,10 @@ export const PriceInput = React.forwardRef<
       if (parseCurrencyUnitStringToCents(currencyCode, value) !== cents) setValue(parsedValue);
     }, [parsedValue]);
     const handleChange = (newValue: string) => {
-      newValue = newValue.replace(/[.,]+/gu, ".").replace(/(\.\d{1,2}).*/u, "$1");
+      newValue = normalizeAmountInput(newValue);
       let cents = parseCurrencyUnitStringToCents(currencyCode, newValue);
-      if (cents != null && !/[.,]\d?$/u.test(newValue)) {
-        if (isNaN(cents) || cents < 0) cents = 0;
+      if (cents != null && (isNaN(cents) || cents < 0)) cents = 0;
+      if (cents != null && !UNSETTLED_VALUE.test(newValue)) {
         newValue = formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, cents);
       }
       setValue(newValue);
