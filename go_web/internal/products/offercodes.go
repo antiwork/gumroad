@@ -354,6 +354,10 @@ type offerDiscount struct {
 	// cents is a fixed code's discount cents, which a once-per-cart code allocates.
 	cents         int64
 	oncePerCartID string
+	// alt is the other code's result, for the selection_discounts entries in altEntries (see
+	// entryKey) that weigh the codes differently from the page.
+	alt        *offerDiscount
+	altEntries map[string]bool
 }
 
 // oncePerCart is OfferCodeDiscountComputingService#once_per_cart?.
@@ -445,57 +449,90 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 	}
 	switch {
 	case url != nil && len(defaults) > 0, len(defaults) > 1:
-		code, fromURL, err := h.comparedOffer(p, prod, v, url, defaults)
+		pick, entries, err := h.comparedOffer(p, prod, v, url, defaults)
 		if err != nil {
 			return nil, err
 		}
-		d.code, d.resultCode = code, code.code.String
-		if fromURL {
-			d.resultCode = d.urlCode
+		d.code, d.resultCode = pick.code, pick.resultCode(d.urlCode)
+		for key, c := range entries {
+			if c == pick {
+				continue
+			}
+			if d.alt == nil {
+				d.alt, d.altEntries = &offerDiscount{listed: d.listed, urlCode: d.urlCode, code: c.code, resultCode: c.resultCode(d.urlCode)}, map[string]bool{}
+			} else if d.alt.code != c.code || d.alt.resultCode != c.resultCode(d.urlCode) {
+				// A third result among the options.
+				return nil, fallback("offer code comparison")
+			}
+			d.altEntries[key] = true
 		}
 	case url != nil:
 		d.code, d.resultCode = url, d.urlCode
 	case len(defaults) == 1:
 		d.code, d.resultCode = defaults[0], defaults[0].code.String
 	}
-	if d.code != nil && auto != nil {
+	if err := h.settleDiscount(ctx, p, prod, price, d, auto); err != nil {
+		return nil, err
+	}
+	// An invalid URL code's scope only shows on an option the applying code leaves out.
+	if c := d.urlRow; c != nil && c != d.code && c.hasVariants && (d.code == nil || len(d.code.scope) > 0) {
+		if err := h.loadCodeOptions(ctx, prod, c); err != nil {
+			return nil, err
+		}
+	}
+	if d.alt != nil {
+		if err := h.settleDiscount(ctx, p, prod, price, d.alt, auto); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
+}
+
+// settleDiscount reads what d's code's result shows: the sale label, the code's products, its
+// options, and a once-per-cart code's allocation.
+func (h *handler) settleDiscount(ctx context.Context, p *page, prod *product, price *int64, d *offerDiscount, auto *offerCode) error {
+	c := d.code
+	if c == nil {
+		return nil
+	}
+	if auto != nil {
 		// sale_label: the winning code is the auto-applied one.
 		if !permalinkParam.MatchString(auto.code.String) {
-			return nil, fallback("offer code characters")
+			return fallback("offer code characters")
 		}
 		if strings.EqualFold(d.resultCode, auto.code.String) {
 			d.label = auto.displayedSaleLabel()
 		}
 	}
-	switch c := d.code; {
-	case c == nil:
+	var err error
+	switch {
 	case !c.universal:
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_products", c.id)
 	case c.anyExcluded:
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_excluded_products", c.id)
 	}
-	if c := d.code; err == nil && c != nil && c.hasVariants {
-		if err = h.loadCodeOptions(ctx, prod, c); err == nil && c.ownerless {
+	if err != nil {
+		return err
+	}
+	if c.hasVariants {
+		if err := h.loadCodeOptions(ctx, prod, c); err != nil {
+			return err
+		}
+		if c.ownerless {
 			// option_ids_by_product keys it by ObfuscateIds.encrypt(nil).
-			err = fallback("offer code option product")
+			return fallback("offer code option product")
 		}
 	}
-	// An invalid URL code's scope only shows on an option the applying code leaves out.
-	if c := d.urlRow; err == nil && c != nil && c != d.code && c.hasVariants && (d.code == nil || len(d.code.scope) > 0) {
-		err = h.loadCodeOptions(ctx, prod, c)
-	}
-	if c := d.code; err == nil && c != nil {
-		d.cents = c.amountCents.Int64
-		if c.oncePerCart() {
-			cur, known := currencies[prod.productCurrency()]
-			if price == nil || !known {
-				return nil, fallback("once-per-cart price")
-			}
-			d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(p.quantity()), cur.minPrice)
-			d.oncePerCartID = h.c.IDs.Encrypt(c.id)
+	d.cents = c.amountCents.Int64
+	if c.oncePerCart() {
+		cur, known := currencies[prod.productCurrency()]
+		if price == nil || !known {
+			return fallback("once-per-cart price")
 		}
+		d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(p.quantity()), cur.minPrice)
+		d.oncePerCartID = h.c.IDs.Encrypt(c.id)
 	}
-	return d, err
+	return nil
 }
 
 // evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: whether it
@@ -665,24 +702,47 @@ func selectionDiscounts(p *page, prod *product, v *view, result any) *rails.RHas
 	if !v.discount.listed && urlCode == nil {
 		return s.Sym("options", rails.NewRHash()).Sym("rent_options", nil)
 	}
-	quotes := func() *rails.RHash {
+	d := v.discount
+	var altResult any
+	if d.alt != nil {
+		altResult = d.alt.resultProps()
+	}
+	entry := func(rent bool, o *variantOption) *rails.RHash {
+		if d.altEntries[entryKey(rent, o)] {
+			return d.alt.optionEntry(o, altResult)
+		}
+		return d.optionEntry(o, result)
+	}
+	quotes := func(rent bool) *rails.RHash {
 		out := rails.NewRHash()
 		if len(v.variants.options) == 0 {
-			return out.Str("", v.discount.optionEntry(nil, result))
+			return out.Str("", entry(rent, nil))
 		}
 		for _, o := range v.variants.options {
 			// cart_item prices another option in a closed tier's place.
 			if !o.closed {
-				out.Str(o.externalID, v.discount.optionEntry(o, result))
+				out.Str(o.externalID, entry(rent, o))
 			}
 		}
 		return out
 	}
 	var rentOptions any
 	if v.prices.rental != nil && !prod.rentOnly() {
-		rentOptions = quotes()
+		rentOptions = quotes(true)
 	}
-	return s.Sym("options", quotes()).Sym("rent_options", rentOptions)
+	return s.Sym("options", quotes(false)).Sym("rent_options", rentOptions)
+}
+
+// entryKey names a selection_discounts entry: rent_options' or options', and the option's id.
+func entryKey(rent bool, o *variantOption) string {
+	key := "options/"
+	if rent {
+		key = "rent_options/"
+	}
+	if o != nil {
+		key += o.externalID
+	}
+	return key
 }
 
 // optionEntry is an option's quote: BestOfferCodeService#result with that option. The computing

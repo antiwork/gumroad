@@ -1580,6 +1580,8 @@ func TestURLOfferCodes(t *testing.T) {
 	}
 	saleResult := `{"valid":true,"code":"SALE20","discount":{"type":"percent","percents":20,"product_ids":null,"expires_at":null,` +
 		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}}`
+	fixed150 := `{"valid":true,"code":"SAVE10","discount":{"type":"fixed","cents":150,"product_ids":null,"expires_at":null,` +
+		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}}`
 	invalid := func(errorCode string) string { return `{"valid":false,"error_code":"` + errorCode + `"}` }
 	quotes := func(urlCode, result, label string) string {
 		return `"selection_discounts":{"url_code":"` + urlCode + `","quantity":1,"recurrence":null,"option_id":null,"price_cents":null,` +
@@ -1713,15 +1715,18 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, map[string]any{"amount_percentage": 50, "minimum_amount_cents": 1000})
 				sale(t, conn)
 			}},
-		// $1.50 off beats 20% at 500 cents, not at the 2,000-cent option.
-		{name: "a code that wins on some options only", target: "/l/guide/SAVE10", reason: "offer code comparison",
+		// $1.50 off beats 20% at 500 cents, so the page and the cheap option quote the code; at the
+		// 2,000-cent option the sale takes more off.
+		{name: "a code that wins on some options only", target: "/l/guide/SAVE10", wants: []string{
+			`"discount_code":` + fixed150 + `,"sale_label":null,`,
+			`"options":{"%[3]s":{"discount_code":` + fixed150 + `,"sale_label":null},"%[4]s":{"discount_code":` + saleResult + `,"sale_label":"Sale"}},`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 150})
 				sale(t, conn)
-				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": int64(1_796_321), "link_id": productID, "title": "Size"})
-				for i, diff := range []int{0, 1500} {
-					testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_796_322 + i), "type": "Variant", "variant_category_id": int64(1_796_321),
-						"name": fmt.Sprint("Size ", i), "position_in_category": i, "price_difference_cents": diff, "created_at": testNow, "updated_at": testNow})
+				testdb.Insert(t, conn, "variant_categories", map[string]any{"id": sizeCategory, "link_id": productID, "title": "Size"})
+				for i, id := range []int64{small, large} {
+					testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": sizeCategory,
+						"name": fmt.Sprint("Size ", i), "position_in_category": i, "price_difference_cents": i * 1500, "created_at": testNow, "updated_at": testNow})
 				}
 			}},
 		{name: "a limited code with uses left", target: "/l/guide/SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},

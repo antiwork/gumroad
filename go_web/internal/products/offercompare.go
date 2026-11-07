@@ -66,35 +66,48 @@ func (h *handler) loadStock(ctx context.Context, p *page, prod *product, v *view
 	return err
 }
 
-// comparedOffer is the code that applies when more than one could: the page's quote and each of
-// selection_discounts' must agree on it, as this port renders one result for every option.
-func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode, defaults []*offerCode) (*offerCode, bool, error) {
+// offerChoice is a quote's pick: the code, and whether its result echoes the URL's string.
+type offerChoice struct {
+	code    *offerCode
+	fromURL bool
+}
+
+// resultCode is the string the pick's result echoes: the URL's as typed, else the stored one.
+func (c offerChoice) resultCode(urlCode string) string {
+	if c.fromURL {
+		return urlCode
+	}
+	return c.code.code.String
+}
+
+// comparedOffer is the code that applies when more than one could: discount_code_props' pick,
+// and each selection_discounts entry's, by entryKey; each weighs the codes at its own price.
+func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode, defaults []*offerCode) (offerChoice, map[string]offerChoice, error) {
 	// An option-scoped code's validity, and a cart's price, differ per option; checkout's
 	// redirect weighs the cart's price.
 	if p.wanted || url != nil && url.hasVariants || slices.ContainsFunc(defaults, func(c *offerCode) bool { return c.hasVariants }) {
-		return nil, false, fallback("offer code comparison")
+		return offerChoice{}, nil, fallback("offer code comparison")
 	}
 	duration, known := prod.subscriptionDurationName()
 	if prod.is(productIsTieredMembership) && !known {
 		// lowest_tier_price would compare the tier prices with a nil duration.
-		return nil, false, fallback("offer code comparison")
+		return offerChoice{}, nil, fallback("offer code comparison")
 	}
 	ctx := p.Ctx
 	minDifference, err := h.lowestVariantDifference(ctx, prod, v.variants)
 	if err != nil {
-		return nil, false, err
+		return offerChoice{}, nil, err
 	}
 	display, agreed := displayPriceCents(prod, v.variants.tiers, v.prices.rows, duration, minDifference)
 	if !agreed {
-		return nil, false, fallback("offer code comparison")
+		return offerChoice{}, nil, fallback("offer code comparison")
 	}
 	if err := h.loadStock(ctx, p, prod, v); err != nil {
-		return nil, false, err
+		return offerChoice{}, nil, err
 	}
-	remaining := v.quantityRemaining
 	// comparison_quantity: the quantity, capped by what's left.
 	capped := func(q int64, left *int64) int64 {
-		if n, ok := remaining.(int64); ok {
+		if n, ok := v.quantityRemaining.(int64); ok {
 			q = min(q, n)
 		}
 		if left != nil {
@@ -102,21 +115,26 @@ func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode,
 		}
 		return q
 	}
+	choose := func(q offerQuote) offerChoice {
+		code, fromURL := q.pick(url, defaults)
+		return offerChoice{code, fromURL}
+	}
 	// discount_code_props has no option or price.
-	quotes := []offerQuote{{display, capped(p.quantity(), nil)}}
-	// selection_discounts: each option, bought (or rented when that's all the product does),
-	// then rented too when it also sells.
-	rents := []bool{prod.rentOnly() && v.prices.rental != nil}
+	pagePick := choose(offerQuote{display, capped(p.quantity(), nil)})
+	// selection_discounts' options are bought, or rented when that's all the product does; its
+	// rent_options are rented.
+	sections := []struct{ rentOptions, rent bool }{{false, prod.rentOnly() && v.prices.rental != nil}}
 	if v.prices.rental != nil && !prod.rentOnly() {
-		rents = append(rents, true)
+		sections = append(sections, struct{ rentOptions, rent bool }{true, true})
 	}
 	options := v.variants.options
 	if len(options) == 0 {
 		options = []*variantOption{nil}
 	}
-	for _, rent := range rents {
+	entries := map[string]offerChoice{}
+	for _, section := range sections {
 		for _, o := range options {
-			c := cartParams{recurrence: v.recurrences.defaultRecurrence(), rent: rent}
+			c := cartParams{recurrence: v.recurrences.defaultRecurrence(), rent: section.rent}
 			var left *int64
 			if o != nil {
 				if o.closed {
@@ -127,19 +145,10 @@ func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode,
 			}
 			_, item, err := cartItem(p, prod, v, c)
 			if err != nil {
-				return nil, false, err
+				return offerChoice{}, nil, err
 			}
-			quotes = append(quotes, offerQuote{item.price, capped(max(p.quantity(), 1), left)})
+			entries[entryKey(section.rentOptions, o)] = choose(offerQuote{item.price, capped(max(p.quantity(), 1), left)})
 		}
 	}
-	var code *offerCode
-	var fromURL bool
-	for i, q := range quotes {
-		c, u := q.pick(url, defaults)
-		if i > 0 && (c != code || u != fromURL) {
-			return nil, false, fallback("offer code comparison")
-		}
-		code, fromURL = c, u
-	}
-	return code, fromURL, nil
+	return pagePick, entries, nil
 }
