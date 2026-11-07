@@ -23,6 +23,10 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	if location != "" {
 		return h.ctl.Redirect(w, p.Visit, location)
 	}
+	if p.catchAll {
+		// e404_page raises after ApplicationController's filters.
+		return pages.ErrNotFound
+	}
 	ctx, conn, req := p.Ctx, h.c.DB, p.Req
 
 	// fetch_product_for_show: a product custom domain's product comes first, and
@@ -83,8 +87,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 			// set_x_robots_tag_header runs before check_if_needs_redirect.
 			w.Header().Set("X-Robots-Tag", "noindex")
 		}
-		if p.json {
-			target += ".json"
+		if p.ext != "html" {
+			// short_link_url's format: params[:format], which it leaves out at the route's default.
+			target += "." + web.EscapeSegment(p.ext)
 		}
 		if rawQuery != "" {
 			target += "?" + rawQuery
@@ -99,9 +104,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return nil
 	}
 
-	if p.json {
+	if p.format != "html" {
 		// render_custom_html_if_present only intercepts HTML.
-		return h.renderJSON(w, p, prod)
+		return h.renderFormat(w, p, prod)
 	}
 	if p.reviewPurchase, err = h.digestPurchase(p, prod); err != nil {
 		return err

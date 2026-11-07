@@ -46,6 +46,8 @@ type cover struct {
 	url, originalURL              string
 	isImage, isVideo, postProcess bool
 	isUnsplash                    bool
+	// retinaRead is url read through the retina variant's cache entry, not the original's.
+	retinaRead bool
 	// oembed is an embedded player's column, as OEmbedFinder stores it.
 	oembed *oembedData
 	// thumbnail is thumbnail_url: a video's poster or a player's thumbnail; "" is nil.
@@ -304,6 +306,7 @@ func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string
 	if !variantKey.Valid {
 		return "", fallback("retina variant image")
 	}
+	c.retinaRead = true
 	retinaURL, err := h.cachedURL(ctx, p, "attachment_"+itoa(c.attachmentID)+"_retina_url", pc.PublicStorageURL+variantKey.String)
 	return pc.cdnURL(retinaURL), err
 }
