@@ -76,6 +76,9 @@ func waitlistFormFound(html string) (bool, error) {
 // renderCustomHTML is render_custom_html_if_present, whose wanted and review link serve has
 // checked and whose native and code params declinedParams left to Rails.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
+	if p.autocomplete {
+		return fallback("inertia partial reload")
+	}
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
 	// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
 	// staff went to Rails already.

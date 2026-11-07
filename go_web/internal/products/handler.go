@@ -128,6 +128,9 @@ type page struct {
 	quantityParam *int64
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
+	// autocomplete is Discover's search box reloading autocomplete_results, the one partial
+	// reload declined lets through.
+	autocomplete bool
 	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
 	wanted bool
 	// format is request.format's symbol, which picks show's respond_to branch, and ext the
@@ -229,6 +232,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		return nil, err
 	}
 	p := &page{Visit: v, format: v.Req.Format(), ext: rt.format}
+	_, p.autocomplete = r.Header["X-Inertia-Partial-Data"]
 	// The path's code overrides the query's; a blank one is no code.
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
@@ -356,6 +360,9 @@ func declined(r *http.Request, env *web.Environment) string {
 	case r.ContentLength != 0 || len(r.TransferEncoding) > 0:
 		// Parsing reads the body, which a fallback after it could no longer send.
 		return "request body"
+	}
+	if _, ok := r.Header["X-Inertia-Partial-Data"]; ok {
+		return pages.DeclinedPartialHeaders(r, discoverComponent, autocompleteData)
 	}
 	return pages.DeclinedVisitHeaders(r)
 }

@@ -110,6 +110,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		return nil
 	}
 
+	if p.autocomplete && p.format != "html" {
+		return fallback("inertia partial reload")
+	}
 	if p.format != "html" {
 		// render_custom_html_if_present only intercepts HTML.
 		return h.renderFormat(w, p, prod)
