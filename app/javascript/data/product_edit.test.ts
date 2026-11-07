@@ -119,6 +119,15 @@ describe("markFileRemoved and withoutFileEmbeds", () => {
     expect(attachmentsWithoutLibraryRow(files, ["attach-a", "attach-b"])).toEqual([]);
   });
 
+  it("does not row Dropbox uploads, which polling re-adds", () => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs id and status
+    const files = [
+      { id: "ext-1", status: { type: "dropbox", externalId: "ext-1", uploadState: "in_progress" } },
+    ] as unknown as Parameters<typeof attachmentsWithoutLibraryRow>[0];
+
+    expect(attachmentsWithoutLibraryRow(files, [])).toEqual([]);
+  });
+
   it("strips the file's embeds from each variant's own pages", () => {
     const variants = variantWithPages([
       { id: "page", description: { type: "doc", content: [embedGroup("group", ["detach-me"])] } },

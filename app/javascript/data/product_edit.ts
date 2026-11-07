@@ -459,9 +459,7 @@ export const withoutFileEmbedsFromVariants = (variants: Variant[], fileId: strin
 // The library list a picker shows carries one row per url, so a second attachment of the same file
 // has no row of its own — and no way to be removed. Every attachment needs a row.
 export const attachmentsWithoutLibraryRow = (files: Product["files"], libraryFileIds: string[]): Product["files"] =>
-  files.filter(
-    (file) => file.status.type !== "removed" && !file.id.startsWith("drop_") && !libraryFileIds.includes(file.id),
-  );
+  files.filter((file) => file.status.type === "saved" && !libraryFileIds.includes(file.id));
 
 export const buildRichContentReconciliationTransaction = (
   state: EditorState,
