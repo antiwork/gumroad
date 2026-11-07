@@ -241,6 +241,7 @@ end
 
 def fill_in_payment_element(number: "4242424242424242", expiry: StripePaymentMethodHelper::EXPIRY_MMYY, cvc: "123")
   within_payment_element_frame do
+    wait_for_link_email_prefill_in_payment_element
     fill_in_stripe_field ["Card number"], with: number
     fill_in_stripe_field ["Expiration date", "Expiration", "MM / YY"], with: expiry
     fill_in_stripe_field ["Security code", "CVC", "CVV"], with: cvc
@@ -248,14 +249,29 @@ def fill_in_payment_element(number: "4242424242424242", expiry: StripePaymentMet
   end
 end
 
+PAYMENT_ELEMENT_RENDER_WAIT_SECONDS = 20
+LINK_PANE_RENDER_WAIT_SECONDS = 2
+
+# The checkout email reaches Link through PaymentElementInput's debounced prefill. Until it lands, Link's save
+# pane has no opt-in checkbox to uncheck; when it lands later it re-checks the opt-in with an empty mobile number,
+# and confirm then fails Link's validation without a request. Typing first also races the re-render.
+def wait_for_link_email_prefill_in_payment_element
+  has_field?("Card number", visible: :all, wait: PAYMENT_ELEMENT_RENDER_WAIT_SECONDS)
+  return unless has_css?("#payment-linkEmailInput", visible: :all, wait: LINK_PANE_RENDER_WAIT_SECONDS)
+
+  has_field?("payment-linkEmailInput", with: /\S/, visible: :all)
+end
+
 # With Link always enabled, the Payment Element may render Link's pre-checked
 # "Save my information for faster checkout" pane, whose required mobile-number
 # field would block confirm. Specs pay as a plain card guest, so uncheck it.
 def uncheck_link_save_in_payment_element
-  save_checkbox = first(:checkbox, "Save my information for faster checkout", visible: false, wait: 0)
-  save_checkbox.click if save_checkbox&.checked?
-rescue Capybara::ElementNotFound, Selenium::WebDriver::Error::ElementNotInteractableError
-  # Older Element layouts (no Link pane) simply don't render the checkbox.
+  save_checkbox = all(:checkbox, "Save my information for faster checkout", visible: false, wait: false).first
+  return unless save_checkbox
+
+  save_checkbox.click if save_checkbox.checked?
+  expect(page).to have_unchecked_field("Save my information for faster checkout", visible: false)
+  expect(page).to have_no_css("#payment-linkMobilePhoneInput", visible: :all)
 end
 
 def within_payment_element_frame(&block)
@@ -269,7 +285,7 @@ end
 
 def fill_in_stripe_field(labels, with:)
   page.document.synchronize do
-    field = labels.lazy.filter_map { |label| first(:fillable_field, label, visible: false, wait: 0) }.first
+    field = labels.lazy.filter_map { |label| all(:fillable_field, label, visible: false, wait: false).first }.first
     raise Capybara::ElementNotFound, "Unable to find Stripe field matching #{labels.join(', ')}" if field.nil?
 
     field.fill_in(with:)
