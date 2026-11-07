@@ -17,6 +17,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -64,7 +65,7 @@ type Store struct {
 	// clock is Time.now for Entry#expires_at and expiry checks; nil is the real clock.
 	clock func() time.Time
 
-	namespace string
+	namespace atomic.Pointer[string]
 	timeout   time.Duration
 	ring      *ring
 }
@@ -84,8 +85,16 @@ func New(servers []string, namespace string, timeout time.Duration) (*Store, err
 	if err != nil {
 		return nil, err
 	}
-	return &Store{namespace: namespace, timeout: timeout, ring: r}, nil
+	s := &Store{timeout: timeout, ring: r}
+	s.namespace.Store(&namespace)
+	return s, nil
 }
+
+// Namespace is the REVISION the keys are namespaced under.
+func (s *Store) Namespace() string { return *s.namespace.Load() }
+
+// SetNamespace moves later reads and writes to another REVISION's keys.
+func (s *Store) SetNamespace(namespace string) { s.namespace.Store(&namespace) }
 
 // Close drops idle connections.
 func (s *Store) Close() {
@@ -145,7 +154,7 @@ func normalizeKey(namespace, name string) (string, error) {
 // Read is Rails.cache.read(name): the value (in marshal.go's types), and whether there
 // was an unexpired entry. An expired entry is deleted, as Store#read does.
 func (s *Store) Read(ctx context.Context, name string) (any, bool, error) {
-	key, err := normalizeKey(s.namespace, name)
+	key, err := normalizeKey(s.Namespace(), name)
 	if err != nil {
 		return nil, false, err
 	}
@@ -187,7 +196,7 @@ func (s *Store) Write(ctx context.Context, name string, value any, expiresIn tim
 		// raise_on_invalid_cache_expiration_time is on (new_framework_defaults_7_1.rb).
 		return fmt.Errorf("railscache: Cache expiration time is invalid, cannot be negative: %v", expiresIn)
 	}
-	key, err := normalizeKey(s.namespace, name)
+	key, err := normalizeKey(s.Namespace(), name)
 	if err != nil {
 		return err
 	}
@@ -207,7 +216,7 @@ func (s *Store) Write(ctx context.Context, name string, value any, expiresIn tim
 
 // Delete is Rails.cache.delete(name).
 func (s *Store) Delete(ctx context.Context, name string) error {
-	key, err := normalizeKey(s.namespace, name)
+	key, err := normalizeKey(s.Namespace(), name)
 	if err != nil {
 		return err
 	}
