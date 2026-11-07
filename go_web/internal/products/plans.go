@@ -22,11 +22,13 @@ func (h *handler) installmentPlanProps(ctx context.Context, p *page, prod *produ
 		return nil, err
 	case n > 1:
 		return nil, fallback("several installment plans")
-	case recurrence != "monthly":
-		// The enum maps only monthly; Rails would render null.
-		return nil, fallback("installment plan recurrence")
 	}
-	return rails.NewRHash().Sym("number_of_installments", installments).Sym("recurrence", recurrence), nil
+	// The enum maps only monthly, and reads any other value as nil.
+	var shown any
+	if recurrence == "monthly" {
+		shown = recurrence
+	}
+	return rails.NewRHash().Sym("number_of_installments", installments).Sym("recurrence", shown), nil
 }
 
 // preorderProps is the preorder prop, from Link#preorder_link.

@@ -62,6 +62,12 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	case prod == nil, prod.bannedAt.Valid:
 		// e404, and check_banned's.
 		return pages.ErrNotFound
+	case p.seller.deletedAt.Valid && p.utm != nil:
+		// A custom domain's: track_utm_link_visit may record a visit before the 404.
+		return fallback("utm visit for a deleted seller")
+	case p.seller.deletedAt.Valid:
+		// ensure_seller_is_not_deleted.
+		return pages.ErrNotFound
 	case prod.userID != p.seller.id:
 		// fetch_leniently is scoped to the seller, so ensure_seller_is_not_deleted and
 		// ensure_domain_belongs_to_seller pass; anything else is Rails'.
@@ -207,9 +213,6 @@ func (h *handler) resolveCustomDomain(p *page) (*product, error) {
 		return nil, err
 	case seller == nil:
 		return nil, fallback("no custom domain owner")
-	case seller.deletedAt.Valid:
-		// Rails 404s it in ensure_seller_is_not_deleted.
-		return nil, fallback("deleted custom domain owner")
 	}
 	p.seller, p.customDomain = seller, true
 	return nil, nil
@@ -245,9 +248,12 @@ func (h *handler) productDomainProduct(p *page, productID int64) (*product, erro
 	switch {
 	case err != nil:
 		return nil, err
-	case seller == nil || seller.deletedAt.Valid:
-		// Rails 404s it in ensure_seller_is_not_deleted.
+	case seller == nil:
+		// ensure_seller_is_not_deleted raises on a nil user.
 		return nil, fallback("product custom domain seller deleted")
+	case seller.deletedAt.Valid:
+		// ensure_seller_is_not_deleted's 404, with no UTM visit recorded on a product's domain.
+		return nil, pages.ErrNotFound
 	}
 	p.seller, p.productDomain, p.utm = seller, true, nil
 	return prod, nil

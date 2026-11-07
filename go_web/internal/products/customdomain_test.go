@@ -99,20 +99,12 @@ func TestACustomDomainThisPortLeavesToRails(t *testing.T) {
 			addCustomDomain(t, conn, 1_799_511, shop, map[string]any{"user_id": nil, "product_id": productID})
 			mustExec(t, conn, "UPDATE links SET deleted_at = ? WHERE id = ?", testNow, productID)
 		}},
-		{name: "a product's domain with a deleted seller", reason: "product custom domain seller deleted", setup: func(t *testing.T, conn *sql.DB) {
-			addCustomDomain(t, conn, 1_799_511, shop, map[string]any{"user_id": nil, "product_id": productID})
-			mustExec(t, conn, "UPDATE users SET deleted_at = ? WHERE id = ?", testNow, sellerID)
-		}},
 		{name: "a domain with a product and a user", reason: "custom domain with a product and a user", setup: func(t *testing.T, conn *sql.DB) {
 			addCustomDomain(t, conn, 1_799_511, shop, map[string]any{"product_id": productID})
 		}},
 		{name: "two rows for the domain", reason: "several custom domains for the host", setup: func(t *testing.T, conn *sql.DB) {
 			addCustomDomain(t, conn, 1_799_511, shop, nil)
 			addCustomDomain(t, conn, 1_799_512, "SHOP.example.com", nil)
-		}},
-		{name: "a deleted owner", reason: "deleted custom domain owner", setup: func(t *testing.T, conn *sql.DB) {
-			addCustomDomain(t, conn, 1_799_511, shop, nil)
-			mustExec(t, conn, "UPDATE users SET deleted_at = ? WHERE id = ?", testNow, sellerID)
 		}},
 		// Subdomain.subdomain_request?'s unescaped dots take this for a seller's subdomain.
 		{name: "a host Rails reads as a subdomain", host: "mygumroad.com", reason: "host"},
@@ -140,6 +132,46 @@ func TestACustomDomainThisPortLeavesToRails(t *testing.T) {
 			maps.Copy(headers, e.dryRun(target, "/l/guide", testNow))
 			w := e.get(target, "/l/guide", headers)
 			if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason || e.railsHit != nil {
+				t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+		})
+	}
+}
+
+// ensure_seller_is_not_deleted 404s a deleted seller's product on their domain or the product's,
+// unless track_utm_link_visit could record a visit first.
+func TestADeletedSellersCustomDomain(t *testing.T) {
+	const shop, utm = "shop.example.com", "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c"
+	sellers := func(t *testing.T, conn *sql.DB) { addCustomDomain(t, conn, 1_799_511, shop, nil) }
+	products := func(t *testing.T, conn *sql.DB) {
+		addCustomDomain(t, conn, 1_799_511, shop, map[string]any{"user_id": nil, "product_id": productID})
+	}
+	for _, c := range []struct {
+		name, target, reason string
+		setup                func(t *testing.T, conn *sql.DB)
+	}{
+		{name: "the seller's domain", target: "/l/guide", setup: sellers},
+		{name: "the product's domain", target: "/l/guide", setup: products},
+		{name: "the product's domain with UTM params", target: utm, setup: products},
+		{name: "the seller's domain with UTM params", target: utm, setup: sellers, reason: "utm visit for a deleted seller"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			c.setup(t, conn)
+			mustExec(t, conn, "UPDATE users SET deleted_at = ? WHERE id = ?", testNow, sellerID)
+			headers := customDomainHeaders(nil)
+			if c.reason != "" {
+				maps.Copy(headers, e.dryRun(shop, c.target, testNow))
+			}
+			w := e.get(shop, c.target, headers)
+			if c.reason != "" {
+				if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != c.reason {
+					t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+				}
+				return
+			}
+			if w.Code != http.StatusNotFound || e.railsHit != nil {
 				t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 			}
 		})

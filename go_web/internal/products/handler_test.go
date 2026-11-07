@@ -451,6 +451,26 @@ func TestAnUploadedCoverRendersItsRetinaVariant(t *testing.T) {
 	}
 }
 
+// retina_variant raises for a type ActiveStorage can't resize, and url_from_file's rescue serves
+// the upload, queueing nothing.
+func TestAnInvariableCoverServesItsUpload(t *testing.T) {
+	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
+	addCover(t, false)
+	mustExec(t, testdb.Open(t), "UPDATE active_storage_blobs SET content_type = 'image/svg+xml', filename = 'a.svg' WHERE id = ?", 1_790_501)
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	cover := pageProps(t, w.Body.String())["product"].(map[string]any)["covers"].([]any)[0].(map[string]any)
+	if original := "https://public-files.gumroad.com/covers/original"; cover["url"] != original || cover["original_url"] != original {
+		t.Errorf("cover %v", cover)
+	}
+	if jobs.Exists("queue:low") {
+		t.Error("an invariable cover queued its retina variant")
+	}
+}
+
 // url_from_file enqueues the missing variant and serves the original until it's processed.
 func TestACoverWithoutItsRetinaVariantQueuesIt(t *testing.T) {
 	e := newTestEnv(t)
@@ -1853,9 +1873,9 @@ func TestInstallmentPlansPreordersAndWaitlists(t *testing.T) {
 			plan(t, conn, 1_793_001, "monthly", nil)
 			plan(t, conn, 1_793_002, "monthly", nil)
 		}},
-		{name: "a recurrence the enum doesn't map", reason: "installment plan recurrence", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			plan(t, conn, 1_793_001, "weekly", nil)
-		}},
+		// The enum reads a value it doesn't map as nil.
+		{name: "a recurrence the enum doesn't map", wants: []string{`"installment_plan":{"number_of_installments":3,"recurrence":null},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { plan(t, conn, 1_793_001, "weekly", nil) }},
 		{name: "an installment plan with a local price", headers: eurCookie,
 			wants: []string{`"buyer_currency_shown":"eur",`, `"installment_plan":{"number_of_installments":3,"recurrence":"monthly"},`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
