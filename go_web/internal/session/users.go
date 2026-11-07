@@ -36,8 +36,11 @@ func (u *User) DisableThirdPartyAnalytics() bool { return u.Flags&disableThirdPa
 func (u *User) Alive() bool { return u.DeletedAt == nil }
 
 // Suspended is User::Risk#suspended?.
-func (u *User) Suspended() bool {
-	return u.UserRiskState == "suspended_for_tos_violation" || u.UserRiskState == "suspended_for_fraud"
+func (u *User) Suspended() bool { return SuspendedRiskState(u.UserRiskState) }
+
+// SuspendedRiskState is whether a user_risk_state is one of User::Risk::SUSPENDED_STATES.
+func SuspendedRiskState(state string) bool {
+	return state == "suspended_for_tos_violation" || state == "suspended_for_fraud"
 }
 
 var userColumnNames = []string{"id", "flags", "deleted_at", "user_risk_state", "last_active_sessions_invalidated_at", "username", "external_id"}

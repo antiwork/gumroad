@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -82,14 +83,23 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	}
 	var shareImageTags string
 	if hasShareImage {
-		// demo_player_card_meta, which is nil without a build.
-		if err := h.noProductBuilds(ctx, prod); err != nil {
-			return err
+		var demo string
+		if rails.Present(shareImage) {
+			if demo, err = h.demoPlayerURL(p, prod, v); err != nil {
+				return err
+			}
 		}
 		escaped := web.HTMLEscape(shareImage)
-		shareImageTags = `<meta property="og:image" content="` + escaped + "\">\n    " +
-			`<meta property="twitter:card" content="summary_large_image">` + "\n    " +
+		card := `<meta property="twitter:card" content="summary_large_image">` + "\n    " +
 			`<meta property="twitter:image" content="` + escaped + `">`
+		if demo != "" {
+			card = `<meta property="twitter:card" content="player">` + "\n    " +
+				`<meta property="twitter:image" content="` + escaped + `">` + "\n    " +
+				`<meta property="twitter:player" content="` + web.HTMLEscape(demo) + `">` + "\n    " +
+				`<meta property="twitter:player:width" content="` + strconv.Itoa(demoPlayerWidth) + `">` + "\n    " +
+				`<meta property="twitter:player:height" content="` + strconv.Itoa(demoPlayerHeight) + `">`
+		}
+		shareImageTags = `<meta property="og:image" content="` + escaped + "\">\n    " + card
 	}
 
 	text := "Available on Gumroad"
