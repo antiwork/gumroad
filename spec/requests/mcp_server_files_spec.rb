@@ -90,6 +90,52 @@ describe "MCP server product files" do
       expect(@stored_objects.sole[:content_length]).to eq(File.size(fixture_path("billion-dollar-company-chapter-0.pdf")))
     end
 
+    it "writes a file the creator produced in the chat, with no hosting step" do
+      content = "# Field notes\n\nWhat I learned on the boat.\n"
+      expect(SsrfFilter).not_to receive(:get)
+
+      result = call_tool("add_file", { id: @product.unique_permalink, content:, filename: "field-notes.md" })
+
+      file = @product.reload.alive_product_files.sole
+      expect(result.dig("structuredContent", "files").sole).to include("name" => "field-notes", "type" => "MD", "size_bytes" => content.bytesize)
+      expect(file.s3_key).to match(%r{\Aattachments/#{@seller.external_id}/[0-9a-f]{32}/original/field-notes\.md\z})
+      expect(@stored_objects.sole).to include(bucket: S3_BUCKET, content_type: "text/markdown", content_length: content.bytesize)
+      expect(file.name_displayable).to eq("field-notes")
+    end
+
+    it "keeps a display name the creator chose for a written file" do
+      call_tool("add_file", { id: @product.unique_permalink, content: "a,b\n1,2\n", filename: "export.csv", display_name: "Spend export" })
+
+      expect(@product.reload.alive_product_files.sole.name_displayable).to eq("Spend export")
+    end
+
+    it "refuses a call that passes both a url and content" do
+      result = call_tool("add_file", { id: @product.unique_permalink, url: "https://example.com/a.pdf", content: "x", filename: "a.md" })
+
+      expect(response.parsed_body.dig("error", "message")).to include("Pass url or content, not both")
+      expect(@product.reload.alive_product_files).to be_empty
+    end
+
+    it "refuses a call that passes neither a url nor content" do
+      call_tool("add_file", { id: @product.unique_permalink })
+
+      expect(response.parsed_body.dig("error", "message")).to include("url is required, or pass content and filename")
+      expect(@stored_objects).to be_empty
+    end
+
+    it "refuses content without a filename" do
+      call_tool("add_file", { id: @product.unique_permalink, content: "# hi" })
+
+      expect(response.parsed_body.dig("error", "message")).to include("filename is required with content")
+    end
+
+    it "refuses a filename it cannot store as text" do
+      call_tool("add_file", { id: @product.unique_permalink, content: "%PDF-1.4", filename: "notes.pdf" })
+
+      expect(response.parsed_body.dig("error", "message")).to include("filename has to end in .md, .markdown, .txt, .csv, .json, .ics, .srt, .vtt")
+      expect(@stored_objects).to be_empty
+    end
+
     it "attaches a file small enough to stay in the write buffer" do
       url = "https://example.com/files/financial-annual-summary-2022.csv"
       stub_remote_file(url, "financial-annual-summary-2022.csv", "text/csv")

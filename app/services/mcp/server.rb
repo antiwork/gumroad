@@ -429,11 +429,13 @@ module Mcp
           tool("list_files", "The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
-          tool("add_file", "Add a file that buyers receive with the product, from a public https URL. Files up to #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.", {
+          tool("add_file", "Add a file that buyers receive with the product. Pass a public https url, or pass content and a filename to write the file out from the chat itself (markdown, text, csv, json, ics, srt or vtt). Prefer content: it needs no hosting, and a product with no file cannot be sold. Files up to #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB from a URL, #{Mcp::ProductFileIngest::INLINE_MAX_BYTES / 1.megabyte} MB from content; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.", {
                  "id" => { type: "string", description: "Product id or permalink." },
-                 "url" => { type: "string", description: "Public https URL of the file." },
-                 "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL." }
-               }, required: %w[id url]),
+                 "url" => { type: "string", description: "Public https URL of the file. Omit when passing content." },
+                 "content" => { type: "string", description: "The file's full text, written here rather than uploaded. Omit when passing url." },
+                 "filename" => { type: "string", description: "File name with an extension, used for content, like field-notes.md. Ignored with url." },
+                 "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL, or the filename." }
+               }, required: %w[id]),
           tool("add_content_link", "Add a button with a link to a product's content page, which the buyer opens after purchase. Use it when the product is delivered as a link, like a Notion template's duplication link. Confirm the link and the button text with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "url" => { type: "string", description: "The link the buyer opens. https is assumed when the value has no scheme." },
@@ -994,12 +996,26 @@ module Mcp
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
         url = args["url"].to_s.strip
-        raise Error.new("url is required", code: -32602) if url.blank?
+        content = args["content"]
+        # An empty string is a caller that meant to pass nothing, not a file of zero bytes.
+        has_content = content.to_s.present?
+        raise Error.new("Pass url or content, not both", code: -32602) if url.present? && has_content
+        raise Error.new("url is required, or pass content and filename to write the file out here", code: -32602) if url.blank? && !has_content
 
+        inline = url.blank?
         begin
-          file = Mcp::ProductFileIngest.new(seller: user, product:, url:, display_name: args["display_name"]).perform
+          file = if inline
+            filename = args["filename"].to_s.strip
+            raise Error.new("filename is required with content", code: -32602) if filename.blank?
+
+            Mcp::ProductFileIngest.new(seller: user, product:, url: "", display_name: args["display_name"]).perform_inline(content:, filename:)
+          else
+            Mcp::ProductFileIngest.new(seller: user, product:, url:, display_name: args["display_name"]).perform
+          end
+        rescue Mcp::ProductFileIngest::InvalidContent
+          raise Error.new("A content file must be text, so filename has to end in #{Mcp::ProductFileIngest::INLINE_CONTENT_TYPES.keys.join(', ')}", code: -32602)
         rescue Mcp::ProductFileIngest::TooLarge
-          raise ToolError, "That file is larger than #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB, which is the most this tool can fetch. Upload it in the product editor instead: #{product.long_url}/edit"
+          raise ToolError, "That file is larger than #{(inline ? Mcp::ProductFileIngest::INLINE_MAX_BYTES : Mcp::ProductFileIngest::MAX_BYTES) / 1.megabyte} MB, which is the most this tool can take. Upload it in the product editor instead: #{product.long_url}/edit"
         rescue Mcp::ProductFileIngest::InvalidUrl, *INTERNET_EXCEPTIONS
           raise ToolError, "Could not download a file from that URL. Use a public https link to the file itself."
         rescue Mcp::ProductFileIngest::DownloadFailed

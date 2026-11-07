@@ -15,9 +15,28 @@ module Mcp
     READ_TIMEOUT_SECONDS = 10
     MAX_REDIRECTS = 3
 
+    # The text types this can write out from the chat. Anything else has to arrive as a URL, because
+    # a text parameter cannot carry a real binary (and an HTML or SVG file handed to a buyer is a
+    # phishing surface, so neither is accepted here).
+    INLINE_CONTENT_TYPES = {
+      ".md" => "text/markdown",
+      ".markdown" => "text/markdown",
+      ".txt" => "text/plain",
+      ".csv" => "text/csv",
+      ".json" => "application/json",
+      ".ics" => "text/calendar",
+      ".srt" => "application/x-subrip",
+      ".vtt" => "text/vtt",
+    }.freeze
+
+    # Nothing a model writes in a chat needs more than this, and the whole payload is already in
+    # memory by the time this runs.
+    INLINE_MAX_BYTES = 2.megabytes
+
     class InvalidUrl < StandardError; end
     class TooLarge < StandardError; end
     class DownloadFailed < StandardError; end
+    class InvalidContent < StandardError; end
 
     def initialize(seller:, product:, url:, display_name: nil)
       @seller = seller
@@ -29,13 +48,18 @@ module Mcp
     # @return [ProductFile] the file now attached to the product
     def perform
       uri = parse_source_uri
-      key = nil
-      begin
-        key, byte_size = store(uri)
-        attach(key, byte_size)
-      rescue StandardError
-        discard_upload(key) if key
-        raise
+      with_cleanup do
+        tempfile, content_type = download(uri)
+        store(tempfile, content_type, filename_with_extension(filename_from(uri), content_type))
+      end
+    end
+
+    # Writes a file the creator produced in the chat itself, so a product does not stall on finding
+    # somewhere to host it first. The content is the whole file: no conversion is attempted.
+    # @return [ProductFile] the file now attached to the product
+    def perform_inline(content:, filename:)
+      with_cleanup do
+        store(inline_tempfile(content), content_type_for(filename), safe_filename(filename))
       end
     end
 
@@ -52,10 +76,20 @@ module Mcp
         raise InvalidUrl
       end
 
-      def store(uri)
-        tempfile, content_type = download(uri)
+      # Uploads the bytes and attaches the row, discarding the upload if attaching fails.
+      def with_cleanup
+        key = nil
         begin
-          filename = filename_with_extension(filename_from(uri), content_type)
+          key, byte_size = yield
+          attach(key, byte_size)
+        rescue StandardError
+          discard_upload(key) if key
+          raise
+        end
+      end
+
+      def store(tempfile, content_type, filename)
+        begin
           key = "attachments/#{seller.external_id}/#{SecureRandom.hex}/original/#{filename}"
           byte_size = tempfile.size
           Aws::S3::Client.new.put_object(
@@ -156,6 +190,30 @@ module Mcp
 
       def file_embed_node(file)
         { "type" => RichContent::FILE_EMBED_NODE_TYPE, "attrs" => { "id" => file.external_id, "uid" => SecureRandom.uuid } }
+      end
+
+      def inline_tempfile(content)
+        raise InvalidContent if content.to_s.empty?
+        raise TooLarge if content.to_s.bytesize > INLINE_MAX_BYTES
+
+        tempfile = Tempfile.new(binmode: true)
+        tempfile.write(content.to_s)
+        tempfile.flush
+        tempfile.rewind
+        tempfile
+      end
+
+      def content_type_for(filename)
+        INLINE_CONTENT_TYPES[File.extname(filename.to_s).downcase] or raise InvalidContent
+      end
+
+      # The creator's filename decides the buyer-visible name, so it is reduced to a basename with
+      # the characters a key and a download link can carry.
+      def safe_filename(filename)
+        name = ActiveStorage::Filename.new(File.basename(filename.to_s)).sanitized
+        raise InvalidContent if name.blank?
+
+        name.tr(" ", "-")
       end
 
       # URLs like ".../watch" have no filename to keep, and the display name a creator typed is
