@@ -87,6 +87,10 @@ module Mcp
       "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
     }.freeze
 
+    # The caller's arguments do not fit the tool's schema. Counted apart from a tool failure,
+    # because the fix is on the client side and it would otherwise inflate the error rate.
+    class InvalidArguments < Error; end
+
     # A tool's scope check failed. `scope` is what the client should re-authorize with: the
     # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
     class InsufficientScope < Error
@@ -130,8 +134,9 @@ module Mcp
 
       handle_message(body)
     ensure
-      ProtocolTelemetry.record(@connector, @protocol_counts)
-      ProtocolTelemetry.record_tools(@connector, @tool_counts)
+      # One stalled Redis costs the request one short timeout, not two: the tool counter rides the
+      # same connection, so a failed protocol write means the tool write would only stall again.
+      ProtocolTelemetry.record_tools(@connector, @tool_counts) if ProtocolTelemetry.record(@connector, @protocol_counts)
     end
 
     def self.discovery(base_url)
@@ -525,20 +530,24 @@ module Mcp
       def call_tool(params)
         name = params["name"]
         definition = tools.find { |tool| tool[:name] == name }
-        unless definition
-          # A retired or misspelled name cannot be attributed to a tool we serve; it is counted as
-          # OTHER so a client stuck on an old tool list still shows up.
-          count_tool(name, "error")
-          raise Error.new("Unknown tool: #{name}", code: -32602)
-        end
+        # A retired or misspelled name is counted as OTHER by tool_bucket, so a client stuck on an
+        # old tool list still shows up.
+        raise Error.new("Unknown tool: #{name}", code: -32602) unless definition
 
         arguments = params.fetch("arguments", {})
-        raise Error.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
+        raise InvalidArguments.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
         validate_tool_arguments!(definition[:inputSchema], arguments)
 
         payload = send("tool_#{name}", arguments)
+        response = { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+        # Counted only once the response is serialised, so a payload that cannot be rendered is
+        # not recorded as a success.
         count_tool(name, "ok")
-        { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+        response
+      rescue InvalidArguments
+        # The caller never reached the tool, and the fix is on the client side.
+        count_tool(name, "invalid")
+        raise
       rescue InsufficientScope
         # Losing a creator to a missing scope is a funnel step, not an error to bury.
         count_tool(name, "scope")
@@ -547,6 +556,11 @@ module Mcp
         count_tool(name, "error")
         message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.to_sentence : e.message
         { content: [{ type: "text", text: message }], isError: true }
+      rescue Error
+        # A tool that rejected the call itself (a missing price, an unknown category) is an error
+        # the caller saw, so it counts, and the JSON-RPC layer still answers it.
+        count_tool(name, "error")
+        raise
       end
 
       # One counter per call, best-effort: telemetry never changes what the caller gets back.
@@ -558,15 +572,15 @@ module Mcp
 
       def validate_tool_arguments!(schema, arguments)
         (schema[:required] || []).each do |key|
-          raise Error.new("#{key} is required", code: -32602) unless arguments.key?(key)
+          raise InvalidArguments.new("#{key} is required", code: -32602) unless arguments.key?(key)
         end
         arguments.each do |key, value|
           property = schema[:properties][key]
-          raise Error.new("Unknown argument: #{key}", code: -32602) unless property
+          raise InvalidArguments.new("Unknown argument: #{key}", code: -32602) unless property
 
           types = { "integer" => [Integer], "array" => [Array], "boolean" => [TrueClass, FalseClass] }.fetch(property[:type], [String])
-          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless types.any? { |type| value.is_a?(type) }
-          raise Error.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
+          raise InvalidArguments.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless types.any? { |type| value.is_a?(type) }
+          raise InvalidArguments.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
         end
       end
 

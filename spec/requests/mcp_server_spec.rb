@@ -4198,6 +4198,20 @@ describe "MCP server" do
       expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
     end
 
+    it "counts a call refused for a bad argument apart from a tool failure" do
+      call_tool("create_draft_product", { name: "Notes", price_cents: 500, bogus: true })
+
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "invalid" => 1 })
+    end
+
+    it "counts a tool that rejected the call itself as an error" do
+      call_tool("create_draft_product", { name: "No price" })
+
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "error" => 1 })
+    end
+
     it "counts a name the server does not serve under other" do
       call_tool("retired_tool")
 

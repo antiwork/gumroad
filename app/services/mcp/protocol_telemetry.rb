@@ -27,7 +27,7 @@ module Mcp
       get_subscriptions list_categories list_files list_payouts list_products list_sales
       publish_product unpublish_product update_bundle update_discount_code update_product
     ].freeze
-    OUTCOMES = %w[ok error scope].freeze
+    OUTCOMES = %w[ok error scope invalid].freeze
     UNDECLARED = "undeclared"
     OTHER = "other"
     RETENTION = 90.days
@@ -56,13 +56,17 @@ module Mcp
       end
 
       # One write per HTTP request. Best-effort: telemetry is never the reason a connector request fails.
+      # Returns whether the write landed, so the caller can skip a second write down the same
+      # stalled connection instead of waiting out a second timeout.
       def record(connector, counts)
-        return if counts.empty? || !CONNECTORS.include?(connector.to_s)
+        return true if counts.empty? || !CONNECTORS.include?(connector.to_s)
 
         pairs = counts.flat_map { |bucket, count| ["#{connector}#{SEPARATOR}#{bucket}", count] }
         redis.eval(INCREMENT_SCRIPT, keys: [RedisKey.mcp_protocol_requests(Date.current)], argv: [RETENTION.to_i, *pairs])
+        true
       rescue StandardError => e
         Rails.logger.warn("mcp_protocol_telemetry_failed #{e.class}")
+        false
       end
 
       # One write per tools/call, on the same best-effort rule: a stalled Redis never changes the
