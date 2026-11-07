@@ -326,18 +326,27 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"offer_code", "quantity", "currency", "option", "variant", "price", "recurrence", "rent", "native", "debug",
+	"offer_code", "quantity", "debug",
 	// The sections' search filters.
 	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
-	// MobileAppWebView and as_embed.
-	"display", "as_embed",
 }
+
+// cartParams are the params only ?wanted=true's cart_item reads, which this port leaves to Rails.
+var cartParams = []string{"currency", "option", "variant", "price", "recurrence", "rent"}
 
 // declinedParams is a param this port leaves to Rails.
 func declinedParams(req *rails.Request) string {
 	for _, name := range rendererParams {
 		if _, ok := req.Params.Get(name); ok {
 			return "param " + name
+		}
+	}
+	wanted := req.Param("wanted") == "true"
+	if wanted {
+		for _, name := range cartParams {
+			if _, ok := req.Params.Get(name); ok {
+				return "param " + name
+			}
 		}
 	}
 	if raw, ok := req.Params.Get("layout"); ok {
@@ -352,7 +361,7 @@ func declinedParams(req *rails.Request) string {
 			return "layout with iframe"
 		}
 	}
-	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest"} {
+	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest", "currency"} {
 		if raw, ok := req.Params.Get(name); ok {
 			if _, isString := raw.(string); !isString && raw != nil {
 				return "param " + name
@@ -370,8 +379,8 @@ func declinedParams(req *rails.Request) string {
 		return reason
 	}
 	for _, key := range req.Params.Keys() {
-		if strings.HasPrefix(key, "monthly") || strings.HasPrefix(key, "quarterly") || strings.HasPrefix(key, "biannually") ||
-			strings.HasPrefix(key, "yearly") || strings.HasPrefix(key, "every_two_years") {
+		if wanted && (strings.HasPrefix(key, "monthly") || strings.HasPrefix(key, "quarterly") || strings.HasPrefix(key, "biannually") ||
+			strings.HasPrefix(key, "yearly") || strings.HasPrefix(key, "every_two_years")) {
 			// BasePrice::Recurrence params that ?wanted=true reads.
 			return "param " + key
 		}

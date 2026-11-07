@@ -127,7 +127,9 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 	if err != nil {
 		return err
 	}
-	if rails.Present(pageHTML) && !p.wanted && p.reviewPurchase == nil && (prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
+	// ?native=true opens the standard page instead.
+	if rails.Present(pageHTML) && !p.wanted && p.Req.Param("native") != "true" && p.reviewPurchase == nil &&
+		(prod.alive() || logged != nil || prod.acceptsWaitlistSignups()) {
 		// ?wanted=true goes on to show, which sends the buyer to checkout.
 		on, err := h.flag(ctx, "custom_html_pages", p.seller.id)
 		switch {

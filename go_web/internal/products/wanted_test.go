@@ -192,6 +192,14 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
 			}},
+		// params.permit(:wanted, :native) goes through to_query, which sorts its keys.
+		{name: "a coffee product with native", target: "/l/guide?wanted=1&native=true&x=2",
+			location: "https://gowebproductseller.gumroad.com/coffee?native=true&wanted=1",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
+			}},
+		{name: "a param only the cart reads", target: "/l/guide?wanted=true&option=x", reason: "param option"},
+		{name: "a recurrence the cart reads", target: "/l/guide?wanted=true&yearly=true", reason: "param yearly"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)

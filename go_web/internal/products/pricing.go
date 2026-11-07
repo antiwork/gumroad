@@ -14,12 +14,15 @@ import (
 // productCurrency is product.price_currency_type.to_s.downcase.
 func (p *product) productCurrency() string { return rails.Downcase(p.priceCurrencyType.String) }
 
-// buyerCurrencyPreference is buyer_currency_preference: the currency cookie the footer
-// selector writes; prepare has left a ?currency= param to Rails.
+// buyerCurrencyPreference is buyer_currency_preference: params[:currency].presence, else the
+// currency cookie the footer selector writes. declinedParams leaves a non-String param to Rails.
 func buyerCurrencyPreference(p *page) *string {
-	raw, ok := p.Req.Cookie("gumroad_buyer_currency")
-	if !ok || rails.Blank(raw) {
-		return nil
+	raw, _ := p.Req.Param("currency").(string)
+	if rails.Blank(raw) {
+		var ok bool
+		if raw, ok = p.Req.Cookie("gumroad_buyer_currency"); !ok || rails.Blank(raw) {
+			return nil
+		}
 	}
 	code := rails.Downcase(raw)
 	if _, ok := currencies[code]; !ok {
