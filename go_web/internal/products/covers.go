@@ -295,10 +295,13 @@ func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string
 		c.rescued = true
 		return pc.cdnURL(pc.PublicStorageURL + c.key), nil
 	}
-	if c.width == nil {
-		return "", fallback("cover width")
+	// retina_width is nil for a blob the analyzer never measured, so the variant is
+	// resize_to_limit [nil, nil].
+	var width any
+	if c.width != nil {
+		width = c.width.minWith(coverRetinaWidth).value()
 	}
-	digest := storage.VariantDigest(c.filename, c.contentType, c.width.minWith(coverRetinaWidth).value(), nil)
+	digest := storage.VariantDigest(c.filename, c.contentType, width, nil)
 	variantKey, found, err := h.variantKey(ctx, c.blobID, digest)
 	if err != nil {
 		return "", err
