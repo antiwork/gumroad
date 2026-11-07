@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,8 +139,8 @@ func TestTheSellersOwnView(t *testing.T) {
 }
 
 // Rails shows the seller and collaborators the custom HTML page of an unpublished product, even a
-// coffee one, which show would redirect: the seller's goes to Rails, and so does any other signed-in
-// visitor's on an unpublished product.
+// coffee one, which show would redirect: the seller's goes to Rails. Any other signed-in visitor
+// gets the standard page.
 func TestTheSellerPreviewsTheirCustomHTML(t *testing.T) {
 	for _, c := range []struct {
 		name, reason  string
@@ -147,7 +148,7 @@ func TestTheSellerPreviewsTheirCustomHTML(t *testing.T) {
 	}{
 		{name: "the seller", reason: "custom html preview"},
 		{name: "the seller of a coffee product", reason: "custom html preview", coffee: true},
-		{name: "another visitor", reason: "custom html preview", buyer: true},
+		{name: "another visitor", buyer: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
@@ -162,7 +163,10 @@ func TestTheSellerPreviewsTheirCustomHTML(t *testing.T) {
 				mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
 			}
 			customHTML(t, e, conn)
-			e.render(t, headers, c.reason)
+			body := e.render(t, headers, c.reason)
+			if c.reason == "" && (strings.Contains(body, "gumroad-landing-frame") || !strings.Contains(body, productComponent)) {
+				t.Error("not the standard page")
+			}
 		})
 	}
 }

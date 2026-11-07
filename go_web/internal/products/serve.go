@@ -121,9 +121,18 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		case err != nil:
 			return err
 		case on && !prod.alive() && logged != nil && !seller:
-			// A collaborator previews it, which renderCustomHTML leaves to Rails; anyone else gets the
-			// page, which isn't ported for an unpublished product here.
-			return fallback("custom html preview")
+			// can_preview_product_custom_html?: a collaborator previews it, which renderCustomHTML
+			// leaves to Rails, as staff went there already; anyone else gets show's page unless the
+			// custom page collects waitlist signups.
+			collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
+			switch {
+			case err != nil:
+				return err
+			case collaborates:
+				return fallback("custom html preview")
+			case prod.acceptsWaitlistSignups():
+				return fallback("custom html waitlist")
+			}
 		case on && !prod.alive() && !seller:
 			return fallback("custom html waitlist")
 		case on:

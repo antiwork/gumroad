@@ -15,16 +15,12 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
-const (
-	// guardianRequiredBelowAge is UserComplianceInfo::GUARDIAN_REQUIRED_BELOW_AGE.
-	guardianRequiredBelowAge = 18
-	// minSalesCentsForStoreAgent is User::MIN_SALES_CENTS_VALUE_FOR_STORE_AGENT.
-	minSalesCentsForStoreAgent = 10_000
-)
+// guardianRequiredBelowAge is UserComplianceInfo::GUARDIAN_REQUIRED_BELOW_AGE.
+const guardianRequiredBelowAge = 18
 
 var (
 	// promotableNavItems is DashboardNav::PROMOTABLE_ITEMS.
-	promotableNavItems = []string{"agent", "profile", "pages", "collaborators", "checkout", "emails", "workflows", "analytics",
+	promotableNavItems = []string{"profile", "pages", "collaborators", "checkout", "emails", "workflows", "analytics",
 		"affiliates", "community", "library"}
 	// nativePayoutCountries is User::Compliance::SUPPORTED_COUNTRIES' alpha2 codes.
 	nativePayoutCountries = strings.Fields(`US CA AU GB HK NZ SG CH PL CZ TH BG DK HU KR AE IL TT PH TZ NA AG RO SE MX AR PE NO AL BH JO
@@ -297,14 +293,7 @@ func (h *handler) signedInProps(p *page) error {
 	if _, ok := timeZoneMapping[seller.timezone.String]; !ok {
 		return fallback("time zone")
 	}
-	// use_store_agent?: view_store_agent?, then the seller's eligible_for_store_agent?.
-	var storeAgent bool
 	var err error
-	if p.hasRole(teamAdmin, teamMarketing) {
-		if storeAgent, err = h.eligibleForStoreAgent(ctx, seller); err != nil {
-			return err
-		}
-	}
 	var sells, published, bought, passkeys, ownCommunity, purchasedCommunity bool
 	const chatEnabled = "communities.deleted_at IS NULL AND links.purchase_disabled_at IS NULL AND links.banned_at IS NULL" +
 		" AND links.deleted_at IS NULL AND (links.flags & 536870912 = 536870912)"
@@ -343,7 +332,7 @@ func (h *handler) signedInProps(p *page) error {
 			return err
 		}
 	}
-	if u.loggedIn, err = h.loggedInUserProps(p, u, community, storeAgent); err != nil {
+	if u.loggedIn, err = h.loggedInUserProps(p, u, community); err != nil {
 		return err
 	}
 	if u.currentSeller, err = h.currentSellerProps(p, seller, sells, published, bought); err != nil {
@@ -364,7 +353,7 @@ func (h *handler) signedInProps(p *page) error {
 
 // loggedInUserProps is RenderingExtension#logged_in_user_props: the visitor's own keys, and the
 // policies their role on the current seller allows.
-func (h *handler) loggedInUserProps(p *page, u *signedInUser, community, storeAgent bool) (*rails.RHash, error) {
+func (h *handler) loggedInUserProps(p *page, u *signedInUser, community bool) (*rails.RHash, error) {
 	ctx := p.Ctx
 	memberships, err := h.teamMembershipsProps(p, u)
 	if err != nil {
@@ -421,8 +410,7 @@ func (h *handler) loggedInUserProps(p *page, u *signedInUser, community, storeAg
 		Sym("utm_link", allowed([]string{"index"}, all...)).
 		Sym("community", rails.NewRHash().Sym("index", community)).
 		Sym("churn", allowed([]string{"show"}, all...)).
-		Sym("page", rails.NewRHash().Sym("index", p.hasRole(all...)).Sym("create", p.hasRole(write...))).
-		Sym("user", rails.NewRHash().Sym("view_store_agent", p.hasRole(write...)).Sym("use_store_agent", storeAgent))
+		Sym("page", rails.NewRHash().Sym("index", p.hasRole(all...)).Sym("create", p.hasRole(write...)))
 	return rails.NewRHash().
 		Sym("id", nullString(u.externalID)).
 		Sym("email", nullString(u.email)).
@@ -498,123 +486,6 @@ func (h *handler) teamMembershipsProps(p *page, u *signedInUser) ([]any, error) 
 			Sym("is_selected", m.sellerID == p.currentSeller.id))
 	}
 	return out, nil
-}
-
-// eligibleForStoreAgent is User#eligible_for_store_agent?.
-func (h *handler) eligibleForStoreAgent(ctx context.Context, u *signedInUser) (bool, error) {
-	if !u.confirmedAt.Valid || u.riskState.String == "suspended_for_tos_violation" || u.riskState.String == "suspended_for_fraud" {
-		return false, nil
-	}
-	completed, err := h.exists(ctx, "SELECT 1 AS one FROM payments WHERE payments.user_id = ? AND payments.state = 'completed' LIMIT 1", u.id)
-	if err != nil {
-		return false, err
-	}
-	if !completed {
-		// made_a_successful_sale_with_a_stripe_connect_or_paypal_connect_account?
-		var ids []int64
-		rows, err := h.c.DB.QueryContext(ctx, "SELECT merchant_accounts.id FROM merchant_accounts WHERE merchant_accounts.user_id = ?"+
-			" AND ((merchant_accounts.charge_processor_id = 'stripe' AND (json_data->>'$.meta.stripe_connect' = 'true')"+
-			" AND merchant_accounts.user_id IS NOT NULL) OR merchant_accounts.charge_processor_id = 'paypal')", u.id)
-		if err != nil {
-			return false, fallback("merchant account json_data")
-		}
-		for rows.Next() {
-			var id int64
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return false, err
-			}
-			ids = append(ids, id)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			return false, fallback("merchant account json_data")
-		}
-		if len(ids) == 0 {
-			return false, nil
-		}
-		if completed, err = h.exists(ctx, "SELECT 1 AS one FROM purchases WHERE purchases.seller_id = ?"+
-			" AND purchases.purchase_state IN ('successful','preorder_authorization_successful','gift_receiver_purchase_successful')"+
-			" AND (purchases.stripe_refunded IS NULL OR purchases.stripe_refunded = 0)"+
-			" AND (purchases.chargeback_date IS NULL OR (purchases.chargeback_date IS NOT NULL AND purchases.flags & 512 != 0))"+
-			" AND (purchases.flags & 32 = 0) AND purchases.merchant_account_id IN ("+placeholders(len(ids))+") LIMIT 1",
-			append([]any{u.id}, int64Args(ids)...)...); err != nil || !completed {
-			return false, err
-		}
-	}
-	if h.c.Page.Search == nil {
-		return false, fallback("store agent sales total")
-	}
-	total, err := h.salesCentsTotal(ctx, u.id)
-	return total >= minSalesCentsForStoreAgent, err
-}
-
-// salesCentsTotal is User::Stats#sales_cents_total: revenue as seller, summed as Floats in
-// Rails' order and truncated, plus revenue as affiliate.
-func (h *handler) salesCentsTotal(ctx context.Context, userID int64) (int64, error) {
-	filter := func(owner any) []any {
-		return []any{owner, map[string]any{"term": map[string]any{"stripe_refunded": false}},
-			map[string]any{"term": map[string]any{"not_chargedback_or_chargedback_reversed": true}},
-			map[string]any{"terms": map[string]any{"purchase_state": []string{"successful"}}}}
-	}
-	body := func(owner any, aggs map[string]any) map[string]any {
-		return map[string]any{"query": map[string]any{"bool": map[string]any{
-			"filter":   filter(owner),
-			"must_not": []any{map[string]any{"term": map[string]any{"selected_flags": "is_bundle_product_purchase"}}},
-			"must":     []any{map[string]any{"range": map[string]any{"price_cents": map[string]any{"gt": 0}}}},
-		}}, "from": 0, "size": 0, "_source": false, "aggs": aggs}
-	}
-	// PurchaseSearchService's seller sums, in the order revenue_as_seller adds and subtracts them.
-	sellerSums := []struct {
-		field string
-		sign  float64
-	}{{"price_cents", 1}, {"fee_cents", -1}, {"amount_refunded_cents", -1}, {"fee_refunded_cents", 1},
-		{"affiliate_credit_amount_cents", -1}, {"affiliate_credit_amount_partially_refunded_cents", 1},
-		{"direct_affiliate_credit_amount_cents", -1}, {"direct_affiliate_credit_amount_partially_refunded_cents", 1}}
-	aggs := map[string]any{}
-	for _, s := range sellerSums {
-		aggs[s.field+"_total"] = map[string]any{"sum": map[string]any{"field": s.field}}
-	}
-	var seller struct {
-		Aggregations map[string]struct {
-			Value float64 `json:"value"`
-		} `json:"aggregations"`
-	}
-	if err := h.c.Page.Search.Search(ctx, "purchases", body(map[string]any{"terms": map[string]any{"seller_id": []int64{userID}}}, aggs), &seller); err != nil {
-		return 0, err
-	}
-	revenue := 0.0
-	for _, s := range sellerSums {
-		revenue += s.sign * seller.Aggregations[s.field+"_total"].Value
-	}
-
-	prefixes := []string{"affiliate_credit", "direct_affiliate_credit"}
-	aggs = map[string]any{}
-	for _, prefix := range prefixes {
-		for _, measure := range []string{"amount_cents", "fee_cents", "amount_partially_refunded_cents", "fee_partially_refunded_cents"} {
-			aggs[prefix+"_"+measure+"_own"] = map[string]any{"filter": map[string]any{"term": map[string]any{prefix + "_affiliate_user_id": userID}},
-				"aggs": map[string]any{"total": map[string]any{"sum": map[string]any{"field": prefix + "_" + measure}}}}
-		}
-	}
-	owner := map[string]any{"bool": map[string]any{"minimum_should_match": 1, "should": []any{
-		map[string]any{"terms": map[string]any{"affiliate_credit_affiliate_user_id": []int64{userID}}},
-		map[string]any{"terms": map[string]any{"direct_affiliate_credit_affiliate_user_id": []int64{userID}}}}}}
-	var affiliate struct {
-		Aggregations map[string]struct {
-			Total struct {
-				Value float64 `json:"value"`
-			} `json:"total"`
-		} `json:"aggregations"`
-	}
-	if err := h.c.Page.Search.Search(ctx, "purchases", body(owner, aggs), &affiliate); err != nil {
-		return 0, err
-	}
-	var earned, refunded int64
-	for _, prefix := range prefixes {
-		earned += int64(affiliate.Aggregations[prefix+"_amount_cents_own"].Total.Value)
-		refunded += int64(affiliate.Aggregations[prefix+"_amount_partially_refunded_cents_own"].Total.Value)
-	}
-	return int64(revenue) + earned - refunded, nil
 }
 
 // promotedNavItems is User#promoted_nav_item_keys. The pluck has no ORDER BY, so the statement

@@ -75,12 +75,18 @@ func (h *handler) curatedProducts(ctx context.Context, p *page) ([]int64, error)
 	}
 	associated := union(cart[:min(int64(len(cart)), limit)], purchased)
 	if len(associated) >= 4 {
-		// Array#sample of half of them.
-		sampled := make([]int64, 0, len(associated)/2)
-		for _, i := range rand.Perm(len(associated))[:len(associated)/2] {
-			sampled = append(sampled, associated[i])
+		// Array#sample of half of them. A dry run takes the first half, which a parity run stubs
+		// Rails' sample to match.
+		half := len(associated) / 2
+		if p.DryRun {
+			associated = associated[:half]
+		} else {
+			sampled := make([]int64, 0, half)
+			for _, i := range rand.Perm(len(associated))[:half] {
+				sampled = append(sampled, associated[i])
+			}
+			associated = sampled
 		}
-		associated = sampled
 	}
 	related, err := h.relatedProducts(ctx, associated)
 	if err != nil || len(related) == 0 {
