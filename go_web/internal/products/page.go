@@ -367,7 +367,19 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// before that for a membership.
 		return nil, fallback("no price")
 	}
-	if v.discount, err = h.loadOfferDiscount(ctx, p, prod, v.priceCents); err != nil {
+	// The offer codes' comparison reads the recurrences and the variants.
+	if v.recurrences, err = h.loadRecurrences(ctx, prod, v.prices); err != nil {
+		return nil, err
+	}
+	if prod.is(productIsTieredMembership) {
+		if v.tierRecurrences, err = tierRecurrences(v.prices); err != nil {
+			return nil, err
+		}
+	}
+	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
+		return nil, err
+	}
+	if v.discount, err = h.loadOfferDiscount(ctx, p, prod, v); err != nil {
 		return nil, err
 	}
 	pppPrice, err := h.loadPPP(ctx, p, prod, v)
@@ -400,14 +412,6 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.preorder, err = h.preorderProps(ctx, prod); err != nil {
 		return nil, err
 	}
-	if v.recurrences, err = h.loadRecurrences(ctx, prod, v.prices); err != nil {
-		return nil, err
-	}
-	if prod.is(productIsTieredMembership) {
-		if v.tierRecurrences, err = tierRecurrences(v.prices); err != nil {
-			return nil, err
-		}
-	}
 	if v.covers, err = h.loadCovers(ctx, p, prod.id); err != nil {
 		return nil, err
 	}
@@ -418,9 +422,6 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	if v.reviewStat, err = h.loadReviewStat(ctx, prod.id); err != nil {
-		return nil, err
-	}
-	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
 		return nil, err
 	}
 	if p.wanted {
