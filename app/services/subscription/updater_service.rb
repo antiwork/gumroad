@@ -304,6 +304,39 @@ class Subscription::UpdaterService
     result
   end
 
+  def selected_plan_indian_card_mandate_terms(billing_info:)
+    error_message = validate_params
+    raise Subscription::UpdateFailed, error_message if error_message.present?
+
+    self.original_purchase = subscription.original_purchase
+    self.original_price = subscription.price
+    self.overdue_for_charge = subscription.overdue_for_charge?
+    self.calculate_upgrade_cost_as_of = Time.current.end_of_day
+    self.prorated_discount_price_cents = subscription.prorated_discount_price_cents(calculate_as_of: calculate_upgrade_cost_as_of)
+    return if same_plan_and_price?
+
+    terms_with_rate = nil
+    ActiveRecord::Base.transaction do
+      self.new_purchase = subscription.update_current_plan!(
+        new_variants: variants,
+        new_price: price,
+        new_quantity: params[:quantity],
+        perceived_price_cents: purchase_perceived_price_cents(original_purchase.purchase_offer_code_discount),
+        clear_deleted_discount: should_clear_original_discount?,
+        authenticated_offer_code_buyer: logged_in_user,
+        submitted_pre_discount_price_cents: params[:submitted_pre_discount_price_cents] || params[:price_range],
+        skip_preparing_for_charge: true,
+      )
+      if apply_plan_change_immediately?
+        terms_with_rate = subscription.reload.indian_card_mandate_terms_with_rate(billing_info:, authenticated_offer_code_buyer: logged_in_user)
+      end
+      raise ActiveRecord::Rollback
+    end
+    terms_with_rate
+  ensure
+    subscription.reload
+  end
+
   private
     def validate_params
       return if !tiered_membership? || (variants.present? && price.present?)

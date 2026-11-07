@@ -500,7 +500,7 @@ describe Stripe::SetupIntentsController, :vcr do
     end
   end
 
-  describe "restarting an ended membership after the seller raised the tier price",
+  describe "sizing a membership's replacement Indian card mandate for the real updater",
            vcr: { cassette_name: "Stripe_SetupIntentsController/restarting_an_ended_membership_after_the_seller_raised_the_tier_price", record: :none, allow_playback_repeats: true } do
     include ManageSubscriptionHelpers
 
@@ -529,8 +529,48 @@ describe Stripe::SetupIntentsController, :vcr do
       allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ subscription_id: @subscription.external_id }]))
       allow(controller).to receive(:logged_in_user).and_return(@user)
       options = controller.send(:mandate_options_for_stripe, double(requires_mandate?: true), subscription: Subscription.find(@subscription.id))
-      mandate_options = options.dig(:payment_method_options, :card, :mandate_options)
 
+      update_with_setup_intent_options(
+        options,
+        price_id: @quarterly_product_price.external_id,
+        variants: [@original_tier.external_id],
+        quantity: 1,
+        perceived_price_cents: new_price_cents,
+        perceived_upgrade_price_cents: new_price_cents,
+      )
+    end
+
+    def mint_setup_intent_for_plan(plan, billing_info:)
+      allow(controller).to receive(:logged_in_user).and_return(@user)
+      allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
+      allow(CardParamsHelper).to receive(:build_chargeable).and_return(
+        double(prepare!: nil, reusable_token_for!: "cus_replacement", requires_mandate?: true, fingerprint: "fingerprint_replacement")
+      )
+      options = nil
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_merchant_account, _chargeable, mandate_options:|
+        options = mandate_options
+        instance_double(StripeSetupIntent, id: "seti_replacement", succeeded?: true)
+      end
+      request.cookie_jar.encrypted[@subscription.cookie_key] = @subscription.external_id
+
+      post :create, params: {
+        stripe_payment_method_id: "pm_replacement",
+        billing_info:,
+        products: [{ price: plan[:perceived_upgrade_price_cents], subscription_id: @subscription.external_id, **plan.except(:perceived_upgrade_price_cents) }]
+      }
+
+      options
+    end
+
+    def change_plan_with_controller_mandate(billing_info: { country: "FR", state: nil, postal_code: nil }, **plan)
+      options = mint_setup_intent_for_plan(plan, billing_info:)
+      expect(response).to be_successful
+
+      update_with_setup_intent_options(options, **plan, contact_info: { country: billing_info[:country], zip_code: billing_info[:postal_code] })
+    end
+
+    def update_with_setup_intent_options(options, **params)
+      mandate_options = options.dig(:payment_method_options, :card, :mandate_options)
       allow(ChargeProcessor).to receive(:get_setup_intent).and_return(
         instance_double(
           StripeSetupIntent, succeeded?: true, mandate: "mandate_active", payment_method_id: "pm_replacement",
@@ -543,13 +583,7 @@ describe Stripe::SetupIntentsController, :vcr do
       service = Subscription::UpdaterService.new(
         subscription: Subscription.find(@subscription.id),
         gumroad_guid: "guid",
-        params: {
-          price_id: @quarterly_product_price.external_id,
-          variants: [@original_tier.external_id],
-          quantity: 1,
-          perceived_price_cents: new_price_cents,
-          perceived_upgrade_price_cents: new_price_cents,
-        },
+        params:,
         logged_in_user: @user,
         remote_ip: "11.22.33.44"
       )
@@ -621,6 +655,126 @@ describe Stripe::SetupIntentsController, :vcr do
 
       expect(mandate_options).to include(amount: 29_99, currency: Currency::USD)
       expect(result).to include(success: true)
+    end
+
+    context "when the buyer selects another plan" do
+      before do
+        setup_subscription_with_vat
+        Feature.activate_user(StripeChargeProcessor::INDIA_CARD_MANDATE_RELIABILITY_FEATURE, @product.user)
+      end
+
+      def end_membership
+        @subscription.update!(cancelled_at: @originally_subscribed_at + 3.months, cancelled_by_buyer: true, deactivated_at: @originally_subscribed_at + 3.months)
+        travel_to(@originally_subscribed_at + 4.months)
+      end
+
+      it "sizes a restart mandate for the selected tier plus tax" do
+        end_membership
+
+        mandate_options, result = change_plan_with_controller_mandate(
+          price_id: @quarterly_product_price.external_id,
+          variants: [@new_tier.external_id],
+          quantity: 1,
+          perceived_price_cents: 10_50,
+          perceived_upgrade_price_cents: 10_50,
+        )
+
+        expect(result).to include(success: true)
+        expect(mandate_options).to include(amount: 12_60, currency: Currency::USD, interval: "month", interval_count: 3)
+        expect(@subscription.reload.tier).to eq(@new_tier)
+      end
+
+      it "sizes a restart mandate for the selected billing period" do
+        end_membership
+
+        mandate_options, result = change_plan_with_controller_mandate(
+          price_id: @yearly_product_price.external_id,
+          variants: [@new_tier.external_id],
+          quantity: 1,
+          perceived_price_cents: 20_00,
+          perceived_upgrade_price_cents: 20_00,
+        )
+
+        expect(result).to include(success: true)
+        expect(mandate_options).to include(amount: 24_00, interval: "year", interval_count: 1)
+      end
+
+      it "sizes a restart mandate for the pay-what-you-want amount the buyer chose" do
+        @new_tier.update!(customizable_price: true)
+        end_membership
+
+        mandate_options, result = change_plan_with_controller_mandate(
+          price_id: @quarterly_product_price.external_id,
+          variants: [@new_tier.external_id],
+          quantity: 1,
+          price_range: 15_00,
+          perceived_price_cents: 15_00,
+          perceived_upgrade_price_cents: 15_00,
+        )
+
+        expect(result).to include(success: true)
+        expect(mandate_options).to include(amount: 18_00)
+      end
+
+      it "sizes a live upgrade's mandate for the new tier" do
+        travel_to(@originally_subscribed_at + 1.month)
+
+        mandate_options, result = change_plan_with_controller_mandate(
+          price_id: @quarterly_product_price.external_id,
+          variants: [@new_tier.external_id],
+          quantity: 1,
+          perceived_price_cents: 10_50,
+          perceived_upgrade_price_cents: @new_tier_quarterly_upgrade_cost_after_one_month,
+        )
+
+        expect(result).to include(success: true)
+        expect(mandate_options).to include(amount: 12_60)
+        expect(@subscription.reload.tier).to eq(@new_tier)
+      end
+
+      it "keeps a deferred downgrade's mandate sized for the plan that renews next" do
+        travel_to(@originally_subscribed_at + 1.month)
+
+        options = mint_setup_intent_for_plan(
+          { price_id: @quarterly_product_price.external_id, variants: [@lower_tier.external_id], quantity: 1, perceived_price_cents: 4_00, perceived_upgrade_price_cents: 0 },
+          billing_info: { country: "FR", state: nil, postal_code: nil }
+        )
+
+        expect(response).to be_successful
+        expect(options.dig(:payment_method_options, :card, :mandate_options)).to include(amount: 7_19)
+        expect(@subscription.reload.tier).to eq(@original_tier)
+      end
+
+      it "does not reuse a pending card whose mandate was sized for the current plan" do
+        end_membership
+        subscription = Subscription.find(@subscription.id)
+        allow(subscription).to receive(:credit_card).and_return(replacement_card)
+        allow(subscription).to receive(:reusable_pending_indian_card).and_return(replacement_card)
+        allow(Subscription).to receive(:find_by_external_id).with(@subscription.external_id).and_return(subscription)
+
+        options = mint_setup_intent_for_plan(
+          { price_id: @quarterly_product_price.external_id, variants: [@new_tier.external_id], quantity: 1, perceived_price_cents: 10_50, perceived_upgrade_price_cents: 10_50 },
+          billing_info: { country: "FR", state: nil, postal_code: nil }
+        )
+
+        expect(response.parsed_body).to include("setup_intent_id" => "seti_replacement")
+        expect(response.parsed_body).not_to have_key("payment_method_id")
+        expect(options.dig(:payment_method_options, :card, :mandate_options)).to include(amount: 12_60)
+      end
+
+      it "rejects a tier from another product without creating a setup intent" do
+        end_membership
+        other_tier = create(:membership_product_with_preset_tiered_pricing).tiers.first
+
+        mint_setup_intent_for_plan(
+          { price_id: @quarterly_product_price.external_id, variants: [other_tier.external_id], quantity: 1, perceived_price_cents: 10_50, perceived_upgrade_price_cents: 10_50 },
+          billing_info: { country: "FR", state: nil, postal_code: nil }
+        )
+
+        expect(response).to have_http_status(:unprocessable_entity)
+        expect(response.parsed_body).to eq("success" => false, "error_message" => "Please select a valid tier and payment option.")
+        expect(ChargeProcessor).not_to have_received(:setup_future_charges!)
+      end
     end
   end
 end
