@@ -4,7 +4,9 @@
 class GenerateAvatarVariantJob
   include Sidekiq::Job
   include DatabaseRoleRouting
-  sidekiq_options retry: 3, queue: :low, lock: :until_executed
+  # A queued job reads the avatar when it starts, so duplicates can be dropped until then; an avatar replaced
+  # while the job runs needs a job of its own, which until_executed would drop.
+  sidekiq_options retry: 3, queue: :low, lock: :until_executing
 
   def perform(user_id)
     # Enqueued as the avatar commits, so a lagging replica can show no avatar or the previous one and the
