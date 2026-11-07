@@ -291,6 +291,21 @@ describe "Product creation", type: :system, js: true do
     end
   end
 
+  describe "price commas" do
+    { "1,500" => 1500_00, "7,9" => 7_90 }.each do |typed, cents|
+      it "creates a product priced #{typed} as #{cents} cents" do
+        visit new_product_path
+        fill_in("Name", with: "Comma product")
+        choose("Digital product")
+        fill_in("Price", with: typed)
+        click_on("Next: Customize")
+
+        expect(page).to have_title("Comma product")
+        expect(seller.links.last.price_cents).to eq(cents)
+      end
+    end
+  end
+
   describe "form validations" do
     it "shows error state when name is not filled" do
       visit new_product_path
