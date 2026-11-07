@@ -30,8 +30,9 @@ const (
 	profilePostsSectionType     = "SellerProfilePostsSection"
 	profileFeaturedSectionType  = "SellerProfileFeaturedProductSection"
 	pageLayoutSort              = "page_layout"
-	// Link::RECOMMENDED_PRODUCTS_PER_PAGE.
+	// Link::RECOMMENDED_PRODUCTS_PER_PAGE and Link::MAX_RESULT_WINDOW.
 	catalogPageSize = 9
+	maxResultWindow = 10_000
 	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
 	catalogTagFacetSize      = 200
 	catalogFiletypeFacetSize = 8
@@ -353,12 +354,19 @@ func sectionHead(id string, header any, typ string) *rails.RHash {
 	return rails.NewRHash().Sym("id", id).Sym("header", header).Sym("type", typ)
 }
 
+// catalogQuery is the visitor's search params section_search_results reads: none for the cached
+// search.
+type catalogQuery struct {
+	text string
+	from int64
+}
+
 // searchSections is section_search_results for each section, in order.
-func (h *handler) searchSections(p *page, sections []*productsSection, query string) ([]*catalogSearch, error) {
+func (h *handler) searchSections(p *page, sections []*productsSection, q catalogQuery) ([]*catalogSearch, error) {
 	searches := make([]*catalogSearch, len(sections))
 	for i, s := range sections {
 		var err error
-		if searches[i], err = h.searchCatalog(p, s, query); err != nil {
+		if searches[i], err = h.searchCatalog(p, s, q); err != nil {
 			return nil, err
 		}
 	}
@@ -368,7 +376,7 @@ func (h *handler) searchSections(p *page, sections []*productsSection, query str
 // visitorSearchSections is section_props' fresh search, which matches the visitor's query.
 func (h *handler) visitorSearchSections(p *page, sections []*productsSection) ([]*catalogSearch, error) {
 	query, _ := p.query.(string)
-	return h.searchSections(p, sections, query)
+	return h.searchSections(p, sections, catalogQuery{text: query, from: p.searchFrom})
 }
 
 // sectionSortClauses is search_options' sort for a section's default_product_sort: page_layout
@@ -386,7 +394,7 @@ func desc(field string) map[string]any { return map[string]any{field: map[string
 
 // searchCatalog is Link.filetype_options' and Link.search_options' searches for a section. They
 // share a query, so one request carries both facets.
-func (h *handler) searchCatalog(p *page, section *productsSection, query string) (*catalogSearch, error) {
+func (h *handler) searchCatalog(p *page, section *productsSection, q catalogQuery) (*catalogSearch, error) {
 	if h.c.Page.Search == nil {
 		return nil, fallback("products section search")
 	}
@@ -394,8 +402,8 @@ func (h *handler) searchCatalog(p *page, section *productsSection, query string)
 		return map[string]any{"terms": map[string]any{"field": field, "size": size}}
 	}
 	var must []any
-	if rails.Present(query) {
-		must = append(must, map[string]any{"simple_query_string": map[string]any{"query": query,
+	if rails.Present(q.text) {
+		must = append(must, map[string]any{"simple_query_string": map[string]any{"query": q.text,
 			"fields": []string{"name", "creator_name", "description", "tags"}, "default_operator": "and"}})
 	}
 	must = append(must,
@@ -441,7 +449,7 @@ func (h *handler) searchCatalog(p *page, section *productsSection, query string)
 		"query": map[string]any{"bool": boolQuery},
 		"aggregations": map[string]any{"tags.keyword": terms("tags.keyword", catalogTagFacetSize),
 			"filetypes.keyword": terms("filetypes.keyword", catalogFiletypeFacetSize)},
-		"sort": sort, "size": catalogPageSize, "from": 0, "_source": false, "track_total_hits": true}, &products)
+		"sort": sort, "size": catalogPageSize, "from": q.from, "_source": false, "track_total_hits": true}, &products)
 	if err != nil {
 		return nil, searchFailed(p, "catalog", err)
 	}

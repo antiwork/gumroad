@@ -361,17 +361,17 @@ func (c *offerCode) oncePerCart() bool {
 	return c.amountCents.Valid && c.flags&offerCodeOncePerCart != 0
 }
 
-// quantity is evaluate_code's: one, raised to the code's minimum.
-func (c *offerCode) quantity() int64 {
-	return max(1, c.minimumQuantity.Int64)
+// quantity is evaluate_code's: the page's, raised to the code's minimum.
+func (c *offerCode) quantity(page int64) int64 {
+	return max(page, c.minimumQuantity.Int64)
 }
 
 // usageUnits is usage_units at that quantity.
-func (c *offerCode) usageUnits() int64 {
+func (c *offerCode) usageUnits(page int64) int64 {
 	if c.oncePerCart() {
 		return 1
 	}
-	return c.quantity()
+	return c.quantity(page)
 }
 
 // oncePerCartCents is allocate_once_per_cart_discount for the product's own line.
@@ -414,6 +414,10 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		list = append(list, eff)
 	}
 	d.listed = len(list) > 0
+	if p.quantity() < 1 && (d.listed || p.discountCode != "") {
+		// discount_code_props weighs the codes at this quantity, selection_discounts at one.
+		return nil, fallback("param quantity")
+	}
 	for _, c := range list {
 		if rails.Blank(c.code.String) {
 			continue
@@ -479,7 +483,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 			if price == nil || !known {
 				return nil, fallback("once-per-cart price")
 			}
-			d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(), cur.minPrice)
+			d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(p.quantity()), cur.minPrice)
 			d.oncePerCartID = h.c.IDs.Encrypt(c.id)
 		}
 	}
@@ -646,9 +650,9 @@ func (d *offerDiscount) resultProps() any {
 // selectionDiscounts is selection_discounts. With no code in the URL and no default code it
 // has no options; otherwise each option the buyer can pick, rented or bought, gets the one
 // result, as only one code can apply, unless the option is outside that code's scope.
-func selectionDiscounts(prod *product, v *view, result any) *rails.RHash {
+func selectionDiscounts(p *page, prod *product, v *view, result any) *rails.RHash {
 	urlCode := presence(v.discount.urlCode)
-	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", int64(1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
+	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", max(p.quantity(), 1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
 		Sym("option_id", nil).Sym("price_cents", nil)
 	if !v.discount.listed && urlCode == nil {
 		return s.Sym("options", rails.NewRHash()).Sym("rent_options", nil)
@@ -697,10 +701,10 @@ func invalidResult(errorCode string) any {
 	return rails.NewRHash().Sym("valid", false).Sym("error_code", errorCode)
 }
 
-// discountedCents is discounted_price_cents at quantity 1.
-func (d *offerDiscount) discountedCents(price int64) int64 {
+// discountedCents is discounted_price_cents at the page's quantity.
+func (d *offerDiscount) discountedCents(price, quantity int64) int64 {
 	c := d.code
-	if c == nil || c.minimumQuantity.Int64 > 1 {
+	if c == nil || c.minimumQuantity.Int64 > quantity {
 		return price
 	}
 	if c.amountCents.Valid {

@@ -377,7 +377,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	// displayed_price_cents: the discounted price, or PPP's when that's lower.
 	displayed := v.priceCents
 	if displayed != nil && v.discount.code != nil {
-		d := v.discount.discountedCents(*displayed)
+		d := v.discount.discountedCents(*displayed, p.quantity())
 		displayed = &d
 	}
 	if displayed != nil && pppPrice != nil && *pppPrice < *displayed {

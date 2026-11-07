@@ -14,8 +14,8 @@ type wantedItem struct {
 	recurrence string
 }
 
-// wantedCartItem is Link#cart_item for show's wanted=true, whose option, variant, rent, price,
-// quantity and recurrence params are declined; nil when show renders the page instead, for a
+// wantedCartItem is Link#cart_item for show's wanted=true, whose option, variant, rent, price
+// and recurrence params are declined; nil when show renders the page instead, for a
 // pay-what-you-want product or option.
 func wantedCartItem(p *page, prod *product, v *view) (*wantedItem, error) {
 	// The first option whose to_option quantity_left isn't 0; a coffee product never gets here.

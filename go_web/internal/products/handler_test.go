@@ -1,6 +1,7 @@
 package products
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -1216,11 +1217,11 @@ func TestDefaultOfferCodes(t *testing.T) {
 	}
 	excludingOther := strings.Replace(sale20, `"minimum_amount_cents":null}`, `"minimum_amount_cents":null,"excluded_product_ids":["%[4]s"]}`, 1)
 	for _, c := range []struct {
-		name    string
-		wants   []string
-		reason  string
-		headers map[string]string
-		setup   func(t *testing.T, e *testEnv, conn *sql.DB)
+		name, target string
+		wants        []string
+		reason       string
+		headers      map[string]string
+		setup        func(t *testing.T, e *testEnv, conn *sql.DB)
 	}{
 		{name: "an auto-applied percent code", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`,
 			`"options":{"":` + saleEntry + `},"rent_options":null}`},
@@ -1341,6 +1342,32 @@ func TestDefaultOfferCodes(t *testing.T) {
 				e.localEUR("0.92345")
 				auto(t, conn, map[string]any{"minimum_quantity": 3})
 			}},
+		// (params[:quantity] || 1).to_i: the codes are weighed at it, and the price discounted from it.
+		{name: "a sale needing three, for three", target: "/l/guide?quantity=3", headers: eurCookie,
+			wants: []string{`"buyer_local_price_cents":369,"buyer_local_original_price_cents":462,`, `"url_code":null,"quantity":3,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				e.localEUR("0.92345")
+				auto(t, conn, map[string]any{"minimum_quantity": 3})
+			}},
+		{name: "a limited sale too short for the quantity", target: "/l/guide?quantity=2",
+			wants: []string{`"discount_code":null,`, `"options":{"":{"discount_code":null,"sale_label":null}}`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"max_purchase_count": 10})
+				insertCodeUse(t, conn, 1_795_901, autoID, map[string]any{"quantity": 9})
+			}},
+		{name: "a once-per-cart sale over two units", target: "/l/guide?quantity=2", wants: []string{oncePerCart(600, 600, "null", false)},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+			}},
+		// selection_discounts reads [quantity, 1].max; discount_code_props the quantity itself.
+		{name: "a quantity under one", target: "/l/guide?quantity=abc", reason: "param quantity",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, nil) }},
+		{name: "a quantity under one without a code", target: "/l/guide?quantity=abc", wants: []string{`"url_code":null,"quantity":1,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {}},
+		{name: "a quantity past int64", target: "/l/guide?quantity=99999999999999999999", reason: "param quantity",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {}},
+		{name: "an Array quantity", target: "/l/guide?quantity[]=2", reason: "param quantity",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {}},
 		// Ruby's Float#round: 999 * 0.15 = 149.85 rounds to 150.
 		{name: "a percent rounding", headers: eurCookie, wants: []string{`"buyer_local_price_cents":849,"buyer_local_original_price_cents":999,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
@@ -1508,7 +1535,8 @@ func TestDefaultOfferCodes(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
 			c.setup(t, e, testdb.Open(t))
-			e.wantAll(t, e.render(t, c.headers, c.reason), c.wants, productID, first, second, otherID, otherID+1, autoID)
+			body, _ := e.renderAt(t, cmp.Or(c.target, "/l/guide"), c.headers, c.reason)
+			e.wantAll(t, body, c.wants, productID, first, second, otherID, otherID+1, autoID)
 		})
 	}
 	// option_ids_by_product keeps the order OfferCode#variants' own statement returns.

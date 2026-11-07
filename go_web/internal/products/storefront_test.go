@@ -274,6 +274,19 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		{name: "a blank visitor query", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?query=+",
 			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
 			want:  func(e *testEnv) string { return results(e, 2) }},
+		// search_options' from is (from.to_i - 1).clamp(0, ...), so a referral tag reads as the first page.
+		{name: "a referral tag in from", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?from=threads",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			want:  func(e *testEnv) string { return results(e, 2) }},
+		{name: "a later page", server: search, searched: 2, searchedAgain: 3, query: "?from=10",
+			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
+			respond: func(body map[string]any) (string, string) {
+				if body["from"] == float64(9) {
+					return fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other), "10"
+				}
+				return bothHits, "3"
+			},
+			want: func(e *testEnv) string { return results(e, 9) }},
 		{name: "the rest of the catalog, without this product", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, nil)

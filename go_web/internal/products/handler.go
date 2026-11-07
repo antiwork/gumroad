@@ -120,8 +120,12 @@ type page struct {
 	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props
 	// search afresh.
 	visitorSearch bool
-	// query is params[:query]: a string, or nil for a bare or absent key.
-	query any
+	// query is params[:query]: a string, or nil for a bare or absent key. searchFrom is
+	// search_options' from for params[:from].
+	query      any
+	searchFrom int64
+	// quantityParam is params[:quantity].to_i, nil without one; see quantity.
+	quantityParam *int64
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
 	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
@@ -248,6 +252,21 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if raw, ok := v.Req.Params.Get("query"); ok {
 		p.query, p.visitorSearch = raw, true
 	}
+	if raw, ok := v.Req.Params.Get("from"); ok {
+		from, _ := raw.(string)
+		n, ok := rails.StringToI(from)
+		if !ok {
+			return nil, fallback("param from")
+		}
+		p.searchFrom, p.visitorSearch = min(max(n-1, 0), maxResultWindow-catalogPageSize), true
+	}
+	if raw, ok := v.Req.Param("quantity").(string); ok {
+		n, fits := rails.StringToI(raw)
+		if !fits {
+			return nil, fallback("param quantity")
+		}
+		p.quantityParam = &n
+	}
 	return p, nil
 }
 
@@ -336,9 +355,9 @@ func declined(r *http.Request, env *web.Environment) string {
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"quantity", "debug",
+	"debug",
 	// The sections' search filters.
-	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
+	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "size",
 }
 
 // cartParams are the params only ?wanted=true's cart_item reads, which this port leaves to Rails.
@@ -371,7 +390,7 @@ func declinedParams(req *rails.Request) string {
 			return "layout with iframe"
 		}
 	}
-	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest", "currency"} {
+	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest", "currency", "quantity", "from"} {
 		if raw, ok := req.Params.Get(name); ok {
 			if _, isString := raw.(string); !isString && raw != nil {
 				return "param " + name
@@ -398,4 +417,13 @@ func declinedParams(req *rails.Request) string {
 		}
 	}
 	return ""
+}
+
+// quantity is (params[:quantity] || 1).to_i, which the offer codes are weighed at; a featured
+// product's props take the default.
+func (p *page) quantity() int64 {
+	if p.quantityParam == nil {
+		return 1
+	}
+	return *p.quantityParam
 }
