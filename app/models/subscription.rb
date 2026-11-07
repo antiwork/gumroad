@@ -1115,6 +1115,23 @@ class Subscription < ApplicationRecord
     [mandate, status, source]
   end
 
+  def active_indian_card_mandate_setup_intent
+    card = credit_card_to_charge
+    return if card.nil? || card.stripe_setup_intent_id.blank? || stripe_mandate_id.blank?
+
+    _mandate, status, = indian_card_mandate_for(card.id)
+    return unless status == "active"
+
+    setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, card.stripe_setup_intent_id)
+    setup_intent if setup_intent&.succeeded? &&
+      setup_intent.mandate == stripe_mandate_id &&
+      setup_intent.customer_id == card.stripe_customer_id &&
+      setup_intent.payment_method_id == card.processor_payment_method_id
+  rescue ChargeProcessorError => e
+    ErrorNotifier.notify(e, subscription: external_id)
+    nil
+  end
+
   def refresh_indian_card_mandate!
     card = credit_card_to_charge
     return "missing" if card.nil?
