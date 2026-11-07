@@ -73,6 +73,29 @@ func TestPushUntilExecutedPushesOnlyTheLockHolder(t *testing.T) {
 	}
 }
 
+// The server reads the lock type off the item, so only the payload differs from until_executed.
+func TestPushUntilExecutingNamesItsLock(t *testing.T) {
+	m := miniredis.RunT(t)
+	c := &Client{Redis: redis.NewClient(&redis.Options{Addr: m.Addr()}), RedisVersion: "7.2.4",
+		Now: func() time.Time { return time.Unix(1762430000, 250_000_000) }}
+	opts := Options{Class: "GenerateAvatarVariantJob", Queue: "low", Retry: 3}
+	ctx := context.Background()
+	jid, pushed, err := c.PushUntilExecuting(ctx, opts, 123)
+	if err != nil || !pushed {
+		t.Fatalf("first push: %v %v", pushed, err)
+	}
+	const digest = "uniquejobs:6a6f0d59833859476105772723cf5b8e"
+	want := `{"retry":3,"queue":"low","backtrace":true,"lock":"until_executing","args":[123],"class":"GenerateAvatarVariantJob",` +
+		`"jid":"` + jid + `","created_at":1762430000.25,"lock_timeout":0,"lock_ttl":null,"lock_prefix":"uniquejobs","lock_args":[123],` +
+		`"lock_digest":"` + digest + `","enqueued_at":1762430000.25}`
+	if got, _ := m.List("queue:low"); len(got) != 1 || got[0] != want {
+		t.Errorf("queue %v\nwant %s", got, want)
+	}
+	if _, pushed, err := c.PushUntilExecuting(ctx, opts, 123); err != nil || pushed {
+		t.Errorf("second push: %v %v", pushed, err)
+	}
+}
+
 func TestAFailedPushFreesItsLock(t *testing.T) {
 	m := miniredis.RunT(t)
 	c := &Client{Redis: redis.NewClient(&redis.Options{Addr: m.Addr()}), RedisVersion: "7.2.4"}

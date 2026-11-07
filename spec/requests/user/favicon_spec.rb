@@ -51,6 +51,7 @@ describe "User favicons", type: :system, js: true do
       end
       click_on "Update profile"
       expect(page).to have_alert(text: "Changes saved!")
+      GenerateAvatarVariantJob.drain
       expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
     end
 end

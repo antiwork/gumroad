@@ -42,6 +42,10 @@ func (h *handler) renderFormat(w http.ResponseWriter, p *page, prod *product) er
 	if err != nil {
 		return err
 	}
+	// show's set_favicon_meta_tags, ahead of every format.
+	if v.avatarURL, err = h.avatarURL(p, p.seller.id); err != nil {
+		return err
+	}
 	if p.wanted {
 		if done, err := h.wantedRedirect(w, p, prod, v.view); err != nil || done {
 			return err
@@ -89,7 +93,7 @@ func (h *handler) wantedRedirect(w http.ResponseWriter, p *page, prod *product, 
 	}
 	// As the page's redirect: the meta tags' retina pushes, and no cache writes.
 	if !p.DryRun {
-		if err := h.pushRetinaVariants(p.Ctx, p); err != nil {
+		if err := h.pushVariants(p.Ctx, p); err != nil {
 			return false, err
 		}
 	}
@@ -178,9 +182,6 @@ func (h *handler) loadPublicBase(ctx context.Context, p *page, prod *product) (*
 // it meets before cached_sales_count.
 func (h *handler) loadPublicRest(ctx context.Context, p *page, prod *product, v *publicView) error {
 	var err error
-	if v.avatarURL, err = h.avatarURL(ctx, p.seller.id); err != nil {
-		return err
-	}
 	if v.thumbnailURL, err = h.thumbnailURL(ctx, prod.id); err != nil {
 		return err
 	}
@@ -487,7 +488,7 @@ func (h *handler) publicReviews(ctx context.Context, p *page, prod *product) (an
 		// shows_account_identity?, else image_url's default avatar.
 		avatar, name := h.c.Page.Avatars.AssetHost+"/images/gumroad-default-avatar-5.png", any("Anonymous")
 		if !r.anonymous.Bool && rails.Present(accountName) {
-			if avatar, err = h.avatarURL(ctx, purchase.purchaserID.Int64); err != nil {
+			if avatar, err = h.avatarURL(p, purchase.purchaserID.Int64); err != nil {
 				return nil, err
 			}
 			name = accountName

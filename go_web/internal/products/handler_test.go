@@ -145,12 +145,13 @@ func newTestEnv(t *testing.T) *testEnv {
 		Meta:     inertia.DefaultMeta{Title: "Gumroad", Environment: "production", AssetHost: env.AssetHost(), AnalyticsByEnvironment: true},
 		Now:      func() time.Time { return testNow },
 		Page: &PageConfig{
-			Layout:  layout,
-			CSP:     csp,
-			Shared:  pages.NewShared(env, func(context.Context) (bool, error) { return true, nil }),
-			Avatars: &storage.Avatars{DB: conn, Exists: presentFiles{}, AssetHost: env.AssetHost(), Now: func() time.Time { return testNow }},
-			Cache:   e.cache,
-			Redis:   redisClient,
+			Layout: layout,
+			CSP:    csp,
+			Shared: pages.NewShared(env, func(context.Context) (bool, error) { return true, nil }),
+			Avatars: &storage.Avatars{DB: conn, Exists: presentFiles{}, AssetHost: env.AssetHost(), Now: func() time.Time { return testNow },
+				PublicStorage: "https://gumroad-public-storage.s3.amazonaws.com/", PublicCDN: "https://public-files.gumroad.com/"},
+			Cache: e.cache,
+			Redis: redisClient,
 			Flag: func(name string) *flipper.Flag {
 				if flags[name] == nil {
 					flags[name] = flipper.New(redisClient, name)
@@ -2470,8 +2471,8 @@ func TestACollaboratorShowsAsCoCreator(t *testing.T) {
 			collaborator(t, conn, affiliateID, 0, 0)
 			collaborator(t, conn, otherID, 0, 0)
 		}},
-		// The collaborator's own avatar, without a processed variant, is Rails'.
-		{"the collaborator's avatar", "", "collaborator avatar", func(t *testing.T, conn *sql.DB) {
+		// The collaborator's own avatar, served as uploaded until it's resized.
+		{"the collaborator's avatar", fmt.Sprintf(byline, "https://gumroad-public-storage.s3.amazonaws.com/avatars/collab"), "", func(t *testing.T, conn *sql.DB) {
 			collaborator(t, conn, affiliateID, 0, 0)
 			testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_792_201), "key": "avatars/collab", "filename": "a.png",
 				"content_type": "image/png", "service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
@@ -2481,6 +2482,7 @@ func TestACollaboratorShowsAsCoCreator(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
+			jobs := sidekiqJobs(t, e)
 			conn := testdb.Open(t)
 			testdb.User(t, conn, collabID, map[string]any{"username": "collab_user", "external_id": "1790002", "name": "Collab", "verified": true})
 			c.setup(t, conn)
@@ -2509,6 +2511,12 @@ func TestACollaboratorShowsAsCoCreator(t *testing.T) {
 			if !strings.Contains(page, want) {
 				i := strings.Index(page, `"collaborating_user"`)
 				t.Errorf("want %s, got %s", want, page[i:min(i+260, len(page))])
+			}
+			// Only the collaborator's unresized avatar is queued.
+			queued, _ := jobs.List("queue:low")
+			if resize := strings.Contains(want, "avatars/collab"); resize != (len(queued) == 1 &&
+				strings.Contains(queued[0], `"args":[1790002],"class":"GenerateAvatarVariantJob"`)) {
+				t.Errorf("queue:low %v", queued)
 			}
 		})
 	}

@@ -50,13 +50,15 @@ const (
 	uniqueDigests   = uniquePrefix + ":digests"
 	uniqueExpiring  = uniquePrefix + ":expiring_digests"
 	maxHistory      = 1000
-	lockUntilExec   = "until_executed"
+
+	lockUntilExecuted  = "until_executed"
+	lockUntilExecuting = "until_executing"
 )
 
-// uniqueLock is Locksmith for one item: Key's keys and the job's jid.
+// uniqueLock is Locksmith for one item: Key's keys, the job's jid and its lock type.
 type uniqueLock struct {
 	c                                    *Client
-	jid                                  string
+	jid, lockType                        string
 	digest, queued, primed, locked, info string
 	changelog, digests, expiringDigests  string
 }
@@ -69,7 +71,7 @@ func (l *uniqueLock) keys() []string {
 // injected now_f, debug_lua (false is 0), max_history, file name and Redis version. A nil reply
 // is "".
 func (l *uniqueLock) run(ctx context.Context, s uniqueScript) (string, error) {
-	argv := []any{l.jid, 0, lockUntilExec, 1, "", rubyNowF(l.c.now()), 0, maxHistory, s.name, l.c.RedisVersion}
+	argv := []any{l.jid, 0, l.lockType, 1, "", rubyNowF(l.c.now()), 0, maxHistory, s.name, l.c.RedisVersion}
 	v, err := s.script.Run(ctx, l.c.Redis, l.keys(), argv...).Result()
 	if errors.Is(err, redis.Nil) {
 		return "", nil
@@ -88,8 +90,18 @@ func (l *uniqueLock) run(ctx context.Context, s uniqueScript) (string, error) {
 // SidekiqUniqueJobs::Middleware::Client: the job is pushed only when its jid takes the lock.
 // pushed is false when another job holds it, which the default NullStrategy swallows.
 func (c *Client) PushUntilExecuted(ctx context.Context, opts Options, args ...any) (jid string, pushed bool, err error) {
+	return c.pushUnique(ctx, lockUntilExecuted, opts, args)
+}
+
+// PushUntilExecuting is PushUntilExecuted for lock: :until_executing, which takes the lock
+// the same way and only lets the server release it sooner.
+func (c *Client) PushUntilExecuting(ctx context.Context, opts Options, args ...any) (jid string, pushed bool, err error) {
+	return c.pushUnique(ctx, lockUntilExecuting, opts, args)
+}
+
+func (c *Client) pushUnique(ctx context.Context, lockType string, opts Options, args []any) (jid string, pushed bool, err error) {
 	now := c.now()
-	jid, job, args, err := normalizeItem(opts, args, now, false, lockUntilExec)
+	jid, job, args, err := normalizeItem(opts, args, now, false, lockType)
 	if err != nil {
 		return "", false, err
 	}
@@ -106,7 +118,7 @@ func (c *Client) PushUntilExecuted(ctx context.Context, opts Options, args ...an
 	if err != nil {
 		return "", false, err
 	}
-	l := &uniqueLock{c: c, jid: jid, digest: digest, queued: digest + ":QUEUED", primed: digest + ":PRIMED",
+	l := &uniqueLock{c: c, jid: jid, lockType: lockType, digest: digest, queued: digest + ":QUEUED", primed: digest + ":PRIMED",
 		locked: digest + ":LOCKED", info: digest + ":INFO", changelog: uniqueChangelog, digests: uniqueDigests,
 		expiringDigests: uniqueExpiring}
 	locked, err := l.lock(ctx)

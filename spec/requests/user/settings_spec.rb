@@ -71,6 +71,7 @@ describe "User profile settings page", type: :system, js: true do
           end
           click_on "Update profile"
           expect(page).to have_alert(text: "Changes saved!")
+          GenerateAvatarVariantJob.drain
           expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
         end
       end
@@ -87,6 +88,7 @@ describe "User profile settings page", type: :system, js: true do
         click_on "Update profile"
         expect(page).to have_alert(text: "Changes saved!")
         wait_for_ajax
+        GenerateAvatarVariantJob.drain
         expect(@user.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user.avatar_variant.key}")
 
         within_fieldset "Avatar" do

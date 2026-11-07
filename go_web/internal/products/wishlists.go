@@ -186,7 +186,7 @@ func (h *handler) wishlistUsers(p *page, ids []int64) (map[int64]wishlistUser, e
 		if !ok {
 			return nil, fallback("wishlist user")
 		}
-		if wu.avatarURL, err = h.avatarURL(p.Ctx, id); err != nil {
+		if wu.avatarURL, err = h.avatarURL(p, id); err != nil {
 			return nil, err
 		}
 		users[id] = wu

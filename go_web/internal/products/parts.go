@@ -404,7 +404,7 @@ func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) 
 		if !key.Valid {
 			return nil, fallback("thumbnail variant")
 		}
-		if !slices.Contains(variableTypes, files[id].contentType.String) {
+		if !storage.Variable(files[id].contentType.String) {
 			return nil, fallback("invariable thumbnail")
 		}
 		urls[id] = pc.cdnURL(pc.PublicStorageURL + key.String)

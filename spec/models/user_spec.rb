@@ -331,11 +331,40 @@ describe User, :vcr do
         @user = create(:user, :with_avatar)
       end
 
+      # The request serves the upload and leaves the resize to GenerateAvatarVariantJob,
+      # whose variant is served once the job has run.
+      def expect_upload_until_resized(missing_key: nil)
+        GenerateAvatarVariantJob.jobs.clear
+        expect(@user.reload.avatar_url).to eq(@user.avatar.url)
+        expect(GenerateAvatarVariantJob).to have_enqueued_sidekiq_job(@user.id)
+
+        GenerateAvatarVariantJob.drain
+
+        url = @user.reload.avatar_url
+        rebuilt_key = @user.reload.avatar_variant.key
+        expect(rebuilt_key).not_to eq(missing_key)
+        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
+        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+      end
+
       it "returns CDN URL" do
-        expect(@user.avatar_url).to match("https://public-files.gumroad.com/#{@user.avatar_variant.key}")
+        variant_key = @user.avatar_variant.key
+
+        expect(@user.reload.avatar_url).to eq("https://public-files.gumroad.com/#{variant_key}")
+      end
+
+      it "serves the upload and queues the resize instead of resizing during the request" do
+        GenerateAvatarVariantJob.jobs.clear
+        expect(@user.avatar_url).to eq(@user.avatar.url)
+        expect(@user.avatar.blob.variant_records).to be_empty
+        # Nothing is cached until there is a variant to serve.
+        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to be_nil
+
+        expect_upload_until_resized
       end
 
       it "caches the variant URL under a versioned key so previously cached 128px URLs are not reused" do
+        @user.avatar_variant
         # The older cache keys hold URLs for the smaller 128x128 variants we
         # used to serve, and for variants written before we checked that the
         # resized file still existed. A stale value there must not leak into
@@ -355,7 +384,8 @@ describe User, :vcr do
         # the entry is written must not keep being handed out for the rest of
         # that day. The variant's storage key is cached next to the URL so
         # every cache hit can confirm the file is still there.
-        stale_url = @user.avatar_url
+        @user.avatar_variant
+        stale_url = @user.reload.avatar_url
         stale_key = @user.reload.avatar_variant.key
         expect(stale_url).to include(stale_key)
 
@@ -364,12 +394,7 @@ describe User, :vcr do
         # exactly the situation being tested.
         Rails.cache.delete("active_storage_variant_present_#{stale_key}")
 
-        url = @user.reload.avatar_url
-
-        expect(url).not_to include(stale_key)
-        rebuilt_key = @user.reload.avatar_variant.key
-        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
-        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+        expect_upload_until_resized(missing_key: stale_key)
       end
 
       it "regenerates the resized avatar and serves a working URL when its file is gone from storage" do
@@ -381,23 +406,16 @@ describe User, :vcr do
         orphaned_record_id = orphaned.image.record.id
         @user.avatar.blob.service.delete(orphaned_key)
 
-        url = @user.reload.avatar_url
-
+        expect_upload_until_resized(missing_key: orphaned_key)
         expect(ActiveStorage::VariantRecord.where(id: orphaned_record_id)).not_to exist
-        expect(url).not_to include(orphaned_key)
-        rebuilt_key = @user.reload.avatar_variant.key
-        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
-        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
       end
 
-      it "does not cache a blank URL" do
-        # A blank URL means we could not work out where the variant lives right
-        # now. Caching it would leave the seller with no picture until the entry
-        # expired, so we fall back to the original upload and try again later.
-        allow(@user).to receive(:avatar_variant).and_return(nil)
+      it "rebuilds a variant whose image is gone" do
+        record = @user.avatar.variant(resize_to_limit: [400, 400]).processed.image.record
+        record.image.attachment.delete
 
-        expect(@user.avatar_url).to eq(@user.avatar.url)
-        expect(Rails.cache.read("attachment_#{@user.avatar.id}_variant_url_v3")).to be_nil
+        expect_upload_until_resized
+        expect(ActiveStorage::VariantRecord.where(id: record.id)).not_to exist
       end
 
       it "keeps serving the existing URL when the storage lookup itself fails" do
@@ -421,13 +439,9 @@ describe User, :vcr do
         Rails.cache.write("active_storage_variant_present_#{orphaned_key}", true)
         @user.avatar.blob.service.delete(orphaned_key)
 
-        url = @user.reload.avatar_url
-
-        expect(url).not_to include(orphaned_key)
+        expect(@user.reload.avatar_url).not_to include(orphaned_key)
         expect(Rails.cache.read("active_storage_variant_present_#{orphaned_key}")).to be_nil
-        rebuilt_key = @user.reload.avatar_variant.key
-        expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
-        expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+        expect_upload_until_resized(missing_key: orphaned_key)
       end
 
       it "heals a variant that disappeared while it was cached as present, once that entry expires" do
@@ -437,7 +451,8 @@ describe User, :vcr do
         # pins how long that can last: once the confirmation expires the next
         # read notices the file is gone and rebuilds the avatar, without having
         # to wait for the much longer URL entry to expire.
-        stale_url = @user.avatar_url
+        @user.avatar_variant
+        stale_url = @user.reload.avatar_url
         stale_key = @user.reload.avatar_variant.key
         expect(stale_url).to include(stale_key)
 
@@ -447,12 +462,7 @@ describe User, :vcr do
         expect(@user.reload.avatar_url).to eq(stale_url)
 
         travel_to(User::AVATAR_VARIANT_PRESENCE_CACHE_TTL.from_now + 1.second) do
-          url = @user.reload.avatar_url
-
-          expect(url).not_to include(stale_key)
-          rebuilt_key = @user.reload.avatar_variant.key
-          expect(url).to eq("https://public-files.gumroad.com/#{rebuilt_key}")
-          expect(@user.avatar.blob.service.exist?(rebuilt_key)).to be(true)
+          expect_upload_until_resized(missing_key: stale_key)
         end
       end
 
@@ -471,7 +481,8 @@ describe User, :vcr do
         # would be pushed back on every read, so a frequently viewed seller's
         # entry would never expire and the storage key cached beside it would
         # be the only thing left catching a variant that had gone missing.
-        @user.avatar_url
+        @user.avatar_variant
+        @user.reload.avatar_url
         url_cache_key = "attachment_#{@user.avatar.id}_variant_url_v3"
         cached_entry = Rails.cache.read(url_cache_key)
         expect(cached_entry[:url]).to be_present
@@ -2092,7 +2103,9 @@ describe User, :vcr do
         end
 
         it "returns URL to user's avatar" do
-          expect(@user_with_avatar.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{@user_with_avatar.avatar_variant.key}")
+          variant_key = @user_with_avatar.avatar_variant.key
+
+          expect(@user_with_avatar.reload.avatar_url).to match("#{AWS_S3_ENDPOINT}/#{S3_BUCKET}/#{variant_key}")
         end
       end
 
@@ -2139,10 +2152,9 @@ describe User, :vcr do
         blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
         blob.analyze
         @user.avatar.attach(blob)
+        allow(@user.avatar).to receive(:variant).and_raise(MiniMagick::Error)
 
-        expect(@user).to receive(:avatar_variant).and_raise(MiniMagick::Error)
-
-        expect(@user.avatar_url).to match(@user.avatar.url)
+        expect(@user.avatar_url).to eq(@user.avatar.url)
       end
     end
 

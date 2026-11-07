@@ -91,8 +91,8 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if err != nil {
 		return err
 	}
-	avatar, err := pc.Avatars.URL(p.Ctx, *owner.SellerID)
-	if errors.Is(err, storage.ErrUnported) {
+	avatar, resize, err := pc.Avatars.URL(p.Ctx, *owner.SellerID)
+	if errors.Is(err, storage.ErrUnported) || resize {
 		return fallback("avatar")
 	}
 	if err != nil {
