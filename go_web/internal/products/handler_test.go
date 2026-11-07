@@ -609,13 +609,17 @@ func TestAFeaturedProductsCoverWithoutItsRetinaVariantQueuesIt(t *testing.T) {
 	}
 }
 
-func TestCustomHTMLWithoutACoversRetinaVariantGoesToRails(t *testing.T) {
+// A dry run renders the wrapper of a cover without its retina variant and queues nothing.
+func TestCustomHTMLWithoutACoversRetinaVariantInADryRun(t *testing.T) {
 	e := newTestEnv(t)
-	sidekiqJobs(t, e)
+	jobs := sidekiqJobs(t, e)
 	addCover(t, false)
 	customHTML(t, e, testdb.Open(t))
-	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Header().Get("X-Go-Web-Fallback") != "retina variant unprocessed" {
+	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Code != http.StatusOK || e.railsHit != nil {
 		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if jobs.Exists("queue:low") {
+		t.Error("a dry run queued the variant")
 	}
 }
 
