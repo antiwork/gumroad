@@ -1158,6 +1158,20 @@ func TestABundleRendersItsProducts(t *testing.T) {
 			t.Errorf("want %s", want)
 		}
 	})
+	// Any other layout renders the product page, and its value still reaches the bundles' URLs.
+	t.Run("another layout", func(t *testing.T) {
+		e := newTestEnv(t)
+		setup(t, testdb.Open(t), true)
+		w := e.get(host, "/l/guide?layout=1%27+and+%22x%22", nil)
+		if w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		componentProps(t, w.Body.String(), productComponent)
+		want := `"url":"https://gowebproductseller.gumroad.com/l/bp2?layout=1%27+and+%22x%22"`
+		if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	})
 }
 
 // The fixture's price is 500 cents; each code is the seller's, with these columns set.
