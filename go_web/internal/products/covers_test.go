@@ -112,24 +112,48 @@ func TestAVideoCoverWithTwoPreviewImages(t *testing.T) {
 	}
 }
 
-func TestAVideoCoverWithoutItsPosterGoesToRails(t *testing.T) {
+// video_poster_url never makes a poster in the request: without a cached or persisted one it
+// shows none and enqueues GenerateVideoPosterWorker, unless Rails' failure sentinel is cached.
+func TestAVideoCoverWithoutItsPosterQueuesIt(t *testing.T) {
 	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
 	addVideoCover(t, testdb.Open(t), `{"width":1920.0,"height":1080.0}`, "WX6OQ3hf/g9WoAI2n/sUdFF1vxA=", false)
-	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Header().Get("X-Go-Web-Fallback") != "video poster" {
-		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
-	}
-	// Rails' failure sentinel: no poster, and nothing to enqueue.
-	e.cache.values["attachment_1793301_poster_url"] = ""
+	const key = "attachment_1793301_poster_url"
 	// The default share image stays.
-	if w := e.get(host, "/l/guide", nil); w.Code != http.StatusOK || !strings.Contains(html.UnescapeString(w.Body.String()), `"thumbnail":null,"id":"video-guid"`) ||
-		!strings.Contains(w.Body.String(), `<meta property="og:image" content="https://assets.gumroad.com/images/opengraph_image.png"`) {
-		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	noPoster := func(headers map[string]string) {
+		t.Helper()
+		w := e.get(host, "/l/guide", headers)
+		if w.Code != http.StatusOK || !strings.Contains(html.UnescapeString(w.Body.String()), `"thumbnail":null,"id":"video-guid"`) ||
+			!strings.Contains(w.Body.String(), `<meta property="og:image" content="https://assets.gumroad.com/images/opengraph_image.png"`) {
+			t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+	}
+	e.cache.values[key] = ""
+	noPoster(nil)
+	if jobs.Exists("queue:low") {
+		t.Fatal("the failure sentinel queued the poster")
+	}
+	delete(e.cache.values, key)
+	noPoster(e.dryRun(host, "/l/guide", testNow))
+	if jobs.Exists("queue:low") {
+		t.Fatal("a dry run queued the poster")
+	}
+	noPoster(nil)
+	queued, _ := jobs.List("queue:low")
+	if len(queued) != 1 || !strings.Contains(queued[0], `"lock":"until_executed","args":[1793101],"class":"GenerateVideoPosterWorker"`) {
+		t.Errorf("queue:low %v", queued)
 	}
 	// A poster go_web cached earlier is enough.
-	e.cache.values["attachment_1793301_poster_url"] = "https://public-files.gumroad.com/posters/cached"
+	e.cache.values[key] = "https://public-files.gumroad.com/posters/cached"
 	if w := e.get(host, "/l/guide", nil); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "posters/cached") {
 		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
+}
+
+func TestAVideoCoverWithoutItsPosterOrSidekiqGoesToRails(t *testing.T) {
+	e := newTestEnv(t)
+	addVideoCover(t, testdb.Open(t), `{"width":1920.0,"height":1080.0}`, "WX6OQ3hf/g9WoAI2n/sUdFF1vxA=", false)
+	e.render(t, nil, "video poster push")
 }
 
 // psychOembed is YAML.dump of an OEmbedFinder YouTube result, as the oembed column holds it.

@@ -95,9 +95,10 @@ type page struct {
 	// certain to render here.
 	warmReputation bool
 	// retinaPushes are the asset previews whose retina variant url_from_file enqueues, and
-	// avatarPushes the users whose avatar_url enqueues GenerateAvatarVariantJob. viewerPushes
-	// are the signed-in props' avatars, which Rails reads only for an Inertia render.
-	retinaPushes, avatarPushes, viewerPushes []int64
+	// posterPushes those whose poster video_poster_url enqueues; avatarPushes the users whose
+	// avatar_url enqueues GenerateAvatarVariantJob. viewerPushes are the signed-in props'
+	// avatars, which Rails reads only for an Inertia render.
+	retinaPushes, posterPushes, avatarPushes, viewerPushes []int64
 	// urlCode is params[:code], the path's or the query's, when present.
 	urlCode string
 	// layout is params[:layout], and recommendedBy params[:recommended_by] when given: the page's

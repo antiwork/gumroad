@@ -209,7 +209,7 @@ func (h *handler) loadWrapperView(ctx context.Context, p *page, prod *product, t
 	if v.covers, err = h.loadCovers(ctx, p, prod.id); err != nil {
 		return nil, err
 	}
-	if len(p.retinaPushes) > 0 {
+	if len(p.retinaPushes) > 0 || len(p.posterPushes) > 0 {
 		// This port doesn't follow which covers' URLs the wrapper's Rails render reads.
 		return nil, fallback("retina variant unprocessed")
 	}

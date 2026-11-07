@@ -259,7 +259,8 @@ func (h *handler) originalCoverURL(ctx context.Context, p *page, c *cover) (stri
 // retinaVariantJob is ProcessAssetPreviewRetinaWorker's sidekiq_options.
 var retinaVariantJob = sidekiq.Options{Class: "ProcessAssetPreviewRetinaWorker", Queue: "low", Retry: 3}
 
-// pushVariants is enqueue_retina_variant_process for each cover whose URL the page read, and
+// pushVariants is enqueue_retina_variant_process for each cover whose URL the page read,
+// video_poster_url's GenerateVideoPosterWorker for each poster it lacked, and
 // generate_avatar_variant_later for each avatar.
 func (h *handler) pushVariants(ctx context.Context, p *page) error {
 	jobs := h.c.Page.Sidekiq
@@ -267,6 +268,12 @@ func (h *handler) pushVariants(ctx context.Context, p *page) error {
 		if _, _, err := jobs.PushUntilExecuted(context.WithoutCancel(ctx), retinaVariantJob, id); err != nil {
 			web.Logger(p.Req.HTTP).Warn("retina variant push failed", "error", err.Error())
 			return fallback("retina variant push")
+		}
+	}
+	for _, id := range p.posterPushes {
+		if _, _, err := jobs.PushUntilExecuted(context.WithoutCancel(ctx), videoPosterJob, id); err != nil {
+			web.Logger(p.Req.HTTP).Warn("video poster push failed", "error", err.Error())
+			return fallback("video poster push")
 		}
 	}
 	for _, id := range p.avatarPushes {
@@ -328,9 +335,12 @@ func (h *handler) variantKey(ctx context.Context, blobID int64, digest string) (
 	return key, err == nil, err
 }
 
+// videoPosterJob is GenerateVideoPosterWorker's sidekiq_options.
+var videoPosterJob = sidekiq.Options{Class: "GenerateVideoPosterWorker", Queue: "low", Retry: 3}
+
 // videoPosterURL is video_poster_url for a video ActiveStorage can preview (ffmpeg is on Rails'
-// hosts). With neither a cached nor a persisted poster, only Rails knows whether a failure
-// sentinel holds or GenerateVideoPosterWorker is enqueued.
+// hosts): the cached poster, else the persisted one, else none, enqueueing
+// GenerateVideoPosterWorker unless a failure sentinel is cached.
 func (h *handler) videoPosterURL(ctx context.Context, p *page, c *cover) (string, error) {
 	key := "attachment_" + itoa(c.attachmentID) + "_poster_url"
 	cached, found, err := h.readCache(ctx, key)
@@ -357,7 +367,11 @@ func (h *handler) videoPosterURL(ctx context.Context, p *page, c *cover) (string
 	if found {
 		return "", nil
 	}
-	return "", fallback("video poster")
+	if h.c.Page.Sidekiq == nil {
+		return "", fallback("video poster push")
+	}
+	p.posterPushes = appendNew(p.posterPushes, c.previewID)
+	return "", nil
 }
 
 // persistedPosterURL is persisted_video_poster_url: the blob's preview image resized to
