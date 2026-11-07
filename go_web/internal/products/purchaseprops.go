@@ -195,16 +195,15 @@ func (h *handler) purchaseInfoProps(p *page, prod *product, v *view, vp *visitor
 	}
 	var token sql.NullString
 	var redirectFlags int64
-	n, err := h.scanFirst(ctx, []any{&token, &redirectFlags},
-		"SELECT url_redirects.token, url_redirects.flags FROM url_redirects WHERE url_redirects.purchase_id = ? LIMIT 2", vp.id)
-	switch {
-	case err != nil:
+	// The has_one's statement, verbatim: it has no ORDER BY, so MySQL's plan picks the row.
+	found := false
+	if err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		cols["token"], cols["flags"] = &token, &redirectFlags
+		return func() { found = true }
+	}, "SELECT `url_redirects`.* FROM `url_redirects` WHERE `url_redirects`.`purchase_id` = ? LIMIT 1", vp.id); err != nil {
 		return nil, err
-	case n > 1:
-		// has_one :url_redirect keeps whichever row MySQL returns first.
-		return nil, fallback("purchase url redirects")
 	}
-	hasContent := n == 1 && !vp.webhookFailed.Bool && !(hasStampablePDFs(v.files) && redirectFlags&urlRedirectIsDonePDFStamping == 0)
+	hasContent := found && !vp.webhookFailed.Bool && !(hasStampablePDFs(v.files) && redirectFlags&urlRedirectIsDonePDFStamping == 0)
 	var contentURL any
 	if hasContent {
 		contentURL = h.c.Env.Protocol + "://" + h.c.Env.Domain + "/d/" + token.String
@@ -225,7 +224,7 @@ func (h *handler) purchaseInfoProps(p *page, prod *product, v *view, vp *visitor
 		Sym("should_show_receipt", !testPurchase && !vp.stripeRefunded.Bool && !vp.chargebackDate.Valid && allSuccessStates[vp.state.String]).
 		Sym("was_paid", vp.priceCents.Int64 > 0 || vp.offerCodeID.Valid).
 		Sym("is_gift_receiver_purchase", false).
-		Sym("show_view_content_button_on_product_page", prod.is(productIsTieredMembership) && n == 1 || hasContent).
+		Sym("show_view_content_button_on_product_page", prod.is(productIsTieredMembership) && found || hasContent).
 		Sym("total_price_including_tax_and_shipping", total).
 		Sym("content_url", contentURL).
 		Sym("subscription_has_lapsed", prod.is(productIsRecurringBilling) && !sub.alive(p.Req.Now)).

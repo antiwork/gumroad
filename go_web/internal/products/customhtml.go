@@ -317,15 +317,17 @@ func (h *handler) customHTMLStoreHostnames(ctx context.Context, p *page) ([]stri
 	// has_one :custom_domain, -> { alive }, then CustomDomain#active?.
 	var domain, state sql.NullString
 	var issued db.NullTime
-	n, err := h.scanFirst(ctx, []any{&domain, &state, &issued}, "SELECT custom_domains.domain, custom_domains.state,"+
-		" custom_domains.ssl_certificate_issued_at FROM custom_domains WHERE custom_domains.user_id = ?"+
-		" AND custom_domains.deleted_at IS NULL LIMIT 2", p.seller.id)
+	// The has_one's statement, verbatim: it has no ORDER BY, so MySQL's plan picks the row.
+	found := false
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		cols["domain"], cols["state"], cols["ssl_certificate_issued_at"] = &domain, &state, &issued
+		return func() { found = true }
+	}, "SELECT `custom_domains`.* FROM `custom_domains` WHERE `custom_domains`.`user_id` = ? AND `custom_domains`.`deleted_at` IS NULL LIMIT 1",
+		p.seller.id)
 	switch {
 	case err != nil:
 		return nil, err
-	case n > 1:
-		return nil, fallback("several custom domains")
-	case n == 1 && state.String == "verified" && issued.Valid && issued.Time.After(p.Req.Now.Add(-customDomainCertificateLifetime)) && domain.Valid:
+	case found && state.String == "verified" && issued.Valid && issued.Time.After(p.Req.Now.Add(-customDomainCertificateLifetime)) && domain.Valid:
 		add(domain.String)
 	}
 	return hostnames, nil

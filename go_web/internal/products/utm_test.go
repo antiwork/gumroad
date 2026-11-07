@@ -102,18 +102,25 @@ func TestAUTMTaggedVisitGoesToRails(t *testing.T) {
 	}
 }
 
-// A banned product's visit is recorded before check_banned's 404, and a visit needs Sidekiq.
-func TestAUTMVisitThisPortCantRecord(t *testing.T) {
+// A visit needs Sidekiq; a banned product's is recorded before check_banned's 404.
+func TestAUTMVisitOnABannedProduct(t *testing.T) {
 	const tagged = "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c"
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
 	if w := e.get(host, tagged, e.dryRun(host, tagged, testNow)); w.Header().Get("X-Go-Web-Fallback") != "utm visit push" {
 		t.Errorf("no sidekiq: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
-	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: miniredis.RunT(t).Addr()}), RedisVersion: "7.2.4"}
+	jobs := miniredis.RunT(t)
+	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr()}), RedisVersion: "7.2.4"}
 	mustExec(t, conn, "UPDATE links SET banned_at = ? WHERE id = ?", testNow, productID)
-	if w := e.get(host, tagged, e.dryRun(host, tagged, testNow.Add(time.Second))); w.Header().Get("X-Go-Web-Fallback") != "utm visit on a banned product" {
+	if w := e.get(host, tagged, e.dryRun(host, tagged, testNow.Add(time.Second))); w.Code != http.StatusNotFound || jobs.Exists("queue:default") {
+		t.Errorf("dry run: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if w := e.get(host, tagged, map[string]string{"Cookie": "_gumroad_guid=guid"}); w.Code != http.StatusNotFound || e.railsHit != nil {
 		t.Errorf("banned: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if queued, _ := jobs.List("queue:default"); len(queued) != 1 || !strings.Contains(queued[0], `"class":"RecordUtmLinkVisitJob"`) {
+		t.Errorf("queue:default %v", queued)
 	}
 }
 

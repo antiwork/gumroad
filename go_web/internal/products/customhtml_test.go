@@ -169,12 +169,13 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 		setup        func(t *testing.T, e *testEnv, conn *sql.DB)
 		wants, nots  []string
 	}{
-		// has_one takes either row, in no order.
-		{name: "two custom domains", reason: "several custom domains", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			domain("verified", testNow)(t, e, conn)
-			testdb.Insert(t, conn, "custom_domains", map[string]any{"id": int64(1_795_406), "user_id": sellerID, "domain": "example.org",
-				"state": "verified", "ssl_certificate_issued_at": testNow, "created_at": testNow, "updated_at": testNow})
-		}},
+		// The has_one's unordered statement takes the row MySQL's plan returns, here the lower id's.
+		{name: "two custom domains", wants: []string{`var STORE_HOSTNAMES = ["gowebproductseller.gumroad.com","example.com"];`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				domain("verified", testNow)(t, e, conn)
+				testdb.Insert(t, conn, "custom_domains", map[string]any{"id": int64(1_795_406), "user_id": sellerID, "domain": "example.org",
+					"state": "verified", "ssl_certificate_issued_at": testNow, "created_at": testNow, "updated_at": testNow})
+			}},
 		{name: "an active custom domain", setup: domain("verified", testNow.AddDate(0, 0, -89)),
 			wants: []string{`var STORE_HOSTNAMES = ["gowebproductseller.gumroad.com","example.com"];`}},
 		{name: "a custom domain whose certificate is due", setup: domain("verified", testNow.AddDate(0, 0, -90)),

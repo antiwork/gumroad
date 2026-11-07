@@ -56,10 +56,10 @@ func (h *handler) serve(w http.ResponseWriter, p *page) error {
 		}
 	}
 	switch {
-	case prod != nil && prod.bannedAt.Valid && p.utm != nil:
+	case prod != nil && prod.bannedAt.Valid:
 		// track_utm_link_visit records a visit before check_banned's 404.
-		return fallback("utm visit on a banned product")
-	case prod == nil, prod.bannedAt.Valid:
+		return firstErr(h.trackUTMVisit(w, p, prod), pages.ErrNotFound)
+	case prod == nil:
 		// e404, and check_banned's.
 		return pages.ErrNotFound
 	case p.seller.deletedAt.Valid && p.utm != nil:
