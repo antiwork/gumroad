@@ -2695,7 +2695,7 @@ func TestASKUSummarizesItsOwnPages(t *testing.T) {
 var authenticityToken = regexp.MustCompile(`"authenticity_token":"[^"]*"|"name":"csrf-token","content":"[^"]*"`)
 
 // An Inertia visit gets the page object the document carries, as JSON, and none of the layout's
-// headers; a custom HTML page, which the wrapper answers as HTML, is Rails'.
+// headers; a custom HTML page's before_action answers it with the same wrapper as any visit.
 func TestAnInertiaVisitGetsThePageObject(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
@@ -2715,9 +2715,10 @@ func TestAnInertiaVisitGetsThePageObject(t *testing.T) {
 		t.Errorf("page object\n%s\nwant\n%s", got, want)
 	}
 	customHTML(t, e, conn)
-	headers := maps.Clone(visitHeaders)
-	maps.Copy(headers, e.dryRun(host, "/l/guide", testNow))
-	if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "inertia visit" {
+	wrapper := e.get(host, "/l/guide", nil)
+	w := e.get(host, "/l/guide", visitHeaders)
+	if w.Code != http.StatusOK || e.railsHit != nil || w.Header().Get("X-Inertia") != "" ||
+		csrfMeta.ReplaceAllString(w.Body.String(), "") != csrfMeta.ReplaceAllString(wrapper.Body.String(), "") {
 		t.Errorf("custom html: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 }

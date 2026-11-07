@@ -77,10 +77,6 @@ func waitlistFormFound(html string) (bool, error) {
 // checked and whose native and code params declinedParams left to Rails.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
-	if inertiaVisit(p) {
-		// The wrapper answers it as plain HTML.
-		return fallback("inertia visit")
-	}
 	// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
 	// staff went to Rails already.
 	preview := false
