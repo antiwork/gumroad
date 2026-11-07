@@ -177,9 +177,23 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	return nil
 }
 
-// finishShow is what show writes once it renders here, unless in a dry run, then the session
-// and set_noindex_header's header.
+// finishShow is what show writes once it renders here, then the session and
+// set_noindex_header's header.
 func (h *handler) finishShow(w http.ResponseWriter, p *page, prod *product, ip string) error {
+	if err := h.showWrites(w, p, prod, ip); err != nil {
+		return err
+	}
+	if err := h.ctl.Finish(w, p.Visit); err != nil {
+		return err
+	}
+	if !prod.alive() || p.urlCode != "" {
+		w.Header().Set("X-Robots-Tag", "noindex")
+	}
+	return nil
+}
+
+// showWrites are show's writes, unless in a dry run: the ones an exception after them keeps.
+func (h *handler) showWrites(w http.ResponseWriter, p *page, prod *product, ip string) error {
 	ctx, pc := p.Ctx, h.c.Page
 	recordSearch, err := h.recordsDiscoverSearch(p)
 	if err != nil {
@@ -214,12 +228,6 @@ func (h *handler) finishShow(w http.ResponseWriter, p *page, prod *product, ip s
 			}
 		}
 		h.flushCacheWrites(ctx, p)
-	}
-	if err := h.ctl.Finish(w, p.Visit); err != nil {
-		return err
-	}
-	if !prod.alive() || p.urlCode != "" {
-		w.Header().Set("X-Robots-Tag", "noindex")
 	}
 	return nil
 }

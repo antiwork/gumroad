@@ -130,7 +130,7 @@ var reasonPhrases = map[int]string{
 }
 
 // RenderException is ShowExceptions handing status to ActionDispatch::PublicExceptions:
-// JSON or XML for those formats, else public/<status>.html, else an empty page. The
+// JSON, XML or YAML for those formats, else public/<status>.html, else an empty page. The
 // exception also skips ActionDispatch::Cookies' write, so no cookie goes out, and drops the
 // controller's headers, debug_headers' X-Revision and X-GR among them.
 func RenderException(w http.ResponseWriter, req *Request, status int) {
@@ -144,6 +144,10 @@ func RenderException(w http.ResponseWriter, req *Request, status int) {
 	case "json":
 		contentType = JSONContentType
 		body = `{"status":` + strconv.Itoa(status) + `,"error":"` + reason + `"}`
+	case "yaml":
+		// Hash#to_yaml.
+		contentType = "application/x-yaml; charset=utf-8"
+		body = "---\n:status: " + strconv.Itoa(status) + "\n:error: " + reason + "\n"
 	case "xml":
 		contentType = "application/xml; charset=utf-8"
 		body = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<hash>\n  <status type=\"integer\">" + strconv.Itoa(status) +

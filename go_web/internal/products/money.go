@@ -1,7 +1,6 @@
 package products
 
 import (
-	"fmt"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -19,16 +18,7 @@ func formatJustPriceInCents(cents int64, currency string) (string, bool) {
 	if !known || cents < 0 {
 		return "", false
 	}
-	var number string
-	if f.singleUnit {
-		number = groupThousands(strconv.FormatInt(cents, 10))
-	} else {
-		number = groupThousands(strconv.FormatInt(cents/100, 10))
-		if c := cents % 100; c != 0 {
-			number += fmt.Sprintf(".%02d", c)
-		}
-	}
-	price := f.prefix + number + f.suffix
+	price := f.prefix + moneyNumber(cents, f.singleUnit) + f.suffix
 	if price == "$0.99" {
 		return "99¢", true
 	}

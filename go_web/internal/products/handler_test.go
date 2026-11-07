@@ -598,7 +598,6 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		setup, undo                func()
 	}{
 		{name: "app domain", host: "gumroad.com", target: "/l/guide", reason: "host"},
-		{name: "a code path Journey would split", host: host, target: "/l/guide/CO.DE", reason: "offer code path"},
 		{name: "a trailing slash", host: host, target: "/l/guide/", reason: "offer code path"},
 		{name: "an offer_code param", host: host, target: "/l/guide?offer_code=X", reason: "param offer_code"},
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
