@@ -95,6 +95,9 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	if err := h.loadViewer(p, prod); err != nil {
 		return err
 	}
+	if p.autocomplete {
+		return h.renderAutocomplete(w, p, prod)
+	}
 
 	v, err := h.loadView(ctx, p, prod)
 	if err != nil {

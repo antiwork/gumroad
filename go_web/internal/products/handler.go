@@ -53,7 +53,7 @@ func Register(app *web.App, c *Config) {
 		Redirects: app.Redirects(), Meta: c.Meta, Now: c.Now, DryRunKey: c.DryRunKey, DryRunOnce: c.DryRunOnce,
 	}}
 	app.HandlePage("GET /l/{id}", "LinksController#show", h)
-	// /l/:id/:code (an offer code), and a trailing slash, whose empty code goes to Rails.
+	// /l/:id/:code (an offer code), and /l/:id/, which Journey routes as /l/:id.
 	app.HandlePage("GET /l/{id}/{rest...}", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.servePage(w, r, true)
 	}))
@@ -128,6 +128,9 @@ type page struct {
 	quantityParam *int64
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
+	// autocomplete is Discover's search box reloading autocomplete_results, the one partial
+	// reload declined lets through.
+	autocomplete bool
 	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
 	wanted bool
 	// format is request.format's symbol, which picks show's respond_to branch, and ext the
@@ -184,6 +187,10 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	if h.c.Page == nil {
 		return nil, fallback("pages off")
 	}
+	if codeRoute && r.PathValue("rest") == "" {
+		// Journey's normalize_path drops the trailing slash; the URL keeps it.
+		codeRoute = false
+	}
 	if codeRoute && r.URL.RawPath != "" && strings.Contains(r.PathValue("rest"), "/") {
 		// An escaped slash stays in Journey's segment, which the mux's rest can't tell.
 		return nil, fallback("offer code path")
@@ -205,7 +212,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	}
 	switch {
 	case codeRoute && rt.code == "":
-		// Journey drops the trailing slash, which this route doesn't.
+		// An empty code before a format.
 		return nil, fallback("offer code path")
 	case !validID(rt.id) || codeRoute && !validID(rt.code):
 		return nil, fallback("permalink")
@@ -225,6 +232,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		return nil, err
 	}
 	p := &page{Visit: v, format: v.Req.Format(), ext: rt.format}
+	_, p.autocomplete = r.Header["X-Inertia-Partial-Data"]
 	// The path's code overrides the query's; a blank one is no code.
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
@@ -237,8 +245,11 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 			p.discountCode, p.wrapperCode = code, code
 		}
 	}
-	if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
-		return nil, fallback("utm visit push")
+	// track_utm_link_visit returns unless request.get?, so a HEAD request records no visit.
+	if r.Method == http.MethodGet {
+		if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
+			return nil, fallback("utm visit push")
+		}
 	}
 	p.layout, _ = v.Req.Param("layout").(string)
 	// A bare key is nil, which still counts as a visitor search param.
@@ -328,7 +339,8 @@ func declined(r *http.Request, env *web.Environment) string {
 		port, protocol = "80", "http://"
 	}
 	switch {
-	case r.Method != http.MethodGet:
+	case r.Method != http.MethodGet && r.Method != http.MethodHead:
+		// Rails routes HEAD to show, and Rack::Head drops the body.
 		return "method"
 	case env.RootDomain != "gumroad.com" || env.IsGumroadHost(host) || analyticsHost.MatchString(host):
 		return "host"
@@ -348,6 +360,9 @@ func declined(r *http.Request, env *web.Environment) string {
 	case r.ContentLength != 0 || len(r.TransferEncoding) > 0:
 		// Parsing reads the body, which a fallback after it could no longer send.
 		return "request body"
+	}
+	if _, ok := r.Header["X-Inertia-Partial-Data"]; ok {
+		return pages.DeclinedPartialHeaders(r, discoverComponent, autocompleteData)
 	}
 	return pages.DeclinedVisitHeaders(r)
 }
