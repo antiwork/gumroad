@@ -103,20 +103,18 @@ module Mcp
       end
 
       def store(tempfile, content_type, filename)
-        begin
-          key = "attachments/#{seller.external_id}/#{SecureRandom.hex}/original/#{filename}"
-          byte_size = tempfile.size
-          Aws::S3::Client.new.put_object(
-            bucket: S3_BUCKET,
-            key:,
-            body: tempfile,
-            content_length: byte_size,
-            content_type: content_type.presence || "application/octet-stream",
-          )
-          [key, byte_size]
-        ensure
-          tempfile.close!
-        end
+        key = "attachments/#{seller.external_id}/#{SecureRandom.hex}/original/#{filename}"
+        byte_size = tempfile.size
+        Aws::S3::Client.new.put_object(
+          bucket: S3_BUCKET,
+          key:,
+          body: tempfile,
+          content_length: byte_size,
+          content_type: content_type.presence || "application/octet-stream",
+        )
+        [key, byte_size]
+      ensure
+        tempfile.close!
       end
 
       def download(uri)
