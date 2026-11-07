@@ -2265,8 +2265,14 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 				testdb.Insert(t, conn, "base_variants", sku(defaultSku, "Default", 1, nil, nil, 0))
 				testdb.Insert(t, conn, "base_variants", sku(deletedSku, "Gone", 0, testNow, nil, 0))
 			}},
-		{"SKUs without the physical flag", nil, "skus", func(t *testing.T, conn *sql.DB) {
+		// A digital product's SKUs are its options, each summarizing its own files.
+		{"a digital product's SKUs", []string{`"options":[{"id":"%[3]s","name":null,`,
+			`"file_summaries":{"product":null,"options":{"%[3]s":` + pdf + `}}`}, "", func(t *testing.T, conn *sql.DB) {
 			conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productSkusEnabled, productID)
+			testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+			testdb.Insert(t, conn, "base_variants", sku(sku1, nil, 0, nil, nil, 0))
+			testdb.Insert(t, conn, "base_variants", sku(sku2, "Untitled", 0, nil, nil, 0))
+			file(t, conn, 1_791_201, sku1)
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -2593,5 +2599,40 @@ func TestACoffeeProductRedirectsToCoffee(t *testing.T) {
 			t.Errorf("%s: %d %q %q %q, Rails hit: %v", target, w.Code, w.Header().Get("Location"), w.Header().Get("X-Robots-Tag"),
 				w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
 		}
+	}
+}
+
+// recoverable_hidden_variant_rich_content? reads the Variants' pages for the product-level check,
+// but a SKU's summary is its own pages': here they embed one of its two files.
+func TestASKUSummarizesItsOwnPages(t *testing.T) {
+	const size, small, sku = int64(1_799_941), int64(1_799_942), int64(1_799_943)
+	const embedded, other = int64(1_799_944), int64(1_799_945)
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	mustExec(t, conn, "UPDATE links SET flags = flags | ? WHERE id = ?", productSkusEnabled|productSameRichContentForAllVariants, productID)
+	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": size, "link_id": productID, "title": "Size"})
+	testdb.Insert(t, conn, "base_variants", map[string]any{"id": small, "type": "Variant", "variant_category_id": size, "name": "Small",
+		"price_difference_cents": 0, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "rich_contents", map[string]any{"id": int64(1_799_946), "entity_type": "BaseVariant", "entity_id": small,
+		"title": "Chapter one", "description": `[]`, "position": 0, "created_at": testNow, "updated_at": testNow})
+	testdb.Insert(t, conn, "base_variants", map[string]any{"id": sku, "type": "Sku", "link_id": productID, "name": "A",
+		"price_difference_cents": 0, "created_at": testNow, "updated_at": testNow})
+	for i, id := range []int64{embedded, other} {
+		testdb.Insert(t, conn, "product_files", map[string]any{"id": id, "link_id": productID, "filetype": "pdf", "size": 2048,
+			"url": "https://s3.amazonaws.com/gumroad/attachments/x/y/original/a.pdf", "created_at": testNow, "updated_at": testNow})
+		testdb.Insert(t, conn, "base_variants_product_files", map[string]any{"id": int64(1_799_950 + i), "base_variant_id": sku,
+			"product_file_id": id})
+	}
+	testdb.Insert(t, conn, "rich_contents", map[string]any{"id": int64(1_799_947), "entity_type": "BaseVariant", "entity_id": sku,
+		"title": "Page", "description": fmt.Sprintf(`[{"type":"fileEmbed","attrs":{"id":%q,"uid":"u0"}}]`, e.ids.Encrypt(embedded)),
+		"position": 0, "created_at": testNow, "updated_at": testNow})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1])
+	want := `"file_summaries":{"product":null,"options":{"` + e.ids.Encrypt(sku) + `":{"formats":["PDF"],"total_size":2048,"count":1}}}`
+	if !strings.Contains(page, want) {
+		t.Errorf("want %s", want)
 	}
 }

@@ -256,7 +256,8 @@ func (h *handler) fileSummaries(ctx context.Context, prod *product, files []prod
 		return rails.NewRHash().Sym("product", nullableRHash(summary)).Sym("options", options), nil
 	}
 	ids := variantIDs(vs.options)
-	if variantContents == nil {
+	// The Variants' pages recoverable_hidden_variant_rich_content? read aren't SKUs'.
+	if variantContents == nil || prod.is(productSkusEnabled) {
 		if variantContents, err = h.richContents(ctx, "BaseVariant", ids); err != nil {
 			return nil, err
 		}
