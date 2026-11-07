@@ -19,15 +19,19 @@ module Mcp
     # a text parameter cannot carry a real binary (and an HTML or SVG file handed to a buyer is a
     # phishing surface, so neither is accepted here).
     INLINE_CONTENT_TYPES = {
-      ".md" => "text/markdown",
-      ".markdown" => "text/markdown",
-      ".txt" => "text/plain",
-      ".csv" => "text/csv",
-      ".json" => "application/json",
-      ".ics" => "text/calendar",
-      ".srt" => "application/x-subrip",
-      ".vtt" => "text/vtt",
+      ".md" => "text/markdown; charset=utf-8",
+      ".markdown" => "text/markdown; charset=utf-8",
+      ".txt" => "text/plain; charset=utf-8",
+      ".csv" => "text/csv; charset=utf-8",
+      ".json" => "application/json; charset=utf-8",
+      ".ics" => "text/calendar; charset=utf-8",
+      ".srt" => "application/x-subrip; charset=utf-8",
+      ".vtt" => "text/vtt; charset=utf-8",
     }.freeze
+
+    # A key is built from the stem, and the extension is all anyone reads back, so a long name is
+    # truncated rather than refused.
+    INLINE_MAX_FILENAME_BYTES = 200
 
     # Nothing a model writes in a chat needs more than this, and the whole payload is already in
     # memory by the time this runs.
@@ -38,7 +42,7 @@ module Mcp
     class DownloadFailed < StandardError; end
     class InvalidContent < StandardError; end
 
-    def initialize(seller:, product:, url:, display_name: nil)
+    def initialize(seller:, product:, url: nil, display_name: nil)
       @seller = seller
       @product = product
       @url = url.to_s.strip
@@ -50,7 +54,14 @@ module Mcp
       uri = parse_source_uri
       with_cleanup do
         tempfile, content_type = download(uri)
-        store(tempfile, content_type, filename_with_extension(filename_from(uri), content_type))
+        begin
+          filename = filename_with_extension(filename_from(uri), content_type)
+        rescue StandardError
+          # Nothing was uploaded yet, and store's ensure is the only other place that closes it.
+          tempfile.close!
+          raise
+        end
+        store(tempfile, content_type, filename)
       end
     end
 
@@ -193,7 +204,7 @@ module Mcp
       end
 
       def inline_tempfile(content)
-        raise InvalidContent if content.to_s.empty?
+        raise InvalidContent, "content is empty" if content.to_s.empty?
         raise TooLarge if content.to_s.bytesize > INLINE_MAX_BYTES
 
         tempfile = Tempfile.new(binmode: true)
@@ -204,16 +215,28 @@ module Mcp
       end
 
       def content_type_for(filename)
-        INLINE_CONTENT_TYPES[File.extname(filename.to_s).downcase] or raise InvalidContent
+        INLINE_CONTENT_TYPES[File.extname(checked_filename(filename)).downcase] or
+          raise InvalidContent, "filename has to end in #{INLINE_CONTENT_TYPES.keys.join(', ')}"
       end
 
       # The creator's filename decides the buyer-visible name, so it is reduced to a basename with
-      # the characters a key and a download link can carry.
+      # the characters a key and a download link can carry: no separators, no characters a URL has
+      # to escape, and a bounded stem.
       def safe_filename(filename)
-        name = ActiveStorage::Filename.new(File.basename(filename.to_s)).sanitized
-        raise InvalidContent if name.blank?
+        name = ActiveStorage::Filename.new(File.basename(checked_filename(filename))).sanitized
+        extension = File.extname(name)
+        stem = name.delete_suffix(extension).gsub(/[^A-Za-z0-9._-]/, "-").presence || "file"
+        stem = stem.byteslice(0, INLINE_MAX_FILENAME_BYTES).to_s
+        "#{stem}#{extension}"
+      end
 
-        name.tr(" ", "-")
+      # File.extname and File.basename raise ArgumentError on a NUL byte, which would reach the
+      # caller as a server fault rather than as the bad argument it is.
+      def checked_filename(filename)
+        name = filename.to_s
+        raise InvalidContent, "filename contains a null byte" if name.include?("\0")
+
+        name
       end
 
       # URLs like ".../watch" have no filename to keep, and the display name a creator typed is

@@ -99,7 +99,7 @@ describe "MCP server product files" do
       file = @product.reload.alive_product_files.sole
       expect(result.dig("structuredContent", "files").sole).to include("name" => "field-notes", "type" => "MD", "size_bytes" => content.bytesize)
       expect(file.s3_key).to match(%r{\Aattachments/#{@seller.external_id}/[0-9a-f]{32}/original/field-notes\.md\z})
-      expect(@stored_objects.sole).to include(bucket: S3_BUCKET, content_type: "text/markdown", content_length: content.bytesize)
+      expect(@stored_objects.sole).to include(bucket: S3_BUCKET, content_type: "text/markdown; charset=utf-8", content_length: content.bytesize)
       expect(file.name_displayable).to eq("field-notes")
     end
 
@@ -110,7 +110,7 @@ describe "MCP server product files" do
     end
 
     it "refuses a call that passes both a url and content" do
-      result = call_tool("add_file", { id: @product.unique_permalink, url: "https://example.com/a.pdf", content: "x", filename: "a.md" })
+      call_tool("add_file", { id: @product.unique_permalink, url: "https://example.com/a.pdf", content: "x", filename: "a.md" })
 
       expect(response.parsed_body.dig("error", "message")).to include("Pass url or content, not both")
       expect(@product.reload.alive_product_files).to be_empty
@@ -134,6 +134,49 @@ describe "MCP server product files" do
 
       expect(response.parsed_body.dig("error", "message")).to include("filename has to end in .md, .markdown, .txt, .csv, .json, .ics, .srt, .vtt")
       expect(@stored_objects).to be_empty
+    end
+
+    it "reduces a filename to a key-safe basename" do
+      call_tool("add_file", { id: @product.unique_permalink, content: "notes", filename: "../../etc/my notes #1.md" })
+
+      key = @stored_objects.sole[:key]
+      expect(key).to match(%r{\Aattachments/#{@seller.external_id}/[0-9a-f]{32}/original/my-notes--1\.md\z})
+    end
+
+    it "refuses a filename with a null byte rather than crashing on it" do
+      call_tool("add_file", { id: @product.unique_permalink, content: "notes", filename: "notes\0.md" })
+
+      expect(response.parsed_body.dig("error", "message")).to include("filename contains a null byte")
+      expect(@stored_objects).to be_empty
+    end
+
+    it "refuses content over the size this tool can write out" do
+      result = call_tool("add_file", { id: @product.unique_permalink, content: "x" * (Mcp::ProductFileIngest::INLINE_MAX_BYTES + 1), filename: "big.txt" })
+
+      expect(result.dig("content", 0, "text")).to include("larger than 2 MB, which is the most this tool can write out here")
+      expect(@stored_objects).to be_empty
+    end
+
+    it "ignores filename when the file comes from a URL" do
+      url = "https://example.com/files/financial-annual-summary-2022.csv"
+      stub_remote_file(url, "financial-annual-summary-2022.csv", "text/csv")
+
+      call_tool("add_file", { id: @product.unique_permalink, url:, filename: "something-else.md" })
+
+      expect(@stored_objects.sole[:key]).to end_with("original/financial-annual-summary-2022.csv")
+    end
+
+    it "discards the uploaded object when attaching the file fails" do
+      allow_any_instance_of(Link).to receive(:save_files!).and_raise("attach failed")
+
+      begin
+        call_tool("add_file", { id: @product.unique_permalink, content: "# hi", filename: "notes.md" })
+      rescue StandardError
+        nil
+      end
+
+      expect(@deleted_keys.sole).to eq(@stored_objects.sole[:key])
+      expect(@product.reload.alive_product_files).to be_empty
     end
 
     it "attaches a file small enough to stay in the write buffer" do

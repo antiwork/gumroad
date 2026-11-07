@@ -1008,14 +1008,16 @@ module Mcp
             filename = args["filename"].to_s.strip
             raise Error.new("filename is required with content", code: -32602) if filename.blank?
 
-            Mcp::ProductFileIngest.new(seller: user, product:, url: "", display_name: args["display_name"]).perform_inline(content:, filename:)
+            Mcp::ProductFileIngest.new(seller: user, product:, display_name: args["display_name"]).perform_inline(content:, filename:)
           else
             Mcp::ProductFileIngest.new(seller: user, product:, url:, display_name: args["display_name"]).perform
           end
-        rescue Mcp::ProductFileIngest::InvalidContent
-          raise Error.new("A content file must be text, so filename has to end in #{Mcp::ProductFileIngest::INLINE_CONTENT_TYPES.keys.join(', ')}", code: -32602)
+        rescue Mcp::ProductFileIngest::InvalidContent => e
+          raise Error.new(e.message, code: -32602)
         rescue Mcp::ProductFileIngest::TooLarge
-          raise ToolError, "That file is larger than #{(inline ? Mcp::ProductFileIngest::INLINE_MAX_BYTES : Mcp::ProductFileIngest::MAX_BYTES) / 1.megabyte} MB, which is the most this tool can take. Upload it in the product editor instead: #{product.long_url}/edit"
+          limit = (inline ? Mcp::ProductFileIngest::INLINE_MAX_BYTES : Mcp::ProductFileIngest::MAX_BYTES) / 1.megabyte
+          action = inline ? "can write out here" : "can fetch"
+          raise ToolError, "That file is larger than #{limit} MB, which is the most this tool #{action}. Upload it in the product editor instead: #{product.long_url}/edit"
         rescue Mcp::ProductFileIngest::InvalidUrl, *INTERNET_EXCEPTIONS
           raise ToolError, "Could not download a file from that URL. Use a public https link to the file itself."
         rescue Mcp::ProductFileIngest::DownloadFailed
