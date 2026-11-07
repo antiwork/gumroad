@@ -338,10 +338,10 @@ func (h *handler) customHTMLStoreHostnames(ctx context.Context, p *page) ([]stri
 }
 
 // wrapperCheckoutQuery is the wrapper's Rack::Utils.build_query(checkout_params): wanted, then the
-// URL's code when there is one.
+// URL's code when there is one, in that order.
 func wrapperCheckoutQuery(p *page) string {
 	if p.wrapperCode == "" {
 		return "wanted=true"
 	}
-	return rails.ToQuery([2]string{"wanted", "true"}, [2]string{"code", p.wrapperCode})
+	return "wanted=true&code=" + rails.RackEscape(p.wrapperCode)
 }
