@@ -254,3 +254,46 @@ func insertOwnershipProduct(t *testing.T, conn *sql.DB, code, product int64) {
 	testdb.Insert(t, conn, "offer_codes_ownership_products", map[string]any{"id": int64(1_797_601), "offer_code_id": code, "product_id": product,
 		"created_at": testNow, "updated_at": testNow})
 }
+
+// A signed-in buyer's tiered code takes the tier their oldest qualifying purchase reaches.
+func TestATieredCodeForABuyer(t *testing.T) {
+	const codeID = int64(1_797_131)
+	for _, c := range []struct {
+		name  string
+		owned bool
+		want  int64
+	}{
+		{name: "a buyer of 13 months", owned: true, want: 25},
+		{name: "a buyer who never bought it", want: 10},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			conn := testdb.Open(t)
+			h := &handler{c: e.config}
+			buyer := &signedInUser{user: user{id: 1_797_002}}
+			now := testNow.Add(time.Hour)
+			insertOfferCode(t, conn, codeID, map[string]any{"code": "LOYAL", "universal": true,
+				"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`})
+			if c.owned {
+				testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_311), "seller_id": sellerID, "link_id": productID,
+					"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
+			}
+			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: now}}, seller: &user{id: sellerID}, viewer: buyer}
+			p.discountCode = "LOYAL"
+			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
+			v := &view{}
+			var err error
+			if v.prices, err = h.loadPrices(t.Context(), prod); err != nil {
+				t.Fatal(err)
+			}
+			if v.variants, err = h.loadVariants(t.Context(), prod); err != nil {
+				t.Fatal(err)
+			}
+			v.priceCents = v.prices.buy
+			d, err := h.loadOfferDiscount(t.Context(), p, prod, v)
+			if err != nil || d.code == nil || d.code.amountPercentage.Int64 != c.want || d.resultCode != "LOYAL" {
+				t.Fatalf("got %v, %+v", err, d)
+			}
+		})
+	}
+}

@@ -174,9 +174,42 @@ func TestStartingTierPercent(t *testing.T) {
 		`[{"months":true,"amount_percentage":25}]`:                                   nil,
 		`[1]`: nil,
 	} {
-		got, ok := startingTierPercent(raw)
+		got, ok := tierPercent(raw, 0)
 		if want == nil && ok || want != nil && (!ok || got != want) {
 			t.Errorf("%s: %d %v, want %v", raw, got, ok, want)
+		}
+	}
+}
+
+// matching_tier_for picks the tier the buyer's months reach, and months_since counts whole
+// months in UTC, a short month's end clamping the day.
+func TestTierPercentAndMonthsSince(t *testing.T) {
+	tiers := `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25},{"months":6,"amount_percentage":15}]`
+	for months, want := range map[int64]int64{0: 10, 5: 10, 6: 15, 11: 15, 12: 25, 40: 25} {
+		if got, ok := tierPercent(tiers, months); !ok || got != want {
+			t.Errorf("%d months: %d %v, want %d", months, got, ok, want)
+		}
+	}
+	at := func(s string) time.Time {
+		v, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	for _, c := range []struct {
+		from, to string
+		want     int64
+	}{
+		{"2026-01-15T10:00:00Z", "2026-11-15T10:00:00Z", 10},
+		{"2026-01-15T10:00:00Z", "2026-11-15T09:59:59Z", 9},
+		{"2026-01-31T12:00:00Z", "2026-02-28T12:00:00Z", 1},
+		{"2026-01-31T12:00:00Z", "2026-02-28T11:00:00Z", 0},
+		{"2025-12-01T00:00:00Z", "2026-01-01T00:00:00Z", 1},
+		{"2026-12-01T00:00:00Z", "2026-11-01T00:00:00Z", 0},
+	} {
+		if got := monthsSince(at(c.from), at(c.to)); got != c.want {
+			t.Errorf("%s to %s: %d, want %d", c.from, c.to, got, c.want)
 		}
 	}
 }

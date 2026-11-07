@@ -226,13 +226,14 @@ func (c *offerCode) unportedLookup(prod *product) string {
 	return ""
 }
 
-// resolveDiscount is evaluate_for_buyer's discount: a tiered code's is its starting tier's
-// percentage for a signed-out visitor. A reason is a code whose discount this port doesn't follow.
-func (c *offerCode) resolveDiscount(signedIn bool) string {
+// resolveDiscount is evaluate_for_buyer's discount: a tiered code's is the percentage of the
+// tier the buyer's months of ownership reach. A reason is a code whose discount this port
+// doesn't follow.
+func (c *offerCode) resolveDiscount(months int64) string {
 	if c.tiers > 0 {
-		pct, ok := startingTierPercent(c.tiersJSON.String)
-		if signedIn || c.amountCents.Valid || !ok {
-			// A buyer's ownership picks the tier, and with no tier to start at Rails raises.
+		pct, ok := tierPercent(c.tiersJSON.String, months)
+		if c.amountCents.Valid || !ok {
+			// With no tier reached, the computing service sets no discount and Rails raises.
 			return "tiered offer code"
 		}
 		c.amountPercentage = sql.NullInt64{Int64: pct, Valid: true}
@@ -243,10 +244,10 @@ func (c *offerCode) resolveDiscount(signedIn bool) string {
 	return ""
 }
 
-// startingTierPercent is matching_tier_for(0)'s amount_percentage: the tier with the most months
-// at or below none, each value read with to_i. ok is false for none, an unreadable tier, or a tie
-// that sort_by could order either way.
-func startingTierPercent(raw string) (int64, bool) {
+// tierPercent is matching_tier_for(ownership)'s amount_percentage: the tier with the most months
+// at or below ownership, each value read with to_i. ok is false for none, an unreadable tier, or
+// a tie that sort_by could order either way.
+func tierPercent(raw string, ownership int64) (int64, bool) {
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.UseNumber()
 	var tiers []map[string]any
@@ -261,7 +262,7 @@ func startingTierPercent(raw string) (int64, bool) {
 		switch {
 		case !ok || !ok2:
 			return 0, false
-		case months > 0:
+		case months > ownership:
 		case !found || months > best:
 			best, pct, found, tied = months, amount, true, false
 		case months == best && amount != pct:
@@ -613,7 +614,11 @@ func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (bool,
 		return false, err
 	}
 	// Only a code that gives this buyer something has terms to read.
-	if reason := c.resolveDiscount(p.viewer != nil); reason != "" {
+	months, err := h.ownershipMonths(p, prod, c)
+	if err != nil {
+		return false, err
+	}
+	if reason := c.resolveDiscount(months); reason != "" {
 		return false, fallback(reason)
 	}
 	shortfall, err := h.usesShortfall(p, c)
@@ -652,7 +657,11 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	case !resolved:
 		return c, "not_new_customer", nil
 	}
-	if reason := c.resolveDiscount(p.viewer != nil); reason != "" {
+	months, err := h.ownershipMonths(p, prod, c)
+	if err != nil {
+		return nil, "", err
+	}
+	if reason := c.resolveDiscount(months); reason != "" {
 		return nil, "", fallback(reason)
 	}
 	if shortfall, err := h.usesShortfall(p, c); err != nil || shortfall != "" {
