@@ -87,6 +87,15 @@ module Mcp
       "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
     }.freeze
 
+    # A scope check failed where no step-up is possible - a batch, or a client that registered none
+    # of the accepted scopes. The caller gets the same plain error as before; the counter still
+    # records it as lost scope rather than as a tool failure.
+    class MissingScope < Error; end
+
+    # The caller's arguments do not fit the tool's schema. Counted apart from a tool failure,
+    # because the fix is on the client side and it would otherwise inflate the error rate.
+    class InvalidArguments < Error; end
+
     # A tool's scope check failed. `scope` is what the client should re-authorize with: the
     # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
     class InsufficientScope < Error
@@ -105,6 +114,8 @@ module Mcp
       @protocol_version_header = protocol_version_header
       @method_header = method_header
       @name_header = name_header
+      # Per-request tool counters, flushed with the protocol counters in `handle`'s ensure.
+      @tool_counts = Hash.new(0)
       @era = :legacy
     end
 
@@ -128,7 +139,9 @@ module Mcp
 
       handle_message(body)
     ensure
-      ProtocolTelemetry.record(@connector, @protocol_counts)
+      # One stalled Redis costs the request one short timeout, not two: the tool counter rides the
+      # same connection, so a failed protocol write means the tool write would only stall again.
+      ProtocolTelemetry.record_tools(@connector, @tool_counts) if ProtocolTelemetry.record(@connector, @protocol_counts)
     end
 
     def self.discovery(base_url)
@@ -522,30 +535,62 @@ module Mcp
       def call_tool(params)
         name = params["name"]
         definition = tools.find { |tool| tool[:name] == name }
-        raise Error.new("Unknown tool: #{name}", code: -32602) unless definition
+        # A retired or misspelled name is the caller's mistake, and tool_bucket folds it into
+        # OTHER, so a client stuck on an old tool list still shows up.
+        raise InvalidArguments.new("Unknown tool: #{name}", code: -32602) unless definition
 
         arguments = params.fetch("arguments", {})
-        raise Error.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
+        raise InvalidArguments.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
         validate_tool_arguments!(definition[:inputSchema], arguments)
 
         payload = send("tool_#{name}", arguments)
-        { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+        response = { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+        # Counted only once the response is serialised, so a payload that cannot be rendered is
+        # not recorded as a success.
+        count_tool(name, "ok")
+        response
+      rescue InvalidArguments
+        # The caller never reached the tool, and the fix is on the client side.
+        count_tool(name, "invalid")
+        raise
+      rescue InsufficientScope, MissingScope
+        # Losing a creator to a missing scope is a funnel step, not an error to bury.
+        count_tool(name, "scope")
+        raise
       rescue ToolError, Link::LinkInvalid, ActiveRecord::RecordInvalid => e
+        count_tool(name, "error")
         message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.to_sentence : e.message
         { content: [{ type: "text", text: message }], isError: true }
+      rescue Error
+        # A tool that rejected the call itself (a missing price, an unknown category) is an error
+        # the caller saw, so it counts, and the JSON-RPC layer still answers it.
+        count_tool(name, "error")
+        raise
+      rescue StandardError
+        # A tool that crashed is exactly the call the counter must not hide: count it, then let the
+        # exception travel as it did before.
+        count_tool(name, "error")
+        raise
+      end
+
+      # One counter per call, best-effort: telemetry never changes what the caller gets back.
+      # A call with no name at all still counts, folded into OTHER by tool_bucket, so a malformed
+      # tools/call cannot vanish from the tool counter while it shows up in the protocol counter.
+      def count_tool(name, outcome)
+        @tool_counts[ProtocolTelemetry.tool_bucket(name, outcome)] += 1
       end
 
       def validate_tool_arguments!(schema, arguments)
         (schema[:required] || []).each do |key|
-          raise Error.new("#{key} is required", code: -32602) unless arguments.key?(key)
+          raise InvalidArguments.new("#{key} is required", code: -32602) unless arguments.key?(key)
         end
         arguments.each do |key, value|
           property = schema[:properties][key]
-          raise Error.new("Unknown argument: #{key}", code: -32602) unless property
+          raise InvalidArguments.new("Unknown argument: #{key}", code: -32602) unless property
 
           types = { "integer" => [Integer], "array" => [Array], "boolean" => [TrueClass, FalseClass] }.fetch(property[:type], [String])
-          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless types.any? { |type| value.is_a?(type) }
-          raise Error.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
+          raise InvalidArguments.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless types.any? { |type| value.is_a?(type) }
+          raise InvalidArguments.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
         end
       end
 
@@ -1787,7 +1832,7 @@ module Mcp
         missing = obtainable_scope(scopes)
         # No challenge for a batch, or when the client registered none of the accepted scopes:
         # either step-up would fail, and a plain error stops the client from retrying.
-        raise Error.new(message) if @batch || missing.nil?
+        raise MissingScope.new(message) if @batch || missing.nil?
 
         @insufficient_scope = InsufficientScope.new(message, scope: (token_scopes.to_a + [missing]).join(" "))
         raise @insufficient_scope

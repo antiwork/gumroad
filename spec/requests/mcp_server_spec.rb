@@ -4166,4 +4166,93 @@ describe "MCP server" do
       end
     end
   end
+
+  context "tool call telemetry" do
+    before do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public view_profile view_sales edit_products")
+    end
+
+    def call_tool(name, arguments = {})
+      post_mcp({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name:, arguments: } })
+    end
+
+    it "counts the tool the creator's assistant actually used" do
+      call_tool("list_products")
+
+      expect(Mcp::ProtocolTelemetry.tool_mix).to eq("muse" => { "list_products" => { "ok" => 1 } })
+    end
+
+    it "counts a tool that failed as an error, without changing the response" do
+      call_tool("create_discount_code", { code: "TOODEEP", product_id: @product.external_id, amount_cents: 1850 })
+
+      expect(response.parsed_body["result"]["isError"]).to eq(true)
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_discount_code" => { "error" => 1 })
+    end
+
+    it "counts a missing scope apart from an error, because it is a funnel step" do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public")
+
+      call_tool("create_draft_product", { name: "Needs write access", price_cents: 500 })
+
+      expect(response).to have_http_status(:forbidden)
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
+    end
+
+    it "counts a call refused for a bad argument apart from a tool failure" do
+      call_tool("create_draft_product", { name: "Notes", price_cents: 500, bogus: true })
+
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "invalid" => 1 })
+    end
+
+    it "counts a tool that rejected the call itself as an error" do
+      call_tool("create_draft_product", { name: "No price" })
+
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "error" => 1 })
+    end
+
+    it "counts a missing scope in a batch, where no step-up challenge is possible" do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public")
+
+      post_mcp([{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Needs write access", price_cents: 500 } } }])
+
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
+      # The caller still gets the plain error it always got, with no step-up it could not complete.
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body.first["error"]["message"]).to include("requires the edit_products or account scope")
+    end
+
+    it "counts a missing scope when the client registered none of the accepted scopes" do
+      narrow_app = create(:oauth_application, owner: @seller, scopes: "view_public")
+      @token = create("doorkeeper/access_token", application: narrow_app, resource_owner_id: @seller.id, scopes: "view_public")
+
+      call_tool("create_draft_product", { name: "Needs write access", price_cents: 500 })
+
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["WWW-Authenticate"]).to be_nil
+      expect(response.parsed_body["error"]["message"]).to include("requires the edit_products or account scope")
+    end
+
+    it "counts a name the server does not serve under other" do
+      call_tool("retired_tool")
+
+      expect(response.parsed_body["error"]).to include("code" => -32602)
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("other" => { "invalid" => 1 })
+    end
+
+    it "counts a tool that crashed rather than hiding it" do
+      allow_any_instance_of(Mcp::Server).to receive(:tool_list_products).and_raise(RuntimeError, "boom")
+
+      begin
+        call_tool("list_products")
+      rescue RuntimeError
+        nil
+      end
+
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("list_products" => { "error" => 1 })
+    end
+  end
 end
