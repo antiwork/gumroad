@@ -118,6 +118,19 @@ func TestWantedSendsTheVisitorToCheckout(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				insertOfferCode(t, conn, 1_799_302, map[string]any{"code": "SALE20", "amount_percentage": 20, "universal": true, "auto_apply": true})
 			}},
+		// The redirect weighs the URL's code against the sale at the cart item's price.
+		{name: "a code beside a bigger sale", target: "/l/guide/save10?wanted=true",
+			location: checkout + "action=show&code=SALE20&controller=links&format=html&id=guide&price=500&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				insertOfferCode(t, conn, 1_799_301, map[string]any{"code": "SAVE10", "amount_percentage": 10, "universal": true})
+				insertOfferCode(t, conn, 1_799_302, map[string]any{"code": "SALE20", "amount_percentage": 20, "universal": true, "auto_apply": true})
+			}},
+		{name: "a code bigger than the sale", target: "/l/guide/save10?wanted=true",
+			location: checkout + "action=show&code=save10&controller=links&format=html&id=guide&price=500&product=gowebp1&rent=false&wanted=true",
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				insertOfferCode(t, conn, 1_799_301, map[string]any{"code": "SAVE10", "amount_percentage": 30, "universal": true})
+				insertOfferCode(t, conn, 1_799_302, map[string]any{"code": "SALE20", "amount_percentage": 20, "universal": true, "auto_apply": true})
+			}},
 		{name: "a code that doesn't apply", target: "/l/guide/nope?wanted=true",
 			location: base + "&id=guide&price=500&product=gowebp1&rent=false&wanted=true"},
 		{name: "a wanted that isn't true", target: "/l/guide?wanted=1"},

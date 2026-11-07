@@ -3,7 +3,6 @@ package products
 import (
 	"context"
 	"math"
-	"slices"
 )
 
 // offerQuote is a selection BestOfferCodeService weighs codes at: comparison_price_cents and
@@ -80,28 +79,12 @@ func (c offerChoice) resultCode(urlCode string) string {
 	return c.code.code.String
 }
 
-// comparedOffer is the code that applies when more than one could: discount_code_props' pick,
-// and each selection_discounts entry's, by entryKey; each weighs the codes at its own price.
+// comparedOffer is the code that applies when more than one could: discount_code_props' pick, or
+// for wanted=true the checkout redirect's, and each selection_discounts entry's by entryKey. Each
+// weighs the codes valid where it quotes at its own price: an entry, an option, leaves out a code
+// whose scope excludes it, and a zero choice is none valid there.
 func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode, defaults []*offerCode) (offerChoice, map[string]offerChoice, error) {
-	// An option-scoped code's validity, and a cart's price, differ per option; checkout's
-	// redirect weighs the cart's price.
-	if p.wanted || url != nil && url.hasVariants || slices.ContainsFunc(defaults, func(c *offerCode) bool { return c.hasVariants }) {
-		return offerChoice{}, nil, fallback("offer code comparison")
-	}
-	duration, known := prod.subscriptionDurationName()
-	if prod.is(productIsTieredMembership) && !known {
-		// lowest_tier_price would compare the tier prices with a nil duration.
-		return offerChoice{}, nil, fallback("offer code comparison")
-	}
 	ctx := p.Ctx
-	minDifference, err := h.lowestVariantDifference(ctx, prod, v.variants)
-	if err != nil {
-		return offerChoice{}, nil, err
-	}
-	display, agreed := displayPriceCents(prod, v.variants.tiers, v.prices.rows, duration, minDifference)
-	if !agreed {
-		return offerChoice{}, nil, fallback("offer code comparison")
-	}
 	if err := h.loadStock(ctx, p, prod, v); err != nil {
 		return offerChoice{}, nil, err
 	}
@@ -115,12 +98,49 @@ func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode,
 		}
 		return q
 	}
-	choose := func(q offerQuote) offerChoice {
-		code, fromURL := q.pick(url, defaults)
+	choose := func(q offerQuote, o *variantOption) offerChoice {
+		u := url
+		if u != nil && u.excludes(o) {
+			u = nil
+		}
+		var here []*offerCode
+		for _, c := range defaults {
+			if !c.excludes(o) {
+				here = append(here, c)
+			}
+		}
+		if u == nil && len(here) == 0 {
+			return offerChoice{}
+		}
+		code, fromURL := q.pick(u, here)
 		return offerChoice{code, fromURL}
 	}
+	if p.wanted {
+		// show weighs the codes at the cart item's price unless it renders the page instead.
+		c := readCartParams(p, prod, v.variants)
+		option, item, err := cartItem(p, prod, v, c)
+		if err != nil {
+			return offerChoice{}, nil, err
+		}
+		if !optionPWYW(prod, option) || c.price != nil && *c.price >= item.price {
+			return choose(offerQuote{item.price, capped(p.quantity(), nil)}, nil), nil, nil
+		}
+	}
+	duration, known := prod.subscriptionDurationName()
+	if prod.is(productIsTieredMembership) && !known {
+		// lowest_tier_price would compare the tier prices with a nil duration.
+		return offerChoice{}, nil, fallback("offer code comparison")
+	}
+	minDifference, err := h.lowestVariantDifference(ctx, prod, v.variants)
+	if err != nil {
+		return offerChoice{}, nil, err
+	}
+	display, agreed := displayPriceCents(prod, v.variants.tiers, v.prices.rows, duration, minDifference)
+	if !agreed {
+		return offerChoice{}, nil, fallback("offer code comparison")
+	}
 	// discount_code_props has no option or price.
-	pagePick := choose(offerQuote{display, capped(p.quantity(), nil)})
+	pagePick := choose(offerQuote{display, capped(p.quantity(), nil)}, nil)
 	// selection_discounts' options are bought, or rented when that's all the product does; its
 	// rent_options are rented.
 	sections := []struct{ rentOptions, rent bool }{{false, prod.rentOnly() && v.prices.rental != nil}}
@@ -147,7 +167,7 @@ func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode,
 			if err != nil {
 				return offerChoice{}, nil, err
 			}
-			entries[entryKey(section.rentOptions, o)] = choose(offerQuote{item.price, capped(max(p.quantity(), 1), left)})
+			entries[entryKey(section.rentOptions, o)] = choose(offerQuote{item.price, capped(max(p.quantity(), 1), left)}, o)
 		}
 	}
 	return pagePick, entries, nil

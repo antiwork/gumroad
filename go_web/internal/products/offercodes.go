@@ -25,6 +25,8 @@ type offerCode struct {
 	universal, existingOnly, newOnly     bool
 	validAt, expiresAt, deletedAt        db.NullTime
 	flags, tiers                         int64
+	// optionsRead is whether loadCodeOptions has read scope and optionIDs.
+	optionsRead bool
 	// tiersJSON is ownership_duration_tiers as stored.
 	tiersJSON sql.NullString
 	// sqlCurrency is whether currency_type matches the product's under the column's collation.
@@ -119,6 +121,10 @@ func (h *handler) loadCodeOptions(ctx context.Context, prod *product, c *offerCo
 		kind               sql.NullString
 		categoryID, linkID sql.NullInt64
 	}
+	if c.optionsRead {
+		return nil
+	}
+	c.optionsRead = true
 	var options []*option
 	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
 		o := &option{}
@@ -419,10 +425,15 @@ type offerDiscount struct {
 	// cents is a fixed code's discount cents, which a once-per-cart code allocates.
 	cents         int64
 	oncePerCartID string
-	// alt is the other code's result, for the selection_discounts entries in altEntries (see
-	// entryKey) that weigh the codes differently from the page.
-	alt        *offerDiscount
-	altEntries map[string]bool
+	// entries are the selection_discounts entries, by entryKey, whose code differs from the
+	// page's: their own result, or none and the error the URL's code gives there.
+	entries map[string]entryResult
+}
+
+// entryResult is a selection_discounts entry's own result: d's, else none valid there, which the
+// URL code's error explains.
+type entryResult struct {
+	d *offerDiscount
 }
 
 // oncePerCart is OfferCodeDiscountComputingService#once_per_cart?.
@@ -514,22 +525,38 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 	}
 	switch {
 	case url != nil && len(defaults) > 0, len(defaults) > 1:
+		// A scoped contender's validity differs per option.
+		for _, c := range append([]*offerCode{url}, defaults...) {
+			if c != nil && c.hasVariants {
+				if err := h.loadCodeOptions(ctx, prod, c); err != nil {
+					return nil, err
+				}
+			}
+		}
 		pick, entries, err := h.comparedOffer(p, prod, v, url, defaults)
 		if err != nil {
 			return nil, err
 		}
 		d.code, d.resultCode = pick.code, pick.resultCode(d.urlCode)
+		results := map[offerChoice]*offerDiscount{pick: d}
 		for key, c := range entries {
 			if c == pick {
 				continue
 			}
-			if d.alt == nil {
-				d.alt, d.altEntries = &offerDiscount{listed: d.listed, urlCode: d.urlCode, code: c.code, resultCode: c.resultCode(d.urlCode)}, map[string]bool{}
-			} else if d.alt.code != c.code || d.alt.resultCode != c.resultCode(d.urlCode) {
-				// A third result among the options.
-				return nil, fallback("offer code comparison")
+			if d.entries == nil {
+				d.entries = map[string]entryResult{}
 			}
-			d.altEntries[key] = true
+			if c.code == nil {
+				d.entries[key] = entryResult{}
+				continue
+			}
+			if results[c] == nil {
+				results[c] = &offerDiscount{listed: d.listed, urlCode: d.urlCode, code: c.code, resultCode: c.resultCode(d.urlCode)}
+				if err := h.settleDiscount(ctx, p, prod, price, results[c], auto); err != nil {
+					return nil, err
+				}
+			}
+			d.entries[key] = entryResult{d: results[c]}
 		}
 	case url != nil:
 		d.code, d.resultCode = url, d.urlCode
@@ -542,11 +569,6 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 	// An invalid URL code's scope only shows on an option the applying code leaves out.
 	if c := d.urlRow; c != nil && c != d.code && c.hasVariants && (d.code == nil || len(d.code.scope) > 0) {
 		if err := h.loadCodeOptions(ctx, prod, c); err != nil {
-			return nil, err
-		}
-	}
-	if d.alt != nil {
-		if err := h.settleDiscount(ctx, p, prod, price, d.alt, auto); err != nil {
 			return nil, err
 		}
 	}
@@ -780,15 +802,16 @@ func selectionDiscounts(p *page, prod *product, v *view, result any) *rails.RHas
 		return s.Sym("options", rails.NewRHash()).Sym("rent_options", nil)
 	}
 	d := v.discount
-	var altResult any
-	if d.alt != nil {
-		altResult = d.alt.resultProps()
-	}
 	entry := func(rent bool, o *variantOption) *rails.RHash {
-		if d.altEntries[entryKey(rent, o)] {
-			return d.alt.optionEntry(o, altResult)
+		e, own := d.entries[entryKey(rent, o)]
+		switch {
+		case !own:
+			return d.optionEntry(o, result)
+		case e.d != nil:
+			return e.d.optionEntry(o, e.d.resultProps())
 		}
-		return d.optionEntry(o, result)
+		// No code is valid for this option: the URL's says why, as optionEntry does.
+		return (&offerDiscount{urlError: d.urlError, urlRow: d.urlRow}).optionEntry(o, nil)
 	}
 	quotes := func(rent bool) *rails.RHash {
 		out := rails.NewRHash()
