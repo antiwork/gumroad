@@ -147,7 +147,7 @@ module Mcp
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Cursor, and other MCP clients can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. An MCP client can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",

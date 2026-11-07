@@ -266,7 +266,7 @@ class Rack::Attack
   # Anonymous dynamic client registration inserts an oauth_applications row per call.
   # Initial: 20rpm, Max: 100 requests/9 hours (per IP, shared across the connector aliases)
   throttle_with_exponential_backoff(name: "oauth_dynamic_registration/ip", requests: 20, period: 60.seconds) do |req|
-    req.remote_ip if req.path.match?(%r{\A/(?:muse|claude|chatgpt)/v1/oauth2/register(?:\.[^/]+)?\z}) && req.post?
+    req.remote_ip if req.path.match?(%r{\A/(?:muse|claude|chatgpt|cursor|antigravity)/v1/oauth2/register(?:\.[^/]+)?\z}) && req.post?
   end
   throttle("oauth_device_token/ip/device_code", limit: 120, period: 60.seconds) do |req|
     if req.path.match?(%r{\A/oauth/token(?:\.[^/]+)?\z}) && req.post?

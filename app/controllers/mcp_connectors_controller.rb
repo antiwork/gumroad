@@ -21,14 +21,14 @@ class McpConnectorsController < ApplicationController
     "cursor" => {
       label: "Cursor",
       connect_label: "Add Gumroad to Cursor",
-      setup: "Open Settings > Cursor Settings > MCP in Cursor, choose Add new MCP server, and paste the URL below. Choose OAuth when Cursor asks how to authenticate.",
-      availability: "Available today as a custom remote MCP server. Cursor signs in with OAuth, so there is nothing to install."
+      setup: "Add a remote MCP server in Cursor using the URL below. Cursor opens a browser so you can sign in to Gumroad and approve the permissions it asks for.",
+      availability: "Available today as a custom remote MCP server. There is no published Gumroad listing in Cursor’s directory yet."
     },
     "antigravity" => {
       label: "Google Antigravity",
       connect_label: "Add Gumroad to Antigravity",
-      setup: "Add a remote MCP server in Antigravity and paste the URL below. Antigravity opens a browser to sign in with Gumroad.",
-      availability: "Available today as a custom remote MCP server."
+      setup: "Add a remote MCP server in Antigravity using the URL below, then sign in to Gumroad when it asks.",
+      availability: "Available today as a custom remote MCP server. There is no published Gumroad listing in Antigravity’s directory yet."
     },
     "chatgpt" => {
       label: "ChatGPT",

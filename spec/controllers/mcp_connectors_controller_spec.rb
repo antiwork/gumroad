@@ -39,7 +39,8 @@ describe McpConnectorsController do
 
     expect(response).to be_successful
     expect(response.body).to include("Gumroad MCP", "Cursor", "/cursor/v1/mcp", "Add Gumroad to Cursor")
-    expect(response.body).not_to include("Submitted for review")
+    expect(response.body).to include("no published Gumroad listing in Cursor")
+    expect(response.body).not_to include("not yet available in", "Cursor’s connector directory")
   end
 
   it "offers Antigravity a custom remote server address" do
@@ -47,7 +48,7 @@ describe McpConnectorsController do
 
     expect(response).to be_successful
     expect(response.body).to include("Google Antigravity", "/antigravity/v1/mcp", "Add Gumroad to Antigravity")
-    expect(response.body).not_to include("Submitted for review")
+    expect(response.body).not_to include("not yet available in", "Antigravity’s connector directory")
   end
 
   it "documents how to revoke connector access" do

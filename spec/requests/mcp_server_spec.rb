@@ -41,6 +41,23 @@ describe "MCP server" do
     allow_any_instance_of(ActionView::Base).to receive(:vite_typescript_tag).and_return("")
   end
 
+  it "routes each new connector path to its own page, OAuth and endpoint" do
+    %w[cursor antigravity].each do |client|
+      # The page renders the layout, which asks GitHub for the star count; the route is what this
+      # example is about, so the call is stubbed rather than recorded.
+      allow(GithubStarsController).to receive(:cached_count).and_return(0)
+
+      get "/#{client}", headers: { "HOST" => DOMAIN }
+
+      expect(response).to be_successful
+      expect(response.body).to include("/#{client}/v1/mcp")
+
+      get "/#{client}/v1/status", headers: { "HOST" => DOMAIN }
+
+      expect(response).to be_successful
+    end
+  end
+
   it "exposes a public status endpoint" do
     get "/muse/v1/status", headers: { "HOST" => DOMAIN }
 
@@ -61,7 +78,9 @@ describe "MCP server" do
     expect(body["clients"]).to include(
       "muse" => "#{PROTOCOL}://#{DOMAIN}/muse/v1/mcp",
       "claude" => "#{PROTOCOL}://#{DOMAIN}/claude/v1/mcp",
-      "chatgpt" => "#{PROTOCOL}://#{DOMAIN}/chatgpt/v1/mcp"
+      "chatgpt" => "#{PROTOCOL}://#{DOMAIN}/chatgpt/v1/mcp",
+      "cursor" => "#{PROTOCOL}://#{DOMAIN}/cursor/v1/mcp",
+      "antigravity" => "#{PROTOCOL}://#{DOMAIN}/antigravity/v1/mcp"
     )
   end
 
