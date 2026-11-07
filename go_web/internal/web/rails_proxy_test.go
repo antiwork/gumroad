@@ -328,3 +328,35 @@ func TestRailsProxyRefusesAResponseAlreadyStarted(t *testing.T) {
 		t.Errorf("wrote %q after the response started", body)
 	}
 }
+
+// Revision is the X-Revision most Rails hosts' /healthcheck gives; a tie, as during a deploy's
+// switch, or no answer is "".
+func TestRailsProxyRevision(t *testing.T) {
+	host := func(revision string, status int) string {
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/healthcheck" {
+				t.Errorf("asked %s", r.URL.Path)
+			}
+			w.Header().Set("X-Revision", revision)
+			w.WriteHeader(status)
+		}))
+		t.Cleanup(s.Close)
+		return addr(s)
+	}
+	for name, c := range map[string]struct {
+		hosts []string
+		want  string
+	}{
+		"the majority":       {[]string{host("new", 200), host("old", 200), host("new", 200)}, "new"},
+		"a tie":              {[]string{host("new", 200), host("old", 200)}, ""},
+		"a failing host":     {[]string{host("new", 200), host("old", 500), deadAddr(t)}, "new"},
+		"no host answers":    {[]string{deadAddr(t)}, ""},
+		"a host without one": {[]string{host("", 200)}, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := newTestProxy(t, c.hosts...).Revision(t.Context()); got != c.want {
+				t.Errorf("%q, want %q", got, c.want)
+			}
+		})
+	}
+}
