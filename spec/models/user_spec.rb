@@ -3789,6 +3789,57 @@ describe User, :vcr do
     end
   end
 
+  describe "after_commit callback to enqueue GenerateAvatarVariantJob" do
+    let(:user) { create(:user) }
+
+    def attach_avatar
+      user.avatar.attach(io: fixture_file_upload("smilie.png"), filename: "smilie.png")
+    end
+
+    it "schedules GenerateAvatarVariantJob once a new avatar is committed" do
+      attach_avatar
+
+      expect(GenerateAvatarVariantJob.jobs.size).to eq(1)
+      expect(GenerateAvatarVariantJob).to have_enqueued_sidekiq_job(user.id)
+    end
+
+    it "schedules GenerateAvatarVariantJob only after the avatar file is uploaded" do
+      uploaded_when_enqueued = nil
+      allow(GenerateAvatarVariantJob).to receive(:perform_async) do
+        uploaded_when_enqueued = user.avatar.blob.service.exist?(user.avatar.key)
+      end
+
+      attach_avatar
+
+      expect(uploaded_when_enqueued).to be(true)
+    end
+
+    it "does not schedule GenerateAvatarVariantJob when something other than the avatar changes" do
+      attach_avatar
+      GenerateAvatarVariantJob.jobs.clear
+
+      user.update!(name: "Renamed")
+
+      expect(GenerateAvatarVariantJob.jobs.size).to eq(0)
+    end
+
+    it "does not schedule GenerateAvatarVariantJob when the avatar is removed" do
+      attach_avatar
+      GenerateAvatarVariantJob.jobs.clear
+
+      user.avatar = nil
+      user.save!
+
+      expect(GenerateAvatarVariantJob.jobs.size).to eq(0)
+    end
+
+    it "does not fail the save when Redis is unreachable" do
+      allow(GenerateAvatarVariantJob).to receive(:perform_async).and_raise(RedisClient::CannotConnectError)
+
+      expect { attach_avatar }.not_to raise_error
+    end
+  end
+
   describe "after_commit callback to enqueue GenerateSubscribePreviewJob" do
     before do
       allow_any_instance_of(User).to receive(:generate_subscribe_preview).and_call_original

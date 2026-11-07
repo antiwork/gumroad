@@ -99,6 +99,10 @@ class User < ApplicationRecord
   # lookups per variant to about one per window.
   AVATAR_VARIANT_PRESENCE_CACHE_TTL = 5.minutes
 
+  # 400x400 so avatars stay sharp on Retina/high-DPI screens: the profile
+  # settings preview box is 200 CSS px, which is 400 device px at 2x.
+  AVATAR_VARIANT_TRANSFORMATIONS = { resize_to_limit: [400, 400] }.freeze
+
   has_many :affiliate_credits, foreign_key: "affiliate_user_id"
   has_many :affiliate_partial_refunds, foreign_key: "affiliate_user_id"
   has_many :affiliate_requests, foreign_key: :seller_id
@@ -209,10 +213,12 @@ class User < ApplicationRecord
   has_many :community_notification_settings, dependent: :destroy
   has_many :seller_community_chat_recaps, class_name: "CommunityChatRecap", foreign_key: :seller_id, dependent: :destroy
 
+  # Declared above has_one_attached: after_commit callbacks run in reverse order here,
+  # so the variant job it enqueues follows the avatar upload.
+  after_commit :reset_avatar_changed
   has_one_attached :avatar
   attr_accessor :avatar_changed
   before_save :set_avatar_changed
-  after_commit :reset_avatar_changed
 
   scope :by_email, ->(email) { where(email:) }
   scope :compliant, -> { where(user_risk_state: "compliant") }
@@ -636,9 +642,7 @@ class User < ApplicationRecord
   def avatar_variant(verify_storage: false)
     return unless avatar.attached?
 
-    # 400x400 so avatars stay sharp on Retina/high-DPI screens: the profile
-    # settings preview box is 200 CSS px, which is 400 device px at 2x.
-    stored_avatar_variant(verify_storage:, resize_to_limit: [400, 400])
+    stored_avatar_variant(verify_storage:, **AVATAR_VARIANT_TRANSFORMATIONS)
   end
 
   def username
@@ -2038,7 +2042,19 @@ class User < ApplicationRecord
     end
 
     def reset_avatar_changed
+      # Enqueued here rather than from its own after_commit, so it can't depend on
+      # callback order to still see the flag set.
+      generate_avatar_variant_later if avatar_changed
       self.avatar_changed = false
+    end
+
+    def generate_avatar_variant_later
+      return unless avatar.attached?
+
+      GenerateAvatarVariantJob.perform_async(id)
+    rescue *REDIS_TRANSPORT_ERRORS => e
+      # The save has already committed; a missed pre-resize must not fail the request.
+      Rails.logger.warn("Avatar variant enqueue skipped for user #{id}: #{e.class}")
     end
 
     def to_email_domain(value)
