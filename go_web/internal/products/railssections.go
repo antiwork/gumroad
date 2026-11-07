@@ -27,7 +27,7 @@ func (h *handler) catalogSearches(p *page, sections []*productsSection) ([]*cata
 		return nil, err
 	}
 	if !found {
-		searches, err := h.searchSections(p, sections, "")
+		searches, err := h.searchSections(p, sections, catalogQuery{})
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +150,7 @@ func (h *handler) productSectionSearches(p *page, ps *productSections) ([]*catal
 				return nil, r.productsErr
 			}
 		}
-		searches, err := h.searchSections(p, ps.allProducts, "")
+		searches, err := h.searchSections(p, ps.allProducts, catalogQuery{})
 		if err != nil {
 			return nil, err
 		}
