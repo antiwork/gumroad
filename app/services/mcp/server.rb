@@ -23,11 +23,11 @@ module Mcp
     HEADER_MISMATCH = -32020
     UNSUPPORTED_PROTOCOL_VERSION = -32022
     TRANSPORT_ERROR_CODES = [HEADER_MISMATCH, UNSUPPORTED_PROTOCOL_VERSION].freeze
-    # A caller only ever sees their own store, so no result of ours is shareable between callers.
+    # Most tools answer for the caller's own store, so no result of ours is shareable between callers.
     TOOLS_LIST_CACHE = { ttlMs: 0, cacheScope: "private" }.freeze
     # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
-    INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
+    INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. search_products also searches the rest of Gumroad's catalogue. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
     DEFAULT_BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
@@ -1540,11 +1540,11 @@ module Mcp
         limit = SEARCH_DEFAULT_LIMIT if limit <= 0
         limit = [limit, SEARCH_MAX_LIMIT].min
 
-        # The index lags the database: a product unpublished or a seller suspended since the last
-        # reindex still comes back, so every hit is checked against the row before it is offered.
+        # The index lags the database. Only these row states are re-checked here: unpublished, deleted,
+        # banned, adult, seller suspended. The rest of Discover eligibility waits for the reindex.
         hits = Link.search(Link.search_options(query: words, size: limit)).records
-        # Reload in one query with the associations the payload reads, keeping the index order.
-        loaded = Link.where(id: hits.map(&:id)).includes(:user, :thumbnail_alive, :alive_prices).index_by(&:id)
+        # Reload in one query with the Discover card's associations, keeping the index order.
+        loaded = Link.where(id: hits.map(&:id)).includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).index_by(&:id)
         products = hits.filter_map { |hit| loaded[hit.id] }
           .select { |product| product.alive? && !product.rated_as_adult? && product.user.present? && !product.user.suspended? }
         {
@@ -1552,10 +1552,11 @@ module Mcp
             {
               id: product.external_id,
               name: product.name,
-              seller_name: product.user&.name.presence,
+              seller_name: product.user.name_or_username,
               price_cents: product.discounted_price_cents(product.display_price_cents(for_default_duration: true)),
               currency: product.price_currency_type,
               recurring: product.is_recurring_billing?,
+              recurrence: product.default_price_recurrence&.recurrence,
               pay_what_you_want: product.has_customizable_price_option?,
               thumbnail_url: product.thumbnail_or_cover_url,
               url: with_mcp_referrer(product.long_url)
