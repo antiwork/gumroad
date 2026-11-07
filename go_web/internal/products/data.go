@@ -40,9 +40,6 @@ func unportedProductShape(prod *product) string {
 		return "purchase type"
 	case membership != "":
 		return membership
-	case prod.is(productSkusEnabled) && !prod.is(productIsPhysical):
-		// FileSummaryService would summarize each SKU.
-		return "skus"
 	case !prod.uniquePermalink.Valid:
 		return "no unique permalink"
 	}
