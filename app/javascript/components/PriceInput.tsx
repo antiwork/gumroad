@@ -15,21 +15,27 @@ import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
 import { Pill } from "$app/components/ui/Pill";
 
-// A comma with exactly three digits after it groups thousands ("7,900"), which is how
-// `parseCurrencyUnitStringToCents` reads it; collapsing every separator to "." first turned that into
-// "7.90" and failed the minimum-price check. The fraction of the decimal point stays capped at two.
+const GROUP_DIGITS = 3;
+const FRACTION_DIGITS = 2;
+
+// A value ending in a separator, or in a group that can still grow a digit ("7,90" is about to
+// become "7,900"), is not settled: rewriting it there turns the grouping into a fraction.
+const UNSETTLED_VALUE = new RegExp(`[.,]\\d{0,${FRACTION_DIGITS}}$`, "u");
+
+// A comma followed by exactly GROUP_DIGITS digits groups thousands ("7,900"), which is how
+// `parseCurrencyUnitStringToCents` reads it; any other trailing separator is the decimal point.
 const normalizeAmountInput = (value: string): string => {
   const decimalIndex = value.indexOf(".");
   if (decimalIndex !== -1) {
     const fraction = value.slice(decimalIndex + 1).replace(/[.,]/gu, "");
-    return value.slice(0, decimalIndex + 1) + fraction.slice(0, 2);
+    return value.slice(0, decimalIndex + 1) + fraction.slice(0, FRACTION_DIGITS);
   }
 
   const commaIndex = value.lastIndexOf(",");
   if (commaIndex === -1) return value;
 
   const fraction = value.slice(commaIndex + 1);
-  return fraction.length === 3 ? value : value.slice(0, commaIndex + 1) + fraction.slice(0, 2);
+  return fraction.length === GROUP_DIGITS ? value : value.slice(0, commaIndex + 1) + fraction.slice(0, FRACTION_DIGITS);
 };
 
 export const PriceInput = React.forwardRef<
@@ -74,10 +80,8 @@ export const PriceInput = React.forwardRef<
     const handleChange = (newValue: string) => {
       newValue = normalizeAmountInput(newValue);
       let cents = parseCurrencyUnitStringToCents(currencyCode, newValue);
-      // A value ending in a separator, or in a group that can still grow a digit ("7,90" is about to
-      // become "7,900"), is not settled: rewriting it there turns the grouping into a fraction.
-      if (cents != null && !/[.,]\d{0,2}$/u.test(newValue)) {
-        if (isNaN(cents) || cents < 0) cents = 0;
+      if (cents != null && (isNaN(cents) || cents < 0)) cents = 0;
+      if (cents != null && !UNSETTLED_VALUE.test(newValue)) {
         newValue = formatPriceCentsWithoutCurrencySymbolAndComma(currencyCode, cents);
       }
       setValue(newValue);

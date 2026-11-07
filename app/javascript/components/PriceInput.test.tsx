@@ -130,23 +130,22 @@ describe("PriceInput", () => {
   });
 });
 
-// The seller types the amount themselves, so the typed string decides the value: a comma before
-// exactly three digits groups thousands and before one or two digits is a decimal point.
 describe("PriceInput amount typing", () => {
   const renderAmount = (currencyCode: "usd" | "krw" | "eur", cents: number | null = null) => {
     const onChange = vi.fn();
     render(<PriceInput currencyCode={currencyCode} cents={cents} ariaLabel="Amount" onChange={onChange} />);
     const input = screen.getByLabelText<HTMLInputElement>("Amount");
-    const type = (value: string | string[]) =>
-      (Array.isArray(value) ? value : [value]).forEach((next) => fireEvent.change(input, { target: { value: next } }));
+    // Each key appends to what the field shows, the way a keyboard does: the field's own rewrites
+    // between keystrokes are part of what these tests have to survive.
+    const type = (keys: string) => {
+      for (const key of keys) fireEvent.change(input, { target: { value: input.value + key } });
+    };
     return { input, onChange, type };
   };
 
-  // Every separator used to be collapsed to "." before parsing, so the field settled on "7.90" and
-  // the server rejected the save for being under the KRW minimum (₩1,110).
   it("keeps a grouped amount as thousands", () => {
     const { input, onChange, type } = renderAmount("krw");
-    type(["7", "7,", "7,9", "7,90", "7,900"]);
+    type("7,900");
 
     expect(input.value).toBe("7900");
     expect(onChange).toHaveBeenLastCalledWith(790_000);
@@ -154,7 +153,7 @@ describe("PriceInput amount typing", () => {
 
   it("reads a comma before two digits as a decimal point", () => {
     const { input, onChange, type } = renderAmount("eur");
-    type(["7", "7,", "7,9", "7,90"]);
+    type("7,90");
 
     expect(input.value).toBe("7,90");
     expect(onChange).toHaveBeenLastCalledWith(790);
@@ -162,15 +161,24 @@ describe("PriceInput amount typing", () => {
 
   it("groups a decimal amount", () => {
     const { input, onChange, type } = renderAmount("usd");
-    type(["1", "12", "12,", "12,3", "12,34", "12,345", "12,345.", "12,345.6", "12,345.67"]);
+    type("12,345.67");
 
-    expect(input.value).toBe("12,345.67");
+    // The field renders without grouping separators, so the comma the parser read as thousands is
+    // gone from the display by the time the fractional keys arrive.
+    expect(input.value).toBe("12345.67");
     expect(onChange).toHaveBeenLastCalledWith(1_234_567);
+  });
+
+  it("reports a clamped zero for a negative amount", () => {
+    const { input, onChange } = renderAmount("usd");
+    fireEvent.change(input, { target: { value: "-1.00" } });
+
+    expect(onChange).toHaveBeenLastCalledWith(0);
   });
 
   it("caps the fraction at two digits", () => {
     const { input, onChange, type } = renderAmount("usd");
-    type(["1", "1.", "1.9", "1.99", "1.999"]);
+    type("1.999");
 
     expect(input.value).toBe("1.99");
     expect(onChange).toHaveBeenLastCalledWith(199);
