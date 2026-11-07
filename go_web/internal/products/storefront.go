@@ -679,34 +679,43 @@ func (h *handler) cardSoldOut(p *page, c *card) (bool, error) {
 	return remaining == int64(0), err
 }
 
+// displayPriceCents is display_price_cents(for_default_duration: true): the lowest offered tier's
+// price at duration, else default_price_cents plus the lowest variant difference. agreed is
+// false where the preload's row order would pick default_price.
+func displayPriceCents(prod *product, tiers []*variantOption, prices []priceRow, duration string, minDifference sql.NullInt64) (int64, bool) {
+	if prod.is(productIsTieredMembership) {
+		return lowestTierPriceCents(offeredTiers(tiers), &duration), true
+	}
+	var rows []priceRow
+	for _, r := range prices {
+		if r.atDuration(prod, duration) {
+			rows = append(rows, r)
+		}
+	}
+	// default_price_cents: a rent-only product's is its rental price.
+	last, agreed := lastPrice(pricesForCurrency(prod, rows, prod.rentOnly()))
+	if !agreed {
+		return 0, false
+	}
+	var price int64
+	if last != nil {
+		price = *last
+	}
+	return price + minDifference.Int64, true
+}
+
 // cardProps is ProductPresenter::Card#for_web for section_props: no seller, inventory or
 // description, and a product URL on this host with layout=profile.
 func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, error) {
 	prod := c.prod
-	// display_price_cents(for_default_duration: true).
-	var price int64
+	price, agreed := displayPriceCents(prod, c.tiers, c.prices, c.defaultRecurrence, c.minVariantDifference)
+	if !agreed {
+		return nil, fallback("catalog price")
+	}
 	pwyw := prod.customizablePrice.Bool
 	if prod.is(productIsTieredMembership) {
-		offered := offeredTiers(c.tiers)
-		price = lowestTierPriceCents(offered, &c.defaultRecurrence)
 		// has_customizable_price_option?
-		pwyw = slices.ContainsFunc(offered, func(o *variantOption) bool { return o.customizablePrice.Bool })
-	} else {
-		var rows []priceRow
-		for _, r := range c.prices {
-			if r.atDuration(prod, c.defaultRecurrence) {
-				rows = append(rows, r)
-			}
-		}
-		// default_price_cents: a rent-only product's is its rental price.
-		last, agreed := lastPrice(pricesForCurrency(prod, rows, prod.rentOnly()))
-		if !agreed {
-			return nil, fallback("catalog price")
-		}
-		if last != nil {
-			price = *last
-		}
-		price += c.minVariantDifference.Int64
+		pwyw = slices.ContainsFunc(offeredTiers(c.tiers), func(o *variantOption) bool { return o.customizablePrice.Bool })
 	}
 	// default_price_recurrence: every match has the recurrence it matched on.
 	var recurrence any

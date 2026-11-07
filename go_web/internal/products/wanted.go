@@ -120,6 +120,24 @@ func priceCentsFromUnits(s string, scale int64) (int64, bool) {
 // instead: a pay-what-you-want product or option without a price that covers it.
 func wantedCartItem(p *page, prod *product, v *view) (*wantedItem, error) {
 	c := readCartParams(p, prod, v.variants)
+	option, item, err := cartItem(p, prod, v, c)
+	if err != nil {
+		return nil, err
+	}
+	if optionPWYW(prod, option) && (c.price == nil || *c.price < item.price) {
+		return nil, nil
+	}
+	return item, nil
+}
+
+// optionPWYW is whether cart_item takes params[:price]: the product's customizable_price, or the
+// Variant's; to_option_for_product's is_pwyw is false.
+func optionPWYW(prod *product, option *variantOption) bool {
+	return prod.customizablePrice.Bool || option != nil && !option.sku && option.customizablePrice.Bool
+}
+
+// cartItem is Link#cart_item for c: the option it picks and the item.
+func cartItem(p *page, prod *product, v *view, c cartParams) (*variantOption, *wantedItem, error) {
 	var option *variantOption
 	if id, ok := c.option.(string); ok {
 		if i := slices.IndexFunc(v.variants.options, func(o *variantOption) bool { return o.externalID == id }); i >= 0 {
@@ -150,24 +168,19 @@ func wantedCartItem(p *page, prod *product, v *view) (*wantedItem, error) {
 	if option != nil {
 		item.price += option.priceDifference.Int64
 	}
-	// to_option_for_product's is_pwyw is false.
-	pwyw := prod.customizablePrice.Bool || option != nil && !option.sku && option.customizablePrice.Bool
 	var asked int64
-	if pwyw && c.price != nil {
+	if optionPWYW(prod, option) && c.price != nil {
 		asked = *c.price
 	}
 	item.price = max(asked, item.price)
 	if pppEnabled(p, prod) && item.price != 0 {
 		cur, known := currencies[prod.productCurrency()]
 		if !known {
-			return nil, fallback("ppp currency")
+			return nil, nil, fallback("ppp currency")
 		}
 		item.price = max(item.price, cur.minPrice)
 	}
-	if pwyw && (c.price == nil || *c.price < item.price) {
-		return nil, nil
-	}
-	return item, nil
+	return option, item, nil
 }
 
 // wantedRecurrence is cart_item's recurrence and its price: the buy price at the requested

@@ -198,16 +198,17 @@ func TestAnOwnershipOptionFallsBackToRails(t *testing.T) {
 }
 
 // A buyer can make the product's existing-customer default apply, which best_default_code_result
-// then weighs against the sale.
+// then weighs against the sale: the sale only wins by taking more off.
 func TestABuyersExistingCustomerDefault(t *testing.T) {
 	const loyalID, saleID = int64(1_797_111), int64(1_797_112)
 	buyer := &signedInUser{user: user{id: 1_797_001}}
 	for _, c := range []struct {
 		name, reason, code string
-		sale               bool
+		sale               int
 	}{
 		{name: "alone", code: "loyal"},
-		{name: "beside the sale", sale: true, reason: "offer code comparison"},
+		{name: "beside a bigger sale", sale: 20, code: "sale"},
+		{name: "beside a sale as big", sale: 10, code: "loyal"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
@@ -215,16 +216,25 @@ func TestABuyersExistingCustomerDefault(t *testing.T) {
 			h := &handler{c: e.config}
 			insertOfferCode(t, conn, loyalID, map[string]any{"code": "loyal", "amount_percentage": 10, "existing_customers_only": true})
 			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_797_121), "offer_code_id": loyalID, "product_id": productID})
-			if c.sale {
-				insertOfferCode(t, conn, saleID, map[string]any{"code": "sale", "amount_percentage": 20, "universal": true, "auto_apply": true})
+			if c.sale > 0 {
+				insertOfferCode(t, conn, saleID, map[string]any{"code": "sale", "amount_percentage": c.sale, "universal": true, "auto_apply": true})
 			}
 			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_301), "seller_id": sellerID, "link_id": productID,
 				"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
 			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, seller: &user{id: sellerID},
-				viewer: buyer, hasAutoApplyCode: c.sale}
+				viewer: buyer, hasAutoApplyCode: c.sale > 0}
 			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true},
 				defaultOfferCodeID: sql.NullInt64{Int64: loyalID, Valid: true}}
-			d, err := h.loadOfferDiscount(t.Context(), p, prod, nil)
+			v := &view{}
+			var err error
+			if v.prices, err = h.loadPrices(t.Context(), prod); err != nil {
+				t.Fatal(err)
+			}
+			if v.variants, err = h.loadVariants(t.Context(), prod); err != nil {
+				t.Fatal(err)
+			}
+			v.priceCents = v.prices.buy
+			d, err := h.loadOfferDiscount(t.Context(), p, prod, v)
 			switch {
 			case c.reason != "":
 				if err != fallback(c.reason) {
