@@ -11,6 +11,18 @@ describe Product::Prices do
     create(:price, link: @subscription_product, price_cents: 35_00, recurrence: BasePrice::Recurrence::YEARLY)
   end
 
+  describe "#clean_price" do
+    it "reads a comma before three digits as thousands grouping" do
+      @product.price_currency_type = "usd"
+      expect(@product.clean_price("7,900")).to eq(790_000)
+    end
+
+    it "reads a comma before two digits as a Euro decimal" do
+      @product.price_currency_type = "usd"
+      expect(@product.clean_price("7,90")).to eq(790)
+    end
+  end
+
   describe "#discounted_price_cents with a shop-wide auto-applied code" do
     let(:seller) { @product.user }
     let(:product) { @product }

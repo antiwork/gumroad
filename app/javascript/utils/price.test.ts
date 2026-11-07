@@ -1,6 +1,12 @@
 import { describe, it, expect } from "vitest";
 
-import { formatPrice, parseUnitStringToPriceCents, priceCentsToUnit, priceUnitToCents } from "$app/utils/price";
+import {
+  formatPrice,
+  parseUnitStringToPriceCents,
+  sanitizePriceRangeInput,
+  priceCentsToUnit,
+  priceUnitToCents,
+} from "$app/utils/price";
 
 describe("priceCentsToUnit", () => {
   it("converts cents to a two-decimal unit amount for a regular currency", () => {
@@ -59,5 +65,19 @@ describe("parseUnitStringToPriceCents", () => {
 
   it("returns null for a null input", () => {
     expect(parseUnitStringToPriceCents(null, false)).toBeNull();
+  });
+});
+
+describe("sanitizePriceRangeInput", () => {
+  it("keeps a thousands comma so the server reads 7,900 as grouping", () => {
+    expect(sanitizePriceRangeInput("7,900")).toBe("7,900");
+  });
+
+  it("keeps a Euro decimal comma", () => {
+    expect(sanitizePriceRangeInput("7,90")).toBe("7,90");
+  });
+
+  it("strips non-amount characters and extra decimal points", () => {
+    expect(sanitizePriceRangeInput("₩1.2.3abc")).toBe("1.23");
   });
 });

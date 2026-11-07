@@ -9,6 +9,7 @@ import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 import { isNumber, isRecord, isString } from "$app/utils/guards";
+import { sanitizePriceRangeInput } from "$app/utils/price";
 import {
   RecurrenceId,
   durationInMonthsToRecurrenceId,
@@ -460,14 +461,7 @@ const NewProductPage = () => {
                     maxLength={10}
                     value={form.data.link.price_range}
                     onChange={(e) => {
-                      let newValue = e.target.value;
-                      newValue = newValue.replace(/[.,]+/gu, ".");
-                      newValue = newValue.replace(/[^0-9.]/gu, "");
-                      const firstDotIndex = newValue.indexOf(".");
-                      if (firstDotIndex !== -1) {
-                        newValue =
-                          newValue.slice(0, firstDotIndex + 1) + newValue.slice(firstDotIndex + 1).replace(/\./gu, "");
-                      }
+                      const newValue = sanitizePriceRangeInput(e.target.value);
                       form.setData("link.price_range", newValue);
                       form.clearErrors("link.price_range");
                     }}
