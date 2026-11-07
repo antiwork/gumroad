@@ -60,10 +60,10 @@ func (h *handler) renderAutocomplete(w http.ResponseWriter, p *page, prod *produ
 	if err != nil {
 		return err
 	}
-	nonce := pc.NewNonce()
-	// The share block reads the CSRF token and the flash whatever the reload keeps.
-	_, err = pc.Shared.SignedOut(ctx, pages.Request{
-		Req: p.Req, Session: p.Session, CSRFToken: p.MaskedCSRFToken(), ScriptNonce: nonce, Title: meta.PageTitle(h.c.Meta.Title),
+	// The share block reads the CSRF token and the flash whatever the reload keeps, and the
+	// renderer always keeps its errors.
+	shared, err := pc.Shared.SignedOut(ctx, pages.Request{
+		Req: p.Req, Session: p.Session, CSRFToken: p.MaskedCSRFToken(), Title: meta.PageTitle(h.c.Meta.Title),
 	})
 	if errors.Is(err, pages.ErrUnported) {
 		return fallback("shared props")
@@ -75,8 +75,9 @@ func (h *handler) renderAutocomplete(w http.ResponseWriter, p *page, prod *produ
 	if err := h.finishShow(w, p, prod, v.ip); err != nil {
 		return err
 	}
-	w.Header().Set("Content-Security-Policy", pc.CSP.Header(nonce))
-	props := rails.NewRHash().Sym(autocompleteData, results).Sym("_inertia_meta", meta.JSON())
+	// The csp_nonce share is a lambda the reload never calls, so the policy gets no nonce.
+	w.Header().Set("Content-Security-Policy", pc.CSP.Header(""))
+	props := rails.NewRHash().Sym("errors", shared.Get("errors")).Sym(autocompleteData, results).Sym("_inertia_meta", meta.JSON())
 	rails.RenderInertiaJSON(w, p.Req, inertia.Page(discoverComponent, p.Req.FullPath(), props))
 	return nil
 }
