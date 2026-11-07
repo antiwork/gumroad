@@ -17,6 +17,7 @@ module OauthScopeHelper
     "revenue_share" => "Revenue Share",
     "unfurl" => "Fetch public information of any product to preview it in Notion.",
     "view_payouts" => "See your payouts data.",
+    "view_library" => "See the products you bought.",
     "view_profile" => "See your profile data.",
     "view_public" => "See your public information (name, bio).",
     "view_sales" => "See your sales data.",

@@ -4,7 +4,7 @@ module Mcp
   class OauthClientRegistration
     class Error < StandardError; end
 
-    MCP_SCOPES = %w[view_public view_profile view_sales edit_products view_payouts].freeze
+    MCP_SCOPES = %w[view_public view_profile view_sales edit_products view_payouts view_library].freeze
     # Not advertised or granted by default, but kept for a client that still names it: Doorkeeper
     # rejects an authorization request naming a scope its application was not registered with.
     LEGACY_SCOPES = %w[account].freeze
