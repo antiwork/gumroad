@@ -4212,6 +4212,14 @@ describe "MCP server" do
       expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "error" => 1 })
     end
 
+    it "counts a missing scope in a batch, where no step-up challenge is possible" do
+      @token = create("doorkeeper/access_token", application: @app, resource_owner_id: @seller.id, scopes: "view_public")
+
+      post_mcp([{ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "create_draft_product", arguments: { name: "Needs write access", price_cents: 500 } } }])
+
+      expect(Mcp::ProtocolTelemetry.tool_mix["muse"]).to eq("create_draft_product" => { "scope" => 1 })
+    end
+
     it "counts a name the server does not serve under other" do
       call_tool("retired_tool")
 

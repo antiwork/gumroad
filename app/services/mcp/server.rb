@@ -87,6 +87,11 @@ module Mcp
       "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
     }.freeze
 
+    # A scope check failed where no step-up is possible - a batch, or a client that registered none
+    # of the accepted scopes. The caller gets the same plain error as before; the counter still
+    # records it as lost scope rather than as a tool failure.
+    class MissingScope < Error; end
+
     # The caller's arguments do not fit the tool's schema. Counted apart from a tool failure,
     # because the fix is on the client side and it would otherwise inflate the error rate.
     class InvalidArguments < Error; end
@@ -548,7 +553,7 @@ module Mcp
         # The caller never reached the tool, and the fix is on the client side.
         count_tool(name, "invalid")
         raise
-      rescue InsufficientScope
+      rescue InsufficientScope, MissingScope
         # Losing a creator to a missing scope is a funnel step, not an error to bury.
         count_tool(name, "scope")
         raise
@@ -1827,7 +1832,7 @@ module Mcp
         missing = obtainable_scope(scopes)
         # No challenge for a batch, or when the client registered none of the accepted scopes:
         # either step-up would fail, and a plain error stops the client from retrying.
-        raise Error.new(message) if @batch || missing.nil?
+        raise MissingScope.new(message) if @batch || missing.nil?
 
         @insufficient_scope = InsufficientScope.new(message, scope: (token_scopes.to_a + [missing]).join(" "))
         raise @insufficient_scope
