@@ -1,7 +1,6 @@
 package products
 
 import (
-	"context"
 	"database/sql"
 	"regexp"
 
@@ -77,12 +76,21 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 	set("", "", "", inertia.Pairs("property", "og:type", "content", pc.OGNamespace+":product")...)
 
 	set("", "", "", inertia.Pairs("property", "twitter:title", "content", prod.name)...)
+	var demo string
 	if rails.Present(shareImage) {
-		if err := h.noProductBuilds(p.Ctx, prod); err != nil {
+		if demo, err = h.demoPlayerURL(p, prod, v); err != nil {
 			return nil, err
 		}
 	}
 	switch {
+	case demo != "":
+		width, _ := numberAttr(int64(demoPlayerWidth))
+		height, _ := numberAttr(int64(demoPlayerHeight))
+		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "player")...)
+		set("", "", "", inertia.Pairs("property", "twitter:image", "content", shareImage)...)
+		set("", "", "", inertia.Pairs("property", "twitter:player", "content", demo)...)
+		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
+		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
 	case main != nil && main.previewImagePath():
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary_large_image")...)
 		set("", "", "", inertia.Pairs("property", "twitter:image", "content", main.url)...)
@@ -171,16 +179,6 @@ func socialShareImage(v *view) (string, error) {
 		return "", fallback("oembed thumbnail escape")
 	}
 	return main.thumbnail, nil
-}
-
-// noProductBuilds goes to Rails for a product with a build: demo_player_card_meta's flag may
-// be on, and the build may have a demo.
-func (h *handler) noProductBuilds(ctx context.Context, prod *product) error {
-	has, err := h.exists(ctx, "SELECT 1 FROM product_builds WHERE product_builds.product_id = ? LIMIT 1", prod.id)
-	if err != nil || has {
-		return firstErr(err, fallback("product builds"))
-	}
-	return nil
 }
 
 // structuredData is Link#structured_data at url, the canonical URL.
