@@ -1730,8 +1730,6 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, map[string]any{"amount_percentage": 50, "minimum_amount_cents": 1000})
 				sale(t, conn)
 			}},
-		// $1.50 off beats 20% at 500 cents, so the page and the cheap option quote the code; at the
-		// 2,000-cent option the sale takes more off.
 		// An option outside a code's scope weighs only the codes valid for it; with none, the URL's
 		// code says why.
 		{name: "a scoped code that beats the sale", target: "/l/guide/SAVE10", wants: []string{
@@ -1751,6 +1749,8 @@ func TestURLOfferCodes(t *testing.T) {
 				sizes(t, conn, codeID)
 				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_302), "offer_code_id": autoID, "variant_id": small})
 			}},
+		// $1.50 off beats 20% at 500 cents, so the page and the cheap option quote the code; at the
+		// 2,000-cent option the sale takes more off.
 		{name: "a code that wins on some options only", target: "/l/guide/SAVE10", wants: []string{
 			`"discount_code":` + fixed150 + `,"sale_label":null,`,
 			`"options":{"%[3]s":{"discount_code":` + fixed150 + `,"sale_label":null},"%[4]s":{"discount_code":` + saleResult + `,"sale_label":"Sale"}},`},
