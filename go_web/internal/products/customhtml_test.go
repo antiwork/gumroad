@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -247,6 +248,53 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 				if strings.Contains(w.Body.String(), not) {
 					t.Errorf("unwanted %q", not)
 				}
+			}
+		})
+	}
+}
+
+// The wrapper reads one cover's URL, social_share_image's of the main cover, so only that one
+// queues its retina variant and caches its URL.
+func TestTheCustomHTMLWrapperReadsTheMainCoverAlone(t *testing.T) {
+	second := func(t *testing.T, conn *sql.DB) {
+		testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_790_402), "link_id": productID, "guid": "second-guid",
+			"position": 1, "created_at": testNow, "updated_at": testNow})
+		addBlob(t, conn, 1_790_503, "covers/second", "b.jpg", "image/jpeg", `{"identified":true,"width":2000,"height":1000,"analyzed":true}`)
+		addAttachment(t, conn, 1_790_603, "file", "AssetPreview", 1_790_402, 1_790_503)
+	}
+	for _, c := range []struct {
+		name          string
+		mainProcessed bool
+		queued        string
+		cached        []string
+	}{
+		{name: "a processed main cover", mainProcessed: true, cached: []string{"attachment_1790601_retina_url"}},
+		{name: "an unprocessed main cover", queued: `"args":[1790401],"class":"ProcessAssetPreviewRetinaWorker"`,
+			cached: []string{"attachment_1790601_original_url"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			jobs := sidekiqJobs(t, e)
+			conn := testdb.Open(t)
+			customHTML(t, e, conn)
+			addCover(t, c.mainProcessed)
+			second(t, conn)
+			w := e.get(host, "/l/guide", nil)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			queued, _ := jobs.List("queue:low")
+			if c.queued == "" && len(queued) != 0 || c.queued != "" && (len(queued) != 1 || !strings.Contains(queued[0], c.queued)) {
+				t.Errorf("queue:low %v", queued)
+			}
+			var covers []string
+			for _, key := range e.cache.writes {
+				if strings.HasPrefix(key, "attachment_") {
+					covers = append(covers, key)
+				}
+			}
+			if !slices.Equal(covers, c.cached) {
+				t.Errorf("cover cache writes %v, want %v", covers, c.cached)
 			}
 		})
 	}

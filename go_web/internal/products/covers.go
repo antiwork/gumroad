@@ -89,9 +89,23 @@ type coverOrder struct {
 	createdAt db.NullTime
 }
 
-// loadCovers is display_asset_previews with each one's URLs. Any other cover goes to Rails:
-// an Unsplash one with a file or player, or a video without a persisted poster (Rails may enqueue one).
+// loadCovers is display_asset_previews with each one's URLs.
 func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*cover, error) {
+	covers, err := h.loadCoverRows(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range covers {
+		if err := h.coverURLs(ctx, p, c); err != nil {
+			return nil, err
+		}
+	}
+	return covers, nil
+}
+
+// loadCoverRows is display_asset_previews without their URLs. Any other cover goes to Rails:
+// an Unsplash one with a file or player, or a video without a persisted poster (Rails may enqueue one).
+func (h *handler) loadCoverRows(ctx context.Context, productID int64) ([]*cover, error) {
 	// One row per attachment, through the attachments' unique index; a preview on two rows
 	// has more than one file.
 	rows, err := h.c.DB.QueryContext(ctx, `SELECT asset_previews.id, asset_previews.guid, asset_previews.position,
@@ -173,11 +187,6 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 		// in_order leaves ties to MySQL.
 		if keys[i] == keys[i-1] {
 			return nil, fallback("cover order")
-		}
-	}
-	for _, c := range covers {
-		if err := h.coverURLs(ctx, p, c); err != nil {
-			return nil, err
 		}
 	}
 	return covers, nil
@@ -493,6 +502,18 @@ func (c *cover) displayHeight() (int64, bool) {
 
 // previewImagePath is preview_image_path? for the main cover: an image file or an Unsplash photo.
 func (c *cover) previewImagePath() bool { return c.isImage || c.isUnsplash }
+
+// urlCacheKey is the Rails.cache entry url_from_file read for c's url, the retina variant's or the
+// original's; "" for an Unsplash URL or one url_from_file's rescue answered.
+func (c *cover) urlCacheKey() string {
+	switch {
+	case c.isUnsplash || c.rescued:
+		return ""
+	case c.retinaRead:
+		return "attachment_" + itoa(c.attachmentID) + "_retina_url"
+	}
+	return "attachment_" + itoa(c.attachmentID) + "_original_url"
+}
 
 // filenameSanitizer is the tr in ActiveStorage::Filename#sanitized.
 var filenameSanitizer = strings.NewReplacer("\u202E", "-", "%", "-", "$", "-", "|", "-", ":", "-", ";", "-", "/", "-", "<", "-",
