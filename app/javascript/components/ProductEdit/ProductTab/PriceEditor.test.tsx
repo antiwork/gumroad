@@ -31,11 +31,17 @@ const renderEditor = (
     />,
   );
 
-describe("PriceEditor comma hint", () => {
-  it("says how a typed comma is read, under the Amount field", () => {
-    renderEditor({ isPWYW: false, setIsPWYW: noop });
+describe("PriceEditor Amount field", () => {
+  // The field is backed by `PriceInput`, which reads a comma as a decimal point, so advertising the
+  // thousands reading the new-product Price field supports would set a much lower price here.
+  it("reads 7,900 as $7.90 and does not advertise it as thousands", () => {
+    const setPriceCents = vi.fn();
+    renderEditor({ isPWYW: false, setIsPWYW: noop, setPriceCents, priceCents: 0 });
 
-    expect(screen.getByText("Use a comma for thousands (7,900) or for cents (7,90).")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7,900" } });
+
+    expect(setPriceCents).toHaveBeenCalledWith(790);
+    expect(screen.queryByText("Use a comma for thousands (7,900) or for cents (7,90).")).toBeNull();
   });
 });
 
