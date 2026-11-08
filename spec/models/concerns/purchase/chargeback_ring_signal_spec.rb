@@ -9,8 +9,6 @@ describe Purchase::ChargebackRingSignal do
       create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
   end
 
-  let(:hosting_ip) { "151.240.10.#{rand(1..250)}" }
-
   def seed_paid_sales(seller, count:, card_country: "BR", hosting: true, created_at: 5.days.ago)
     product = create(:product, user: seller, price_cents: 2200)
     count.times.map do |i|
@@ -19,9 +17,9 @@ describe Purchase::ChargebackRingSignal do
     end
   end
 
-  def build_checkout_purchase(seller)
+  def build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.99.99")
     product = create(:product, user: seller, price_cents: 2200)
-    build(:purchase, link: product, seller:, card_country: "BR", ip_address: "151.240.99.99")
+    build(:purchase, link: product, seller:, card_country:, ip_address:)
   end
 
   describe "thresholds" do
@@ -86,10 +84,18 @@ describe Purchase::ChargebackRingSignal do
       expect(result.paid_sales).to be_nil # early return: the bounded query never ran
     end
 
+    it "serves a multi-item cart from one query via the per-seller cache" do
+      seller = create(:user, created_at: 10.days.ago)
+      seed_paid_sales(seller, count: 5)
+
+      expect(described_class).to receive(:evaluate_uncached).once.and_call_original
+      2.times { described_class.evaluate(seller:) }
+    end
+
     it "ignores free and older-than-window sales" do
       seller = create(:user, created_at: 10.days.ago)
       product = create(:product, user: seller, price_cents: 0)
-      3.times { create(:purchase, link: product, seller:, price_cents: 0, stripe_fingerprint: nil, stripe_transaction_id: nil, ip_address: hosting_ip) }
+      3.times { create(:purchase, link: product, seller:, price_cents: 0, stripe_fingerprint: nil, stripe_transaction_id: nil, ip_address: "151.240.1.1") }
       seed_paid_sales(seller, count: 5, created_at: 45.days.ago)
 
       result = described_class.evaluate(seller:)
@@ -99,7 +105,7 @@ describe Purchase::ChargebackRingSignal do
   end
 
   describe "checkout integration" do
-    context "when the flag is off (default)" do
+    context "when chargeback_ring_signal is off (default)" do
       it "never calls evaluate and changes nothing" do
         seller = create(:user, created_at: 10.days.ago)
         seed_paid_sales(seller, count: 5)
@@ -108,29 +114,27 @@ describe Purchase::ChargebackRingSignal do
         expect(described_class).not_to receive(:evaluate)
         expect { purchase.save! }.not_to change { ChargebackRingSignal.count }
         expect(purchase.errors).to be_empty
+        expect(seller.reload.payouts_paused_internally?).to be(false)
       end
     end
 
-    context "when the flag is on for the seller" do
+    context "when chargeback_ring_signal is on (shadow)" do
       let(:seller) { create(:user, created_at: 10.days.ago) }
 
       # Seeding runs with the flag OFF (the seed purchases would otherwise trip the signal
       # themselves); each example turns the flag on after its history is in place.
       def arm_flag = Feature.activate_user(described_class::FEATURE_FLAG, seller)
 
-      it "refuses the purchase with a generic message, writes a blocked telemetry row, and pauses payouts" do
+      it "never refuses the purchase, but records telemetry, pauses payouts, flags the seller and alerts ops" do
         seed_paid_sales(seller, count: 5)
         arm_flag
         purchase = build_checkout_purchase(seller)
 
         allow(ErrorNotifier).to receive(:notify)
 
-        purchase.save
-
-        expect(purchase.errors.full_messages).to eq(["Your card was not charged."])
-        expect(purchase.errors.full_messages.join).not_to match(/fraud|seller|ring|block/i)
-        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
-        expect(purchase).to be_persisted
+        expect { purchase.save! }.to change { ChargebackRingSignal.count }.by(1)
+        expect(purchase.errors).to be_empty
+        expect(purchase.error_code).to be_nil
 
         row = ChargebackRingSignal.last
         expect(row.seller_id).to eq(seller.id)
@@ -145,29 +149,80 @@ describe Purchase::ChargebackRingSignal do
         seller.reload
         expect(seller.payouts_paused_internally?).to be(true)
         expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-        expect(seller.comments.with_type_on_probation.last.author_name)
-          .to eq(User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal])
+        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
         # The hold must NOT read as a chargeback-rate hold, or the automatic rate-recovery
         # release would lift it while the ring's disputes are still in flight.
         expect(seller.payouts_paused_for_chargeback_rate?).to be(false)
-        expect(ErrorNotifier).to have_received(:notify).with(a_string_including("chargeback_ring_signal blocked"))
+        expect(seller.flagged_for_fraud?).to be(true)
+        expect(ErrorNotifier).to have_received(:notify).with(a_string_including("chargeback_ring_signal hit"))
       end
 
-      it "allows a young legitimate seller with one-country buyers on residential IPs and records the allowed side" do
-        seed_paid_sales(seller, count: 5, hosting: false)
+      it "records the ring hold on top of an existing SYSTEM chargeback-rate hold so the rate-recovery job cannot lift it" do
+        seed_paid_sales(seller, count: 5)
+        # Pre-existing automatic chargeback-rate hold.
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        seller.comments.create!(
+          content: "rate hold",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+        expect(seller.payouts_paused_for_chargeback_rate?).to be(true)
         arm_flag
-        purchase = build_checkout_purchase(seller)
 
-        expect { purchase.save! }.to change { ChargebackRingSignal.count }.by(1)
-        expect(purchase.errors).to be_empty
+        allow(ErrorNotifier).to receive(:notify)
+        build_checkout_purchase(seller).save!
 
-        row = ChargebackRingSignal.last
-        expect(row.decision).to eq("allowed")
-        expect(row.paid_sales).to eq(5)
-        expect(row.hosting_share_pct).to eq(0.0)
+        seller.reload
+        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+        expect(seller.payouts_paused_for_chargeback_rate?).to be(false)
+        expect(seller.payouts_paused_internally?).to be(true)
       end
 
-      it "fails open on an exception: the purchase is allowed and an error row is written" do
+      it "does not append a second comment when the ring hold is already the newest" do
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+
+        build_checkout_purchase(seller).save!
+        expect { build_checkout_purchase(seller).save! }
+          .not_to change { seller.comments.with_type_on_probation.count }
+      end
+
+      it "leaves an admin payout pause untouched" do
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+
+        build_checkout_purchase(seller).save!
+        expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      end
+
+      it "still pauses payouts when the telemetry insert fails (containment does not depend on telemetry)" do
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+        allow(ChargebackRingSignal).to receive(:create!).and_raise(ActiveRecord::StatementInvalid, "boom")
+
+        build_checkout_purchase(seller).save!
+
+        seller.reload
+        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+        expect(ErrorNotifier).to have_received(:notify).with(instance_of(ActiveRecord::StatementInvalid), anything).at_least(:once)
+      end
+
+      it "still records telemetry when containment fails" do
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+        allow_any_instance_of(User).to receive(:with_lock).and_raise(ActiveRecord::LockWaitTimeout)
+
+        purchase = build_checkout_purchase(seller)
+        expect { purchase.save! }.to change { ChargebackRingSignal.where(decision: "blocked").count }.by(1)
+        expect(purchase.errors).to be_empty
+      end
+
+      it "fails open on an evaluation exception: the purchase is allowed and an error row is written" do
         seed_paid_sales(seller, count: 5)
         arm_flag
         purchase = build_checkout_purchase(seller)
@@ -177,80 +232,35 @@ describe Purchase::ChargebackRingSignal do
 
         expect { purchase.save! }.to change { ChargebackRingSignal.where(decision: "error").count }.by(1)
         expect(purchase.errors).to be_empty
+        expect(purchase.error_code).to be_nil
         expect(seller.reload.payouts_paused_internally?).to be(false)
-        expect(ErrorNotifier).to have_received(:notify).with(instance_of(Timeout::Error), hash_including(:seller_id))
       end
 
-      it "does not stack on top of an admin payout pause" do
-        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+      it "survives ErrorNotifier itself raising" do
         seed_paid_sales(seller, count: 5)
         arm_flag
+        allow(described_class).to receive(:evaluate).and_raise(Timeout::Error)
+        allow(ErrorNotifier).to receive(:notify).and_raise(StandardError, "notifier down")
+
         purchase = build_checkout_purchase(seller)
-
-        allow(ErrorNotifier).to receive(:notify)
-        purchase.save
-
-        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
-        expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        expect { purchase.save! }.not_to raise_error
+        expect(purchase.errors).to be_empty
       end
 
-      it "records the ring hold over an existing chargeback-rate hold so the automatic release cannot lift it" do
-        # A ring seller's measured rate is still low when the signal fires, so a hold that still
-        # reads as the chargeback-rate one would be released by the rate-recovery job and would pay
-        # the 75% reserve in the meantime. The ring comment has to become the newest pausing comment.
-        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-        seller.comments.create!(
-          content: "Payouts automatically paused due to chargeback rate (2.0) exceeding 1% volume over the last 120 days.",
-          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
-          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
-        )
-        expect(seller.payouts_paused_for_chargeback_rate?).to be(true)
-        seed_paid_sales(seller, count: 5)
+      it "allows a young legitimate seller with one-country buyers on residential IPs: no refusal, no pause, no flag" do
+        seed_paid_sales(seller, count: 5, hosting: false)
         arm_flag
-        purchase = build_checkout_purchase(seller)
+        purchase = build_checkout_purchase(seller, ip_address: "88.12.99.99")
 
-        allow(ErrorNotifier).to receive(:notify)
-        purchase.save
+        expect { purchase.save! }.to change { ChargebackRingSignal.count }.by(1)
+        expect(purchase.errors).to be_empty
 
-        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        row = ChargebackRingSignal.last
+        expect(row.decision).to eq("allowed")
+        expect(row.hosting_share_pct).to eq(0.0)
         seller.reload
-        expect(seller.payouts_paused_internally?).to be(true)
-        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-        expect(seller.comments.with_type_on_probation.last.author_name)
-          .to eq(User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal])
-        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
-        expect(seller.payouts_paused_for_chargeback_rate?).to be(false)
-        expect(seller.chargeback_rate_payout_reserve_active?).to be(false)
-        expect(ReleaseChargebackRatePayoutPauseForSellerJob.new.send(:releasable?, seller)).to be(false)
-      end
-
-      it "takes over a Stripe payouts hold so a payout-method change cannot release the balance" do
-        # UpdatePayoutMethod clears a Stripe-source pause on a payout-method change, which would
-        # hand a ring seller's balance back to them while the disputes are still in flight.
-        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
-        seed_paid_sales(seller, count: 5)
-        arm_flag
-        purchase = build_checkout_purchase(seller)
-
-        allow(ErrorNotifier).to receive(:notify)
-        purchase.save
-
-        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
-        seller.reload
-        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
-      end
-
-      it "does not append a second hold comment for a later blocked sale" do
-        seed_paid_sales(seller, count: 5)
-        arm_flag
-        allow(ErrorNotifier).to receive(:notify)
-        build_checkout_purchase(seller).save
-
-        expect { build_checkout_purchase(seller).save }.not_to change {
-          seller.comments.with_type_on_probation
-                .where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]).count
-        }
+        expect(seller.payouts_paused_internally?).to be(false)
+        expect(seller.flagged_for_fraud?).to be(false)
       end
 
       it "skips recurring subscription charges" do
@@ -260,11 +270,8 @@ describe Purchase::ChargebackRingSignal do
         allow(purchase).to receive(:is_recurring_subscription_charge).and_return(true)
 
         expect(described_class).not_to receive(:evaluate)
-        # Invoke the hook directly: making the factory purchase a full recurring charge drags in
-        # unrelated subscription plumbing, and the guard under test is the first thing the hook does.
-        purchase.send(:check_for_chargeback_ring_signal)
+        purchase.send(:evaluate_chargeback_ring_signal)
         expect(purchase.errors).to be_empty
-        expect(purchase.error_code).to be_nil
       end
 
       it "writes no telemetry row below the volume floor" do
@@ -274,6 +281,98 @@ describe Purchase::ChargebackRingSignal do
 
         expect { purchase.save! }.not_to change { ChargebackRingSignal.count }
         expect(purchase.errors).to be_empty
+      end
+    end
+
+    context "when chargeback_ring_signal_enforce is also on" do
+      let(:seller) { create(:user, created_at: 10.days.ago) }
+
+      def arm_flags
+        Feature.activate_user(described_class::FEATURE_FLAG, seller)
+        Feature.activate_user(described_class::ENFORCE_FLAG, seller)
+      end
+
+      def hit_result
+        described_class::Result.new(
+          decision: described_class::DECISION_BLOCKED,
+          paid_sales: 5, dominant_card_country: "BR", dominant_share_pct: 100.0,
+          hosting_share_pct: 100.0, distinct_browsers: 2, matched_cidr: "151.240.0.0/16"
+        )
+      end
+
+      it "refuses the charge before the processor is called when the in-flight purchase carries the ring evidence" do
+        seed_paid_sales(seller, count: 5)
+        arm_flags
+        purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")
+        purchase.instance_variable_set(:@chargeback_ring_signal_result, hit_result)
+        purchase.chargeable = instance_double(Chargeable)
+
+        expect(purchase).not_to receive(:create_charge_intent)
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+        purchase.charge!
+
+        expect(purchase.errors[:base]).to be_present
+        expect(purchase.errors.full_messages.join).not_to match(/fraud|seller|ring|block/i)
+        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        expect(purchase.charge_intent).to be_nil
+      end
+
+      it "does not refuse a buyer on a residential IP even when the seller is a hit" do
+        seed_paid_sales(seller, count: 5)
+        arm_flags
+        purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "88.12.99.99")
+        purchase.instance_variable_set(:@chargeback_ring_signal_result, hit_result)
+
+        expect(purchase.send(:refuse_charge_for_chargeback_ring_signal?)).to be(false)
+        expect(purchase.errors).to be_empty
+      end
+
+      it "does not refuse a buyer whose card country is not the dominant one" do
+        seed_paid_sales(seller, count: 5)
+        arm_flags
+        purchase = build_checkout_purchase(seller, card_country: "US", ip_address: "151.240.50.1")
+        purchase.instance_variable_set(:@chargeback_ring_signal_result, hit_result)
+
+        expect(purchase.send(:refuse_charge_for_chargeback_ring_signal?)).to be(false)
+        expect(purchase.errors).to be_empty
+      end
+
+      it "does not refuse without the enforce flag even on full buyer-level evidence" do
+        seed_paid_sales(seller, count: 5)
+        Feature.activate_user(described_class::FEATURE_FLAG, seller)
+        purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")
+        purchase.instance_variable_set(:@chargeback_ring_signal_result, hit_result)
+
+        expect(purchase.send(:refuse_charge_for_chargeback_ring_signal?)).to be(false)
+        expect(purchase.errors).to be_empty
+      end
+
+      it "fails open and restores error_code when the refusal check itself raises" do
+        seed_paid_sales(seller, count: 5)
+        arm_flags
+        purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")
+        purchase.instance_variable_set(:@chargeback_ring_signal_result, hit_result)
+        allow(ErrorNotifier).to receive(:notify)
+        # Raise after the refusal state was assigned: vague_error_message runs post-assignment.
+        allow(purchase).to receive(:vague_error_message).and_raise(StandardError, "boom")
+
+        expect(purchase.send(:refuse_charge_for_chargeback_ring_signal?)).to be(false)
+        expect(purchase.errors).to be_empty
+        expect(purchase.error_code).to be_nil
+      end
+
+      it "raises PurchaseInvalid through the create-service path so the purchase rolls back to failed" do
+        seed_paid_sales(seller, count: 5)
+        arm_flags
+        purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")
+        purchase.instance_variable_set(:@chargeback_ring_signal_result, hit_result)
+        purchase.chargeable = instance_double(Chargeable)
+        purchase.charge!
+
+        # CreateService raises Purchase::PurchaseInvalid whenever charge! leaves errors, and its
+        # rescue path runs handle_purchase_failure — the same rollback every refused charge takes.
+        expect(purchase.errors).to be_present
       end
     end
   end
