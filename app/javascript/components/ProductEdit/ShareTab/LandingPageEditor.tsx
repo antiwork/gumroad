@@ -1,5 +1,6 @@
 import * as React from "react";
 
+import { cast } from "$app/utils/cast";
 import { assertResponseError, request, ResponseError } from "$app/utils/request";
 
 import { Button } from "$app/components/Button";
@@ -84,7 +85,7 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
         url: Routes.link_path(uniquePermalink),
         data: { custom_html: null },
       });
-      const json: { success?: boolean; message?: string; error_message?: string } = await response.json();
+      const json = cast<{ success?: boolean; message?: string; error_message?: string }>(await response.json());
       if (!response.ok || json.success === false) throw new ResponseError(json.message ?? json.error_message);
 
       setIsRemoveOpen(false);
@@ -109,7 +110,7 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
       {hasLandingPage ? (
         <Alert role="status" variant="success">
           <div className="flex flex-col justify-between sm:flex-row">
-            A custom landing page is live on this product.
+            A custom landing page is set on this product.
             <a href={url} target="_blank" rel="noreferrer">
               View
             </a>
@@ -154,8 +155,8 @@ If the gumroad CLI isn't installed: brew install antiwork/cli/gumroad (or curl -
             </>
           }
         >
-          This removes your live landing page, so buyers will see your default product page again. You can't undo it —
-          if you might want the page back, save its HTML first.
+          This removes your custom landing page and restores your default product page. You can't undo it — if you might
+          want the page back, save its HTML first.
         </Modal>
       ) : null}
     </section>

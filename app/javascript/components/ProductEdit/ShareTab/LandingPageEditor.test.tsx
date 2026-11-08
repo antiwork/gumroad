@@ -65,11 +65,20 @@ describe("LandingPageEditor", () => {
   });
   afterEach(cleanup);
 
-  it("clears the live page on the product the caller points it at", async () => {
+  // Drafts reach this panel too, and a draft's page is usually visible only to the seller, so no copy may call it live.
+  it("clears the page on the product the caller points it at without calling it live", async () => {
     renderEditor(true);
-    expect(screen.getByText("A custom landing page is live on this product.")).toBeDefined();
+    const status = screen.getByText("A custom landing page is set on this product.").closest('[role="status"]');
+    expect(status).not.toBeNull();
+    expect(status?.textContent).not.toMatch(/\blive\b/iu);
 
-    await removeLandingPage();
+    fireEvent.click(screen.getByRole("button", { name: "Remove landing page" }));
+    const warning = screen.getByText(
+      /^This removes your custom landing page and restores your default product page\./u,
+    );
+    expect(warning.textContent).not.toMatch(/\blive\b|buyers/iu);
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(state.requests).toHaveLength(1));
 
     expect(state.requests[0]).toMatchObject({
       method: "POST",
@@ -80,10 +89,10 @@ describe("LandingPageEditor", () => {
     expect(showAlert).toHaveBeenCalledWith("Landing page removed.", "success");
   });
 
-  it("offers no removal when no page is live", () => {
+  it("offers no removal without a landing page", () => {
     renderEditor(false);
 
-    expect(screen.queryByText("A custom landing page is live on this product.")).toBeNull();
+    expect(screen.queryByText("A custom landing page is set on this product.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove landing page" })).toBeNull();
   });
 

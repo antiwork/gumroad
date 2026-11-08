@@ -61,8 +61,6 @@ export const ShareTab = () => {
                   <h2>Share</h2>
                 </header>
                 <ShareButtons url={url} twitterText={`Buy ${product.name} on @Gumroad`} facebookText={product.name}>
-                  {/* The header used to carry a "Copy checkout link" button; it lives here now so the
-                  header stays at just Unpublish + Save changes. */}
                   <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="top">
                     <Button>
                       <CartPlus className="size-5" />
@@ -71,7 +69,11 @@ export const ShareTab = () => {
                   </CopyToClipboard>
                 </ShareButtons>
               </>
-            ) : null}
+            ) : (
+              <Alert role="status" variant="info">
+                Share links appear here once you publish. Unpublished products don't appear on your profile.
+              </Alert>
+            )}
             {waitlist && product.is_published ? (
               <WaitlistCard waitlist={waitlist} productName={product.name} productPermalink={uniquePermalink} />
             ) : null}

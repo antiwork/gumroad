@@ -7,7 +7,7 @@ import { CurrentSellerProvider, type CurrentSeller } from "$app/components/Curre
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/ProductEdit/Layout";
 import { ShareTab } from "$app/components/ProductEdit/ShareTab";
-import { type FileEntry, ProductEditContext, type Product } from "$app/components/ProductEdit/state";
+import { type FileEntry, ProductEditContext, type Product, type Waitlist } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const matchHandle = vi.hoisted(() => ({ current: "product" }));
@@ -81,6 +81,7 @@ afterEach(() => {
   cleanup();
   product.files = [];
   product.is_published = false;
+  product.native_type = "digital";
   matchHandle.current = "product";
   navigate.mockClear();
   vi.unstubAllGlobals();
@@ -187,11 +188,15 @@ const renderLayout = (
     saveBlocked = false,
     updateProduct = vi.fn(),
     webAppUploading = false,
+    autoMarketingEnabled = false,
+    waitlist = null,
     children = <Layout>Body</Layout>,
   }: {
     saveBlocked?: boolean;
     updateProduct?: (update: Partial<Product> | ((product: Product) => void)) => void;
     webAppUploading?: boolean;
+    autoMarketingEnabled?: boolean;
+    waitlist?: Waitlist | null;
     children?: React.ReactNode;
   } = {},
 ) =>
@@ -253,8 +258,8 @@ const renderLayout = (
             webBuildPlayerEnabled: false,
             hasWebBuilds: false,
             customHtmlPagesEnabled: false,
-            autoMarketingEnabled: false,
-            waitlist: null,
+            autoMarketingEnabled,
+            waitlist,
             customHtmlStoreHostnames: [],
             customHtmlGlobalNavHosts: [],
             customHtmlGlobalNavPaths: [],
@@ -400,7 +405,8 @@ describe("ProductEdit Layout Share tab on a draft", () => {
     product.is_published = false;
     renderLayout(minor, { updateProduct });
 
-    fireEvent.click(screen.getByRole("button", { name: "Publish and continue" }));
+    expect(screen.queryByRole("button", { name: "Publish and continue" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
 
     await waitFor(() =>
       expect(updateProduct).toHaveBeenCalledWith({
@@ -422,13 +428,30 @@ describe("ProductEdit Layout Share tab on a draft", () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/products/product-permalink/edit/content"));
   });
+
+  it("sends a coffee product back to its Product tab when they unpublish from Share", async () => {
+    matchHandle.current = "share";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: null });
+    product.files = [];
+    product.is_published = true;
+    product.native_type = "coffee";
+    renderLayout(minor);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/products/product-permalink/edit"));
+  });
 });
 
 describe("ProductEdit Share tab controls", () => {
   const renderShareTab = (is_published: boolean) => {
     product.files = [];
     product.is_published = is_published;
-    return renderLayout(minor, { children: <ShareTab /> });
+    return renderLayout(minor, {
+      autoMarketingEnabled: true,
+      waitlist: { count: 3, blocked_reason: null, email: null },
+      children: <ShareTab />,
+    });
   };
 
   it("lets a draft set profile sections and the Discover category", () => {
@@ -438,16 +461,40 @@ describe("ProductEdit Share tab controls", () => {
     expect(screen.getByTestId("taxonomy-editor")).toBeTruthy();
   });
 
-  it("keeps the share and checkout controls off a draft", () => {
+  it("keeps the share and checkout controls off a draft and says why", () => {
     renderShareTab(false);
 
     expect(screen.queryByTestId("share-buttons")).toBeNull();
+    expect(
+      screen.getByText("Share links appear here once you publish. Unpublished products don't appear on your profile."),
+    ).toBeTruthy();
   });
 
   it("shows the share and checkout controls once published", () => {
     renderShareTab(true);
 
     expect(screen.getByTestId("share-buttons")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Share links appear here once you publish. Unpublished products don't appear on your profile.",
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps the waitlist, launch and cart recovery cards off a draft", () => {
+    renderShareTab(false);
+
+    expect(screen.queryByTestId("waitlist-card")).toBeNull();
+    expect(screen.queryByTestId("launch-card")).toBeNull();
+    expect(screen.queryByTestId("cart-recovery-card")).toBeNull();
+  });
+
+  it("shows the waitlist, launch and cart recovery cards once published", () => {
+    renderShareTab(true);
+
+    expect(screen.getByTestId("waitlist-card")).toBeTruthy();
+    expect(screen.getByTestId("launch-card")).toBeTruthy();
+    expect(screen.getByTestId("cart-recovery-card")).toBeTruthy();
   });
 });
 

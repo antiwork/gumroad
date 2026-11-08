@@ -345,7 +345,8 @@ export const Layout = ({
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
                 <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
-                  {isPublishing ? "Publishing..." : "Publish and continue"}
+                  {/* Share is the last tab and publishing from it stays there, so there is nothing to continue to. */}
+                  {isPublishing ? "Publishing..." : tab === "share" ? "Publish" : "Publish and continue"}
                 </Button>
               </WithTooltip>
             </>
