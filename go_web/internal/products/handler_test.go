@@ -629,6 +629,11 @@ func TestAnotherSpellingOfThePermalinkRedirectsPermanently(t *testing.T) {
 	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "https://"+host+"/l/guide?a%20b=1" {
 		t.Errorf("%d %q", w.Code, w.Header().Get("Location"))
 	}
+	// A code with a trailing slash, which the redirect leaves off.
+	w = e.get(host, "/l/gowebp1/feed/", nil)
+	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "https://"+host+"/l/guide/feed" {
+		t.Errorf("code: %d %q", w.Code, w.Header().Get("Location"))
+	}
 }
 
 func TestABannedOrMissingProductIsNotFound(t *testing.T) {
@@ -663,6 +668,9 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
 		{name: "a code param in other letters", host: host, target: "/l/guide?code=%CE%A3", reason: "param code"},
 		{name: "a code param with punctuation", host: host, target: "/l/guide?code=SAVE.10", reason: "param code"},
+		// An escaped slash stays in the code, as in Journey; only a literal trailing one is dropped.
+		{name: "a path code ending in an escaped slash", host: host, target: "/l/guide/save10%2F", reason: "offer code path"},
+		{name: "an escaped slash before a trailing one", host: host, target: "/l/guide/save10%2F/", reason: "offer code path"},
 		// ServeMux would redirect it to its cleaned form; Rails routes it as it is.
 		{name: "a path with a doubled slash", host: host, target: "/l/url(https://fonts.example.com/css", reason: "unclean path"},
 		{name: "the custom HTML page's frame", host: host, target: "/l/guide/landing/embed", reason: "landing route"},
@@ -1673,6 +1681,10 @@ func TestURLOfferCodes(t *testing.T) {
 		// The result echoes the code as typed.
 		{name: "a code in the path", target: "/l/guide/save10",
 			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`, quotes("save10", valid("save10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		// Journey drops the trailing slash.
+		{name: "a code in the path with a trailing slash", target: "/l/guide/save10/",
+			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
