@@ -131,6 +131,8 @@ export function sanitizePriceRangeInput(value: string): string {
   return cleaned.slice(0, firstDotIndex + 1) + cleaned.slice(firstDotIndex + 1).replace(/\./gu, "");
 }
 
-// Only for fields that keep a typed comma (the new-product Price field), where the server reads the
-// comma from the digits after it. Fields backed by `PriceInput` normalize a comma to a decimal point.
+// The field keeps the comma the seller types and the server decides what it means from the digits
+// after it, so a comma that is left unexplained is a price the seller only discovers by saving it.
+// Rendered under the Price field on the new-product page and the Amount field in the product editor;
+// `PriceInput` reads the same comma the same way (a comma before three digits groups thousands).
 export const priceCommaHint = "Use a comma for thousands (7,900) or for cents (7,90).";
