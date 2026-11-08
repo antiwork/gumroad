@@ -104,6 +104,48 @@ func newTestApp(t *testing.T, config string) (*App, *bytes.Buffer) {
 	return app, logs
 }
 
+// An unclean path under a registered prefix reaches its handler; every other request goes to
+// the mux, which redirects an unclean one.
+func TestAppSendsUncleanPathsUnderAPrefixToTheirHandler(t *testing.T) {
+	app, _ := newTestApp(t, "")
+	write := func(body string) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, body) })
+	}
+	app.HandlePage("GET /l/{id}", "LinksController#show", write("page"))
+	app.HandlePage("GET /l/{id}/{rest...}", "LinksController#show", write("page"))
+	app.HandleUncleanPage("/l/", "LinksController#show", write("unclean"))
+	for _, c := range []struct{ method, target, want string }{
+		{"GET", "/l/a", "page"},
+		{"GET", "/l/a/", "page"},
+		{"GET", "/l/a//b", "unclean"},
+		{"GET", "/l/./a", "unclean"},
+		{"GET", "/l/a/../b", "unclean"},
+		// The mux checks the escaped path, where these are no slash or dot segment.
+		{"GET", "/l/a%2F%2Fb", "page"},
+		{"GET", "/l/%2e%2e/b", "page"},
+		{"CONNECT", "/l/a//b", "mux"},
+		{"GET", "/robots.txt//", "redirect"},
+	} {
+		w := httptest.NewRecorder()
+		app.ServeHTTP(w, httptest.NewRequest(c.method, c.target, nil))
+		body := w.Body.String()
+		switch c.want {
+		case "mux":
+			if body == "unclean" {
+				t.Errorf("%s %s reached the unclean handler", c.method, c.target)
+			}
+		case "redirect":
+			if w.Code < 300 || w.Code > 399 || body == "unclean" {
+				t.Errorf("%s %s: %d %q", c.method, c.target, w.Code, body)
+			}
+		default:
+			if body != c.want {
+				t.Errorf("%s %s: %d %q, want %q", c.method, c.target, w.Code, body, c.want)
+			}
+		}
+	}
+}
+
 func TestAppRedirectsConfiguredHostPathsBeforeTheAction(t *testing.T) {
 	app, _ := newTestApp(t, "seller.gumroad.com/robots.txt=https://example.com/robots.txt\nother.gumroad.com/robots.txt=/elsewhere\nthird.gumroad.com/robots.txt=elsewhere")
 

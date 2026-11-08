@@ -53,6 +53,9 @@ func Register(app *web.App, c *Config) {
 		Redirects: app.Redirects(), Meta: c.Meta, Now: c.Now, DryRunKey: c.DryRunKey, DryRunOnce: c.DryRunOnce,
 	}}
 	app.HandlePage("GET /l/{id}", "LinksController#show", h)
+	app.HandleUncleanPage("/l/", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ctl.Serve(w, r, "product page", func(*http.Request) (*pages.Visit, error) { return nil, fallback("unclean path") })
+	}))
 	// /l/:id/:code (an offer code), and /l/:id/, which Journey routes as /l/:id.
 	app.HandlePage("GET /l/{id}/{rest...}", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.servePage(w, r, true)
