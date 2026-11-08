@@ -55,6 +55,7 @@ class Charge::CreateService
                                                        transfer_group: charge.id_with_prefix,
                                                        off_session:,
                                                        setup_future_charges:,
+                                                       seller:,
                                                        metadata: StripeMetadata.build_metadata_large_list(purchases.map(&:external_id), key: :purchases, separator: ","),
                                                        mandate_options: mandate_options_in_charge_currency(processor_args),
                                                        **processor_args)

@@ -1444,7 +1444,7 @@ describe Order::ChargeService, :vcr do
         mandate: "mandate_saved_indian_free_trial"
       )
       mandate_amount = nil
-      expect(ChargeProcessor).to receive(:setup_future_charges!) do |account, chargeable, mandate_options:|
+      expect(ChargeProcessor).to receive(:setup_future_charges!) do |account, chargeable, mandate_options:, **_rest|
         expect(account).to eq(merchant_account)
         expect(chargeable).to be_a(Chargeable)
         mandate = mandate_options.dig(:payment_method_options, :card, :mandate_options)
@@ -1888,7 +1888,8 @@ describe Order::ChargeService, :vcr do
       expect(ChargeProcessor).to have_received(:setup_future_charges!).with(
         merchant_account,
         chargeable,
-        mandate_options:
+        mandate_options:,
+        seller: purchase.seller
       )
       expect(captured_kwargs[:off_session]).to eq(true)
       # No mandate_options on the charge: the processor resolves the mandate from the
@@ -1925,7 +1926,7 @@ describe Order::ChargeService, :vcr do
         requires_action?: true
       )
       captured_mandate_options = nil
-      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:, **_rest|
         captured_mandate_options = mandate_options
         setup_intent
       end
@@ -2257,7 +2258,7 @@ describe Order::ChargeService, :vcr do
       fresh_si = instance_double(StripeSetupIntent, id: "seti_fresh", payment_method_id: "pm_fresh", customer_id: nil, mandate: "mandate_fresh", card_mandate_options: { amount: 10_00, currency: "usd" }, succeeded?: true, requires_action?: false)
       allow(fresh_si).to receive_messages(succeeded?: true, requires_action?: false, present?: true, payment_method_id: "pm_fresh_connect")
       captured_mandate = nil
-      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:, **_rest|
         captured_mandate = mandate_options
         fresh_si
       end
@@ -2330,7 +2331,8 @@ describe Order::ChargeService, :vcr do
       expect(ChargeProcessor).to have_received(:setup_future_charges!).with(
         merchant_account,
         chargeable,
-        mandate_options: { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } }
+        mandate_options: { payment_method_options: { card: { mandate_options: { amount: 10_00, currency: Currency::USD } } } },
+        seller: purchase.seller
       )
       expect(purchase.reload.processor_setup_intent_id).to eq("seti_connect_fresh")
     end
@@ -2433,7 +2435,7 @@ describe Order::ChargeService, :vcr do
       allow_any_instance_of(StripeChargeableCreditCard).to receive(:prepare_with_trusted_setup_intent!)
       chargeables_by_account = {}
       mandate_caps_by_account = {}
-      allow(ChargeProcessor).to receive(:setup_future_charges!) do |account, group_chargeable, mandate_options:|
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |account, group_chargeable, mandate_options:, **_rest|
         key = account.is_a_stripe_connect_account? ? :connect : :platform
         chargeables_by_account[key] = group_chargeable
         mandate_caps_by_account[key] = mandate_options.dig(:payment_method_options, :card, :mandate_options)
@@ -2545,7 +2547,7 @@ describe Order::ChargeService, :vcr do
         mandate: nil,
         card_mandate_options: nil
       )
-      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:|
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_account, _chargeable, mandate_options:, **_rest|
         setup_calls << mandate_options
         shared_si
       end

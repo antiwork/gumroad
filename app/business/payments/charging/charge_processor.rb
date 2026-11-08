@@ -120,13 +120,13 @@ module ChargeProcessor
   # Raises error if the setup is declined or there is a technical failure.
   #
   # Returns a SetupIntent object.
-  def self.setup_future_charges!(merchant_account, chargeable, mandate_options: nil)
+  def self.setup_future_charges!(merchant_account, chargeable, mandate_options: nil, seller: nil)
     return unless StripeChargeProcessor.charge_processor_id == merchant_account.charge_processor_id
 
     charge_processor = get_charge_processor(merchant_account.charge_processor_id)
     chargeable_for_charge_processor = chargeable.get_chargeable_for(merchant_account.charge_processor_id)
 
-    charge_processor.setup_future_charges!(merchant_account, chargeable_for_charge_processor, mandate_options:)
+    charge_processor.setup_future_charges!(merchant_account, chargeable_for_charge_processor, mandate_options:, seller:)
   end
 
   # Public: Charges a Chargeable object with funds destined to the merchant account.
@@ -146,7 +146,7 @@ module ChargeProcessor
                                             mandate_expected: false,
                                             processor_amount_cents: nil, processor_currency: nil,
                                             processor_gumroad_amount_cents: nil, stripe_fx_quote_id: nil,
-                                            idempotency_key: nil)
+                                            idempotency_key: nil, seller: nil)
     charge_processor = get_charge_processor(merchant_account.charge_processor_id)
     chargeable_for_charge_processor = chargeable.get_chargeable_for(merchant_account.charge_processor_id)
     charge_options = {
@@ -157,6 +157,7 @@ module ChargeProcessor
       setup_future_charges:,
       mandate_options:,
       mandate_expected:,
+      seller:,
     }
     charge_options[:processor_amount_cents] = processor_amount_cents unless processor_amount_cents.nil?
     charge_options[:processor_currency] = processor_currency unless processor_currency.nil?

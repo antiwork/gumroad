@@ -5257,7 +5257,8 @@ class Purchase < ApplicationRecord
         mandate_options = mandate_options_for_stripe(with_currency: true)
         mark_indian_card_mandate_registration! if mandate_options.present?
         self.setup_intent = ChargeProcessor.setup_future_charges!(self.merchant_account, chargeable,
-                                                                  mandate_options:)
+                                                                  mandate_options:,
+                                                                  seller:)
         return unless setup_intent.present?
 
         self.processor_setup_intent_id = setup_intent.id
@@ -5439,6 +5440,7 @@ class Purchase < ApplicationRecord
                                                                          setup_future_charges:,
                                                                          mandate_options:,
                                                                          mandate_expected:,
+                                                                         seller:,
                                                                          **presentment_args)
 
         if charge_intent.id.present?
