@@ -192,6 +192,10 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		// An escaped slash stays in Journey's segment, which the mux's rest can't tell.
 		return nil, fallback("offer code path")
 	}
+	if rest := r.PathValue("rest"); codeRoute && (strings.HasPrefix(rest, "landing/embed") || strings.HasPrefix(rest, "landing/version")) {
+		// links#landing_iframe_content and #landing_version: a custom HTML page's frame and live reload.
+		return nil, fallback("landing route")
+	}
 	rt := parseRoute(r.PathValue("id"), r.PathValue("rest"), codeRoute)
 	if reason := declined(r, h.c.Env); reason != "" {
 		return nil, fallback(reason)

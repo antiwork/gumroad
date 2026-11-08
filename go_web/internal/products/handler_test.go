@@ -663,6 +663,8 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
 		{name: "a code param in other letters", host: host, target: "/l/guide?code=%CE%A3", reason: "param code"},
 		{name: "a code param with punctuation", host: host, target: "/l/guide?code=SAVE.10", reason: "param code"},
+		{name: "the custom HTML page's frame", host: host, target: "/l/guide/landing/embed", reason: "landing route"},
+		{name: "the custom HTML page's live reload", host: host, target: "/l/guide/landing/version.json", reason: "landing route"},
 		{name: "a utm visit without Sidekiq", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm visit push"},
 		{name: "the analytics host's route", host: "gumroad-analytics-com.gumroad.com", target: "/l/guide", reason: "host"},
 		{name: "a Forwarded header", host: host, target: "/l/guide", reason: "forwarded header",
