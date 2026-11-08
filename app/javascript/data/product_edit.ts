@@ -44,6 +44,8 @@ export type SaveProductResponse = {
   loaded_integrations?: Record<string, boolean>;
   // The same baseline, per version, keyed by variant external id.
   variant_loaded_integrations?: Record<string, Record<string, boolean>>;
+  // Set when the save could not apply file deletions, so the removals it carried are still pending.
+  file_deletions_skipped?: boolean;
 };
 
 const optional = (value: unknown, check: (item: unknown) => boolean) => value === undefined || check(value);
@@ -65,7 +67,8 @@ const isSaveProductResponse = (value: unknown): value is SaveProductResponse =>
   optional(value.variant_updated_at, isStringMap) &&
   optional(value.editor_revision, (revision) => revision === null || isString(revision)) &&
   optional(value.loaded_integrations, isBooleanMap) &&
-  optional(value.variant_loaded_integrations, (variants) => isRecordOf(variants, isBooleanMap));
+  optional(value.variant_loaded_integrations, (variants) => isRecordOf(variants, isBooleanMap)) &&
+  optional(value.file_deletions_skipped, isBoolean);
 
 // The server's fail-closed answer when a save would delete version-level pages
 // that are hidden by the "use the same content for all versions" flag while

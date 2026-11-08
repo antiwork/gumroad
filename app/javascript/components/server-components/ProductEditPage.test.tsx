@@ -2175,6 +2175,26 @@ describe("a file removal", () => {
     expect(contextCapture.current?.product.files.map(({ id }) => id)).toEqual(["keep"]);
   });
 
+  it("is kept when the server skipped file deletions, and sent again by the next save", async () => {
+    const product = { ...buildTieredProduct([]), files: [savedFile("keep"), savedFile("detach")] };
+    saveProductMock.mockResolvedValueOnce({ file_deletions_skipped: true } satisfies SaveProductResponse);
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    render(<ProductEditPage {...buildTieredProps(product)} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+    markRemoved("detach");
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(sentDeletedFileIds(0)).toEqual(["detach"]);
+
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    expect(sentDeletedFileIds(1)).toEqual(["detach"]);
+    expect(contextCapture.current?.product.files.map(({ id }) => id)).toEqual(["keep"]);
+  });
+
   it("made while a save is in flight is still sent by the next save", async () => {
     const product = { ...buildTieredProduct([]), files: [savedFile("first"), savedFile("second")] };
     const requests: { resolve: (response: SaveProductResponse) => void }[] = [];

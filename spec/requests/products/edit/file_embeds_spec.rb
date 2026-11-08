@@ -675,6 +675,36 @@ describe("File embeds in product content editor", type: :system, js: true) do
       expect(orphan.reload).to be_alive
     end
 
+    it "keeps a removal the save skipped while the flag store was down, and applies it on the next save" do
+      flag_store_down = false
+      allow_any_instance_of(Flipper::Adapters::Redis).to receive(:get).and_wrap_original do |original, feature|
+        raise Redis::CannotConnectError if flag_store_down && feature.key == Product::SaveContract::FEATURE_NAME.to_s
+        original.call(feature)
+      end
+      allow(ErrorNotifier).to receive(:notify).and_call_original
+
+      visit edit_link_path(product.unique_permalink) + "/content"
+      open_existing_files_picker
+      within_modal "Select existing product files" do
+        click_on "Remove Orphan from this product"
+        click_on "Cancel"
+      end
+
+      # Clears the fail-open wrapper's cached value from the page load, so the save's read fails.
+      Feature.activate_user(:product_editor_save_contract, seller)
+      flag_store_down = true
+      save_change
+      expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Redis::CannotConnectError), hash_including(context: "Product::SaveContract flag lookup"))
+      expect(orphan.reload).to be_alive
+
+      flag_store_down = false
+      select_tab "Product"
+      fill_in "Name", with: "Renamed after the flag store recovered", match: :first
+      save_change
+      expect(product.reload.name).to eq("Renamed after the flag store recovered")
+      expect(orphan.reload).to be_deleted
+    end
+
     it "detaches the attachment the library list leaves out and a file no page embeds, and keeps them detached" do
       listed_ids = seller.alive_product_files_preferred_for_product(product).map(&:external_id)
       unlisted, listed = [workbook, workbook_copy].partition { listed_ids.exclude?(_1.external_id) }.map(&:sole)

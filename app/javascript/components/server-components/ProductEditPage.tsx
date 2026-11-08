@@ -731,8 +731,10 @@ const ProductEditPage = (props: Props) => {
       reconciled.confirmed_removed_variant_ids = [];
       reconciled.confirmed_removed_rich_content_ids = [];
       // A removed file restated by a later save would count as a deletion and be refused once the
-      // editor revision moves, so the removals this save carried are spent like the ids above.
-      reconciled.files = reconciled.files.filter((file) => !sentRemovedFileIds.has(file.id));
+      // editor revision moves, so the removals this save carried are spent like the ids above —
+      // unless the server skipped them, in which case they stay pending for the next save.
+      const spentFileIds = response.file_deletions_skipped ? new Set<string>() : sentRemovedFileIds;
+      reconciled.files = reconciled.files.filter((file) => !spentFileIds.has(file.id));
       // The marker is per-save. Keeping it would let a later content-tab
       // snapshot still claim a description clear.
       reconciled.description_changed = false;
@@ -772,9 +774,7 @@ const ProductEditPage = (props: Props) => {
           sentConfirmedPageIds,
           confirmedPageIdMappings,
         );
-        current.files = current.files.filter(
-          (file) => !(file.status.type === "removed" && sentRemovedFileIds.has(file.id)),
-        );
+        current.files = current.files.filter((file) => !(file.status.type === "removed" && spentFileIds.has(file.id)));
         // The marker this request carried is spent. A description edited while
         // the save was in flight was not part of it, so its marker stays.
         if (current.description === productSent.description) current.description_changed = false;
