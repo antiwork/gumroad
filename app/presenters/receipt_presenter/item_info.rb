@@ -40,7 +40,7 @@ class ReceiptPresenter::ItemInfo
     }
   end
 
-  # Also read by the seller's sale notification, which links the same download page.
+  # Also read by the seller's sale notification to decide whether to link the buyer's receipt.
   def show_download_button
     !purchase.is_gift_sender_purchase &&
     !purchase.is_preorder_authorization &&

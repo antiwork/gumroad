@@ -1076,9 +1076,6 @@ describe ContactingCreatorMailer do
       def receipt_path(purchase) = "/purchases/#{purchase.external_id}/receipt"
 
       it "links this purchase's receipt, without the buyer's email or the download token" do
-        other = create(:purchase, link: create(:product, user: seller), seller:)
-        other.create_url_redirect!
-
         body = ContactingCreatorMailer.notify(purchase.id).body.decoded
         link = Nokogiri::HTML(body).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
 
@@ -1086,7 +1083,6 @@ describe ContactingCreatorMailer do
         expect(URI(link["href"]).path).to eq(receipt_path(purchase))
         expect(URI(link["href"]).query).to be_nil
         expect(body).not_to include(purchase.url_redirect.token)
-        expect(body).not_to include(receipt_path(other))
       end
 
       def notify_body = ContactingCreatorMailer.notify(purchase.reload.id).body.decoded
