@@ -234,9 +234,41 @@ module Purchase::ChargebackRingSignal
     end
 
     # Payout pause + fraud-review flag. No suspension: a human decides the account's fate.
+    #
+    # A human's decision is final: once someone released this hold or moved the account's risk
+    # state after it was applied, a later sale must not contain the seller again. A hit stays a
+    # hit for the whole 30-day window, so without this the release would be undone seconds after
+    # the seller's next sale and shadow mode could not be run with a human in the loop.
     def contain_chargeback_ring_seller!(result)
+      return if human_decided_after_ring_containment?
+
       pause_seller_payouts_for_ring_signal!(result)
       flag_seller_for_ring_review!
+    end
+
+    # True when a human released the hold or moved the risk state after the ring last contained
+    # this seller. Both write a comment carrying the acting admin's `author_id`; the automated
+    # siblings write `author_name` only, and the ring's own pause/flag comments carry no
+    # author_id either (`flag_for_fraud!` is called with `author_name:`), so an actor id after the
+    # ring's containment comment is a human decision — whether it came from the admin console's
+    # payouts resume or from a risk-state transition (`mark_compliant`, `put_on_probation`, ...).
+    def human_decided_after_ring_containment?
+      ring_author = User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]
+      ring_containment = seller.comments
+        .with_type_on_probation
+        .where(author_name: ring_author)
+        .order(:created_at, :id)
+        .last
+      return false if ring_containment.nil?
+
+      human_comment_types = Comment::RISK_STATE_COMMENT_TYPES + [Comment::COMMENT_TYPE_PAYOUTS_RESUMED]
+      # Compared by id, not created_at: `comments.created_at` is whole-second on this schema, so
+      # a human's comment in the same second as the ring's would otherwise read as earlier.
+      seller.comments
+        .where(comment_type: human_comment_types)
+        .where.not(author_id: nil)
+        .where("id > ?", ring_containment.id)
+        .exists?
     end
 
     # The repo's risk-review surface: flagged_for_fraud is the state the review queue reads (the

@@ -188,6 +188,65 @@ describe Purchase::ChargebackRingSignal do
           .not_to change { seller.comments.with_type_on_probation.count }
       end
 
+      # A hit stays a hit for the whole window, so containment keyed on "is the seller paused
+      # right now" would undo a human's release on the seller's very next sale. Ring sellers are
+      # not suspended: they keep selling while a human reviews the account.
+      it "keeps a human's release: a later sale does not re-pause, re-flag or re-comment" do
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+        build_checkout_purchase(seller).save!
+        expect(seller.reload.payouts_paused_for_chargeback_ring_signal?).to be(true)
+
+        # The human review: the admin console's payout resume, then the risk queue's verdict.
+        reviewer = create(:user)
+        seller.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+        seller.comments.create!(
+          author_id: reviewer.id,
+          comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
+          content: "Payouts resumed."
+        )
+        seller.mark_compliant!(author_id: reviewer.id)
+        expect(seller.reload.flagged_for_fraud?).to be(false)
+
+        # Still evaluates as a hit, so observation continues...
+        expect { build_checkout_purchase(seller).save! }.to change { ChargebackRingSignal.count }.by(1)
+
+        # ...but the decision the human made is not re-imposed.
+        seller.reload
+        expect(seller.payouts_paused_internally?).to be(false)
+        expect(seller.flagged_for_fraud?).to be(false)
+        expect(
+          seller.comments.with_type_on_probation
+                .where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]).count
+        ).to eq(1)
+      end
+
+      # The other half of the same guard: a LATER AUTOMATIC hold replacing the ring's as the
+      # newest pausing comment is not a human decision, so the ring must re-record its hold over
+      # it — otherwise the rate-recovery release could lift it and pay a ring seller out.
+      it "re-records the ring hold when a later automatic hold replaced it as the newest" do
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+        build_checkout_purchase(seller).save!
+        expect(seller.reload.payouts_paused_for_chargeback_ring_signal?).to be(true)
+
+        seller.comments.create!(
+          content: "rate hold",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+        expect(seller.reload.payouts_paused_for_chargeback_ring_signal?).to be(false)
+
+        build_checkout_purchase(seller).save!
+
+        seller.reload
+        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+        expect(seller.payouts_paused_for_chargeback_rate?).to be(false)
+        expect(seller.payouts_paused_internally?).to be(true)
+      end
+
       it "leaves an admin payout pause untouched" do
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
         seed_paid_sales(seller, count: 5)
