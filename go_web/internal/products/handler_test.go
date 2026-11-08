@@ -2446,6 +2446,13 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 			file(t, conn, 1_791_201, small)
 			file(t, conn, 1_791_202, 0)
 		}},
+		// upcase leaves a character without case as it is.
+		{"a file type ending in a quote", []string{`"file_summaries":{"product":null,"options":{"%[1]s":{"formats":["PDF”"],`}, "",
+			func(t *testing.T, conn *sql.DB) {
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+				file(t, conn, 1_791_201, small)
+				conn.Exec("UPDATE product_files SET filetype = 'pdf”' WHERE id = ?", 1_791_201)
+			}},
 		{"files shared by every option", []string{`"file_summaries":{"product":` + pdf + `,"options":{"%[1]s":` + pdf + `,"%[2]s":` + pdf + `}}`}, "",
 			func(t *testing.T, conn *sql.DB) {
 				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productSameRichContentForAllVariants, productID)
