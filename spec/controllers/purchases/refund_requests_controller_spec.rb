@@ -57,7 +57,7 @@ describe Purchases::RefundRequestsController do
 
     it "re-enqueues the notify worker when a stale request still owes notifications" do
       request = create(:purchase_refund_request, purchase:, seller_notified_at: nil, support_notified_at: Time.current,
-                       created_at: 11.minutes.ago)
+                                                 created_at: 11.minutes.ago)
 
       expect do
         get :show, params: { purchase_id: token }
