@@ -6,10 +6,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/ProductEdit/Layout";
+import { ShareTab } from "$app/components/ProductEdit/ShareTab";
 import { type FileEntry, ProductEditContext, type Product } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const matchHandle = vi.hoisted(() => ({ current: "product" }));
+const navigate = vi.hoisted(() => vi.fn());
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children, onClick }: { to: string; children?: React.ReactNode; onClick?: React.MouseEventHandler }) => (
     <a href={to} onClick={onClick}>
@@ -17,7 +19,7 @@ vi.mock("react-router-dom", () => ({
     </a>
   ),
   useMatches: () => [{ handle: matchHandle.current }],
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
   useBlocker: () => ({ state: "unblocked" }),
   NavigationType: { Pop: "POP" },
 }));
@@ -36,6 +38,30 @@ vi.mock("$app/components/WithTooltip", () => ({
 const setProductPublished = vi.hoisted(() => vi.fn());
 vi.mock("$app/data/publish_product", () => ({ setProductPublished }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+vi.mock("$app/components/ProductEdit/ProductPreview", () => ({ ProductPreview: () => null }));
+vi.mock("$app/components/ShareButtons", () => ({
+  ShareButtons: ({ children }: { children?: React.ReactNode }) => <div data-testid="share-buttons">{children}</div>,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/ProfileSectionsEditor", () => ({
+  ProfileSectionsEditor: () => <div data-testid="profile-sections" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/TaxonomyEditor", () => ({
+  TaxonomyEditor: () => <div data-testid="taxonomy-editor" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/TaxonomyAttributesEditor", () => ({
+  TaxonomyAttributesEditor: () => null,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/TagSelector", () => ({ TagSelector: () => null }));
+vi.mock("$app/components/ProductEdit/ShareTab/WaitlistCard", () => ({
+  WaitlistCard: () => <div data-testid="waitlist-card" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/ShareYourLaunchCard", () => ({
+  ShareYourLaunchCard: () => <div data-testid="launch-card" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/CartRecoveryCard", () => ({
+  CartRecoveryCard: () => <div data-testid="cart-recovery-card" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/LandingPageEditor", () => ({ LandingPageEditor: () => null }));
 
 beforeAll(() => {
   const url = (path: string) => () => path;
@@ -46,6 +72,7 @@ beforeAll(() => {
       new_email_path: url("/emails/new"),
       settings_payments_path: url("/settings/payments"),
       short_link_url: url("/l/product-permalink"),
+      discover_url: url("https://discover.test.gumroad.com/"),
     },
   });
 });
@@ -55,6 +82,7 @@ afterEach(() => {
   product.files = [];
   product.is_published = false;
   matchHandle.current = "product";
+  navigate.mockClear();
   vi.unstubAllGlobals();
 });
 
@@ -159,10 +187,12 @@ const renderLayout = (
     saveBlocked = false,
     updateProduct = vi.fn(),
     webAppUploading = false,
+    children = <Layout>Body</Layout>,
   }: {
     saveBlocked?: boolean;
     updateProduct?: (update: Partial<Product> | ((product: Product) => void)) => void;
     webAppUploading?: boolean;
+    children?: React.ReactNode;
   } = {},
 ) =>
   render(
@@ -237,7 +267,7 @@ const renderLayout = (
             customAttributeNameSuggestions: [],
           }}
         >
-          <Layout>Body</Layout>
+          {children}
         </ProductEditContext.Provider>
       </CurrentSellerProvider>
     </DomainSettingsProvider>,
@@ -360,6 +390,64 @@ describe("ProductEdit Layout Share tab on a draft", () => {
 
     expect(click).toBe(true);
     expect(showAlert).not.toHaveBeenCalled();
+  });
+
+  it("stays on the Share tab when the seller publishes from it", async () => {
+    const updateProduct = vi.fn();
+    matchHandle.current = "share";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: "2026-01-23T12:00:00Z" });
+    product.files = [];
+    product.is_published = false;
+    renderLayout(minor, { updateProduct });
+
+    fireEvent.click(screen.getByRole("button", { name: "Publish and continue" }));
+
+    await waitFor(() =>
+      expect(updateProduct).toHaveBeenCalledWith({
+        is_published: true,
+        first_published_at: "2026-01-23T12:00:00Z",
+      }),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("sends the seller back to Content when they unpublish from Share", async () => {
+    matchHandle.current = "share";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: null });
+    product.files = [];
+    product.is_published = true;
+    renderLayout(minor);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/products/product-permalink/edit/content"));
+  });
+});
+
+describe("ProductEdit Share tab controls", () => {
+  const renderShareTab = (is_published: boolean) => {
+    product.files = [];
+    product.is_published = is_published;
+    return renderLayout(minor, { children: <ShareTab /> });
+  };
+
+  it("lets a draft set profile sections and the Discover category", () => {
+    renderShareTab(false);
+
+    expect(screen.getByTestId("profile-sections")).toBeTruthy();
+    expect(screen.getByTestId("taxonomy-editor")).toBeTruthy();
+  });
+
+  it("keeps the share and checkout controls off a draft", () => {
+    renderShareTab(false);
+
+    expect(screen.queryByTestId("share-buttons")).toBeNull();
+  });
+
+  it("shows the share and checkout controls once published", () => {
+    renderShareTab(true);
+
+    expect(screen.getByTestId("share-buttons")).toBeTruthy();
   });
 });
 
