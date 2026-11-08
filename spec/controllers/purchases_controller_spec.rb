@@ -1980,7 +1980,7 @@ describe PurchasesController, :vcr do
         end
 
         it "calls CustomerMailer with correct args" do
-          expect(CustomerMailer).to receive(:receipt).with(purchase.id, for_email: false).and_call_original
+          expect(CustomerMailer).to receive(:receipt).with(purchase.id, for_email: false, single_purchase: false).and_call_original
           get :receipt, params: { id: purchase.external_id }
           expect(response).to be_successful
         end

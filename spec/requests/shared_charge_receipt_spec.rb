@@ -152,6 +152,9 @@ describe "Shared charge receipt", type: :request do
   end
 
   describe "an item's own receipt page" do
+    # Receipt recommendations can list the other item's product; these examples check order lines only.
+    before { allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).and_return([]) }
+
     it "shows only that item" do
       get receipt_purchase_url(purchase_one.external_id), params: { email: }
 
@@ -172,6 +175,7 @@ describe "Shared charge receipt", type: :request do
     end
 
     it "shows only that item when the buyer emails differ and the order includes a preorder" do
+      create(:preorder_link, link: purchase_two.link)
       purchase_two.update_columns(flags: purchase_two.flags | Purchase.flag_mapping["flags"][:is_preorder_authorization], purchase_state: "preorder_authorization_successful")
       purchase_one.update_column(:email, "someone-else@example.com")
 
