@@ -362,6 +362,41 @@ describe Purchase::ChargebackRingSignal do
         expect(purchase.error_code).to be_nil
       end
 
+      it "refuses a combined (cart) charge before the processor is called" do
+        seed_paid_sales(seller, count: 5)
+        arm_flags
+        purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")
+        purchase.instance_variable_set(:@chargeback_ring_signal_result, hit_result)
+        purchase.save(validate: false)
+        order = create(:order)
+
+        expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+        charge = Charge::CreateService.new(
+          order:, seller:, merchant_account: MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id),
+          chargeable: instance_double(Chargeable, fingerprint: "fp", charge_processor_id: "stripe"),
+          purchases: [purchase], amount_cents: 2200, gumroad_amount_cents: 220,
+          setup_future_charges: false, off_session: false, statement_description: nil,
+          mandate_options: nil, params: {}
+        ).perform
+
+        expect(charge.charge_intent).to be_nil
+        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        expect(purchase.errors[:base]).to be_present
+      end
+
+      it "does not flag a seller who was suspended concurrently (state re-checked under the lock)" do
+        seed_paid_sales(seller, count: 5)
+        arm_flags
+        allow(ErrorNotifier).to receive(:notify)
+        seller.flag_for_fraud!(author_name: "test")
+        seller.suspend_for_fraud!(author_name: "test")
+
+        build_checkout_purchase(seller, card_country: "US", ip_address: "88.12.1.1").save!
+
+        expect(seller.reload.suspended_for_fraud?).to be(true)
+      end
+
       it "raises PurchaseInvalid through the create-service path so the purchase rolls back to failed" do
         seed_paid_sales(seller, count: 5)
         arm_flags

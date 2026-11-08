@@ -40,6 +40,21 @@ class Charge::CreateService
       purchase.save!
     end
 
+    # Buyer-level chargeback-ring refusal (see Purchase::ChargebackRingSignal). A combined
+    # charge is one processor call for one buyer and one seller, so one refused purchase
+    # refuses the group; marking every purchase keeps ensure_all_purchases_processed's
+    # accounting consistent. Checked here so cart checkouts are refused before the processor
+    # exactly like single purchases are in Purchase#charge!.
+    if purchases.any?(&:refuse_charge_for_chargeback_ring_signal?)
+      purchases.each do |purchase|
+        next if purchase.error_code == PurchaseErrorCode::CHARGEBACK_RING_SIGNAL
+
+        purchase.error_code = PurchaseErrorCode::CHARGEBACK_RING_SIGNAL
+        purchase.errors.add :base, purchase.send(:vague_error_message)
+      end
+      return charge
+    end
+
     charge_intent = with_charge_processor_error_handler do
       presentment_args = buyer_currency_presentment_processor_args
       idempotency_key = payment_intent_idempotency_key(presentment_args)

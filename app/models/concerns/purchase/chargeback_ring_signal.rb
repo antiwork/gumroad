@@ -161,10 +161,14 @@ module Purchase::ChargebackRingSignal
       nil
     end
 
-    # Called at the top of Purchase#charge!, strictly before create_charge_intent, so a refusal
-    # provably never reaches the processor. Refuses only on buyer-level evidence: this purchase's
-    # IP inside the matched hosting CIDR AND its card country equal to the dominant one. The
-    # containment (payout pause, fraud flag, alert) does not depend on this refusal.
+  public
+
+    # Called before any processor call — at the top of Purchase#charge! for single purchases and
+    # from Charge::CreateService#perform for combined (cart) charges — so a refusal provably
+    # never reaches the processor. Public because Charge::CreateService invokes it per purchase.
+    # Refuses only on buyer-level evidence: this purchase's IP inside the matched hosting CIDR
+    # AND its card country equal to the dominant one. The containment (payout pause, fraud flag,
+    # alert) does not depend on this refusal.
     def refuse_charge_for_chargeback_ring_signal?
       result = @chargeback_ring_signal_result
       return false unless result&.hit?
@@ -186,6 +190,8 @@ module Purchase::ChargebackRingSignal
       Purchase::ChargebackRingSignal.safe_notify(e, purchase_id: id, seller_id: seller&.id)
       false
     end
+
+  private
 
     # after_commit on: :create. Containment is durable and runs FIRST; telemetry and the ops
     # alert are best-effort. Each step is isolated so none can take the others down, and nothing
@@ -231,9 +237,20 @@ module Purchase::ChargebackRingSignal
     # Payout pause + fraud-review flag. No suspension: a human decides the account's fate.
     def contain_chargeback_ring_seller!(result)
       pause_seller_payouts_for_ring_signal!(result)
-      # The repo's risk-review surface: flagged_for_fraud is the state the review queue reads
-      # (same mechanism Purchase::Blockable uses via flag_for_fraud!).
-      seller.flag_for_fraud!(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]) if seller.can_flag_for_fraud?
+      flag_seller_for_ring_review!
+    end
+
+    # The repo's risk-review surface: flagged_for_fraud is the state the review queue reads (the
+    # same mechanism Purchase::Blockable uses). Check-and-transition inside the seller lock with
+    # a fresh read: can_flag_for_fraud? on a stale in-memory user could otherwise overwrite a
+    # suspension that landed concurrently (flag_for_fraud transitions FROM suspended states are
+    # already impossible, but only if the state it reads is current).
+    def flag_seller_for_ring_review!
+      seller.with_lock do
+        next unless seller.reload.can_flag_for_fraud?
+
+        seller.flag_for_fraud!(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal])
+      end
     end
 
     # Same pause mechanism as the existing chargeback-rate gate
