@@ -430,9 +430,20 @@ class Order::PreparePaymentIntentService
         pix_payment_method_options,
         upi_payment_method_options(presentment),
         recurring_indian_card_payment_method_options(presentment),
+        card_three_d_secure_payment_method_options,
       ].compact.reduce({}) do |options, method_options|
         options.deep_merge(method_options)
       end.presence
+    end
+
+    # The buyer confirms this intent in the browser, so the Payment Element can run
+    # the challenge. Card-scoped: Stripe rejects card options on an intent that
+    # does not offer card.
+    def card_three_d_secure_payment_method_options
+      return unless @previewed_payment_method_type == "card"
+      return unless Checkout::ThreeDSecure.request?(seller)
+
+      { card: { request_three_d_secure: "any" } }
     end
 
     # Stripe rejects options for a method the intent doesn't list, so only when Pix was

@@ -83,6 +83,41 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "with a card cart and the 3DS challenge flag" do
+      before do
+        create(:merchant_account, user: seller, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
+      end
+
+      after { Feature.deactivate_user(Checkout::ThreeDSecure::FEATURE, seller) }
+
+      def card_intent_create_args
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_3ds", client_secret: "pi_3ds_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        order, params = build_order
+        described_class.new(order:, params:, confirmation_token: "ctoken_3ds").perform
+        create_args
+      end
+
+      it "asks the Payment Element to request authentication when the flag is on for the seller" do
+        Feature.activate_user(Checkout::ThreeDSecure::FEATURE, seller)
+
+        expect(card_intent_create_args[:payment_method_options]).to eq(card: { request_three_d_secure: "any" })
+      end
+
+      it "leaves the decision to Stripe when the flag is off" do
+        expect(card_intent_create_args[:payment_method_options].to_h[:card]).to be_nil
+      end
+    end
+
     context "when the previewed card country fails purchasing power parity verification" do
       before { create(:merchant_account, user: seller) }
 
