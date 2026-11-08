@@ -2,13 +2,12 @@
 
 module BasePrice::Shared
   def clean_price(price_string)
-    clean = price_string.to_s
-    unless single_unit_currency?
-      clean = clean.gsub(/[^-0-9.,]/, "")      # allow commas for now
-      if clean.match?(/,\d{1,2}\z/) # euro style, incl. one-digit decimal
-        clean = clean.delete(".") # remove euro 1000^x delimiters
-        clean = clean.tr(",", ".")             # replace euro comma with decimal
-      end
+    clean = price_string.to_s.gsub(/[^-0-9.,]/, "") # allow commas for now
+    # Euro style, incl. one-digit decimal. Currencies without minor units round it rather than
+    # reading 150,50 as 15050.
+    if clean.match?(/,\d{1,2}\z/)
+      clean = clean.delete(".") # remove euro 1000^x delimiters
+      clean = clean.tr(",", ".") # replace euro comma with decimal
     end
     clean = clean.gsub(/[^-0-9.]/, "")         # remove commas
     string_to_price_cents(price_currency_type.to_sym, clean)

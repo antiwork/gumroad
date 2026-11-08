@@ -26,6 +26,12 @@ describe Product::Prices do
       @product.price_currency_type = "usd"
       expect(@product.clean_price("7,9")).to eq(790)
     end
+
+    it "rounds a decimal comma in a currency without minor units" do
+      @product.price_currency_type = "jpy"
+      expect(@product.clean_price("150,50")).to eq(151)
+      expect(@product.clean_price("7,900")).to eq(7900)
+    end
   end
 
   describe "#discounted_price_cents with a shop-wide auto-applied code" do

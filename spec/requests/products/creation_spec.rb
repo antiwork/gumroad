@@ -322,6 +322,18 @@ describe "Product creation", type: :system, js: true do
       expect(page).to have_title("Comma product")
       expect(seller.links.last.price_cents).to eq(1_000_000_50)
     end
+
+    it "rounds a decimal comma in yen instead of reading it as thousands" do
+      visit new_product_path
+      fill_in("Name", with: "Comma product")
+      choose("Digital product")
+      select("¥ (Yen)", from: "Currency", visible: false)
+      fill_in("Price", with: "150,50")
+      click_on("Next: Customize")
+
+      expect(page).to have_title("Comma product")
+      expect(seller.links.last.price_cents).to eq(151)
+    end
   end
 
   describe "form validations" do
