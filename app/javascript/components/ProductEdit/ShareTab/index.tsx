@@ -55,19 +55,23 @@ export const ShareTab = () => {
         <form>
           <section className="grid gap-8 p-4! md:p-8!">
             <DiscoverEligibilityPromo />
-            <header>
-              <h2>Share</h2>
-            </header>
-            <ShareButtons url={url} twitterText={`Buy ${product.name} on @Gumroad`} facebookText={product.name}>
-              {/* The header used to carry a "Copy checkout link" button; it lives here now so the
+            {product.is_published ? (
+              <>
+                <header>
+                  <h2>Share</h2>
+                </header>
+                <ShareButtons url={url} twitterText={`Buy ${product.name} on @Gumroad`} facebookText={product.name}>
+                  {/* The header used to carry a "Copy checkout link" button; it lives here now so the
                   header stays at just Unpublish + Save changes. */}
-              <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="top">
-                <Button>
-                  <CartPlus className="size-5" />
-                  Copy checkout URL
-                </Button>
-              </CopyToClipboard>
-            </ShareButtons>
+                  <CopyToClipboard text={checkoutUrl} copyTooltip="Copy checkout URL" tooltipPosition="top">
+                    <Button>
+                      <CartPlus className="size-5" />
+                      Copy checkout URL
+                    </Button>
+                  </CopyToClipboard>
+                </ShareButtons>
+              </>
+            ) : null}
             {waitlist && product.is_published ? (
               <WaitlistCard waitlist={waitlist} productName={product.name} productPermalink={uniquePermalink} />
             ) : null}

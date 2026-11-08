@@ -349,6 +349,20 @@ describe("ProductEdit Layout publish and unpublish", () => {
   });
 });
 
+describe("ProductEdit Layout Share tab on a draft", () => {
+  it("opens without the publish-first alert", () => {
+    product.files = [];
+    product.is_published = false;
+    renderLayout(minor);
+
+    vi.mocked(showAlert).mockClear();
+    const click = fireEvent.click(screen.getByRole("link", { name: "Share" }));
+
+    expect(click).toBe(true);
+    expect(showAlert).not.toHaveBeenCalled();
+  });
+});
+
 describe("ProductEdit Layout when saving is blocked until a reload", () => {
   it("disables Save without claiming a save is in progress", () => {
     product.files = [];
