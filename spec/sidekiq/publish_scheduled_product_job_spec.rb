@@ -29,7 +29,7 @@ describe PublishScheduledProductJob do
       )
 
       expect(schedule.reload).to have_attributes(status: "scheduled", version: replacement_version)
-      expect(SendProductPublishScheduleNoticeJob).not_to have_enqueued_sidekiq_job
+      expect(SendProductPublishScheduleNoticeJob.jobs.size).to eq(0)
     end
   end
 end
