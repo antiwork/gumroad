@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -123,6 +124,7 @@ func (h *handler) loadCoverRows(ctx context.Context, productID int64) ([]*cover,
 	defer rows.Close()
 	var covers []*cover
 	var keys []coverOrder
+	var ids []int64
 	var lastPreviewID int64
 	for rows.Next() {
 		var c cover
@@ -179,17 +181,53 @@ func (h *handler) loadCoverRows(ctx context.Context, productID int64) ([]*cover,
 		}
 		covers = append(covers, &c)
 		keys = append(keys, k)
+		ids = append(ids, previewID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	for i := 1; i < len(keys); i++ {
-		// in_order leaves ties to MySQL.
 		if keys[i] == keys[i-1] {
-			return nil, fallback("cover order")
+			// in_order leaves ties to MySQL, so each of Rails' statements has to agree with this
+			// order, which breaks them by id.
+			same, err := h.railsCoverOrder(ctx, productID, ids)
+			if err != nil {
+				return nil, err
+			}
+			if !same {
+				return nil, fallback("cover order")
+			}
+			break
 		}
 	}
 	return covers, nil
+}
+
+// railsCoverOrder is whether Rails' display_asset_previews statements return the previews in
+// want's order: the association's, its preload's, and first's LIMIT 1.
+func (h *handler) railsCoverOrder(ctx context.Context, productID int64, want []int64) (bool, error) {
+	const order = " ORDER BY `asset_previews`.`position` ASC, `asset_previews`.`created_at` ASC"
+	for _, s := range []struct {
+		query string
+		first bool
+	}{
+		{"SELECT `asset_previews`.* FROM `asset_previews` WHERE `asset_previews`.`link_id` = ? AND `asset_previews`.`deleted_at` IS NULL" + order, false},
+		{"SELECT `asset_previews`.* FROM `asset_previews` WHERE `asset_previews`.`deleted_at` IS NULL AND `asset_previews`.`link_id` = ?" + order, false},
+		{"SELECT `asset_previews`.* FROM `asset_previews` WHERE `asset_previews`.`link_id` = ? AND `asset_previews`.`deleted_at` IS NULL" + order + " LIMIT 1", true},
+	} {
+		ids, err := h.scanIDs(ctx, s.query, productID)
+		if err != nil {
+			return false, err
+		}
+		expected := want
+		if s.first {
+			expected = want[:1]
+		}
+		if !slices.Equal(ids, expected) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // blobDimensions reads the analyzer's width and height out of the blob's metadata.

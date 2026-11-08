@@ -291,6 +291,29 @@ func TestAnUnsplashCoverRendersItsURL(t *testing.T) {
 	}
 }
 
+// Covers tied on position and created_at come in the order Rails' statements return, which
+// here, as for the tied covers seen in production, is by id.
+func TestCoversTiedOnPositionAndTime(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_793_701), "link_id": productID, "guid": "first",
+		"created_at": testNow, "updated_at": testNow})
+	addBlob(t, conn, 1_793_801, "covers/first", "first.gif", "image/gif", `{"width":10,"height":10}`)
+	addAttachment(t, conn, 1_793_901, "file", "AssetPreview", 1_793_701, 1_793_801)
+	// An Unsplash cover has no file, and is still one of the tied previews.
+	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_793_702), "link_id": productID, "guid": "second",
+		"unsplash_url": "https://images.unsplash.com/photo", "created_at": testNow, "updated_at": testNow})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	product := pageProps(t, w.Body.String())["product"].(map[string]any)
+	covers := product["covers"].([]any)
+	if len(covers) != 2 || covers[0].(map[string]any)["id"] != "first" || product["main_cover_id"] != "first" {
+		t.Errorf("covers %v, main %v", covers, product["main_cover_id"])
+	}
+}
+
 func TestACoverWithTwoFilesUsesTheLowerBlob(t *testing.T) {
 	e := newTestEnv(t)
 	addCover(t, true)
