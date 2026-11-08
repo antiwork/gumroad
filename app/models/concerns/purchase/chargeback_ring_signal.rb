@@ -239,15 +239,19 @@ module Purchase::ChargebackRingSignal
     # state after it was applied, a later sale must not contain the seller again. A hit stays a
     # hit for the whole 30-day window, so without this the release would be undone seconds after
     # the seller's next sale and shadow mode could not be run with a human in the loop.
+    # Each step re-checks that decision INSIDE its own seller lock (see the two methods below): an
+    # admin can release the hold between the read and the write, and containment must neither undo
+    # a release that landed first nor leave a fresher ring comment behind — a newer ring comment
+    # would make the admin's release read as older and re-arm containment on the next sale.
     def contain_chargeback_ring_seller!(result)
-      return if human_decided_after_ring_containment?
-
       pause_seller_payouts_for_ring_signal!(result)
       flag_seller_for_ring_review!
     end
 
     # True when a human released the hold or moved the risk state after the ring last contained
-    # this seller. Both write a comment carrying the acting admin's `author_id`; the automated
+    # this seller. Always called INSIDE the seller lock (see the two steps above), so a release
+    # that committed before the lock was taken is visible and wins.
+    # Both write a comment carrying the acting admin's `author_id`; the automated
     # siblings write `author_name` only, and the ring's own pause/flag comments carry no
     # author_id either (`flag_for_fraud!` is called with `author_name:`), so an actor id after the
     # ring's containment comment is a human decision — whether it came from the admin console's
@@ -278,6 +282,7 @@ module Purchase::ChargebackRingSignal
     # already impossible, but only if the state it reads is current).
     def flag_seller_for_ring_review!
       seller.with_lock do
+        next if human_decided_after_ring_containment?
         next unless seller.reload.can_flag_for_fraud?
 
         seller.flag_for_fraud!(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal])
@@ -299,6 +304,9 @@ module Purchase::ChargebackRingSignal
 
       seller.with_lock do
         next if seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
+        # A human who released this hold by hand keeps it released — checked under the lock, so a
+        # release that committed before we took the lock wins and we add no ring comment after it.
+        next if human_decided_after_ring_containment?
         # Idempotence: once the ring's own comment is the newest, a second hit adds nothing.
         next if seller.payouts_paused_for_chargeback_ring_signal?
 

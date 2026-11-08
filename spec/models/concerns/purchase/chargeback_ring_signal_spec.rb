@@ -444,12 +444,18 @@ describe Purchase::ChargebackRingSignal do
         expect(purchase.errors[:base]).to be_present
       end
 
+      # The suspension lands AFTER the pause step and through a SECOND object, so the copy the
+      # purchase holds is still stale exactly when the flag step reads the account's state. The
+      # example fails if that read is not taken again under the lock: a stale copy reports
+      # `can_flag_for_fraud?`, so the ring flag would overwrite the suspension.
       it "does not flag a seller who was suspended concurrently (state re-checked under the lock)" do
         seed_paid_sales(seller, count: 5)
         arm_flags
         allow(ErrorNotifier).to receive(:notify)
-        seller.flag_for_fraud!(author_name: "test")
-        seller.suspend_for_fraud!(author_name: "test")
+        allow_any_instance_of(Purchase).to receive(:pause_seller_payouts_for_ring_signal!).and_wrap_original do |original, *args|
+          original.call(*args)
+          User.find(seller.id).suspend_for_fraud!(author_name: "test")
+        end
 
         build_checkout_purchase(seller, card_country: "US", ip_address: "88.12.1.1").save!
 
