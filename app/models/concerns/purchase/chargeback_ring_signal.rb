@@ -192,7 +192,6 @@ module Purchase::ChargebackRingSignal
     end
 
   private
-
     # after_commit on: :create. Containment is durable and runs FIRST; telemetry and the ops
     # alert are best-effort. Each step is isolated so none can take the others down, and nothing
     # here can surface as a purchase failure.
