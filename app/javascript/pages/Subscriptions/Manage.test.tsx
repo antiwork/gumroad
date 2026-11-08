@@ -357,6 +357,46 @@ describe("SubscriptionsManage saved payment method", () => {
   });
 });
 
+describe("SubscriptionsManage current plan status", () => {
+  afterEach(cleanup);
+
+  const tieredProps = (overrides: Record<string, unknown>) =>
+    pageProps({
+      product: {
+        ...pageProps().product,
+        is_tiered_membership: true,
+        options: [
+          {
+            id: "option-1",
+            name: "Tier",
+            quantity_left: null,
+            description: null,
+            price_difference_cents: null,
+            recurrence_price_values: { monthly: { price_cents: 500, suggested_price_cents: null } },
+            is_pwyw: false,
+            duration_in_minutes: null,
+          },
+        ],
+      },
+      subscription: subscription({ option_id: "option-1", ...overrides }),
+    });
+
+  it("states the next charge instead of promising that a free current price will remain", () => {
+    renderManage(tieredProps({ price: 0, pre_discount_price: 0, next_charge_price: 500 }));
+    expect(screen.queryByText(/based on previous pricing\. Your next charge will be \$5\./u)).not.toBeNull();
+    expect(screen.queryByText(/will remain the same/u)).toBeNull();
+  });
+
+  it("keeps the previous-pricing promise when the next charge stays at the current price", () => {
+    renderManage(tieredProps({ price: 300, pre_discount_price: 300, next_charge_price: 300 }));
+    expect(
+      screen.queryByText(
+        /based on previous pricing\. This price will remain the same when updating your payment method\./u,
+      ),
+    ).not.toBeNull();
+  });
+});
+
 describe("SubscriptionsManage pay-what-you-want hint", () => {
   afterEach(cleanup);
 

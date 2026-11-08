@@ -157,6 +157,12 @@ export default function SubscriptionsManage() {
   const hasPriceChanged =
     Math.round(currentSubscriptionUnitPrice) !==
     currentOption?.recurrence_price_values?.[subscription.recurrence]?.price_cents;
+  // A tiered discount can make today's price free while the next charge is not, so don't promise it will remain.
+  const nextChargePrice = subscription.next_charge_price ?? 0;
+  const currentPriceNote =
+    nextChargePrice > subscription.price
+      ? `Your next charge will be ${formatPriceCentsWithCurrencySymbol(product.currency_code, nextChargePrice, { symbolFormat: "long" })}.`
+      : "This price will remain the same when updating your payment method.";
   const configurationSelectorProduct: ConfigurationSelectorProduct = {
     ...product,
     options: product.options.map((option) =>
@@ -169,7 +175,7 @@ export default function SubscriptionsManage() {
                     product.currency_code,
                     Math.round(currentSubscriptionUnitPrice),
                     { symbolFormat: "long" },
-                  )} ${recurrenceLabels[subscription.recurrence]}, based on previous pricing. This price will remain the same when updating your payment method.`
+                  )} ${recurrenceLabels[subscription.recurrence]}, based on previous pricing. ${currentPriceNote}`
                 : undefined,
           }
         : option,

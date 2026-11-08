@@ -38,8 +38,12 @@ describe Subscription, "#next_charge_price_cents" do
     expect(subscription.next_charge_price_cents).to eq(full_price)
   end
 
-  it "never reads a date in the past" do
-    expect(subscription.next_charge_price_cents(as_of: 2.years.ago)).to eq(0)
+  it "prices a past charge date, or an overdue renewal date, as of now" do
+    travel_to(purchase.created_at + 13.months) do
+      expect(subscription.renews_at).to be < Time.current
+      expect(subscription.next_charge_price_cents(as_of: purchase.created_at + 1.month)).to eq(full_price)
+      expect(subscription.next_charge_price_cents).to eq(full_price)
+    end
   end
 
   it "matches the current price for a non-tiered discount" do
@@ -71,6 +75,50 @@ describe Subscription, "#next_charge_price_cents" do
     subscription.reload
     expect(subscription.next_charge_price_cents(as_of: 13.months.from_now)).to eq(full_price)
     expect(subscription.next_charge_price_cents(as_of: 3.months.from_now)).to eq(0)
+  end
+
+  it "prices the manage page's next charge for the subscription's account, whoever is viewing" do
+    subscription.update!(user: buyer)
+    create(:membership_purchase, purchaser: buyer, email: buyer.email, link: product, created_at: 11.months.ago - 1.day)
+    expect(subscription.renews_at).to be_within(1.minute).of(1.month.from_now)
+    expect(subscription.current_subscription_price_cents).to eq(0)
+
+    { "signed out (reminder token)" => nil, "another signed-in user" => create(:user), "the account owner" => buyer }.each do |viewer_label, viewer|
+      props = CheckoutPresenter.new(logged_in_user: viewer, ip: "127.0.0.1").subscription_manager_props(subscription:)
+      expect(props[:subscription]).to include(price: 0, next_charge_price: full_price), viewer_label
+    end
+  end
+
+  context "with an annual plan" do
+    let(:purchase) do
+      create(:membership_purchase, purchaser: buyer, email: buyer.email, created_at: Time.current,
+                                   link: create(:membership_product, subscription_duration: :yearly))
+    end
+
+    it "quotes the first renewal at the later tier from the 30-day reminder, while today's tier is still free" do
+      expect(subscription.recurrence).to eq(BasePrice::Recurrence::YEARLY)
+
+      travel_to(subscription.renews_at - 30.days) do
+        expect(subscription.current_subscription_price_cents).to eq(0)
+        expect(subscription.next_charge_price_cents).to eq(full_price)
+
+        mail = CustomerLowPriorityMailer.subscription_renewal_reminder(subscription.id)
+        expect(mail.body.encoded).to include("You're paying #{purchase.format_displayed_price_cents(full_price)}")
+
+        value = ReceiptPresenter::PaymentInfo.new(purchase.reload).upcoming_payment_attributes.last[:value]
+        expect(value).to start_with("$5 on")
+
+        props = CheckoutPresenter.new(logged_in_user: buyer, ip: "127.0.0.1").subscription_manager_props(subscription: subscription.reload)
+        expect(props[:subscription]).to include(price: 0, next_charge_price: full_price)
+      end
+    end
+
+    it "exposes no paid next charge once a single-charge membership has collected it" do
+      subscription.update!(charge_occurrence_count: 1)
+
+      props = CheckoutPresenter.new(logged_in_user: buyer, ip: "127.0.0.1").subscription_manager_props(subscription: subscription.reload)
+      expect(props[:subscription]).to include(price: 0, next_charge_price: 0, remaining_charges_count: 0)
+    end
   end
 
   describe "surfaces" do
