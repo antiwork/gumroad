@@ -49,7 +49,7 @@
   <p>
     <% presenter.payment_info.notes.each do |note| %><%= note %><br><% end %>
     <% (presenter.payment_info.today_payment_attributes + presenter.payment_info.upcoming_payment_attributes + [presenter.payment_info.payment_method_attribute].compact).each do |attribute| %>
-      <%= [attribute[:label], Array(attribute[:value]).join(", ")].compact_blank.join(": ") %><br>
+      <% if attribute[:label].present? %><%= attribute[:label] %>: <% end %><%= safe_join(Array(attribute[:value]).map { |value| auto_link(value.to_s, html: { target: "_blank" }) }, ", ") %><br>
     <% end %>
   </p>
 <% end %>
@@ -58,7 +58,7 @@
   <p>
     <strong><%= presenter.shipping_info.title %></strong><br>
     <% presenter.shipping_info.attributes.each do |attribute| %>
-      <%= [attribute[:label], Array(attribute[:value]).join(", ")].compact_blank.join(": ") %><br>
+      <% if attribute[:label].present? %><%= attribute[:label] %>: <% end %><%= safe_join(Array(attribute[:value]).map { |value| auto_link(value.to_s, html: { target: "_blank" }) }, ", ") %><br>
     <% end %>
   </p>
 <% end %>
