@@ -85,7 +85,10 @@ describe("sanitizePriceRangeInput", () => {
 
 describe("priceCommaHint", () => {
   it("names both readings the server gives a typed comma", () => {
-    expect(priceCommaHint).toContain("7,900");
-    expect(priceCommaHint).toContain("7,90");
+    expect(priceCommaHint(false)).toBe("Use a comma for thousands (7,900) or for cents (7,90).");
+  });
+
+  it("offers only thousands for a currency without minor units", () => {
+    expect(priceCommaHint(true)).toBe("Use a comma for thousands (7,900).");
   });
 });

@@ -497,7 +497,7 @@ const NewProductPage = () => {
                   ) : null}
                 </InputGroup>
                 <FieldsetDescription id={`price-hint-${formUID}`}>
-                  {selectedCurrency.isSingleUnit ? "Use a comma for thousands (7,900)." : priceCommaHint}
+                  {priceCommaHint(selectedCurrency.isSingleUnit)}
                 </FieldsetDescription>
                 <Errors errors={errors["link.price_range"]} label="Price" />
                 <Errors errors={errors["link.base"]} label="" />

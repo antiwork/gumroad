@@ -1,18 +1,17 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { set } from "lodash-es";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import NewProductPage, { isAiProductDetails } from "$app/pages/Products/New";
 import { isProductNativeType } from "$app/parsers/product";
 
-const seller = vi.hoisted(() => ({ currencyCode: "usd" }));
-
 vi.mock("@inertiajs/react", () => ({
   Link: () => null,
   usePage: () => ({
     props: {
-      current_seller_currency_code: seller.currencyCode,
+      current_seller_currency_code: "usd",
       native_product_types: ["digital", "course"],
       service_product_types: ["call", "coffee"],
       release_at_date: "",
@@ -23,7 +22,12 @@ vi.mock("@inertiajs/react", () => ({
       is_mobile_app_web_view: true,
     },
   }),
-  useForm: <T,>(_key: string, data: T) => ({ data, errors: {}, processing: false, setData: vi.fn() }),
+  // Keeps form state so a change (for example the currency) re-renders the page like Inertia's form.
+  useForm: <T extends object>(_key: string, initial: T) => {
+    const [data, setState] = React.useState(initial);
+    const setData = (path: string, value: unknown) => setState((current) => set(structuredClone(current), path, value));
+    return { data, errors: {}, processing: false, setData, clearErrors: vi.fn() };
+  },
 }));
 
 const details = {
@@ -60,10 +64,7 @@ describe("isProductNativeType", () => {
 });
 
 describe("NewProductPage", () => {
-  afterEach(() => {
-    cleanup();
-    seller.currencyCode = "usd";
-  });
+  afterEach(cleanup);
 
   it("names each product type picker after its heading", () => {
     render(<NewProductPage />);
@@ -72,20 +73,16 @@ describe("NewProductPage", () => {
     expect(screen.getByRole("radiogroup", { name: "Services" })).toBeDefined();
   });
 
-  it("explains how the Price field reads a comma", () => {
-    const { unmount } = render(<NewProductPage />);
-    expect(
-      screen.getByRole("textbox", {
-        name: "Price",
-        description: "Use a comma for thousands (7,900) or for cents (7,90).",
-      }),
-    ).toBeDefined();
-    unmount();
-
-    seller.currencyCode = "jpy";
+  it("explains how the Price field reads a comma in the selected currency", () => {
     render(<NewProductPage />);
-    expect(
-      screen.getByRole("textbox", { name: "Price", description: "Use a comma for thousands (7,900)." }),
-    ).toBeDefined();
+    const describedPrice = (description: string) => screen.getByRole("textbox", { name: "Price", description });
+
+    expect(describedPrice("Use a comma for thousands (7,900) or for cents (7,90).")).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "jpy" } });
+    expect(describedPrice("Use a comma for thousands (7,900).")).toBeDefined();
+
+    fireEvent.change(screen.getByLabelText("Currency"), { target: { value: "cop" } });
+    expect(describedPrice("Use a comma for thousands (7,900) or for cents (7,90).")).toBeDefined();
   });
 });
