@@ -213,6 +213,17 @@ describe("PriceInput amount typing", () => {
     expect(onChange).toHaveBeenLastCalledWith(0);
   });
 
+  it("waits for an IME composition to end before settling the amount", () => {
+    const { input, onChange, type } = renderAmount("krw");
+    fireEvent.compositionStart(input);
+    type("7,900");
+
+    expect(input.value).toBe("7,900");
+    fireEvent.compositionEnd(input);
+    expect(input.value).toBe("7900");
+    expect(onChange).toHaveBeenLastCalledWith(790_000);
+  });
+
   it("caps the fraction at two digits", () => {
     const { input, onChange, type } = renderAmount("usd");
     type("1.999");

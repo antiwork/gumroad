@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol, getIsSingleUnitCurrency } from "$app/utils/currency";
 
 import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
@@ -9,7 +9,7 @@ import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/In
 import { OfferCode, ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 
@@ -92,7 +92,14 @@ export const PriceEditor = ({
         cents={priceCents}
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
+        ariaDescribedBy={`${uid}-price-cents-hint`}
       />
+      <FieldsetDescription id={`${uid}-price-cents-hint`}>
+        A comma before 3 digits separates thousands, like 1,000.{" "}
+        {getIsSingleUnitCurrency(currencyType)
+          ? "Decimals round to a whole amount."
+          : "For decimals, use a period or comma, like 9.99 or 9,99."}
+      </FieldsetDescription>
       {mustBePWYW ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details open={pwywOn}>
         <DetailsToggle chevronPosition="none" className="mb-0">

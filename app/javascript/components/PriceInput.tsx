@@ -52,6 +52,7 @@ export const PriceInput = React.forwardRef<
     placeholder?: string;
     hasError?: boolean;
     ariaLabel?: string;
+    ariaDescribedBy?: string;
     onBlur?: () => void;
     disabled?: boolean;
     suffix?: React.ReactNode;
@@ -68,6 +69,7 @@ export const PriceInput = React.forwardRef<
       placeholder,
       hasError,
       ariaLabel,
+      ariaDescribedBy,
       onBlur,
       disabled,
       suffix,
@@ -79,6 +81,9 @@ export const PriceInput = React.forwardRef<
     React.useEffect(() => {
       if (parseCurrencyUnitStringToCents(currencyCode, value) !== cents) setValue(parsedValue);
     }, [parsedValue]);
+    // Rewriting the value mid-composition ends the IME session without a compositionend, and the
+    // commit then lands after the rewritten text ("79007,900"). Settle once composition ends.
+    const composingRef = React.useRef(false);
     const handleChange = (newValue: string) => {
       newValue = normalizeAmountInput(newValue);
       let cents = parseCurrencyUnitStringToCents(currencyCode, newValue);
@@ -132,12 +137,20 @@ export const PriceInput = React.forwardRef<
           id={id}
           name={name}
           value={value}
-          onChange={(evt) => handleChange(evt.target.value)}
+          onChange={(evt) => (composingRef.current ? setValue(evt.target.value) : handleChange(evt.target.value))}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onCompositionEnd={(evt) => {
+            composingRef.current = false;
+            handleChange(evt.currentTarget.value);
+          }}
           maxLength={10}
           placeholder={placeholder}
           autoComplete="off"
           aria-invalid={hasError}
           aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
           onBlur={onBlur}
           disabled={disabled}
           ref={ref}

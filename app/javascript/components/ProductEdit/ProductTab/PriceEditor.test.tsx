@@ -132,3 +132,26 @@ describe("PriceEditor installments toggle", () => {
     expect(screen.getByRole("switch", { name: /installments/iu }).getAttribute("aria-describedby")).toBeNull();
   });
 });
+
+describe("PriceEditor amount hint", () => {
+  const amountDescription = () => {
+    const ids = screen.getByLabelText("Amount").getAttribute("aria-describedby")?.split(" ") ?? [];
+    return ids.map((id) => document.getElementById(id)?.textContent).join(" ");
+  };
+
+  it("describes the amount's thousands and decimal separators", () => {
+    renderEditor({ isPWYW: false, setIsPWYW: noop, priceCents: 1500, currencyType: "usd" });
+
+    expect(amountDescription()).toBe(
+      "A comma before 3 digits separates thousands, like 1,000. For decimals, use a period or comma, like 9.99 or 9,99.",
+    );
+  });
+
+  it("does not offer decimals in a currency without minor units", () => {
+    renderEditor({ isPWYW: false, setIsPWYW: noop, priceCents: 1500, currencyType: "jpy" });
+
+    expect(amountDescription()).toBe(
+      "A comma before 3 digits separates thousands, like 1,000. Decimals round to a whole amount.",
+    );
+  });
+});
