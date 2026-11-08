@@ -18,7 +18,7 @@ func (h *handler) catalogSearches(p *page, sections []*productsSection) ([]*cata
 	if err != nil {
 		return nil, err
 	}
-	key := "profile-sections_default_" + h.railsRevision() + "-" + productsKey
+	key := "profile-sections_default_" + h.c.Env.Revision + "-" + productsKey
 	if sections[0] != nil {
 		key = h.sectionsCacheKey(productsKey, profileSectionsCacheKey(p.seller.id, sections))
 	}
@@ -27,7 +27,7 @@ func (h *handler) catalogSearches(p *page, sections []*productsSection) ([]*cata
 		return nil, err
 	}
 	if !found {
-		searches, err := h.searchSections(p, sections, catalogQuery{})
+		searches, err := h.searchSections(p, sections, "")
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +150,7 @@ func (h *handler) productSectionSearches(p *page, ps *productSections) ([]*catal
 				return nil, r.productsErr
 			}
 		}
-		searches, err := h.searchSections(p, ps.allProducts, catalogQuery{})
+		searches, err := h.searchSections(p, ps.allProducts, "")
 		if err != nil {
 			return nil, err
 		}
@@ -285,7 +285,7 @@ func railsBuckets(buckets []catalogBucket) []any {
 
 // sectionsCacheKey is cached_sections' key for a relation's cache_key_with_version.
 func (h *handler) sectionsCacheKey(productsKey, relation string) string {
-	return "profile-sections_" + h.railsRevision() + "-" + productsKey + "-" + relation
+	return "profile-sections_" + h.c.Env.Revision + "-" + productsKey + "-" + relation
 }
 
 // profileSectionsCacheKey is seller_profile_products_sections.on_profile's
@@ -421,13 +421,4 @@ func rubyString(v any) (string, bool) {
 		return string(v), true
 	}
 	return "", false
-}
-
-// railsRevision is the REVISION Rails.cache is namespaced under, which ProfileSectionsPresenter's
-// keys embed.
-func (h *handler) railsRevision() string {
-	if h.c.Page.Revision != nil {
-		return h.c.Page.Revision()
-	}
-	return h.c.Env.Revision
 }

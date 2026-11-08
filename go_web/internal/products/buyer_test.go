@@ -2,9 +2,7 @@ package products
 
 import (
 	"database/sql"
-	"fmt"
 	"maps"
-	"strings"
 	"testing"
 	"time"
 
@@ -163,7 +161,7 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if valid, err := h.evaluateOfferCode(p, prod, stored); err != nil || (valid != nil) != (c.errorCode == "") {
+			if valid, err := h.evaluateOfferCode(p, prod, stored); err != nil || valid != (c.errorCode == "") {
 				t.Errorf("default code: %v %v, want %v", valid, err, c.errorCode == "")
 			}
 		})
@@ -200,17 +198,16 @@ func TestAnOwnershipOptionFallsBackToRails(t *testing.T) {
 }
 
 // A buyer can make the product's existing-customer default apply, which best_default_code_result
-// then weighs against the sale: the sale only wins by taking more off.
+// then weighs against the sale.
 func TestABuyersExistingCustomerDefault(t *testing.T) {
 	const loyalID, saleID = int64(1_797_111), int64(1_797_112)
 	buyer := &signedInUser{user: user{id: 1_797_001}}
 	for _, c := range []struct {
 		name, reason, code string
-		sale               int
+		sale               bool
 	}{
 		{name: "alone", code: "loyal"},
-		{name: "beside a bigger sale", sale: 20, code: "sale"},
-		{name: "beside a sale as big", sale: 10, code: "loyal"},
+		{name: "beside the sale", sale: true, reason: "offer code comparison"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			e := newTestEnv(t)
@@ -218,25 +215,16 @@ func TestABuyersExistingCustomerDefault(t *testing.T) {
 			h := &handler{c: e.config}
 			insertOfferCode(t, conn, loyalID, map[string]any{"code": "loyal", "amount_percentage": 10, "existing_customers_only": true})
 			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_797_121), "offer_code_id": loyalID, "product_id": productID})
-			if c.sale > 0 {
-				insertOfferCode(t, conn, saleID, map[string]any{"code": "sale", "amount_percentage": c.sale, "universal": true, "auto_apply": true})
+			if c.sale {
+				insertOfferCode(t, conn, saleID, map[string]any{"code": "sale", "amount_percentage": 20, "universal": true, "auto_apply": true})
 			}
 			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_301), "seller_id": sellerID, "link_id": productID,
 				"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
 			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, seller: &user{id: sellerID},
-				viewer: buyer, hasAutoApplyCode: c.sale > 0}
+				viewer: buyer, hasAutoApplyCode: c.sale}
 			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true},
 				defaultOfferCodeID: sql.NullInt64{Int64: loyalID, Valid: true}}
-			v := &view{}
-			var err error
-			if v.prices, err = h.loadPrices(t.Context(), prod); err != nil {
-				t.Fatal(err)
-			}
-			if v.variants, err = h.loadVariants(t.Context(), prod); err != nil {
-				t.Fatal(err)
-			}
-			v.priceCents = v.prices.buy
-			d, err := h.loadOfferDiscount(t.Context(), p, prod, v)
+			d, err := h.loadOfferDiscount(t.Context(), p, prod, nil)
 			switch {
 			case c.reason != "":
 				if err != fallback(c.reason) {
@@ -255,138 +243,4 @@ func insertOwnershipProduct(t *testing.T, conn *sql.DB, code, product int64) {
 		"price_cents": 100, "created_at": testNow, "updated_at": testNow})
 	testdb.Insert(t, conn, "offer_codes_ownership_products", map[string]any{"id": int64(1_797_601), "offer_code_id": code, "product_id": product,
 		"created_at": testNow, "updated_at": testNow})
-}
-
-// A signed-in buyer's tiered code takes the tier their oldest qualifying purchase reaches.
-func TestATieredCodeForABuyer(t *testing.T) {
-	const codeID = int64(1_797_131)
-	for _, c := range []struct {
-		name  string
-		owned bool
-		want  int64
-	}{
-		{name: "a buyer of 13 months", owned: true, want: 25},
-		{name: "a buyer who never bought it", want: 10},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			e := newTestEnv(t)
-			conn := testdb.Open(t)
-			h := &handler{c: e.config}
-			buyer := &signedInUser{user: user{id: 1_797_002}}
-			now := testNow.Add(time.Hour)
-			insertOfferCode(t, conn, codeID, map[string]any{"code": "LOYAL", "universal": true,
-				"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`})
-			if c.owned {
-				testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_311), "seller_id": sellerID, "link_id": productID,
-					"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
-			}
-			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: now}}, seller: &user{id: sellerID}, viewer: buyer}
-			p.discountCode = "LOYAL"
-			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
-			v := &view{}
-			var err error
-			if v.prices, err = h.loadPrices(t.Context(), prod); err != nil {
-				t.Fatal(err)
-			}
-			if v.variants, err = h.loadVariants(t.Context(), prod); err != nil {
-				t.Fatal(err)
-			}
-			v.priceCents = v.prices.buy
-			d, err := h.loadOfferDiscount(t.Context(), p, prod, v)
-			if err != nil || d.code == nil || d.code.amountPercentage.Int64 != c.want || d.resultCode != "LOYAL" {
-				t.Fatalf("got %v, %+v", err, d)
-			}
-		})
-	}
-}
-
-// The buyer's tier lands on the product's own copy of the seller's sale: the shared code, which
-// cards read, keeps the percentage it stores.
-func TestATieredSaleKeepsItsStoredPercentage(t *testing.T) {
-	const codeID = int64(1_797_132)
-	e := newTestEnv(t)
-	conn := testdb.Open(t)
-	h := &handler{c: e.config}
-	buyer := &signedInUser{user: user{id: 1_797_003}}
-	now := testNow.Add(time.Hour)
-	insertOfferCode(t, conn, codeID, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true,
-		"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`})
-	testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_312), "seller_id": sellerID, "link_id": productID,
-		"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
-	p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: now}}, seller: &user{id: sellerID}, viewer: buyer,
-		hasAutoApplyCode: true}
-	prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
-	v := &view{}
-	var err error
-	if v.prices, err = h.loadPrices(t.Context(), prod); err != nil {
-		t.Fatal(err)
-	}
-	if v.variants, err = h.loadVariants(t.Context(), prod); err != nil {
-		t.Fatal(err)
-	}
-	v.priceCents = v.prices.buy
-	d, err := h.loadOfferDiscount(t.Context(), p, prod, v)
-	if err != nil || d.code == nil || d.code.amountPercentage.Int64 != 25 {
-		t.Fatalf("got %v, %+v", err, d)
-	}
-	if p.autoApply == nil || p.autoApply.amountPercentage != (sql.NullInt64{Int64: 10, Valid: true}) {
-		t.Errorf("the seller's sale is now %+v", p.autoApply)
-	}
-}
-
-// Each selection_discounts entry weighs the codes at its own price, so the URL's code, a buyer's
-// existing-customer default and the sale can each win one: $1.50 off at 500 cents, $3 off past
-// a 900-cent minimum at 1,000, and 20% at 2,000.
-func TestThreeCodesEachWinningAnOption(t *testing.T) {
-	const urlID, loyalID, saleID = int64(1_797_141), int64(1_797_142), int64(1_797_143)
-	const category, small, mid, large = int64(1_797_151), int64(1_797_152), int64(1_797_153), int64(1_797_154)
-	e := newTestEnv(t)
-	conn := testdb.Open(t)
-	h := &handler{c: e.config}
-	buyer := &signedInUser{user: user{id: 1_797_003}}
-	insertOfferCode(t, conn, urlID, map[string]any{"code": "SAVE", "amount_cents": 150, "currency_type": "usd", "universal": true})
-	insertOfferCode(t, conn, loyalID, map[string]any{"code": "loyal", "amount_cents": 300, "currency_type": "usd", "minimum_amount_cents": 900,
-		"existing_customers_only": true})
-	testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_797_161), "offer_code_id": loyalID, "product_id": productID})
-	insertOfferCode(t, conn, saleID, map[string]any{"code": "SALE", "amount_percentage": 20, "universal": true, "auto_apply": true})
-	testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_321), "seller_id": sellerID, "link_id": productID,
-		"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
-	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Size"})
-	for i, id := range []int64{small, mid, large} {
-		testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": category, "name": fmt.Sprint("Size ", i),
-			"position_in_category": i, "price_difference_cents": []int{0, 500, 1500}[i], "created_at": testNow, "updated_at": testNow})
-	}
-	p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, seller: &user{id: sellerID},
-		viewer: buyer, hasAutoApplyCode: true}
-	p.discountCode = "SAVE"
-	prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true},
-		defaultOfferCodeID: sql.NullInt64{Int64: loyalID, Valid: true}}
-	v := &view{}
-	var err error
-	if v.prices, err = h.loadPrices(t.Context(), prod); err != nil {
-		t.Fatal(err)
-	}
-	if v.variants, err = h.loadVariants(t.Context(), prod); err != nil {
-		t.Fatal(err)
-	}
-	v.priceCents = v.prices.buy
-	if v.discount, err = h.loadOfferDiscount(t.Context(), p, prod, v); err != nil {
-		t.Fatal(err)
-	}
-	if v.discount.resultCode != "SAVE" {
-		t.Errorf("the page's code %q", v.discount.resultCode)
-	}
-	options := rails.EncodeJSON(selectionDiscounts(p, prod, v, v.discount.resultProps()))
-	for id, want := range map[int64]string{
-		small: `{"discount_code":{"valid":true,"code":"SAVE","discount":{"type":"fixed","cents":150,`,
-		mid:   `{"discount_code":{"valid":true,"code":"loyal","discount":{"type":"fixed","cents":300,`,
-		large: `{"discount_code":{"valid":true,"code":"SALE","discount":{"type":"percent","percents":20,`,
-	} {
-		if entry := `"` + e.ids.Encrypt(id) + `":` + want; !strings.Contains(options, entry) {
-			t.Errorf("want %s in %s", entry, options)
-		}
-	}
-	if !strings.Contains(options, `"sale_label":"Sale"}`) || strings.Count(options, `"sale_label":null`) != 2 {
-		t.Errorf("labels in %s", options)
-	}
 }

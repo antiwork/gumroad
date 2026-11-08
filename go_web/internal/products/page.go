@@ -34,12 +34,10 @@ type PageConfig struct {
 	CSP     web.CSP
 	Shared  *pages.Shared
 	Avatars *storage.Avatars
-	// Cache is Rails.cache and Redis $redis. Revision is the REVISION it's namespaced under,
-	// which Rails' own keys embed too; nil is go_web's.
-	Cache    Cache
-	Revision func() string
-	Redis    redis.Cmdable
-	GeoIP    *geoip.Reader
+	// Cache is Rails.cache and Redis $redis.
+	Cache Cache
+	Redis redis.Cmdable
+	GeoIP *geoip.Reader
 	// Flag is a Flipper flag by name.
 	Flag func(name string) *flipper.Flag
 	// CDNMap is CDN_URL_MAP in order, and PublicStorageURL the public service's object URL
@@ -96,9 +94,6 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	}
 	if err := h.loadViewer(p, prod); err != nil {
 		return err
-	}
-	if p.autocomplete {
-		return h.renderAutocomplete(w, p, prod)
 	}
 
 	v, err := h.loadView(ctx, p, prod)
@@ -372,19 +367,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		// before that for a membership.
 		return nil, fallback("no price")
 	}
-	// The offer codes' comparison reads the recurrences and the variants.
-	if v.recurrences, err = h.loadRecurrences(ctx, prod, v.prices); err != nil {
-		return nil, err
-	}
-	if prod.is(productIsTieredMembership) {
-		if v.tierRecurrences, err = tierRecurrences(v.prices); err != nil {
-			return nil, err
-		}
-	}
-	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
-		return nil, err
-	}
-	if v.discount, err = h.loadOfferDiscount(ctx, p, prod, v); err != nil {
+	if v.discount, err = h.loadOfferDiscount(ctx, p, prod, v.priceCents); err != nil {
 		return nil, err
 	}
 	pppPrice, err := h.loadPPP(ctx, p, prod, v)
@@ -394,7 +377,7 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	// displayed_price_cents: the discounted price, or PPP's when that's lower.
 	displayed := v.priceCents
 	if displayed != nil && v.discount.code != nil {
-		d := v.discount.discountedCents(*displayed, p.quantity())
+		d := v.discount.discountedCents(*displayed)
 		displayed = &d
 	}
 	if displayed != nil && pppPrice != nil && *pppPrice < *displayed {
@@ -417,6 +400,14 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.preorder, err = h.preorderProps(ctx, prod); err != nil {
 		return nil, err
 	}
+	if v.recurrences, err = h.loadRecurrences(ctx, prod, v.prices); err != nil {
+		return nil, err
+	}
+	if prod.is(productIsTieredMembership) {
+		if v.tierRecurrences, err = tierRecurrences(v.prices); err != nil {
+			return nil, err
+		}
+	}
 	if v.covers, err = h.loadCovers(ctx, p, prod.id); err != nil {
 		return nil, err
 	}
@@ -427,6 +418,9 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 		return nil, err
 	}
 	if v.reviewStat, err = h.loadReviewStat(ctx, prod.id); err != nil {
+		return nil, err
+	}
+	if v.variants, err = h.loadVariants(ctx, prod); err != nil {
 		return nil, err
 	}
 	if p.wanted {
@@ -441,7 +435,10 @@ func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, 
 	if v.collaborator, err = h.collaboratorByline(ctx, p, prod); err != nil {
 		return nil, err
 	}
-	if err := h.loadStock(ctx, p, prod, v); err != nil {
+	if v.bundle, err = h.loadBundle(ctx, p, prod); err != nil {
+		return nil, err
+	}
+	if v.quantityRemaining, err = h.remainingForSaleCount(ctx, prod, v.variants, v.bundle.quantityLeft); err != nil {
 		return nil, err
 	}
 	if err := h.loadDescription(ctx, prod, v); err != nil {

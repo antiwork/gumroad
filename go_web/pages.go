@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -145,31 +144,10 @@ func (e s3Exister) Exists(ctx context.Context, key string) (bool, error) {
 // memcacheTimeout is Dalli's socket timeout, which Rails.cache uses.
 const memcacheTimeout = time.Second
 
-// railsRevisionInterval is how often go_web asks the Rails hosts which REVISION they run.
-const railsRevisionInterval = time.Minute
-
-// followRailsRevision keeps cache on the REVISION the Rails hosts run. Rails namespaces
-// Rails.cache, and its profile sections' keys, by its own deploy's REVISION, which moves on
-// every deploy while go_web rolls only on its own changes. An unknown one keeps the last.
-func followRailsRevision(proxy *web.RailsProxy, cache *railscache.Store, logger *slog.Logger, stop <-chan struct{}) {
-	ticker := time.NewTicker(railsRevisionInterval)
-	defer ticker.Stop()
-	for {
-		if r := proxy.Revision(context.Background()); r != "" && r != cache.Namespace() {
-			logger.Info("following Rails' cache namespace", "revision", r)
-			cache.SetNamespace(r)
-		}
-		select {
-		case <-stop:
-			return
-		case <-ticker.C:
-		}
-	}
-}
-
 // productPageConfig is what the product page reads beyond the shared page config, or
-// errPagesOff. Its Rails.cache reads and writes follow the Rails hosts' REVISION namespace (see
-// followRailsRevision), starting from go_web's own.
+// errPagesOff. Its Rails.cache reads and writes use go_web's own REVISION namespace: what it
+// reads there it computes from the database under keys that capture every change, or leaves a
+// miss to Rails.
 func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, error) {
 	if b.pages == nil {
 		return nil, fmt.Errorf("%w: download page config", errPagesOff)
@@ -183,11 +161,6 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		return nil, fmt.Errorf("%w: %v", errPagesOff, err)
 	}
 	d.closers = append(d.closers, func() error { cache.Close(); return nil })
-	if b.proxy != nil {
-		stop := make(chan struct{})
-		go followRailsRevision(b.proxy, cache, d.logger, stop)
-		d.closers = append(d.closers, func() error { close(stop); return nil })
-	}
 	geo, err := d.geoIP()
 	if err != nil {
 		return nil, err
@@ -235,15 +208,14 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		d.logger.Warn("call product pages left to Rails", "reason", err.Error())
 	}
 	return &products.PageConfig{
-		Layout:   b.pages.Layout,
-		CSP:      b.pages.CSP,
-		Shared:   b.pages.Shared,
-		Avatars:  b.pages.Avatars,
-		Cache:    cache,
-		Revision: cache.Namespace,
-		Redis:    d.redis,
-		GeoIP:    geo,
-		Flag:     flags.flag,
+		Layout:  b.pages.Layout,
+		CSP:     b.pages.CSP,
+		Shared:  b.pages.Shared,
+		Avatars: b.pages.Avatars,
+		Cache:   cache,
+		Redis:   d.redis,
+		GeoIP:   geo,
+		Flag:    flags.flag,
 		// CDN_URL_MAP in production.
 		CDNMap: [][2]string{
 			{s3Endpoint + "/gumroad/", env.S3ProxyHost + "/res/gumroad/"},

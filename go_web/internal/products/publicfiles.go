@@ -41,7 +41,7 @@ func (h *handler) publicFilesProps(ctx context.Context, productID int64) ([]any,
 		last = id
 		var extension any
 		if fileType.Valid {
-			up, ok := fileTypeUpcase(fileType.String)
+			up, ok := asciiUpcase(fileType.String)
 			if !ok {
 				return nil, fallback("public file type")
 			}

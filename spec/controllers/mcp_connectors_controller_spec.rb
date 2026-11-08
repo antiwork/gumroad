@@ -34,23 +34,6 @@ describe McpConnectorsController do
     expect(response.body).not_to include("Connect your store", "1. Add the connector", "Select the connector in your chat")
   end
 
-  it "offers Cursor a custom remote server address" do
-    get :show, params: { client: "cursor" }
-
-    expect(response).to be_successful
-    expect(response.body).to include("Gumroad MCP", "Cursor", "/cursor/v1/mcp", "Add Gumroad to Cursor")
-    expect(response.body).to include("no published Gumroad listing in Cursor")
-    expect(response.body).not_to include("not yet available in", "Cursor’s connector directory")
-  end
-
-  it "offers Antigravity a custom remote server address" do
-    get :show, params: { client: "antigravity" }
-
-    expect(response).to be_successful
-    expect(response.body).to include("Google Antigravity", "/antigravity/v1/mcp", "Add Gumroad to Antigravity")
-    expect(response.body).not_to include("not yet available in", "Antigravity’s connector directory")
-  end
-
   it "documents how to revoke connector access" do
     get :show, params: { client: "claude" }
 
@@ -73,8 +56,6 @@ describe McpConnectorsController do
       expect(response.body).to include("Gumroad MCP for Claude", "Available now in Claude’s connector directory", "Listed in Claude’s connector directory")
       expect(response.body).not_to include("not yet listed")
       expect(response.body).to include("Gumroad MCP for Muse", "not yet available in Muse")
-      expect(response.body).to include("Gumroad MCP for Cursor", "Available now as a custom connector.")
-      expect(response.body).to include("Gumroad MCP for Google Antigravity")
       expect(response.body).to include("Gumroad MCP for ChatGPT", "Available now in ChatGPT’s plugin directory", "Listed in ChatGPT’s plugin directory")
       expect(response.body).not_to include("Not available yet")
       expect(response.body).not_to include("Connect your store")

@@ -12,7 +12,7 @@ module Mcp
   # the only place the surface says what creators actually DO through an assistant — publishing
   # versus reading sales — because the MCP route logs nothing per request anywhere else.
   module ProtocolTelemetry
-    CONNECTORS = %w[muse claude chatgpt cursor antigravity].freeze
+    CONNECTORS = %w[muse claude chatgpt].freeze
     # Every published revision, so a client declaring one we do not serve is still named.
     VERSIONS = (Server::SUPPORTED_VERSIONS + %w[2024-11-05 2025-06-18 2025-11-25]).uniq.freeze
     # The methods this endpoint dispatches.
@@ -25,7 +25,7 @@ module Mcp
       add_content_link add_cover add_file create_bundle create_discount_code create_draft_product
       expire_discount_code get_account get_analytics get_customers get_product get_sales_totals
       get_subscriptions list_categories list_files list_payouts list_products list_purchases list_sales
-      publish_product search_products unpublish_product update_bundle update_discount_code update_product
+      publish_product unpublish_product update_bundle update_discount_code update_product
     ].freeze
     OUTCOMES = %w[ok error scope invalid].freeze
     UNDECLARED = "undeclared"

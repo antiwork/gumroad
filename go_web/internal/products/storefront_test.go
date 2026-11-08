@@ -20,7 +20,6 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/elastic"
 	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
-	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 func TestTheStorefrontCatalog(t *testing.T) {
@@ -173,18 +172,6 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		return strings.Replace(card, `"recurrence":null}`, `"recurrence":null`+tail+`}`, 1)
 	}
 	const onSale = `,"original_price_cents":300,"sale_label":"Sale"`
-	// tieredSale makes the sale tiered by ownership, storing its first tier's 10% as the dashboard
-	// does, and has the buyer buy this product months ago.
-	tieredSale := func(t *testing.T, conn *sql.DB, months int) {
-		sale(t, conn, nil, map[string]any{
-			"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":6,"amount_percentage":15},{"months":12,"amount_percentage":25}]`})
-		addBuyer(t, conn, nil)
-		addPurchase(t, conn, 1_792_661, map[string]any{"purchaser_id": buyerID, "created_at": testNow.AddDate(0, -months, 0)})
-	}
-	// tierDiscount is this product's discount_code at the buyer's tier.
-	tierDiscount := func(percents int) string {
-		return fmt.Sprintf(`"discount_code":{"valid":true,"code":"SALE","discount":{"type":"percent","percents":%d,"product_ids":null,`, percents)
-	}
 	// scopedSale is a sale, left off this product, scoped to the other product's option at index
 	// scoped among options with the price differences diffs.
 	scopedSale := func(t *testing.T, conn *sql.DB, scoped int, diffs ...any) {
@@ -239,12 +226,10 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		body, total string
 		respond     func(body map[string]any) (hits, total string)
 		setup       func(t *testing.T, conn *sql.DB)
-		// prepare sets flags and rates; headers and query go with the request, and signedIn
-		// signs the buyer in in place of headers.
-		prepare  func(e *testEnv)
-		headers  map[string]string
-		signedIn bool
-		query    string
+		// prepare sets flags and rates; headers and query go with the request.
+		prepare func(e *testEnv)
+		headers map[string]string
+		query   string
 		// searchedAgain is the searches after a second view, when it differs from searched.
 		searchedAgain int
 		want          func(e *testEnv) string
@@ -289,19 +274,6 @@ func TestTheStorefrontCatalog(t *testing.T) {
 		{name: "a blank visitor query", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?query=+",
 			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
 			want:  func(e *testEnv) string { return results(e, 2) }},
-		// search_options' from is (from.to_i - 1).clamp(0, ...), so a referral tag reads as the first page.
-		{name: "a referral tag in from", hits: bothHits, server: search, searched: 2, searchedAgain: 3, query: "?from=threads",
-			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
-			want:  func(e *testEnv) string { return results(e, 2) }},
-		{name: "a later page", server: search, searched: 2, searchedAgain: 3, query: "?from=10",
-			setup: func(t *testing.T, conn *sql.DB) { addOther(t, conn, nil) },
-			respond: func(body map[string]any) (string, string) {
-				if body["from"] == float64(9) {
-					return fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other), "10"
-				}
-				return bothHits, "3"
-			},
-			want: func(e *testEnv) string { return results(e, 9) }},
 		{name: "the rest of the catalog, without this product", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				addOther(t, conn, nil)
@@ -424,31 +396,6 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_971), "name": "file",
 					"record_type": "Thumbnail", "record_id": int64(1_792_951), "blob_id": int64(1_792_961), "created_at": testNow})
 				// Ruby's digest of {format: "png", resize_to_limit: [600, 600]}.
-				testdb.Insert(t, conn, "active_storage_variant_records", map[string]any{"id": int64(1_792_981), "blob_id": int64(1_792_961),
-					"variation_digest": "Qf43UUrCAHcLMQKl8+06HI/IH0c="})
-				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_972), "name": "image",
-					"record_type": "ActiveStorage::VariantRecord", "record_id": int64(1_792_981), "blob_id": int64(1_792_962), "created_at": testNow})
-			},
-			want: func(e *testEnv) string {
-				card := strings.Replace(otherCard(e), `"ratings":{"count":3,"average":4.5}`, `"ratings":null`, 1)
-				card = strings.Replace(card, `"thumbnail_url":null`, `"thumbnail_url":"https://public-files.gumroad.com/thumbnails/600"`, 1)
-				return section(e, 2, strings.Replace(card, `"price_cents":400`, `"price_cents":300`, 1))
-			}},
-		// A second file of the same thumbnail, with a lower attachment id: has_one keeps the lower blob_id.
-		{name: "a card's thumbnail with two files", server: search, searched: 1,
-			hits: fmt.Sprintf(`[{"_id":"%d","sort":[1762430000000]}]`, other),
-			setup: func(t *testing.T, conn *sql.DB) {
-				addOther(t, conn, map[string]any{"flags": 0})
-				testdb.Insert(t, conn, "thumbnails", map[string]any{"id": int64(1_792_951), "product_id": other, "guid": "t",
-					"created_at": testNow, "updated_at": testNow})
-				for i, key := range []string{"thumbnails/original", "thumbnails/600", "thumbnails/other"} {
-					testdb.Insert(t, conn, "active_storage_blobs", map[string]any{"id": int64(1_792_961 + i), "key": key, "filename": "t.png",
-						"content_type": "image/png", "service_name": "amazon_public", "byte_size": 1, "created_at": testNow})
-				}
-				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_971), "name": "file",
-					"record_type": "Thumbnail", "record_id": int64(1_792_951), "blob_id": int64(1_792_961), "created_at": testNow})
-				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_970), "name": "file",
-					"record_type": "Thumbnail", "record_id": int64(1_792_951), "blob_id": int64(1_792_963), "created_at": testNow})
 				testdb.Insert(t, conn, "active_storage_variant_records", map[string]any{"id": int64(1_792_981), "blob_id": int64(1_792_961),
 					"variation_digest": "Qf43UUrCAHcLMQKl8+06HI/IH0c="})
 				testdb.Insert(t, conn, "active_storage_attachments", map[string]any{"id": int64(1_792_972), "name": "image",
@@ -919,24 +866,6 @@ func TestTheStorefrontCatalog(t *testing.T) {
 			want: func(e *testEnv) string {
 				return section(e, 2, saleCard(e, 270, `,"original_price_cents":300,"sale_label":"Black Friday"`))
 			}},
-		// The buyer's tier is this product's; discounted_price_cents prices a card through the
-		// sale's stored percentage, whatever the buyer has owned.
-		{name: "a tiered sale for a buyer of 7 months", hits: bothHits, server: search, searched: 1, signedIn: true,
-			setup: func(t *testing.T, conn *sql.DB) { tieredSale(t, conn, 7) },
-			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) },
-			check: func(t *testing.T, e *testEnv, page string) {
-				if want := tierDiscount(15); !strings.Contains(page, want) {
-					t.Errorf("want %s", want)
-				}
-			}},
-		{name: "a tiered sale for a buyer of 13 months", hits: bothHits, server: search, searched: 1, signedIn: true,
-			setup: func(t *testing.T, conn *sql.DB) { tieredSale(t, conn, 13) },
-			want:  func(e *testEnv) string { return section(e, 2, saleCard(e, 270, onSale)) },
-			check: func(t *testing.T, e *testEnv, page string) {
-				if want := tierDiscount(25); !strings.Contains(page, want) {
-					t.Errorf("want %s", want)
-				}
-			}},
 		{name: "a card the sale leaves out", hits: bothHits, server: search, searched: 1,
 			setup: func(t *testing.T, conn *sql.DB) {
 				sale(t, conn, nil, nil)
@@ -1069,11 +998,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				e.config.Page.Search = client
 			}
 			path := "/l/guide" + c.query
-			headers := c.headers
-			if c.signedIn {
-				headers = e.signedIn(buyerID, nil)
-			}
-			w := e.get(host, path, e.withDryRun(path, headers, c.reason))
+			w := e.get(host, path, e.withDryRun(path, c.headers, c.reason))
 			if searches != c.searched {
 				t.Errorf("%d searches, want %d", searches, c.searched)
 			}
@@ -1114,7 +1039,7 @@ func TestTheStorefrontCatalog(t *testing.T) {
 				t.Fatalf("cache writes %v", e.cache.writes)
 			}
 			// The next view reads the search from the cache.
-			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, path, headers).Body.String())[1])
+			again := html.UnescapeString(dataPage.FindStringSubmatch(e.get(host, path, c.headers).Body.String())[1])
 			wantSearches := c.searched
 			if c.searchedAgain != 0 {
 				wantSearches = c.searchedAgain
@@ -1403,16 +1328,4 @@ func TestAnUnlistedFeaturedSectionsProduct(t *testing.T) {
 	addSection(t, conn, 1_792_642, profileFeaturedSectionType, "Odd", `{"featured_product_id":1795711}`)
 	listSections(t, conn, `{"sections":[]}`)
 	e.render(t, nil, "purchase type")
-}
-
-// The sections' keys embed the REVISION Rails.cache is namespaced under, which go_web follows.
-func TestSectionsCacheKeyFollowsRailsRevision(t *testing.T) {
-	h := &handler{c: &Config{Env: &web.Environment{Revision: "go"}, Page: &PageConfig{}}}
-	if got := h.sectionsCacheKey("p", "r"); got != "profile-sections_go-p-r" {
-		t.Errorf("before Rails answers: %q", got)
-	}
-	h.c.Page.Revision = func() string { return "rails" }
-	if got := h.sectionsCacheKey("p", "r"); got != "profile-sections_rails-p-r" {
-		t.Errorf("following Rails: %q", got)
-	}
 }

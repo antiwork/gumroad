@@ -53,10 +53,7 @@ func Register(app *web.App, c *Config) {
 		Redirects: app.Redirects(), Meta: c.Meta, Now: c.Now, DryRunKey: c.DryRunKey, DryRunOnce: c.DryRunOnce,
 	}}
 	app.HandlePage("GET /l/{id}", "LinksController#show", h)
-	app.HandleUncleanPage("/l/", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ctl.Serve(w, r, "product page", func(*http.Request) (*pages.Visit, error) { return nil, fallback("unclean path") })
-	}))
-	// /l/:id/:code (an offer code), and /l/:id/, which Journey routes as /l/:id.
+	// /l/:id/:code (an offer code), and a trailing slash, whose empty code goes to Rails.
 	app.HandlePage("GET /l/{id}/{rest...}", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.servePage(w, r, true)
 	}))
@@ -102,10 +99,8 @@ type page struct {
 	// avatar_url enqueues GenerateAvatarVariantJob. viewerPushes are the signed-in props'
 	// avatars, which Rails reads only for an Inertia render.
 	retinaPushes, posterPushes, avatarPushes, viewerPushes []int64
-	// urlCode is params[:code], the path's or the query's, when present: the noindex header's
-	// and the permalink redirect's. discountCode is (params[:offer_code] || params[:code]).presence,
-	// the discount's, and wrapperCode params[:offer_code].presence || params[:code].presence.
-	urlCode, discountCode, wrapperCode string
+	// urlCode is params[:code], the path's or the query's, when present.
+	urlCode string
 	// layout is params[:layout], and recommendedBy params[:recommended_by] when given: the page's
 	// own, never a featured product's.
 	layout        string
@@ -123,17 +118,10 @@ type page struct {
 	// visitorSearch is whether the query has a VISITOR_SEARCH_PARAMS key, which makes section_props
 	// search afresh.
 	visitorSearch bool
-	// query is params[:query]: a string, or nil for a bare or absent key. searchFrom is
-	// search_options' from for params[:from].
-	query      any
-	searchFrom int64
-	// quantityParam is params[:quantity].to_i, nil without one; see quantity.
-	quantityParam *int64
+	// query is params[:query]: a string, or nil for a bare or absent key.
+	query any
 	// iframe is params[:overlay] || params[:embed], which renders Products/Iframe/Show.
 	iframe bool
-	// autocomplete is Discover's search box reloading autocomplete_results, the one partial
-	// reload declined lets through.
-	autocomplete bool
 	// wanted is params[:wanted] == "true", which sends the visitor to checkout.
 	wanted bool
 	// format is request.format's symbol, which picks show's respond_to branch, and ext the
@@ -181,29 +169,20 @@ var railsSubdomainHost = web.SubdomainRequestPattern("gumroad.com")
 // which a subdomain like gumroad-analytics-com.gumroad.com also meets, so Rails 404s it.
 var analyticsHost = regexp.MustCompile(`gumroad-analytics.com`)
 
+// permalinkParam is the shape of a code this port reads; anything else is Rails'.
+var permalinkParam = regexp.MustCompile(`\A[A-Za-z0-9_-]+\z`)
+
 // prepare parses the request and decides whether this port serves it. Nothing it does is
 // visible outside the process, so any fallback it returns is safe.
 func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) (*page, error) {
 	if h.c.Page == nil {
 		return nil, fallback("pages off")
 	}
-	rest := r.PathValue("rest")
-	if strings.HasSuffix(r.URL.EscapedPath(), "/") {
-		// Journey's normalize_path drops a trailing slash, after the id or the code; the URL keeps it.
-		rest = strings.TrimSuffix(rest, "/")
-	}
-	if codeRoute && rest == "" {
-		codeRoute = false
-	}
-	if codeRoute && r.URL.RawPath != "" && strings.Contains(rest, "/") {
+	if codeRoute && r.URL.RawPath != "" && strings.Contains(r.PathValue("rest"), "/") {
 		// An escaped slash stays in Journey's segment, which the mux's rest can't tell.
 		return nil, fallback("offer code path")
 	}
-	if codeRoute && (strings.HasPrefix(rest, "landing/embed") || strings.HasPrefix(rest, "landing/version")) {
-		// links#landing_iframe_content and #landing_version: a custom HTML page's frame and live reload.
-		return nil, fallback("landing route")
-	}
-	rt := parseRoute(r.PathValue("id"), rest, codeRoute)
+	rt := parseRoute(r.PathValue("id"), r.PathValue("rest"), codeRoute)
 	if reason := declined(r, h.c.Env); reason != "" {
 		return nil, fallback(reason)
 	}
@@ -220,7 +199,7 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	}
 	switch {
 	case codeRoute && rt.code == "":
-		// An empty code before a format.
+		// Journey drops the trailing slash, which this route doesn't.
 		return nil, fallback("offer code path")
 	case !validID(rt.id) || codeRoute && !validID(rt.code):
 		return nil, fallback("permalink")
@@ -240,24 +219,12 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 		return nil, err
 	}
 	p := &page{Visit: v, format: v.Req.Format(), ext: rt.format}
-	_, p.autocomplete = r.Header["X-Inertia-Partial-Data"]
 	// The path's code overrides the query's; a blank one is no code.
 	if code, _ := v.Req.Param("code").(string); rails.Present(code) {
 		p.urlCode = code
 	}
-	p.discountCode, p.wrapperCode = p.urlCode, p.urlCode
-	if code, ok := v.Req.Param("offer_code").(string); ok {
-		// A blank offer_code still wins the ||, then reads as no code.
-		p.discountCode = ""
-		if rails.Present(code) {
-			p.discountCode, p.wrapperCode = code, code
-		}
-	}
-	// track_utm_link_visit returns unless request.get?, so a HEAD request records no visit.
-	if r.Method == http.MethodGet {
-		if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
-			return nil, fallback("utm visit push")
-		}
+	if p.utm, _ = utmParams(v.Req); p.utm != nil && h.c.Page.Sidekiq == nil {
+		return nil, fallback("utm visit push")
 	}
 	p.layout, _ = v.Req.Param("layout").(string)
 	// A bare key is nil, which still counts as a visitor search param.
@@ -270,21 +237,6 @@ func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) 
 	p.wanted = v.Req.Param("wanted") == "true"
 	if raw, ok := v.Req.Params.Get("query"); ok {
 		p.query, p.visitorSearch = raw, true
-	}
-	if raw, ok := v.Req.Params.Get("from"); ok {
-		from, _ := raw.(string)
-		n, ok := rails.StringToI(from)
-		if !ok {
-			return nil, fallback("param from")
-		}
-		p.searchFrom, p.visitorSearch = min(max(n-1, 0), maxResultWindow-catalogPageSize), true
-	}
-	if raw, ok := v.Req.Param("quantity").(string); ok {
-		n, fits := rails.StringToI(raw)
-		if !fits {
-			return nil, fallback("param quantity")
-		}
-		p.quantityParam = &n
 	}
 	return p, nil
 }
@@ -347,8 +299,7 @@ func declined(r *http.Request, env *web.Environment) string {
 		port, protocol = "80", "http://"
 	}
 	switch {
-	case r.Method != http.MethodGet && r.Method != http.MethodHead:
-		// Rails routes HEAD to show, and Rack::Head drops the body.
+	case r.Method != http.MethodGet:
 		return "method"
 	case env.RootDomain != "gumroad.com" || env.IsGumroadHost(host) || analyticsHost.MatchString(host):
 		return "host"
@@ -369,19 +320,19 @@ func declined(r *http.Request, env *web.Environment) string {
 		// Parsing reads the body, which a fallback after it could no longer send.
 		return "request body"
 	}
-	if _, ok := r.Header["X-Inertia-Partial-Data"]; ok {
-		return pages.DeclinedPartialHeaders(r, discoverComponent, autocompleteData)
-	}
 	return pages.DeclinedVisitHeaders(r)
 }
 
 // rendererParams are the params whose effect on the page this port leaves to Rails.
 var rendererParams = []string{
 	// The action and its presenter.
-	"debug",
+	"offer_code", "quantity", "debug",
 	// The sections' search filters.
-	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "size",
+	"tags", "filetypes", "min_price", "max_price", "rating", "sort", "from", "size",
 }
+
+// cartParams are the params only ?wanted=true's cart_item reads, which this port leaves to Rails.
+var cartParams = []string{"currency", "option", "variant", "price", "recurrence", "rent"}
 
 // declinedParams is a param this port leaves to Rails.
 func declinedParams(req *rails.Request) string {
@@ -390,9 +341,19 @@ func declinedParams(req *rails.Request) string {
 			return "param " + name
 		}
 	}
+	wanted := req.Param("wanted") == "true"
+	if wanted {
+		for _, name := range cartParams {
+			if _, ok := req.Params.Get(name); ok {
+				return "param " + name
+			}
+		}
+	}
 	if raw, ok := req.Params.Get("layout"); ok {
-		if _, isString := raw.(string); !isString && raw != nil {
-			// The bundles' URLs would nest it.
+		switch raw {
+		case nil, "", productLayoutProfile, productLayoutDiscover:
+		default:
+			// Its value would go into the bundles' URLs.
 			return "param layout"
 		}
 		// The layout's component with embed's iframe body class is neither port's shape.
@@ -400,34 +361,29 @@ func declinedParams(req *rails.Request) string {
 			return "layout with iframe"
 		}
 	}
-	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest", "currency", "quantity", "from"} {
+	for _, name := range []string{"recommended_by", "query", "purchase_id", "purchase_email_digest", "currency"} {
 		if raw, ok := req.Params.Get(name); ok {
 			if _, isString := raw.(string); !isString && raw != nil {
 				return "param " + name
 			}
 		}
 	}
-	// Redirects and props echo the code without looking it up, so one this port wouldn't look up
-	// goes to Rails here.
-	for _, name := range []string{"code", "offer_code"} {
-		if raw, ok := req.Params.Get(name); ok {
-			code, isString := raw.(string)
-			if _, ported := normalizeCode(code); !isString || rails.Present(code) && !ported {
-				return "param " + name
-			}
+	// Only a code whose lookups can't depend on Unicode normalization or the collation is
+	// served here.
+	if raw, ok := req.Params.Get("code"); ok {
+		if code, isString := raw.(string); !isString || !rails.Blank(code) && !permalinkParam.MatchString(code) {
+			return "param code"
 		}
 	}
 	if _, reason := utmParams(req); reason != "" {
 		return reason
 	}
-	return ""
-}
-
-// quantity is (params[:quantity] || 1).to_i, which the offer codes are weighed at; a featured
-// product's props take the default.
-func (p *page) quantity() int64 {
-	if p.quantityParam == nil {
-		return 1
+	for _, key := range req.Params.Keys() {
+		if wanted && (strings.HasPrefix(key, "monthly") || strings.HasPrefix(key, "quarterly") || strings.HasPrefix(key, "biannually") ||
+			strings.HasPrefix(key, "yearly") || strings.HasPrefix(key, "every_two_years")) {
+			// BasePrice::Recurrence params that ?wanted=true reads.
+			return "param " + key
+		}
 	}
-	return *p.quantityParam
+	return ""
 }

@@ -79,7 +79,7 @@ func remainingTTL(t *testing.T, srv *server, key string) int {
 
 func (s *Store) key(t *testing.T, name string) string {
 	t.Helper()
-	k, err := normalizeKey(s.Namespace(), name)
+	k, err := normalizeKey(s.namespace, name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestLiveRoundTrip(t *testing.T) {
 
 func TestLiveStoredItemMatchesStoreWrite(t *testing.T) {
 	s := liveStore(t)
-	s.SetNamespace("24fb9aed6a64")
+	s.namespace = "24fb9aed6a64"
 	ctx := t.Context()
 	checked := 0
 	for _, c := range loadFixtures(t).Writes {

@@ -74,8 +74,7 @@ func waitlistFormFound(html string) (bool, error) {
 }
 
 // renderCustomHTML is render_custom_html_if_present, whose wanted and review link serve has
-// checked and whose native and code params declinedParams left to Rails. It answers an
-// autocomplete partial reload with the same document, since it renders before show.
+// checked and whose native and code params declinedParams left to Rails.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
 	// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
@@ -186,19 +185,13 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		"«description»", web.HTMLEscape(text),
 		"«iframe_src»", web.HTMLEscape("/l/"+prod.uniquePermalink.String+"/landing/embed"),
 		"«nonce»", web.HTMLEscape(nonce),
-		"«checkout_url»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"?"+wrapperCheckoutQuery(p)),
+		"«checkout_url»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"?wanted=true"),
 		"«store_hostnames»", rails.EncodeJSON(hostnames),
 		"«nav_hosts»", rails.EncodeJSON(h.c.Env.ValidRequestHosts),
 		"«waitlist_script»", waitlist,
 		"«live_reload_script»", liveReload,
 	).Replace(customHTMLWrapper)
 
-	if !p.DryRun {
-		// Before the UTM visit, which a fallback to Rails would repeat.
-		if err := h.pushVariants(ctx, p); err != nil {
-			return err
-		}
-	}
 	if err := h.trackUTMVisit(w, p, prod); err != nil {
 		return err
 	}
@@ -212,10 +205,6 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	hdr := w.Header()
 	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
 	hdr.Set("Link", vite.LinkHeader(*pc.CustomHTMLAnalytics))
-	if p.urlCode != "" {
-		// set_x_robots_tag_header runs before this before_action.
-		hdr.Set("X-Robots-Tag", "noindex")
-	}
 	rails.RenderHTML(w, p.Req, body)
 	return nil
 }
@@ -234,15 +223,12 @@ func (h *handler) loadWrapperView(ctx context.Context, p *page, prod *product, t
 	if v.prices, err = h.loadPrices(ctx, prod); err != nil {
 		return nil, err
 	}
-	// social_share_image reads the main cover's URL and no other's.
-	if v.covers, err = h.loadCoverRows(ctx, prod.id); err != nil {
+	if v.covers, err = h.loadCovers(ctx, p, prod.id); err != nil {
 		return nil, err
 	}
-	if len(v.covers) > 0 {
-		if err := h.coverURLs(ctx, p, v.covers[0]); err != nil {
-			return nil, err
-		}
-		keepShareImageEffects(p, v.covers[0])
+	if len(p.retinaPushes) > 0 || len(p.posterPushes) > 0 {
+		// This port doesn't follow which covers' URLs the wrapper's Rails render reads.
+		return nil, fallback("retina variant unprocessed")
 	}
 	if v.thumbnailURL, err = h.thumbnailURL(ctx, prod.id); err != nil {
 		return nil, err
@@ -283,19 +269,6 @@ func (h *handler) loadWrapperView(ctx context.Context, p *page, prod *product, t
 		}
 	}
 	return v, nil
-}
-
-// keepShareImageEffects keeps, of the main cover's cache writes, social_share_image's: its url's
-// entry, or a video's poster's.
-func keepShareImageEffects(p *page, main *cover) {
-	prefix := "attachment_" + itoa(main.attachmentID) + "_"
-	read := main.urlCacheKey()
-	if !main.previewImagePath() {
-		read = prefix + "poster_url"
-	}
-	p.cacheWrites = slices.DeleteFunc(p.cacheWrites, func(pw pendingWrite) bool {
-		return strings.HasPrefix(pw.key, prefix) && pw.key != read
-	})
 }
 
 // customHTMLAnalyticsHead is custom_html_analytics_head.
@@ -358,13 +331,4 @@ func (h *handler) customHTMLStoreHostnames(ctx context.Context, p *page) ([]stri
 		add(domain.String)
 	}
 	return hostnames, nil
-}
-
-// wrapperCheckoutQuery is the wrapper's Rack::Utils.build_query(checkout_params): wanted, then the
-// URL's code when there is one, in that order.
-func wrapperCheckoutQuery(p *page) string {
-	if p.wrapperCode == "" {
-		return "wanted=true"
-	}
-	return "wanted=true&code=" + rails.RackEscape(p.wrapperCode)
 }

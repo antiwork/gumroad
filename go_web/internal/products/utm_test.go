@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -151,37 +150,3 @@ func TestAUTMTaggedVisitThatGoesToCheckout(t *testing.T) {
 		t.Errorf("queued %v", queued)
 	}
 }
-
-// Rails routes HEAD to show and Rack::Head drops the body, so a HEAD gets the page's status and
-// headers; track_utm_link_visit skips it.
-func TestAHEADRequest(t *testing.T) {
-	e := newTestEnv(t)
-	testdb.Open(t)
-	jobs := miniredis.RunT(t)
-	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr()}), RedisVersion: "7.2.4"}
-	path := "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c"
-	cookie := map[string]string{"Cookie": "_gumroad_guid=guid-1"}
-	head := e.request(http.MethodHead, host, path, cookie)
-	if head.Code != http.StatusOK || e.railsHit != nil || head.Body.Len() != 0 {
-		t.Fatalf("%d %q, %d bytes", head.Code, head.Header().Get("X-Go-Web-Fallback"), head.Body.Len())
-	}
-	if list, _ := jobs.List("queue:default"); len(list) != 0 {
-		t.Errorf("HEAD queued %v", list)
-	}
-	get := e.get(host, path, cookie)
-	if list, _ := jobs.List("queue:default"); len(list) != 1 {
-		t.Errorf("GET queued %v", list)
-	}
-	for _, h := range []string{"Content-Type", "Content-Length", "Vary", "Cache-Control", "Content-Security-Policy"} {
-		got, want := head.Header().Get(h), get.Header().Get(h)
-		if h == "Content-Security-Policy" {
-			// Each response has its own nonce.
-			got, want = nonceSrc.ReplaceAllString(got, ""), nonceSrc.ReplaceAllString(want, "")
-		}
-		if got != want || want == "" {
-			t.Errorf("%s %q, GET's %q", h, got, want)
-		}
-	}
-}
-
-var nonceSrc = regexp.MustCompile(`'nonce-[^']*'`)

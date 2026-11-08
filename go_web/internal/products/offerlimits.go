@@ -104,7 +104,7 @@ func (h *handler) usesShortfall(p *page, c *offerCode) (string, error) {
 	switch {
 	case err != nil:
 		return "", err
-	case left >= c.usageUnits(p.quantity()):
+	case left >= c.usageUnits():
 		return "", nil
 	case left > 0:
 		return "insufficient_times_of_use", nil

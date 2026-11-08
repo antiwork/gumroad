@@ -321,22 +321,3 @@ func DeclinedVisitHeaders(r *http.Request) string {
 	}
 	return ""
 }
-
-// DeclinedPartialHeaders is DeclinedVisitHeaders for a page that answers one partial reload
-// itself: an Inertia visit for component's data and nothing else.
-func DeclinedPartialHeaders(r *http.Request, component, data string) string {
-	if r.Header.Get("X-Inertia") == "" {
-		// The renderer filters the props whether or not the request is an Inertia visit.
-		return "inertia partial without X-Inertia"
-	}
-	if v := r.Header.Values("X-Inertia-Partial-Component"); len(v) != 1 || v[0] != component {
-		return "inertia header X-Inertia-Partial-Component"
-	}
-	if v := r.Header.Values("X-Inertia-Partial-Data"); len(v) != 1 || v[0] != data {
-		return "inertia header X-Inertia-Partial-Data"
-	}
-	h := r.Header.Clone()
-	h.Del("X-Inertia-Partial-Component")
-	h.Del("X-Inertia-Partial-Data")
-	return DeclinedVisitHeaders(&http.Request{Header: h})
-}

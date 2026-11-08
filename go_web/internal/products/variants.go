@@ -271,23 +271,19 @@ func (vs *variants) available() bool {
 	return false
 }
 
-// toOptionName is to_option's name: the product's for an Untitled Variant, "" for none; or
-// to_option_for_product's, a SKU's own.
-func (o *variantOption) toOptionName(prod *product) any {
-	if o.sku {
-		return nullString(o.name)
-	}
-	if o.name.String == "Untitled" {
-		return prod.name
-	}
-	return o.name.String
-}
-
 // optionsProps is Link#options: to_option for each Variant, or to_option_for_product for each
 // SKU. tierRecurrences is what a tiered membership's tiers read; see tierRecurrences.
 func (h *handler) optionsProps(prod *product, vs *variants, tierRecurrences map[string]bool) []any {
 	out := make([]any, 0, len(vs.options))
 	for _, o := range vs.options {
+		var name any = nullString(o.name)
+		if !o.sku {
+			n := o.name.String
+			if n == "Untitled" {
+				n = prod.name
+			}
+			name = n
+		}
 		quantityLeft := intOrNil(o.quantityLeft())
 		if o.closed {
 			quantityLeft = int64(0)
@@ -298,7 +294,7 @@ func (h *handler) optionsProps(prod *product, vs *variants, tierRecurrences map[
 		}
 		out = append(out, rails.NewRHash().
 			Sym("id", o.externalID).
-			Sym("name", o.toOptionName(prod)).
+			Sym("name", name).
 			Sym("quantity_left", quantityLeft).
 			Sym("description", o.description.String).
 			Sym("price_difference_cents", nullInt(o.priceDifference)).

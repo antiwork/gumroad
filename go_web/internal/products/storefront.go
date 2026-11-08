@@ -30,9 +30,8 @@ const (
 	profilePostsSectionType     = "SellerProfilePostsSection"
 	profileFeaturedSectionType  = "SellerProfileFeaturedProductSection"
 	pageLayoutSort              = "page_layout"
-	// Link::RECOMMENDED_PRODUCTS_PER_PAGE and Link::MAX_RESULT_WINDOW.
+	// Link::RECOMMENDED_PRODUCTS_PER_PAGE.
 	catalogPageSize = 9
-	maxResultWindow = 10_000
 	// SearchProducts' facet sizes: Link.search_options' tags and Link.filetype_options' filetypes.
 	catalogTagFacetSize      = 200
 	catalogFiletypeFacetSize = 8
@@ -354,19 +353,12 @@ func sectionHead(id string, header any, typ string) *rails.RHash {
 	return rails.NewRHash().Sym("id", id).Sym("header", header).Sym("type", typ)
 }
 
-// catalogQuery is the visitor's search params section_search_results reads: none for the cached
-// search.
-type catalogQuery struct {
-	text string
-	from int64
-}
-
 // searchSections is section_search_results for each section, in order.
-func (h *handler) searchSections(p *page, sections []*productsSection, q catalogQuery) ([]*catalogSearch, error) {
+func (h *handler) searchSections(p *page, sections []*productsSection, query string) ([]*catalogSearch, error) {
 	searches := make([]*catalogSearch, len(sections))
 	for i, s := range sections {
 		var err error
-		if searches[i], err = h.searchCatalog(p, s, q); err != nil {
+		if searches[i], err = h.searchCatalog(p, s, query); err != nil {
 			return nil, err
 		}
 	}
@@ -376,7 +368,7 @@ func (h *handler) searchSections(p *page, sections []*productsSection, q catalog
 // visitorSearchSections is section_props' fresh search, which matches the visitor's query.
 func (h *handler) visitorSearchSections(p *page, sections []*productsSection) ([]*catalogSearch, error) {
 	query, _ := p.query.(string)
-	return h.searchSections(p, sections, catalogQuery{text: query, from: p.searchFrom})
+	return h.searchSections(p, sections, query)
 }
 
 // sectionSortClauses is search_options' sort for a section's default_product_sort: page_layout
@@ -394,7 +386,7 @@ func desc(field string) map[string]any { return map[string]any{field: map[string
 
 // searchCatalog is Link.filetype_options' and Link.search_options' searches for a section. They
 // share a query, so one request carries both facets.
-func (h *handler) searchCatalog(p *page, section *productsSection, q catalogQuery) (*catalogSearch, error) {
+func (h *handler) searchCatalog(p *page, section *productsSection, query string) (*catalogSearch, error) {
 	if h.c.Page.Search == nil {
 		return nil, fallback("products section search")
 	}
@@ -402,8 +394,8 @@ func (h *handler) searchCatalog(p *page, section *productsSection, q catalogQuer
 		return map[string]any{"terms": map[string]any{"field": field, "size": size}}
 	}
 	var must []any
-	if rails.Present(q.text) {
-		must = append(must, map[string]any{"simple_query_string": map[string]any{"query": q.text,
+	if rails.Present(query) {
+		must = append(must, map[string]any{"simple_query_string": map[string]any{"query": query,
 			"fields": []string{"name", "creator_name", "description", "tags"}, "default_operator": "and"}})
 	}
 	must = append(must,
@@ -449,7 +441,7 @@ func (h *handler) searchCatalog(p *page, section *productsSection, q catalogQuer
 		"query": map[string]any{"bool": boolQuery},
 		"aggregations": map[string]any{"tags.keyword": terms("tags.keyword", catalogTagFacetSize),
 			"filetypes.keyword": terms("filetypes.keyword", catalogFiletypeFacetSize)},
-		"sort": sort, "size": catalogPageSize, "from": q.from, "_source": false, "track_total_hits": true}, &products)
+		"sort": sort, "size": catalogPageSize, "from": 0, "_source": false, "track_total_hits": true}, &products)
 	if err != nil {
 		return nil, searchFailed(p, "catalog", err)
 	}
@@ -679,43 +671,34 @@ func (h *handler) cardSoldOut(p *page, c *card) (bool, error) {
 	return remaining == int64(0), err
 }
 
-// displayPriceCents is display_price_cents(for_default_duration: true): the lowest offered tier's
-// price at duration, else default_price_cents plus the lowest variant difference. agreed is
-// false where the preload's row order would pick default_price.
-func displayPriceCents(prod *product, tiers []*variantOption, prices []priceRow, duration string, minDifference sql.NullInt64) (int64, bool) {
-	if prod.is(productIsTieredMembership) {
-		return lowestTierPriceCents(offeredTiers(tiers), &duration), true
-	}
-	var rows []priceRow
-	for _, r := range prices {
-		if r.atDuration(prod, duration) {
-			rows = append(rows, r)
-		}
-	}
-	// default_price_cents: a rent-only product's is its rental price.
-	last, agreed := lastPrice(pricesForCurrency(prod, rows, prod.rentOnly()))
-	if !agreed {
-		return 0, false
-	}
-	var price int64
-	if last != nil {
-		price = *last
-	}
-	return price + minDifference.Int64, true
-}
-
 // cardProps is ProductPresenter::Card#for_web for section_props: no seller, inventory or
 // description, and a product URL on this host with layout=profile.
 func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, error) {
 	prod := c.prod
-	price, agreed := displayPriceCents(prod, c.tiers, c.prices, c.defaultRecurrence, c.minVariantDifference)
-	if !agreed {
-		return nil, fallback("catalog price")
-	}
+	// display_price_cents(for_default_duration: true).
+	var price int64
 	pwyw := prod.customizablePrice.Bool
 	if prod.is(productIsTieredMembership) {
+		offered := offeredTiers(c.tiers)
+		price = lowestTierPriceCents(offered, &c.defaultRecurrence)
 		// has_customizable_price_option?
-		pwyw = slices.ContainsFunc(offeredTiers(c.tiers), func(o *variantOption) bool { return o.customizablePrice.Bool })
+		pwyw = slices.ContainsFunc(offered, func(o *variantOption) bool { return o.customizablePrice.Bool })
+	} else {
+		var rows []priceRow
+		for _, r := range c.prices {
+			if r.atDuration(prod, c.defaultRecurrence) {
+				rows = append(rows, r)
+			}
+		}
+		// default_price_cents: a rent-only product's is its rental price.
+		last, agreed := lastPrice(pricesForCurrency(prod, rows, prod.rentOnly()))
+		if !agreed {
+			return nil, fallback("catalog price")
+		}
+		if last != nil {
+			price = *last
+		}
+		price += c.minVariantDifference.Int64
 	}
 	// default_price_recurrence: every match has the recurrence it matched on.
 	var recurrence any

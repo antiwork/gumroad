@@ -1,7 +1,6 @@
 package products
 
 import (
-	"context"
 	"database/sql"
 	"regexp"
 
@@ -257,18 +256,6 @@ func (h *handler) structuredData(p *page, prod *product, v *view, url, image str
 	return d, nil
 }
 
-// lowestVariantDifference is lowest_variant_price_difference_cents, over every alive category.
-func (h *handler) lowestVariantDifference(ctx context.Context, prod *product, vs *variants) (sql.NullInt64, error) {
-	var diff sql.NullInt64
-	in, args := "NULL", []any{prod.id}
-	if cats := vs.categories; len(cats) > 0 {
-		in, args = placeholders(len(cats)), append(args, int64Args(cats)...)
-	}
-	err := h.c.DB.QueryRowContext(ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
-		" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN ("+in+"))", args...).Scan(&diff)
-	return diff, err
-}
-
 // offerData is build_offer_data: the offer in USD, through the cached rate when the product's
 // currency isn't, else in that currency.
 func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails.Hash, error) {
@@ -290,8 +277,14 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 		}
 	}
 	if !prod.is(productIsTieredMembership) && cents != nil {
-		diff, err := h.lowestVariantDifference(p.Ctx, prod, v.variants)
-		if err != nil {
+		var diff sql.NullInt64
+		// lowest_variant_price_difference_cents, over every alive category.
+		in, args := "NULL", []any{prod.id}
+		if cats := v.variants.categories; len(cats) > 0 {
+			in, args = placeholders(len(cats)), append(args, int64Args(cats)...)
+		}
+		if err := h.c.DB.QueryRowContext(p.Ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
+			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN ("+in+"))", args...).Scan(&diff); err != nil {
 			return nil, err
 		}
 		c := *cents + diff.Int64

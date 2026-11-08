@@ -15,8 +15,6 @@ func TestVariantDigestMatchesRubysMarshal(t *testing.T) {
 		{"a.jpg", "image/jpeg", 853.3333333333334, nil, "yGdK38vOSPPwle71bb9fVfTFoFU="},
 		{"a.bmp", "image/bmp", 600, 600, "B5GjqkNnotBsCn2Kk7GJXVjrdrk="}, // {format: :png, resize_to_limit: [600, 600]}
 		{"a.png", "image/png", 42, nil, "rnUnbwFFbDdb4KbxqJ21AJCAijo="},  // {format: "png", resize_to_limit: [42, nil]}
-		// An unmeasured blob's retina variant: {format: "jpg", resize_to_limit: [nil, nil]}.
-		{"b.jpg", "image/jpeg", nil, nil, "xnE288a83hjSBIHSisas0AlUSJU="},
 		// Wider w_long values, then Bignums from 2**30.
 		{"a.bmp", "image/bmp", 70_000, 1 << 31, "PWG+TOdhPohr5rtt2yJskXGmEvE="},
 		{"a.png", "image/png", 300, 1<<30 - 1, "D35zOCe/9Y0Ic42PKEKa0cs3UGQ="},

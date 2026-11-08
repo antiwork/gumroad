@@ -5,12 +5,6 @@ module Mcp
   # Tools are a slim, agent-oriented view of the public v2 API — same auth, same records.
   class Server
     LEGACY_PROTOCOL_VERSION = "2025-03-26"
-    # Characters simple_query_string treats as operators: a query made only of these matches
-    # everything, which is not something an assistant should be able to ask for.
-    QUERY_OPERATOR_CHARACTERS = /[+\-=&|><!(){}\[\]^"~*?:\\\/]/
-    SEARCH_QUERY_MAX_LENGTH = 200
-    SEARCH_DEFAULT_LIMIT = 10
-    SEARCH_MAX_LIMIT = 25
     # A client on this revision declares its version per request and never handshakes.
     MODERN_PROTOCOL_VERSION = "2026-07-28"
     SUPPORTED_VERSIONS = [LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION].freeze
@@ -153,16 +147,14 @@ module Mcp
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. An MCP client can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
         clients: {
           muse: "#{base_url}/muse/v1/mcp",
           claude: "#{base_url}/claude/v1/mcp",
-          chatgpt: "#{base_url}/chatgpt/v1/mcp",
-          cursor: "#{base_url}/cursor/v1/mcp",
-          antigravity: "#{base_url}/antigravity/v1/mcp"
+          chatgpt: "#{base_url}/chatgpt/v1/mcp"
         },
         oauth: {
           authorization_endpoint: "#{base_url}/muse/v1/oauth2/authorize",
@@ -497,10 +489,6 @@ module Mcp
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
-          tool("search_products", "Search Gumroad's catalogue, not just the connected creator's own products. These are the same results the discover page shows. Use it when someone wants to see what exists in a topic, compare prices, or find something to learn a skill from. Each URL carries the MCP referrer, so a visit or purchase that starts from this result is distinguishable from the creator's own traffic.", {
-                 "query" => { type: "string", description: "What to search for, e.g. \"learn to draw\" or \"tax spreadsheet\"." },
-                 "limit" => { type: "integer", description: "Max products to return (1-#{SEARCH_MAX_LIMIT}, default #{SEARCH_DEFAULT_LIMIT})." }
-               }, required: %w[query], read_only: true),
           tool("list_purchases", "The products the connected creator bought, newest first, so an assistant can answer \"what did I buy?\" and open it. Each purchase links to the creator's library. When next_cursor is returned, pass it as cursor for the next page.", {
                  "limit" => { type: "integer", description: "Max purchases to return (1-50, default 25)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
@@ -1555,54 +1543,6 @@ module Mcp
           variant = kept&.variant || product.variants_or_skus.first
           { product_id: product.external_id, variant_id: variant&.external_id, quantity: kept&.quantity || DEFAULT_BUNDLE_MEMBER_QUANTITY, position: }
         end
-      end
-
-      # Search runs over the same index the discover page uses, so results are what a shopper would
-      # see, not a second catalogue that can drift from it.
-      def tool_search_products(args)
-        require_scopes!(:view_public, :account)
-        query = args["query"].to_s.strip
-        raise InvalidArguments.new("query is required", code: -32602) if query.empty?
-        raise InvalidArguments.new("query is longer than #{SEARCH_QUERY_MAX_LENGTH} characters", code: -32602) if query.length > SEARCH_QUERY_MAX_LENGTH
-
-        # An empty query is not the only way to ask for everything: "*" and friends are operators
-        # inside simple_query_string, so the words are all that get sent to the index.
-        words = query.gsub(QUERY_OPERATOR_CHARACTERS, " ").squish
-        raise InvalidArguments.new("query needs at least one word", code: -32602) if words.blank?
-
-        limit = args["limit"].to_i
-        limit = SEARCH_DEFAULT_LIMIT if limit <= 0
-        limit = [limit, SEARCH_MAX_LIMIT].min
-
-        # The index lags the database: a product unpublished or a seller suspended since the last
-        # reindex still comes back, so every hit is checked against the row before it is offered.
-        hits = Link.search(Link.search_options(query: words, size: limit)).records
-        # Reload in one query with the associations the payload reads, keeping the index order.
-        loaded = Link.where(id: hits.map(&:id)).includes(:user, :thumbnail_alive, :alive_prices).index_by(&:id)
-        products = hits.filter_map { |hit| loaded[hit.id] }
-          .select { |product| product.alive? && !product.rated_as_adult? && product.user.present? && !product.user.suspended? }
-        {
-          products: products.map do |product|
-            {
-              id: product.external_id,
-              name: product.name,
-              seller_name: product.user&.name.presence,
-              price_cents: product.discounted_price_cents(product.display_price_cents(for_default_duration: true)),
-              currency: product.price_currency_type,
-              recurring: product.is_recurring_billing?,
-              pay_what_you_want: product.has_customizable_price_option?,
-              thumbnail_url: product.thumbnail_or_cover_url,
-              url: with_mcp_referrer(product.long_url)
-            }
-          end
-        }
-      end
-
-      def with_mcp_referrer(url)
-        uri = URI.parse(url)
-        params = Rack::Utils.parse_nested_query(uri.query.to_s).merge("referrer" => "#{PROTOCOL}://#{DOMAIN}/mcp")
-        uri.query = params.to_query
-        uri.to_s
       end
 
       def tool_create_bundle(args)

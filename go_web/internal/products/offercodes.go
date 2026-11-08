@@ -4,16 +4,11 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
-	"encoding/json"
 	"math"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
-
-	"golang.org/x/text/cases"
-	"golang.org/x/text/unicode/norm"
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
@@ -29,10 +24,6 @@ type offerCode struct {
 	universal, existingOnly, newOnly     bool
 	validAt, expiresAt, deletedAt        db.NullTime
 	flags, tiers                         int64
-	// optionsRead is whether loadCodeOptions has read scope and optionIDs.
-	optionsRead bool
-	// tiersJSON is ownership_duration_tiers as stored.
-	tiersJSON sql.NullString
 	// sqlCurrency is whether currency_type matches the product's under the column's collation.
 	sqlCurrency                              bool
 	hasVariants, excludesProduct, forProduct bool
@@ -68,14 +59,14 @@ const offerCodeColumns = "offer_codes.id, offer_codes.code, offer_codes.currency
 	" offer_codes.amount_cents, offer_codes.amount_percentage, offer_codes.max_purchase_count, offer_codes.minimum_quantity," +
 	" offer_codes.duration_in_months, offer_codes.minimum_amount_cents, offer_codes.universal, offer_codes.existing_customers_only," +
 	" offer_codes.new_customers_only, offer_codes.valid_at, offer_codes.expires_at, offer_codes.deleted_at, offer_codes.flags," +
-	" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0), offer_codes.ownership_duration_tiers," +
+	" COALESCE(JSON_LENGTH(offer_codes.ownership_duration_tiers), 0)," +
 	" EXISTS(SELECT 1 FROM offer_codes_variants v WHERE v.offer_code_id = offer_codes.id)," +
 	" EXISTS(SELECT 1 FROM offer_codes_ownership_variants v WHERE v.offer_code_id = offer_codes.id)"
 
 func (c *offerCode) ownDest() []any {
 	return []any{&c.id, &c.code, &c.currencyType, &c.saleLabel, &c.amountCents, &c.amountPercentage, &c.maxPurchaseCount,
 		&c.minimumQuantity, &c.durationInMonths, &c.minimumAmountCents, &c.universal, &c.existingOnly, &c.newOnly, &c.validAt,
-		&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &c.tiersJSON, &c.hasVariants, &c.hasOwnershipVariants}
+		&c.expiresAt, &c.deletedAt, &c.flags, &c.tiers, &c.hasVariants, &c.hasOwnershipVariants}
 }
 
 // loadOfferCode reads the row a condition finds first, nil for none.
@@ -125,10 +116,6 @@ func (h *handler) loadCodeOptions(ctx context.Context, prod *product, c *offerCo
 		kind               sql.NullString
 		categoryID, linkID sql.NullInt64
 	}
-	if c.optionsRead {
-		return nil
-	}
-	c.optionsRead = true
 	var options []*option
 	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
 		o := &option{}
@@ -223,118 +210,28 @@ func (h *handler) codeProductIDs(ctx context.Context, table string, codeID int64
 	return out, nil
 }
 
-// unportedLookup is a code whose lookups by string this port can't follow: one with a
-// character outside codeRunes, or whose currency SQL and Ruby compare differently.
+// unportedLookup is a code whose lookups by string this port can't follow: one whose string
+// Unicode normalization or the collation would read differently, or whose currency SQL and
+// Ruby compare differently.
 func (c *offerCode) unportedLookup(prod *product) string {
-	if _, ok := normalizeCode(c.code.String); !ok {
+	switch {
+	case !permalinkParam.MatchString(c.code.String):
 		return "offer code characters"
-	}
-	if c.currencyType.Valid && c.sqlCurrency != c.currencyMatches(prod) {
+	case c.currencyType.Valid && c.sqlCurrency != c.currencyMatches(prod):
 		return "offer code currency"
 	}
 	return ""
 }
 
-// normalizeCode is OfferCode.normalize_code, false for a code with a character outside
-// codeRunes, which strip leaves alone. NFC can compose two of them into one outside the set
-// (G and an acute accent are Ǵ), so its result is checked too.
-func normalizeCode(code string) (string, bool) {
-	nfc := norm.NFC.String(code)
-	if !codeRunes(code) || !codeRunes(nfc) {
-		return "", false
+// unportedDiscount is a code whose evaluation or discount this port doesn't follow.
+func (c *offerCode) unportedDiscount() string {
+	switch {
+	case c.tiers > 0:
+		return "tiered offer code"
+	case c.amountCents.Valid == c.amountPercentage.Valid:
+		return "offer code amount"
 	}
-	return rails.Downcase(nfc), true
-}
-
-// codeRunes is whether s has only the ASCII a code allows, Latin-1 Supplement and Latin
-// Extended-A, combining marks, and the invisible marks pasted links carry: the characters
-// checked against Ruby's NFC, downcase and fold.
-func codeRunes(s string) bool {
-	return !strings.ContainsFunc(s, func(r rune) bool {
-		if r < utf8.RuneSelf {
-			return r != '-' && r != '_' && !('0' <= r && r <= '9') && !('a' <= r && r <= 'z') && !('A' <= r && r <= 'Z')
-		}
-		return !(0xA0 <= r && r <= 0x17F || 0x300 <= r && r <= 0x36F || 0x200B <= r && r <= 0x200F ||
-			0x202A <= r && r <= 0x202E || 0x2060 <= r && r <= 0x2064 || 0x2066 <= r && r <= 0x2069 || r == 0xFEFF)
-	})
-}
-
-// casecmp is String#casecmp?: equal after full Unicode case folding.
-func casecmp(a, b string) bool {
-	return cases.Fold().String(a) == cases.Fold().String(b)
-}
-
-// resolveDiscount is evaluate_for_buyer's discount for this buyer and product: a tiered code's is
-// the percentage of the tier the buyer's months of ownership reach, on a copy, since the code
-// itself also prices the seller's other cards. A reason is a discount this port doesn't follow.
-func (c *offerCode) resolveDiscount(months int64) (*offerCode, string) {
-	if c.tiers > 0 {
-		pct, ok := tierPercent(c.tiersJSON.String, months)
-		if c.amountCents.Valid || !ok {
-			// With no tier reached, the computing service sets no discount and Rails raises.
-			return nil, "tiered offer code"
-		}
-		resolved := *c
-		resolved.amountPercentage = sql.NullInt64{Int64: pct, Valid: true}
-		c = &resolved
-	}
-	if c.amountCents.Valid == c.amountPercentage.Valid {
-		return nil, "offer code amount"
-	}
-	return c, ""
-}
-
-// tierPercent is matching_tier_for(ownership)'s amount_percentage: the tier with the most months
-// at or below ownership, each value read with to_i. ok is false for none, an unreadable tier, or
-// a tie that sort_by could order either way.
-func tierPercent(raw string, ownership int64) (int64, bool) {
-	dec := json.NewDecoder(strings.NewReader(raw))
-	dec.UseNumber()
-	var tiers []map[string]any
-	if err := dec.Decode(&tiers); err != nil {
-		return 0, false
-	}
-	var best, pct int64
-	found, tied := false, false
-	for _, t := range tiers {
-		if t == nil {
-			// A null tier decodes to no map; nil.with_indifferent_access raises.
-			return 0, false
-		}
-		months, ok := jsonToI(t["months"])
-		amount, ok2 := jsonToI(t["amount_percentage"])
-		switch {
-		case !ok || !ok2:
-			return 0, false
-		case months > ownership:
-		case !found || months > best:
-			best, pct, found, tied = months, amount, true, false
-		case months == best && amount != pct:
-			tied = true
-		}
-	}
-	return pct, found && !tied
-}
-
-// jsonToI is #to_i on a JSON value: nil is 0, a Float truncates, a String reads as String#to_i;
-// ok is false where Ruby raises.
-func jsonToI(v any) (int64, bool) {
-	switch v := v.(type) {
-	case nil:
-		return 0, true
-	case json.Number:
-		if n, err := v.Int64(); err == nil {
-			return n, true
-		}
-		f, err := v.Float64()
-		if err != nil || math.IsInf(f, 0) || math.Abs(f) >= math.MaxInt64 {
-			return 0, false
-		}
-		return int64(f), true
-	case string:
-		return rails.StringToI(v)
-	}
-	return 0, false
+	return ""
 }
 
 // currencyMatches is product.price_currency_type == currency_type.
@@ -457,15 +354,6 @@ type offerDiscount struct {
 	// cents is a fixed code's discount cents, which a once-per-cart code allocates.
 	cents         int64
 	oncePerCartID string
-	// entries are the selection_discounts entries, by entryKey, whose code differs from the
-	// page's: their own result, or none and the error the URL's code gives there.
-	entries map[string]entryResult
-}
-
-// entryResult is a selection_discounts entry's own result: d's, else none valid there, which the
-// URL code's error explains.
-type entryResult struct {
-	d *offerDiscount
 }
 
 // oncePerCart is OfferCodeDiscountComputingService#once_per_cart?.
@@ -473,17 +361,17 @@ func (c *offerCode) oncePerCart() bool {
 	return c.amountCents.Valid && c.flags&offerCodeOncePerCart != 0
 }
 
-// quantity is evaluate_code's: the page's, raised to the code's minimum.
-func (c *offerCode) quantity(page int64) int64 {
-	return max(page, c.minimumQuantity.Int64)
+// quantity is evaluate_code's: one, raised to the code's minimum.
+func (c *offerCode) quantity() int64 {
+	return max(1, c.minimumQuantity.Int64)
 }
 
 // usageUnits is usage_units at that quantity.
-func (c *offerCode) usageUnits(page int64) int64 {
+func (c *offerCode) usageUnits() int64 {
 	if c.oncePerCart() {
 		return 1
 	}
-	return c.quantity(page)
+	return c.quantity()
 }
 
 // oncePerCartCents is allocate_once_per_cart_discount for the product's own line.
@@ -495,10 +383,9 @@ func oncePerCartCents(amount, full, minPrice int64) int64 {
 	return allocated
 }
 
-// loadOfferDiscount reads v's prices, variants and recurrences; Link#price_cents is what a
-// once-per-cart code allocates against.
-func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product, v *view) (*offerDiscount, error) {
-	d, price := &offerDiscount{}, v.priceCents
+// loadOfferDiscount's price is Link#price_cents, which a once-per-cart code allocates against.
+func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product, price *int64) (*offerDiscount, error) {
+	d := &offerDiscount{}
 	// auto_apply_offer_code_for.
 	var auto *offerCode
 	a, err := h.sellerAutoApply(p, prod)
@@ -527,175 +414,103 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		list = append(list, eff)
 	}
 	d.listed = len(list) > 0
-	if p.quantity() < 1 && (d.listed || p.discountCode != "") {
-		// discount_code_props weighs the codes at this quantity, selection_discounts at one.
-		return nil, fallback("param quantity")
-	}
-	var defaults []*offerCode
 	for _, c := range list {
 		if rails.Blank(c.code.String) {
 			continue
 		}
-		resolved, err := h.evaluateOfferCode(p, prod, c)
-		if err != nil {
+		valid, err := h.evaluateOfferCode(p, prod, c)
+		switch {
+		case err != nil:
 			return nil, err
-		}
-		if resolved != nil {
-			defaults = append(defaults, resolved)
+		case valid && d.code != nil:
+			// best_default_code_result weighs a buyer's existing-customer default against the sale.
+			return nil, fallback("offer code comparison")
+		case valid:
+			d.code, d.resultCode = c, c.code.String
 		}
 	}
-	var url *offerCode
-	if d.urlCode = p.discountCode; d.urlCode != "" {
+	if d.urlCode = p.urlCode; d.urlCode != "" {
+		if d.code != nil && strings.EqualFold(d.urlCode, d.code.code.String) {
+			// The URL names the default that applies, so both would.
+			return nil, fallback("offer code comparison")
+		}
 		fromURL, errorCode, err := h.evaluateURLCode(p, prod, d.urlCode)
-		if err != nil {
+		switch {
+		case err != nil:
 			return nil, err
+		case errorCode == "" && d.code != nil:
+			// met_discount_conditions? and comparison_amount weigh the two.
+			return nil, fallback("offer code comparison")
+		case errorCode == "":
+			d.code, d.resultCode = fromURL, d.urlCode
 		}
 		d.urlError, d.urlRow = errorCode, fromURL
-		if errorCode == "" {
-			url = fromURL
-		}
 	}
-	switch {
-	case url != nil && len(defaults) > 0, len(defaults) > 1:
-		// A scoped contender's validity differs per option.
-		for _, c := range append([]*offerCode{url}, defaults...) {
-			if c != nil && c.hasVariants {
-				if err := h.loadCodeOptions(ctx, prod, c); err != nil {
-					return nil, err
-				}
-			}
-		}
-		pick, entries, err := h.comparedOffer(p, prod, v, url, defaults)
-		if err != nil {
-			return nil, err
-		}
-		d.code, d.resultCode = pick.code, pick.resultCode(d.urlCode)
-		results := map[offerChoice]*offerDiscount{pick: d}
-		for key, c := range entries {
-			if c == pick {
-				continue
-			}
-			if d.entries == nil {
-				d.entries = map[string]entryResult{}
-			}
-			if c.code == nil {
-				d.entries[key] = entryResult{}
-				continue
-			}
-			if results[c] == nil {
-				results[c] = &offerDiscount{listed: d.listed, urlCode: d.urlCode, code: c.code, resultCode: c.resultCode(d.urlCode)}
-				if err := h.settleDiscount(ctx, p, prod, price, results[c], auto); err != nil {
-					return nil, err
-				}
-			}
-			d.entries[key] = entryResult{d: results[c]}
-		}
-	case url != nil:
-		d.code, d.resultCode = url, d.urlCode
-	case len(defaults) == 1:
-		d.code, d.resultCode = defaults[0], defaults[0].code.String
-	}
-	if err := h.settleDiscount(ctx, p, prod, price, d, auto); err != nil {
-		return nil, err
-	}
-	// An invalid URL code's scope only shows on an option the applying code leaves out.
-	if c := d.urlRow; c != nil && c != d.code && c.hasVariants && (d.code == nil || len(d.code.scope) > 0) {
-		if err := h.loadCodeOptions(ctx, prod, c); err != nil {
-			return nil, err
-		}
-	}
-	return d, nil
-}
-
-// settleDiscount reads what d's code's result shows: the sale label, the code's products, its
-// options, and a once-per-cart code's allocation.
-func (h *handler) settleDiscount(ctx context.Context, p *page, prod *product, price *int64, d *offerDiscount, auto *offerCode) error {
-	c := d.code
-	if c == nil {
-		return nil
-	}
-	if auto != nil {
+	if d.code != nil && auto != nil {
 		// sale_label: the winning code is the auto-applied one.
-		code, ok := normalizeCode(d.resultCode)
-		if !ok || !codeRunes(auto.code.String) {
-			return fallback("offer code characters")
+		if !permalinkParam.MatchString(auto.code.String) {
+			return nil, fallback("offer code characters")
 		}
-		if casecmp(code, auto.code.String) {
+		if strings.EqualFold(d.resultCode, auto.code.String) {
 			d.label = auto.displayedSaleLabel()
 		}
 	}
-	var err error
-	switch {
+	switch c := d.code; {
+	case c == nil:
 	case !c.universal:
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_products", c.id)
 	case c.anyExcluded:
 		d.products, err = h.codeProductIDs(ctx, "offer_codes_excluded_products", c.id)
 	}
-	if err != nil {
-		return err
-	}
-	if c.hasVariants {
-		if err := h.loadCodeOptions(ctx, prod, c); err != nil {
-			return err
-		}
-		if c.ownerless {
+	if c := d.code; err == nil && c != nil && c.hasVariants {
+		if err = h.loadCodeOptions(ctx, prod, c); err == nil && c.ownerless {
 			// option_ids_by_product keys it by ObfuscateIds.encrypt(nil).
-			return fallback("offer code option product")
+			err = fallback("offer code option product")
 		}
 	}
-	d.cents = c.amountCents.Int64
-	if c.oncePerCart() {
-		cur, known := currencies[prod.productCurrency()]
-		if price == nil || !known {
-			return fallback("once-per-cart price")
-		}
-		d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(p.quantity()), cur.minPrice)
-		d.oncePerCartID = h.c.IDs.Encrypt(c.id)
+	// An invalid URL code's scope only shows on an option the applying code leaves out.
+	if c := d.urlRow; err == nil && c != nil && c != d.code && c.hasVariants && (d.code == nil || len(d.code.scope) > 0) {
+		err = h.loadCodeOptions(ctx, prod, c)
 	}
-	return nil
+	if c := d.code; err == nil && c != nil {
+		d.cents = c.amountCents.Int64
+		if c.oncePerCart() {
+			cur, known := currencies[prod.productCurrency()]
+			if price == nil || !known {
+				return nil, fallback("once-per-cart price")
+			}
+			d.cents = oncePerCartCents(c.amountCents.Int64, *price*c.quantity(), cur.minPrice)
+			d.oncePerCartID = h.c.IDs.Encrypt(c.id)
+		}
+	}
+	return d, err
 }
 
-// evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code, which it looks up
-// by c's string: the code that discounts for the visitor, nil when none does.
-func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (*offerCode, error) {
+// evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: whether it
+// gives the visitor a discount. Looking c up by its string must land on c.
+func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (bool, error) {
 	ctx, now := p.Ctx, p.Req.Now
 	if reason := c.unportedLookup(prod); reason != "" {
-		return nil, fallback(reason)
+		return false, fallback(reason)
 	}
-	found, pick, err := h.findOfferCode(ctx, prod, c.code.String)
-	if err != nil || found == 0 {
-		return nil, err
-	}
-	if found != c.id || pick != c.id {
-		// The result echoes the default's own string, which sale_label compares too.
-		code := c.code
-		if c, err = h.serviceCode(ctx, prod, found, pick); err != nil || c == nil {
-			return nil, err
-		}
-		if reason := c.unportedLookup(prod); reason != "" {
-			return nil, fallback(reason)
-		}
-		c.code = code
-	}
-	if !c.applicable(prod) || !c.currencyValid(prod) || c.inactive(now) {
-		return nil, nil
+	id, err := h.findOfferCode(ctx, prod, c.code.String)
+	switch {
+	case err != nil || id == 0:
+		return false, err
+	case id != c.id:
+		return false, fallback("offer code lookup")
+	case !c.applicable(prod) || !c.currencyValid(prod) || c.inactive(now):
+		return false, nil
 	}
 	if resolved, err := h.resolvesForBuyer(ctx, prod, c, p.viewer); err != nil || !resolved {
-		return nil, err
+		return false, err
 	}
 	// Only a code that gives this buyer something has terms to read.
-	months, err := h.ownershipMonths(p, prod, c)
-	if err != nil {
-		return nil, err
+	if reason := c.unportedDiscount(); reason != "" {
+		return false, fallback(reason)
 	}
-	resolved, reason := c.resolveDiscount(months)
-	if reason != "" {
-		return nil, fallback(reason)
-	}
-	if shortfall, err := h.usesShortfall(p, resolved); err != nil || shortfall != "" {
-		return nil, err
-	}
-	return resolved, nil
+	shortfall, err := h.usesShortfall(p, c)
+	return shortfall == "", err
 }
 
 // evaluateURLCode is BestOfferCodeService#evaluate_code for the URL's code: the code that
@@ -703,11 +518,11 @@ func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (*offe
 // comes after the option scope.
 func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerCode, string, error) {
 	ctx, now := p.Ctx, p.Req.Now
-	found, pick, err := h.findOfferCode(ctx, prod, typed)
-	if err != nil || found == 0 {
+	id, err := h.findOfferCode(ctx, prod, typed)
+	if err != nil || id == 0 {
 		return nil, "invalid_offer", err
 	}
-	c, err := h.serviceCode(ctx, prod, found, pick)
+	c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", id)
 	switch {
 	case err != nil:
 		return nil, "", err
@@ -730,28 +545,20 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	case !resolved:
 		return c, "not_new_customer", nil
 	}
-	months, err := h.ownershipMonths(p, prod, c)
-	if err != nil {
-		return nil, "", err
-	}
-	discounted, reason := c.resolveDiscount(months)
-	if reason != "" {
+	if reason := c.unportedDiscount(); reason != "" {
 		return nil, "", fallback(reason)
 	}
-	if shortfall, err := h.usesShortfall(p, discounted); err != nil || shortfall != "" {
+	if shortfall, err := h.usesShortfall(p, c); err != nil || shortfall != "" {
 		return c, shortfall, err
 	}
-	return discounted, "", nil
+	return c, "", nil
 }
 
-// findOfferCode is find_offer_code's row for a code, 0 for none, by Rails' unordered statements,
-// and pick, the row OfferCodeDiscountComputingService applies: the first of the seller's codes
-// by that string that suits the product, in its own statement's order.
-func (h *handler) findOfferCode(ctx context.Context, prod *product, code string) (found, pick int64, err error) {
-	code, ok := normalizeCode(code)
-	if !ok {
-		return 0, 0, fallback("offer code characters")
-	}
+// findOfferCode is find_offer_code's row for a code, 0 for none, by Rails' unordered statements.
+// OfferCodeDiscountComputingService then applies the first of the seller's codes by that string
+// that suits the product, in its own statement's order; any other row than this goes to Rails.
+func (h *handler) findOfferCode(ctx context.Context, prod *product, code string) (int64, error) {
+	code = strings.ToLower(code)
 	ids, err := h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` INNER JOIN `offer_codes_products`"+
 		" ON `offer_codes`.`id` = `offer_codes_products`.`offer_code_id` WHERE `offer_codes_products`.`product_id` = ?"+
 		" AND `offer_codes`.`deleted_at` IS NULL AND `offer_codes`.`code` = ? LIMIT 1", prod.id, code)
@@ -764,23 +571,24 @@ func (h *handler) findOfferCode(ctx context.Context, prod *product, code string)
 			prod.userID, prod.priceCurrencyType, strconv.FormatInt(prod.id, 10), code)
 	}
 	if err != nil || len(ids) == 0 {
-		return 0, 0, err
+		return 0, err
 	}
-	found = ids[0]
+	found := ids[0]
 	if ids, err = h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` WHERE `offer_codes`.`user_id` = ? AND `offer_codes`.`code` = ?"+
 		" AND `offer_codes`.`deleted_at` IS NULL", prod.userID, code); err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	switch {
 	case len(ids) == 1 && ids[0] == found:
-		return found, found, nil
+		// The callers check this row's terms themselves.
+		return found, nil
 	case !slices.Contains(ids, found):
 		// The product's code is another seller's, which the computing service never loads.
-		return 0, 0, fallback("offer code lookup")
+		return 0, fallback("offer code lookup")
 	}
 	codes, err := h.loadOfferCodes(ctx, prod, "offer_codes.id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
 	byID := make(map[int64]*offerCode, len(codes))
 	for _, c := range codes {
@@ -788,29 +596,13 @@ func (h *handler) findOfferCode(ctx context.Context, prod *product, code string)
 	}
 	for _, id := range ids {
 		if c := byID[id]; c != nil && c.applicable(prod) && c.currencyValid(prod) {
-			return found, id, nil
+			if id != found {
+				return 0, fallback("offer code lookup")
+			}
+			break
 		}
 	}
-	// None suits the product, and found, which the callers check, doesn't either.
-	return found, found, nil
-}
-
-// serviceCode is pick, the row whose terms the result has. BestOfferCodeService weighs it at
-// found's minimum quantity and keys its evaluations by found's option scope, so a pick whose
-// minimum differs, or either with an option scope, goes to Rails.
-func (h *handler) serviceCode(ctx context.Context, prod *product, found, pick int64) (*offerCode, error) {
-	c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", pick)
-	if err != nil || c == nil || pick == found {
-		return c, err
-	}
-	f, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", found)
-	if err != nil {
-		return nil, err
-	}
-	if f == nil || f.minimumQuantity != c.minimumQuantity || f.hasVariants || c.hasVariants {
-		return nil, fallback("offer code lookup")
-	}
-	return c, nil
+	return found, nil
 }
 
 // resultProps is the discount_code prop: the code that applies and OfferCode#discount.
@@ -854,55 +646,31 @@ func (d *offerDiscount) resultProps() any {
 // selectionDiscounts is selection_discounts. With no code in the URL and no default code it
 // has no options; otherwise each option the buyer can pick, rented or bought, gets the one
 // result, as only one code can apply, unless the option is outside that code's scope.
-func selectionDiscounts(p *page, prod *product, v *view, result any) *rails.RHash {
+func selectionDiscounts(prod *product, v *view, result any) *rails.RHash {
 	urlCode := presence(v.discount.urlCode)
-	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", max(p.quantity(), 1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
+	s := rails.NewRHash().Sym("url_code", urlCode).Sym("quantity", int64(1)).Sym("recurrence", v.recurrences.defaultRecurrence()).
 		Sym("option_id", nil).Sym("price_cents", nil)
 	if !v.discount.listed && urlCode == nil {
 		return s.Sym("options", rails.NewRHash()).Sym("rent_options", nil)
 	}
-	d := v.discount
-	entry := func(rent bool, o *variantOption) *rails.RHash {
-		e, own := d.entries[entryKey(rent, o)]
-		switch {
-		case !own:
-			return d.optionEntry(o, result)
-		case e.d != nil:
-			return e.d.optionEntry(o, e.d.resultProps())
-		}
-		// No code is valid for this option: the URL's says why, as optionEntry does.
-		return (&offerDiscount{urlError: d.urlError, urlRow: d.urlRow}).optionEntry(o, nil)
-	}
-	quotes := func(rent bool) *rails.RHash {
+	quotes := func() *rails.RHash {
 		out := rails.NewRHash()
 		if len(v.variants.options) == 0 {
-			return out.Str("", entry(rent, nil))
+			return out.Str("", v.discount.optionEntry(nil, result))
 		}
 		for _, o := range v.variants.options {
 			// cart_item prices another option in a closed tier's place.
 			if !o.closed {
-				out.Str(o.externalID, entry(rent, o))
+				out.Str(o.externalID, v.discount.optionEntry(o, result))
 			}
 		}
 		return out
 	}
 	var rentOptions any
 	if v.prices.rental != nil && !prod.rentOnly() {
-		rentOptions = quotes(true)
+		rentOptions = quotes()
 	}
-	return s.Sym("options", quotes(false)).Sym("rent_options", rentOptions)
-}
-
-// entryKey names a selection_discounts entry: rent_options' or options', and the option's id.
-func entryKey(rent bool, o *variantOption) string {
-	key := "options/"
-	if rent {
-		key = "rent_options/"
-	}
-	if o != nil {
-		key += o.externalID
-	}
-	return key
+	return s.Sym("options", quotes()).Sym("rent_options", rentOptions)
 }
 
 // optionEntry is an option's quote: BestOfferCodeService#result with that option. The computing
@@ -929,10 +697,10 @@ func invalidResult(errorCode string) any {
 	return rails.NewRHash().Sym("valid", false).Sym("error_code", errorCode)
 }
 
-// discountedCents is discounted_price_cents at the page's quantity.
-func (d *offerDiscount) discountedCents(price, quantity int64) int64 {
+// discountedCents is discounted_price_cents at quantity 1.
+func (d *offerDiscount) discountedCents(price int64) int64 {
 	c := d.code
-	if c == nil || c.minimumQuantity.Int64 > quantity {
+	if c == nil || c.minimumQuantity.Int64 > 1 {
 		return price
 	}
 	if c.amountCents.Valid {

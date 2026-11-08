@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"path"
 	"strings"
 	"time"
 
@@ -19,13 +18,6 @@ type App struct {
 	logger    *slog.Logger
 	redirects *SubdomainRedirects
 	mux       *http.ServeMux
-	unclean   []uncleanRoute
-}
-
-// uncleanRoute serves, under prefix, a path ServeMux would redirect to its cleaned form.
-type uncleanRoute struct {
-	prefix string
-	h      http.Handler
 }
 
 // NewApp takes $redis (REDIS_HOST), which holds the subdomain redirect table.
@@ -61,22 +53,12 @@ func (a *App) HandlePage(pattern, action string, h http.Handler) { a.handle(patt
 // Redirects is the custom subdomain redirect table HandlePage leaves to the action.
 func (a *App) Redirects() *SubdomainRedirects { return a.redirects }
 
-// HandleUncleanPage serves a path under prefix that ServeMux would redirect to its cleaned
-// form instead: Rails' router squeezes repeated slashes itself and routes such a path as is.
-func (a *App) HandleUncleanPage(prefix, action string, h http.Handler) {
-	a.unclean = append(a.unclean, uncleanRoute{prefix, a.wrap(action, h, false)})
-}
-
 func (a *App) handle(pattern, action string, h http.Handler, redirect bool) {
-	a.mux.Handle(pattern, a.wrap(action, h, redirect))
-}
-
-func (a *App) wrap(action string, h http.Handler, redirect bool) http.Handler {
 	controller, actionName, found := strings.Cut(action, "#")
 	if !found {
 		panic("action must be Controller#action, got " + action)
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	a.mux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		id := requestID(r)
 		logger := a.logger.With("uuid", id)
@@ -130,7 +112,7 @@ func (a *App) wrap(action string, h http.Handler, redirect bool) http.Handler {
 		default:
 			h.ServeHTTP(rec, r)
 		}
-	})
+	}))
 }
 
 // setDefaultHeaders covers debug_headers, ActionDispatch::RequestId and SecureHeaders'
@@ -155,32 +137,7 @@ func (a *App) HandleNotFound(h http.Handler) {
 }
 
 func (a *App) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	for _, u := range a.unclean {
-		if p := r.URL.EscapedPath(); strings.HasPrefix(p, u.prefix) && r.Method != http.MethodConnect && cleanPath(p) != p {
-			u.h.ServeHTTP(w, r)
-			return
-		}
-	}
 	a.mux.ServeHTTP(w, r)
-}
-
-// cleanPath is ServeMux's canonical form of a path, which it redirects any other form to.
-func cleanPath(p string) string {
-	if p == "" {
-		return "/"
-	}
-	if p[0] != '/' {
-		p = "/" + p
-	}
-	np := path.Clean(p)
-	if p[len(p)-1] == '/' && np != "/" {
-		if len(p) == len(np)+1 && strings.HasPrefix(p, np) {
-			np = p
-		} else {
-			np += "/"
-		}
-	}
-	return np
 }
 
 type statusRecorder struct {
