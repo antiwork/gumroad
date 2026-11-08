@@ -1088,8 +1088,14 @@ describe ContactingCreatorMailer do
       {
         "has no url redirect" => -> { purchase.url_redirect.destroy! },
         "is refunded" => -> { purchase.update!(stripe_refunded: true) },
+        "is charged back" => -> { purchase.update!(chargeback_date: Time.current) },
         "is the sender leg of a gift" => -> { purchase.update!(is_gift_sender_purchase: true) },
+        "is the receiver leg of a gift" => -> { purchase.update!(is_gift_receiver_purchase: true) },
+        "is a preorder authorization" => -> { purchase.update!(is_preorder_authorization: true) },
+        "is the seller's own test purchase" => -> { purchase.update!(purchaser: seller) },
         "is a rental" => -> { purchase.url_redirect.update!(is_rental: true) },
+        "is still waiting for its PDFs to be stamped" => -> { create(:readable_document, link: product, pdf_stamp_enabled: true) },
+        "is for a coffee product" => -> { product.update_column(:native_type, Link::NATIVE_TYPE_COFFEE) },
       }.each do |condition, change|
         it "omits the link when the purchase #{condition}" do
           expect(notify_body).to include("/d/")
