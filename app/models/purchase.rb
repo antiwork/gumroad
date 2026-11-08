@@ -6641,8 +6641,12 @@ class Purchase < ApplicationRecord
 
     def sync_open_refund_request_state
       # Same lock the request-create path takes, so a row inserted while this
-      # refund was committing is still seen and closed here.
-      with_lock do
+      # refund was committing is still seen and closed here. The purchase row is
+      # locked by id rather than with #with_lock: #with_lock reloads `self`,
+      # which clears #previous_changes and starves every LATER after_commit
+      # callback that keys off it (the high-volume-fee synchronous refresh does).
+      Purchase.transaction do
+        Purchase.lock.where(id: id).load
         if stripe_refunded?
           PurchaseRefundRequest.open_for(self)&.update!(state: "refunded")
         elsif chargedback?
