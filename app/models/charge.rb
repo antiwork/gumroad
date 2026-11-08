@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 class Charge < ApplicationRecord
-  include ExternalId, Chargeable, Purchase::ChargeEventsHandler, Disputable, FlagShihTzu, Refundable
+  include ExternalId, SecureExternalId, Chargeable, Purchase::ChargeEventsHandler, Disputable, FlagShihTzu, Refundable
 
   COMBINED_CHARGE_PREFIX = "CH-"
+  SHARED_RECEIPT_SCOPE = "shared_receipt"
 
   belongs_to :order
   belongs_to :seller, class_name: "User"
@@ -277,7 +278,7 @@ class Charge < ApplicationRecord
   end
 
   # One buyer-facing page for every item of this seller's charge. Only for a plain multi-item order
-  # whose items all went to the same buyer email, so the email check opens exactly what was bought.
+  # whose items all went to the same buyer email, so the link mailed to that address opens exactly what was bought.
   def shared_receipt_eligible?
     items = successful_purchases.to_a
     return false if items.size < 2
@@ -285,10 +286,6 @@ class Charge < ApplicationRecord
 
     emails = items.map { _1.email.to_s.strip.downcase }.uniq
     emails.one? && emails.first.present?
-  end
-
-  def shared_receipt_email
-    successful_purchases.first&.email
   end
 
   def split_receipt_mode?

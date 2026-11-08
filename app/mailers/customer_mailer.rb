@@ -82,7 +82,8 @@ class CustomerMailer < ApplicationMailer
     is_receipt_for_gift_receiver = receipt_for_gift_receiver?(@chargeable)
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
     shared_charge = shared_receipt_charge(@chargeable)
-    @shared_receipt_url = receipt_charge_url(shared_charge.external_id) if for_email && shared_charge
+    # Only the buyer's own mail carries the token; the seller's sale notification links the bare URL.
+    @shared_receipt_url = receipt_charge_url(shared_charge.external_id, token: shared_charge.secure_external_id(scope: Charge::SHARED_RECEIPT_SCOPE)) if for_email && shared_charge
     graphics_light = !is_receipt_for_gift_receiver && Feature.active?(:graphics_light_receipt, @chargeable.seller)
     template = is_receipt_for_gift_receiver ? "gift_receiver_receipt" : (graphics_light ? "receipt_light" : "receipt")
     mail(

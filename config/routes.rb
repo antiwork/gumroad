@@ -864,7 +864,7 @@ Rails.application.routes.draw do
     resources :charges, only: [] do
       member do
         get :receipt
-        get :confirm_receipt_email
+        post :resend_receipt
       end
     end
 

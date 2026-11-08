@@ -474,7 +474,7 @@ class Rack::Attack
 
   # Throttle requests to resend receipts
   # Initial: 2rpm, Max: 20 requests/9 hours (per purchase, per IP)
-  throttle_by_ip path: /\A\/(purchases|service_charges)\/.+\/resend_receipt\z/,
+  throttle_by_ip path: /\A\/(purchases|service_charges|charges)\/.+\/resend_receipt\z/,
                  method: :post,
                  requests: 2,
                  period: 60.seconds

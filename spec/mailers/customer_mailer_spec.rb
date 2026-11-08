@@ -1308,12 +1308,24 @@ describe CustomerMailer do
       purchase_two.create_url_redirect!
     end
 
+    def shared_receipt_link(body, text = "View every item in this order")
+      URI(Nokogiri::HTML(body).at_xpath("//a[normalize-space()='#{text}']")["href"])
+    end
+
     it "links the shared receipt from a single-item receipt without adding the other item" do
       body = CustomerMailer.receipt(purchase_one.id, nil, single_purchase: true).body.decoded
 
       expect(body).to include("/charges/#{charge.external_id}/receipt")
       expect(body).to include("Book One")
       expect(body).not_to include("Upsell Two")
+    end
+
+    it "carries a token in the buyer's link that opens only this charge" do
+      link = shared_receipt_link(CustomerMailer.receipt(purchase_one.id, nil, single_purchase: true).body.decoded)
+      token = Rack::Utils.parse_query(link.query)["token"]
+
+      expect(link.path).to eq("/charges/#{charge.external_id}/receipt")
+      expect(Charge.find_by_secure_external_id(token, scope: Charge::SHARED_RECEIPT_SCOPE)).to eq(charge)
     end
 
     it "links the shared receipt from the combined receipt" do
@@ -1359,7 +1371,8 @@ describe CustomerMailer do
         body = CustomerMailer.receipt(nil, charge.id).body.decoded
 
         expect(body).not_to include("&lt;a ")
-        expect(body).to include("<a ")
+        expect(Nokogiri::HTML(body).at_xpath("//a[normalize-space()='Generate invoice']")["href"]).to eq(charge.invoice_url)
+        expect(shared_receipt_link(body, "View your order").path).to eq("/charges/#{charge.external_id}/receipt")
       end
 
       it "does not apply to another seller's receipt" do
