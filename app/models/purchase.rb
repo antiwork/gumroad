@@ -445,12 +445,18 @@ class Purchase < ApplicationRecord
 
   before_save :schedule_product_search_refresh_after_refund
 
-  # A refund issued through the existing refund action closes any open buyer
-  # refund request, so the request's state records the conversion (requested ->
-  # refunded) without a new refund path. Guarded on the flip TO refunded; a
-  # failed-refund reversal reopens nothing.
-  after_commit :close_open_refund_request_as_refunded, if: -> (purchase) {
-    purchase.stripe_refunded_previously_changed? && purchase.stripe_refunded?
+  # A refund or chargeback through the existing paths closes any open buyer
+  # refund request so the row records the outcome. Also fires when a refund is
+  # REVERSED (stripe_refunded flips back to false): a request left showing
+  # "refunded" would be lying, so it's re-expired for support follow-up.
+  after_commit :sync_open_refund_request_state, if: -> (purchase) {
+    # True on either side of the change: nil/false -> true is a refund,
+    # true -> nil/false is a reversal. Purchase processing's nil -> false
+    # write must NOT fire this — the sync's locking reload has no place in
+    # the charging flow.
+    (purchase.stripe_refunded_previously_changed? &&
+      purchase.previous_changes["stripe_refunded"].any? { |value| value == true }) ||
+      (purchase.chargeback_date_previously_changed? && purchase.chargeback_date.present?)
   }
 
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
@@ -6633,11 +6639,24 @@ class Purchase < ApplicationRecord
       after_commit { enqueue_product_search_refresh_after_refund }
     end
 
-    def close_open_refund_request_as_refunded
-      PurchaseRefundRequest.open_for(self)&.update!(state: "refunded")
+    def sync_open_refund_request_state
+      # Same lock the request-create path takes, so a row inserted while this
+      # refund was committing is still seen and closed here.
+      with_lock do
+        if stripe_refunded?
+          PurchaseRefundRequest.open_for(self)&.update!(state: "refunded")
+        elsif chargedback?
+          # Buyer went to the bank anyway; the request is moot.
+          PurchaseRefundRequest.open_for(self)&.update!(state: "expired")
+        else
+          # Refund reversal: don't display "refunded" for money that came back.
+          PurchaseRefundRequest.where(purchase_id: id, state: "refunded")
+                               .find_each { |request| request.update!(state: "expired") }
+        end
+      end
     rescue => e
-      # Closing the request is bookkeeping; never let it fail the refund's commit path.
-      Rails.logger.error("[PurchaseRefundRequest] failed to close for purchase #{id}: #{e.class}: #{e.message}")
+      # Bookkeeping must never fail the refund/chargeback commit path.
+      Rails.logger.error("[PurchaseRefundRequest] failed to sync for purchase #{id}: #{e.class}: #{e.message}")
     end
 
     def send_failure_email

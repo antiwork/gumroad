@@ -1,14 +1,11 @@
 # frozen_string_literal: true
 
-# A buyer-initiated request to have a purchase refunded. No money moves here:
-# the request only notifies the seller (and support) so one of them can issue
-# the refund through the existing refund action before the buyer goes to their
-# bank. Named PurchaseRefundRequest to match the repo's other purchase-scoped
-# records (PurchaseRefundPolicy, PurchaseCustomField, ...).
 class PurchaseRefundRequest < ApplicationRecord
   belongs_to :purchase
 
   MAX_MESSAGE_LENGTH = 2_000
+  # Weekdays only, no holiday calendar — same approximation as PiracyReport.
+  ESCALATION_BUSINESS_DAYS = 2
 
   REASONS = %w[not_received not_as_described no_longer_needed duplicate_purchase other].freeze
   REASON_LABELS = {
@@ -21,12 +18,11 @@ class PurchaseRefundRequest < ApplicationRecord
 
   enum :reason, REASONS.index_by(&:itself), prefix: true, validate: true
 
-  # requested -> seen (seller opened it) -> refunded / declined; expired is for
-  # requests nobody acted on. Open states keep `open_key` = purchase_id so the
-  # unique index enforces one open request per purchase (MySQL has no partial
-  # unique indexes); closing a request nulls the key.
   STATES = %w[requested seen refunded declined expired].freeze
   OPEN_STATES = %w[requested seen].freeze
+  # declined/expired block a NEW request (anti-harassment); refunded needs no
+  # entry here because purchase_eligible? already rejects refunded purchases.
+  TERMINAL_BLOCKING_STATES = %w[declined expired].freeze
   enum :state, STATES.index_by(&:itself), prefix: true, validate: true
 
   validates :email, presence: true
@@ -35,6 +31,7 @@ class PurchaseRefundRequest < ApplicationRecord
   before_save :sync_open_key
   after_create :log_event
   after_update :log_event, if: :saved_change_to_state?
+  after_create_commit :enqueue_notifications, :schedule_escalation
 
   scope :open_state, -> { where(state: OPEN_STATES) }
 
@@ -44,21 +41,36 @@ class PurchaseRefundRequest < ApplicationRecord
 
   def open? = OPEN_STATES.include?(state)
 
-  # A purchase qualifies for a request only while a refund is still the cheaper
-  # outcome: it was actually charged, hasn't already been refunded or charged
-  # back, and the seller's refund window (when the purchase recorded one) hasn't
-  # lapsed. A purchase with no recorded policy window is allowed: the whole
-  # point is catching the buyer before the bank does, and support can still
-  # decline.
+  # Nil stamps mean a notification is still owed (crash/Redis outage after
+  # create); callers may re-enqueue freely — the worker is idempotent on stamps.
+  def notifications_pending?
+    open? && (seller_notified_at.nil? || support_notified_at.nil?)
+  end
+
+  def enqueue_notifications
+    PurchaseRefundRequests::NotifyWorker.perform_async(id)
+  end
+
+  def escalation_deadline
+    deadline = created_at.to_date
+    ESCALATION_BUSINESS_DAYS.times do
+      deadline += 1
+      deadline += 1 while deadline.saturday? || deadline.sunday?
+    end
+    deadline.end_of_day
+  end
+
   def self.purchase_eligible?(purchase)
     return false unless purchase.purchase_state.in?(Purchase::CHARGED_SUCCESS_STATES)
     return false if purchase.price_cents.to_i <= 0
     return false if purchase.refunded? || purchase.stripe_partially_refunded?
     return false if purchase.chargedback?
+    # declined/expired means the seller or the clock already answered; re-asking
+    # requires a support action, not a fresh form submit.
+    return false if where(purchase_id: purchase.id, state: TERMINAL_BLOCKING_STATES).exists?
 
     max_days = purchase.purchase_refund_policy&.max_refund_period_in_days
-    # 0 means the seller sells "no refunds" — the request form would promise
-    # something the seller never offered, so route those buyers to support.
+    # 0 = seller sells "no refunds"; the form would promise what they never offered.
     return false if max_days && max_days <= 0
     return false if max_days && purchase.created_at <= max_days.days.ago
 
@@ -67,11 +79,16 @@ class PurchaseRefundRequest < ApplicationRecord
 
   private
     def sync_open_key
+      # MySQL has no partial unique indexes; open_key carries purchase_id while
+      # open and NULL once closed, so the unique index only bites open rows.
       self.open_key = open? ? purchase_id : nil
     end
 
-    # One stable prefix so request->refund conversion is countable in SQL over
-    # the logs (and the row's own state/timestamps carry the same facts).
+    def schedule_escalation
+      PurchaseRefundRequests::EscalateWorker.perform_at(escalation_deadline, id)
+    end
+
+    # Stable prefix for SQL-countable conversion; never the free-text message.
     def log_event
       Rails.logger.info(
         "[PurchaseRefundRequest] id=#{id} purchase_id=#{purchase_id} state=#{state} reason=#{reason}"

@@ -564,18 +564,20 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "A sale has been refunded"
   end
 
-  # A buyer asked for their money back through the receipt-email refund request
-  # page. The link lands on the seller's existing Customers sale page, where the
-  # existing refund action lives — this mailer never refunds anything itself.
+  # The one-click link lands on the seller's existing Customers sale page —
+  # this mailer never refunds anything itself.
   def refund_requested(refund_request_id)
-    # Same primary read as #purchase_refunded: the request row was created
-    # moments before this delivers, so a lagging replica could miss it.
+    # Same primary read as #purchase_refunded: the row was created moments
+    # before this delivers, so a lagging replica could miss it.
     ApplicationRecord.connected_to(role: :writing) do
       @refund_request = PurchaseRefundRequest.find_by(id: refund_request_id)
       return do_not_send if @refund_request.nil?
 
       @purchase = @refund_request.purchase
     end
+    # Flag off is a hard no-op even for mail already sitting in the queue.
+    return do_not_send unless Feature.active?(:buyer_refund_requests, @purchase.seller)
+
     @seller = @purchase.seller
     @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
     @subject = "A customer has requested a refund"

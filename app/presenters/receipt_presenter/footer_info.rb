@@ -63,10 +63,8 @@ class ReceiptPresenter::FooterInfo
     )
   end
 
-  # Purchase receipts only (grouped Charge receipts span purchases with
-  # different eligibility, so they keep the support path). Guarded by the
-  # buyer_refund_requests flag on the seller; requesting is free — the refund
-  # itself still goes through the seller's existing refund action.
+  # Purchase receipts only: a grouped Charge receipt spans purchases with
+  # different eligibility, so Charge buyers keep the support path.
   def show_refund_request_link?
     return false unless chargeable.is_a?(Purchase)
     return false unless Feature.active?(:buyer_refund_requests, chargeable.seller)

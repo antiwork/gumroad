@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2350,6 +2350,8 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.text "message"
     t.string "state", default: "requested", null: false
     t.bigint "open_key"
+    t.datetime "seller_notified_at"
+    t.datetime "support_notified_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["open_key"], name: "index_purchase_refund_requests_one_open_per_purchase", unique: true

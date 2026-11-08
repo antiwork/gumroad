@@ -7,6 +7,8 @@ describe ContactingCreatorMailer do
     let(:purchase) { create(:purchase) }
     let(:refund_request) { create(:purchase_refund_request, purchase:, message: "The files were corrupted.") }
 
+    before { Feature.activate_user(:buyer_refund_requests, purchase.seller) }
+
     it "emails the seller with the request and a link to the existing refund action" do
       mail = described_class.refund_requested(refund_request.id)
 
@@ -22,6 +24,14 @@ describe ContactingCreatorMailer do
 
     it "does not send when the request is gone" do
       mail = described_class.refund_requested(nil)
+
+      expect(mail.message).to be_a(ActionMailer::Base::NullMail)
+    end
+
+    it "does not send when the flag was turned off after enqueue" do
+      Feature.deactivate_user(:buyer_refund_requests, purchase.seller)
+
+      mail = described_class.refund_requested(refund_request.id)
 
       expect(mail.message).to be_a(ActionMailer::Base::NullMail)
     end
