@@ -1067,20 +1067,25 @@ describe ContactingCreatorMailer do
                                                                   text, nil, {}, "chaching.wav", true)
     end
 
-    describe "buyer access link" do
+    describe "buyer receipt link" do
       let(:product) { create(:product, user: seller) }
       let(:purchase) { create(:purchase, link: product, seller:, email: buyer.email) }
 
       before { purchase.create_url_redirect! }
 
-      it "includes the buyer's download page link for this purchase only" do
+      def receipt_path(purchase) = "/purchases/#{purchase.external_id}/receipt"
+
+      it "links this purchase's receipt, without the buyer's email or the download token" do
         other = create(:purchase, link: create(:product, user: seller), seller:)
         other.create_url_redirect!
 
         body = ContactingCreatorMailer.notify(purchase.id).body.decoded
+        href = Nokogiri::HTML(body).at_xpath("//h4[normalize-space()=\"Buyer's receipt link\"]/ancestor::tr[1]//a")["href"]
 
-        expect(body).to include(purchase.url_redirect.download_page_url)
-        expect(body).not_to include(other.url_redirect.download_page_url)
+        expect(URI(href).path).to eq(receipt_path(purchase))
+        expect(URI(href).query).to be_nil
+        expect(body).not_to include(purchase.url_redirect.token)
+        expect(body).not_to include(receipt_path(other))
       end
 
       def notify_body = ContactingCreatorMailer.notify(purchase.reload.id).body.decoded
@@ -1098,11 +1103,11 @@ describe ContactingCreatorMailer do
         "is for a coffee product" => -> { product.update!(native_type: Link::NATIVE_TYPE_COFFEE) },
       }.each do |condition, change|
         it "omits the link when the purchase #{condition}" do
-          expect(notify_body).to include("/d/")
+          expect(notify_body).to include(receipt_path(purchase))
 
           instance_exec(&change)
 
-          expect(notify_body).not_to include("/d/")
+          expect(notify_body).not_to include(receipt_path(purchase))
         end
       end
 
@@ -1112,23 +1117,23 @@ describe ContactingCreatorMailer do
 
         it "keeps the link once the buyer has member purchases, even if the members are later removed" do
           product.bundle_products.each { Purchase::CreateBundleProductPurchaseService.new(purchase, _1).perform }
-          expect(notify_body).to include(purchase.url_redirect.download_page_url)
+          expect(notify_body).to include(receipt_path(purchase))
 
           product.bundle_products.each(&:mark_deleted!)
 
           expect(purchase.product_purchases).to be_present
-          expect(notify_body).to include(purchase.url_redirect.download_page_url)
+          expect(notify_body).to include(receipt_path(purchase))
         end
 
         it "omits the link for a memberless bundle only once it has no files of its own" do
           product.bundle_products.each(&:mark_deleted!)
           own_file = create(:product_file, link: product)
           expect(purchase.product_purchases).to be_empty
-          expect(notify_body).to include(purchase.url_redirect.download_page_url)
+          expect(notify_body).to include(receipt_path(purchase))
 
           own_file.mark_deleted!
 
-          expect(notify_body).not_to include("/d/")
+          expect(notify_body).not_to include(receipt_path(purchase))
         end
       end
     end

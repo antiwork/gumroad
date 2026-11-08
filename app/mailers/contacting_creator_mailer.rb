@@ -92,7 +92,7 @@ class ContactingCreatorMailer < ApplicationMailer
     set_notify_of_sale_headers(is_preorder:)
 
     @referrer_name = @purchase&.display_referrer
-    @buyer_download_link = buyer_download_link(@purchase)
+    @buyer_receipt_link = buyer_receipt_link(@purchase)
 
     do_not_send unless should_send_email?
   end
@@ -831,15 +831,16 @@ class ContactingCreatorMailer < ApplicationMailer
   end
 
   private
-    def buyer_download_link(purchase)
+    # The buyer's receipt rather than its /d/<token> download link: an unseen download page lets its first visitor in
+    # without the buyer's email, while the receipt asks for it before showing the download link.
+    def buyer_receipt_link(purchase)
       return if purchase.nil? || purchase.is_gift_sender_purchase || purchase.is_gift_receiver_purchase
       return if purchase.is_preorder_authorization || purchase.is_test_purchase?
       return unless purchase.successful_and_not_reversed? && purchase.has_content?
       # Where the receipt has no button (coffee, a memberless bundle with nothing of its own) there is nothing to open.
       return unless ReceiptPresenter::ItemInfo.new(purchase).show_download_button
 
-      url_redirect = purchase.url_redirect
-      url_redirect.download_page_url unless url_redirect.is_rental?
+      receipt_purchase_url(purchase.external_id) unless purchase.url_redirect.is_rental?
     end
 
     # Stripe's format-rejection messages end with the format it expects, for example:
