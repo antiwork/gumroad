@@ -1067,6 +1067,47 @@ describe ContactingCreatorMailer do
                                                                   text, nil, {}, "chaching.wav", true)
     end
 
+    describe "buyer access link" do
+      let(:product) { create(:product, user: seller) }
+      let(:purchase) { create(:purchase, link: product, seller:, email: buyer.email) }
+
+      before { purchase.create_url_redirect! }
+
+      it "includes the buyer's download page link for this purchase only" do
+        other = create(:purchase, link: create(:product, user: seller), seller:)
+        other.create_url_redirect!
+
+        body = ContactingCreatorMailer.notify(purchase.id).body.decoded
+
+        expect(body).to include(purchase.url_redirect.download_page_url)
+        expect(body).not_to include(other.url_redirect.download_page_url)
+      end
+
+      it "omits the link when the purchase has no url redirect" do
+        purchase.url_redirect.destroy!
+
+        expect(ContactingCreatorMailer.notify(purchase.reload.id).body.decoded).not_to include("/d/")
+      end
+
+      it "omits the link for a refunded purchase" do
+        purchase.update!(stripe_refunded: true)
+
+        expect(ContactingCreatorMailer.notify(purchase.id).body.decoded).not_to include("/d/")
+      end
+
+      it "omits the link for the sender leg of a gift" do
+        purchase.update!(is_gift_sender_purchase: true)
+
+        expect(ContactingCreatorMailer.notify(purchase.id).body.decoded).not_to include("/d/")
+      end
+
+      it "omits the link for a rental" do
+        purchase.url_redirect.update!(is_rental: true)
+
+        expect(ContactingCreatorMailer.notify(purchase.id).body.decoded).not_to include("/d/")
+      end
+    end
+
     it "uses SUPPORT_EMAIL as from address" do
       mail = ContactingCreatorMailer.notify(purchase.id)
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])

@@ -92,6 +92,7 @@ class ContactingCreatorMailer < ApplicationMailer
     set_notify_of_sale_headers(is_preorder:)
 
     @referrer_name = @purchase&.display_referrer
+    @buyer_access_url = buyer_access_url(@purchase)
 
     do_not_send unless should_send_email?
   end
@@ -830,6 +831,15 @@ class ContactingCreatorMailer < ApplicationMailer
   end
 
   private
+    def buyer_access_url(purchase)
+      return if purchase.nil? || purchase.is_gift_sender_purchase || purchase.is_gift_receiver_purchase
+      return if purchase.is_preorder_authorization || purchase.is_test_purchase?
+      return unless purchase.successful_and_not_reversed? && purchase.has_content?
+
+      url_redirect = purchase.url_redirect
+      url_redirect.download_page_url unless url_redirect.is_rental?
+    end
+
     # Stripe's format-rejection messages end with the format it expects, for example:
     # "Invalid routing number for PK. The number must contain both the bank code and the branch
     # code, and should be in the format AAAAPKBB or AAAAPKBBXYZ." Pull out that sentence so the
