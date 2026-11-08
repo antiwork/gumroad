@@ -840,7 +840,10 @@ class ContactingCreatorMailer < ApplicationMailer
       # Where the receipt has no button (coffee, a memberless bundle with nothing of its own) there is nothing to open.
       return unless ReceiptPresenter::ItemInfo.new(purchase).show_download_button
 
-      receipt_purchase_url(purchase.external_id) unless purchase.url_redirect.is_rental?
+      return if purchase.url_redirect.is_rental?
+
+      charge = purchase.charge
+      charge&.shared_receipt_eligible? ? receipt_charge_url(charge.external_id) : receipt_purchase_url(purchase.external_id)
     end
 
     # Stripe's format-rejection messages end with the format it expects, for example:

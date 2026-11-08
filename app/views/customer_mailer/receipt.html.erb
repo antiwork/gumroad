@@ -1,1 +1,6 @@
 <%= render("customer_mailer/receipt", receipt_presenter: @receipt_presenter, chargeable: @chargeable) %>
+<% if @shared_receipt_url.present? %>
+  <p>
+    <%= link_to("View every item in this order", @shared_receipt_url) %>
+  </p>
+<% end %>

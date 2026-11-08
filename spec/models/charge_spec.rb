@@ -790,4 +790,38 @@ describe Charge, :vcr do
       end
     end
   end
+
+  describe "#shared_receipt_eligible?" do
+    let(:seller) { create(:named_seller) }
+    let(:email) { "buyer@example.com" }
+    let(:purchase_one) { create(:purchase, link: create(:product, user: seller), seller:, email:) }
+    let(:purchase_two) { create(:purchase, link: create(:product, user: seller), seller:, email:) }
+    let(:charge) { create(:charge, purchases: [purchase_one, purchase_two], seller:) }
+
+    it "is true for two or more purchases sharing one buyer email" do
+      expect(charge.shared_receipt_eligible?).to be(true)
+    end
+
+    it "is false for a single purchase" do
+      expect(create(:charge, purchases: [purchase_one], seller:).shared_receipt_eligible?).to be(false)
+    end
+
+    it "is false when the buyer emails differ" do
+      purchase_two.update_column(:email, "other@example.com")
+
+      expect(charge.shared_receipt_eligible?).to be(false)
+    end
+
+    it "ignores case and spacing when comparing buyer emails" do
+      purchase_two.update_column(:email, " Buyer@Example.com ")
+
+      expect(charge.shared_receipt_eligible?).to be(true)
+    end
+
+    it "is false when an item is a gift" do
+      purchase_two.update_column(:flags, purchase_two.flags | Purchase.flag_mapping["flags"][:is_gift_sender_purchase])
+
+      expect(charge.reload.shared_receipt_eligible?).to be(false)
+    end
+  end
 end
