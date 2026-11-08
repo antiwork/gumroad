@@ -176,7 +176,7 @@ class Stripe::SetupIntentsController < ApplicationController
         mandate_amount = if max_product_price.positive?
           max_product_price
         elsif subscription.present?
-          subscription.current_subscription_price_cents(authenticated_offer_code_buyer: logged_in_user)
+          subscription.indian_card_mandate_renewal_price_cents(authenticated_offer_code_buyer: logged_in_user)
         else
           0
         end

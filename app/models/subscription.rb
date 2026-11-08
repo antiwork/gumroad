@@ -767,7 +767,7 @@ class Subscription < ApplicationRecord
     return if purchase.nil?
 
     price_override = renewal_price_cents.present?
-    renewal_price_cents ||= current_subscription_price_cents(authenticated_offer_code_buyer:)
+    renewal_price_cents ||= indian_card_mandate_renewal_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
     presentment_in_force = if presentment.nil?
       false
@@ -904,9 +904,18 @@ class Subscription < ApplicationRecord
   def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     return false if charges_completed?
     return true if current_subscription_price_cents(authenticated_offer_code_buyer:).positive?
+    # An ownership-tiered code can make this period free while the next charge is paid.
+    return true if next_charge_price_cents.positive?
 
     discount = original_purchase&.purchase_offer_code_discount
     discount&.duration_in_billing_cycles.present? && renewal_pre_discount_total_cents.positive?
+  end
+
+  # The renewal price a mandate must cover. An ownership-tiered code can make this period free while the next charge is
+  # paid; sizing at today's $0 would register no mandate. A positive current price keeps today's sizing unchanged.
+  def indian_card_mandate_renewal_price_cents(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    current_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
+    current_price_cents.positive? ? current_price_cents : next_charge_price_cents
   end
 
   def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil, price_override: false)

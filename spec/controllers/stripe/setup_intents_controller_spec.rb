@@ -138,6 +138,23 @@ describe Stripe::SetupIntentsController, :vcr do
         expect(next_mandate_terms[:reference]).not_to eq(mandate_terms[:reference])
       end
 
+      it "sizes a manage-page mandate for the paid next charge while an ownership-tiered code makes this period free" do
+        purchase = create(:membership_purchase, created_at: Time.current, link: create(:membership_product, subscription_duration: :yearly))
+        subscription = purchase.subscription
+        offer_code = create(:tiered_offer_code, user: purchase.link.user, products: [purchase.link],
+                                                ownership_duration_tiers: [{ "months" => 0, "amount_percentage" => 100 }, { "months" => 12, "amount_percentage" => 0 }])
+        purchase.update!(offer_code:, displayed_price_cents: 0)
+        purchase.create_purchase_offer_code_discount!(offer_code:, offer_code_amount: 100, offer_code_is_percent: true,
+                                                      pre_discount_minimum_price_cents: 5_00)
+        subscription.reload
+        allow(controller).to receive(:params).and_return(ActionController::Parameters.new(products: [{ subscription_id: subscription.external_id, price: 0 }]))
+        expect(subscription.current_subscription_price_cents).to eq(0)
+
+        mandate_options = controller.send(:mandate_options_for_stripe, double(requires_mandate?: true), subscription:)
+
+        expect(mandate_options.dig(:payment_method_options, :card, :mandate_options)).to include(amount: 5_00, amount_type: "maximum")
+      end
+
       it "omits the interval count for a sporadic subscription mandate" do
         subscription = create(:subscription)
         chargeable = double(requires_mandate?: true)

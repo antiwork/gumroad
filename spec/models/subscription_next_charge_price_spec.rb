@@ -113,6 +113,22 @@ describe Subscription, "#next_charge_price_cents" do
       end
     end
 
+    it "counts the paid renewal as a future charge for an Indian card mandate while this year is free" do
+      expect(subscription.current_subscription_price_cents).to eq(0)
+      expect(subscription.future_subscription_charge?).to be(true)
+    end
+
+    it "sizes the Indian card mandate for the paid renewal instead of today's $0" do
+      expect(purchase.reload).to have_attributes(displayed_price_cents: 0, total_transaction_cents: 0)
+      expect(subscription.indian_card_mandate_terms).to include(amount: full_price, currency: Currency::USD, interval: "year")
+    end
+
+    it "keeps today's price as the mandate's renewal price for a membership that already pays" do
+      paying = create(:membership_purchase, price_cents: 3_00).subscription
+      expect(paying.current_subscription_price_cents).to eq(3_00)
+      expect(paying.indian_card_mandate_renewal_price_cents).to eq(3_00)
+    end
+
     it "exposes no paid next charge once a single-charge membership has collected it" do
       subscription.update!(charge_occurrence_count: 1)
 
