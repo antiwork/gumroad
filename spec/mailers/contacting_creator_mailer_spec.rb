@@ -1095,12 +1095,38 @@ describe ContactingCreatorMailer do
         "is the seller's own test purchase" => -> { purchase.update!(purchaser: seller) },
         "is a rental" => -> { purchase.url_redirect.update!(is_rental: true) },
         "is still waiting for its PDFs to be stamped" => -> { create(:readable_document, link: product, pdf_stamp_enabled: true) },
-        "is for a coffee product" => -> { product.update_column(:native_type, Link::NATIVE_TYPE_COFFEE) },
+        "is for a coffee product" => -> { product.update!(native_type: Link::NATIVE_TYPE_COFFEE) },
       }.each do |condition, change|
         it "omits the link when the purchase #{condition}" do
           expect(notify_body).to include("/d/")
 
           instance_exec(&change)
+
+          expect(notify_body).not_to include("/d/")
+        end
+      end
+
+      context "when the purchase is for a bundle" do
+        let(:product) { create(:product, :bundle, user: seller) }
+        let(:purchase) { create(:purchase, link: product, seller:, email: buyer.email, is_bundle_purchase: true) }
+
+        it "keeps the link once the buyer has member purchases, even if the members are later removed" do
+          product.bundle_products.each { Purchase::CreateBundleProductPurchaseService.new(purchase, _1).perform }
+          expect(notify_body).to include(purchase.url_redirect.download_page_url)
+
+          product.bundle_products.each(&:mark_deleted!)
+
+          expect(purchase.product_purchases).to be_present
+          expect(notify_body).to include(purchase.url_redirect.download_page_url)
+        end
+
+        it "omits the link for a memberless bundle only once it has no files of its own" do
+          product.bundle_products.each(&:mark_deleted!)
+          own_file = create(:product_file, link: product)
+          expect(purchase.product_purchases).to be_empty
+          expect(notify_body).to include(purchase.url_redirect.download_page_url)
+
+          own_file.mark_deleted!
 
           expect(notify_body).not_to include("/d/")
         end

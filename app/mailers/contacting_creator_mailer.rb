@@ -835,8 +835,8 @@ class ContactingCreatorMailer < ApplicationMailer
       return if purchase.nil? || purchase.is_gift_sender_purchase || purchase.is_gift_receiver_purchase
       return if purchase.is_preorder_authorization || purchase.is_test_purchase?
       return unless purchase.successful_and_not_reversed? && purchase.has_content?
-      # A coffee purchase delivers nothing: its /d/ page redirects to the coffee page, and the receipt hides it too.
-      return if purchase.link.native_type == Link::NATIVE_TYPE_COFFEE
+      # Where the receipt has no button (coffee, a memberless bundle with nothing of its own) there is nothing to open.
+      return unless ReceiptPresenter::ItemInfo.new(purchase).show_download_button
 
       url_redirect = purchase.url_redirect
       url_redirect.download_page_url unless url_redirect.is_rental?
