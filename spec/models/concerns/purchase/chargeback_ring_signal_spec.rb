@@ -194,6 +194,65 @@ describe Purchase::ChargebackRingSignal do
         expect(seller.reload.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
       end
 
+      it "records the ring hold over an existing chargeback-rate hold so the automatic release cannot lift it" do
+        # A ring seller's measured rate is still low when the signal fires, so a hold that still
+        # reads as the chargeback-rate one would be released by the rate-recovery job and would pay
+        # the 75% reserve in the meantime. The ring comment has to become the newest pausing comment.
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        seller.comments.create!(
+          content: "Payouts automatically paused due to chargeback rate (2.0) exceeding 1% volume over the last 120 days.",
+          comment_type: Comment::COMMENT_TYPE_ON_PROBATION,
+          author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
+        )
+        expect(seller.payouts_paused_for_chargeback_rate?).to be(true)
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        purchase = build_checkout_purchase(seller)
+
+        allow(ErrorNotifier).to receive(:notify)
+        purchase.save
+
+        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        seller.reload
+        expect(seller.payouts_paused_internally?).to be(true)
+        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(seller.comments.with_type_on_probation.last.author_name)
+          .to eq(User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal])
+        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+        expect(seller.payouts_paused_for_chargeback_rate?).to be(false)
+        expect(seller.chargeback_rate_payout_reserve_active?).to be(false)
+        expect(ReleaseChargebackRatePayoutPauseForSellerJob.new.send(:releasable?, seller)).to be(false)
+      end
+
+      it "takes over a Stripe payouts hold so a payout-method change cannot release the balance" do
+        # UpdatePayoutMethod clears a Stripe-source pause on a payout-method change, which would
+        # hand a ring seller's balance back to them while the disputes are still in flight.
+        seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_STRIPE)
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        purchase = build_checkout_purchase(seller)
+
+        allow(ErrorNotifier).to receive(:notify)
+        purchase.save
+
+        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        seller.reload
+        expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_SYSTEM)
+        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+      end
+
+      it "does not append a second hold comment for a later blocked sale" do
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+        build_checkout_purchase(seller).save
+
+        expect { build_checkout_purchase(seller).save }.not_to change {
+          seller.comments.with_type_on_probation
+                .where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]).count
+        }
+      end
+
       it "skips recurring subscription charges" do
         seed_paid_sales(seller, count: 5)
         arm_flag

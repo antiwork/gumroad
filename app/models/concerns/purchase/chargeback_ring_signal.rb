@@ -1,25 +1,15 @@
 # frozen_string_literal: true
 
-# Pre-charge signal for card-testing cash-out rings (the "money net" of the daily
-# chargeback-ring scan, moved to checkout time so it can stop sales instead of only
-# pausing payouts after every sale has already been charged).
+# Pre-charge signal for card-testing cash-out rings: the daily chargeback-ring scan could only
+# pause payouts after a ring's sales had already been charged.
 #
-# Measured shape (2026-11 mills): a young seller account takes hundreds of paid sales in weeks,
-# >=90% of the cards from ONE country, bought from a datacenter /16. No legitimate seller matched
-# that conjunction in the production audit; young legitimate sellers with buyers from one country
-# match the country clause but not the hosting-IP clause, which is why the IP dimension must stay
-# in the rule.
+# The country-dominance and hosting-IP clauses only mean anything together: young legitimate
+# sellers whose buyers share one country are common, and a datacenter block is what separates a
+# mill from them. All four clauses below must hold to block.
 #
-# All four clauses must hold to block:
-#   1. paid sales in the last 30 days >= MIN_PAID_SALES
-#   2. one card_country accounts for >= DOMINANT_CARD_COUNTRY_SHARE_PCT of them
-#   3. >= HOSTING_IP_SHARE_PCT of those purchases' ip_addresses fall inside HOSTING_CIDR_STRINGS
-#   4. the seller account is younger than MAX_SELLER_AGE_DAYS
-#
-# Gated by the `chargeback_ring_signal` Flipper flag (default off — flag off means evaluate is
-# never called, so there is zero behaviour change). Fail-open: any exception allows the purchase
-# and records an `error` telemetry row. Every evaluation at or above MIN_PAID_SALES writes a
-# telemetry row (blocked or allowed) so precision is measurable in SQL.
+# Flag off means evaluate is never called, so there is zero behaviour change until it is enabled.
+# Fail-open: an exception allows the purchase and records an `error` row. Every evaluation at or
+# above MIN_PAID_SALES writes a row (blocked or allowed) so precision is measurable in SQL.
 module Purchase::ChargebackRingSignal
   FEATURE_FLAG = :chargeback_ring_signal
 
@@ -63,10 +53,8 @@ module Purchase::ChargebackRingSignal
   end
 
   class << self
-    # One bounded query per call: seller_id + purchase_state + created_at range, covered by
-    # index_purchases_on_seller_id_and_purchase_state_and_created_at, capped at SAMPLE_LIMIT
-    # rows. The free age clause runs first so the query is only paid for accounts young enough
-    # to be candidates at all.
+    # The age clause is decided before any query, so the bounded sample below is only ever read
+    # for accounts young enough to be candidates.
     def evaluate(seller:)
       if seller.created_at <= MAX_SELLER_AGE_DAYS.days.ago
         return Result.new(decision: DECISION_ALLOWED)
@@ -127,10 +115,9 @@ module Purchase::ChargebackRingSignal
   end
 
   private
-    # before_create, registered in Purchase right after check_for_fraud. Flag off => evaluate is
-    # never called and nothing changes. On a hit the refusal is generic and names neither fraud
-    # nor the seller; containment and telemetry run after commit (the refused purchase row still
-    # persists — see the before_create comment in Purchase).
+    # before_create in Purchase, registered right after check_for_fraud. Containment and telemetry
+    # run after commit — the refused purchase row still persists (see the before_create comment in
+    # Purchase). The refusal message names neither fraud nor the seller.
     def check_for_chargeback_ring_signal
       return if errors.present? # an earlier risk check already refused this purchase
       return if seller.nil?
@@ -188,19 +175,24 @@ module Purchase::ChargebackRingSignal
 
     # Same pause mechanism as the existing chargeback-rate gate
     # (Purchase::Blockable#pause_payouts_for_seller_based_on_chargeback_rate!): the internal
-    # system pause flag plus an on-probation comment, with the same outranking-source and
-    # locked re-check discipline. The author is registered in
-    # User::SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS so the hold is attributed correctly — and
-    # because it differs from high_chargeback_rate, ReleaseChargebackRatePayoutPausesJob never
-    # auto-lifts it (a ring seller's measured chargeback rate is still LOW at block time; the
-    # disputes haven't landed yet). Only an admin lifts this hold.
-    # No suspension here — payout containment only; a human decides the account's fate.
+    # system pause flag plus an on-probation comment, with the same locked re-check discipline.
+    #
+    # The comment landing LAST is what makes the containment hold: User#payouts_paused_for_chargeback_rate?
+    # reads the newest pausing comment, and a ring seller's rate is still low when the signal fires,
+    # so a hold that still reads as the chargeback-rate one would be auto-released by
+    # ReleaseChargebackRatePayoutPausesJob and would pay the 75% reserve until then. An existing
+    # automatic hold therefore must not short-circuit this — only a human's own pause is left
+    # untouched. (A Stripe-source pause is not preserved either: UpdatePayoutMethod clears that
+    # source on a payout-method change, which would release the balance to the disputes in flight.)
+    # No suspension here: payout containment only, a human decides the account's fate.
     def pause_seller_payouts_for_ring_signal!(result)
-      outranking_sources = [User::PAYOUT_PAUSE_SOURCE_ADMIN, User::PAYOUT_PAUSE_SOURCE_SYSTEM]
-      return if outranking_sources.include?(seller.payouts_paused_by_source)
+      preserved_sources = [User::PAYOUT_PAUSE_SOURCE_ADMIN]
+      return if preserved_sources.include?(seller.payouts_paused_by_source)
 
       seller.with_lock do
-        next if outranking_sources.include?(seller.payouts_paused_by_source)
+        next if preserved_sources.include?(seller.payouts_paused_by_source)
+        # A second blocked sale must not append another comment once the ring's own is the newest.
+        next if seller.payouts_paused_for_chargeback_ring_signal?
 
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
         seller.comments.create(

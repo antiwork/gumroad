@@ -482,6 +482,17 @@ module User::Risk
     last_system_payout_pause_comment&.author_name == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:high_chargeback_rate]
   end
 
+  # True when the current automatic hold is the checkout chargeback-ring signal's. Read the same
+  # way as above (newest pausing comment, soft-deleted ones included) because the two questions
+  # must never disagree: whichever author is newest is the hold, and
+  # Purchase::ChargebackRingSignal relies on that to know whether its comment still has to land.
+  def payouts_paused_for_chargeback_ring_signal?
+    return false unless payouts_paused_internally?
+    return false unless payouts_paused_by_source == PAYOUT_PAUSE_SOURCE_SYSTEM
+
+    last_system_payout_pause_comment&.author_name == SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]
+  end
+
   # When the current chargeback-volume hold began. The reserve calculation anchors on this so
   # payouts made under the hold keep counting toward the 25% base instead of shrinking it.
   def chargeback_rate_payout_hold_started_at
