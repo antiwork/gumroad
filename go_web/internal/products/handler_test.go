@@ -1596,11 +1596,20 @@ func TestDefaultOfferCodes(t *testing.T) {
 				insertOfferCode(t, conn, autoID-1, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
 				auto(t, conn, nil)
 			}},
-		{name: "a product's code with the sale's string and another minimum", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, nil)
-			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "minimum_quantity": 2})
-			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
-		}},
+		// Weighed at the product's code's minimum, one, the sale falls short of its own three.
+		{name: "a sale by the product's code's string short of its own minimum", wants: []string{`"discount_code":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"minimum_quantity": 3})
+				insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
+			}},
+		// The sale is weighed at the product's code's minimum, which its own terms don't change.
+		{name: "a product's code with the sale's string and another minimum", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
+			}},
 		{name: "a sale in Latin letters", wants: []string{`"discount_code":` + discount(`"SOLDÉ"`, `{"type":"percent","percents":20,`+
 			`"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}`) +
 			`,"sale_label":"Sale",`},
@@ -1958,6 +1967,44 @@ func TestURLOfferCodes(t *testing.T) {
 			wants: []string{quotes("save10", valid("save10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		// Weighed at the product's code's minimum, the universal one falls short of its own.
+		{name: "a universal code by the string short of its own minimum", target: "/l/guide/save10",
+			wants: []string{`"discount_code":` + invalid("unmet_minimum_purchase_quantity") + `,`,
+				quotes("save10", invalid("unmet_minimum_purchase_quantity"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"minimum_quantity": 3})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		// The product's code's minimum of two raises the quantity the universal code is checked at:
+		// its one use left falls short, and its once-per-cart amount covers two units.
+		{name: "a universal code by the string with one use left", target: "/l/guide/save10",
+			wants: []string{quotes("save10", invalid("insufficient_times_of_use"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 1})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		{name: "a once-per-cart universal code by the string", target: "/l/guide/save10", wants: []string{`"discount_code":{"valid":true,"code":"save10",` +
+			`"discount":{"type":"fixed","cents":600,"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,` +
+			`"minimum_amount_cents":null,"once_per_cart":true,"once_per_cart_id":"%[2]s","once_per_cart_amount_cents":600,` +
+			`"once_per_cart_has_usage_limit":false}},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		// evaluate_code memoizes under the product's code's scope, which takes every option, so the
+		// universal code's result for the first option, where it applies, is every option's.
+		{name: "a scoped universal code by the string", target: "/l/guide/save10",
+			wants: []string{`"discount_code":` + valid("save10", smallOnly) + `,`,
+				optionQuotes("save10", valid("save10", smallOnly), "null", valid("save10", smallOnly))},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				sizes(t, conn, codeID)
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
 				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
 			}},

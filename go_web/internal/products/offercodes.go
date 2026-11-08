@@ -46,10 +46,24 @@ type offerCode struct {
 	optionIDs *rails.RHash
 	scope     map[int64]bool
 	ownerless bool
+	// found is find_offer_code's row when the computing service applies this code in its place.
+	// evaluate_code weighs this code at found's minimum, and memoizes its result under found's
+	// option scope, so an option takes the result of the first in memo with the same scope.
+	found *offerCode
+	memo  []*variantOption
 }
 
-// excludes is !applicable_to_variant?. A page without options has none to leave out.
+// excludes is !applicable_to_variant?, at the memo's option for a pick with found. A page
+// without options has none to leave out.
 func (c *offerCode) excludes(o *variantOption) bool {
+	if o != nil && c.found != nil {
+		for _, m := range c.memo {
+			if c.found.excludes(m) == c.found.excludes(o) {
+				o = m
+				break
+			}
+		}
+	}
 	return o != nil && len(c.scope) > 0 && !c.scope[o.id]
 }
 
@@ -473,9 +487,18 @@ func (c *offerCode) oncePerCart() bool {
 	return c.amountCents.Valid && c.flags&offerCodeOncePerCart != 0
 }
 
-// quantity is evaluate_code's: the page's, raised to the code's minimum.
+// quantity is evaluate_code's: the page's, raised to find_offer_code's row's minimum.
 func (c *offerCode) quantity(page int64) int64 {
+	if c.found != nil {
+		return max(page, c.found.minimumQuantity.Int64)
+	}
 	return max(page, c.minimumQuantity.Int64)
+}
+
+// unmetMinimum is meets_minimum_purchase_quantity? failing, which only a code weighed at another
+// row's minimum can.
+func (c *offerCode) unmetMinimum(page int64) bool {
+	return c.minimumQuantity.Int64 > c.quantity(page)
 }
 
 // usageUnits is usage_units at that quantity.
@@ -553,6 +576,20 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 		d.urlError, d.urlRow = errorCode, fromURL
 		if errorCode == "" {
 			url = fromURL
+		}
+	}
+	// selection_discounts evaluates the options in order, skipping a closed tier, with one memo.
+	var memo []*variantOption
+	if v.variants != nil {
+		for _, o := range v.variants.options {
+			if !o.closed {
+				memo = append(memo, o)
+			}
+		}
+	}
+	for _, c := range append([]*offerCode{url, d.urlRow}, defaults...) {
+		if c != nil && c.found != nil {
+			c.memo = memo
 		}
 	}
 	switch {
@@ -692,6 +729,9 @@ func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (*offe
 	if reason != "" {
 		return nil, fallback(reason)
 	}
+	if resolved.unmetMinimum(p.quantity()) {
+		return nil, nil
+	}
 	if shortfall, err := h.usesShortfall(p, resolved); err != nil || shortfall != "" {
 		return nil, err
 	}
@@ -737,6 +777,9 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	discounted, reason := c.resolveDiscount(months)
 	if reason != "" {
 		return nil, "", fallback(reason)
+	}
+	if discounted.unmetMinimum(p.quantity()) {
+		return c, "unmet_minimum_purchase_quantity", nil
 	}
 	if shortfall, err := h.usesShortfall(p, discounted); err != nil || shortfall != "" {
 		return c, shortfall, err
@@ -795,9 +838,7 @@ func (h *handler) findOfferCode(ctx context.Context, prod *product, code string)
 	return found, found, nil
 }
 
-// serviceCode is pick, the row whose terms the result has. BestOfferCodeService weighs it at
-// found's minimum quantity and keys its evaluations by found's option scope, so a pick whose
-// minimum differs, or either with an option scope, goes to Rails.
+// serviceCode is pick, the row whose terms the result has, with found, which weighs it.
 func (h *handler) serviceCode(ctx context.Context, prod *product, found, pick int64) (*offerCode, error) {
 	c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", pick)
 	if err != nil || c == nil || pick == found {
@@ -807,9 +848,15 @@ func (h *handler) serviceCode(ctx context.Context, prod *product, found, pick in
 	if err != nil {
 		return nil, err
 	}
-	if f == nil || f.minimumQuantity != c.minimumQuantity || f.hasVariants || c.hasVariants {
+	if f == nil {
 		return nil, fallback("offer code lookup")
 	}
+	if f.hasVariants {
+		if err := h.loadCodeOptions(ctx, prod, f); err != nil {
+			return nil, err
+		}
+	}
+	c.found = f
 	return c, nil
 }
 
