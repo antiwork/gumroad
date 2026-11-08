@@ -87,9 +87,14 @@ type Document struct {
 	DesignSettings, UserAgentInfo string
 }
 
+// PageJSON is the page object, with the meta tags among its props.
+func (d Document) PageJSON() string {
+	return Page(d.Component, d.URL, d.Props.Sym("_inertia_meta", d.Meta.JSON()))
+}
+
 // Render returns the page's HTML.
 func (l *Layout) Render(d Document) string {
-	page := Page(d.Component, d.URL, d.Props.Sym("_inertia_meta", d.Meta.JSON()))
+	page := d.PageJSON()
 	var b strings.Builder
 	// Escaping a quote takes six bytes, and the page JSON is most of the document.
 	b.Grow(len(l.head) + len(l.tail) + 2*len(page) + 4096)

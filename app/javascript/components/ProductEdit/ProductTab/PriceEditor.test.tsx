@@ -31,6 +31,33 @@ const renderEditor = (
     />,
   );
 
+describe("PriceEditor Amount field", () => {
+  // The field is backed by `PriceInput`, which reads a comma before three digits as thousands
+  // grouping (the same reading the hint advertises and the same one `clean_price` applies on the
+  // new-product page), so 7,900 typed here is $7,900, not $7.90.
+  it("reads 7,900 as $7,900 and says how a typed comma is read", () => {
+    const setPriceCents = vi.fn();
+    renderEditor({ isPWYW: false, setIsPWYW: noop, setPriceCents, priceCents: 0 });
+
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7,900" } });
+
+    expect(setPriceCents).toHaveBeenCalledWith(790000);
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7,90" } });
+    expect(setPriceCents).toHaveBeenLastCalledWith(790);
+    expect(screen.getByText("Use a comma for thousands (7,900) or for cents (7,90).")).toBeTruthy();
+  });
+
+  it("offers only the thousands reading in a currency without minor units", () => {
+    const setPriceCents = vi.fn();
+    renderEditor({ isPWYW: false, setIsPWYW: noop, setPriceCents, priceCents: 0, currencyType: "jpy" });
+
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "7,900" } });
+
+    expect(setPriceCents).toHaveBeenCalledWith(7900);
+    expect(screen.getByText("Use a comma for thousands (7,900).")).toBeTruthy();
+  });
+});
+
 describe("PriceEditor PWYW toggle", () => {
   it("leaves PWYW editable on a $0-base product with paid variants", () => {
     const setIsPWYW = vi.fn();

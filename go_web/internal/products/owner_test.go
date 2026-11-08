@@ -139,15 +139,15 @@ func TestTheSellersOwnView(t *testing.T) {
 }
 
 // Rails shows the seller and collaborators the custom HTML page of an unpublished product, even a
-// coffee one, which show would redirect: the seller's goes to Rails. Any other signed-in visitor
-// gets the standard page.
+// coffee one, which show would redirect, with the live reload. Any other signed-in visitor gets
+// the standard page.
 func TestTheSellerPreviewsTheirCustomHTML(t *testing.T) {
 	for _, c := range []struct {
-		name, reason  string
+		name          string
 		coffee, buyer bool
 	}{
-		{name: "the seller", reason: "custom html preview"},
-		{name: "the seller of a coffee product", reason: "custom html preview", coffee: true},
+		{name: "the seller"},
+		{name: "the seller of a coffee product", coffee: true},
 		{name: "another visitor", buyer: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -163,9 +163,13 @@ func TestTheSellerPreviewsTheirCustomHTML(t *testing.T) {
 				mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
 			}
 			customHTML(t, e, conn)
-			body := e.render(t, headers, c.reason)
-			if c.reason == "" && (strings.Contains(body, "gumroad-landing-frame") || !strings.Contains(body, productComponent)) {
+			body := e.render(t, headers, "")
+			wrapper := strings.Contains(body, "gumroad-landing-frame") && strings.Contains(body, `var versionUrl = "/l/gowebp1/landing/version";`)
+			if c.buyer && (wrapper || !strings.Contains(body, productComponent)) {
 				t.Error("not the standard page")
+			}
+			if !c.buyer && !wrapper {
+				t.Error("not the preview")
 			}
 		})
 	}

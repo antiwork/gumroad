@@ -77,6 +77,17 @@ class Onetime::BackfillMembershipAdvanceRenewalRemindersTest < ActiveSupport::Te
     assert_equal 0, run_backfill[:scheduled]
   end
 
+  test "schedules the advance notice from the charge that still follows a refunded charge" do
+    subscription = create_subscription_for_backfill
+    Subscription.any_instance.unstub(:end_time_of_subscription)
+    purchase = subscription.original_purchase
+    assert purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, -purchase.total_transaction_cents), purchase.seller_id)
+
+    assert_equal 1, run_backfill[:scheduled]
+    lead = BasePrice::Recurrence.renewal_advance_reminder_email_days(BasePrice::Recurrence::YEARLY)
+    assert_in_delta (purchase.succeeded_at + 1.year - lead).to_f, advance_jobs.sole["at"], 1
+  end
+
   test "stops at a row whose scheduling raises so the next run retries it" do
     first = create_subscription_for_backfill
     second = create_subscription_for_backfill

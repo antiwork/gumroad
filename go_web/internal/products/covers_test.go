@@ -95,6 +95,26 @@ func TestAVideoCoverRendersWithItsPoster(t *testing.T) {
 	}
 }
 
+// preview_width and preview_height are nil for a video without its size, and their tags have
+// no content.
+func TestAVideoCoverWithoutItsSize(t *testing.T) {
+	e := newTestEnv(t)
+	addVideoCover(t, testdb.Open(t), `{"analyzed":true}`, "WX6OQ3hf/g9WoAI2n/sUdFF1vxA=", true)
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	for _, want := range []string{
+		`<meta property="twitter:player" content="https://public-files.gumroad.com/videos/original"`,
+		`<meta property="twitter:player:width" inertia="meta-property-twitter-player-width">`,
+		`<meta property="twitter:player:height" inertia="meta-property-twitter-player-height">`,
+	} {
+		if !strings.Contains(w.Body.String(), want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+}
+
 // A blob with two preview images takes the one Rails' has_one statement returns first: the
 // uniqueness index's first, by blob, not the lowest attachment id.
 func TestAVideoCoverWithTwoPreviewImages(t *testing.T) {
@@ -112,24 +132,48 @@ func TestAVideoCoverWithTwoPreviewImages(t *testing.T) {
 	}
 }
 
-func TestAVideoCoverWithoutItsPosterGoesToRails(t *testing.T) {
+// video_poster_url never makes a poster in the request: without a cached or persisted one it
+// shows none and enqueues GenerateVideoPosterWorker, unless Rails' failure sentinel is cached.
+func TestAVideoCoverWithoutItsPosterQueuesIt(t *testing.T) {
 	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
 	addVideoCover(t, testdb.Open(t), `{"width":1920.0,"height":1080.0}`, "WX6OQ3hf/g9WoAI2n/sUdFF1vxA=", false)
-	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Header().Get("X-Go-Web-Fallback") != "video poster" {
-		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
-	}
-	// Rails' failure sentinel: no poster, and nothing to enqueue.
-	e.cache.values["attachment_1793301_poster_url"] = ""
+	const key = "attachment_1793301_poster_url"
 	// The default share image stays.
-	if w := e.get(host, "/l/guide", nil); w.Code != http.StatusOK || !strings.Contains(html.UnescapeString(w.Body.String()), `"thumbnail":null,"id":"video-guid"`) ||
-		!strings.Contains(w.Body.String(), `<meta property="og:image" content="https://assets.gumroad.com/images/opengraph_image.png"`) {
-		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	noPoster := func(headers map[string]string) {
+		t.Helper()
+		w := e.get(host, "/l/guide", headers)
+		if w.Code != http.StatusOK || !strings.Contains(html.UnescapeString(w.Body.String()), `"thumbnail":null,"id":"video-guid"`) ||
+			!strings.Contains(w.Body.String(), `<meta property="og:image" content="https://assets.gumroad.com/images/opengraph_image.png"`) {
+			t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+	}
+	e.cache.values[key] = ""
+	noPoster(nil)
+	if jobs.Exists("queue:low") {
+		t.Fatal("the failure sentinel queued the poster")
+	}
+	delete(e.cache.values, key)
+	noPoster(e.dryRun(host, "/l/guide", testNow))
+	if jobs.Exists("queue:low") {
+		t.Fatal("a dry run queued the poster")
+	}
+	noPoster(nil)
+	queued, _ := jobs.List("queue:low")
+	if len(queued) != 1 || !strings.Contains(queued[0], `"lock":"until_executed","args":[1793101],"class":"GenerateVideoPosterWorker"`) {
+		t.Errorf("queue:low %v", queued)
 	}
 	// A poster go_web cached earlier is enough.
-	e.cache.values["attachment_1793301_poster_url"] = "https://public-files.gumroad.com/posters/cached"
+	e.cache.values[key] = "https://public-files.gumroad.com/posters/cached"
 	if w := e.get(host, "/l/guide", nil); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "posters/cached") {
 		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
+}
+
+func TestAVideoCoverWithoutItsPosterOrSidekiqGoesToRails(t *testing.T) {
+	e := newTestEnv(t)
+	addVideoCover(t, testdb.Open(t), `{"width":1920.0,"height":1080.0}`, "WX6OQ3hf/g9WoAI2n/sUdFF1vxA=", false)
+	e.render(t, nil, "video poster push")
 }
 
 // psychOembed is YAML.dump of an OEmbedFinder YouTube result, as the oembed column holds it.
@@ -244,6 +288,29 @@ func TestAnUnsplashCoverRendersItsURL(t *testing.T) {
 	// file.image? is nil without a file, so nothing is preloaded.
 	if strings.Contains(body, `rel="preload" as="image"`) {
 		t.Error("an Unsplash cover is preloaded")
+	}
+}
+
+// Covers tied on position and created_at come in the order Rails' statements return, which
+// here, as for the tied covers seen in production, is by id.
+func TestCoversTiedOnPositionAndTime(t *testing.T) {
+	e := newTestEnv(t)
+	conn := testdb.Open(t)
+	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_793_701), "link_id": productID, "guid": "first",
+		"created_at": testNow, "updated_at": testNow})
+	addBlob(t, conn, 1_793_801, "covers/first", "first.gif", "image/gif", `{"width":10,"height":10}`)
+	addAttachment(t, conn, 1_793_901, "file", "AssetPreview", 1_793_701, 1_793_801)
+	// An Unsplash cover has no file, and is still one of the tied previews.
+	testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_793_702), "link_id": productID, "guid": "second",
+		"unsplash_url": "https://images.unsplash.com/photo", "created_at": testNow, "updated_at": testNow})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	product := pageProps(t, w.Body.String())["product"].(map[string]any)
+	covers := product["covers"].([]any)
+	if len(covers) != 2 || covers[0].(map[string]any)["id"] != "first" || product["main_cover_id"] != "first" {
+		t.Errorf("covers %v, main %v", covers, product["main_cover_id"])
 	}
 }
 

@@ -336,14 +336,14 @@ func fetchLeniently(ctx context.Context, conn *sql.DB, permalink string, sellerI
 	return nil, nil
 }
 
-// customHTMLPresent is whether the product's root page holds custom HTML, which
+// productCustomHTML is the custom HTML of the product's root page, which
 // render_custom_html_if_present may serve instead of the page.
-func customHTMLPresent(ctx context.Context, conn *sql.DB, productID int64) (bool, error) {
+func productCustomHTML(ctx context.Context, conn *sql.DB, productID int64) (string, error) {
 	var html sql.NullString
 	err := conn.QueryRowContext(ctx, "SELECT pages.custom_html FROM pages WHERE pages.pageable_type = 'Link'"+
 		" AND pages.pageable_id = ? AND pages.slug IS NULL LIMIT 1", productID).Scan(&html)
 	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
+		return "", nil
 	}
-	return rails.Present(html.String), err
+	return html.String, err
 }

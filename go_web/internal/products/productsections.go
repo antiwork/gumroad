@@ -461,6 +461,7 @@ func (p *page) absorb(fp *page) {
 	fp.cacheWrites = nil
 	p.warmReputation = p.warmReputation || fp.warmReputation
 	p.retinaPushes = appendNew(p.retinaPushes, fp.retinaPushes...)
+	p.posterPushes = appendNew(p.posterPushes, fp.posterPushes...)
 	p.avatarPushes = appendNew(p.avatarPushes, fp.avatarPushes...)
 	if p.settleable == nil {
 		p.settleable = fp.settleable

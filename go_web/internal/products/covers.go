@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -41,8 +42,9 @@ type cover struct {
 	url, originalURL              string
 	isImage, isVideo, postProcess bool
 	isUnsplash                    bool
-	// retinaRead is url read through the retina variant's cache entry, not the original's.
-	retinaRead bool
+	// retinaRead is url read through the retina variant's cache entry, not the original's, and
+	// rescued one url_from_file's rescue answered without either.
+	retinaRead, rescued bool
 	// oembed is an embedded player's column, as OEmbedFinder stores it.
 	oembed *oembedData
 	// thumbnail is thumbnail_url: a video's poster or a player's thumbnail; "" is nil.
@@ -88,9 +90,23 @@ type coverOrder struct {
 	createdAt db.NullTime
 }
 
-// loadCovers is display_asset_previews with each one's URLs. Any other cover goes to Rails:
-// an Unsplash one with a file or player, or a video without a persisted poster (Rails may enqueue one).
+// loadCovers is display_asset_previews with each one's URLs.
 func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*cover, error) {
+	covers, err := h.loadCoverRows(ctx, productID)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range covers {
+		if err := h.coverURLs(ctx, p, c); err != nil {
+			return nil, err
+		}
+	}
+	return covers, nil
+}
+
+// loadCoverRows is display_asset_previews without their URLs. Any other cover goes to Rails:
+// an Unsplash one with a file or player, or a video without a persisted poster (Rails may enqueue one).
+func (h *handler) loadCoverRows(ctx context.Context, productID int64) ([]*cover, error) {
 	// One row per attachment, through the attachments' unique index; a preview on two rows
 	// has more than one file.
 	rows, err := h.c.DB.QueryContext(ctx, `SELECT asset_previews.id, asset_previews.guid, asset_previews.position,
@@ -108,6 +124,7 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 	defer rows.Close()
 	var covers []*cover
 	var keys []coverOrder
+	var ids []int64
 	var lastPreviewID int64
 	for rows.Next() {
 		var c cover
@@ -164,22 +181,53 @@ func (h *handler) loadCovers(ctx context.Context, p *page, productID int64) ([]*
 		}
 		covers = append(covers, &c)
 		keys = append(keys, k)
+		ids = append(ids, previewID)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	for i := 1; i < len(keys); i++ {
-		// in_order leaves ties to MySQL.
 		if keys[i] == keys[i-1] {
-			return nil, fallback("cover order")
-		}
-	}
-	for _, c := range covers {
-		if err := h.coverURLs(ctx, p, c); err != nil {
-			return nil, err
+			// in_order leaves ties to MySQL, so each of Rails' statements has to agree with this
+			// order, which breaks them by id.
+			same, err := h.railsCoverOrder(ctx, productID, ids)
+			if err != nil {
+				return nil, err
+			}
+			if !same {
+				return nil, fallback("cover order")
+			}
+			break
 		}
 	}
 	return covers, nil
+}
+
+// railsCoverOrder is whether Rails' display_asset_previews statements return the previews in
+// want's order: the association's, its preload's, and first's LIMIT 1.
+func (h *handler) railsCoverOrder(ctx context.Context, productID int64, want []int64) (bool, error) {
+	const order = " ORDER BY `asset_previews`.`position` ASC, `asset_previews`.`created_at` ASC"
+	for _, s := range []struct {
+		query string
+		first bool
+	}{
+		{"SELECT `asset_previews`.* FROM `asset_previews` WHERE `asset_previews`.`link_id` = ? AND `asset_previews`.`deleted_at` IS NULL" + order, false},
+		{"SELECT `asset_previews`.* FROM `asset_previews` WHERE `asset_previews`.`deleted_at` IS NULL AND `asset_previews`.`link_id` = ?" + order, false},
+		{"SELECT `asset_previews`.* FROM `asset_previews` WHERE `asset_previews`.`link_id` = ? AND `asset_previews`.`deleted_at` IS NULL" + order + " LIMIT 1", true},
+	} {
+		ids, err := h.scanIDs(ctx, s.query, productID)
+		if err != nil {
+			return false, err
+		}
+		expected := want
+		if s.first {
+			expected = want[:1]
+		}
+		if !slices.Equal(ids, expected) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // blobDimensions reads the analyzer's width and height out of the blob's metadata.
@@ -259,7 +307,8 @@ func (h *handler) originalCoverURL(ctx context.Context, p *page, c *cover) (stri
 // retinaVariantJob is ProcessAssetPreviewRetinaWorker's sidekiq_options.
 var retinaVariantJob = sidekiq.Options{Class: "ProcessAssetPreviewRetinaWorker", Queue: "low", Retry: 3}
 
-// pushVariants is enqueue_retina_variant_process for each cover whose URL the page read, and
+// pushVariants is enqueue_retina_variant_process for each cover whose URL the page read,
+// video_poster_url's GenerateVideoPosterWorker for each poster it lacked, and
 // generate_avatar_variant_later for each avatar.
 func (h *handler) pushVariants(ctx context.Context, p *page) error {
 	jobs := h.c.Page.Sidekiq
@@ -267,6 +316,12 @@ func (h *handler) pushVariants(ctx context.Context, p *page) error {
 		if _, _, err := jobs.PushUntilExecuted(context.WithoutCancel(ctx), retinaVariantJob, id); err != nil {
 			web.Logger(p.Req.HTTP).Warn("retina variant push failed", "error", err.Error())
 			return fallback("retina variant push")
+		}
+	}
+	for _, id := range p.posterPushes {
+		if _, _, err := jobs.PushUntilExecuted(context.WithoutCancel(ctx), videoPosterJob, id); err != nil {
+			web.Logger(p.Req.HTTP).Warn("video poster push failed", "error", err.Error())
+			return fallback("video poster push")
 		}
 	}
 	for _, id := range p.avatarPushes {
@@ -283,13 +338,17 @@ func (h *handler) pushVariants(ctx context.Context, p *page) error {
 func (h *handler) retinaCoverURL(ctx context.Context, p *page, c *cover) (string, error) {
 	pc := h.c.Page
 	if !storage.Variable(c.contentType) {
-		// retina_variant raises, and url_from_file's rescue answers file.url.
-		return "", fallback("invariable cover")
+		// retina_variant raises, and url_from_file's rescue answers file.url, uncached.
+		c.rescued = true
+		return pc.cdnURL(pc.PublicStorageURL + c.key), nil
 	}
-	if c.width == nil {
-		return "", fallback("cover width")
+	// retina_width is nil for a blob the analyzer never measured, so the variant is
+	// resize_to_limit [nil, nil].
+	var width any
+	if c.width != nil {
+		width = c.width.minWith(coverRetinaWidth).value()
 	}
-	digest := storage.VariantDigest(c.filename, c.contentType, c.width.minWith(coverRetinaWidth).value(), nil)
+	digest := storage.VariantDigest(c.filename, c.contentType, width, nil)
 	variantKey, found, err := h.variantKey(ctx, c.blobID, digest)
 	if err != nil {
 		return "", err
@@ -328,9 +387,12 @@ func (h *handler) variantKey(ctx context.Context, blobID int64, digest string) (
 	return key, err == nil, err
 }
 
+// videoPosterJob is GenerateVideoPosterWorker's sidekiq_options.
+var videoPosterJob = sidekiq.Options{Class: "GenerateVideoPosterWorker", Queue: "low", Retry: 3}
+
 // videoPosterURL is video_poster_url for a video ActiveStorage can preview (ffmpeg is on Rails'
-// hosts). With neither a cached nor a persisted poster, only Rails knows whether a failure
-// sentinel holds or GenerateVideoPosterWorker is enqueued.
+// hosts): the cached poster, else the persisted one, else none, enqueueing
+// GenerateVideoPosterWorker unless a failure sentinel is cached.
 func (h *handler) videoPosterURL(ctx context.Context, p *page, c *cover) (string, error) {
 	key := "attachment_" + itoa(c.attachmentID) + "_poster_url"
 	cached, found, err := h.readCache(ctx, key)
@@ -357,7 +419,11 @@ func (h *handler) videoPosterURL(ctx context.Context, p *page, c *cover) (string
 	if found {
 		return "", nil
 	}
-	return "", fallback("video poster")
+	if h.c.Page.Sidekiq == nil {
+		return "", fallback("video poster push")
+	}
+	p.posterPushes = appendNew(p.posterPushes, c.previewID)
+	return "", nil
 }
 
 // persistedPosterURL is persisted_video_poster_url: the blob's preview image resized to
@@ -474,6 +540,18 @@ func (c *cover) displayHeight() (int64, bool) {
 
 // previewImagePath is preview_image_path? for the main cover: an image file or an Unsplash photo.
 func (c *cover) previewImagePath() bool { return c.isImage || c.isUnsplash }
+
+// urlCacheKey is the Rails.cache entry url_from_file read for c's url, the retina variant's or the
+// original's; "" for an Unsplash URL or one url_from_file's rescue answered.
+func (c *cover) urlCacheKey() string {
+	switch {
+	case c.isUnsplash || c.rescued:
+		return ""
+	case c.retinaRead:
+		return "attachment_" + itoa(c.attachmentID) + "_retina_url"
+	}
+	return "attachment_" + itoa(c.attachmentID) + "_original_url"
+}
 
 // filenameSanitizer is the tr in ActiveStorage::Filename#sanitized.
 var filenameSanitizer = strings.NewReplacer("\u202E", "-", "%", "-", "$", "-", "|", "-", ":", "-", ";", "-", "/", "-", "<", "-",

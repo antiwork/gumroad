@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
@@ -256,7 +258,8 @@ func (h *handler) fileSummaries(ctx context.Context, prod *product, files []prod
 		return rails.NewRHash().Sym("product", nullableRHash(summary)).Sym("options", options), nil
 	}
 	ids := variantIDs(vs.options)
-	if variantContents == nil {
+	// The Variants' pages recoverable_hidden_variant_rich_content? read aren't SKUs'.
+	if variantContents == nil || prod.is(productSkusEnabled) {
 		if variantContents, err = h.richContents(ctx, "BaseVariant", ids); err != nil {
 			return nil, err
 		}
@@ -332,7 +335,7 @@ func (h *handler) summarize(contents []*delivery.RichContent, files []productFil
 	formats := []string{}
 	total, hasNil := int64(0), false
 	for _, f := range delivered {
-		up, ok := asciiUpcase(f.filetype.String)
+		up, ok := fileTypeUpcase(f.filetype.String)
 		if !ok {
 			return nil, fallback("file type")
 		}
@@ -350,6 +353,27 @@ func (h *handler) summarize(contents []*delivery.RichContent, files []productFil
 		totalSize = nil
 	}
 	return rails.NewRHash().Sym("formats", formats).Sym("total_size", totalSize).Sym("count", int64(len(delivered))), nil
+}
+
+// fileTypeUpcase is String#upcase for a file type: ASCII's, with any character that has no case,
+// such as the quote a filename can end in, left as is. A letter outside ASCII is Rails'.
+func fileTypeUpcase(s string) (string, bool) {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r < utf8.RuneSelf:
+			if 'a' <= r && r <= 'z' {
+				r -= 'a' - 'A'
+			}
+		case r == utf8.RuneError || !unicode.In(r, unicode.M, unicode.N, unicode.P, unicode.S, unicode.Zs) ||
+			unicode.ToUpper(r) != r || unicode.SimpleFold(r) != r:
+			// Letters, and code points Go's tables leave unassigned, which Ruby's may case.
+			return "", false
+		}
+		b.WriteRune(r)
+	}
+	return b.String(), true
 }
 
 // asciiUpcase is String#upcase where it is ASCII's; other text is Rails'.

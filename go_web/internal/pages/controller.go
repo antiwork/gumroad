@@ -300,6 +300,15 @@ func DeclinedHeaders(r *http.Request) string {
 	if r.Header.Get("X-Inertia") != "" {
 		return "inertia visit"
 	}
+	return DeclinedVisitHeaders(r)
+}
+
+// DeclinedVisitHeaders is DeclinedHeaders for a page that answers a plain Inertia visit itself:
+// a blank X-Inertia, which the renderer and the middleware read differently, and the rest.
+func DeclinedVisitHeaders(r *http.Request) string {
+	if v, ok := r.Header["X-Inertia"]; ok && rails.Blank(strings.Join(v, "")) {
+		return "inertia visit"
+	}
 	// Rack reads the host, scheme and port from Forwarded before the X-Forwarded headers.
 	if _, ok := r.Header["Forwarded"]; ok {
 		return "forwarded header"
@@ -311,4 +320,23 @@ func DeclinedHeaders(r *http.Request) string {
 		}
 	}
 	return ""
+}
+
+// DeclinedPartialHeaders is DeclinedVisitHeaders for a page that answers one partial reload
+// itself: an Inertia visit for component's data and nothing else.
+func DeclinedPartialHeaders(r *http.Request, component, data string) string {
+	if r.Header.Get("X-Inertia") == "" {
+		// The renderer filters the props whether or not the request is an Inertia visit.
+		return "inertia partial without X-Inertia"
+	}
+	if v := r.Header.Values("X-Inertia-Partial-Component"); len(v) != 1 || v[0] != component {
+		return "inertia header X-Inertia-Partial-Component"
+	}
+	if v := r.Header.Values("X-Inertia-Partial-Data"); len(v) != 1 || v[0] != data {
+		return "inertia header X-Inertia-Partial-Data"
+	}
+	h := r.Header.Clone()
+	h.Del("X-Inertia-Partial-Component")
+	h.Del("X-Inertia-Partial-Data")
+	return DeclinedVisitHeaders(&http.Request{Header: h})
 }

@@ -131,7 +131,8 @@ export function sanitizePriceRangeInput(value: string): string {
   return cleaned.slice(0, firstDotIndex + 1) + cleaned.slice(firstDotIndex + 1).replace(/\./gu, "");
 }
 
-// `clean_price` reads a comma before one or two final digits as a decimal, except in currencies
-// without minor units, where every comma is grouping.
+// Under the new-product Price field and the editor's Amount field: `clean_price` and `PriceInput` both
+// read a comma before three digits as thousands and before one or two as cents. Currencies without
+// minor units have no cents, so they only get the thousands half.
 export const priceCommaHint = (isSingleUnit: boolean): string =>
   isSingleUnit ? "Use a comma for thousands (7,900)." : "Use a comma for thousands (7,900) or for cents (7,90).";

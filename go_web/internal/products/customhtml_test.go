@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 )
@@ -99,6 +99,21 @@ func TestTheCustomHTMLWrapper(t *testing.T) {
 	if dry.Code != http.StatusOK || csrfMeta.ReplaceAllString(dry.Body.String(), "") != csrfMeta.ReplaceAllString(body, "") {
 		t.Errorf("dry run: %d %q", dry.Code, dry.Header().Get("X-Go-Web-Fallback"))
 	}
+
+	// Discover's search box asking for suggestions gets the document a visit does.
+	target := "/l/guide?layout=discover&query=pen"
+	plain := e.get(host, target, nil)
+	partial := e.get(host, target, map[string]string{"X-Inertia": "true", "X-Requested-With": "XMLHttpRequest",
+		"X-Inertia-Partial-Component": "Products/Discover/Show", "X-Inertia-Partial-Data": "autocomplete_results"})
+	if partial.Code != http.StatusOK || e.railsHit != nil ||
+		csrfMeta.ReplaceAllString(partial.Body.String(), "") != csrfMeta.ReplaceAllString(plain.Body.String(), "") {
+		t.Fatalf("partial reload: %d %q", partial.Code, partial.Header().Get("X-Go-Web-Fallback"))
+	}
+	for _, name := range []string{"Content-Type", "Link", "Vary", "X-Robots-Tag"} {
+		if got, want := partial.Header().Get(name), plain.Header().Get(name); got != want {
+			t.Errorf("partial reload %s %q, want %q", name, got, want)
+		}
+	}
 }
 
 var csrfMeta = regexp.MustCompile(`"csrf-token" content="[^"]*"`)
@@ -136,19 +151,24 @@ func TestTheCustomHTMLWrapperSignedIn(t *testing.T) {
 	mustExec(t, conn, "UPDATE affiliates SET deleted_at = ? WHERE id = ?", testNow, 1_795_451)
 	getsWrapper("a removed collaborator")
 	mustExec(t, conn, "UPDATE affiliates SET deleted_at = NULL WHERE id = ?", 1_795_451)
-	for i, user := range []int64{sellerID, collabID} {
-		headers := e.signedIn(user, nil)
-		// A signature is good for one request.
-		headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide", testNow.Add(time.Duration(i)*time.Second))["X-Go-Web-Dry-Run"]
-		if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "custom html preview" {
+	// The seller and a collaborator preview it: the same page, with the live reload last.
+	script := strings.NewReplacer("«nonce»", "NONCE", "«version_src»", `"/l/gowebp1/landing/version"`,
+		"«poll_interval_ms»", "2000").Replace(customHTMLLiveReload)
+	preview := strings.Replace(csrfMeta.ReplaceAllString(out.Body.String(), ""), "    \n  </body>", "    "+script+"\n  </body>", 1)
+	for _, want := range []string{`var versionUrl = "/l/gowebp1/landing/version";`, "setInterval(poll, 2000);"} {
+		if !strings.Contains(preview, want) {
+			t.Fatalf("no %s", want)
+		}
+	}
+	for _, user := range []int64{sellerID, collabID} {
+		w := e.get(host, "/l/guide", e.signedIn(user, nil))
+		if w.Code != http.StatusOK || e.railsHit != nil || csrfMeta.ReplaceAllString(w.Body.String(), "") != preview {
 			t.Errorf("user %d: %d %q", user, w.Code, w.Header().Get("X-Go-Web-Fallback"))
 		}
 	}
 	// Unpublished, it's still the collaborator's preview, which other visitors don't get.
 	mustExec(t, conn, "UPDATE links SET purchase_disabled_at = ? WHERE id = ?", testNow, productID)
-	headers := e.signedIn(collabID, nil)
-	headers["X-Go-Web-Dry-Run"] = e.dryRun(host, "/l/guide", testNow.Add(-time.Second))["X-Go-Web-Dry-Run"]
-	if w := e.get(host, "/l/guide", headers); w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "custom html preview" {
+	if w := e.get(host, "/l/guide", e.signedIn(collabID, nil)); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), script) {
 		t.Errorf("unpublished: %d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
 	}
 }
@@ -165,12 +185,13 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 		setup        func(t *testing.T, e *testEnv, conn *sql.DB)
 		wants, nots  []string
 	}{
-		// has_one takes either row, in no order.
-		{name: "two custom domains", reason: "several custom domains", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			domain("verified", testNow)(t, e, conn)
-			testdb.Insert(t, conn, "custom_domains", map[string]any{"id": int64(1_795_406), "user_id": sellerID, "domain": "example.org",
-				"state": "verified", "ssl_certificate_issued_at": testNow, "created_at": testNow, "updated_at": testNow})
-		}},
+		// The has_one's unordered statement takes the row MySQL's plan returns, here the lower id's.
+		{name: "two custom domains", wants: []string{`var STORE_HOSTNAMES = ["gowebproductseller.gumroad.com","example.com"];`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				domain("verified", testNow)(t, e, conn)
+				testdb.Insert(t, conn, "custom_domains", map[string]any{"id": int64(1_795_406), "user_id": sellerID, "domain": "example.org",
+					"state": "verified", "ssl_certificate_issued_at": testNow, "created_at": testNow, "updated_at": testNow})
+			}},
 		{name: "an active custom domain", setup: domain("verified", testNow.AddDate(0, 0, -89)),
 			wants: []string{`var STORE_HOSTNAMES = ["gowebproductseller.gumroad.com","example.com"];`}},
 		{name: "a custom domain whose certificate is due", setup: domain("verified", testNow.AddDate(0, 0, -90)),
@@ -247,10 +268,113 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 	}
 }
 
-func TestACoffeeProductsCustomHTMLGoesToRails(t *testing.T) {
+// The wrapper reads one cover's URL, social_share_image's of the main cover, so only that one
+// queues its retina variant and caches its URL.
+func TestTheCustomHTMLWrapperReadsTheMainCoverAlone(t *testing.T) {
+	second := func(t *testing.T, conn *sql.DB) {
+		testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_790_402), "link_id": productID, "guid": "second-guid",
+			"position": 1, "created_at": testNow, "updated_at": testNow})
+		addBlob(t, conn, 1_790_503, "covers/second", "b.jpg", "image/jpeg", `{"identified":true,"width":2000,"height":1000,"analyzed":true}`)
+		addAttachment(t, conn, 1_790_603, "file", "AssetPreview", 1_790_402, 1_790_503)
+	}
+	for _, c := range []struct {
+		name          string
+		mainProcessed bool
+		queued        string
+		cached        []string
+	}{
+		{name: "a processed main cover", mainProcessed: true, cached: []string{"attachment_1790601_retina_url"}},
+		{name: "an unprocessed main cover", queued: `"args":[1790401],"class":"ProcessAssetPreviewRetinaWorker"`,
+			cached: []string{"attachment_1790601_original_url"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			jobs := sidekiqJobs(t, e)
+			conn := testdb.Open(t)
+			customHTML(t, e, conn)
+			addCover(t, c.mainProcessed)
+			second(t, conn)
+			w := e.get(host, "/l/guide", nil)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			queued, _ := jobs.List("queue:low")
+			if c.queued == "" && len(queued) != 0 || c.queued != "" && (len(queued) != 1 || !strings.Contains(queued[0], c.queued)) {
+				t.Errorf("queue:low %v", queued)
+			}
+			var covers []string
+			for _, key := range e.cache.writes {
+				if strings.HasPrefix(key, "attachment_") {
+					covers = append(covers, key)
+				}
+			}
+			if !slices.Equal(covers, c.cached) {
+				t.Errorf("cover cache writes %v, want %v", covers, c.cached)
+			}
+		})
+	}
+}
+
+// render_custom_html_if_present runs before show's /coffee redirect, and its wrapper is any
+// product's.
+func TestACoffeeProductsCustomHTML(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
-	mustExec(t, conn, "UPDATE links SET native_type = 'coffee' WHERE id = ?", productID)
+	// initialize_suggested_amount_if_needed!'s shape: a $0 base, pay what you want, and the
+	// suggested amount as a nameless option, which the JSON-LD offer's price adds.
+	mustExec(t, conn, "UPDATE links SET native_type = 'coffee', price_cents = 0, customizable_price = 1 WHERE id = ?", productID)
+	mustExec(t, conn, "UPDATE prices SET price_cents = 0 WHERE id = ?", priceID)
+	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": int64(1_799_931), "link_id": productID, "title": "Suggested Amounts"})
+	testdb.Insert(t, conn, "base_variants", map[string]any{"id": int64(1_799_932), "type": "Variant", "variant_category_id": int64(1_799_931),
+		"name": "", "price_difference_cents": 300, "created_at": testNow, "updated_at": testNow})
 	customHTML(t, e, conn)
-	e.render(t, nil, "coffee product")
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q, Rails hit: %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
+	}
+	e.wantAll(t, w.Body.String(), []string{
+		`<link rel="canonical" href="https://gowebproductseller.gumroad.com/l/guide">`,
+		`"/l/gowebp1?wanted=true"`,
+		`"url":"https://gowebproductseller.gumroad.com/l/guide","price":3.0}`,
+		`"@type":"Product","name":"Guide \u003c1\u003e"`,
+	})
+}
+
+// Pages::WaitlistForm.found_in? reads the message anywhere, and the form only as Loofah parses it.
+func TestWaitlistFormFound(t *testing.T) {
+	for html, want := range map[string]bool{
+		`<form data-gumroad-waitlist><input name="email"></form>`:                             true,
+		`<p>Join</p><div><FORM DATA-GUMROAD-WAITLIST="1"></FORM></div>`:                       true,
+		`<button onclick="parent.postMessage({type: 'gumroad:waitlist'}, '*')">Join</button>`: true,
+		`<form data-waitlist></form>`:                                                         false,
+		`<div data-gumroad-waitlist></div>`:                                                   false,
+		`<!-- <form data-gumroad-waitlist> -->`:                                               false,
+		`<script>var form = "<form data-gumroad-waitlist>";</script>`:                         false,
+	} {
+		if got, err := waitlistFormFound(html); err != nil || got != want {
+			t.Errorf("%s: %v %v", html, got, err)
+		}
+	}
+}
+
+// The wrapper's checkout carries params[:offer_code].presence || params[:code].presence, and a
+// code noindexes it.
+func TestTheCustomHTMLWrappersCheckoutCode(t *testing.T) {
+	e := newTestEnv(t)
+	customHTML(t, e, testdb.Open(t))
+	for target, want := range map[string]string{
+		"/l/guide":                            `"/l/gowebp1?wanted=true"`,
+		"/l/guide/SAVE10":                     `"/l/gowebp1?wanted=true\u0026code=SAVE10"`,
+		"/l/guide?offer_code=&code=SAVE10":    `"/l/gowebp1?wanted=true\u0026code=SAVE10"`,
+		"/l/guide?offer_code=OFF&code=SAVE10": `"/l/gowebp1?wanted=true\u0026code=OFF"`,
+	} {
+		w := e.get(host, target, nil)
+		if w.Code != http.StatusOK || e.railsHit != nil || !strings.Contains(w.Body.String(), "var BASE_CHECKOUT = "+want+";") {
+			t.Errorf("%s: %d %q, want %s", target, w.Code, w.Header().Get("X-Go-Web-Fallback"), want)
+		}
+		// set_x_robots_tag_header reads params[:code] alone.
+		if noindex := w.Header().Get("X-Robots-Tag") == "noindex"; noindex != strings.Contains(target, "SAVE10") {
+			t.Errorf("%s: X-Robots-Tag %q", target, w.Header().Get("X-Robots-Tag"))
+		}
+	}
 }

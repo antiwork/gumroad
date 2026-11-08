@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PriceInput } from "$app/components/PriceInput";
 
@@ -127,5 +127,73 @@ describe("PriceInput", () => {
       "kr (Norwegian Krone)",
       "kr (Danish Krone)",
     ]);
+  });
+});
+
+describe("PriceInput amount typing", () => {
+  const renderAmount = (currencyCode: "usd" | "krw" | "eur", cents: number | null = null) => {
+    const onChange = vi.fn();
+    render(<PriceInput currencyCode={currencyCode} cents={cents} ariaLabel="Amount" onChange={onChange} />);
+    const input = screen.getByLabelText<HTMLInputElement>("Amount");
+    // Each key appends to what the field shows, the way a keyboard does: the field's own rewrites
+    // between keystrokes are part of what these tests have to survive.
+    const type = (keys: string) => {
+      for (const key of keys) fireEvent.change(input, { target: { value: input.value + key } });
+    };
+    return { input, onChange, type };
+  };
+
+  it("keeps a grouped amount as thousands", () => {
+    const { input, onChange, type } = renderAmount("krw");
+    type("7,900");
+
+    expect(input.value).toBe("7900");
+    expect(onChange).toHaveBeenLastCalledWith(790_000);
+  });
+
+  it("reads a comma before two digits as a decimal point", () => {
+    const { input, onChange, type } = renderAmount("eur");
+    type("7,90");
+
+    expect(input.value).toBe("7,90");
+    expect(onChange).toHaveBeenLastCalledWith(790);
+  });
+
+  it("groups a decimal amount", () => {
+    const { input, onChange, type } = renderAmount("usd");
+    type("12,345.67");
+
+    // The field renders without grouping separators, so the comma the parser read as thousands is
+    // gone from the display by the time the fractional keys arrive.
+    expect(input.value).toBe("12345.67");
+    expect(onChange).toHaveBeenLastCalledWith(1_234_567);
+  });
+
+  it("reports a clamped zero for a negative amount", () => {
+    const { input, onChange } = renderAmount("usd");
+    fireEvent.change(input, { target: { value: "-1.00" } });
+
+    expect(onChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it("caps the fraction at two digits", () => {
+    const { input, onChange, type } = renderAmount("usd");
+    type("1.999");
+
+    expect(input.value).toBe("1.99");
+    expect(onChange).toHaveBeenLastCalledWith(199);
+  });
+
+  // A pasted amount can carry both separators: the comma groups thousands and the fraction after
+  // the decimal point is complete, so neither reading can change with another key and the field
+  // has to settle on the amount instead of keeping the grouping comma in the display. This is
+  // spec/requests/products/show/show_spec.rb "ensures correct price formatting", where `fill_in`
+  // types the keys one at a time.
+  it("settles a typed amount that carries both separators", () => {
+    const { input, onChange, type } = renderAmount("usd");
+    type("-1234,.439");
+
+    expect(input.value).toBe("1234.43");
+    expect(onChange).toHaveBeenLastCalledWith(123_443);
   });
 });

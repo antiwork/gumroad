@@ -5,6 +5,12 @@ module Mcp
   # Tools are a slim, agent-oriented view of the public v2 API — same auth, same records.
   class Server
     LEGACY_PROTOCOL_VERSION = "2025-03-26"
+    # Characters simple_query_string treats as operators: a query made only of these matches
+    # everything, which is not something an assistant should be able to ask for.
+    QUERY_OPERATOR_CHARACTERS = /[+\-=&|><!(){}\[\]^"~*?:\\\/]/
+    SEARCH_QUERY_MAX_LENGTH = 200
+    SEARCH_DEFAULT_LIMIT = 10
+    SEARCH_MAX_LIMIT = 25
     # A client on this revision declares its version per request and never handshakes.
     MODERN_PROTOCOL_VERSION = "2026-07-28"
     SUPPORTED_VERSIONS = [LEGACY_PROTOCOL_VERSION, MODERN_PROTOCOL_VERSION].freeze
@@ -87,6 +93,15 @@ module Mcp
       "max_purchase_count" => { type: "integer", description: "How many times the code can be used in total. 0 or more." }
     }.freeze
 
+    # A scope check failed where no step-up is possible - a batch, or a client that registered none
+    # of the accepted scopes. The caller gets the same plain error as before; the counter still
+    # records it as lost scope rather than as a tool failure.
+    class MissingScope < Error; end
+
+    # The caller's arguments do not fit the tool's schema. Counted apart from a tool failure,
+    # because the fix is on the client side and it would otherwise inflate the error rate.
+    class InvalidArguments < Error; end
+
     # A tool's scope check failed. `scope` is what the client should re-authorize with: the
     # scopes the token already holds plus the missing one, so the step-up keeps the old grant.
     class InsufficientScope < Error
@@ -105,6 +120,8 @@ module Mcp
       @protocol_version_header = protocol_version_header
       @method_header = method_header
       @name_header = name_header
+      # Per-request tool counters, flushed with the protocol counters in `handle`'s ensure.
+      @tool_counts = Hash.new(0)
       @era = :legacy
     end
 
@@ -128,20 +145,24 @@ module Mcp
 
       handle_message(body)
     ensure
-      ProtocolTelemetry.record(@connector, @protocol_counts)
+      # One stalled Redis costs the request one short timeout, not two: the tool counter rides the
+      # same connection, so a failed protocol write means the tool write would only stall again.
+      ProtocolTelemetry.record_tools(@connector, @tool_counts) if ProtocolTelemetry.record(@connector, @protocol_counts)
     end
 
     def self.discovery(base_url)
       {
         name: "Gumroad",
-        description: "Sell digital products. Claude, ChatGPT, Muse, and other MCP clients can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
+        description: "Sell digital products. An MCP client can list products and sales, draft and edit a product, add the files and links buyers receive and a cover image, publish it, and check payouts for a connected creator.",
         website: "https://gumroad.com",
         documentation: "#{base_url}/muse",
         mcp: "#{base_url}/muse/v1/mcp",
         clients: {
           muse: "#{base_url}/muse/v1/mcp",
           claude: "#{base_url}/claude/v1/mcp",
-          chatgpt: "#{base_url}/chatgpt/v1/mcp"
+          chatgpt: "#{base_url}/chatgpt/v1/mcp",
+          cursor: "#{base_url}/cursor/v1/mcp",
+          antigravity: "#{base_url}/antigravity/v1/mcp"
         },
         oauth: {
           authorization_endpoint: "#{base_url}/muse/v1/oauth2/authorize",
@@ -416,11 +437,13 @@ module Mcp
           tool("list_files", "The files a buyer receives with this product: name, type, size, and position. The download page lists them in this order.", {
                  "id" => { type: "string", description: "Product id or permalink." }
                }, required: %w[id], read_only: true),
-          tool("add_file", "Add a file that buyers receive with the product, from a public https URL. Files up to #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB; larger files, like a long video, must be uploaded in the product editor. Ask the creator for the link if they have not given one.", {
+          tool("add_file", "Add a file that buyers receive with the product. Pass a public https url for a file the creator already has; ask for the link if they have not given one. Pass content and a filename only for text the creator is writing with you here (markdown, text, csv, json, ics, srt or vtt), which needs no hosting. Never stand in text you wrote for a file the creator owns. Files up to #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB from a URL, #{Mcp::ProductFileIngest::INLINE_MAX_BYTES / 1.megabyte} MB from content; larger files, like a long video, must be uploaded in the product editor.", {
                  "id" => { type: "string", description: "Product id or permalink." },
-                 "url" => { type: "string", description: "Public https URL of the file." },
-                 "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL." }
-               }, required: %w[id url]),
+                 "url" => { type: "string", description: "Public https URL of the file. Omit when passing content." },
+                 "content" => { type: "string", description: "The file's full text, written here rather than uploaded. Omit when passing url." },
+                 "filename" => { type: "string", description: "File name with an extension, used for content, like field-notes.md. Ignored with url." },
+                 "display_name" => { type: "string", description: "Name shown to the buyer. Defaults to the name in the URL, or the filename." }
+               }, required: %w[id]),
           tool("add_content_link", "Add a button with a link to a product's content page, which the buyer opens after purchase. Use it when the product is delivered as a link, like a Notion template's duplication link. Confirm the link and the button text with the creator first.", {
                  "id" => { type: "string", description: "Product id or permalink." },
                  "url" => { type: "string", description: "The link the buyer opens. https is assumed when the value has no scheme." },
@@ -474,6 +497,10 @@ module Mcp
                  "limit" => { type: "integer", description: "Max payouts to return (1-50, default 10)." },
                  "cursor" => { type: "string", description: "next_cursor from the previous page." }
                }, read_only: true),
+          tool("search_products", "Search Gumroad's catalogue, not just the connected creator's own products. These are the same results the discover page shows. Use it when someone wants to see what exists in a topic, compare prices, or find something to learn a skill from. Each URL carries the MCP referrer, so a visit or purchase that starts from this result is distinguishable from the creator's own traffic.", {
+                 "query" => { type: "string", description: "What to search for, e.g. \"learn to draw\" or \"tax spreadsheet\"." },
+                 "limit" => { type: "integer", description: "Max products to return (1-#{SEARCH_MAX_LIMIT}, default #{SEARCH_DEFAULT_LIMIT})." }
+               }, required: %w[query], read_only: true),
           tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
                  "name" => { type: "string", description: "Bundle name." },
                  "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
@@ -522,30 +549,62 @@ module Mcp
       def call_tool(params)
         name = params["name"]
         definition = tools.find { |tool| tool[:name] == name }
-        raise Error.new("Unknown tool: #{name}", code: -32602) unless definition
+        # A retired or misspelled name is the caller's mistake, and tool_bucket folds it into
+        # OTHER, so a client stuck on an old tool list still shows up.
+        raise InvalidArguments.new("Unknown tool: #{name}", code: -32602) unless definition
 
         arguments = params.fetch("arguments", {})
-        raise Error.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
+        raise InvalidArguments.new("arguments must be an object", code: -32602) unless arguments.is_a?(Hash)
         validate_tool_arguments!(definition[:inputSchema], arguments)
 
         payload = send("tool_#{name}", arguments)
-        { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+        response = { content: [{ type: "text", text: JSON.pretty_generate(payload) }], structuredContent: payload }
+        # Counted only once the response is serialised, so a payload that cannot be rendered is
+        # not recorded as a success.
+        count_tool(name, "ok")
+        response
+      rescue InvalidArguments
+        # The caller never reached the tool, and the fix is on the client side.
+        count_tool(name, "invalid")
+        raise
+      rescue InsufficientScope, MissingScope
+        # Losing a creator to a missing scope is a funnel step, not an error to bury.
+        count_tool(name, "scope")
+        raise
       rescue ToolError, Link::LinkInvalid, ActiveRecord::RecordInvalid => e
+        count_tool(name, "error")
         message = e.is_a?(ActiveRecord::RecordInvalid) ? e.record.errors.full_messages.to_sentence : e.message
         { content: [{ type: "text", text: message }], isError: true }
+      rescue Error
+        # A tool that rejected the call itself (a missing price, an unknown category) is an error
+        # the caller saw, so it counts, and the JSON-RPC layer still answers it.
+        count_tool(name, "error")
+        raise
+      rescue StandardError
+        # A tool that crashed is exactly the call the counter must not hide: count it, then let the
+        # exception travel as it did before.
+        count_tool(name, "error")
+        raise
+      end
+
+      # One counter per call, best-effort: telemetry never changes what the caller gets back.
+      # A call with no name at all still counts, folded into OTHER by tool_bucket, so a malformed
+      # tools/call cannot vanish from the tool counter while it shows up in the protocol counter.
+      def count_tool(name, outcome)
+        @tool_counts[ProtocolTelemetry.tool_bucket(name, outcome)] += 1
       end
 
       def validate_tool_arguments!(schema, arguments)
         (schema[:required] || []).each do |key|
-          raise Error.new("#{key} is required", code: -32602) unless arguments.key?(key)
+          raise InvalidArguments.new("#{key} is required", code: -32602) unless arguments.key?(key)
         end
         arguments.each do |key, value|
           property = schema[:properties][key]
-          raise Error.new("Unknown argument: #{key}", code: -32602) unless property
+          raise InvalidArguments.new("Unknown argument: #{key}", code: -32602) unless property
 
           types = { "integer" => [Integer], "array" => [Array], "boolean" => [TrueClass, FalseClass] }.fetch(property[:type], [String])
-          raise Error.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless types.any? { |type| value.is_a?(type) }
-          raise Error.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
+          raise InvalidArguments.new("#{key} must be #{property[:type] == 'array' ? 'an' : 'a'} #{property[:type]}", code: -32602) unless types.any? { |type| value.is_a?(type) }
+          raise InvalidArguments.new("#{key} must be one of: #{property[:enum].join(', ')}", code: -32602) if property[:enum] && !property[:enum].include?(value)
         end
       end
 
@@ -949,14 +1008,35 @@ module Mcp
         require_scopes!(:edit_products, :account)
         product = find_product!(args["id"])
         url = args["url"].to_s.strip
-        raise Error.new("url is required", code: -32602) if url.blank?
+        content = args["content"]
+        raise Error.new("content must be a string", code: -32602) unless content.nil? || content.is_a?(String)
+        # An empty string is a caller that meant to pass nothing, not a file of zero bytes.
+        has_content = content.present?
+        raise Error.new("Pass url or content, not both", code: -32602) if url.present? && has_content
+        raise Error.new("url is required, or pass content and filename to write the file out here", code: -32602) if url.blank? && !has_content
 
+        inline = url.blank?
         begin
-          file = Mcp::ProductFileIngest.new(seller: user, product:, url:, display_name: args["display_name"]).perform
+          file = if inline
+            filename = args["filename"].to_s.strip
+            raise Error.new("filename is required with content", code: -32602) if filename.blank?
+
+            Mcp::ProductFileIngest.new(seller: user, product:, display_name: args["display_name"]).perform_inline(content:, filename:)
+          else
+            Mcp::ProductFileIngest.new(seller: user, product:, url:, display_name: args["display_name"]).perform
+          end
+        rescue Mcp::ProductFileIngest::InvalidContent => e
+          raise Error.new(e.message, code: -32602)
         rescue Mcp::ProductFileIngest::TooLarge
-          raise ToolError, "That file is larger than #{Mcp::ProductFileIngest::MAX_BYTES / 1.megabyte} MB, which is the most this tool can fetch. Upload it in the product editor instead: #{product.long_url}/edit"
+          limit = (inline ? Mcp::ProductFileIngest::INLINE_MAX_BYTES : Mcp::ProductFileIngest::MAX_BYTES) / 1.megabyte
+          action = inline ? "can write out here" : "can fetch"
+          raise ToolError, "That file is larger than #{limit} MB, which is the most this tool #{action}. Upload it in the product editor instead: #{product.long_url}/edit"
         rescue Mcp::ProductFileIngest::InvalidUrl, *INTERNET_EXCEPTIONS
-          raise ToolError, "Could not download a file from that URL. Use a public https link to the file itself."
+          raise ToolError, if inline
+            "Could not store that file right now. Try again, or upload it in the product editor."
+          else
+            "Could not download a file from that URL. Use a public https link to the file itself."
+          end
         rescue Mcp::ProductFileIngest::DownloadFailed
           raise ToolError, "That link did not return a file. Use a public https link to the file itself."
         rescue Aws::S3::Errors::ServiceError
@@ -1443,6 +1523,54 @@ module Mcp
         end
       end
 
+      # Search runs over the same index the discover page uses, so results are what a shopper would
+      # see, not a second catalogue that can drift from it.
+      def tool_search_products(args)
+        require_scopes!(:view_public, :account)
+        query = args["query"].to_s.strip
+        raise InvalidArguments.new("query is required", code: -32602) if query.empty?
+        raise InvalidArguments.new("query is longer than #{SEARCH_QUERY_MAX_LENGTH} characters", code: -32602) if query.length > SEARCH_QUERY_MAX_LENGTH
+
+        # An empty query is not the only way to ask for everything: "*" and friends are operators
+        # inside simple_query_string, so the words are all that get sent to the index.
+        words = query.gsub(QUERY_OPERATOR_CHARACTERS, " ").squish
+        raise InvalidArguments.new("query needs at least one word", code: -32602) if words.blank?
+
+        limit = args["limit"].to_i
+        limit = SEARCH_DEFAULT_LIMIT if limit <= 0
+        limit = [limit, SEARCH_MAX_LIMIT].min
+
+        # The index lags the database: a product unpublished or a seller suspended since the last
+        # reindex still comes back, so every hit is checked against the row before it is offered.
+        hits = Link.search(Link.search_options(query: words, size: limit)).records
+        # Reload in one query with the associations the payload reads, keeping the index order.
+        loaded = Link.where(id: hits.map(&:id)).includes(:user, :thumbnail_alive, :alive_prices).index_by(&:id)
+        products = hits.filter_map { |hit| loaded[hit.id] }
+          .select { |product| product.alive? && !product.rated_as_adult? && product.user.present? && !product.user.suspended? }
+        {
+          products: products.map do |product|
+            {
+              id: product.external_id,
+              name: product.name,
+              seller_name: product.user&.name.presence,
+              price_cents: product.discounted_price_cents(product.display_price_cents(for_default_duration: true)),
+              currency: product.price_currency_type,
+              recurring: product.is_recurring_billing?,
+              pay_what_you_want: product.has_customizable_price_option?,
+              thumbnail_url: product.thumbnail_or_cover_url,
+              url: with_mcp_referrer(product.long_url)
+            }
+          end
+        }
+      end
+
+      def with_mcp_referrer(url)
+        uri = URI.parse(url)
+        params = Rack::Utils.parse_nested_query(uri.query.to_s).merge("referrer" => "#{PROTOCOL}://#{DOMAIN}/mcp")
+        uri.query = params.to_query
+        uri.to_s
+      end
+
       def tool_create_bundle(args)
         require_scopes!(:edit_products, :account)
         name = args["name"].strip
@@ -1787,7 +1915,7 @@ module Mcp
         missing = obtainable_scope(scopes)
         # No challenge for a batch, or when the client registered none of the accepted scopes:
         # either step-up would fail, and a plain error stops the client from retrying.
-        raise Error.new(message) if @batch || missing.nil?
+        raise MissingScope.new(message) if @batch || missing.nil?
 
         @insufficient_scope = InsufficientScope.new(message, scope: (token_scopes.to_a + [missing]).join(" "))
         raise @insufficient_scope
