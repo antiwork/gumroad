@@ -26,11 +26,22 @@ describe Product::Prices do
       @product.price_currency_type = "usd"
       expect(@product.clean_price("7,9")).to eq(790)
     end
+  end
 
-    it "rounds a decimal comma in a currency without minor units" do
+  describe "#clean_price single-unit currency" do
+    # JPY and VND have no minor units: "150,50" is the seller writing 150.50, which rounds to 151.
+    # Reading that comma as grouping is what turns the price into 15050.
+    it "reads a decimal comma as a decimal for JPY" do
       @product.price_currency_type = "jpy"
       expect(@product.clean_price("150,50")).to eq(151)
-      expect(@product.clean_price("7,900")).to eq(7900)
+      expect(@product.clean_price("7,900")).to eq(7_900)
+      expect(@product.clean_price("150.50")).to eq(151)
+    end
+
+    it "reads a decimal comma as a decimal for VND" do
+      @product.price_currency_type = "vnd"
+      expect(@product.clean_price("25,618")).to eq(25_618)
+      expect(@product.clean_price("256,18")).to eq(256)
     end
   end
 
