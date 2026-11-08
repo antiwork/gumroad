@@ -1979,6 +1979,24 @@ func TestURLOfferCodes(t *testing.T) {
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
 				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
 			}},
+		// The product's code's minimum of two raises the quantity the universal code is checked at:
+		// its one use left falls short, and its once-per-cart amount covers two units.
+		{name: "a universal code by the string with one use left", target: "/l/guide/save10",
+			wants: []string{quotes("save10", invalid("insufficient_times_of_use"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 1})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		{name: "a once-per-cart universal code by the string", target: "/l/guide/save10", wants: []string{`"discount_code":{"valid":true,"code":"save10",` +
+			`"discount":{"type":"fixed","cents":600,"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,` +
+			`"minimum_amount_cents":null,"once_per_cart":true,"once_per_cart_id":"%[2]s","once_per_cart_amount_cents":600,` +
+			`"once_per_cart_has_usage_limit":false}},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
 		// evaluate_code memoizes under the product's code's scope, which takes every option, so the
 		// universal code's result for the first option, where it applies, is every option's.
 		{name: "a scoped universal code by the string", target: "/l/guide/save10",
