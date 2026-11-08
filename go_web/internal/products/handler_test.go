@@ -629,6 +629,11 @@ func TestAnotherSpellingOfThePermalinkRedirectsPermanently(t *testing.T) {
 	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "https://"+host+"/l/guide?a%20b=1" {
 		t.Errorf("%d %q", w.Code, w.Header().Get("Location"))
 	}
+	// A code with a trailing slash, which the redirect leaves off.
+	w = e.get(host, "/l/gowebp1/feed/", nil)
+	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "https://"+host+"/l/guide/feed" {
+		t.Errorf("code: %d %q", w.Code, w.Header().Get("Location"))
+	}
 }
 
 func TestABannedOrMissingProductIsNotFound(t *testing.T) {
@@ -1673,6 +1678,10 @@ func TestURLOfferCodes(t *testing.T) {
 		// The result echoes the code as typed.
 		{name: "a code in the path", target: "/l/guide/save10",
 			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`, quotes("save10", valid("save10", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		// Journey drops the trailing slash.
+		{name: "a code in the path with a trailing slash", target: "/l/guide/save10/",
+			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
