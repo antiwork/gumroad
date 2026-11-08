@@ -328,6 +328,9 @@ class CheckoutPresenter
         option_id: (subscription.original_purchase.variant_attributes[0] || product.default_tier)&.external_id,
         recurrence: subscription.recurrence,
         price: subscription_price,
+        # Display only: priced for the subscription's account, as the renewal charge is, not for whoever is viewing.
+        # A fixed-length membership that has collected every charge never bills again.
+        next_charge_price: subscription.charges_completed? ? 0 : subscription.next_charge_price_cents,
         pre_discount_price:,
         prorated_discount_price_cents: subscription.prorated_discount_price_cents,
         quantity: subscription.original_purchase.quantity,

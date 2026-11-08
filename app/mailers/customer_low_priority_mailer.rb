@@ -169,7 +169,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       end
     @date = @subscription.renews_at.strftime("%B %e, %Y")
     original_purchase = @subscription.original_purchase
-    @price = original_purchase.format_displayed_price_cents(@subscription.current_subscription_price_cents)
+    @price = original_purchase.format_displayed_price_cents(@subscription.next_charge_price_cents(as_of: @subscription.renews_at))
     @delivery_options = { reply_to: @subscription.seller.support_or_form_email }
   end
 

@@ -382,7 +382,10 @@ describe ReceiptPresenter::PaymentInfo do
       context "when a free first charge is followed by paid renewals" do
         let(:purchase) { create(:membership_purchase, price_cents: 0, total_transaction_cents: 0) }
 
-        before { allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(1_499) }
+        before do
+          allow_any_instance_of(Subscription).to receive(:current_subscription_price_cents).and_return(1_499)
+          allow_any_instance_of(Subscription).to receive(:next_charge_price_cents).and_return(1_499)
+        end
 
         it "keeps the payment section" do
           expect(payment_info.present?).to be(true)

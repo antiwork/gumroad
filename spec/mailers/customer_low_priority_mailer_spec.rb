@@ -225,7 +225,7 @@ describe CustomerLowPriorityMailer do
         purchase = create(:membership_purchase)
         subscription = purchase.subscription
         allow(Subscription).to receive(:find).with(subscription.id).and_return(subscription)
-        allow(subscription).to receive(:current_subscription_price_cents).and_return(5_00)
+        allow(subscription).to receive(:next_charge_price_cents).and_return(5_00)
         allow(subscription).to receive(:original_purchase).and_return(purchase)
         allow(purchase).to receive(:format_displayed_price_cents).with(5_00).and_return("$5")
         allow(purchase).to receive(:formatted_total_price).and_return("$10")
