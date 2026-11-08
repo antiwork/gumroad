@@ -1073,14 +1073,14 @@ describe ContactingCreatorMailer do
 
       before { purchase.create_url_redirect! }
 
-      def receipt_path(purchase) = "/purchases/#{purchase.external_id}/receipt"
+      def receipt_location(purchase) = "/purchases/#{purchase.external_id}/receipt"
 
       it "links this purchase's receipt, without the buyer's email or the download token" do
         body = ContactingCreatorMailer.notify(purchase.id).body.decoded
         link = Nokogiri::HTML(body).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
 
         expect(link).to be_present
-        expect(URI(link["href"]).path).to eq(receipt_path(purchase))
+        expect(URI(link["href"]).path).to eq(receipt_location(purchase))
         expect(URI(link["href"]).query).to be_nil
         expect(body).not_to include(purchase.url_redirect.token)
       end
@@ -1100,11 +1100,11 @@ describe ContactingCreatorMailer do
         "is for a coffee product" => -> { product.update!(native_type: Link::NATIVE_TYPE_COFFEE) },
       }.each do |condition, change|
         it "omits the link when the purchase #{condition}" do
-          expect(notify_body).to include(receipt_path(purchase))
+          expect(notify_body).to include(receipt_location(purchase))
 
           instance_exec(&change)
 
-          expect(notify_body).not_to include(receipt_path(purchase))
+          expect(notify_body).not_to include(receipt_location(purchase))
         end
       end
 
@@ -1114,23 +1114,23 @@ describe ContactingCreatorMailer do
 
         it "keeps the link once the buyer has member purchases, even if the members are later removed" do
           product.bundle_products.each { Purchase::CreateBundleProductPurchaseService.new(purchase, _1).perform }
-          expect(notify_body).to include(receipt_path(purchase))
+          expect(notify_body).to include(receipt_location(purchase))
 
           product.bundle_products.each(&:mark_deleted!)
 
           expect(purchase.product_purchases).to be_present
-          expect(notify_body).to include(receipt_path(purchase))
+          expect(notify_body).to include(receipt_location(purchase))
         end
 
         it "omits the link for a memberless bundle only once it has no files of its own" do
           product.bundle_products.each(&:mark_deleted!)
           own_file = create(:product_file, link: product)
           expect(purchase.product_purchases).to be_empty
-          expect(notify_body).to include(receipt_path(purchase))
+          expect(notify_body).to include(receipt_location(purchase))
 
           own_file.mark_deleted!
 
-          expect(notify_body).not_to include(receipt_path(purchase))
+          expect(notify_body).not_to include(receipt_location(purchase))
         end
       end
     end
