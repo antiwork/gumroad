@@ -11,6 +11,7 @@ import { useDomains } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
 import { PublicFileWithStatus } from "$app/components/ProductEdit/state";
+import { PublishSchedule, PublishScheduleCard } from "$app/components/PublishScheduleCard";
 import { showAlert } from "$app/components/server-components/Alert";
 import { PageHeader } from "$app/components/ui/PageHeader";
 import { Tab, Tabs } from "$app/components/ui/Tabs";
@@ -43,6 +44,8 @@ type BundleEditLayoutProps = {
   customPermalink?: string | null;
   uniquePermalink?: string;
   isPublished: boolean;
+  publishSchedule?: PublishSchedule | null;
+  canCreatePublishSchedule?: boolean;
   publicFiles?: PublicFileWithStatus[];
   preview?: React.ReactNode;
   isLoading?: boolean;
@@ -62,6 +65,8 @@ export const BundleEditLayout = ({
   customPermalink,
   uniquePermalink = "",
   isPublished,
+  publishSchedule = null,
+  canCreatePublishSchedule = false,
   publicFiles = [],
   preview,
   isLoading = false,
@@ -141,6 +146,13 @@ export const BundleEditLayout = ({
 
   return (
     <>
+      {uniquePermalink ? (
+        <PublishScheduleCard
+          permalink={uniquePermalink}
+          schedule={publishSchedule}
+          canCreate={canCreatePublishSchedule}
+        />
+      ) : null}
       <PageHeader
         ref={headerRef}
         className="sticky top-0 z-10 bg-body"

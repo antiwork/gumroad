@@ -609,3 +609,7 @@ send_bundles_marketing_email:
   cron: "0 10 2 1 *" # UTC 10:00 on 2nd of January every year.
   class: SendBundlesMarketingEmailJob
   description: Send marketing emails for bundles every January 2nd
+dispatch_product_publish_schedules:
+  cron: "* * * * *" # Every minute
+  class: DispatchProductPublishSchedulesJob
+  description: Re-enqueues lost scheduled product publishes, resolves stuck claims and resends unsent notices

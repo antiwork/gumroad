@@ -12,6 +12,7 @@ import { useCurrentSeller } from "$app/components/CurrentSeller";
 import { useDomains } from "$app/components/DomainSettings";
 import { Preview } from "$app/components/Preview";
 import { PreviewChrome, PreviewSidebar, WithPreviewSidebar } from "$app/components/PreviewSidebar";
+import { PublishScheduleCard } from "$app/components/PublishScheduleCard";
 import { useImageUploadSettings } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
@@ -271,6 +272,11 @@ export const Layout = ({
   return (
     <>
       <NotifyAboutProductUpdatesAlert />
+      <PublishScheduleCard
+        permalink={uniquePermalink}
+        schedule={product.publish_schedule ?? null}
+        canCreate={product.can_create_publish_schedule ?? false}
+      />
       {!currentSeller?.isBuyer && currentSeller && !currentSeller.can_publish_products && !product.is_published ? (
         <div className="p-4 pb-0 md:p-8 md:pb-0">
           <Alert variant="warning">

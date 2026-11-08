@@ -173,6 +173,7 @@ class Link < ApplicationRecord
   has_many :affiliate_credits
   has_many :comments, as: :commentable
   has_many :sales_holds, class_name: "ProductSalesHold", foreign_key: :product_id
+  has_one :publish_schedule, class_name: "ProductPublishSchedule", foreign_key: :product_id
   has_many :workflows
   has_many :dropbox_files
   has_many :shipping_destinations
@@ -292,6 +293,7 @@ class Link < ApplicationRecord
 
   attr_accessor :publishing
 
+  after_save :cancel_pending_publish_schedule, if: :publish_schedule_invalidated?
   before_save :downcase_filetype
   before_save :remove_xml_tags
   # The offer code guards only watch visible products, so a default discount can
@@ -654,6 +656,24 @@ class Link < ApplicationRecord
 
   def publishing?
     !!publishing
+  end
+
+  # The read-only checks publish! runs before it takes locks; the scheduler refuses to accept a
+  # product that already fails them. Returns the seller-facing message or nil.
+  def publish_precheck_error
+    return "To publish a product, we need you to have an email." if user.email.blank?
+
+    enforce_not_unpublished_by_admin!
+    enforce_no_active_sales_hold!
+    enforce_shipping_destinations_presence!
+    enforce_user_email_confirmation!
+    enforce_seller_plan!
+    enforce_merchant_account_exits_for_new_users!
+    nil
+  rescue LinkInvalid => e
+    ActionController::Base.helpers.strip_tags(e.message)
+  ensure
+    errors.clear
   end
 
   def unpublish!(is_unpublished_by_admin: false)
@@ -2026,6 +2046,19 @@ class Link < ApplicationRecord
 
       errors.add(:base, UNPUBLISHED_BY_ADMIN_MESSAGE)
       raise LinkInvalid, UNPUBLISHED_BY_ADMIN_MESSAGE
+    end
+
+    def publish_schedule_invalidated?
+      (saved_change_to_deleted_at? && deleted_at.present?) || saved_change_to_draft?(to: false) ||
+        (saved_change_to_purchase_disabled_at? && purchase_disabled_at.present?) || (saved_change_to_banned_at? && banned_at.present?)
+    end
+
+    def cancel_pending_publish_schedule
+      reason = if deleted_at.present? then "deleted"
+      elsif saved_change_to_draft?(to: false) then "published_manually"
+      else "unavailable"
+      end
+      ProductPublishSchedule.cancel_pending!(id, reason:)
     end
 
     def enforce_no_active_sales_hold!(lock: false)

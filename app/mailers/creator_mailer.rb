@@ -70,6 +70,35 @@ class CreatorMailer < ApplicationMailer
     )
   end
 
+  def product_scheduled_publish_succeeded(schedule_id:)
+    @schedule = ProductPublishSchedule.find_by(id: schedule_id)
+    return if @schedule.nil?
+
+    email = @schedule.product.user.form_email
+    return unless EmailFormatValidator.valid?(email)
+
+    @product = @schedule.product
+    @published_at_label = @schedule.local_time_label(@schedule.published_at || @schedule.publish_at)
+    @subject = "#{@product.name} is live"
+
+    mail to: email, subject: @subject
+  end
+
+  def product_scheduled_publish_failed(schedule_id:)
+    @schedule = ProductPublishSchedule.find_by(id: schedule_id)
+    return if @schedule.nil?
+
+    email = @schedule.product.user.form_email
+    return unless EmailFormatValidator.valid?(email)
+
+    @product = @schedule.product
+    @scheduled_label = @schedule.local_time_label
+    @editor_url = "#{UrlService.domain_with_protocol}/products/#{@product.unique_permalink}/edit"
+    @subject = "#{@product.name} was not published"
+
+    mail to: email, subject: @subject
+  end
+
   def scheduled_payout_chargeback_hold(scheduled_payout_id:)
     @scheduled_payout = ScheduledPayout.find_by(id: scheduled_payout_id)
     return if @scheduled_payout.nil?
