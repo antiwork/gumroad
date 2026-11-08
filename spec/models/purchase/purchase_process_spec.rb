@@ -1119,4 +1119,40 @@ describe "Purchase Process", :vcr do
       expect(purchase.card_type).to eq "visa"
     end
   end
+
+  describe "the seller sent to the charge processor" do
+    let(:seller) { create(:user) }
+    let(:merchant_account) do
+      MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+        create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
+    end
+    let(:purchase) { create(:purchase, link: create(:product, user: seller), merchant_account:) }
+    let(:chargeable) { instance_double(Chargeable) }
+
+    it "is the purchase's seller, not the shared merchant account's user, when the card is saved for future charges" do
+      captured = nil
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |account, card, **kwargs|
+        captured = { account:, card:, **kwargs }
+        nil
+      end
+
+      purchase.send(:create_setup_intent, chargeable)
+
+      expect(merchant_account.user).to be_nil
+      expect(captured).to include(account: merchant_account, card: chargeable, seller:)
+    end
+
+    it "is the purchase's seller, not the shared merchant account's user, when the buyer is charged" do
+      captured = nil
+      allow(ChargeProcessor).to receive(:create_payment_intent_or_charge!) do |account, card, *, **kwargs|
+        captured = { account:, card:, **kwargs }
+        raise ChargeProcessorCardError, "card_declined"
+      end
+
+      purchase.send(:create_charge_intent, chargeable, off_session: false)
+
+      expect(merchant_account.user).to be_nil
+      expect(captured).to include(account: merchant_account, card: chargeable, off_session: false, seller:)
+    end
+  end
 end

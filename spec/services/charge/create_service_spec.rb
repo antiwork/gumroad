@@ -108,7 +108,7 @@ describe Charge::CreateService, :vcr do
                                                                                  setup_future_charges:,
                                                                                  metadata: purchase_details,
                                                                                  mandate_options:,
-                                                                                 seller: anything).and_call_original
+                                                                                 seller: seller_1).and_call_original
 
       expect do
         expect do
@@ -183,7 +183,7 @@ describe Charge::CreateService, :vcr do
                                                                                  setup_future_charges:,
                                                                                  metadata: purchase_details,
                                                                                  mandate_options:,
-                                                                                 seller: anything).and_call_original
+                                                                                 seller: seller_1).and_call_original
 
       expect do
         expect do
@@ -281,7 +281,7 @@ describe Charge::CreateService, :vcr do
         processor_gumroad_amount_cents: 3_75,
         stripe_fx_quote_id: "fxq_test",
         idempotency_key: a_string_matching(/\Abuyer-currency-charge-.+-fxq_test\z/),
-        seller: anything
+        seller: seller_1
       ).and_return(nil)
 
       Charge::CreateService.new(order:,
@@ -948,7 +948,7 @@ describe Charge::CreateService, :vcr do
           setup_future_charges: false,
           metadata: { "purchases{0}" => purchase.external_id },
           mandate_options: nil,
-          seller: anything
+          seller:
         ).and_return(nil)
 
         Charge::CreateService.new(order:,
@@ -1404,7 +1404,7 @@ describe Charge::CreateService, :vcr do
         setup_future_charges: false,
         metadata: { "purchases{0}" => purchase.external_id },
         mandate_options: nil,
-        seller: anything
+        seller: seller_1
       ).and_return(nil)
 
       Charge::CreateService.new(order:,
