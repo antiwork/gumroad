@@ -5,9 +5,6 @@ module BasePrice::Shared
     clean = price_string.to_s.gsub(/[^-0-9.,]/, "") # allow commas for now
     # A comma before one or two digits is a decimal point in every currency, JPY and VND included:
     # they have no minor units, but "150,50" is the seller writing 150.50 (which rounds to 151).
-    # This used to be guarded by `unless single_unit_currency?` because the client turned that comma
-    # into a dot first; the client keeps the comma now, so skipping the check here would read the
-    # comma as grouping and multiply a JPY or VND price by ten or a hundred.
     if clean.match?(/,\d{1,2}\z/) # euro style, incl. one-digit decimal
       clean = clean.delete(".") # remove euro 1000^x delimiters
       clean = clean.tr(",", ".") # replace euro comma with decimal
