@@ -31,6 +31,7 @@ import {
   createReducer,
   StateContext,
   Product as PaymentProduct,
+  SubscriptionPlanSelection,
   getTotalPrice,
 } from "$app/components/Checkout/payment";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
@@ -273,6 +274,13 @@ export default function SubscriptionsManage() {
   const declareRecurring = remainingCharges === null || remainingCharges > 0;
   const renewalPriceCents = declareRecurring ? Math.round(price / product.exchange_rate) : null;
   const recurrence = selection.recurrence ?? subscription.recurrence;
+  const subscriptionPlan: SubscriptionPlanSelection = {
+    variants: selection.optionId ? [selection.optionId] : [],
+    price_id: product.recurrences.find((recurrence) => recurrence.recurrence === selection.recurrence)?.id,
+    quantity: selection.quantity,
+    price_range: isPWYW ? (selection.price.value ?? 0) * selection.quantity : undefined,
+    perceived_price_cents: price,
+  };
   const paymentProduct: PaymentProduct = {
     permalink: product.permalink,
     name: product.name,
@@ -300,6 +308,7 @@ export default function SubscriptionsManage() {
     testPurchase: subscription.is_test,
     requirePayment,
     subscription_id: subscription.id,
+    subscriptionPlan,
     recommended_by: null,
     shippableCountryCodes: product.shippable_country_codes,
     shipsNowhere: product.ships_nowhere ?? false,
@@ -353,7 +362,16 @@ export default function SubscriptionsManage() {
     () => dispatchAction({ type: "update-products", products: [paymentProduct] }),
     // renewalPriceCents and recurrence feed the Apple Pay recurring declaration and can change
     // without changing amountDueToday (e.g. switching plans while today's charge stays $0).
-    [amountDueToday, requirePayment, renewalPriceCents, recurrence],
+    [
+      amountDueToday,
+      requirePayment,
+      renewalPriceCents,
+      recurrence,
+      selection.optionId,
+      selection.quantity,
+      selection.price.value,
+      price,
+    ],
   );
   React.useEffect(() => dispatchAction({ type: "set-value", warning }), [warning]);
   React.useEffect(() => dispatchAction({ type: "set-value", payLabel }), [payLabel]);
@@ -379,12 +397,8 @@ export default function SubscriptionsManage() {
       recaptchaResponse: state.status.recaptchaResponse ?? null,
       declined: url.searchParams.get("declined") === "true",
       subscription_id: subscription.id,
-      variants: selection.optionId ? [selection.optionId] : [],
-      price_id: product.recurrences.find((recurrence) => recurrence.recurrence === selection.recurrence)?.id,
-      perceived_price_cents: price,
+      ...subscriptionPlan,
       perceived_upgrade_price_cents: amountDueToday,
-      quantity: selection.quantity,
-      price_range: isPWYW ? (selection.price.value ?? 0) * selection.quantity : undefined,
       contact_info: {
         country: state.country,
         email: state.email,

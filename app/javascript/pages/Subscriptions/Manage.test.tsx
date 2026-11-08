@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { getReusablePaymentMethodResult } from "$app/data/payment_method_result";
 import SubscriptionsManage from "$app/pages/Subscriptions/Manage";
 
 import { LoggedInUserProvider } from "$app/components/LoggedInUser";
@@ -457,5 +458,95 @@ describe("SubscriptionsManage pay-what-you-want hint", () => {
     fireEvent.change(screen.getByLabelText("Seats"), { target: { value: "1" } });
 
     expect(pwywInput().getAttribute("placeholder")).toBe("24+");
+  });
+});
+
+describe("SubscriptionsManage selected plan for a new card's future charges", () => {
+  beforeEach(() => {
+    mocks.updateSubscription.mockReset();
+    mocks.updateSubscription.mockResolvedValue({
+      type: "done",
+      message: "Your membership has been updated.",
+      next: null,
+    });
+    vi.mocked(getReusablePaymentMethodResult).mockClear();
+  });
+  afterEach(cleanup);
+
+  const tier = (id: string, name: string, monthly: number, yearly: number) => ({
+    id,
+    name,
+    quantity_left: null,
+    description: null,
+    price_difference_cents: null,
+    recurrence_price_values: {
+      monthly: { price_cents: monthly, suggested_price_cents: null },
+      yearly: { price_cents: yearly, suggested_price_cents: null },
+    },
+    is_pwyw: false,
+    duration_in_minutes: null,
+  });
+
+  const tieredProps = (gold: { monthly: number; yearly: number }) =>
+    pageProps({
+      product: {
+        ...pageProps().product,
+        is_tiered_membership: true,
+        price_cents: 0,
+        recurrences: [
+          { id: "price-monthly", recurrence: "monthly", price_cents: 0 },
+          { id: "price-yearly", recurrence: "yearly", price_cents: 0 },
+        ],
+        options: [
+          tier("tier-silver", "Silver", 500, 5000),
+          tier("tier-gold", "Gold", gold.monthly, gold.yearly),
+          tier("tier-bronze", "Bronze", gold.monthly, gold.yearly),
+        ],
+      },
+      subscription: subscription({ option_id: "tier-silver" }),
+      used_paypal: null,
+    });
+
+  const preparedPlan = () => {
+    const call = vi.mocked(getReusablePaymentMethodResult).mock.lastCall;
+    return call?.[1].products[0]?.subscriptionPlan;
+  };
+
+  it("prepares the card with the tier and billing period the buyer picked", async () => {
+    renderManage(tieredProps({ monthly: 900, yearly: 9000 }));
+
+    fireEvent.click(screen.getByRole("radio", { name: "Gold" }));
+    fireEvent.change(screen.getByLabelText("Recurrence"), { target: { value: "yearly" } });
+    await submitUpdate();
+
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(1));
+    expect(getReusablePaymentMethodResult).toHaveBeenCalledTimes(1);
+    expect(preparedPlan()).toEqual({
+      variants: ["tier-gold"],
+      price_id: "price-yearly",
+      quantity: 1,
+      price_range: undefined,
+      perceived_price_cents: 9000,
+    });
+    expect(mocks.updateSubscription).toHaveBeenCalledWith(expect.objectContaining(preparedPlan()));
+  });
+
+  it("prepares the card with the last tier picked when it costs the same as the one picked before", async () => {
+    renderManage(tieredProps({ monthly: 900, yearly: 9000 }));
+
+    fireEvent.click(screen.getByRole("radio", { name: "Gold" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Bronze" }));
+    await submitUpdate();
+
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(1));
+    expect(getReusablePaymentMethodResult).toHaveBeenCalledTimes(1);
+    expect(preparedPlan()).toEqual({
+      variants: ["tier-bronze"],
+      price_id: "price-monthly",
+      quantity: 1,
+      price_range: undefined,
+      perceived_price_cents: 900,
+    });
+    expect(mocks.updateSubscription).toHaveBeenCalledWith(expect.objectContaining(preparedPlan()));
   });
 });

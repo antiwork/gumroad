@@ -24,7 +24,10 @@ class Stripe::SetupIntentsController < ApplicationController
 
     chargeable.prepare!
 
-    pending_card = reusable_pending_card(subscription, chargeable)
+    selected_plan_mandate_terms = mandate_terms_for_selected_plan(subscription, chargeable)
+    return if performed?
+
+    pending_card = reusable_pending_card(subscription, chargeable) if selected_plan_mandate_terms.nil?
     return if performed?
 
     if pending_card.present?
@@ -44,7 +47,7 @@ class Stripe::SetupIntentsController < ApplicationController
       return
     end
 
-    mandate_options = mandate_options_for_stripe(chargeable, subscription:)
+    mandate_options = mandate_options_for_stripe(chargeable, subscription:, selected_plan_mandate_terms:)
 
     setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
 
@@ -138,10 +141,26 @@ class Stripe::SetupIntentsController < ApplicationController
       end
     end
 
-    def mandate_options_for_stripe(chargeable, subscription: nil)
+    def mandate_terms_for_selected_plan(subscription, chargeable)
+      return if product_params["subscription_id"].blank? || product_params.slice("variants", "price_id").empty?
+      return unless subscription&.india_card_mandate_reliability_enabled? && chargeable.requires_mandate?
+
+      Subscription::UpdaterService.new(
+        subscription:,
+        params: product_params.slice("variants", "price_id", "quantity", "price_range", "perceived_price_cents"),
+        logged_in_user:,
+        gumroad_guid: cookies[:_gumroad_guid],
+        remote_ip: request.remote_ip
+      ).selected_plan_indian_card_mandate_terms(billing_info: billing_info_params)
+    rescue Subscription::UpdateFailed, ActiveRecord::RecordInvalid => e
+      render json: { success: false, error_message: e.message }, status: :unprocessable_entity
+      nil
+    end
+
+    def mandate_options_for_stripe(chargeable, subscription: nil, selected_plan_mandate_terms: nil)
       if chargeable.requires_mandate?
         if subscription&.india_card_mandate_reliability_enabled?
-          terms, mandate_rate = subscription.indian_card_mandate_terms_with_rate(
+          terms, mandate_rate = selected_plan_mandate_terms || subscription.indian_card_mandate_terms_with_rate(
             billing_info: billing_info_params,
             authenticated_offer_code_buyer: logged_in_user,
             renewal_price_cents: subscription.restart_tier_price_cents
@@ -269,7 +288,7 @@ class Stripe::SetupIntentsController < ApplicationController
     end
 
     def product_params_list
-      @product_params_list ||= params.permit(products: [:price, :subscription_id, :permalink, :force_new_subscription])
+      @product_params_list ||= params.permit(products: [:price, :subscription_id, :permalink, :force_new_subscription, :price_id, :quantity, :price_range, :perceived_price_cents, variants: []])
                                      .to_h
                                      .fetch("products", [])
     end

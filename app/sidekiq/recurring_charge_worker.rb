@@ -66,6 +66,7 @@ class RecurringChargeWorker
         mandate_terms_before_plan_change = if check_mandate_terms_after_plan_change
           subscription.indian_card_mandate_terms
         end
+        stored_mandate_setup_intent = subscription.active_indian_card_mandate_setup_intent if check_mandate_terms_after_plan_change
         override_params = {}
         if latest_applicable_plan_change.present?
           same_tier = latest_applicable_plan_change.tier == subscription.tier
@@ -85,7 +86,8 @@ class RecurringChargeWorker
               subscription.reload
 
               mandate_reauthorization_required = check_mandate_terms_after_plan_change &&
-                subscription.indian_card_mandate_terms != mandate_terms_before_plan_change
+                subscription.indian_card_mandate_terms != mandate_terms_before_plan_change &&
+                !subscription.indian_card_setup_intent_terms_match?(stored_mandate_setup_intent)
               if mandate_reauthorization_required
                 subscription.require_indian_card_mandate_reauthorization!(clear_existing_mandate: true)
               end

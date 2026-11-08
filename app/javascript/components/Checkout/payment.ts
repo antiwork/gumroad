@@ -236,11 +236,20 @@ export type Product = {
   nativeType: ProductNativeType;
   recurrence: RecurrenceId | null;
   subscription_id?: string;
+  subscriptionPlan?: SubscriptionPlanSelection;
   forceNewSubscription?: boolean;
   recommended_by?: string | null;
   shippableCountryCodes: string[];
   // Set by the server for a physical product whose seller excluded every country it covers.
   shipsNowhere?: boolean;
+};
+
+export type SubscriptionPlanSelection = {
+  variants: string[];
+  price_id: string | undefined;
+  quantity: number;
+  price_range: number | undefined;
+  perceived_price_cents: number;
 };
 
 export type Gift =

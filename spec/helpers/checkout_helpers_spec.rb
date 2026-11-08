@@ -22,6 +22,14 @@ describe "Stripe field synchronization", type: :system, js: true do
     expect(page).to have_field("MM / YY", with: "12/26")
   end
 
+  it "falls back to a later label when an earlier one matches no field" do
+    visit "data:text/html,#{ERB::Util.url_encode('<input placeholder="MM / YY">')}"
+
+    using_wait_time(1) { fill_in_stripe_field ["Expiration date", "MM / YY"], with: "12/26" }
+
+    expect(page).to have_field("MM / YY", with: "12/26")
+  end
+
   it "fails when a field never retains the complete requested value" do
     visit "data:text/html,#{ERB::Util.url_encode('<input placeholder="MM / YY" maxlength="1">')}"
 
