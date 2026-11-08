@@ -1067,6 +1067,74 @@ describe ContactingCreatorMailer do
                                                                   text, nil, {}, "chaching.wav", true)
     end
 
+    describe "buyer receipt link" do
+      let(:product) { create(:product, user: seller) }
+      let(:purchase) { create(:purchase, link: product, seller:, email: buyer.email) }
+
+      before { purchase.create_url_redirect! }
+
+      def receipt_location(purchase) = "/purchases/#{purchase.external_id}/receipt"
+
+      it "links this purchase's receipt, without the buyer's email or the download token" do
+        body = ContactingCreatorMailer.notify(purchase.id).body.decoded
+        link = Nokogiri::HTML(body).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
+
+        expect(link).to be_present
+        expect(URI(link["href"]).path).to eq(receipt_location(purchase))
+        expect(URI(link["href"]).query).to be_nil
+        expect(body).not_to include(purchase.url_redirect.token)
+      end
+
+      def notify_body = ContactingCreatorMailer.notify(purchase.reload.id).body.decoded
+
+      {
+        "has no url redirect" => -> { purchase.url_redirect.destroy! },
+        "is refunded" => -> { purchase.update!(stripe_refunded: true) },
+        "is charged back" => -> { purchase.update!(chargeback_date: Time.current) },
+        "is the sender leg of a gift" => -> { purchase.update!(is_gift_sender_purchase: true) },
+        "is the receiver leg of a gift" => -> { purchase.update!(is_gift_receiver_purchase: true) },
+        "is a preorder authorization" => -> { purchase.update!(is_preorder_authorization: true) },
+        "is the seller's own test purchase" => -> { purchase.update!(purchaser: seller) },
+        "is a rental" => -> { purchase.url_redirect.update!(is_rental: true) },
+        "is still waiting for its PDFs to be stamped" => -> { create(:readable_document, link: product, pdf_stamp_enabled: true) },
+        "is for a coffee product" => -> { product.update!(native_type: Link::NATIVE_TYPE_COFFEE) },
+      }.each do |condition, change|
+        it "omits the link when the purchase #{condition}" do
+          expect(notify_body).to include(receipt_location(purchase))
+
+          instance_exec(&change)
+
+          expect(notify_body).not_to include(receipt_location(purchase))
+        end
+      end
+
+      context "when the purchase is for a bundle" do
+        let(:product) { create(:product, :bundle, user: seller) }
+        let(:purchase) { create(:purchase, link: product, seller:, email: buyer.email, is_bundle_purchase: true) }
+
+        it "keeps the link once the buyer has member purchases, even if the members are later removed" do
+          product.bundle_products.each { Purchase::CreateBundleProductPurchaseService.new(purchase, _1).perform }
+          expect(notify_body).to include(receipt_location(purchase))
+
+          product.bundle_products.each(&:mark_deleted!)
+
+          expect(purchase.product_purchases).to be_present
+          expect(notify_body).to include(receipt_location(purchase))
+        end
+
+        it "omits the link for a memberless bundle only once it has no files of its own" do
+          product.bundle_products.each(&:mark_deleted!)
+          own_file = create(:product_file, link: product)
+          expect(purchase.product_purchases).to be_empty
+          expect(notify_body).to include(receipt_location(purchase))
+
+          own_file.mark_deleted!
+
+          expect(notify_body).not_to include(receipt_location(purchase))
+        end
+      end
+    end
+
     it "uses SUPPORT_EMAIL as from address" do
       mail = ContactingCreatorMailer.notify(purchase.id)
       expect(mail.from).to eq([ApplicationMailer::SUPPORT_EMAIL])

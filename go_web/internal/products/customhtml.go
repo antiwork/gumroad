@@ -74,11 +74,9 @@ func waitlistFormFound(html string) (bool, error) {
 }
 
 // renderCustomHTML is render_custom_html_if_present, whose wanted and review link serve has
-// checked and whose native and code params declinedParams left to Rails.
+// checked and whose native and code params declinedParams left to Rails. It answers an
+// autocomplete partial reload with the same document, since it renders before show.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
-	if p.autocomplete {
-		return fallback("inertia partial reload")
-	}
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
 	// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
 	// staff went to Rails already.
@@ -195,6 +193,12 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		"«live_reload_script»", liveReload,
 	).Replace(customHTMLWrapper)
 
+	if !p.DryRun {
+		// Before the UTM visit, which a fallback to Rails would repeat.
+		if err := h.pushVariants(ctx, p); err != nil {
+			return err
+		}
+	}
 	if err := h.trackUTMVisit(w, p, prod); err != nil {
 		return err
 	}
@@ -230,12 +234,15 @@ func (h *handler) loadWrapperView(ctx context.Context, p *page, prod *product, t
 	if v.prices, err = h.loadPrices(ctx, prod); err != nil {
 		return nil, err
 	}
-	if v.covers, err = h.loadCovers(ctx, p, prod.id); err != nil {
+	// social_share_image reads the main cover's URL and no other's.
+	if v.covers, err = h.loadCoverRows(ctx, prod.id); err != nil {
 		return nil, err
 	}
-	if len(p.retinaPushes) > 0 || len(p.posterPushes) > 0 {
-		// This port doesn't follow which covers' URLs the wrapper's Rails render reads.
-		return nil, fallback("retina variant unprocessed")
+	if len(v.covers) > 0 {
+		if err := h.coverURLs(ctx, p, v.covers[0]); err != nil {
+			return nil, err
+		}
+		keepShareImageEffects(p, v.covers[0])
 	}
 	if v.thumbnailURL, err = h.thumbnailURL(ctx, prod.id); err != nil {
 		return nil, err
@@ -276,6 +283,19 @@ func (h *handler) loadWrapperView(ctx context.Context, p *page, prod *product, t
 		}
 	}
 	return v, nil
+}
+
+// keepShareImageEffects keeps, of the main cover's cache writes, social_share_image's: its url's
+// entry, or a video's poster's.
+func keepShareImageEffects(p *page, main *cover) {
+	prefix := "attachment_" + itoa(main.attachmentID) + "_"
+	read := main.urlCacheKey()
+	if !main.previewImagePath() {
+		read = prefix + "poster_url"
+	}
+	p.cacheWrites = slices.DeleteFunc(p.cacheWrites, func(pw pendingWrite) bool {
+		return strings.HasPrefix(pw.key, prefix) && pw.key != read
+	})
 }
 
 // customHTMLAnalyticsHead is custom_html_analytics_head.

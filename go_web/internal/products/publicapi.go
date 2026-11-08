@@ -111,16 +111,10 @@ func (h *handler) wantedRedirect(w http.ResponseWriter, p *page, prod *product, 
 func keepMetaCoverWrites(p *page, covers []*cover) {
 	keys := map[string]bool{}
 	for _, c := range covers {
-		if !c.isImage || c.isUnsplash || c.oembed != nil {
-			continue
-		}
-		if c.rescued {
-			continue
-		}
-		if c.retinaRead {
-			keys["attachment_"+itoa(c.attachmentID)+"_retina_url"] = true
-		} else {
-			keys["attachment_"+itoa(c.attachmentID)+"_original_url"] = true
+		if c.isImage && c.oembed == nil {
+			if key := c.urlCacheKey(); key != "" {
+				keys[key] = true
+			}
 		}
 	}
 	p.cacheWrites = slices.DeleteFunc(p.cacheWrites, func(pw pendingWrite) bool { return !keys[pw.key] })

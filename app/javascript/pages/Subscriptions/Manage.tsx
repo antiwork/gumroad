@@ -31,6 +31,7 @@ import {
   createReducer,
   StateContext,
   Product as PaymentProduct,
+  SubscriptionPlanSelection,
   getTotalPrice,
 } from "$app/components/Checkout/payment";
 import { PaymentForm } from "$app/components/Checkout/PaymentForm";
@@ -76,6 +77,7 @@ type Props = {
     recurrence: RecurrenceId;
     option_id: string | null;
     price: number;
+    next_charge_price?: number;
     pre_discount_price: number;
     quantity: number;
     alive: boolean;
@@ -156,6 +158,12 @@ export default function SubscriptionsManage() {
   const hasPriceChanged =
     Math.round(currentSubscriptionUnitPrice) !==
     currentOption?.recurrence_price_values?.[subscription.recurrence]?.price_cents;
+  // A tiered discount can make today's price free while the next charge is not, so don't promise it will remain.
+  const nextChargePrice = subscription.next_charge_price ?? 0;
+  const currentPriceNote =
+    nextChargePrice > subscription.price
+      ? `Your next charge will be ${formatPriceCentsWithCurrencySymbol(product.currency_code, nextChargePrice, { symbolFormat: "long" })}.`
+      : "This price will remain the same when updating your payment method.";
   const configurationSelectorProduct: ConfigurationSelectorProduct = {
     ...product,
     options: product.options.map((option) =>
@@ -168,7 +176,7 @@ export default function SubscriptionsManage() {
                     product.currency_code,
                     Math.round(currentSubscriptionUnitPrice),
                     { symbolFormat: "long" },
-                  )} ${recurrenceLabels[subscription.recurrence]}, based on previous pricing. This price will remain the same when updating your payment method.`
+                  )} ${recurrenceLabels[subscription.recurrence]}, based on previous pricing. ${currentPriceNote}`
                 : undefined,
           }
         : option,
@@ -208,8 +216,10 @@ export default function SubscriptionsManage() {
     pricingDiscount,
     getMinPriceCents(product.currency_code),
   );
-  const requirePayment = price > 0;
   const noChangesToCurrentPlan = noChangesToNonPriceOptions && (!isPWYW || price === subscription.price);
+  // A tiered discount can be free now and paid at renewal; the card must be addable before then.
+  const renewalPrice = noChangesToCurrentPlan ? Math.max(price, subscription.next_charge_price ?? 0) : price;
+  const requirePayment = renewalPrice > 0;
   // Overdue charges the full new plan; subtracting stale proration would trip the price guard.
   let amountDueToday =
     (subscription.alive || subscription.pending_cancellation) &&
@@ -271,8 +281,15 @@ export default function SubscriptionsManage() {
   // agreement is declared.
   const remainingCharges = subscription.remaining_charges_count;
   const declareRecurring = remainingCharges === null || remainingCharges > 0;
-  const renewalPriceCents = declareRecurring ? Math.round(price / product.exchange_rate) : null;
+  const renewalPriceCents = declareRecurring ? Math.round(renewalPrice / product.exchange_rate) : null;
   const recurrence = selection.recurrence ?? subscription.recurrence;
+  const subscriptionPlan: SubscriptionPlanSelection = {
+    variants: selection.optionId ? [selection.optionId] : [],
+    price_id: product.recurrences.find((recurrence) => recurrence.recurrence === selection.recurrence)?.id,
+    quantity: selection.quantity,
+    price_range: isPWYW ? (selection.price.value ?? 0) * selection.quantity : undefined,
+    perceived_price_cents: price,
+  };
   const paymentProduct: PaymentProduct = {
     permalink: product.permalink,
     name: product.name,
@@ -300,6 +317,7 @@ export default function SubscriptionsManage() {
     testPurchase: subscription.is_test,
     requirePayment,
     subscription_id: subscription.id,
+    subscriptionPlan,
     recommended_by: null,
     shippableCountryCodes: product.shippable_country_codes,
     shipsNowhere: product.ships_nowhere ?? false,
@@ -353,7 +371,16 @@ export default function SubscriptionsManage() {
     () => dispatchAction({ type: "update-products", products: [paymentProduct] }),
     // renewalPriceCents and recurrence feed the Apple Pay recurring declaration and can change
     // without changing amountDueToday (e.g. switching plans while today's charge stays $0).
-    [amountDueToday, requirePayment, renewalPriceCents, recurrence],
+    [
+      amountDueToday,
+      requirePayment,
+      renewalPriceCents,
+      recurrence,
+      selection.optionId,
+      selection.quantity,
+      selection.price.value,
+      price,
+    ],
   );
   React.useEffect(() => dispatchAction({ type: "set-value", warning }), [warning]);
   React.useEffect(() => dispatchAction({ type: "set-value", payLabel }), [payLabel]);
@@ -379,12 +406,8 @@ export default function SubscriptionsManage() {
       recaptchaResponse: state.status.recaptchaResponse ?? null,
       declined: url.searchParams.get("declined") === "true",
       subscription_id: subscription.id,
-      variants: selection.optionId ? [selection.optionId] : [],
-      price_id: product.recurrences.find((recurrence) => recurrence.recurrence === selection.recurrence)?.id,
-      perceived_price_cents: price,
+      ...subscriptionPlan,
       perceived_upgrade_price_cents: amountDueToday,
-      quantity: selection.quantity,
-      price_range: isPWYW ? (selection.price.value ?? 0) * selection.quantity : undefined,
       contact_info: {
         country: state.country,
         email: state.email,

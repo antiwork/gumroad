@@ -53,6 +53,9 @@ func Register(app *web.App, c *Config) {
 		Redirects: app.Redirects(), Meta: c.Meta, Now: c.Now, DryRunKey: c.DryRunKey, DryRunOnce: c.DryRunOnce,
 	}}
 	app.HandlePage("GET /l/{id}", "LinksController#show", h)
+	app.HandleUncleanPage("/l/", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h.ctl.Serve(w, r, "product page", func(*http.Request) (*pages.Visit, error) { return nil, fallback("unclean path") })
+	}))
 	// /l/:id/:code (an offer code), and /l/:id/, which Journey routes as /l/:id.
 	app.HandlePage("GET /l/{id}/{rest...}", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h.servePage(w, r, true)
@@ -178,24 +181,29 @@ var railsSubdomainHost = web.SubdomainRequestPattern("gumroad.com")
 // which a subdomain like gumroad-analytics-com.gumroad.com also meets, so Rails 404s it.
 var analyticsHost = regexp.MustCompile(`gumroad-analytics.com`)
 
-// permalinkParam is the shape of a code this port reads; anything else is Rails'.
-var permalinkParam = regexp.MustCompile(`\A[A-Za-z0-9_-]+\z`)
-
 // prepare parses the request and decides whether this port serves it. Nothing it does is
 // visible outside the process, so any fallback it returns is safe.
 func (h *handler) prepare(ctx context.Context, r *http.Request, codeRoute bool) (*page, error) {
 	if h.c.Page == nil {
 		return nil, fallback("pages off")
 	}
-	if codeRoute && r.PathValue("rest") == "" {
-		// Journey's normalize_path drops the trailing slash; the URL keeps it.
+	rest := r.PathValue("rest")
+	if strings.HasSuffix(r.URL.EscapedPath(), "/") {
+		// Journey's normalize_path drops a trailing slash, after the id or the code; the URL keeps it.
+		rest = strings.TrimSuffix(rest, "/")
+	}
+	if codeRoute && rest == "" {
 		codeRoute = false
 	}
-	if codeRoute && r.URL.RawPath != "" && strings.Contains(r.PathValue("rest"), "/") {
+	if codeRoute && r.URL.RawPath != "" && strings.Contains(rest, "/") {
 		// An escaped slash stays in Journey's segment, which the mux's rest can't tell.
 		return nil, fallback("offer code path")
 	}
-	rt := parseRoute(r.PathValue("id"), r.PathValue("rest"), codeRoute)
+	if codeRoute && (strings.HasPrefix(rest, "landing/embed") || strings.HasPrefix(rest, "landing/version")) {
+		// links#landing_iframe_content and #landing_version: a custom HTML page's frame and live reload.
+		return nil, fallback("landing route")
+	}
+	rt := parseRoute(r.PathValue("id"), rest, codeRoute)
 	if reason := declined(r, h.c.Env); reason != "" {
 		return nil, fallback(reason)
 	}
@@ -383,10 +391,8 @@ func declinedParams(req *rails.Request) string {
 		}
 	}
 	if raw, ok := req.Params.Get("layout"); ok {
-		switch raw {
-		case nil, "", productLayoutProfile, productLayoutDiscover:
-		default:
-			// Its value would go into the bundles' URLs.
+		if _, isString := raw.(string); !isString && raw != nil {
+			// The bundles' URLs would nest it.
 			return "param layout"
 		}
 		// The layout's component with embed's iframe body class is neither port's shape.
@@ -401,11 +407,12 @@ func declinedParams(req *rails.Request) string {
 			}
 		}
 	}
-	// Only a code whose lookups can't depend on Unicode normalization or the collation is
-	// served here.
+	// Redirects and props echo the code without looking it up, so one this port wouldn't look up
+	// goes to Rails here.
 	for _, name := range []string{"code", "offer_code"} {
 		if raw, ok := req.Params.Get(name); ok {
-			if code, isString := raw.(string); !isString || !rails.Blank(code) && !permalinkParam.MatchString(code) {
+			code, isString := raw.(string)
+			if _, ported := normalizeCode(code); !isString || rails.Present(code) && !ported {
 				return "param " + name
 			}
 		}

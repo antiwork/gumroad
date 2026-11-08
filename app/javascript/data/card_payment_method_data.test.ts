@@ -15,6 +15,8 @@ import { type CardPaymentMethodParams } from "$app/data/payment_method_params";
 import { request } from "$app/utils/request";
 import { getStripeInstance } from "$app/utils/stripe_loader";
 
+import { type Product } from "$app/components/Checkout/payment";
+
 vi.mock("$app/utils/stripe_loader", () => ({ getStripeInstance: vi.fn() }));
 vi.mock("$app/utils/request", () => ({ request: vi.fn() }));
 
@@ -439,6 +441,56 @@ describe("prepareFutureCharges", () => {
       stripe_payment_method_id: "pm_new",
       stripe_customer_id: "cus_new",
       stripe_setup_intent_id: "seti_new",
+    });
+  });
+
+  it("sends the membership plan the buyer selected so the mandate is sized for it", async () => {
+    respondWith({ success: true, reusable_token: "cus_new", setup_intent_id: "seti_new" });
+    const product: Product = {
+      permalink: "membership",
+      name: "Membership",
+      creator: { id: "seller", name: "Seller", profile_url: "", avatar_url: "" },
+      quantity: 1,
+      price: 49_00,
+      payInInstallments: false,
+      requireShipping: false,
+      customFields: [],
+      bundleProductCustomFields: [],
+      supportsPaypal: null,
+      paypalCardFundingDisabled: false,
+      testPurchase: false,
+      requirePayment: true,
+      hasFreeTrial: false,
+      hasTippingEnabled: false,
+      isPreorder: false,
+      canGift: false,
+      nativeType: "membership",
+      recurrence: "monthly",
+      shippableCountryCodes: [],
+      subscription_id: "subscription",
+      subscriptionPlan: {
+        variants: ["tier"],
+        price_id: "monthly",
+        quantity: 1,
+        price_range: undefined,
+        perceived_price_cents: 49_00,
+      },
+    };
+
+    await prepareFutureCharges({ products: [product], cardParams });
+
+    expect(vi.mocked(request).mock.lastCall?.[0].data).toMatchObject({
+      products: [
+        {
+          price: 49_00,
+          subscription_id: "subscription",
+          permalink: "membership",
+          variants: ["tier"],
+          price_id: "monthly",
+          quantity: 1,
+          perceived_price_cents: 49_00,
+        },
+      ],
     });
   });
 

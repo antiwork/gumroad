@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -97,6 +98,21 @@ func TestTheCustomHTMLWrapper(t *testing.T) {
 	dry := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow))
 	if dry.Code != http.StatusOK || csrfMeta.ReplaceAllString(dry.Body.String(), "") != csrfMeta.ReplaceAllString(body, "") {
 		t.Errorf("dry run: %d %q", dry.Code, dry.Header().Get("X-Go-Web-Fallback"))
+	}
+
+	// Discover's search box asking for suggestions gets the document a visit does.
+	target := "/l/guide?layout=discover&query=pen"
+	plain := e.get(host, target, nil)
+	partial := e.get(host, target, map[string]string{"X-Inertia": "true", "X-Requested-With": "XMLHttpRequest",
+		"X-Inertia-Partial-Component": "Products/Discover/Show", "X-Inertia-Partial-Data": "autocomplete_results"})
+	if partial.Code != http.StatusOK || e.railsHit != nil ||
+		csrfMeta.ReplaceAllString(partial.Body.String(), "") != csrfMeta.ReplaceAllString(plain.Body.String(), "") {
+		t.Fatalf("partial reload: %d %q", partial.Code, partial.Header().Get("X-Go-Web-Fallback"))
+	}
+	for _, name := range []string{"Content-Type", "Link", "Vary", "X-Robots-Tag"} {
+		if got, want := partial.Header().Get(name), plain.Header().Get(name); got != want {
+			t.Errorf("partial reload %s %q, want %q", name, got, want)
+		}
 	}
 }
 
@@ -247,6 +263,53 @@ func TestTheCustomHTMLWrapperShapes(t *testing.T) {
 				if strings.Contains(w.Body.String(), not) {
 					t.Errorf("unwanted %q", not)
 				}
+			}
+		})
+	}
+}
+
+// The wrapper reads one cover's URL, social_share_image's of the main cover, so only that one
+// queues its retina variant and caches its URL.
+func TestTheCustomHTMLWrapperReadsTheMainCoverAlone(t *testing.T) {
+	second := func(t *testing.T, conn *sql.DB) {
+		testdb.Insert(t, conn, "asset_previews", map[string]any{"id": int64(1_790_402), "link_id": productID, "guid": "second-guid",
+			"position": 1, "created_at": testNow, "updated_at": testNow})
+		addBlob(t, conn, 1_790_503, "covers/second", "b.jpg", "image/jpeg", `{"identified":true,"width":2000,"height":1000,"analyzed":true}`)
+		addAttachment(t, conn, 1_790_603, "file", "AssetPreview", 1_790_402, 1_790_503)
+	}
+	for _, c := range []struct {
+		name          string
+		mainProcessed bool
+		queued        string
+		cached        []string
+	}{
+		{name: "a processed main cover", mainProcessed: true, cached: []string{"attachment_1790601_retina_url"}},
+		{name: "an unprocessed main cover", queued: `"args":[1790401],"class":"ProcessAssetPreviewRetinaWorker"`,
+			cached: []string{"attachment_1790601_original_url"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e := newTestEnv(t)
+			jobs := sidekiqJobs(t, e)
+			conn := testdb.Open(t)
+			customHTML(t, e, conn)
+			addCover(t, c.mainProcessed)
+			second(t, conn)
+			w := e.get(host, "/l/guide", nil)
+			if w.Code != http.StatusOK || e.railsHit != nil {
+				t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+			}
+			queued, _ := jobs.List("queue:low")
+			if c.queued == "" && len(queued) != 0 || c.queued != "" && (len(queued) != 1 || !strings.Contains(queued[0], c.queued)) {
+				t.Errorf("queue:low %v", queued)
+			}
+			var covers []string
+			for _, key := range e.cache.writes {
+				if strings.HasPrefix(key, "attachment_") {
+					covers = append(covers, key)
+				}
+			}
+			if !slices.Equal(covers, c.cached) {
+				t.Errorf("cover cache writes %v, want %v", covers, c.cached)
 			}
 		})
 	}

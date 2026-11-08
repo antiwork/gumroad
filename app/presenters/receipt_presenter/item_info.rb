@@ -40,6 +40,15 @@ class ReceiptPresenter::ItemInfo
     }
   end
 
+  # Also read by the seller's sale notification to decide whether to link the buyer's receipt.
+  def show_download_button
+    !purchase.is_gift_sender_purchase &&
+    !purchase.is_preorder_authorization &&
+    (purchase.url_redirect.present? || purchase.is_commission_completion_purchase?) &&
+    purchase.link.native_type != Link::NATIVE_TYPE_COFFEE &&
+    !empty_member_bundle_without_content?
+  end
+
   private
     attr_reader :seller, :subscription
 
@@ -108,14 +117,6 @@ class ReceiptPresenter::ItemInfo
           purchase.link.preorder_link.release_at,
           purchase.link.user.timezone
         )}."
-    end
-
-    def show_download_button
-      !purchase.is_gift_sender_purchase &&
-      !purchase.is_preorder_authorization &&
-      (purchase.url_redirect.present? || purchase.is_commission_completion_purchase?) &&
-      purchase.link.native_type != Link::NATIVE_TYPE_COFFEE &&
-      !empty_member_bundle_without_content?
     end
 
     # Empty-member bundles still render on the receipt (see Chargeable#unbundled_purchases).

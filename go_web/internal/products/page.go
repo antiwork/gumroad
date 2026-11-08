@@ -34,10 +34,12 @@ type PageConfig struct {
 	CSP     web.CSP
 	Shared  *pages.Shared
 	Avatars *storage.Avatars
-	// Cache is Rails.cache and Redis $redis.
-	Cache Cache
-	Redis redis.Cmdable
-	GeoIP *geoip.Reader
+	// Cache is Rails.cache and Redis $redis. Revision is the REVISION it's namespaced under,
+	// which Rails' own keys embed too; nil is go_web's.
+	Cache    Cache
+	Revision func() string
+	Redis    redis.Cmdable
+	GeoIP    *geoip.Reader
 	// Flag is a Flipper flag by name.
 	Flag func(name string) *flipper.Flag
 	// CDNMap is CDN_URL_MAP in order, and PublicStorageURL the public service's object URL

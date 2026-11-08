@@ -514,6 +514,35 @@ func TestACoverWithoutItsRetinaVariantQueuesIt(t *testing.T) {
 	}
 }
 
+// A blob the analyzer never measured has no retina_width: its variant is resize_to_limit [nil, nil],
+// not processed yet here, so the cover queues it and serves the original, with no sizes.
+func TestAnUnmeasuredCoverQueuesItsRetinaVariant(t *testing.T) {
+	e := newTestEnv(t)
+	jobs := sidekiqJobs(t, e)
+	addCover(t, false)
+	conn := testdb.Open(t)
+	mustExec(t, conn, `UPDATE active_storage_blobs SET metadata = '{"identified":true}' WHERE id = ?`, 1_790_501)
+	// Ruby's digest of {format: "jpg", resize_to_limit: [1005, nil]}, for the measured cover.
+	testdb.Insert(t, conn, "active_storage_variant_records", map[string]any{"id": int64(1_790_701), "blob_id": int64(1_790_501),
+		"variation_digest": "WX6OQ3hf/g9WoAI2n/sUdFF1vxA="})
+	w := e.get(host, "/l/guide", nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	cover := pageProps(t, w.Body.String())["product"].(map[string]any)["covers"].([]any)[0].(map[string]any)
+	original := "https://public-files.gumroad.com/covers/original"
+	for key, want := range map[string]any{"url": original, "original_url": original, "width": nil, "height": nil,
+		"native_width": nil, "native_height": nil} {
+		if got := cover[key]; got != want {
+			t.Errorf("cover %s = %#v, want %#v", key, got, want)
+		}
+	}
+	queued, _ := jobs.List("queue:low")
+	if len(queued) != 1 || !strings.Contains(queued[0], `"args":[1790401],"class":"ProcessAssetPreviewRetinaWorker"`) {
+		t.Errorf("queue:low %v", queued)
+	}
+}
+
 // sidekiqJobs gives e a Sidekiq client on a fresh Redis, which it returns.
 func sidekiqJobs(t *testing.T, e *testEnv) *miniredis.Miniredis {
 	jobs := miniredis.RunT(t)
@@ -580,13 +609,17 @@ func TestAFeaturedProductsCoverWithoutItsRetinaVariantQueuesIt(t *testing.T) {
 	}
 }
 
-func TestCustomHTMLWithoutACoversRetinaVariantGoesToRails(t *testing.T) {
+// A dry run renders the wrapper of a cover without its retina variant and queues nothing.
+func TestCustomHTMLWithoutACoversRetinaVariantInADryRun(t *testing.T) {
 	e := newTestEnv(t)
-	sidekiqJobs(t, e)
+	jobs := sidekiqJobs(t, e)
 	addCover(t, false)
 	customHTML(t, e, testdb.Open(t))
-	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Header().Get("X-Go-Web-Fallback") != "retina variant unprocessed" {
+	if w := e.get(host, "/l/guide", e.dryRun(host, "/l/guide", testNow)); w.Code != http.StatusOK || e.railsHit != nil {
 		t.Errorf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	if jobs.Exists("queue:low") {
+		t.Error("a dry run queued the variant")
 	}
 }
 
@@ -595,6 +628,11 @@ func TestAnotherSpellingOfThePermalinkRedirectsPermanently(t *testing.T) {
 	w := e.get(host, "/l/gowebp1?a%20b=1", nil)
 	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "https://"+host+"/l/guide?a%20b=1" {
 		t.Errorf("%d %q", w.Code, w.Header().Get("Location"))
+	}
+	// A code with a trailing slash, which the redirect leaves off.
+	w = e.get(host, "/l/gowebp1/feed/", nil)
+	if w.Code != http.StatusMovedPermanently || w.Header().Get("Location") != "https://"+host+"/l/guide/feed" {
+		t.Errorf("code: %d %q", w.Code, w.Header().Get("Location"))
 	}
 }
 
@@ -628,7 +666,15 @@ func TestWhatThisPortLeavesToRailsGoesThere(t *testing.T) {
 		{name: "an empty code before a format", host: host, target: "/l/guide/.json", reason: "offer code path"},
 		{name: "an offer_code param that isn't a plain string", host: host, target: "/l/guide?offer_code[]=X", reason: "param offer_code"},
 		{name: "a code param that isn't a plain string", host: host, target: "/l/guide?code[]=X", reason: "param code"},
-		{name: "a code param the collation could read", host: host, target: "/l/guide?code=caf%C3%A9", reason: "param code"},
+		{name: "a code param in other letters", host: host, target: "/l/guide?code=%CE%A3", reason: "param code"},
+		{name: "a code param with punctuation", host: host, target: "/l/guide?code=SAVE.10", reason: "param code"},
+		// An escaped slash stays in the code, as in Journey; only a literal trailing one is dropped.
+		{name: "a path code ending in an escaped slash", host: host, target: "/l/guide/save10%2F", reason: "offer code path"},
+		{name: "an escaped slash before a trailing one", host: host, target: "/l/guide/save10%2F/", reason: "offer code path"},
+		// ServeMux would redirect it to its cleaned form; Rails routes it as it is.
+		{name: "a path with a doubled slash", host: host, target: "/l/url(https://fonts.example.com/css", reason: "unclean path"},
+		{name: "the custom HTML page's frame", host: host, target: "/l/guide/landing/embed", reason: "landing route"},
+		{name: "the custom HTML page's live reload", host: host, target: "/l/guide/landing/version.json", reason: "landing route"},
 		{name: "a utm visit without Sidekiq", host: host, target: "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", reason: "utm visit push"},
 		{name: "the analytics host's route", host: "gumroad-analytics-com.gumroad.com", target: "/l/guide", reason: "host"},
 		{name: "a Forwarded header", host: host, target: "/l/guide", reason: "forwarded header",
@@ -1158,6 +1204,20 @@ func TestABundleRendersItsProducts(t *testing.T) {
 			t.Errorf("want %s", want)
 		}
 	})
+	// Any other layout renders the product page, and its value still reaches the bundles' URLs.
+	t.Run("another layout", func(t *testing.T) {
+		e := newTestEnv(t)
+		setup(t, testdb.Open(t), true)
+		w := e.get(host, "/l/guide?layout=1%27+and+%22x%22", nil)
+		if w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("%d %q", w.Code, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		componentProps(t, w.Body.String(), productComponent)
+		want := `"url":"https://gowebproductseller.gumroad.com/l/bp2?layout=1%27+and+%22x%22"`
+		if page := html.UnescapeString(dataPage.FindStringSubmatch(w.Body.String())[1]); !strings.Contains(page, want) {
+			t.Errorf("want %s", want)
+		}
+	})
 }
 
 // The fixture's price is 500 cents; each code is the seller's, with these columns set.
@@ -1519,14 +1579,43 @@ func TestDefaultOfferCodes(t *testing.T) {
 			auto(t, conn, nil)
 			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
 		}},
-		// The sale's string finds the product's own code, not the sale.
-		{name: "a product's code with the sale's string", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, nil)
-			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
-			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
-		}},
+		// find_offer_code takes the product's code, and the computing service the first of the
+		// seller's codes by that string that suits the product, the sale, at the found row's minimum.
+		{name: "a product's code with the sale's string", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
+			}},
+		// An older universal code by the sale's string comes first to both lookups, so the result has
+		// its 5%, echoed under the sale's own string, which also earns the sale's label.
+		{name: "an older code by the sale's string", wants: []string{`"discount_code":` + discount(`"SALE20"`, `{"type":"percent","percents":5,`+
+			`"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}`) +
+			`,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				insertOfferCode(t, conn, autoID-1, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
+				auto(t, conn, nil)
+			}},
+		// Weighed at the product's code's minimum, one, the sale falls short of its own three.
+		{name: "a sale by the product's code's string short of its own minimum", wants: []string{`"discount_code":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, map[string]any{"minimum_quantity": 3})
+				insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
+			}},
+		// The sale is weighed at the product's code's minimum, which its own terms don't change.
+		{name: "a product's code with the sale's string and another minimum", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
+			}},
+		{name: "a sale in Latin letters", wants: []string{`"discount_code":` + discount(`"SOLDÉ"`, `{"type":"percent","percents":20,`+
+			`"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}`) +
+			`,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, map[string]any{"code": "SOLDÉ"}) }},
 		{name: "a code in other letters", reason: "offer code characters", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
-			auto(t, conn, map[string]any{"code": "SOLDÉ"})
+			auto(t, conn, map[string]any{"code": "ΣALE"})
 		}},
 		// applicable? compares with ==, so no sale.
 		{name: "a sale in a currency only the collation matches", wants: []string{`"discount_code":null,`, `"options":{},"rent_options":null}`},
@@ -1580,6 +1669,7 @@ func TestURLOfferCodes(t *testing.T) {
 	}
 	saleResult := `{"valid":true,"code":"SALE20","discount":{"type":"percent","percents":20,"product_ids":null,"expires_at":null,` +
 		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}}`
+	scoped30 := strings.Replace(valid("SAVE10", `,"option_ids_by_product":{"%[1]s":["%[3]s"]}`), `"percents":10`, `"percents":30`, 1)
 	fixed150 := `{"valid":true,"code":"SAVE10","discount":{"type":"fixed","cents":150,"product_ids":null,"expires_at":null,` +
 		`"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}}`
 	invalid := func(errorCode string) string { return `{"valid":false,"error_code":"` + errorCode + `"}` }
@@ -1617,6 +1707,10 @@ func TestURLOfferCodes(t *testing.T) {
 		{name: "a code in the path", target: "/l/guide/save10",
 			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`, quotes("save10", valid("save10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		// Journey drops the trailing slash.
+		{name: "a code in the path with a trailing slash", target: "/l/guide/save10/",
+			wants: []string{`"discount_code":` + valid("save10", "") + `,"sale_label":null,`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a code in the query", target: "/l/guide?code=SAVE10", wants: []string{quotes("SAVE10", valid("SAVE10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		// (params[:offer_code] || params[:code]).presence: offer_code wins, a blank one hides the code,
@@ -1635,6 +1729,17 @@ func TestURLOfferCodes(t *testing.T) {
 				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
 			}},
 		{name: "an unknown code", target: "/l/guide/NOPE", wants: []string{quotes("NOPE", invalid("invalid_offer"), "null")}},
+		// normalize_code's NFC and downcase, then the column's collation, which ignores a word
+		// joiner but not a directional isolate.
+		{name: "an accented code typed in capitals", target: "/l/guide?code=CAFE%CC%81",
+			wants: []string{quotes("CAFE\u0301", valid("CAFE\u0301", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"code": "café"}) }},
+		{name: "a code with a word joiner pasted on", target: "/l/guide/SAVE10%E2%81%A0",
+			wants: []string{quotes("SAVE10\u2060", valid("SAVE10\u2060", ""), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
+		{name: "a code with a directional isolate pasted on", target: "/l/guide/SAVE10%E2%81%A9",
+			wants: []string{quotes("SAVE10\u2069", invalid("invalid_offer"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, nil) }},
 		{name: "a deleted code", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { save10(t, conn, map[string]any{"deleted_at": past}) }},
 		{name: "a code that leaves this product out", target: "/l/guide/SAVE10", wants: []string{`"discount_code":` + invalid("invalid_offer") + `,`},
@@ -1714,6 +1819,25 @@ func TestURLOfferCodes(t *testing.T) {
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, map[string]any{"amount_percentage": 50, "minimum_amount_cents": 1000})
 				sale(t, conn)
+			}},
+		// An option outside a code's scope weighs only the codes valid for it; with none, the URL's
+		// code says why.
+		{name: "a scoped code that beats the sale", target: "/l/guide/SAVE10", wants: []string{
+			`"discount_code":` + scoped30 + `,"sale_label":null,`,
+			`"options":{"%[3]s":{"discount_code":` + scoped30 + `,"sale_label":null},"%[4]s":{"discount_code":` + saleResult + `,"sale_label":"Sale"}},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": 30})
+				sale(t, conn)
+				sizes(t, conn, codeID)
+			}},
+		{name: "a scoped code and sale both leaving an option out", target: "/l/guide/SAVE10", wants: []string{
+			`"discount_code":` + scoped30 + `,"sale_label":null,`,
+			`"options":{"%[3]s":{"discount_code":` + scoped30 + `,"sale_label":null},"%[4]s":{"discount_code":` + invalid("option_not_eligible") + `,"sale_label":null}},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": 30})
+				sale(t, conn)
+				sizes(t, conn, codeID)
+				testdb.Insert(t, conn, "offer_codes_variants", map[string]any{"id": int64(1_796_302), "offer_code_id": autoID, "variant_id": small})
 			}},
 		// $1.50 off beats 20% at 500 cents, so the page and the cheap option quote the code; at the
 		// 2,000-cent option the sale takes more off.
@@ -1837,9 +1961,50 @@ func TestURLOfferCodes(t *testing.T) {
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "save10", "amount_percentage": 5})
 				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_108), "offer_code_id": autoID, "product_id": int64(1_796_999)})
 			}},
-		{name: "a product's code with a universal code's string", target: "/l/guide/save10", reason: "offer code lookup",
+		// find_offer_code takes the product's code, and the computing service the universal one,
+		// whose 10% the result shows.
+		{name: "a product's code with a universal code's string", target: "/l/guide/save10",
+			wants: []string{quotes("save10", valid("save10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		// Weighed at the product's code's minimum, the universal one falls short of its own.
+		{name: "a universal code by the string short of its own minimum", target: "/l/guide/save10",
+			wants: []string{`"discount_code":` + invalid("unmet_minimum_purchase_quantity") + `,`,
+				quotes("save10", invalid("unmet_minimum_purchase_quantity"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"minimum_quantity": 3})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		// The product's code's minimum of two raises the quantity the universal code is checked at:
+		// its one use left falls short, and its once-per-cart amount covers two units.
+		{name: "a universal code by the string with one use left", target: "/l/guide/save10",
+			wants: []string{quotes("save10", invalid("insufficient_times_of_use"), "null")},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"max_purchase_count": 1})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		{name: "a once-per-cart universal code by the string", target: "/l/guide/save10", wants: []string{`"discount_code":{"valid":true,"code":"save10",` +
+			`"discount":{"type":"fixed","cents":600,"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,` +
+			`"minimum_amount_cents":null,"once_per_cart":true,"once_per_cart_id":"%[2]s","once_per_cart_amount_cents":600,` +
+			`"once_per_cart_has_usage_limit":false}},`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, map[string]any{"amount_percentage": nil, "amount_cents": 600, "flags": offerCodeOncePerCart})
+				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5, "minimum_quantity": 2})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
+			}},
+		// evaluate_code memoizes under the product's code's scope, which takes every option, so the
+		// universal code's result for the first option, where it applies, is every option's.
+		{name: "a scoped universal code by the string", target: "/l/guide/save10",
+			wants: []string{`"discount_code":` + valid("save10", smallOnly) + `,`,
+				optionQuotes("save10", valid("save10", smallOnly), "null", valid("save10", smallOnly))},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				save10(t, conn, nil)
+				sizes(t, conn, codeID)
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})
 				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_103), "offer_code_id": autoID, "product_id": productID})
 			}},
@@ -2363,6 +2528,13 @@ func TestVariantsRenderAsOptions(t *testing.T) {
 			file(t, conn, 1_791_201, small)
 			file(t, conn, 1_791_202, 0)
 		}},
+		// upcase leaves a character without case as it is.
+		{"a file type ending in a quote", []string{`"file_summaries":{"product":null,"options":{"%[1]s":{"formats":["PDF”"],`}, "",
+			func(t *testing.T, conn *sql.DB) {
+				testdb.Insert(t, conn, "base_variants", variant(small, size, "Small", 0, nil, nil, 0))
+				file(t, conn, 1_791_201, small)
+				conn.Exec("UPDATE product_files SET filetype = 'pdf”' WHERE id = ?", 1_791_201)
+			}},
 		{"files shared by every option", []string{`"file_summaries":{"product":` + pdf + `,"options":{"%[1]s":` + pdf + `,"%[2]s":` + pdf + `}}`}, "",
 			func(t *testing.T, conn *sql.DB) {
 				conn.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productSameRichContentForAllVariants, productID)

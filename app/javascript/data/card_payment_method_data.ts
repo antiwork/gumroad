@@ -422,6 +422,7 @@ export const prepareFutureCharges = async <
         subscription_id: product.subscription_id,
         permalink: product.permalink,
         force_new_subscription: product.forceNewSubscription ?? false,
+        ...product.subscriptionPlan,
       })),
     },
   });

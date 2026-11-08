@@ -231,6 +231,20 @@ class Subscription < ApplicationRecord
     auto_renewal_discounted_total_cents(auto, pre_discount)
   end
 
+  # The price the next charge will bill. Differs from current_subscription_price_cents only for an
+  # ownership-duration tiered code, whose tier is read as of the charge date instead of today.
+  def next_charge_price_cents(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED, as_of: nil)
+    return current_subscription_price_cents(authenticated_offer_code_buyer:) if is_installment_plan || reuse_original_discount_on_next_charge?
+
+    as_of = [as_of || (renews_at if persisted?), Time.current].compact.max
+    pre_discount = renewal_pre_discount_total_cents
+    buyer = authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED) ? user : authenticated_offer_code_buyer
+    auto = compute_auto_renewal_offer_code(buyer, as_of:)
+    return pre_discount unless auto
+
+    auto_renewal_discounted_total_cents(auto, pre_discount)
+  end
+
   def renewal_pre_discount_total_cents
     return cached_tiered_pwyw_renewal_pre_discount_total_cents if cached_tiered_pwyw_renewal_pre_discount_total_cents.present?
 
@@ -753,7 +767,7 @@ class Subscription < ApplicationRecord
     return if purchase.nil?
 
     price_override = renewal_price_cents.present?
-    renewal_price_cents ||= current_subscription_price_cents(authenticated_offer_code_buyer:)
+    renewal_price_cents ||= indian_card_mandate_renewal_price_cents(authenticated_offer_code_buyer:)
     presentment = current_later_charge_presentment
     presentment_in_force = if presentment.nil?
       false
@@ -890,9 +904,18 @@ class Subscription < ApplicationRecord
   def future_subscription_charge?(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
     return false if charges_completed?
     return true if current_subscription_price_cents(authenticated_offer_code_buyer:).positive?
+    # An ownership-tiered code can make this period free while the next charge is paid.
+    return true if next_charge_price_cents.positive?
 
     discount = original_purchase&.purchase_offer_code_discount
     discount&.duration_in_billing_cycles.present? && renewal_pre_discount_total_cents.positive?
+  end
+
+  # The renewal price a mandate must cover. An ownership-tiered code can make this period free while the next charge is
+  # paid; sizing at today's $0 would register no mandate. A positive current price keeps today's sizing unchanged.
+  def indian_card_mandate_renewal_price_cents(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED)
+    current_price_cents = current_subscription_price_cents(authenticated_offer_code_buyer:)
+    current_price_cents.positive? ? current_price_cents : next_charge_price_cents
   end
 
   def indian_card_mandate_price_cents(purchase, renewal_price_cents, fixed_rate: nil, price_override: false)
@@ -1113,6 +1136,23 @@ class Subscription < ApplicationRecord
 
     mandate, status = source&.retrieve_indian_card_mandate || [nil, "missing"]
     [mandate, status, source]
+  end
+
+  def active_indian_card_mandate_setup_intent
+    card = credit_card_to_charge
+    return if card.nil? || card.stripe_setup_intent_id.blank? || stripe_mandate_id.blank?
+
+    _mandate, status, = indian_card_mandate_for(card.id)
+    return unless status == "active"
+
+    setup_intent = ChargeProcessor.get_setup_intent(renewal_merchant_account, card.stripe_setup_intent_id)
+    setup_intent if setup_intent&.succeeded? &&
+      setup_intent.mandate == stripe_mandate_id &&
+      setup_intent.customer_id == card.stripe_customer_id &&
+      setup_intent.payment_method_id == card.processor_payment_method_id
+  rescue ChargeProcessorError => e
+    ErrorNotifier.notify(e, subscription: external_id)
+    nil
   end
 
   def refresh_indian_card_mandate!
@@ -1923,7 +1963,7 @@ class Subscription < ApplicationRecord
       PostToPingEndpointsWorker.perform_in(*args)
     end
 
-    def compute_auto_renewal_offer_code(offer_code_buyer)
+    def compute_auto_renewal_offer_code(offer_code_buyer, as_of: nil)
       return nil if is_installment_plan
       return nil if link.nil? || original_purchase.nil?
       return nil if reuse_original_discount_on_next_charge?
@@ -1938,7 +1978,7 @@ class Subscription < ApplicationRecord
         .filter_map do |offer_code|
           next unless eligible_auto_renewal_offer_code?(offer_code)
 
-          resolved = offer_code.evaluate_for_buyer(offer_code_buyer, product: link, fallback_purchase: original_purchase)
+          resolved = offer_code.evaluate_for_buyer(offer_code_buyer, product: link, fallback_purchase: original_purchase, as_of:)
           auto_discount = auto_renewal_discount_for(offer_code, resolved)
           next if auto_discount.nil?
           discounted_total = auto_renewal_discounted_total_cents(auto_discount, renewal_pre_discount_total_cents)
