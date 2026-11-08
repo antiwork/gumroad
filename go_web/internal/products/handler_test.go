@@ -1579,10 +1579,26 @@ func TestDefaultOfferCodes(t *testing.T) {
 			auto(t, conn, nil)
 			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
 		}},
-		// The sale's string finds the product's own code, not the sale.
-		{name: "a product's code with the sale's string", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+		// find_offer_code takes the product's code, and the computing service the first of the
+		// seller's codes by that string that suits the product, the sale, at the found row's minimum.
+		{name: "a product's code with the sale's string", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				auto(t, conn, nil)
+				insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
+				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
+			}},
+		// An older universal code by the sale's string comes first to both lookups, so the result has
+		// its 5%, echoed under the sale's own string, which also earns the sale's label.
+		{name: "an older code by the sale's string", wants: []string{`"discount_code":` + discount(`"SALE20"`, `{"type":"percent","percents":5,`+
+			`"product_ids":null,"expires_at":null,"minimum_quantity":null,"duration_in_billing_cycles":null,"minimum_amount_cents":null}`) +
+			`,"sale_label":"Sale",`},
+			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
+				insertOfferCode(t, conn, autoID-1, map[string]any{"code": "sale20", "amount_percentage": 5, "universal": true})
+				auto(t, conn, nil)
+			}},
+		{name: "a product's code with the sale's string and another minimum", reason: "offer code lookup", setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 			auto(t, conn, nil)
-			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5})
+			insertOfferCode(t, conn, autoID+10, map[string]any{"code": "sale20", "amount_percentage": 5, "minimum_quantity": 2})
 			testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_795_103), "offer_code_id": autoID + 10, "product_id": productID})
 		}},
 		{name: "a sale in Latin letters", wants: []string{`"discount_code":` + discount(`"SOLDÉ"`, `{"type":"percent","percents":20,`+
@@ -1936,7 +1952,10 @@ func TestURLOfferCodes(t *testing.T) {
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "save10", "amount_percentage": 5})
 				testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_796_108), "offer_code_id": autoID, "product_id": int64(1_796_999)})
 			}},
-		{name: "a product's code with a universal code's string", target: "/l/guide/save10", reason: "offer code lookup",
+		// find_offer_code takes the product's code, and the computing service the universal one,
+		// whose 10% the result shows.
+		{name: "a product's code with a universal code's string", target: "/l/guide/save10",
+			wants: []string{quotes("save10", valid("save10", ""), "null")},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {
 				save10(t, conn, nil)
 				insertOfferCode(t, conn, autoID, map[string]any{"code": "Save10", "amount_percentage": 5})

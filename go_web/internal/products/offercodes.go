@@ -655,20 +655,29 @@ func (h *handler) settleDiscount(ctx context.Context, p *page, prod *product, pr
 	return nil
 }
 
-// evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code: c as it discounts
-// for the visitor, nil when it doesn't. Looking c up by its string must land on c.
+// evaluateOfferCode is BestOfferCodeService#evaluate_code for a default code, which it looks up
+// by c's string: the code that discounts for the visitor, nil when none does.
 func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (*offerCode, error) {
 	ctx, now := p.Ctx, p.Req.Now
 	if reason := c.unportedLookup(prod); reason != "" {
 		return nil, fallback(reason)
 	}
-	id, err := h.findOfferCode(ctx, prod, c.code.String)
-	switch {
-	case err != nil || id == 0:
+	found, pick, err := h.findOfferCode(ctx, prod, c.code.String)
+	if err != nil || found == 0 {
 		return nil, err
-	case id != c.id:
-		return nil, fallback("offer code lookup")
-	case !c.applicable(prod) || !c.currencyValid(prod) || c.inactive(now):
+	}
+	if found != c.id || pick != c.id {
+		// The result echoes the default's own string, which sale_label compares too.
+		code := c.code
+		if c, err = h.serviceCode(ctx, prod, found, pick); err != nil || c == nil {
+			return nil, err
+		}
+		if reason := c.unportedLookup(prod); reason != "" {
+			return nil, fallback(reason)
+		}
+		c.code = code
+	}
+	if !c.applicable(prod) || !c.currencyValid(prod) || c.inactive(now) {
 		return nil, nil
 	}
 	if resolved, err := h.resolvesForBuyer(ctx, prod, c, p.viewer); err != nil || !resolved {
@@ -694,11 +703,11 @@ func (h *handler) evaluateOfferCode(p *page, prod *product, c *offerCode) (*offe
 // comes after the option scope.
 func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerCode, string, error) {
 	ctx, now := p.Ctx, p.Req.Now
-	id, err := h.findOfferCode(ctx, prod, typed)
-	if err != nil || id == 0 {
+	found, pick, err := h.findOfferCode(ctx, prod, typed)
+	if err != nil || found == 0 {
 		return nil, "invalid_offer", err
 	}
-	c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", id)
+	c, err := h.serviceCode(ctx, prod, found, pick)
 	switch {
 	case err != nil:
 		return nil, "", err
@@ -735,13 +744,13 @@ func (h *handler) evaluateURLCode(p *page, prod *product, typed string) (*offerC
 	return discounted, "", nil
 }
 
-// findOfferCode is find_offer_code's row for a code, 0 for none, by Rails' unordered statements.
-// OfferCodeDiscountComputingService then applies the first of the seller's codes by that string
-// that suits the product, in its own statement's order; any other row than this goes to Rails.
-func (h *handler) findOfferCode(ctx context.Context, prod *product, code string) (int64, error) {
+// findOfferCode is find_offer_code's row for a code, 0 for none, by Rails' unordered statements,
+// and pick, the row OfferCodeDiscountComputingService applies: the first of the seller's codes
+// by that string that suits the product, in its own statement's order.
+func (h *handler) findOfferCode(ctx context.Context, prod *product, code string) (found, pick int64, err error) {
 	code, ok := normalizeCode(code)
 	if !ok {
-		return 0, fallback("offer code characters")
+		return 0, 0, fallback("offer code characters")
 	}
 	ids, err := h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` INNER JOIN `offer_codes_products`"+
 		" ON `offer_codes`.`id` = `offer_codes_products`.`offer_code_id` WHERE `offer_codes_products`.`product_id` = ?"+
@@ -755,24 +764,23 @@ func (h *handler) findOfferCode(ctx context.Context, prod *product, code string)
 			prod.userID, prod.priceCurrencyType, strconv.FormatInt(prod.id, 10), code)
 	}
 	if err != nil || len(ids) == 0 {
-		return 0, err
+		return 0, 0, err
 	}
-	found := ids[0]
+	found = ids[0]
 	if ids, err = h.scanIDs(ctx, "SELECT `offer_codes`.* FROM `offer_codes` WHERE `offer_codes`.`user_id` = ? AND `offer_codes`.`code` = ?"+
 		" AND `offer_codes`.`deleted_at` IS NULL", prod.userID, code); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	switch {
 	case len(ids) == 1 && ids[0] == found:
-		// The callers check this row's terms themselves.
-		return found, nil
+		return found, found, nil
 	case !slices.Contains(ids, found):
 		// The product's code is another seller's, which the computing service never loads.
-		return 0, fallback("offer code lookup")
+		return 0, 0, fallback("offer code lookup")
 	}
 	codes, err := h.loadOfferCodes(ctx, prod, "offer_codes.id IN ("+placeholders(len(ids))+")", int64Args(ids)...)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	byID := make(map[int64]*offerCode, len(codes))
 	for _, c := range codes {
@@ -780,13 +788,29 @@ func (h *handler) findOfferCode(ctx context.Context, prod *product, code string)
 	}
 	for _, id := range ids {
 		if c := byID[id]; c != nil && c.applicable(prod) && c.currencyValid(prod) {
-			if id != found {
-				return 0, fallback("offer code lookup")
-			}
-			break
+			return found, id, nil
 		}
 	}
-	return found, nil
+	// None suits the product, and found, which the callers check, doesn't either.
+	return found, found, nil
+}
+
+// serviceCode is pick, the row whose terms the result has. BestOfferCodeService weighs it at
+// found's minimum quantity and keys its evaluations by found's option scope, so a pick whose
+// minimum differs, or either with an option scope, goes to Rails.
+func (h *handler) serviceCode(ctx context.Context, prod *product, found, pick int64) (*offerCode, error) {
+	c, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", pick)
+	if err != nil || c == nil || pick == found {
+		return c, err
+	}
+	f, err := h.loadOfferCode(ctx, prod, "offer_codes.id = ? LIMIT 1", found)
+	if err != nil {
+		return nil, err
+	}
+	if f == nil || f.minimumQuantity != c.minimumQuantity || f.hasVariants || c.hasVariants {
+		return nil, fallback("offer code lookup")
+	}
+	return c, nil
 }
 
 // resultProps is the discount_code prop: the code that applies and OfferCode#discount.
