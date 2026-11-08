@@ -66,6 +66,20 @@ describe ProductPublishSchedule do
       bundle = create(:product, :bundle, user: seller, draft: true)
       expect(schedule!("2026-12-02T09:30", target: bundle)).to be_persisted
     end
+
+    it "schedules a never-published draft that carries the editor's not-for-sale marker" do
+      # Product creation marks every new draft `purchase_disabled_at` (LinksController#create); the
+      # eligibility check must not read that as "unavailable".
+      ui_draft = create(:product, user: seller, draft: true, purchase_disabled_at: Time.current)
+
+      expect(schedule!("2026-12-02T09:30", target: ui_draft)).to be_persisted
+    end
+
+    it "still refuses a draft an admin took down" do
+      product.update!(is_unpublished_by_admin: true)
+
+      expect { schedule!("2026-12-02T09:30") }.to raise_error(described_class::Invalid)
+    end
   end
 
   describe "#run!" do
@@ -120,6 +134,30 @@ describe ProductPublishSchedule do
       other.run!(expected_version: other.version, now: due + 1.minute)
       expect(other.reload).to have_attributes(status: "cancelled", cancellation_reason: "authority_revoked")
       expect(product.reload.draft?).to eq(true)
+    end
+
+    it "cancels when the scheduler was suspended after scheduling" do
+      member = create(:user)
+      create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
+      other = schedule!("2026-12-01T05:00", by: member)
+      member.suspend_for_fraud!(author_name: "test")
+
+      other.run!(expected_version: other.version, now: due + 1.minute)
+      expect(other.reload).to have_attributes(status: "cancelled", cancellation_reason: "authority_revoked")
+      expect(product.reload.draft?).to eq(true)
+    end
+
+    it "cancels a claimed schedule when the draft was archived before the job published" do
+      # The claim lands first, then the product becomes unavailable: the state is re-read at fire time.
+      allow(Link).to receive(:find_by).and_wrap_original do |original, *args|
+        product.update!(archived: true)
+        original.call(*args)
+      end
+
+      schedule.run!(expected_version: schedule.version, now: due + 1.minute)
+
+      expect(product.reload.draft?).to eq(true)
+      expect(schedule.reload).to have_attributes(status: "cancelled", cancellation_reason: "unavailable")
     end
 
     it "honors an accepted schedule after the creation flag is turned off" do

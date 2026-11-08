@@ -51,6 +51,10 @@ class ProductPublishSchedule < ApplicationRecord
         raise Invalid, reason if reason
 
         schedule = find_or_initialize_by(product_id: product.id)
+        # Take the row lock before reading the status: the publishing job claims this same row with one
+        # conditional UPDATE, so either the claim commits first (we read "publishing" and refuse) or this
+        # reschedule commits first and the claim's version condition matches nothing.
+        schedule.lock! if schedule.persisted?
         raise Invalid, "This product is being published right now." if schedule.status == "publishing"
 
         schedule.assign_attributes(
@@ -66,7 +70,11 @@ class ProductPublishSchedule < ApplicationRecord
 
     def ineligibility_reason(product)
       return "Only products that have never been published can be scheduled." unless product.draft? && product.first_published_at.nil?
-      return "This product can't be scheduled." if product.deleted_at || product.banned_at || product.purchase_disabled_at || product.archived?
+      # `purchase_disabled_at` is deliberately NOT a blocker: product creation stamps it on every draft
+      # (LinksController#create), so testing it would refuse every normally created draft. This line only
+      # sees never-published drafts, and an admin takedown is caught by `is_unpublished_by_admin` inside
+      # `publish_precheck_error` below.
+      return "This product can't be scheduled." if product.deleted_at || product.banned_at || product.archived?
       return "Pre-orders can't be scheduled." if product.is_in_preorder_state
       return "Your account can't publish products right now." if product.user.suspended?
 
@@ -112,6 +120,9 @@ class ProductPublishSchedule < ApplicationRecord
     fresh = Link.find_by(id: product_id)
     return finish!("cancelled", "deleted") if fresh.nil? || fresh.deleted_at
     return finish!("cancelled", "already_published") unless fresh.draft?
+    # A claimed row escapes the Link after_save cancellation (that only cancels `scheduled` rows), so the
+    # states a seller or an admin can set after the claim are re-checked here.
+    return finish!("cancelled", "unavailable") if fresh.banned_at || fresh.archived? || fresh.is_unpublished_by_admin?
     return finish!("cancelled", "authority_revoked") unless scheduler_authorized?(fresh)
 
     begin
@@ -171,7 +182,7 @@ class ProductPublishSchedule < ApplicationRecord
 
     def scheduler_authorized?(product)
       seller = product.user
-      scheduled_by.alive? && !seller.suspended? &&
+      scheduled_by.alive? && !scheduled_by.suspended? && !seller.suspended? &&
         (scheduled_by.role_admin_for?(seller) || scheduled_by.role_marketing_for?(seller))
     rescue ActiveRecord::RecordNotFound
       false
