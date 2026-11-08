@@ -139,19 +139,15 @@ describe("PriceEditor amount hint", () => {
     return ids.map((id) => document.getElementById(id)?.textContent).join(" ");
   };
 
-  it("describes the amount's thousands and decimal separators", () => {
+  it("shows an example amount with decimals", () => {
     renderEditor({ isPWYW: false, setIsPWYW: noop, priceCents: 1500, currencyType: "usd" });
 
-    expect(amountDescription()).toBe(
-      "A comma before 3 digits separates thousands, like 1,000. For decimals, use a period or comma, like 9.99 or 9,99.",
-    );
+    expect(amountDescription()).toBe("Enter an amount like 7900 or 9.99.");
   });
 
-  it("does not offer decimals in a currency without minor units", () => {
+  it("asks for a whole amount in a currency without minor units", () => {
     renderEditor({ isPWYW: false, setIsPWYW: noop, priceCents: 1500, currencyType: "jpy" });
 
-    expect(amountDescription()).toBe(
-      "A comma before 3 digits separates thousands, like 1,000. Decimals round to a whole amount.",
-    );
+    expect(amountDescription()).toBe("Enter a whole amount like 7900.");
   });
 });

@@ -95,10 +95,9 @@ export const PriceEditor = ({
         ariaDescribedBy={`${uid}-price-cents-hint`}
       />
       <FieldsetDescription id={`${uid}-price-cents-hint`}>
-        A comma before 3 digits separates thousands, like 1,000.{" "}
         {getIsSingleUnitCurrency(currencyType)
-          ? "Decimals round to a whole amount."
-          : "For decimals, use a period or comma, like 9.99 or 9,99."}
+          ? "Enter a whole amount like 7900."
+          : "Enter an amount like 7900 or 9.99."}
       </FieldsetDescription>
       {mustBePWYW ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details open={pwywOn}>
