@@ -858,5 +858,18 @@ describe Charge, :vcr do
 
       expect(charge.reload.purchase_receipt_page_single_purchase?).to be(false)
     end
+
+    it "is true when buyer emails differ and an item is a preorder" do
+      purchase_two.update_columns(flags: purchase_two.flags | Purchase.flag_mapping["flags"][:is_preorder_authorization], purchase_state: "preorder_authorization_successful")
+      purchase_one.update_column(:email, "other@example.com")
+
+      expect(charge.reload.purchase_receipt_page_single_purchase?).to be(true)
+    end
+
+    it "is false when an item is a preorder and every item went to one buyer email" do
+      purchase_two.update_columns(flags: purchase_two.flags | Purchase.flag_mapping["flags"][:is_preorder_authorization], purchase_state: "preorder_authorization_successful")
+
+      expect(charge.reload.purchase_receipt_page_single_purchase?).to be(false)
+    end
   end
 end

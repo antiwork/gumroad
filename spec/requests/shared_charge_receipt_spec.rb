@@ -171,6 +171,17 @@ describe "Shared charge receipt", type: :request do
       expect(response.body).not_to include("Book One", purchase_one.url_redirect.download_page_url)
     end
 
+    it "shows only that item when the buyer emails differ and the order includes a preorder" do
+      purchase_two.update_columns(flags: purchase_two.flags | Purchase.flag_mapping["flags"][:is_preorder_authorization], purchase_state: "preorder_authorization_successful")
+      purchase_one.update_column(:email, "someone-else@example.com")
+
+      get receipt_purchase_url(purchase_one.external_id), params: { email: "someone-else@example.com" }
+
+      expect(response).to be_successful
+      expect(response.body).to include("Book One", purchase_one.url_redirect.download_page_url)
+      expect(response.body).not_to include("Upsell Two")
+    end
+
     it "shows only that item when the items went to different buyer emails" do
       purchase_two.update_column(:email, "someone-else@example.com")
 
