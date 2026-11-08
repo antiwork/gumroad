@@ -441,14 +441,21 @@ module User::Risk
     repeated_failed_payouts: "pause_payouts_after_repeated_failures",
     high_chargeback_rate: "pause_payouts_for_seller_based_on_chargeback_rate",
     recent_failed_purchases: "pause_payouts_for_seller_based_on_recent_failures",
+    chargeback_ring_signal: "pause_payouts_for_chargeback_ring_signal",
   }.freeze
 
-  # Of the three system comment authors above, only these two actually pause payouts.
+  # Of the comment authors above, only these actually pause payouts.
   # `recent_failed_purchases` writes the same kind of comment but deliberately leaves payouts
   # alone (see Purchase::Blockable — it only flags the account for review), so it must never be
   # read as "this is why payouts are paused".
+  #
+  # `chargeback_ring_signal` (Purchase::ChargebackRingSignal) is here so its hold is attributed
+  # correctly, and deliberately NOT treated as a chargeback-rate hold by
+  # payouts_paused_for_chargeback_rate? below: the ring seller's measured chargeback rate is
+  # still low when the signal fires (the disputes haven't landed yet), so the automatic
+  # rate-recovery release must never lift it. Only an admin does.
   SYSTEM_PAYOUT_PAUSING_COMMENT_AUTHORS = SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS
-    .values_at(:repeated_failed_payouts, :high_chargeback_rate).freeze
+    .values_at(:repeated_failed_payouts, :high_chargeback_rate, :chargeback_ring_signal).freeze
 
   # Comment left when the automatic re-check (ReleaseChargebackRatePayoutPausesJob) lifts a hold.
   CHARGEBACK_RATE_PAYOUT_RESUME_COMMENT_AUTHOR = "release_payouts_for_seller_based_on_chargeback_rate"

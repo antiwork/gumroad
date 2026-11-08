@@ -6,7 +6,7 @@ class Purchase < ApplicationRecord
   include Rails.application.routes.url_helpers
   include ActionView::Helpers::DateHelper, CurrencyHelper, ProductsHelper, PurchaseErrorCode,
           ExternalId, JsonData, TimestampScopes, Accounting, Blockable, CardCountrySource, Targeting,
-          Refundable, Reviews, PingNotification, Searchable, Risk,
+          Refundable, Reviews, PingNotification, Searchable, Risk, ChargebackRingSignal,
           CreatorAnalyticsCallbacks, FlagShihTzu, AfterCommitEverywhere, CompletionHandler, Integrations,
           ChargeEventsHandler, AudienceMember, Reportable, Recommended, CustomFields, Charge::Disputable,
           Charge::Chargeable, Charge::Refundable, DisputeWinCredits, Order::Orderable, Paypal, Receipt, UnusedColumns, SecureExternalId,
@@ -415,6 +415,7 @@ class Purchase < ApplicationRecord
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
   before_create :check_for_fraud
+  before_create :check_for_chargeback_ring_signal
   before_create :toggle_off_can_contact_if_buyer_has_unsubscribed
 
   before_save :assign_default_rental_expired
@@ -451,6 +452,10 @@ class Purchase < ApplicationRecord
   after_create :mark_inventory_new_in_txn
   before_save :snapshot_inventory_pre_save_state
   after_commit :sync_inventory_counter_caches_on_create, on: :create
+  # Telemetry + containment for the chargeback-ring signal (see Purchase::ChargebackRingSignal).
+  # after_commit because the evaluation runs in a before_create and the row (refused or not)
+  # must exist before the telemetry row can reference it.
+  after_commit :record_chargeback_ring_signal, on: :create
   after_commit :sync_inventory_counter_cache_for_state_change, on: :update
   after_commit :sync_inventory_counter_cache_for_destroy, on: :destroy
   after_commit :auto_delete_single_use_offer_code, on: :create, if: -> { successful? && offer_code.present? }

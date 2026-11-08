@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_25_000007) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_25_000008) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -561,6 +561,23 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_25_000007) do
     t.datetime "updated_at", null: false
     t.index ["charge_id"], name: "index_charge_purchases_on_charge_id"
     t.index ["purchase_id"], name: "index_charge_purchases_on_purchase_id"
+  end
+
+  create_table "chargeback_ring_signals", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "seller_id", null: false
+    t.bigint "purchase_id", null: false
+    t.string "decision", null: false
+    t.integer "paid_sales"
+    t.string "dominant_card_country"
+    t.decimal "dominant_share_pct", precision: 5, scale: 2
+    t.decimal "hosting_share_pct", precision: 5, scale: 2
+    t.integer "distinct_browsers"
+    t.string "matched_cidr"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["decision", "created_at"], name: "index_chargeback_ring_signals_on_decision_and_created_at"
+    t.index ["purchase_id"], name: "index_chargeback_ring_signals_on_purchase_id"
+    t.index ["seller_id", "created_at"], name: "index_chargeback_ring_signals_on_seller_id_and_created_at"
   end
 
   create_table "charges", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
