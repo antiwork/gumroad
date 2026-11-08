@@ -63,6 +63,27 @@ class ReceiptPresenter::FooterInfo
     )
   end
 
+  # Purchase receipts only (grouped Charge receipts span purchases with
+  # different eligibility, so they keep the support path). Guarded by the
+  # buyer_refund_requests flag on the seller; requesting is free — the refund
+  # itself still goes through the seller's existing refund action.
+  def show_refund_request_link?
+    return false unless chargeable.is_a?(Purchase)
+    return false unless Feature.active?(:buyer_refund_requests, chargeable.seller)
+
+    PurchaseRefundRequest.purchase_eligible?(chargeable)
+  end
+
+  def refund_request_link
+    link_to(
+      "Request a refund",
+      Rails.application.routes.url_helpers.purchase_refund_request_url(
+        chargeable.secure_external_id(scope: Purchases::RefundRequestsController::SECURE_ID_SCOPE, expires_at: 6.months.from_now),
+        host: UrlService.domain_with_protocol
+      )
+    )
+  end
+
   private
     attr_reader :chargeable
 end

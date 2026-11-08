@@ -886,6 +886,9 @@ Rails.application.routes.draw do
       resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
         get :success
       end
+      # Buyer-initiated refund requests, reached via a signed token link from
+      # the receipt email (flag: buyer_refund_requests).
+      resource :refund_request, controller: "purchases/refund_requests", only: %i[show create]
     end
 
     resources :orders, only: [:create] do

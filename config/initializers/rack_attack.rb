@@ -220,6 +220,16 @@ class Rack::Attack
     req.remote_ip if req.path.match?(%r{\A/help/contact(?:\.[^/]+)?\z}) && req.post?
   end
 
+  # Buyer refund-request form (signed-token link from the receipt email). Each
+  # submission emails the seller and support, so it gets the same shape of
+  # limit as the help-center form: per IP, regex-matched so a format suffix
+  # shares the counter, max_level: 1 to skip the multi-hour backoff tiers that
+  # a 1-minute base period would otherwise derive. The token path segment is
+  # per purchase, so IP alone is the right key.
+  throttle_with_exponential_backoff(name: "purchase_refund_request/ip", requests: 3, period: 60.seconds, max_level: 1) do |req|
+    req.remote_ip if req.path.match?(%r{\A/purchases/[^/]+/refund_request(?:\.[^/]+)?\z}) && req.post?
+  end
+
   # Each hit that matches purchases sends a grouped receipt email to the given address,
   # unauthenticated. Throttle by IP and, separately, by target email — the harm is to the
   # RECIPIENT, so an abuser rotating IPs must not be able to mailbomb one buyer

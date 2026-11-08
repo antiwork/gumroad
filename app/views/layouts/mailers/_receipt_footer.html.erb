@@ -18,6 +18,10 @@
     </div>
   <% end %>
   <% footer_info = @receipt_presenter.footer_info %>
+  <% if footer_info.show_refund_request_link? %>
+    <%= footer_info.refund_request_link %>
+    &nbsp;&middot;&nbsp;
+  <% end %>
   <% if footer_info.can_manage_subscription? %>
     <%= footer_info.manage_subscription_note %>
     <%= footer_info.manage_subscription_link %>

@@ -183,6 +183,7 @@ class Purchase < ApplicationRecord
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy
   has_one :purchase_refund_policy, dependent: :destroy
+  has_many :refund_requests, class_name: "PurchaseRefundRequest", dependent: :destroy
   has_one :order_purchase, dependent: :destroy
   has_one :order, through: :order_purchase, dependent: :destroy
   has_one :charge_purchase, dependent: :destroy
@@ -443,6 +444,14 @@ class Purchase < ApplicationRecord
   }
 
   before_save :schedule_product_search_refresh_after_refund
+
+  # A refund issued through the existing refund action closes any open buyer
+  # refund request, so the request's state records the conversion (requested ->
+  # refunded) without a new refund path. Guarded on the flip TO refunded; a
+  # failed-refund reversal reopens nothing.
+  after_commit :close_open_refund_request_as_refunded, if: -> (purchase) {
+    purchase.stripe_refunded_previously_changed? && purchase.stripe_refunded?
+  }
 
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
     purchase.purchase_state_previously_changed? &&
@@ -6622,6 +6631,13 @@ class Purchase < ApplicationRecord
       return if (previous_value == true) == (new_value == true)
 
       after_commit { enqueue_product_search_refresh_after_refund }
+    end
+
+    def close_open_refund_request_as_refunded
+      PurchaseRefundRequest.open_for(self)&.update!(state: "refunded")
+    rescue => e
+      # Closing the request is bookkeeping; never let it fail the refund's commit path.
+      Rails.logger.error("[PurchaseRefundRequest] failed to close for purchase #{id}: #{e.class}: #{e.message}")
     end
 
     def send_failure_email
