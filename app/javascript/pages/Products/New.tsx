@@ -24,7 +24,7 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -471,6 +471,7 @@ const NewProductPage = () => {
                     }}
                     autoComplete="off"
                     aria-invalid={!!errors["link.price_range"] || !!errors["link.base"]}
+                    aria-describedby={`price-hint-${formUID}`}
                     ref={priceInputRef}
                   />
 
@@ -495,6 +496,11 @@ const NewProductPage = () => {
                     </Pill>
                   ) : null}
                 </InputGroup>
+                <FieldsetDescription id={`price-hint-${formUID}`}>
+                  {selectedCurrency.isSingleUnit
+                    ? "Use a comma for thousands (7,900)."
+                    : "Use a comma for thousands (7,900) or decimals (7,90)."}
+                </FieldsetDescription>
                 <Errors errors={errors["link.price_range"]} label="Price" />
                 <Errors errors={errors["link.base"]} label="" />
               </Fieldset>

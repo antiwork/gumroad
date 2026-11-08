@@ -1,16 +1,18 @@
 // @vitest-environment happy-dom
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import NewProductPage, { isAiProductDetails } from "$app/pages/Products/New";
 import { isProductNativeType } from "$app/parsers/product";
+
+const seller = vi.hoisted(() => ({ currencyCode: "usd" }));
 
 vi.mock("@inertiajs/react", () => ({
   Link: () => null,
   usePage: () => ({
     props: {
-      current_seller_currency_code: "usd",
+      current_seller_currency_code: seller.currencyCode,
       native_product_types: ["digital", "course"],
       service_product_types: ["call", "coffee"],
       release_at_date: "",
@@ -58,10 +60,32 @@ describe("isProductNativeType", () => {
 });
 
 describe("NewProductPage", () => {
+  afterEach(() => {
+    cleanup();
+    seller.currencyCode = "usd";
+  });
+
   it("names each product type picker after its heading", () => {
     render(<NewProductPage />);
 
     expect(screen.getByRole("radiogroup", { name: "Products" })).toBeDefined();
     expect(screen.getByRole("radiogroup", { name: "Services" })).toBeDefined();
+  });
+
+  it("explains how the Price field reads a comma", () => {
+    const { unmount } = render(<NewProductPage />);
+    expect(
+      screen.getByRole("textbox", {
+        name: "Price",
+        description: "Use a comma for thousands (7,900) or decimals (7,90).",
+      }),
+    ).toBeDefined();
+    unmount();
+
+    seller.currencyCode = "jpy";
+    render(<NewProductPage />);
+    expect(
+      screen.getByRole("textbox", { name: "Price", description: "Use a comma for thousands (7,900)." }),
+    ).toBeDefined();
   });
 });
