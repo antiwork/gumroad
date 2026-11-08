@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 # The shared receipt for one seller's multi-item charge. Opens only for the buyer: through the tokened
-# link mailed to the buyer's address, or signed in as the charge's purchaser. Knowing the buyer's email
-# is not enough, because the seller knows it too and gets the bare link in the sale notification.
+# link mailed to the buyer's address, or signed in as the charge's purchaser. The sale notification
+# links the same page without the token.
 class ChargesController < ApplicationController
   skip_before_action :set_analytics_meta_tags, only: :receipt
   before_action :set_charge

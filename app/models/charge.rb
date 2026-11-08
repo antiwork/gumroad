@@ -280,12 +280,16 @@ class Charge < ApplicationRecord
   # One buyer-facing page for every item of this seller's charge. Only for a plain multi-item order
   # whose items all went to the same buyer email, so the link mailed to that address opens exactly what was bought.
   def shared_receipt_eligible?
-    items = successful_purchases.to_a
-    return false if items.size < 2
-    return false if items.any? { _1.is_gift_sender_purchase || _1.is_gift_receiver_purchase || _1.is_preorder_authorization || _1.is_test_purchase? }
+    return false unless plain_multi_item?
 
-    emails = items.map { _1.email.to_s.strip.downcase }.uniq
+    emails = successful_purchases.map { _1.email.to_s.strip.downcase }.uniq
     emails.one? && emails.first.present?
+  end
+
+  # A purchase's own receipt page shows only that purchase for a plain multi-item order: the whole order
+  # is on the shared receipt, or its items went to different buyer emails.
+  def purchase_receipt_page_single_purchase?
+    plain_multi_item?
   end
 
   def split_receipt_mode?
@@ -336,6 +340,12 @@ class Charge < ApplicationRecord
   end
 
   private
+    # Several items, none of them a gift, preorder or test purchase.
+    def plain_multi_item?
+      items = successful_purchases.to_a
+      items.size >= 2 && items.none? { _1.is_gift_sender_purchase || _1.is_gift_receiver_purchase || _1.is_preorder_authorization || _1.is_test_purchase? }
+    end
+
     def split_receipt_email_info_scope
       CustomerEmailInfo.where(
         purchase_id: successful_purchases.select(:id),

@@ -824,4 +824,32 @@ describe Charge, :vcr do
       expect(charge.reload.shared_receipt_eligible?).to be(false)
     end
   end
+
+  describe "#purchase_receipt_page_single_purchase?" do
+    let(:seller) { create(:named_seller) }
+    let(:email) { "buyer@example.com" }
+    let(:purchase_one) { create(:purchase, link: create(:product, user: seller), seller:, email:) }
+    let(:purchase_two) { create(:purchase, link: create(:product, user: seller), seller:, email:) }
+    let(:charge) { create(:charge, purchases: [purchase_one, purchase_two], seller:) }
+
+    it "is true for a multi-item order with one buyer email" do
+      expect(charge.purchase_receipt_page_single_purchase?).to be(true)
+    end
+
+    it "is true for a multi-item order whose buyer emails differ" do
+      purchase_two.update_column(:email, "other@example.com")
+
+      expect(charge.purchase_receipt_page_single_purchase?).to be(true)
+    end
+
+    it "is false for a single purchase" do
+      expect(create(:charge, purchases: [purchase_one], seller:).purchase_receipt_page_single_purchase?).to be(false)
+    end
+
+    it "is false when an item is a gift" do
+      purchase_two.update_column(:flags, purchase_two.flags | Purchase.flag_mapping["flags"][:is_gift_sender_purchase])
+
+      expect(charge.reload.purchase_receipt_page_single_purchase?).to be(false)
+    end
+  end
 end

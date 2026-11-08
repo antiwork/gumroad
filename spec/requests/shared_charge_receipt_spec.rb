@@ -150,4 +150,24 @@ describe "Shared charge receipt", type: :request do
     expect(response).to have_http_status(:not_found)
     expect(SendPurchaseReceiptJob.jobs.size).to eq(0)
   end
+
+  describe "an item's own receipt page" do
+    it "shows only that item" do
+      get receipt_purchase_url(purchase_one.external_id), params: { email: }
+
+      expect(response).to be_successful
+      expect(response.body).to include("Book One", purchase_one.url_redirect.download_page_url)
+      expect(response.body).not_to include("Upsell Two", purchase_two.url_redirect.download_page_url)
+    end
+
+    it "shows only that item when the items went to different buyer emails" do
+      purchase_two.update_column(:email, "someone-else@example.com")
+
+      get receipt_purchase_url(purchase_two.external_id), params: { email: "someone-else@example.com" }
+
+      expect(response).to be_successful
+      expect(response.body).to include("Upsell Two", purchase_two.url_redirect.download_page_url)
+      expect(response.body).not_to include("Book One", purchase_one.url_redirect.download_page_url)
+    end
+  end
 end
