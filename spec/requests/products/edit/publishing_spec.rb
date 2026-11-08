@@ -92,22 +92,73 @@ describe("Product Edit - Publishing Scenario", type: :system, js: true) do
       expect(@product.published?).to be(false)
     end
 
-    it("allows user to publish and unpublish product if a payout method is setup") do
+    it("allows user to publish from the Share tab, stay there, and unpublish back to Content if a payout method is setup") do
       create(:merchant_account_stripe_connect, user: seller)
+      share_path = "#{edit_link_path(@product.unique_permalink)}/share"
 
       visit edit_link_path(@product.unique_permalink)
-      click_on "Save and continue"
-      wait_for_ajax
-      click_on "Publish and continue"
+      select_tab "Share"
+      expect(page).to have_current_path(share_path)
+      expect(page).not_to have_button("Copy URL")
+      expect(page).to have_status(text: "Share links appear here once you publish. Unpublished products don't appear on your profile.")
+      expect(page).not_to have_button("Publish and continue")
+      click_on "Publish"
       wait_for_ajax
       expect(page).to have_button("Unpublish")
+      expect(page).to have_current_path(share_path)
+      expect(page).to have_button("Copy URL")
+      expect(page).not_to have_text("Share links appear here once you publish. Unpublished products don't appear on your profile.")
       expect(@product.reload.alive?).to be(true)
       expect(@product.published?).to be(true)
       click_on "Unpublish"
       wait_for_ajax
       expect(page).to have_button("Publish and continue")
+      expect(page).to have_current_path("#{edit_link_path(@product.unique_permalink)}/content")
       expect(@product.reload.alive?).to be(false)
       expect(@product.published?).to be(false)
+    end
+
+    it "saves profile sections and a Discover category from the Share tab without publishing or listing the draft", :sidekiq_inline, :elasticsearch_wait_for_refresh do
+      published_product = create(:product, user: seller, name: "Published product")
+      section = create(:seller_profile_products_section, seller:, header: "Featured", shown_products: [published_product.id], add_new_products: false)
+      create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [section.id] }] })
+
+      visit edit_link_path(@product.unique_permalink)
+      select_tab "Share"
+      expect(page).not_to have_button("Copy URL")
+      expect(page).not_to have_button("Copy checkout URL")
+      within_section "Profile", section_element: :section do
+        check "Featured"
+      end
+      within :fieldset, "Category" do
+        select_combo_box_option search: "3D > 3D Modeling", from: "Category"
+      end
+      save_change
+
+      expect(section.reload.shown_products).to eq([published_product.id, @product.id])
+      expect(@product.reload.taxonomy.slug).to eq("3d-modeling")
+      expect(@product.published?).to be(false)
+      expect(@product.recommendable_reasons).to include(taxonomy_filled: true, alive: false)
+      expect(@product.recommendable?).to be(false)
+
+      refresh
+      within_section "Profile", section_element: :section do
+        expect(page).to have_checked_field("Featured")
+      end
+      within :fieldset, "Category" do
+        expect(page).to have_text("3D > 3D Modeling")
+      end
+
+      click_on "Publish"
+      expect(page).to have_alert("You must connect at least one payment method before you can publish this product for sale.")
+      expect(@product.reload.published?).to be(false)
+
+      Capybara.using_session("visitor") do
+        visit seller.subdomain_with_protocol
+        within_section "Featured", section_element: :section do
+          expect_product_cards_in_order([published_product])
+        end
+      end
     end
 
     context "Merchant migration enabled" do

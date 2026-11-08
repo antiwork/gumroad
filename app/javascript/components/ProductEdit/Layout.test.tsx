@@ -6,10 +6,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CurrentSellerProvider, type CurrentSeller } from "$app/components/CurrentSeller";
 import { DomainSettingsProvider } from "$app/components/DomainSettings";
 import { Layout } from "$app/components/ProductEdit/Layout";
-import { type FileEntry, ProductEditContext, type Product } from "$app/components/ProductEdit/state";
+import { ShareTab } from "$app/components/ProductEdit/ShareTab";
+import { type FileEntry, ProductEditContext, type Product, type Waitlist } from "$app/components/ProductEdit/state";
 import { showAlert } from "$app/components/server-components/Alert";
 
 const matchHandle = vi.hoisted(() => ({ current: "product" }));
+const navigate = vi.hoisted(() => vi.fn());
 vi.mock("react-router-dom", () => ({
   Link: ({ to, children, onClick }: { to: string; children?: React.ReactNode; onClick?: React.MouseEventHandler }) => (
     <a href={to} onClick={onClick}>
@@ -17,7 +19,7 @@ vi.mock("react-router-dom", () => ({
     </a>
   ),
   useMatches: () => [{ handle: matchHandle.current }],
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
   useBlocker: () => ({ state: "unblocked" }),
   NavigationType: { Pop: "POP" },
 }));
@@ -36,6 +38,30 @@ vi.mock("$app/components/WithTooltip", () => ({
 const setProductPublished = vi.hoisted(() => vi.fn());
 vi.mock("$app/data/publish_product", () => ({ setProductPublished }));
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
+vi.mock("$app/components/ProductEdit/ProductPreview", () => ({ ProductPreview: () => null }));
+vi.mock("$app/components/ShareButtons", () => ({
+  ShareButtons: ({ children }: { children?: React.ReactNode }) => <div data-testid="share-buttons">{children}</div>,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/ProfileSectionsEditor", () => ({
+  ProfileSectionsEditor: () => <div data-testid="profile-sections" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/TaxonomyEditor", () => ({
+  TaxonomyEditor: () => <div data-testid="taxonomy-editor" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/TaxonomyAttributesEditor", () => ({
+  TaxonomyAttributesEditor: () => null,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/TagSelector", () => ({ TagSelector: () => null }));
+vi.mock("$app/components/ProductEdit/ShareTab/WaitlistCard", () => ({
+  WaitlistCard: () => <div data-testid="waitlist-card" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/ShareYourLaunchCard", () => ({
+  ShareYourLaunchCard: () => <div data-testid="launch-card" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/CartRecoveryCard", () => ({
+  CartRecoveryCard: () => <div data-testid="cart-recovery-card" />,
+}));
+vi.mock("$app/components/ProductEdit/ShareTab/LandingPageEditor", () => ({ LandingPageEditor: () => null }));
 
 beforeAll(() => {
   const url = (path: string) => () => path;
@@ -46,6 +72,7 @@ beforeAll(() => {
       new_email_path: url("/emails/new"),
       settings_payments_path: url("/settings/payments"),
       short_link_url: url("/l/product-permalink"),
+      discover_url: url("https://discover.test.gumroad.com/"),
     },
   });
 });
@@ -54,7 +81,9 @@ afterEach(() => {
   cleanup();
   product.files = [];
   product.is_published = false;
+  product.native_type = "digital";
   matchHandle.current = "product";
+  navigate.mockClear();
   vi.unstubAllGlobals();
 });
 
@@ -159,10 +188,16 @@ const renderLayout = (
     saveBlocked = false,
     updateProduct = vi.fn(),
     webAppUploading = false,
+    autoMarketingEnabled = false,
+    waitlist = null,
+    children = <Layout>Body</Layout>,
   }: {
     saveBlocked?: boolean;
     updateProduct?: (update: Partial<Product> | ((product: Product) => void)) => void;
     webAppUploading?: boolean;
+    autoMarketingEnabled?: boolean;
+    waitlist?: Waitlist | null;
+    children?: React.ReactNode;
   } = {},
 ) =>
   render(
@@ -223,8 +258,8 @@ const renderLayout = (
             webBuildPlayerEnabled: false,
             hasWebBuilds: false,
             customHtmlPagesEnabled: false,
-            autoMarketingEnabled: false,
-            waitlist: null,
+            autoMarketingEnabled,
+            waitlist,
             customHtmlStoreHostnames: [],
             customHtmlGlobalNavHosts: [],
             customHtmlGlobalNavPaths: [],
@@ -237,7 +272,7 @@ const renderLayout = (
             customAttributeNameSuggestions: [],
           }}
         >
-          <Layout>Body</Layout>
+          {children}
         </ProductEditContext.Provider>
       </CurrentSellerProvider>
     </DomainSettingsProvider>,
@@ -346,6 +381,120 @@ describe("ProductEdit Layout publish and unpublish", () => {
         first_published_at: "2026-01-23T12:00:00Z",
       }),
     );
+  });
+});
+
+describe("ProductEdit Layout Share tab on a draft", () => {
+  it("opens without the publish-first alert", () => {
+    product.files = [];
+    product.is_published = false;
+    renderLayout(minor);
+
+    vi.mocked(showAlert).mockClear();
+    const click = fireEvent.click(screen.getByRole("link", { name: "Share" }));
+
+    expect(click).toBe(true);
+    expect(showAlert).not.toHaveBeenCalled();
+  });
+
+  it("stays on the Share tab when the seller publishes from it", async () => {
+    const updateProduct = vi.fn();
+    matchHandle.current = "share";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: "2026-01-23T12:00:00Z" });
+    product.files = [];
+    product.is_published = false;
+    renderLayout(minor, { updateProduct });
+
+    expect(screen.queryByRole("button", { name: "Publish and continue" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+
+    await waitFor(() =>
+      expect(updateProduct).toHaveBeenCalledWith({
+        is_published: true,
+        first_published_at: "2026-01-23T12:00:00Z",
+      }),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("sends the seller back to Content when they unpublish from Share", async () => {
+    matchHandle.current = "share";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: null });
+    product.files = [];
+    product.is_published = true;
+    renderLayout(minor);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/products/product-permalink/edit/content"));
+  });
+
+  it("sends a coffee product back to its Product tab when they unpublish from Share", async () => {
+    matchHandle.current = "share";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: null });
+    product.files = [];
+    product.is_published = true;
+    product.native_type = "coffee";
+    renderLayout(minor);
+
+    fireEvent.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith("/products/product-permalink/edit"));
+  });
+});
+
+describe("ProductEdit Share tab controls", () => {
+  const renderShareTab = (is_published: boolean) => {
+    product.files = [];
+    product.is_published = is_published;
+    return renderLayout(minor, {
+      autoMarketingEnabled: true,
+      waitlist: { count: 3, blocked_reason: null, email: null },
+      children: <ShareTab />,
+    });
+  };
+
+  it("lets a draft set profile sections and the Discover category", () => {
+    renderShareTab(false);
+
+    expect(screen.getByTestId("profile-sections")).toBeTruthy();
+    expect(screen.getByTestId("taxonomy-editor")).toBeTruthy();
+  });
+
+  it("keeps the share and checkout controls off a draft and says why", () => {
+    renderShareTab(false);
+
+    expect(screen.queryByTestId("share-buttons")).toBeNull();
+    expect(
+      screen.getByText("Share links appear here once you publish. Unpublished products don't appear on your profile."),
+    ).toBeTruthy();
+  });
+
+  it("shows the share and checkout controls once published", () => {
+    renderShareTab(true);
+
+    expect(screen.getByTestId("share-buttons")).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "Share links appear here once you publish. Unpublished products don't appear on your profile.",
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps the waitlist, launch and cart recovery cards off a draft", () => {
+    renderShareTab(false);
+
+    expect(screen.queryByTestId("waitlist-card")).toBeNull();
+    expect(screen.queryByTestId("launch-card")).toBeNull();
+    expect(screen.queryByTestId("cart-recovery-card")).toBeNull();
+  });
+
+  it("shows the waitlist, launch and cart recovery cards once published", () => {
+    renderShareTab(true);
+
+    expect(screen.getByTestId("waitlist-card")).toBeTruthy();
+    expect(screen.getByTestId("launch-card")).toBeTruthy();
+    expect(screen.getByTestId("cart-recovery-card")).toBeTruthy();
   });
 });
 

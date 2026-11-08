@@ -189,8 +189,10 @@ export const Layout = ({
       updateProduct(first_published_at ? { is_published: published, first_published_at } : { is_published: published });
       showAlert(published ? "Published!" : "Unpublished!", "success");
       if (tab === "share") {
-        if (product.native_type === "coffee") navigate.current(rootPath);
-        else navigate.current(`${rootPath}/content`);
+        if (!published) {
+          if (product.native_type === "coffee") navigate.current(rootPath);
+          else navigate.current(`${rootPath}/content`);
+        }
       } else if (published) {
         navigate.current(`${rootPath}/share`);
       }
@@ -343,7 +345,8 @@ export const Layout = ({
               {saveButton}
               <WithTooltip tip={saveButtonTooltip}>
                 <Button color="accent" disabled={isBusy} onClick={() => void setPublished(true)}>
-                  {isPublishing ? "Publishing..." : "Publish and continue"}
+                  {/* Share is the last tab and publishing from it stays there, so there is nothing to continue to. */}
+                  {isPublishing ? "Publishing..." : tab === "share" ? "Publish" : "Publish and continue"}
                 </Button>
               </WithTooltip>
             </>
@@ -375,20 +378,7 @@ export const Layout = ({
               </Link>
             </Tab>
             <Tab asChild isSelected={tab === "share"}>
-              <Link
-                to={`${rootPath}/share`}
-                onClick={(evt) => {
-                  onTabClick(evt, () => {
-                    if (!product.is_published) {
-                      evt.preventDefault();
-                      showAlert(
-                        "Not yet! You've got to publish your awesome product before you can share it with your audience and the world.",
-                        "warning",
-                      );
-                    }
-                  });
-                }}
-              >
+              <Link to={`${rootPath}/share`} onClick={onTabClick}>
                 Share
               </Link>
             </Tab>
