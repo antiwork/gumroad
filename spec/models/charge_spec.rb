@@ -846,6 +846,13 @@ describe Charge, :vcr do
       expect(create(:charge, purchases: [purchase_one], seller:).purchase_receipt_page_single_purchase?).to be(false)
     end
 
+    it "is true when only one of the items succeeded" do
+      purchase_two.update_column(:purchase_state, "failed")
+
+      expect(charge.reload.purchase_receipt_page_single_purchase?).to be(true)
+      expect(charge.shared_receipt_eligible?).to be(false)
+    end
+
     it "is false when an item is a gift" do
       purchase_two.update_column(:flags, purchase_two.flags | Purchase.flag_mapping["flags"][:is_gift_sender_purchase])
 

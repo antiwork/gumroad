@@ -41,6 +41,6 @@ class ChargesController < ApplicationController
       return true if Charge.find_by_secure_external_id(params[:token], scope: Charge::SHARED_RECEIPT_SCOPE) == @charge
       return false if logged_in_user.nil?
 
-      logged_in_user.is_team_member? || @charge.successful_purchases.all? { _1.purchaser == logged_in_user }
+      @charge.successful_purchases.all? { _1.purchaser == logged_in_user }
     end
 end

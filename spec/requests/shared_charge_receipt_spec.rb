@@ -101,12 +101,12 @@ describe "Shared charge receipt", type: :request do
     expect_buyer_verification_page
   end
 
-  it "opens for a team member" do
+  it "does not open for a signed-in team member who did not make the purchases" do
     sign_in create(:user, is_team_member: true)
 
     get receipt_charge_url(charge.external_id)
 
-    expect_shared_receipt
+    expect_buyer_verification_page
   end
 
   it "mails the receipt to the buyer's address on request without showing it" do
@@ -158,6 +158,17 @@ describe "Shared charge receipt", type: :request do
       expect(response).to be_successful
       expect(response.body).to include("Book One", purchase_one.url_redirect.download_page_url)
       expect(response.body).not_to include("Upsell Two", purchase_two.url_redirect.download_page_url)
+    end
+
+    it "shows only that item when the other item did not succeed" do
+      purchase_one.update_column(:email, "someone-else@example.com")
+      purchase_two.update_column(:purchase_state, "failed")
+
+      get receipt_purchase_url(purchase_two.external_id), params: { email: }
+
+      expect(response).to be_successful
+      expect(response.body).to include("Upsell Two")
+      expect(response.body).not_to include("Book One", purchase_one.url_redirect.download_page_url)
     end
 
     it "shows only that item when the items went to different buyer emails" do
