@@ -372,7 +372,7 @@ class StripeChargeProcessor
     # Request 3DS manually when preparing future charges for all Indian cards. Ref: https://github.com/gumroad/web/issues/20783
     chargeable.prepare! # loads the payment method's info, including card country
     params.deep_merge!(REQUEST_MANUAL_3DS_PARAMS) if chargeable.country == Compliance::Countries::IND.alpha2
-    params.deep_merge!(Checkout::ThreeDSecure::REQUEST_PARAMS) if Checkout::ThreeDSecure.request?(merchant_account.user)
+    params.deep_merge!(Checkout::ThreeDSecure::REQUEST_PARAMS) if Checkout::ThreeDSecure.request?(merchant_account.user) && Checkout::ThreeDSecure.card_scoped?(params)
 
     with_stripe_error_handler do
       if merchant_migrated? merchant_account
@@ -488,8 +488,9 @@ class StripeChargeProcessor
     params.deep_merge!(REQUEST_MANUAL_3DS_PARAMS) if should_setup_future_usage && !upi_autopay && chargeable.country == Compliance::Countries::IND.alpha2
 
     # An off-session charge has no buyer to challenge, so the flag only applies to
-    # customer-present intents; Stripe is left to decide on the rest.
-    params.deep_merge!(Checkout::ThreeDSecure::REQUEST_PARAMS) if !off_session && !upi_autopay && Checkout::ThreeDSecure.request?(merchant_account.user)
+    # customer-present intents; Stripe is left to decide on the rest. Card options are
+    # legal only on an intent that offers card, which is what card_scoped? checks.
+    params.deep_merge!(Checkout::ThreeDSecure::REQUEST_PARAMS) if !off_session && !upi_autopay && Checkout::ThreeDSecure.request?(merchant_account.user) && Checkout::ThreeDSecure.card_scoped?(params)
 
     if statement_description
       statement_description = statement_description.gsub(%r{[^A-Z0-9./\s]}i, "").to_s.strip[0...22]

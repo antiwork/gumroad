@@ -14,6 +14,7 @@
 # abandon at the challenge) lands on all sales.
 class Checkout::ThreeDSecure
   FEATURE = :card_3ds_challenge
+  CARD_PAYMENT_METHOD_TYPE = "card"
 
   # Stripe rejects card options on an intent that does not offer card, so callers
   # must already know the intent is card-scoped.
@@ -21,5 +22,12 @@ class Checkout::ThreeDSecure
 
   def self.request?(seller = nil)
     Feature.active?(FEATURE, seller)
+  end
+
+  # Stripe rejects card payment_method_options on an intent whose payment_method_types
+  # does not offer card, so callers ask about the params they are actually sending
+  # instead of assuming the intent is card-scoped.
+  def self.card_scoped?(params)
+    Array(params[:payment_method_types]).map(&:to_s).include?(CARD_PAYMENT_METHOD_TYPE)
   end
 end
