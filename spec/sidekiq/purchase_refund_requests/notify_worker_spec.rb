@@ -31,6 +31,24 @@ describe PurchaseRefundRequests::NotifyWorker do
     end.not_to change { ActionMailer::Base.deliveries.count }
   end
 
+  it "takes the request's row lock before it stamps, so overlapping duplicate jobs can't double-send" do
+    statements = []
+    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
+      statements << payload[:sql].to_s
+    end
+    begin
+      described_class.new.perform(refund_request.id)
+    ensure
+      ActiveSupport::Notifications.unsubscribe(subscriber)
+    end
+
+    lock = statements.index { |sql| sql.match?(/FROM .?purchase_refund_requests.? .*FOR UPDATE/) }
+    first_stamp = statements.index { |sql| sql.match?(/UPDATE .?purchase_refund_requests.? SET/) }
+    expect(lock).to be_present
+    expect(first_stamp).to be_present
+    expect(lock).to be < first_stamp
+  end
+
   it "delivers only the missing notification on retry after a partial failure" do
     refund_request.update_column(:seller_notified_at, Time.current)
 

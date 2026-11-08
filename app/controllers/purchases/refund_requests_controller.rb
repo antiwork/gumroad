@@ -2,6 +2,10 @@
 
 class Purchases::RefundRequestsController < ApplicationController
   SECURE_ID_SCOPE = "refund_request"
+  # A revisit only re-enqueues notifications for a request at least this old, so
+  # the redirect after create — worker still pending, both stamps still nil —
+  # can't pile more jobs on top of the one after_create_commit already enqueued.
+  NOTIFICATION_RETRY_GRACE = 10.minutes
 
   before_action :hide_layouts
   before_action :set_purchase
@@ -13,8 +17,13 @@ class Purchases::RefundRequestsController < ApplicationController
   def show
     @refund_request = latest_refund_request
     # A crash or Redis outage after create can leave an open row with unsent
-    # notifications; a returning visit re-enqueues them (worker is idempotent).
-    @refund_request.enqueue_notifications if @refund_request&.notifications_pending?
+    # notifications; a later revisit re-enqueues them. Not a fresh row, though:
+    # the redirect from create arrives while the job enqueued by
+    # after_create_commit is usually still pending, and re-enqueueing there is
+    # what made the happy path race two jobs for the same request.
+    if @refund_request&.notifications_pending? && @refund_request.created_at < NOTIFICATION_RETRY_GRACE.ago
+      @refund_request.enqueue_notifications
+    end
     @eligible = PurchaseRefundRequest.purchase_eligible?(@purchase)
   end
 

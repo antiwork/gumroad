@@ -55,13 +55,22 @@ describe Purchases::RefundRequestsController do
       expect(response.body).not_to include("Send refund request")
     end
 
-    it "re-enqueues the notify worker when notifications are still owed" do
-      request = create(:purchase_refund_request, purchase:, seller_notified_at: nil, support_notified_at: Time.current)
+    it "re-enqueues the notify worker when a stale request still owes notifications" do
+      request = create(:purchase_refund_request, purchase:, seller_notified_at: nil, support_notified_at: Time.current,
+                       created_at: 11.minutes.ago)
 
       expect do
         get :show, params: { purchase_id: token }
       end.to change(PurchaseRefundRequests::NotifyWorker.jobs, :size).by(1)
       expect(PurchaseRefundRequests::NotifyWorker.jobs.last["args"]).to eq([request.id])
+    end
+
+    it "does not re-enqueue while the request is still inside the post-create grace window" do
+      create(:purchase_refund_request, purchase:, seller_notified_at: nil, support_notified_at: Time.current)
+
+      expect do
+        get :show, params: { purchase_id: token }
+      end.not_to change(PurchaseRefundRequests::NotifyWorker.jobs, :size)
     end
 
     it "does not re-enqueue when notifications were delivered" do

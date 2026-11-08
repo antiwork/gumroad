@@ -24,6 +24,22 @@ describe PurchaseRefundRequests::EscalateWorker do
     expect(refund_request.reload.state).to eq("refunded")
   end
 
+  it "leaves the request open when the support mail fails, so the retry can still escalate it" do
+    allow(SupportContactMailer).to receive(:contact_form).and_raise(StandardError, "smtp unavailable")
+
+    expect do
+      described_class.new.perform(refund_request.id)
+    end.to raise_error(StandardError, "smtp unavailable")
+    expect(refund_request.reload.state).to eq("requested")
+
+    allow(SupportContactMailer).to receive(:contact_form).and_call_original
+
+    expect do
+      described_class.new.perform(refund_request.id)
+    end.to change { ActionMailer::Base.deliveries.count }.by(1)
+    expect(refund_request.reload.state).to eq("expired")
+  end
+
   it "does nothing for a deleted request" do
     expect do
       described_class.new.perform(-1)
