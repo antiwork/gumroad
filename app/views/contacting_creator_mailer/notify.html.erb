@@ -179,12 +179,12 @@
             <% end %>
           </td>
         </tr>
-        <% if @buyer_access_url.present? %>
+        <% if @buyer_download_link.present? %>
           <tr>
             <td>
               <h4>Buyer's access link</h4>
             </td>
-            <td><%= link_to @buyer_access_url, @buyer_access_url %></td>
+            <td><%= link_to @buyer_download_link, @buyer_download_link %></td>
           </tr>
         <% end %>
         <% if @purchase.try(:is_gift_sender_purchase) %>

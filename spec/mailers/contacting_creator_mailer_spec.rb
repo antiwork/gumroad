@@ -1083,28 +1083,21 @@ describe ContactingCreatorMailer do
         expect(body).not_to include(other.url_redirect.download_page_url)
       end
 
-      it "omits the link when the purchase has no url redirect" do
-        purchase.url_redirect.destroy!
+      def notify_body = ContactingCreatorMailer.notify(purchase.reload.id).body.decoded
 
-        expect(ContactingCreatorMailer.notify(purchase.reload.id).body.decoded).not_to include("/d/")
-      end
+      {
+        "has no url redirect" => -> { purchase.url_redirect.destroy! },
+        "is refunded" => -> { purchase.update!(stripe_refunded: true) },
+        "is the sender leg of a gift" => -> { purchase.update!(is_gift_sender_purchase: true) },
+        "is a rental" => -> { purchase.url_redirect.update!(is_rental: true) },
+      }.each do |condition, change|
+        it "omits the link when the purchase #{condition}" do
+          expect(notify_body).to include("/d/")
 
-      it "omits the link for a refunded purchase" do
-        purchase.update!(stripe_refunded: true)
+          instance_exec(&change)
 
-        expect(ContactingCreatorMailer.notify(purchase.id).body.decoded).not_to include("/d/")
-      end
-
-      it "omits the link for the sender leg of a gift" do
-        purchase.update!(is_gift_sender_purchase: true)
-
-        expect(ContactingCreatorMailer.notify(purchase.id).body.decoded).not_to include("/d/")
-      end
-
-      it "omits the link for a rental" do
-        purchase.url_redirect.update!(is_rental: true)
-
-        expect(ContactingCreatorMailer.notify(purchase.id).body.decoded).not_to include("/d/")
+          expect(notify_body).not_to include("/d/")
+        end
       end
     end
 
