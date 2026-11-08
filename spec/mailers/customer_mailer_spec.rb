@@ -1354,6 +1354,14 @@ describe CustomerMailer do
         expect(body).not_to include("class=\"button primary\"")
       end
 
+      it "keeps presenter links clickable instead of escaping them" do
+        Feature.activate_user(:graphics_light_receipt, seller)
+        body = CustomerMailer.receipt(nil, charge.id).body.decoded
+
+        expect(body).not_to include("&lt;a ")
+        expect(body).to include("<a ")
+      end
+
       it "does not apply to another seller's receipt" do
         Feature.activate_user(:graphics_light_receipt, create(:user))
 

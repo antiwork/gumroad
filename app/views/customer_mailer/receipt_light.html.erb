@@ -16,8 +16,16 @@
   <% item_props = item_info.props %>
   <p>
     <strong><%= item_props.dig(:product, :name) %></strong>
-    <% (item_props[:notes] + item_props[:general_attributes].map { |a| [a[:label], Array(a[:value]).join(", ")].compact_blank.join(": ") }).each do |line| %>
+    <% item_props[:notes].each do |line| %>
       <br><%= line %>
+    <% end %>
+    <% (item_props[:gift_attributes] + item_props[:general_attributes]).each do |attribute| %>
+      <br>
+      <% if attribute[:label].present? %><%= attribute[:label] %>: <% end %>
+      <%= safe_join(Array(attribute[:value]).map { |v| auto_link(v.to_s, html: { target: "_blank" }) }, ", ") %>
+    <% end %>
+    <% if item_props[:manage_subscription_note].present? %>
+      <br><%= item_props[:manage_subscription_note] %>
     <% end %>
     <% if item_props[:license_key].present? %>
       <br>License key: <%= item_props[:license_key] %>
@@ -27,6 +35,8 @@
       <% url_redirect = purchase.is_commission_completion_purchase? ? purchase.commission.deposit_purchase.url_redirect : purchase.url_redirect %>
       <% if url_redirect.present? && !url_redirect.is_rental? %>
         <br><%= link_to(view_content_button_text(item_info.product), url_redirect_download_page_url(url_redirect.token)) %>
+      <% elsif url_redirect.present? && item_info.product.streamable? %>
+        <br><%= link_to("Watch", url_redirect_stream_page_url(url_redirect.token)) %>
       <% end %>
     <% end %>
   </p>
