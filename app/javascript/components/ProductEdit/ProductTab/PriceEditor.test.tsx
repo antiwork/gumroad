@@ -31,6 +31,14 @@ const renderEditor = (
     />,
   );
 
+describe("PriceEditor comma hint", () => {
+  it("says how a typed comma is read, under the Amount field", () => {
+    renderEditor({ isPWYW: false, setIsPWYW: noop });
+
+    expect(screen.getByText("Use a comma for thousands (7,900) or for cents (7,90).")).toBeTruthy();
+  });
+});
+
 describe("PriceEditor PWYW toggle", () => {
   it("leaves PWYW editable on a $0-base product with paid variants", () => {
     const setIsPWYW = vi.fn();

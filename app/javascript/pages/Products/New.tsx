@@ -9,7 +9,7 @@ import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 import { isNumber, isRecord, isString } from "$app/utils/guards";
-import { sanitizePriceRangeInput } from "$app/utils/price";
+import { priceCommaHint, sanitizePriceRangeInput } from "$app/utils/price";
 import {
   RecurrenceId,
   durationInMonthsToRecurrenceId,
@@ -497,9 +497,7 @@ const NewProductPage = () => {
                   ) : null}
                 </InputGroup>
                 <FieldsetDescription id={`price-hint-${formUID}`}>
-                  {selectedCurrency.isSingleUnit
-                    ? "Use a comma for thousands (7,900)."
-                    : "Use a comma for thousands (7,900) or decimals (7,90)."}
+                  {selectedCurrency.isSingleUnit ? "Use a comma for thousands (7,900)." : priceCommaHint}
                 </FieldsetDescription>
                 <Errors errors={errors["link.price_range"]} label="Price" />
                 <Errors errors={errors["link.base"]} label="" />

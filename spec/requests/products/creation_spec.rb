@@ -292,6 +292,12 @@ describe "Product creation", type: :system, js: true do
   end
 
   describe "price commas" do
+    it "explains how a typed comma is read" do
+      visit new_product_path
+
+      expect(page).to have_text("Use a comma for thousands (7,900) or for cents (7,90).")
+    end
+
     { "1,500" => 1500_00, "7,9" => 7_90 }.each do |typed, cents|
       it "creates a product priced #{typed} as #{cents} cents" do
         visit new_product_path

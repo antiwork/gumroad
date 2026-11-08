@@ -77,7 +77,7 @@ describe("NewProductPage", () => {
     expect(
       screen.getByRole("textbox", {
         name: "Price",
-        description: "Use a comma for thousands (7,900) or decimals (7,90).",
+        description: "Use a comma for thousands (7,900) or for cents (7,90).",
       }),
     ).toBeDefined();
     unmount();
