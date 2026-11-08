@@ -1,6 +1,7 @@
 package products
 
 import (
+	"context"
 	"database/sql"
 	"regexp"
 
@@ -109,21 +110,25 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
 		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
 	case main != nil && main.isVideo:
-		dw, okW := main.displayWidth()
-		dh, okH := main.displayHeight()
-		if !okW || !okH {
-			return nil, fallback("video cover size")
+		// A nil display size's tag has no content, as for the oembed thumbnail above.
+		width := []inertia.Attr{{Key: "property", Value: "twitter:player:width"}}
+		if dw, ok := main.displayWidth(); ok {
+			attr, ok := numberAttr(dw.value())
+			if !ok {
+				return nil, fallback("video cover size")
+			}
+			width = append(width, attr)
 		}
-		width, ok := numberAttr(dw.value())
-		if !ok {
-			return nil, fallback("video cover size")
+		height := []inertia.Attr{{Key: "property", Value: "twitter:player:height"}}
+		if dh, ok := main.displayHeight(); ok {
+			attr, _ := numberAttr(dh)
+			height = append(height, attr)
 		}
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "player")...)
 		set("", "", "", inertia.Pairs("property", "twitter:image", "content", "https://gumroad.com/assets/icon.png")...)
 		set("", "", "", inertia.Pairs("property", "twitter:player", "content", main.url)...)
-		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:width"}, width)
-		height, _ := numberAttr(dh)
-		set("", "", "", inertia.Attr{Key: "property", Value: "twitter:player:height"}, height)
+		set("", "", "", width...)
+		set("", "", "", height...)
 	default:
 		set("", "", "", inertia.Pairs("property", "twitter:card", "content", "summary")...)
 	}
@@ -252,6 +257,18 @@ func (h *handler) structuredData(p *page, prod *product, v *view, url, image str
 	return d, nil
 }
 
+// lowestVariantDifference is lowest_variant_price_difference_cents, over every alive category.
+func (h *handler) lowestVariantDifference(ctx context.Context, prod *product, vs *variants) (sql.NullInt64, error) {
+	var diff sql.NullInt64
+	in, args := "NULL", []any{prod.id}
+	if cats := vs.categories; len(cats) > 0 {
+		in, args = placeholders(len(cats)), append(args, int64Args(cats)...)
+	}
+	err := h.c.DB.QueryRowContext(ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
+		" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN ("+in+"))", args...).Scan(&diff)
+	return diff, err
+}
+
 // offerData is build_offer_data: the offer in USD, through the cached rate when the product's
 // currency isn't, else in that currency.
 func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails.Hash, error) {
@@ -273,14 +290,8 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 		}
 	}
 	if !prod.is(productIsTieredMembership) && cents != nil {
-		var diff sql.NullInt64
-		// lowest_variant_price_difference_cents, over every alive category.
-		in, args := "NULL", []any{prod.id}
-		if cats := v.variants.categories; len(cats) > 0 {
-			in, args = placeholders(len(cats)), append(args, int64Args(cats)...)
-		}
-		if err := h.c.DB.QueryRowContext(p.Ctx, "SELECT MIN(`base_variants`.`price_difference_cents`) FROM `base_variants`"+
-			" WHERE `base_variants`.`deleted_at` IS NULL AND (link_id = ? OR variant_category_id IN ("+in+"))", args...).Scan(&diff); err != nil {
+		diff, err := h.lowestVariantDifference(p.Ctx, prod, v.variants)
+		if err != nil {
 			return nil, err
 		}
 		c := *cents + diff.Int64

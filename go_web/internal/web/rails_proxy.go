@@ -24,6 +24,8 @@ const (
 	// to run, as the Rails nginx's own upstream connect does.
 	railsDialTimeout  = 2 * time.Second
 	railsUpstreamsTTL = 5 * time.Second
+	// railsRevisionTimeout bounds Revision's round of /healthcheck requests.
+	railsRevisionTimeout = 2 * time.Second
 	// Fallbacks are a minority of requests, but bursts would otherwise reconnect every time.
 	railsIdleConnsPerHost = 32
 	// A host that refused, or whose nginx couldn't reach Puma, is likely stopping; Consul's
@@ -53,6 +55,9 @@ type RailsProxy struct {
 
 	downMu    sync.Mutex
 	downUntil map[string]time.Time
+
+	// probe asks the hosts for their revision.
+	probe *http.Client
 }
 
 type upstreamList struct {
@@ -62,7 +67,7 @@ type upstreamList struct {
 }
 
 func NewRailsProxy(upstreamsFile string) *RailsProxy {
-	p := &RailsProxy{path: upstreamsFile, now: time.Now, pick: rand.IntN}
+	p := &RailsProxy{path: upstreamsFile, now: time.Now, pick: rand.IntN, probe: &http.Client{Timeout: railsRevisionTimeout}}
 	p.reload(&upstreamList{})
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
@@ -212,6 +217,53 @@ func (p *RailsProxy) reload(old *upstreamList) *upstreamList {
 	}
 	p.snapshot.Store(&next)
 	return &next
+}
+
+// Revision is the REVISION most Rails hosts report: debug_headers' X-Revision on their
+// /healthcheck, which their nginx serves as Consul's check does. "" is no answer or a tie, as
+// both colors give while a deploy switches them.
+func (p *RailsProxy) Revision(ctx context.Context) string {
+	p.refreshing.Lock()
+	list := p.reload(p.snapshot.Load())
+	p.refreshing.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, railsRevisionTimeout)
+	defer cancel()
+	revisions := make(chan string, len(list.hosts))
+	for _, host := range list.hosts {
+		go func() {
+			var revision string
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+host+"/healthcheck", nil)
+			if err == nil {
+				if res, err := p.probe.Do(req); err == nil {
+					io.Copy(io.Discard, io.LimitReader(res.Body, 4<<10))
+					res.Body.Close()
+					if res.StatusCode == http.StatusOK {
+						revision = res.Header.Get("X-Revision")
+					}
+				}
+			}
+			revisions <- revision
+		}()
+	}
+	counts := map[string]int{}
+	for range list.hosts {
+		if r := <-revisions; r != "" {
+			counts[r]++
+		}
+	}
+	best, tied := "", false
+	for r, n := range counts {
+		switch {
+		case n > counts[best]:
+			best, tied = r, false
+		case n == counts[best]:
+			tied = true
+		}
+	}
+	if tied {
+		return ""
+	}
+	return best
 }
 
 func parseUpstreams(data string) []string {

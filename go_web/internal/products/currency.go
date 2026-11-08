@@ -272,12 +272,42 @@ func (h *handler) sellerStripeAccount(p *page) (*stripeAccount, error) {
 		if p.seller.is(userCheckMerchantAccountIsLinked) {
 			return connect, nil
 		}
-		// merchant_migration_enabled? without the linked flag: the feature, then the compliance country.
-		if on, err := h.flag(p.Ctx, "merchant_migration", p.seller.id); err != nil || on {
-			return nil, firstErr(err, fallback("stripe connect routing"))
+		routes, err := h.stripeConnectRoutes(p)
+		if err != nil || routes {
+			return connect, err
 		}
 	}
 	return own, nil
+}
+
+// stripeConnectCountries is StripeMerchantAccountManager::COUNTRIES_SUPPORTED_BY_STRIPE_CONNECT.
+var stripeConnectCountries = map[string]bool{"AU": true, "AT": true, "BE": true, "BR": true, "BG": true, "CA": true, "HR": true,
+	"CY": true, "CZ": true, "DK": true, "EE": true, "FI": true, "FR": true, "DE": true, "GI": true, "GR": true, "HK": true, "HU": true,
+	"IE": true, "IT": true, "JP": true, "LV": true, "LI": true, "LT": true, "LU": true, "MT": true, "NL": true, "NZ": true, "NO": true,
+	"PL": true, "PT": true, "RO": true, "SG": true, "SK": true, "SI": true, "ES": true, "SE": true, "CH": true, "AE": true, "GB": true,
+	"US": true}
+
+// stripeConnectRoutes is merchant_migration_enabled? without the linked flag: the feature, then
+// stripe_connect_routing_country_code among the countries Stripe Connect supports.
+func (h *handler) stripeConnectRoutes(p *page) (bool, error) {
+	if on, err := h.flag(p.Ctx, "merchant_migration", p.seller.id); err != nil || !on {
+		return false, err
+	}
+	info, err := h.complianceInfo(p.Ctx, p.seller.id)
+	if err != nil || info == nil {
+		return false, err
+	}
+	byEntity, err := h.flag(p.Ctx, "stripe_connect_routing_by_legal_entity_country", p.seller.id)
+	if err != nil {
+		return false, err
+	}
+	var code string
+	if byEntity {
+		code, err = info.legalEntityCountryCode()
+	} else {
+		code, err = complianceCountry(info.country)
+	}
+	return stripeConnectCountries[code], err
 }
 
 type platformAccount struct {

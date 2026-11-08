@@ -14,6 +14,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/customstyles"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/description"
+	"github.com/antiwork/gumroad/go_web/internal/html4"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
@@ -31,22 +32,61 @@ var customHTMLWrapper string
 //go:embed custom_html_waitlist.html
 var customHTMLWaitlist string
 
+// customHTMLLiveReload is custom_html_live_reload_script's heredoc, filled the same way.
+//
+//go:embed custom_html_live_reload.html
+var customHTMLLiveReload string
+
+// customHTMLPollInterval is RendersCustomHtmlPages::POLL_INTERVAL_MS.
+const customHTMLPollInterval = "2000"
+
 // customDomainCertificateLifetime is CustomDomain::CERTIFICATE_LIFETIME.
 const customDomainCertificateLifetime = 90 * 24 * time.Hour
 
+// waitlistFormFound is Pages::WaitlistForm.found_in?: the signup message, or a
+// form[data-gumroad-waitlist] anywhere in Loofah's HTML4 fragment parse.
+func waitlistFormFound(html string) (bool, error) {
+	if strings.Contains(html, "gumroad:waitlist") {
+		return true, nil
+	}
+	frag, err := html4.ParseFragment(html)
+	if errors.Is(err, html4.ErrUnported) {
+		return false, fallback("custom html waitlist")
+	}
+	if err != nil {
+		return false, err
+	}
+	var holds func(n *html4.Node) bool
+	holds = func(n *html4.Node) bool {
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if c.Type == html4.ElementNode && c.Name == "form" {
+				if _, ok := c.Attr("data-gumroad-waitlist"); ok {
+					return true
+				}
+			}
+			if holds(c) {
+				return true
+			}
+		}
+		return false
+	}
+	return holds(frag), nil
+}
+
 // renderCustomHTML is render_custom_html_if_present, whose wanted and review link serve has
-// checked and whose native and code params declinedParams left to Rails.
+// checked and whose native and code params declinedParams left to Rails. It answers an
+// autocomplete partial reload with the same document, since it renders before show.
 func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product) error {
 	pc, ctx, seller := h.c.Page, p.Ctx, p.seller
+	// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
+	// staff went to Rails already.
+	preview := false
 	if logged := p.Auth.LoggedInUser(); logged != nil {
-		// can_preview_product_custom_html? adds the live reload for the seller and a collaborator;
-		// staff went to Rails already.
-		if logged.ID == prod.userID {
-			return fallback("custom html preview")
-		}
-		collaborates, err := h.collaboratorFor(ctx, logged.ID, prod.id)
-		if err != nil || collaborates {
-			return firstErr(err, fallback("custom html preview"))
+		if preview = logged.ID == prod.userID; !preview {
+			var err error
+			if preview, err = h.collaboratorFor(ctx, logged.ID, prod.id); err != nil {
+				return err
+			}
 		}
 	}
 	if pc.CustomHTMLAnalytics == nil {
@@ -56,10 +96,6 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	// since Rails renders this before prepare_product_page.
 	if reason := unportedProductShape(prod); reason != "" {
 		return fallback(reason)
-	}
-	if prod.nativeType == "coffee" {
-		// Rails renders this before show's /coffee redirect; not yet ported for coffee.
-		return fallback("coffee product")
 	}
 	tracking := h.analyticsEnabled(seller)
 	v, err := h.loadWrapperView(ctx, p, prod, tracking)
@@ -129,6 +165,14 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 			"«product_id»", rails.EncodeJSON(h.c.IDs.Encrypt(prod.id)),
 		).Replace(customHTMLWaitlist)
 	}
+	liveReload := ""
+	if preview {
+		liveReload = strings.NewReplacer(
+			"«nonce»", web.HTMLEscape(nonce),
+			"«version_src»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"/landing/version"),
+			"«poll_interval_ms»", customHTMLPollInterval,
+		).Replace(customHTMLLiveReload)
+	}
 	title := web.HTMLEscape(prod.name)
 	body := strings.NewReplacer(
 		"«title»", title,
@@ -142,12 +186,19 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 		"«description»", web.HTMLEscape(text),
 		"«iframe_src»", web.HTMLEscape("/l/"+prod.uniquePermalink.String+"/landing/embed"),
 		"«nonce»", web.HTMLEscape(nonce),
-		"«checkout_url»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"?wanted=true"),
+		"«checkout_url»", rails.EncodeJSON("/l/"+prod.uniquePermalink.String+"?"+wrapperCheckoutQuery(p)),
 		"«store_hostnames»", rails.EncodeJSON(hostnames),
 		"«nav_hosts»", rails.EncodeJSON(h.c.Env.ValidRequestHosts),
 		"«waitlist_script»", waitlist,
+		"«live_reload_script»", liveReload,
 	).Replace(customHTMLWrapper)
 
+	if !p.DryRun {
+		// Before the UTM visit, which a fallback to Rails would repeat.
+		if err := h.pushVariants(ctx, p); err != nil {
+			return err
+		}
+	}
 	if err := h.trackUTMVisit(w, p, prod); err != nil {
 		return err
 	}
@@ -161,6 +212,10 @@ func (h *handler) renderCustomHTML(w http.ResponseWriter, p *page, prod *product
 	hdr := w.Header()
 	hdr.Set("Content-Security-Policy", pc.CSP.Header(nonce))
 	hdr.Set("Link", vite.LinkHeader(*pc.CustomHTMLAnalytics))
+	if p.urlCode != "" {
+		// set_x_robots_tag_header runs before this before_action.
+		hdr.Set("X-Robots-Tag", "noindex")
+	}
 	rails.RenderHTML(w, p.Req, body)
 	return nil
 }
@@ -179,12 +234,15 @@ func (h *handler) loadWrapperView(ctx context.Context, p *page, prod *product, t
 	if v.prices, err = h.loadPrices(ctx, prod); err != nil {
 		return nil, err
 	}
-	if v.covers, err = h.loadCovers(ctx, p, prod.id); err != nil {
+	// social_share_image reads the main cover's URL and no other's.
+	if v.covers, err = h.loadCoverRows(ctx, prod.id); err != nil {
 		return nil, err
 	}
-	if len(p.retinaPushes) > 0 {
-		// This port doesn't follow which covers' URLs the wrapper's Rails render reads.
-		return nil, fallback("retina variant unprocessed")
+	if len(v.covers) > 0 {
+		if err := h.coverURLs(ctx, p, v.covers[0]); err != nil {
+			return nil, err
+		}
+		keepShareImageEffects(p, v.covers[0])
 	}
 	if v.thumbnailURL, err = h.thumbnailURL(ctx, prod.id); err != nil {
 		return nil, err
@@ -225,6 +283,19 @@ func (h *handler) loadWrapperView(ctx context.Context, p *page, prod *product, t
 		}
 	}
 	return v, nil
+}
+
+// keepShareImageEffects keeps, of the main cover's cache writes, social_share_image's: its url's
+// entry, or a video's poster's.
+func keepShareImageEffects(p *page, main *cover) {
+	prefix := "attachment_" + itoa(main.attachmentID) + "_"
+	read := main.urlCacheKey()
+	if !main.previewImagePath() {
+		read = prefix + "poster_url"
+	}
+	p.cacheWrites = slices.DeleteFunc(p.cacheWrites, func(pw pendingWrite) bool {
+		return strings.HasPrefix(pw.key, prefix) && pw.key != read
+	})
 }
 
 // customHTMLAnalyticsHead is custom_html_analytics_head.
@@ -273,16 +344,27 @@ func (h *handler) customHTMLStoreHostnames(ctx context.Context, p *page) ([]stri
 	// has_one :custom_domain, -> { alive }, then CustomDomain#active?.
 	var domain, state sql.NullString
 	var issued db.NullTime
-	n, err := h.scanFirst(ctx, []any{&domain, &state, &issued}, "SELECT custom_domains.domain, custom_domains.state,"+
-		" custom_domains.ssl_certificate_issued_at FROM custom_domains WHERE custom_domains.user_id = ?"+
-		" AND custom_domains.deleted_at IS NULL LIMIT 2", p.seller.id)
+	// The has_one's statement, verbatim: it has no ORDER BY, so MySQL's plan picks the row.
+	found := false
+	err := scanNamed(ctx, h.c.DB, func(cols map[string]any) func() {
+		cols["domain"], cols["state"], cols["ssl_certificate_issued_at"] = &domain, &state, &issued
+		return func() { found = true }
+	}, "SELECT `custom_domains`.* FROM `custom_domains` WHERE `custom_domains`.`user_id` = ? AND `custom_domains`.`deleted_at` IS NULL LIMIT 1",
+		p.seller.id)
 	switch {
 	case err != nil:
 		return nil, err
-	case n > 1:
-		return nil, fallback("several custom domains")
-	case n == 1 && state.String == "verified" && issued.Valid && issued.Time.After(p.Req.Now.Add(-customDomainCertificateLifetime)) && domain.Valid:
+	case found && state.String == "verified" && issued.Valid && issued.Time.After(p.Req.Now.Add(-customDomainCertificateLifetime)) && domain.Valid:
 		add(domain.String)
 	}
 	return hostnames, nil
+}
+
+// wrapperCheckoutQuery is the wrapper's Rack::Utils.build_query(checkout_params): wanted, then the
+// URL's code when there is one, in that order.
+func wrapperCheckoutQuery(p *page) string {
+	if p.wrapperCode == "" {
+		return "wanted=true"
+	}
+	return "wanted=true&code=" + rails.RackEscape(p.wrapperCode)
 }

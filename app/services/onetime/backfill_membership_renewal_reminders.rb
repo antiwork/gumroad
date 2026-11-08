@@ -4,10 +4,16 @@
 # membership_renewal_reminders flip; later purchases already scheduled their own, so
 # including them would email the buyer twice.
 #
-# Not idempotent per row, so progress lives in a Redis cursor: a retry resumes after the
-# last row handled and a finished run is a no-op on rerun.
+# Run it only once every web and Sidekiq process is on the code that marks final reminders: the worker
+# skips a renewal only if its marker exists, so a reminder sent before that (or a crash between the
+# enqueue and the marker) can still be sent again. Progress lives in a Redis cursor so a retry resumes
+# after the last row handled and a finished run is a no-op on rerun.
 module Onetime
   class BackfillMembershipRenewalReminders
+    class EnqueueFailed < StandardError; end
+    # RUNNING_KEY expired and another run claimed it; this run must stop writing shared state.
+    class LeaseLost < StandardError; end
+
     BATCH_SIZE = 500
     CURSOR_KEY = "onetime:backfill_membership_renewal_reminders:cursor"
     RUNNING_KEY = "onetime:backfill_membership_renewal_reminders:running"
@@ -17,6 +23,16 @@ module Onetime
     FLAG_ENABLED_AT = Time.utc(2026, 9, 26, 15, 0, 24).freeze
     # Reminders already past their lead time would otherwise all enqueue at once.
     DUE_NOW_SPREAD = 1.hour
+    # A row that raises is retried on the next run instead of being skipped; after this many attempts it
+    # is recorded as failed and stepped over so it cannot block every subscription after it.
+    MAX_ATTEMPTS_PER_ROW = 3
+    FAILED_IDS_KEY = "onetime:backfill_membership_renewal_reminders:failed_ids"
+    ATTEMPTS_KEY = "onetime:backfill_membership_renewal_reminders:attempts"
+    # Same owner-token scripts as the advance notice backfill; each acts only while RUNNING_KEY holds this run's token.
+    RENEW_SCRIPT = BackfillMembershipAdvanceRenewalReminders::RENEW_SCRIPT
+    ADVANCE_SCRIPT = BackfillMembershipAdvanceRenewalReminders::ADVANCE_SCRIPT
+    RECORD_FAILURE_SCRIPT = BackfillMembershipAdvanceRenewalReminders::RECORD_FAILURE_SCRIPT
+    RELEASE_SCRIPT = BackfillMembershipAdvanceRenewalReminders::RELEASE_SCRIPT
 
     def self.process(dry_run: false, batch_size: BATCH_SIZE, limit: nil, enabled_before: FLAG_ENABLED_AT)
       new(dry_run:, batch_size:, limit:, enabled_before:).process
@@ -45,9 +61,19 @@ module Onetime
           else
             counts[:skipped] += 1
           end
+        rescue LeaseLost
+          raise
         rescue => e
           counts[:errors] += 1
-          Rails.logger.warn("[BackfillMembershipRenewalReminders] skipped subscription #{subscription.id}: #{e.class}: #{e.message}")
+          Rails.logger.warn("[BackfillMembershipRenewalReminders] failed on subscription #{subscription.id}: #{e.class}: #{e.message}")
+          next if @dry_run
+
+          # Leave the cursor before a failed row so the next run retries it.
+          attempts = record_failure!(subscription.id)
+          break if attempts < MAX_ATTEMPTS_PER_ROW
+
+          Rails.logger.error("[BackfillMembershipRenewalReminders] gave up on subscription #{subscription.id} after #{attempts} attempts: #{e.class}: #{e.message}")
+          next
         end
 
         # Per row, so a crash re-schedules at most the row in flight.
@@ -58,13 +84,13 @@ module Onetime
       Rails.logger.info("[BackfillMembershipRenewalReminders] #{@dry_run ? 'dry run ' : ''}finished after id #{start_after}: #{counts.inspect}")
       counts
     ensure
-      $redis.del(RUNNING_KEY) if @claimed
+      $redis.eval(RELEASE_SCRIPT, keys: [RUNNING_KEY], argv: [@token]) if @claimed
     end
 
     private
       # Not send_renewal_reminder_at: it floors at Time.current, which hides the due-now rows.
       def schedule(subscription, counts)
-        renews_at = subscription.end_time_of_subscription
+        renews_at = subscription.renews_at
         remind_at = renews_at - BasePrice::Recurrence.renewal_reminder_email_days(subscription.recurrence)
         now = Time.current
 
@@ -75,12 +101,14 @@ module Onetime
         end
         return if @dry_run
 
-        RecurringChargeReminderWorker.perform_at(remind_at, subscription.id)
+        renew!
+        enqueued = RecurringChargeReminderWorker.perform_at(remind_at, subscription.id)
+        raise EnqueueFailed, "perform_at returned #{enqueued.inspect}" unless enqueued
         counts[:scheduled] += 1
       end
 
       # RecurringChargeReminderWorker#perform's guards, plus the purchase cutoff it can't see.
-      # No last purchase means no renewal date to derive (end_time_of_subscription raises).
+      # No last purchase means no renewal date to derive (renews_at raises).
       def eligible?(subscription)
         subscription.send_renewal_reminders? &&
           subscription.last_purchase_at.present? &&
@@ -88,19 +116,34 @@ module Onetime
           subscription.alive?(include_pending_cancellation: false) &&
           !subscription.in_free_trial? &&
           !subscription.charges_completed? &&
-          !(subscription.renewal_disabled_due_to_indian_card_mandate? && subscription.india_card_mandate_reliability_enabled?)
+          !(subscription.renewal_disabled_due_to_indian_card_mandate? && subscription.india_card_mandate_reliability_enabled?) &&
+          subscription.renews_at > Time.current
       end
 
       def claim!
-        @claimed = $redis.set(RUNNING_KEY, Time.current.to_i, nx: true, ex: RUNNING_TTL.to_i)
+        @token = SecureRandom.hex(16)
+        @claimed = $redis.set(RUNNING_KEY, @token, nx: true, ex: RUNNING_TTL.to_i)
         raise "BackfillMembershipRenewalReminders is already running (#{RUNNING_KEY})" unless @claimed
       end
 
+      def renew!
+        lease_lost! unless $redis.eval(RENEW_SCRIPT, keys: [RUNNING_KEY], argv: [@token, RUNNING_TTL.to_i]) == 1
+      end
+
       def advance!(id)
-        $redis.multi do |tx|
-          tx.set(CURSOR_KEY, id)
-          tx.expire(RUNNING_KEY, RUNNING_TTL.to_i)
-        end
+        lease_lost! unless $redis.eval(ADVANCE_SCRIPT, keys: [RUNNING_KEY, CURSOR_KEY, ATTEMPTS_KEY], argv: [@token, RUNNING_TTL.to_i, id]) == 1
+      end
+
+      # Counts the attempt and, at the cap, records the row as failed and steps the cursor past it.
+      def record_failure!(id)
+        attempts = $redis.eval(RECORD_FAILURE_SCRIPT, keys: [RUNNING_KEY, ATTEMPTS_KEY, FAILED_IDS_KEY, CURSOR_KEY], argv: [@token, RUNNING_TTL.to_i, id, MAX_ATTEMPTS_PER_ROW])
+        lease_lost! if attempts.negative?
+        attempts
+      end
+
+      def lease_lost!
+        Rails.logger.error("[BackfillMembershipRenewalReminders] lost #{RUNNING_KEY} to another run; stopping without further writes")
+        raise LeaseLost, "#{RUNNING_KEY} is held by another run"
       end
   end
 end

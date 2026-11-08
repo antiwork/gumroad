@@ -327,9 +327,11 @@ func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) 
 		key, filename, contentType sql.NullString
 	}
 	files := map[int64]file{}
+	// has_one's query reads the attachments' unique index, so the lowest blob_id wins.
 	rows, err := h.c.DB.QueryContext(ctx, `SELECT att.record_id, blobs.id, blobs.key, blobs.filename, blobs.content_type
 		FROM active_storage_attachments att LEFT JOIN active_storage_blobs blobs ON blobs.id = att.blob_id
-		WHERE att.record_type = 'Thumbnail' AND att.record_id IN (`+placeholders(len(ids))+`) AND att.name = 'file'`, int64Args(ids)...)
+		WHERE att.record_type = 'Thumbnail' AND att.record_id IN (`+placeholders(len(ids))+`) AND att.name = 'file'
+		ORDER BY att.record_id, att.blob_id`, int64Args(ids)...)
 	if err != nil {
 		return nil, err
 	}
@@ -340,11 +342,9 @@ func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) 
 			rows.Close()
 			return nil, err
 		}
-		if _, dup := files[id]; dup {
-			rows.Close()
-			return nil, fallback("thumbnail attachment")
+		if _, dup := files[id]; !dup {
+			files[id] = f
 		}
-		files[id] = f
 	}
 	rows.Close()
 	if err := rows.Err(); err != nil {
@@ -364,7 +364,8 @@ func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) 
 			urls[id] = nil
 		case !f.blobID.Valid:
 			return nil, fallback("thumbnail blob")
-		case strings.Contains(f.contentType.String, "gif"):
+		case strings.Contains(f.contentType.String, "gif") || !storage.Variable(f.contentType.String):
+			// Thumbnail#url skips a GIF's variant, and rescues the one file.variant can't make.
 			urls[id] = pc.cdnURL(pc.PublicStorageURL + f.key.String)
 		default:
 			// thumbnail_variant.processed would resize an unprocessed one.
@@ -403,9 +404,6 @@ func (h *handler) thumbnailURLs(ctx context.Context, thumbnails []thumbnailRow) 
 		key := keys[v]
 		if !key.Valid {
 			return nil, fallback("thumbnail variant")
-		}
-		if !storage.Variable(files[id].contentType.String) {
-			return nil, fallback("invariable thumbnail")
 		}
 		urls[id] = pc.cdnURL(pc.PublicStorageURL + key.String)
 	}
