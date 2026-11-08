@@ -55,6 +55,16 @@ describe Subscription, "#next_charge_price_cents" do
     expect(plain.next_charge_price_cents).to eq(plain.current_subscription_price_cents)
   end
 
+  it "prices a tiered code the seller added after a purchase bought without a discount" do
+    other = create(:membership_purchase, purchaser: buyer, email: buyer.email, link: product, created_at: Time.current)
+    undiscounted = other.subscription
+    expect(other.purchase_offer_code_discount).to be_nil
+    other.update!(displayed_price_cents: full_price)
+    undiscounted.reload
+    expect(undiscounted.current_subscription_price_cents).to eq(0)
+    expect(undiscounted.next_charge_price_cents(as_of: 13.months.from_now)).to eq(full_price)
+  end
+
   it "prices a guest buyer (no account) by the original purchase's age" do
     purchase.update!(purchaser: nil)
     subscription.update!(user: nil)

@@ -389,6 +389,25 @@ describe("SubscriptionsManage pay-what-you-want hint", () => {
       }),
     });
 
+  it("offers the payment method fields to an unchanged pay-what-you-want plan that is free now but paid at renewal", () => {
+    const props = pwywProps({
+      type: "percent",
+      percents: 100,
+      product_ids: null,
+      expires_at: null,
+      minimum_quantity: null,
+      duration_in_billing_cycles: null,
+      minimum_amount_cents: null,
+    });
+    renderManage({
+      ...props,
+      subscription: { ...props.subscription, price: 0, next_charge_price: 2400 },
+      used_card: savedCard,
+      used_paypal: null,
+    });
+    expect(screen.getByLabelText("Saved credit card").textContent).toBe("**** 4242");
+  });
+
   const pwywInput = () => {
     const inputs = screen
       .getAllByLabelText("Name a fair price:")

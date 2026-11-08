@@ -209,11 +209,10 @@ export default function SubscriptionsManage() {
     pricingDiscount,
     getMinPriceCents(product.currency_code),
   );
-  // A tiered discount can be free now and paid at renewal; the card must be addable before then.
-  const renewalPrice =
-    noChangesToNonPriceOptions && !isPWYW ? Math.max(price, subscription.next_charge_price ?? 0) : price;
-  const requirePayment = renewalPrice > 0;
   const noChangesToCurrentPlan = noChangesToNonPriceOptions && (!isPWYW || price === subscription.price);
+  // A tiered discount can be free now and paid at renewal; the card must be addable before then.
+  const renewalPrice = noChangesToCurrentPlan ? Math.max(price, subscription.next_charge_price ?? 0) : price;
+  const requirePayment = renewalPrice > 0;
   // Overdue charges the full new plan; subtracting stale proration would trip the price guard.
   let amountDueToday =
     (subscription.alive || subscription.pending_cancellation) &&

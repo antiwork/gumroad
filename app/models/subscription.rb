@@ -234,8 +234,7 @@ class Subscription < ApplicationRecord
   # The price the next charge will bill. Differs from current_subscription_price_cents only for an
   # ownership-duration tiered code, whose tier is read as of the charge date instead of today.
   def next_charge_price_cents(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED, as_of: nil)
-    return current_subscription_price_cents(authenticated_offer_code_buyer:) unless original_renewal_offer_code&.tiered?
-    return current_subscription_price_cents(authenticated_offer_code_buyer:) if is_installment_plan
+    return current_subscription_price_cents(authenticated_offer_code_buyer:) if is_installment_plan || reuse_original_discount_on_next_charge?
 
     as_of = [as_of || (renews_at if persisted?), Time.current].compact.max
     pre_discount = renewal_pre_discount_total_cents
