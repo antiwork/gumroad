@@ -415,7 +415,7 @@ class Purchase < ApplicationRecord
   before_create :validate_quantity
   before_create :assign_is_multiseat_license
   before_create :check_for_fraud
-  before_create :check_for_chargeback_ring_signal
+  before_create :evaluate_chargeback_ring_signal
   before_create :toggle_off_can_contact_if_buyer_has_unsubscribed
 
   before_save :assign_default_rental_expired
@@ -2504,6 +2504,10 @@ class Purchase < ApplicationRecord
 
   def charge!(off_session: true)
     return if chargeable.nil?
+    # Buyer-level ring refusal (see Purchase::ChargebackRingSignal). Checked here, before
+    # create_charge_intent, so a refused purchase provably never reaches the processor;
+    # card_country is set by prepare_chargeable_for_charge! which has already run.
+    return if refuse_charge_for_chargeback_ring_signal?
 
     self.charge_intent = create_charge_intent(chargeable, off_session:)
     return if errors.present?

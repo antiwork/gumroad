@@ -5,26 +5,38 @@
 #
 # The country-dominance and hosting-IP clauses only mean anything together: young legitimate
 # sellers whose buyers share one country are common, and a datacenter block is what separates a
-# mill from them. All four clauses below must hold to block.
+# mill from them.
 #
-# Flag off means evaluate is never called, so there is zero behaviour change until it is enabled.
-# Fail-open: an exception allows the purchase and records an `error` row. Every evaluation at or
-# above MIN_PAID_SALES writes a row (blocked or allowed) so precision is measurable in SQL.
+# Two Flipper flags, both default off (Flipper booleans can't express a three-level flag):
+#   - chargeback_ring_signal         evaluate + telemetry + payout pause + fraud flag + ops alert
+#                                    (shadow: no buyer is ever refused)
+#   - chargeback_ring_signal_enforce additionally refuse the charge, but ONLY when the in-flight
+#                                    purchase itself carries the ring evidence: its ip_address is
+#                                    inside the matched hosting CIDR AND its card_country is the
+#                                    dominant country. A buyer on a normal IP is never refused.
+#
+# With chargeback_ring_signal off, evaluate is never called — zero behaviour change.
+# Fail-open throughout: an exception allows the purchase and records an `error` row.
 module Purchase::ChargebackRingSignal
   FEATURE_FLAG = :chargeback_ring_signal
+  ENFORCE_FLAG = :chargeback_ring_signal_enforce
 
   MIN_PAID_SALES = 3
   DOMINANT_CARD_COUNTRY_SHARE_PCT = 90.0
   HOSTING_IP_SHARE_PCT = 80.0
   MAX_SELLER_AGE_DAYS = 120
   WINDOW = 30.days
-  # Hard bound on rows read per evaluation. The age clause already restricts evaluation to
-  # accounts younger than 120 days, so this is generous slack for the biggest plausible young
-  # seller; the measured mills ran ~500 paid sales in seven weeks.
+  # Hard bound on rows read per evaluation; the age clause restricts evaluation to accounts
+  # younger than 120 days, so this is generous slack for the biggest plausible young seller.
   SAMPLE_LIMIT = 2_000
+  # A multi-item cart evaluates once per purchase; the seller's 30-day aggregate can't
+  # meaningfully change inside a minute, so one query serves the whole cart (and burst traffic).
+  CACHE_TTL = 1.minute
 
-  # Hosting/datacenter blocks, one per line, as data so a new ring's block is a one-line change.
-  # 151.240.0.0/16 is the measured block behind both 2026-11 mills.
+  # Hosting/datacenter blocks as data: a new ring's block is a one-line addition.
+  # 151.240.0.0/16: measured 2026-11 from the two production card mills (sellers 28262165 and
+  # 28522244) — the /16 their checkout traffic came from. Not a general hosting detector; blocks
+  # are added here as rings are measured.
   HOSTING_CIDR_STRINGS = %w[
     151.240.0.0/16
   ].freeze
@@ -34,6 +46,8 @@ module Purchase::ChargebackRingSignal
   DECISION_ALLOWED = "allowed"
   DECISION_ERROR = "error"
 
+  # decision is the RULE's verdict on the seller's existing sales; whether any buyer was actually
+  # refused additionally depends on the enforce flag and on buyer-level evidence at charge time.
   Result = Struct.new(
     :decision,
     :paid_sales,
@@ -47,8 +61,8 @@ module Purchase::ChargebackRingSignal
     def hit? = decision == DECISION_BLOCKED
     def error? = decision == DECISION_ERROR
 
-    # Telemetry records both sides (blocked and allowed) once a seller has enough paid sales
-    # for the volume clause, so false-positive rate is measurable. Error rows always record.
+    # Both sides (blocked and allowed) are recorded once the volume clause is reached, so the
+    # false-positive rate is measurable. Error rows always record.
     def recordable? = error? || (paid_sales.present? && paid_sales >= MIN_PAID_SALES)
   end
 
@@ -60,6 +74,12 @@ module Purchase::ChargebackRingSignal
         return Result.new(decision: DECISION_ALLOWED)
       end
 
+      Rails.cache.fetch("chargeback_ring_signal/v1/#{seller.id}", expires_in: CACHE_TTL) do
+        evaluate_uncached(seller:)
+      end
+    end
+
+    def evaluate_uncached(seller:)
       rows = Purchase.where(seller_id: seller.id, purchase_state: "successful")
                      .where("price_cents > 0")
                      .where(created_at: WINDOW.ago..)
@@ -69,8 +89,7 @@ module Purchase::ChargebackRingSignal
       paid_sales = rows.size
       country_counts = rows.map(&:first).compact.tally
       dominant_card_country, dominant_count = country_counts.max_by { |_country, count| count }
-      # nil card_country rows stay in the denominator, so unknowns always lower the share —
-      # the conservative (allowing) direction.
+      # nil card_country rows stay in the denominator: unknowns lower the share, which allows.
       dominant_share_pct = paid_sales.zero? ? 0.0 : (100.0 * dominant_count.to_i / paid_sales).round(2)
 
       cidr_hits = Hash.new(0)
@@ -99,103 +118,144 @@ module Purchase::ChargebackRingSignal
       )
     end
 
-    private
-      def matching_cidr(ip)
-        return nil if ip.blank?
+    def matching_cidr(ip)
+      return nil if ip.blank?
 
-        parsed = begin
-          IPAddr.new(ip)
-        rescue IPAddr::InvalidAddressError, ArgumentError
-          # An unparseable stored IP counts as non-hosting: lowers the share, allows the sale.
-          return nil
-        end
-        index = HOSTING_CIDRS.index { _1.include?(parsed) }
-        index && HOSTING_CIDR_STRINGS[index]
+      parsed = begin
+        IPAddr.new(ip)
+      rescue IPAddr::InvalidAddressError, ArgumentError
+        # An unparseable stored IP counts as non-hosting: lowers the share, allows the sale.
+        return nil
       end
+      index = HOSTING_CIDRS.index { _1.include?(parsed) }
+      index && HOSTING_CIDR_STRINGS[index]
+    end
+
+    # ErrorNotifier must never be the reason a purchase or its containment fails.
+    def safe_notify(*args, **kwargs)
+      ErrorNotifier.notify(*args, **kwargs)
+    rescue StandardError
+      nil
+    end
   end
 
   private
-    # before_create in Purchase, registered right after check_for_fraud. Containment and telemetry
-    # run after commit — the refused purchase row still persists (see the before_create comment in
-    # Purchase). The refusal message names neither fraud nor the seller.
-    def check_for_chargeback_ring_signal
-      return if errors.present? # an earlier risk check already refused this purchase
+    # before_create in Purchase, right after check_for_fraud. Evaluation only — it never refuses:
+    # refusal (if the enforce flag is on AND this purchase carries buyer-level evidence) happens
+    # in refuse_charge_for_chargeback_ring_signal? at charge time, where card_country is known.
+    def evaluate_chargeback_ring_signal
+      return if errors.present?
       return if seller.nil?
       return if free_purchase?
-      # Renewals aren't new ring sales, and blocking a young legitimate seller's renewals is the
-      # worst false-positive shape — same carve-out as check_for_past_fraudulent_ips.
+      # Renewals aren't new ring sales — same carve-out as check_for_past_fraudulent_ips.
       return if is_recurring_subscription_charge
       return unless Feature.active?(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
 
       @chargeback_ring_signal_result = Purchase::ChargebackRingSignal.evaluate(seller:)
-      return unless @chargeback_ring_signal_result.hit?
-
-      self.error_code = PurchaseErrorCode::CHARGEBACK_RING_SIGNAL
-      # Generic, non-accusatory refusal — the same wording the sibling risk checks use.
-      errors.add :base, vague_error_message
+      nil
     rescue StandardError => e
-      # Fail-open: never refuse a legitimate sale because this signal broke.
       @chargeback_ring_signal_result = Purchase::ChargebackRingSignal::Result.new(
         decision: Purchase::ChargebackRingSignal::DECISION_ERROR
       )
-      ErrorNotifier.notify(e, seller_id: seller&.id)
+      Purchase::ChargebackRingSignal.safe_notify(e, seller_id: seller&.id)
       nil
     end
 
-    # after_commit on: :create. Rescued wholesale: telemetry and containment must never surface
-    # as a purchase failure — the refusal (if any) already happened in the before_create.
+    # Called at the top of Purchase#charge!, strictly before create_charge_intent, so a refusal
+    # provably never reaches the processor. Refuses only on buyer-level evidence: this purchase's
+    # IP inside the matched hosting CIDR AND its card country equal to the dominant one. The
+    # containment (payout pause, fraud flag, alert) does not depend on this refusal.
+    def refuse_charge_for_chargeback_ring_signal?
+      result = @chargeback_ring_signal_result
+      return false unless result&.hit?
+      return false unless Feature.active?(Purchase::ChargebackRingSignal::ENFORCE_FLAG, seller)
+      return false if result.matched_cidr.nil? || result.dominant_card_country.nil?
+      return false unless Purchase::ChargebackRingSignal.matching_cidr(ip_address) == result.matched_cidr
+      return false unless card_country.present? && card_country == result.dominant_card_country
+
+      # Compute the message before assigning any refusal state, so the rescue below never has
+      # partially-applied state to undo beyond error_code.
+      message = vague_error_message
+      self.error_code = PurchaseErrorCode::CHARGEBACK_RING_SIGNAL
+      # Generic, non-accusatory refusal — same wording as the sibling risk checks.
+      errors.add :base, message
+      true
+    rescue StandardError => e
+      # Fail-open; undo the refusal state so a bug here can't fail a legitimate sale.
+      self.error_code = nil if error_code == PurchaseErrorCode::CHARGEBACK_RING_SIGNAL
+      Purchase::ChargebackRingSignal.safe_notify(e, purchase_id: id, seller_id: seller&.id)
+      false
+    end
+
+    # after_commit on: :create. Containment is durable and runs FIRST; telemetry and the ops
+    # alert are best-effort. Each step is isolated so none can take the others down, and nothing
+    # here can surface as a purchase failure.
     def record_chargeback_ring_signal
       result = @chargeback_ring_signal_result
       return if result.nil?
       return unless result.recordable?
 
-      ::ChargebackRingSignal.create!(
-        seller_id:,
-        purchase_id: id,
-        decision: result.decision,
-        paid_sales: result.paid_sales,
-        dominant_card_country: result.dominant_card_country,
-        dominant_share_pct: result.dominant_share_pct,
-        hosting_share_pct: result.hosting_share_pct,
-        distinct_browsers: result.distinct_browsers,
-        matched_cidr: result.matched_cidr
-      )
+      if result.hit?
+        begin
+          contain_chargeback_ring_seller!(result)
+        rescue StandardError => e
+          Purchase::ChargebackRingSignal.safe_notify(e, purchase_id: id, seller_id:)
+        end
+      end
+
+      begin
+        ::ChargebackRingSignal.create!(
+          seller_id:,
+          purchase_id: id,
+          decision: result.decision,
+          paid_sales: result.paid_sales,
+          dominant_card_country: result.dominant_card_country,
+          dominant_share_pct: result.dominant_share_pct,
+          hosting_share_pct: result.hosting_share_pct,
+          distinct_browsers: result.distinct_browsers,
+          matched_cidr: result.matched_cidr
+        )
+      rescue StandardError => e
+        Purchase::ChargebackRingSignal.safe_notify(e, purchase_id: id, seller_id:)
+      end
 
       if result.hit?
-        pause_seller_payouts_for_ring_signal!(result)
-        ErrorNotifier.notify(
-          "chargeback_ring_signal blocked purchase: seller_id=#{seller_id} paid_sales=#{result.paid_sales} " \
+        Purchase::ChargebackRingSignal.safe_notify(
+          "chargeback_ring_signal hit: seller_id=#{seller_id} paid_sales=#{result.paid_sales} " \
           "dominant=#{result.dominant_card_country} #{result.dominant_share_pct}% " \
           "hosting=#{result.hosting_share_pct}% cidr=#{result.matched_cidr}"
         )
       end
-    rescue StandardError => e
-      ErrorNotifier.notify(e, purchase_id: id, seller_id:)
+    end
+
+    # Payout pause + fraud-review flag. No suspension: a human decides the account's fate.
+    def contain_chargeback_ring_seller!(result)
+      pause_seller_payouts_for_ring_signal!(result)
+      # The repo's risk-review surface: flagged_for_fraud is the state the review queue reads
+      # (same mechanism Purchase::Blockable uses via flag_for_fraud!).
+      seller.flag_for_fraud!(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]) if seller.can_flag_for_fraud?
     end
 
     # Same pause mechanism as the existing chargeback-rate gate
     # (Purchase::Blockable#pause_payouts_for_seller_based_on_chargeback_rate!): the internal
     # system pause flag plus an on-probation comment, with the same locked re-check discipline.
     #
-    # The comment landing LAST is what makes the containment hold: User#payouts_paused_for_chargeback_rate?
-    # reads the newest pausing comment, and a ring seller's rate is still low when the signal fires,
-    # so a hold that still reads as the chargeback-rate one would be auto-released by
-    # ReleaseChargebackRatePayoutPausesJob and would pay the 75% reserve until then. An existing
-    # automatic hold therefore must not short-circuit this — only a human's own pause is left
-    # untouched. (A Stripe-source pause is not preserved either: UpdatePayoutMethod clears that
-    # source on a payout-method change, which would release the balance to the disputes in flight.)
-    # No suspension here: payout containment only, a human decides the account's fate.
+    # The ring comment landing LAST is what makes the containment hold:
+    # User#payouts_paused_for_chargeback_rate? reads the newest pausing comment, and a ring
+    # seller's measured rate is still low when the signal fires, so a hold that still reads as
+    # the chargeback-rate one would be auto-released by ReleaseChargebackRatePayoutPausesJob.
+    # An existing automatic hold therefore must NOT short-circuit this — the ring comment is
+    # recorded on top of it. Only a human's own (admin) pause is left untouched.
     def pause_seller_payouts_for_ring_signal!(result)
-      preserved_sources = [User::PAYOUT_PAUSE_SOURCE_ADMIN]
-      return if preserved_sources.include?(seller.payouts_paused_by_source)
+      return if seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
 
       seller.with_lock do
-        next if preserved_sources.include?(seller.payouts_paused_by_source)
-        # A second blocked sale must not append another comment once the ring's own is the newest.
+        next if seller.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_ADMIN
+        # Idempotence: once the ring's own comment is the newest, a second hit adds nothing.
         next if seller.payouts_paused_for_chargeback_ring_signal?
 
         seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_SYSTEM)
-        seller.comments.create(
+        seller.comments.create!(
           content: "Payouts automatically paused by the checkout chargeback-ring signal: " \
             "#{result.paid_sales} paid sales in #{Purchase::ChargebackRingSignal::WINDOW.inspect}, " \
             "#{result.dominant_share_pct}% from #{result.dominant_card_country}, " \
