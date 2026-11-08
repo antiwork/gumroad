@@ -464,6 +464,56 @@ export const withoutFileEmbedsFromVariants = (variants: Variant[], fileId: strin
 export const attachmentsWithoutLibraryRow = (files: Product["files"], libraryFileIds: string[]): Product["files"] =>
   files.filter((file) => file.status.type === "saved" && !libraryFileIds.includes(file.id));
 
+// "Keep version content" reloads the editor as soon as it saves, so removals that save skipped
+// (`file_deletions_skipped`) cross the reload here, with the revision that save left behind.
+export type SkippedFileRemovals = { fileIds: string[]; editorRevision: string | null };
+const skippedFileRemovalsKey = (productId: string) => `product-edit:skipped-file-removals:${productId}`;
+
+export const storeSkippedFileRemovals = (productId: string, removals: SkippedFileRemovals) => {
+  try {
+    window.sessionStorage.setItem(skippedFileRemovalsKey(productId), JSON.stringify(removals));
+  } catch {
+    // Without storage the reloaded editor shows the file as still attached, as it did before.
+  }
+};
+
+export const readSkippedFileRemovals = (productId: string): SkippedFileRemovals | null => {
+  try {
+    const value: unknown = JSON.parse(window.sessionStorage.getItem(skippedFileRemovalsKey(productId)) ?? "null");
+    return isPlainObject(value) &&
+      isStringList(value.fileIds) &&
+      (value.editorRevision === null || isString(value.editorRevision))
+      ? { fileIds: value.fileIds, editorRevision: value.editorRevision }
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+export const clearSkippedFileRemovals = (productId: string) => {
+  try {
+    window.sessionStorage.removeItem(skippedFileRemovalsKey(productId));
+  } catch {
+    // Nothing was stored.
+  }
+};
+
+// Removes the files again on the reloaded product, embeds included. Only safe when the product is
+// still exactly as the skipping save left it, which the matching editor revision proves; otherwise
+// the removal is decided against content the seller has not seen.
+export const withSkippedFileRemovals = (product: Product, removals: SkippedFileRemovals | null): Product => {
+  if (!removals?.editorRevision || removals.editorRevision !== product.editor_revision) return product;
+  const fileIds = removals.fileIds.filter((id) => product.files.some((file) => file.id === id));
+  if (fileIds.length === 0) return product;
+  const updated = structuredClone(product);
+  for (const id of fileIds) {
+    updated.files = markFileRemoved(updated.files, id);
+    updated.rich_content = withoutFileEmbeds(updated.rich_content, id);
+    withoutFileEmbedsFromVariants(updated.variants, id);
+  }
+  return updated;
+};
+
 export const buildRichContentReconciliationTransaction = (
   state: EditorState,
   removedFileIds: Set<string>,

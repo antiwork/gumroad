@@ -2195,6 +2195,94 @@ describe("a file removal", () => {
     expect(contextCapture.current?.product.files.map(({ id }) => id)).toEqual(["keep"]);
   });
 
+  describe("skipped by a save that kept version content", () => {
+    const embeddingPage = {
+      id: "version-page",
+      title: "Version page",
+      description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "detach", uid: "embed-uid" } }] },
+      updated_at: "2026-01-01T00:00:00Z",
+    };
+    const loadedProduct = (editorRevision: string) => ({
+      ...buildTieredProduct([buildTier("tier-a", "Tier A", [embeddingPage])]),
+      files: [savedFile("keep"), savedFile("detach")],
+      editor_revision: editorRevision,
+    });
+    const renderLoaded = async (editorRevision: string) => {
+      contextCapture.current = null;
+      render(<ProductEditPage {...buildTieredProps(loadedProduct(editorRevision))} />);
+      await waitFor(() => expect(contextCapture.current).not.toBeNull());
+    };
+    const removeThenKeepVersionContent = async (response: SaveProductResponse) => {
+      const reload = vi.fn();
+      vi.stubGlobal("location", { ...window.location, reload });
+      await renderLoaded("rev-1");
+      markRemoved("detach");
+      saveProductMock.mockRejectedValueOnce(
+        new HiddenVariantContentConflictError("conflict", [
+          { id: "hidden-page", title: "Hidden", variant_name: "Tier A" },
+        ]),
+      );
+      await act(async () => {
+        await contextCapture.current?.save();
+      });
+      saveProductMock.mockResolvedValueOnce(response);
+      await act(async () => {
+        fireEvent.click(await screen.findByRole("button", { name: /^Keep (?!shared).* content$/u }));
+      });
+      expect(reload).toHaveBeenCalledOnce();
+      expect(sentDeletedFileIds(1)).toEqual(["detach"]);
+      cleanup();
+      vi.mocked(showAlert).mockClear();
+    };
+    beforeEach(() => window.sessionStorage.clear());
+    afterEach(() => vi.unstubAllGlobals());
+
+    it("is removed again after the reload, and sent by the next save", async () => {
+      await removeThenKeepVersionContent({ file_deletions_skipped: true, editor_revision: "rev-2" });
+
+      await renderLoaded("rev-2");
+
+      const reloaded = contextCapture.current?.product;
+      expect(reloaded?.files.find(({ id }) => id === "detach")?.status.type).toBe("removed");
+      expect(JSON.stringify(reloaded?.variants[0]?.rich_content)).not.toContain("fileEmbed");
+      expect(showAlert).toHaveBeenCalledWith(
+        "A file you removed is still attached. Save changes to remove it.",
+        "warning",
+      );
+      saveProductMock.mockResolvedValueOnce({} satisfies SaveProductResponse);
+      await act(async () => {
+        await contextCapture.current?.save();
+      });
+      expect(sentDeletedFileIds(2)).toEqual(["detach"]);
+    });
+
+    it.each([
+      ["the product changed after that save", { editor_revision: "rev-2" }, "rev-3"],
+      ["that save could not vouch for this tab's snapshot", {}, "rev-2"],
+    ])("is left attached when %s", async (_case, revision, reloadedRevision) => {
+      await removeThenKeepVersionContent({ file_deletions_skipped: true, ...revision });
+
+      await renderLoaded(reloadedRevision);
+
+      const reloaded = contextCapture.current?.product;
+      expect(reloaded?.files.map(({ status }) => status.type)).toEqual(["saved", "saved"]);
+      expect(reloaded?.variants[0]?.rich_content).toEqual([embeddingPage]);
+      expect(showAlert).toHaveBeenCalledWith(
+        "A file you removed is still attached because the product changed since. Remove it again to detach it.",
+        "warning",
+      );
+    });
+
+    it("is not carried over when the save applied it", async () => {
+      await removeThenKeepVersionContent({ editor_revision: "rev-2" });
+
+      await renderLoaded("rev-2");
+
+      expect(contextCapture.current?.product.files.map(({ status }) => status.type)).toEqual(["saved", "saved"]);
+      expect(showAlert).not.toHaveBeenCalled();
+    });
+  });
+
   it("made while a save is in flight is still sent by the next save", async () => {
     const product = { ...buildTieredProduct([]), files: [savedFile("first"), savedFile("second")] };
     const requests: { resolve: (response: SaveProductResponse) => void }[] = [];

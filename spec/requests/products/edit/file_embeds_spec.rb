@@ -705,6 +705,67 @@ describe("File embeds in product content editor", type: :system, js: true) do
       expect(orphan.reload).to be_deleted
     end
 
+    context "when the seller keeps version content while the flag store is down" do
+      let(:flag_store) { { down: false } }
+      let!(:shared_page) { create(:product_rich_content, entity: product, title: "Shared page", description: [{ "type" => "paragraph", "content" => [{ "type" => "text", "text" => "Product-level shared content" }] }]) }
+
+      before do
+        product.update!(has_same_rich_content_for_all_variants: true)
+        allow_any_instance_of(Flipper::Adapters::Redis).to receive(:get).and_wrap_original do |original, feature|
+          raise Redis::CannotConnectError if flag_store[:down] && feature.key == Product::SaveContract::FEATURE_NAME.to_s
+          original.call(feature)
+        end
+        allow(ErrorNotifier).to receive(:notify).and_call_original
+      end
+
+      def remove_orphan_then_keep_version_content
+        visit edit_link_path(product.unique_permalink) + "/content"
+        expect(page).to have_text("Product-level shared content")
+        open_existing_files_picker
+        within_modal "Select existing product files" do
+          click_on "Remove Orphan from this product"
+          click_on "Cancel"
+        end
+        yield if block_given?
+
+        # Clears the fail-open wrapper's cached value from the page load, so the save's reads fail.
+        Feature.activate_user(:product_editor_save_contract, seller)
+        flag_store[:down] = true
+        click_on "Save changes"
+        within_modal "Choose which content to keep" do
+          click_on "Keep version content"
+        end
+      end
+
+      it "removes the file again after the reload, and the next save detaches it" do
+        remove_orphan_then_keep_version_content
+
+        expect(page).to have_alert(text: "A file you removed is still attached. Save changes to remove it.")
+        # Once for the save that hit the conflict, once for the save that kept version content.
+        expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Redis::CannotConnectError), hash_including(context: "Product::SaveContract flag lookup")).twice
+        expect(shared_page.reload).to be_deleted
+        expect(product.reload.has_same_rich_content_for_all_variants?).to be(false)
+        expect(orphan.reload).to be_alive
+
+        flag_store[:down] = false
+        save_change
+        expect(orphan.reload).to be_deleted
+        expect(product.product_files.alive).to contain_exactly(workbook, workbook_copy)
+      end
+
+      it "leaves the file attached when the save could not vouch for this tab's snapshot" do
+        remove_orphan_then_keep_version_content { orphan.update!(description: "Edited in another tab") }
+
+        expect(page).to have_alert(text: "A file you removed is still attached because the product changed since.")
+        expect(shared_page.reload).to be_deleted
+        expect(orphan.reload).to be_alive
+
+        flag_store[:down] = false
+        save_change
+        expect(orphan.reload).to be_alive
+      end
+    end
+
     it "detaches the attachment the library list leaves out and a file no page embeds, and keeps them detached" do
       listed_ids = seller.alive_product_files_preferred_for_product(product).map(&:external_id)
       unlisted, listed = [workbook, workbook_copy].partition { listed_ids.exclude?(_1.external_id) }.map(&:sole)
