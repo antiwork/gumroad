@@ -1,13 +1,12 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "inertia_rails/rspec"
 
-describe Purchases::RefundRequestsController do
-  render_views
-
+describe Purchases::RefundRequestsController, type: :controller, inertia: true do
   let(:purchase) { create(:purchase) }
   let(:seller) { purchase.seller }
-  let(:token) { purchase.secure_external_id(scope: described_class::SECURE_ID_SCOPE, expires_at: 6.months.from_now) }
+  let(:token) { purchase.secure_external_id(scope: described_class::SECURE_ID_SCOPE, expires_at: described_class::LINK_EXPIRY.from_now) }
 
   before do
     Feature.activate_user(:buyer_refund_requests, seller)
@@ -18,8 +17,14 @@ describe Purchases::RefundRequestsController do
       get :show, params: { purchase_id: token }
 
       expect(response).to be_successful
-      expect(response.body).to include("Request a refund")
-      expect(response.body).to include("Send refund request")
+      expect(inertia.component).to eq("Purchases/RefundRequest/Show")
+      expect(inertia.props.slice(:purchase_route_id, :product_name, :refund_request, :ineligibility)).to eq(
+        purchase_route_id: token,
+        product_name: purchase.link.name,
+        refund_request: nil,
+        ineligibility: nil,
+      )
+      expect(inertia.props[:reasons].map { _1[:value] }).to eq(PurchaseRefundRequest::REASONS)
       expect(response.headers["Cache-Control"]).to eq("no-store")
       expect(response.headers["Referrer-Policy"]).to eq("no-referrer")
     end
@@ -46,39 +51,39 @@ describe Purchases::RefundRequestsController do
       expect { get :show, params: { purchase_id: wrong_scope_token } }.to raise_error(ActionController::RoutingError)
     end
 
-    it "shows the current state instead of the form when a request exists" do
-      create(:purchase_refund_request, purchase:, seller_notified_at: Time.current, support_notified_at: Time.current)
+    it "shows the current request without enqueueing anything" do
+      create(:purchase_refund_request, purchase:, reason: "other")
+      PurchaseRefundRequests::NotifyJob.jobs.clear
 
       get :show, params: { purchase_id: token }
 
-      expect(response.body).to include("Your refund request has been sent to the creator")
-      expect(response.body).not_to include("Send refund request")
+      expect(inertia.props[:refund_request]).to eq(state: "requested", email: purchase.email, reason_label: "Something else")
+      expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
     end
 
-    it "re-enqueues the notify worker when a stale request still owes notifications" do
-      request = create(:purchase_refund_request, purchase:, seller_notified_at: nil, support_notified_at: Time.current,
-                                                 created_at: 11.minutes.ago)
+    it "shows the purchase as refunded even if the sync missed the request row" do
+      create(:purchase_refund_request, purchase:, state: "escalated")
+      purchase.update_column(:stripe_refunded, true)
 
-      expect do
-        get :show, params: { purchase_id: token }
-      end.to change(PurchaseRefundRequests::NotifyWorker.jobs, :size).by(1)
-      expect(PurchaseRefundRequests::NotifyWorker.jobs.last["args"]).to eq([request.id])
+      get :show, params: { purchase_id: token }
+
+      expect(inertia.props[:refund_request][:state]).to eq("refunded")
     end
 
-    it "does not re-enqueue while the request is still inside the post-create grace window" do
-      create(:purchase_refund_request, purchase:, seller_notified_at: nil, support_notified_at: Time.current)
+    it "does not show a reversed refund as refunded even if the sync missed the request row" do
+      create(:purchase_refund_request, purchase:, state: "refunded")
 
-      expect do
-        get :show, params: { purchase_id: token }
-      end.not_to change(PurchaseRefundRequests::NotifyWorker.jobs, :size)
+      get :show, params: { purchase_id: token }
+
+      expect(inertia.props[:refund_request][:state]).to eq("expired")
     end
 
-    it "does not re-enqueue when notifications were delivered" do
-      create(:purchase_refund_request, purchase:, seller_notified_at: Time.current, support_notified_at: Time.current)
+    it "explains ineligibility for a partly refunded purchase" do
+      purchase.update!(stripe_partially_refunded: true)
 
-      expect do
-        get :show, params: { purchase_id: token }
-      end.not_to change(PurchaseRefundRequests::NotifyWorker.jobs, :size)
+      get :show, params: { purchase_id: token }
+
+      expect(inertia.props[:ineligibility]).to eq("partially_refunded")
     end
 
     it "explains ineligibility for a refunded purchase" do
@@ -86,18 +91,15 @@ describe Purchases::RefundRequestsController do
 
       get :show, params: { purchase_id: token }
 
-      expect(response.body).to include("isn't eligible")
-      expect(response.body).not_to include("Send refund request")
+      expect(inertia.props[:ineligibility]).to eq("refunded")
     end
   end
 
   describe "POST create" do
-    it "creates the request and enqueues the notify worker and escalation exactly once" do
+    it "creates the request and enqueues the notify job once" do
       expect do
         post :create, params: { purchase_id: token, reason: "not_as_described", message: "Files are corrupted." }
       end.to change(PurchaseRefundRequest, :count).by(1)
-        .and change(PurchaseRefundRequests::NotifyWorker.jobs, :size).by(1)
-        .and change(PurchaseRefundRequests::EscalateWorker.jobs, :size).by(1)
 
       request = PurchaseRefundRequest.last
       expect(request.purchase).to eq(purchase)
@@ -105,21 +107,19 @@ describe Purchases::RefundRequestsController do
       expect(request.reason).to eq("not_as_described")
       expect(request.message).to eq("Files are corrupted.")
       expect(request.state).to eq("requested")
-      expect(request.seller_notified_at).to be_nil
-
-      expect(PurchaseRefundRequests::NotifyWorker.jobs.last["args"]).to eq([request.id])
+      expect(PurchaseRefundRequests::NotifyJob.jobs.map { _1["args"] }).to eq([[request.id]])
       expect(response).to redirect_to(purchase_refund_request_path(token))
     end
 
     it "returns the existing open request without enqueueing anything" do
       existing = create(:purchase_refund_request, purchase:)
-      PurchaseRefundRequests::NotifyWorker.jobs.clear
+      PurchaseRefundRequests::NotifyJob.jobs.clear
 
       expect do
         post :create, params: { purchase_id: token, reason: "other" }
-      end.to not_change(PurchaseRefundRequest, :count)
-        .and not_change(PurchaseRefundRequests::NotifyWorker.jobs, :size)
+      end.not_to change(PurchaseRefundRequest, :count)
 
+      expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
       expect(response).to redirect_to(purchase_refund_request_path(token))
       expect(PurchaseRefundRequest.open_for(purchase)).to eq(existing)
     end
@@ -129,10 +129,10 @@ describe Purchases::RefundRequestsController do
 
       expect do
         post :create, params: { purchase_id: token, reason: "not_as_described" }
-      end.to not_change(PurchaseRefundRequest, :count)
-        .and not_change(PurchaseRefundRequests::NotifyWorker.jobs, :size)
+      end.not_to change(PurchaseRefundRequest, :count)
 
-      expect(response.body).to include("isn't eligible")
+      expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
+      expect(response).to redirect_to(purchase_refund_request_path(token))
     end
 
     it "rejects a purchase whose previous request was declined" do
@@ -142,8 +142,7 @@ describe Purchases::RefundRequestsController do
         post :create, params: { purchase_id: token, reason: "other" }
       end.not_to change(PurchaseRefundRequest, :count)
 
-      expect(response.body).to include("The creator declined this refund request")
-      expect(response.body).not_to include("Send refund request")
+      expect(response).to redirect_to(purchase_refund_request_path(token))
     end
 
     it "404s when the flag is off" do
@@ -155,12 +154,13 @@ describe Purchases::RefundRequestsController do
       expect(PurchaseRefundRequest.count).to eq(0)
     end
 
-    it "re-renders the form when no valid reason is given" do
+    it "redirects back with an alert when no valid reason is given" do
       expect do
         post :create, params: { purchase_id: token, reason: "nonsense" }
       end.not_to change(PurchaseRefundRequest, :count)
 
       expect(response).to redirect_to(purchase_refund_request_path(token))
+      expect(flash[:alert]).to eq("Please select a reason for your refund request.")
     end
 
     it "truncates the message to the cap" do

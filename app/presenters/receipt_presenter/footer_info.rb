@@ -63,20 +63,19 @@ class ReceiptPresenter::FooterInfo
     )
   end
 
-  # Purchase receipts only: a grouped Charge receipt spans purchases with
-  # different eligibility, so Charge buyers keep the support path.
   def show_refund_request_link?
-    return false unless chargeable.is_a?(Purchase)
-    return false unless Feature.active?(:buyer_refund_requests, chargeable.seller)
+    purchase = refund_request_purchase
+    return false if purchase.nil?
+    return false unless Feature.active?(:buyer_refund_requests, purchase.seller)
 
-    PurchaseRefundRequest.purchase_eligible?(chargeable)
+    PurchaseRefundRequest.purchase_eligible?(purchase)
   end
 
   def refund_request_link
     link_to(
       "Request a refund",
       Rails.application.routes.url_helpers.purchase_refund_request_url(
-        chargeable.secure_external_id(scope: Purchases::RefundRequestsController::SECURE_ID_SCOPE, expires_at: 6.months.from_now),
+        refund_request_purchase.secure_external_id(scope: Purchases::RefundRequestsController::SECURE_ID_SCOPE, expires_at: Purchases::RefundRequestsController::LINK_EXPIRY.from_now),
         host: UrlService.domain_with_protocol
       )
     )
@@ -84,4 +83,14 @@ class ReceiptPresenter::FooterInfo
 
   private
     attr_reader :chargeable
+
+    # Checkout receipts are usually built on a Charge. Link only when it holds a
+    # single charged purchase: a multi-item receipt spans purchases with different
+    # eligibility, so those buyers keep the support path.
+    def refund_request_purchase
+      return @refund_request_purchase if defined?(@refund_request_purchase)
+
+      purchases = chargeable.charged_purchases.reject(&:is_bundle_product_purchase?)
+      @refund_request_purchase = purchases.one? ? purchases.first : nil
+    end
 end

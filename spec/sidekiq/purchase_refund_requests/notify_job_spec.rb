@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe PurchaseRefundRequests::NotifyWorker do
+describe PurchaseRefundRequests::NotifyJob do
   let(:purchase) { create(:purchase) }
   let(:refund_request) { create(:purchase_refund_request, purchase:, message: "The files were corrupted.") }
 
@@ -31,22 +31,26 @@ describe PurchaseRefundRequests::NotifyWorker do
     end.not_to change { ActionMailer::Base.deliveries.count }
   end
 
-  it "takes the request's row lock before it stamps, so overlapping duplicate jobs can't double-send" do
-    statements = []
-    subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
-      statements << payload[:sql].to_s
-    end
-    begin
-      described_class.new.perform(refund_request.id)
-    ensure
-      ActiveSupport::Notifications.unsubscribe(subscriber)
+  it "holds no transaction or row lock while the mail is delivered" do
+    refund_request
+    baseline = ActiveRecord::Base.connection.open_transactions
+    open_during_delivery = []
+    allow_any_instance_of(Mail::Message).to receive(:deliver).and_wrap_original do |original, *args|
+      open_during_delivery << ActiveRecord::Base.connection.open_transactions
+      original.call(*args)
     end
 
-    lock = statements.index { |sql| sql.match?(/FROM .?purchase_refund_requests.? .*FOR UPDATE/) }
-    first_stamp = statements.index { |sql| sql.match?(/UPDATE .?purchase_refund_requests.? SET/) }
-    expect(lock).to be_present
-    expect(first_stamp).to be_present
-    expect(lock).to be < first_stamp
+    described_class.new.perform(refund_request.id)
+
+    expect(open_during_delivery).to eq([baseline, baseline])
+    expect(refund_request.reload.seller_notified_at).to be_present
+  end
+
+  it "raises without stamping when the mail server rejects the email" do
+    allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(Net::SMTPFatalError.new("550 rejected"))
+
+    expect { described_class.new.perform(refund_request.id) }.to raise_error(Net::SMTPFatalError)
+    expect(refund_request.reload.seller_notified_at).to be_nil
   end
 
   it "delivers only the missing notification on retry after a partial failure" do
@@ -80,5 +84,19 @@ describe PurchaseRefundRequests::NotifyWorker do
     expect do
       described_class.new.perform(-1)
     end.not_to change { ActionMailer::Base.deliveries.count }
+  end
+
+  context "with the unique lock enabled" do
+    around do |example|
+      SidekiqUniqueJobs.use_config(enabled: true) { example.run }
+    end
+
+    it "drops a re-push while the create-time job for the same request is still queued" do
+      refund_request
+      expect(described_class.jobs.map { _1["args"] }).to eq([[refund_request.id]])
+
+      expect(described_class.perform_async(refund_request.id)).to be_nil
+      expect(described_class.jobs.size).to eq(1)
+    end
   end
 end

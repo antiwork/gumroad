@@ -144,8 +144,20 @@ describe ReceiptPresenter::FooterInfo, :vcr do
         expect(presenter.show_refund_request_link?).to be(false)
       end
 
-      it "does not show the link for a Charge" do
-        charge_presenter = described_class.new(create(:charge))
+      it "shows the link for a checkout Charge receipt with one purchase, signed for that purchase" do
+        charge_presenter = described_class.new(create(:charge, purchases: [chargeable]))
+        token_purchase = nil
+        allow_any_instance_of(Purchase).to receive(:secure_external_id) { |purchase, **| token_purchase = purchase; "sample-secure-id" }
+
+        expect(charge_presenter.show_refund_request_link?).to be(true)
+        expect(charge_presenter.refund_request_link).to include("sample-secure-id")
+        expect(token_purchase).to eq(chargeable)
+      end
+
+      it "does not show the link for a Charge receipt with several purchases" do
+        other_purchase = create(:purchase, link: create(:product, user: chargeable.seller), seller: chargeable.seller)
+        charge_presenter = described_class.new(create(:charge, purchases: [chargeable, other_purchase]))
+
         expect(charge_presenter.show_refund_request_link?).to be(false)
       end
 

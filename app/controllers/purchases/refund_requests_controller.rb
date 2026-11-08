@@ -1,66 +1,46 @@
 # frozen_string_literal: true
 
 class Purchases::RefundRequestsController < ApplicationController
-  SECURE_ID_SCOPE = "refund_request"
-  # A revisit only re-enqueues notifications for a request at least this old, so
-  # the redirect after create — worker still pending, both stamps still nil —
-  # can't pile more jobs on top of the one after_create_commit already enqueued.
-  NOTIFICATION_RETRY_GRACE = 10.minutes
+  layout "inertia"
 
-  before_action :hide_layouts
+  SECURE_ID_SCOPE = "refund_request"
+  LINK_EXPIRY = 6.months
+
   before_action :set_purchase
   before_action :check_feature_flag
-  # The signed token is the URL itself; keep it out of shared caches and
-  # don't leak it to third parties via the Referer header.
+  # The signed token is the URL itself: keep it out of shared caches and Referer headers.
   before_action :set_no_store_and_referrer_policy
 
   def show
-    @refund_request = latest_refund_request
-    # A crash or Redis outage after create can leave an open row with unsent
-    # notifications; a later revisit re-enqueues them. Not a fresh row, though:
-    # the redirect from create arrives while the job enqueued by
-    # after_create_commit is usually still pending, and re-enqueueing there is
-    # what made the happy path race two jobs for the same request.
-    if @refund_request&.notifications_pending? && @refund_request.created_at < NOTIFICATION_RETRY_GRACE.ago
-      @refund_request.enqueue_notifications
-    end
-    @eligible = PurchaseRefundRequest.purchase_eligible?(@purchase)
+    set_meta_tag(title: "Request a refund")
+    set_noindex_header
+
+    render inertia: "Purchases/RefundRequest/Show", props: page_props
   end
 
   def create
-    # Lock the purchase so a concurrently-committing refund can't slide between
-    # the eligibility read and the insert; the refund callback takes the same
-    # lock, so after our insert it will see and close the row.
+    reason = params[:reason].to_s
+    unless PurchaseRefundRequest::REASONS.include?(reason)
+      return redirect_to purchase_refund_request_path(params[:purchase_id]), alert: "Please select a reason for your refund request.", status: :see_other
+    end
+
+    # Same purchase lock the refund paths take, so a refund committing concurrently
+    # either makes this purchase ineligible or sees and closes the new row.
     @purchase.with_lock do
-      @refund_request = PurchaseRefundRequest.open_for(@purchase)
-      next if @refund_request.present? # double submit → show the existing one
+      next if PurchaseRefundRequest.open_for(@purchase).present?
+      next unless PurchaseRefundRequest.purchase_eligible?(@purchase)
 
-      unless PurchaseRefundRequest.purchase_eligible?(@purchase)
-        @ineligible = true
-        next
-      end
-
-      begin
-        @refund_request = PurchaseRefundRequest.create!(
-          purchase: @purchase,
-          email: @purchase.email,
-          reason: permitted_reason,
-          message: params[:message].to_s.strip.first(PurchaseRefundRequest::MAX_MESSAGE_LENGTH).presence,
-        )
-      rescue ActiveRecord::RecordInvalid
-        @invalid = true
-      end
+      PurchaseRefundRequest.create!(
+        purchase: @purchase,
+        email: @purchase.email,
+        reason:,
+        message: params[:message].to_s.strip.first(PurchaseRefundRequest::MAX_MESSAGE_LENGTH).presence,
+      )
     end
 
-    return render_ineligible if @ineligible
-    if @invalid
-      flash[:alert] = "Please select a reason for your refund request."
-      return redirect_to purchase_refund_request_path(params[:purchase_id])
-    end
-
-    # Notifications are NOT sent here: after_create_commit enqueues an
-    # idempotent worker exactly once, on the submission that created the row.
-    redirect_to purchase_refund_request_path(params[:purchase_id])
+    # The show page renders whatever the purchase now has: the new or existing
+    # request, or why it isn't eligible.
+    redirect_to purchase_refund_request_path(params[:purchase_id]), status: :see_other
   end
 
   private
@@ -69,7 +49,6 @@ class Purchases::RefundRequestsController < ApplicationController
       e404 if @purchase.nil?
     end
 
-    # Off means the page does not exist: same 404 as a bad token.
     def check_feature_flag
       e404 unless Feature.active?(:buyer_refund_requests, @purchase.seller)
     end
@@ -79,18 +58,39 @@ class Purchases::RefundRequestsController < ApplicationController
       response.headers["Referrer-Policy"] = "no-referrer"
     end
 
-    def permitted_reason
-      reason = params[:reason].to_s
-      PurchaseRefundRequest::REASONS.include?(reason) ? reason : nil
+    def page_props
+      refund_request = PurchaseRefundRequest.where(purchase_id: @purchase.id).order(:id).last
+      {
+        purchase_route_id: params[:purchase_id],
+        product_name: @purchase.link.name,
+        formatted_price: @purchase.formatted_display_price,
+        escalation_business_days: PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS,
+        max_message_length: PurchaseRefundRequest::MAX_MESSAGE_LENGTH,
+        reasons: PurchaseRefundRequest::REASON_LABELS.map { |value, label| { value:, label: } },
+        refund_request: refund_request && {
+          state: displayed_state(refund_request),
+          email: refund_request.email,
+          reason_label: PurchaseRefundRequest::REASON_LABELS[refund_request.reason],
+        },
+        ineligibility: ineligibility,
+      }
     end
 
-    def render_ineligible
-      @refund_request = latest_refund_request
-      @eligible = false
-      render :show
+    # The purchase is the source of truth if the refund/chargeback sync missed this row.
+    def displayed_state(refund_request)
+      return "refunded" if @purchase.refunded?
+      return "expired" if @purchase.chargedback? && refund_request.state != "refunded"
+      return "expired" if refund_request.state_refunded?
+
+      refund_request.state
     end
 
-    def latest_refund_request
-      PurchaseRefundRequest.where(purchase_id: @purchase.id).order(:id).last
+    def ineligibility
+      return if PurchaseRefundRequest.purchase_eligible?(@purchase)
+      return "refunded" if @purchase.refunded?
+      return "partially_refunded" if @purchase.stripe_partially_refunded?
+      return "chargedback" if @purchase.chargedback?
+
+      "other"
     end
 end

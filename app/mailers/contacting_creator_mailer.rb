@@ -564,8 +564,6 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "A sale has been refunded"
   end
 
-  # The one-click link lands on the seller's existing Customers sale page —
-  # this mailer never refunds anything itself.
   def refund_requested(refund_request_id)
     # Same primary read as #purchase_refunded: the row was created moments
     # before this delivers, so a lagging replica could miss it.
@@ -575,7 +573,7 @@ class ContactingCreatorMailer < ApplicationMailer
 
       @purchase = @refund_request.purchase
     end
-    # Flag off is a hard no-op even for mail already sitting in the queue.
+    # The flag can be turned off after the job was queued.
     return do_not_send unless Feature.active?(:buyer_refund_requests, @purchase.seller)
 
     @seller = @purchase.seller

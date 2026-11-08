@@ -75,21 +75,20 @@ describe PurchaseRefundRequest do
     end
   end
 
-  describe "notification + escalation enqueueing" do
-    it "enqueues the notify worker and schedules escalation on create" do
+  describe "notification enqueueing" do
+    it "enqueues the notify job on create" do
       request = create(:purchase_refund_request, purchase:)
 
-      expect(PurchaseRefundRequests::NotifyWorker.jobs.map { |job| job["args"] }).to include([request.id])
-      expect(PurchaseRefundRequests::EscalateWorker.jobs.map { |job| job["args"] }).to include([request.id])
+      expect(PurchaseRefundRequests::NotifyJob.jobs.map { |job| job["args"] }).to eq([[request.id]])
     end
 
     it "does not re-enqueue on state changes" do
       request = create(:purchase_refund_request, purchase:)
-      PurchaseRefundRequests::NotifyWorker.jobs.clear
+      PurchaseRefundRequests::NotifyJob.jobs.clear
 
       request.update!(state: "seen")
 
-      expect(PurchaseRefundRequests::NotifyWorker.jobs).to be_empty
+      expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
     end
   end
 
@@ -158,6 +157,15 @@ describe PurchaseRefundRequest do
       create(:purchase_refund_request, purchase:, state: "declined")
       expect(described_class.purchase_eligible?(purchase)).to eq(false)
     end
+
+    it "rejects a purchase whose previous request was escalated to support" do
+      create(:purchase_refund_request, purchase:, state: "escalated")
+      expect(described_class.purchase_eligible?(purchase)).to eq(false)
+    end
+
+    it "rejects a preorder authorization, which has not been charged" do
+      expect(described_class.purchase_eligible?(create(:preorder_authorization_purchase, stripe_transaction_id: nil))).to eq(false)
+    end
   end
 
   describe "closing on refund" do
@@ -187,12 +195,72 @@ describe PurchaseRefundRequest do
       expect(request.reload.state).to eq("expired")
     end
 
+    it "marks an escalated request refunded when the purchase is refunded after the deadline" do
+      request = create(:purchase_refund_request, purchase:, state: "escalated")
+
+      purchase.update!(stripe_refunded: true)
+
+      expect(request.reload.state).to eq("refunded")
+    end
+
+    it "expires an escalated request when the purchase is charged back" do
+      request = create(:purchase_refund_request, purchase:, state: "escalated")
+
+      purchase.update!(chargeback_date: Time.current)
+
+      expect(request.reload.state).to eq("expired")
+    end
+
     it "does not touch already-closed requests" do
       request = create(:purchase_refund_request, purchase:, state: "declined")
 
       purchase.update!(stripe_refunded: true)
 
       expect(request.reload.state).to eq("declined")
+    end
+
+    it "marks the open request refunded when the seller refunds through refund_purchase!" do
+      request = create(:purchase_refund_request, purchase:)
+
+      purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents), purchase.seller.id)
+
+      expect(purchase.reload.stripe_refunded).to eq(true)
+      expect(request.reload.state).to eq("refunded")
+    end
+
+    it "closes the request only after a caller's transaction around refund_purchase! commits" do
+      request = create(:purchase_refund_request, purchase:)
+
+      ActiveRecord::Base.transaction do
+        purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents), purchase.seller.id)
+        expect(request.reload.state).to eq("requested")
+      end
+
+      expect(request.reload.state).to eq("refunded")
+    end
+
+    it "keeps the request open on a partial refund and closes it when the rest is refunded" do
+      request = create(:purchase_refund_request, purchase:)
+      half = purchase.total_transaction_cents / 2
+
+      purchase.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, half), purchase.seller.id)
+      expect(request.reload.state).to eq("requested")
+
+      purchase.reload.refund_purchase!(FlowOfFunds.build_simple_flow_of_funds(Currency::USD, purchase.total_transaction_cents - half), purchase.seller.id)
+      expect(purchase.reload.stripe_refunded).to eq(true)
+      expect(request.reload.state).to eq("refunded")
+    end
+
+    it "keeps the purchase's later after_commit callbacks working on a chargeback" do
+      travel_to(Time.utc(2020, 1, 10))
+      purchase = create(:purchase, created_at: 2.days.ago)
+      request = create(:purchase_refund_request, purchase:)
+      RegenerateCreatorAnalyticsCacheWorker.jobs.clear
+
+      purchase.mark_as_disputed!(disputed_at: Time.current)
+
+      expect(request.reload.state).to eq("expired")
+      expect(RegenerateCreatorAnalyticsCacheWorker).to have_enqueued_sidekiq_job(purchase.seller_id, "2020-01-07")
     end
   end
 end

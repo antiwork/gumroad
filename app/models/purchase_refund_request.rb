@@ -4,6 +4,7 @@ class PurchaseRefundRequest < ApplicationRecord
   belongs_to :purchase
 
   MAX_MESSAGE_LENGTH = 2_000
+  SUPPORT_CATEGORY = "purchases & refunds"
   # Weekdays only, no holiday calendar — same approximation as PiracyReport.
   ESCALATION_BUSINESS_DAYS = 2
 
@@ -18,11 +19,12 @@ class PurchaseRefundRequest < ApplicationRecord
 
   enum :reason, REASONS.index_by(&:itself), prefix: true, validate: true
 
-  STATES = %w[requested seen refunded declined expired].freeze
+  STATES = %w[requested seen refunded declined expired escalated].freeze
   OPEN_STATES = %w[requested seen].freeze
-  # declined/expired block a NEW request (anti-harassment); refunded needs no
-  # entry here because purchase_eligible? already rejects refunded purchases.
-  TERMINAL_BLOCKING_STATES = %w[declined expired].freeze
+  # Refunded needs no entry: purchase_eligible? already rejects refunded purchases.
+  TERMINAL_BLOCKING_STATES = %w[declined expired escalated].freeze
+  # Escalated requests are with support, so a later refund or chargeback still closes them.
+  RESOLVABLE_STATES = (OPEN_STATES + %w[escalated]).freeze
   enum :state, STATES.index_by(&:itself), prefix: true, validate: true
 
   validates :email, presence: true
@@ -31,7 +33,7 @@ class PurchaseRefundRequest < ApplicationRecord
   before_save :sync_open_key
   after_create :log_event
   after_update :log_event, if: :saved_change_to_state?
-  after_create_commit :enqueue_notifications, :schedule_escalation
+  after_create_commit :enqueue_notifications
 
   scope :open_state, -> { where(state: OPEN_STATES) }
 
@@ -41,14 +43,12 @@ class PurchaseRefundRequest < ApplicationRecord
 
   def open? = OPEN_STATES.include?(state)
 
-  # Nil stamps mean a notification is still owed (crash/Redis outage after
-  # create); callers may re-enqueue freely — the worker is idempotent on stamps.
   def notifications_pending?
     open? && (seller_notified_at.nil? || support_notified_at.nil?)
   end
 
   def enqueue_notifications
-    PurchaseRefundRequests::NotifyWorker.perform_async(id)
+    PurchaseRefundRequests::NotifyJob.perform_async(id)
   end
 
   def escalation_deadline
@@ -61,12 +61,11 @@ class PurchaseRefundRequest < ApplicationRecord
   end
 
   def self.purchase_eligible?(purchase)
-    return false unless purchase.purchase_state.in?(Purchase::CHARGED_SUCCESS_STATES)
+    # Not preorder authorizations: the card is only held, so there is nothing to refund.
+    return false unless purchase.successful?
     return false if purchase.price_cents.to_i <= 0
     return false if purchase.refunded? || purchase.stripe_partially_refunded?
     return false if purchase.chargedback?
-    # declined/expired means the seller or the clock already answered; re-asking
-    # requires a support action, not a fresh form submit.
     return false if where(purchase_id: purchase.id, state: TERMINAL_BLOCKING_STATES).exists?
 
     max_days = purchase.purchase_refund_policy&.max_refund_period_in_days
@@ -84,11 +83,7 @@ class PurchaseRefundRequest < ApplicationRecord
       self.open_key = open? ? purchase_id : nil
     end
 
-    def schedule_escalation
-      PurchaseRefundRequests::EscalateWorker.perform_at(escalation_deadline, id)
-    end
-
-    # Stable prefix for SQL-countable conversion; never the free-text message.
+    # Never log the free-text message.
     def log_event
       Rails.logger.info(
         "[PurchaseRefundRequest] id=#{id} purchase_id=#{purchase_id} state=#{state} reason=#{reason}"
