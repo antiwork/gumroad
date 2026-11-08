@@ -332,12 +332,15 @@ class ReceiptPresenter::PaymentInfo
         subscription = purchase.subscription
         return if subscription.has_fixed_length? && purchase == subscription.last_purchase && subscription.remaining_charges_count&.zero?
 
-        if subscription.current_subscription_price_cents == purchase.displayed_price_cents
+        next_payment_date = purchase.is_free_trial_purchase? ? subscription.free_trial_ends_at : purchase.created_at + subscription.period
+        next_price_cents = subscription.next_charge_price_cents(as_of: next_payment_date)
+
+        if next_price_cents == purchase.displayed_price_cents
           next_payment_tax_cents = purchase.tax_in_purchase_currency
         else
           tax_calculation = SalesTaxCalculator.new(
             product: purchase.link,
-            price_cents: subscription.current_subscription_price_cents,
+            price_cents: next_price_cents,
             shipping_cents: purchase.shipping_cents,
             quantity: purchase.quantity,
             buyer_location:
@@ -355,12 +358,11 @@ class ReceiptPresenter::PaymentInfo
           )
         end
 
-        next_payment_date = purchase.is_free_trial_purchase? ? subscription.free_trial_ends_at : purchase.created_at + subscription.period
         {
           label: price_attribute_label(purchase) + upcoming_price_attribute_label_notes(purchase),
           value: "#{formatted_price(
               purchase.displayed_price_currency_type,
-              subscription.current_subscription_price_cents + purchase.shipping_in_purchase_currency + next_payment_tax_cents
+              next_price_cents + purchase.shipping_in_purchase_currency + next_payment_tax_cents
             )} on #{next_payment_date.to_fs(:formatted_date_abbrev_month)}".html_safe
         }
       end

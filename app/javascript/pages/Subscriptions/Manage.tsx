@@ -76,6 +76,7 @@ type Props = {
     recurrence: RecurrenceId;
     option_id: string | null;
     price: number;
+    next_charge_price?: number;
     pre_discount_price: number;
     quantity: number;
     alive: boolean;
@@ -208,7 +209,10 @@ export default function SubscriptionsManage() {
     pricingDiscount,
     getMinPriceCents(product.currency_code),
   );
-  const requirePayment = price > 0;
+  // A tiered discount can be free now and paid at renewal; the card must be addable before then.
+  const renewalPrice =
+    noChangesToNonPriceOptions && !isPWYW ? Math.max(price, subscription.next_charge_price ?? 0) : price;
+  const requirePayment = renewalPrice > 0;
   const noChangesToCurrentPlan = noChangesToNonPriceOptions && (!isPWYW || price === subscription.price);
   // Overdue charges the full new plan; subtracting stale proration would trip the price guard.
   let amountDueToday =
@@ -271,7 +275,7 @@ export default function SubscriptionsManage() {
   // agreement is declared.
   const remainingCharges = subscription.remaining_charges_count;
   const declareRecurring = remainingCharges === null || remainingCharges > 0;
-  const renewalPriceCents = declareRecurring ? Math.round(price / product.exchange_rate) : null;
+  const renewalPriceCents = declareRecurring ? Math.round(renewalPrice / product.exchange_rate) : null;
   const recurrence = selection.recurrence ?? subscription.recurrence;
   const paymentProduct: PaymentProduct = {
     permalink: product.permalink,

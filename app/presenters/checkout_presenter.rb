@@ -328,6 +328,7 @@ class CheckoutPresenter
         option_id: (subscription.original_purchase.variant_attributes[0] || product.default_tier)&.external_id,
         recurrence: subscription.recurrence,
         price: subscription_price,
+        next_charge_price: subscription.next_charge_price_cents(authenticated_offer_code_buyer: logged_in_user),
         pre_discount_price:,
         prorated_discount_price_cents: subscription.prorated_discount_price_cents,
         quantity: subscription.original_purchase.quantity,

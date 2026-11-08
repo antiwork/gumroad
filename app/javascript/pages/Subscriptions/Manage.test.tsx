@@ -257,6 +257,18 @@ describe("SubscriptionsManage saved payment method", () => {
     expect(await screen.findByRole("radio", { name: "Card" })).toHaveProperty("checked", true);
   });
 
+  it("offers the payment method fields while this period is free but the renewal is paid", () => {
+    const free = { ...pageProps().subscription, price: 0, pre_discount_price: 500 };
+    renderManage(pageProps({ subscription: free, used_card: savedCard, used_paypal: null }));
+    expect(screen.queryByLabelText("Saved credit card")).toBeNull();
+    cleanup();
+
+    renderManage(
+      pageProps({ subscription: { ...free, next_charge_price: 500 }, used_card: savedCard, used_paypal: null }),
+    );
+    expect(screen.getByLabelText("Saved credit card").textContent).toBe("**** 4242");
+  });
+
   it("shows no saved PayPal for a card or for no saved payment method", () => {
     renderManage(pageProps({ used_paypal: null, used_card: savedCard }));
     expect(savedPayPalRadio()).toBeNull();

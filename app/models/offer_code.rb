@@ -460,12 +460,12 @@ class OfferCode < ApplicationRecord
     end.sort_by { it["months"] }
   end
 
-  def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil)
-    months = ownership_months_for(buyer, ownership_reference_products(product), ownership_variants) if existing_customers_only? || tiered?
+  def evaluate_for_buyer(buyer, product: nil, fallback_purchase: nil, as_of: nil)
+    months = ownership_months_for(buyer, ownership_reference_products(product), ownership_variants, as_of:) if existing_customers_only? || tiered?
     return nil if existing_customers_only? && months.nil?
 
     if tiered?
-      months ||= months_since(fallback_purchase&.created_at)
+      months ||= months_since(fallback_purchase&.created_at, as_of:)
       tier = matching_tier_for(months || 0)
       return nil if tier.nil?
       return discount.merge(type: "percent", percents: tier["amount_percentage"])
@@ -488,7 +488,7 @@ class OfferCode < ApplicationRecord
   # not been proven to belong to the signed-in user, so trusting it would let
   # someone sign up with a stranger's email and inherit that stranger's
   # existing-customer discounts.
-  def ownership_months_for(buyer, products, variants = nil)
+  def ownership_months_for(buyer, products, variants = nil, as_of: nil)
     return nil if buyer.nil?
 
     variants = Array(variants)
@@ -507,7 +507,7 @@ class OfferCode < ApplicationRecord
       (qualifying_ownership_purchases.where(link_id: product_ids).where(*ownership_condition).order(:created_at).pick(:created_at) if product_ids.any?),
       (qualifying_ownership_purchases.joins(:variant_attributes).where(base_variants: { id: variants.map(&:id) }).where(*ownership_condition).order(:created_at).pick(:created_at) if variants.any?),
     ].compact.min
-    months_since(oldest)
+    months_since(oldest, as_of:)
   end
 
   # Whether any of these accounts or emails already holds a purchase from this seller, in any
@@ -526,9 +526,9 @@ class OfferCode < ApplicationRecord
       (emails.any? && purchases.where(email: emails).exists?)
   end
 
-  def months_since(timestamp)
+  def months_since(timestamp, as_of: nil)
     return nil if timestamp.nil?
-    now = Time.current
+    now = as_of || Time.current
     months = (now.year * 12 + now.month) - (timestamp.year * 12 + timestamp.month)
     months -= 1 if timestamp.advance(months:) > now
     [months, 0].max

@@ -231,6 +231,21 @@ class Subscription < ApplicationRecord
     auto_renewal_discounted_total_cents(auto, pre_discount)
   end
 
+  # The price the next charge will bill. Differs from current_subscription_price_cents only for an
+  # ownership-duration tiered code, whose tier is read as of the charge date instead of today.
+  def next_charge_price_cents(authenticated_offer_code_buyer: AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED, as_of: nil)
+    return current_subscription_price_cents(authenticated_offer_code_buyer:) unless original_renewal_offer_code&.tiered?
+    return current_subscription_price_cents(authenticated_offer_code_buyer:) if is_installment_plan
+
+    as_of = [as_of || (renews_at if persisted?), Time.current].compact.max
+    pre_discount = renewal_pre_discount_total_cents
+    buyer = authenticated_offer_code_buyer.equal?(AUTHENTICATED_OFFER_CODE_BUYER_NOT_PROVIDED) ? user : authenticated_offer_code_buyer
+    auto = compute_auto_renewal_offer_code(buyer, as_of:)
+    return pre_discount unless auto
+
+    auto_renewal_discounted_total_cents(auto, pre_discount)
+  end
+
   def renewal_pre_discount_total_cents
     return cached_tiered_pwyw_renewal_pre_discount_total_cents if cached_tiered_pwyw_renewal_pre_discount_total_cents.present?
 
@@ -1923,7 +1938,7 @@ class Subscription < ApplicationRecord
       PostToPingEndpointsWorker.perform_in(*args)
     end
 
-    def compute_auto_renewal_offer_code(offer_code_buyer)
+    def compute_auto_renewal_offer_code(offer_code_buyer, as_of: nil)
       return nil if is_installment_plan
       return nil if link.nil? || original_purchase.nil?
       return nil if reuse_original_discount_on_next_charge?
@@ -1938,7 +1953,7 @@ class Subscription < ApplicationRecord
         .filter_map do |offer_code|
           next unless eligible_auto_renewal_offer_code?(offer_code)
 
-          resolved = offer_code.evaluate_for_buyer(offer_code_buyer, product: link, fallback_purchase: original_purchase)
+          resolved = offer_code.evaluate_for_buyer(offer_code_buyer, product: link, fallback_purchase: original_purchase, as_of:)
           auto_discount = auto_renewal_discount_for(offer_code, resolved)
           next if auto_discount.nil?
           discounted_total = auto_renewal_discounted_total_cents(auto_discount, renewal_pre_discount_total_cents)
