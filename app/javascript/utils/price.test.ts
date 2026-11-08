@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   formatPrice,
   parseUnitStringToPriceCents,
+  priceCommaHint,
   sanitizePriceRangeInput,
   priceCentsToUnit,
   priceUnitToCents,
@@ -79,5 +80,12 @@ describe("sanitizePriceRangeInput", () => {
 
   it("strips non-amount characters and extra decimal points", () => {
     expect(sanitizePriceRangeInput("₩1.2.3abc")).toBe("1.23");
+  });
+});
+
+describe("priceCommaHint", () => {
+  it("names both readings the server gives a typed comma", () => {
+    expect(priceCommaHint).toContain("7,900");
+    expect(priceCommaHint).toContain("7,90");
   });
 });

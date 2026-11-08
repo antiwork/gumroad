@@ -9,7 +9,7 @@ import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 import { isNumber, isRecord, isString } from "$app/utils/guards";
-import { sanitizePriceRangeInput } from "$app/utils/price";
+import { priceCommaHint, sanitizePriceRangeInput } from "$app/utils/price";
 import {
   RecurrenceId,
   durationInMonthsToRecurrenceId,
@@ -491,6 +491,7 @@ const NewProductPage = () => {
                     </Pill>
                   ) : null}
                 </InputGroup>
+                <p className="text-sm text-muted">{priceCommaHint}</p>
                 <Errors errors={errors["link.price_range"]} label="Price" />
                 <Errors errors={errors["link.base"]} label="" />
               </Fieldset>
