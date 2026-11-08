@@ -16,7 +16,9 @@ describe "Buyer link in the seller's sale notification", type: :request do
 
   def buyer_link
     html = ContactingCreatorMailer.notify(purchase.id).body.decoded
-    Nokogiri::HTML(html).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")["href"]
+    link = Nokogiri::HTML(html).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
+    expect(link).to be_present
+    link["href"]
   end
 
   def expect_download_page_unopened

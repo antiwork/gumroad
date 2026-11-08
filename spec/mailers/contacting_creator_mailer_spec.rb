@@ -1080,10 +1080,11 @@ describe ContactingCreatorMailer do
         other.create_url_redirect!
 
         body = ContactingCreatorMailer.notify(purchase.id).body.decoded
-        href = Nokogiri::HTML(body).at_xpath("//h4[normalize-space()=\"Buyer's receipt link\"]/ancestor::tr[1]//a")["href"]
+        link = Nokogiri::HTML(body).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
 
-        expect(URI(href).path).to eq(receipt_path(purchase))
-        expect(URI(href).query).to be_nil
+        expect(link).to be_present
+        expect(URI(link["href"]).path).to eq(receipt_path(purchase))
+        expect(URI(link["href"]).query).to be_nil
         expect(body).not_to include(purchase.url_redirect.token)
         expect(body).not_to include(receipt_path(other))
       end
