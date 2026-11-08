@@ -259,7 +259,7 @@ def wait_for_link_email_prefill_in_payment_element
   has_field?("Card number", visible: :all, wait: PAYMENT_ELEMENT_RENDER_WAIT_SECONDS)
   return unless has_css?("#payment-linkEmailInput", visible: :all, wait: LINK_PANE_RENDER_WAIT_SECONDS)
 
-  has_field?("payment-linkEmailInput", with: /\S/, visible: :all)
+  expect(page).to have_field("payment-linkEmailInput", with: /\S/, visible: :all)
 end
 
 # With Link always enabled, the Payment Element may render Link's pre-checked
