@@ -672,6 +672,13 @@ const ProductEditPage = (props: Props) => {
         preserved_rich_content_ids: conflictResolution.hiddenPageIds,
       };
     }
+    // A removed file this product never saved (picked from the library, then its block deleted) has
+    // no row here, so it leaves the save rather than naming one in deleted_ids.
+    const savedFileIds = new Set(lastSavedProductRef.current.files.map((file) => file.id));
+    productToSave = {
+      ...productToSave,
+      files: productToSave.files.filter((file) => file.status.type !== "removed" || savedFileIds.has(file.id)),
+    };
     // Stamp every page with its client-only identity before freezing the
     // snapshot: reconciliation matches each page back to its sent snapshot by
     // this stamp, because scope, id, and move marker together cannot always

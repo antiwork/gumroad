@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render, act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { Editor } from "@tiptap/core";
 import * as React from "react";
 import { afterEach, assert, describe, expect, it, vi } from "vitest";
@@ -1088,7 +1088,7 @@ it("shows the bulk disable-downloads result in flow and lets the seller dismiss 
   }
 });
 
-describe("removing a file from the existing-files picker", () => {
+describe("removing a file from the product", () => {
   const file = (id: string, display_name: string, url: string) => ({
     id,
     display_name,
@@ -1125,26 +1125,24 @@ describe("removing a file from the existing-files picker", () => {
     return [...(type === "fileEmbed" ? [attrs?.id] : []), ...(content ?? []).flatMap(embeddedFileIds)];
   };
 
-  // The same upload attached to two versions is two product files with one url; the library list
-  // the picker loads groups by url, so it carries only one of them.
   const workbook = file("file-workbook", "Workbook", "https://example.com/workbook.pdf");
   const workbookCopy = file("file-workbook-copy", "Workbook", "https://example.com/workbook.pdf");
   const orphan = file("file-orphan", "Orphan", "https://example.com/orphan.pdf");
 
-  const openPicker = async ({
-    extraFiles = [],
-    awaitLoad = true,
-  }: { extraFiles?: Product["files"]; awaitLoad?: boolean } = {}) => {
+  const mount = async () => {
     const product = buildProduct([
       { id: "version-a", name: "A", rich_content: [embedPage("page-a", workbook.id)] },
       { id: "version-b", name: "B", rich_content: [embedPage("page-b", workbookCopy.id)] },
     ]);
-    product.files = [workbook, workbookCopy, orphan, ...extraFiles];
+    product.files = [workbook, workbookCopy, orphan];
     context.product = product;
+    // A fresh product per write, as the page's state does, so memoized reads see the change.
     context.updateProduct = (update: unknown) => {
+      const next = { ...cast<Product>(context.product) };
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- narrowing the update union for the fixture
-      if (typeof update === "function") (update as (p: Product) => void)(product);
-      else Object.assign(product, update);
+      if (typeof update === "function") (update as (p: Product) => void)(next);
+      else Object.assign(next, update);
+      context.product = next;
     };
     context.filesById = new Map(product.files.map((entry) => [entry.id, entry]));
     Object.assign(globalThis, {
@@ -1163,12 +1161,18 @@ describe("removing a file from the existing-files picker", () => {
     toolbarCustom.render = true;
     toolbarCustom.openPopover = "Upload files";
 
-    render(<ContentTabContent selectedVariantId="version-b" />);
+    const view = render(<ContentTabContent selectedVariantId="version-b" />);
     await act(async () => {});
-    fireEvent.click(screen.getByRole("menuitem", { name: "Existing product files" }));
-    if (awaitLoad) await screen.findByRole("option", { name: /Orphan/u });
-    return product;
+    return {
+      current: () => cast<Product>(context.product),
+      rerender: () => view.rerender(<ContentTabContent selectedVariantId="version-b" />),
+    };
   };
+  const openPicker = async () => {
+    fireEvent.click(screen.getByRole("menuitem", { name: "Existing product files" }));
+    await screen.findByRole("option", { name: /Orphan/u });
+  };
+  const status = (product: Product, id: string) => product.files.find((entry) => entry.id === id)?.status;
 
   afterEach(() => {
     toolbarCustom.render = false;
@@ -1177,71 +1181,73 @@ describe("removing a file from the existing-files picker", () => {
     Object.assign(context, { existingFiles: [] });
   });
 
-  it("offers every attachment of a url-deduped file, and detaches only the one the seller removes", async () => {
-    const product = await openPicker();
+  it("removes a file when the seller deletes its last block, and keeps it when the block comes back", async () => {
+    const { current } = await mount();
 
-    const removeWorkbook = screen.getAllByRole("button", { name: "Remove Workbook from this product" });
-    expect(removeWorkbook).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: "Remove Elsewhere from this product" })).toBeNull();
-
-    // The copy is the attachment the library list left out.
-    const copyRemove = removeWorkbook.find((button) => !button.closest('[role="option"]'));
-    if (!copyRemove) throw new Error("The url-deduped attachment has no Remove control");
-    fireEvent.click(copyRemove);
-
-    expect(buildDeletionOperations(product).deleted_ids.files).toEqual([workbookCopy.id]);
-    expect(product.files.find(({ id }) => id === workbook.id)?.status).toEqual({ type: "saved" });
-    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
-    expect(embeddedFileIds(product.variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
-    expect(embeddedFileIds(product.variants[0]?.rich_content[0]?.description ?? {})).toEqual([workbook.id]);
-
-    // The mounted page was reconciled too, so the seller's next edit does not write the embed back.
     act(() => {
-      getMountedEditor().chain().focus("end").insertContent(" EDITED").run();
+      getMountedEditor().chain().setNodeSelection(0).deleteSelection().run();
     });
-    expect(embeddedFileIds(product.variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
-  });
+    expect(buildDeletionOperations(current()).deleted_ids.files).toEqual([workbookCopy.id]);
+    expect(status(current(), workbook.id)).toEqual({ type: "saved" });
 
-  it("leaves an upload that has not saved to its own embed controls", async () => {
-    const uploading = cast<Product["files"][number]>({
-      ...file("file-uploading", "Uploading", "https://example.com/uploading.pdf"),
-      status: { type: "unsaved", uploadStatus: { type: "uploading", progress: { percent: 10 } }, url: "blob:x" },
+    act(() => {
+      getMountedEditor().commands.undo();
     });
-    await openPicker({ extraFiles: [uploading] });
-
-    expect(screen.queryByRole("button", { name: "Remove Uploading from this product" })).toBeNull();
+    expect(status(current(), workbookCopy.id)).toEqual({ type: "saved" });
+    expect(buildDeletionOperations(current()).deleted_ids.files).toBeUndefined();
   });
 
-  it("lists attachments the library left out only once it has loaded, and only those matching the search", async () => {
-    await openPicker({ awaitLoad: false });
-    expect(screen.queryAllByRole("button", { name: "Remove Workbook from this product" })).toHaveLength(0);
+  it("lists a file no page embeds, and removes it", async () => {
+    const { current, rerender } = await mount();
 
-    await screen.findByRole("option", { name: /Orphan/u });
-    expect(screen.getAllByRole("button", { name: "Remove Workbook from this product" })).toHaveLength(2);
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toContain("This file is attached to this product but not on any page.");
+    expect(within(notice).queryByRole("button", { name: /Workbook/u })).toBeNull();
 
-    fireEvent.change(screen.getByPlaceholderText("Find your files"), { target: { value: "Orphan" } });
-    expect(screen.queryAllByRole("button", { name: "Remove Workbook from this product" })).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Remove Orphan from this product" })).toBeTruthy();
+    fireEvent.click(within(notice).getByRole("button", { name: "Remove Orphan from this product" }));
+    expect(buildDeletionOperations(current()).deleted_ids.files).toEqual([orphan.id]);
+    rerender();
+    expect(screen.queryByText(/not on any page/u)).toBeNull();
   });
 
-  it("picks an attached file when the seller clicks its name, without removing it", async () => {
-    const product = await openPicker();
+  it("puts a file no page embeds on the open page", async () => {
+    const { current, rerender } = await mount();
 
+    fireEvent.click(screen.getByRole("button", { name: "Add Orphan to this page" }));
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toContain(orphan.id);
+    expect(current().files.filter((entry) => entry.id === orphan.id)).toHaveLength(1);
+    rerender();
+    expect(screen.queryByText(/not on any page/u)).toBeNull();
+  });
+
+  it("offers no removal in the picker, and picks a file when the seller clicks its name", async () => {
+    await mount();
+    await openPicker();
+
+    expect(within(screen.getByRole("listbox")).queryAllByRole("button")).toHaveLength(0);
     fireEvent.click(screen.getByRole("heading", { name: "Orphan" }));
-
-    expect(product.files.find(({ id }) => id === orphan.id)?.status).toEqual({ type: "saved" });
     expect(screen.getByRole("option", { name: /Orphan/u }).querySelector("input[type=checkbox]")).toHaveProperty(
       "checked",
       true,
     );
   });
 
-  it("detaches a file no page embeds", async () => {
-    const product = await openPicker();
+  it("places a picked file no page shows as itself, and re-attaches one a page already shows", async () => {
+    const { current } = await mount();
+    await openPicker();
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove Orphan from this product" }));
+    fireEvent.click(screen.getByRole("heading", { name: "Orphan" }));
+    fireEvent.click(screen.getByRole("heading", { name: "Workbook" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
 
-    expect(buildDeletionOperations(product).deleted_ids.files).toEqual([orphan.id]);
-    expect(screen.queryByRole("option", { name: /Orphan/u })).toBeNull();
+    const files = current().files;
+    expect(files.filter((entry) => entry.id === orphan.id)).toHaveLength(1);
+    const workbooks = files.filter((entry) => entry.display_name === "Workbook").map((entry) => entry.id);
+    expect(workbooks).toHaveLength(3);
+    const reattached = workbooks.find((id) => id !== workbook.id && id !== workbookCopy.id);
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual(
+      expect.arrayContaining([workbookCopy.id, orphan.id, reattached]),
+    );
   });
 });

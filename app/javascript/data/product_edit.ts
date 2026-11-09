@@ -1,5 +1,5 @@
 import { Editor, findChildren } from "@tiptap/core";
-import { type Mark } from "@tiptap/pm/model";
+import { type Mark, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorState, Transaction } from "@tiptap/pm/state";
 
 import { buildDeletionOperations } from "$app/data/product_save_contract";
@@ -425,8 +425,7 @@ export const embeddedFailedUploadIds = (
   files: { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null }[],
   pages: { description: object }[],
 ) => {
-  const embedded = new Set<string>();
-  pages.forEach((page) => collectFileEmbedIds(page.description, embedded));
+  const embedded = embeddedFileIds(pages);
   return new Set([...failedUploadFileIds(files)].filter((id) => embedded.has(id)));
 };
 
@@ -459,10 +458,55 @@ export const withoutFileEmbedsFromVariants = (variants: Variant[], fileId: strin
   });
 };
 
-// The library list a picker shows carries one row per url, so a second attachment of the same file
-// has no row of its own — and no way to be removed. Every attachment needs a row.
-export const attachmentsWithoutLibraryRow = (files: Product["files"], libraryFileIds: string[]): Product["files"] =>
-  files.filter((file) => file.status.type === "saved" && !libraryFileIds.includes(file.id));
+const embeddedFileIds = (pages: { description: object }[]) => {
+  const ids = new Set<string>();
+  pages.forEach((page) => collectFileEmbedIds(page.description, ids));
+  return ids;
+};
+
+const embeddedFileIdsInProduct = (product: Pick<Product, "rich_content" | "variants">) =>
+  embeddedFileIds([...product.rich_content, ...product.variants.flatMap((variant) => variant.rich_content)]);
+
+// A file embed is a block, so the walk never needs to enter a paragraph.
+const fileEmbedIdsInDoc = (doc: ProseMirrorNode): Set<string> => {
+  const ids = new Set<string>();
+  doc.descendants((node) => {
+    if (node.type.name === FileEmbed.name && typeof node.attrs.id === "string") ids.add(node.attrs.id);
+    return !node.isTextblock;
+  });
+  return ids;
+};
+
+export const fileEmbedChanges = (before: ProseMirrorNode, after: ProseMirrorNode) => {
+  const idsBefore = fileEmbedIdsInDoc(before);
+  const idsAfter = fileEmbedIdsInDoc(after);
+  return {
+    deleted: new Set([...idsBefore].filter((id) => !idsAfter.has(id))),
+    inserted: new Set([...idsAfter].filter((id) => !idsBefore.has(id))),
+  };
+};
+
+// Deleting a file's last block removes the file; an embed that comes back (undo, paste) cancels the
+// removal. Only editor edits feed this, so content lost any other way never becomes a deletion.
+export const reconcileFileRemovalsWithEmbeds = (
+  product: Pick<Product, "files" | "rich_content" | "variants">,
+  { deleted, inserted }: { deleted: Set<string>; inserted: Set<string> },
+): Product["files"] => {
+  const embedded = embeddedFileIdsInProduct(product);
+  let files = product.files.map((file) =>
+    file.status.type === "removed" && inserted.has(file.id) ? { ...file, status: file.status.previousStatus } : file,
+  );
+  for (const file of files)
+    if (file.status.type === "saved" && deleted.has(file.id) && !embedded.has(file.id))
+      files = markFileRemoved(files, file.id);
+  return files;
+};
+
+// Pages the shared-content setting hides are not loaded, so a file only they embed is listed too.
+export const filesOnNoPage = (product: Pick<Product, "files" | "rich_content" | "variants">): Product["files"] => {
+  const embedded = embeddedFileIdsInProduct(product);
+  return product.files.filter((file) => file.status.type === "saved" && !embedded.has(file.id));
+};
 
 // "Keep version content" reloads the editor as soon as it saves, so removals that save skipped
 // (`file_deletions_skipped`) cross the reload here, with the revision that save left behind.

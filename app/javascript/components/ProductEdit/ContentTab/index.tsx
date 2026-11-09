@@ -21,13 +21,12 @@ import {
   Plus,
   Rename,
   Star,
-  Trash,
   TwitterX,
   X,
 } from "@boxicons/react";
 import { type Editor, findChildren, generateJSON, Node as TiptapNode } from "@tiptap/core";
 import { DOMSerializer } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
+import { NodeSelection, type Transaction } from "@tiptap/pm/state";
 import { EditorContent } from "@tiptap/react";
 import { parseISO } from "date-fns";
 import { partition } from "lodash-es";
@@ -36,17 +35,17 @@ import { ReactSortable } from "react-sortablejs";
 
 import { fetchDropboxFiles, ResponseDropboxFile, uploadDropboxFile } from "$app/data/dropbox_upload";
 import {
-  attachmentsWithoutLibraryRow,
   copyRichContentPages,
+  fileEmbedChanges,
+  filesOnNoPage,
   markFileRemoved,
   prepareRichContentPagesForMove,
+  reconcileFileRemovalsWithEmbeds,
   reconcileMountedEditorFileEmbedIds,
   reconcileMountedEditorFileEmbeds,
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
   scopedRichContentPageKey,
-  withoutFileEmbeds,
-  withoutFileEmbedsFromVariants,
 } from "$app/data/product_edit";
 import { reorderRowsPreservingMembership } from "$app/data/product_save_contract";
 import { type Post } from "$app/types/workflow";
@@ -595,7 +594,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       reconcileMountedEditorFileEmbeds(editor, removedFileEmbedIds);
     }
   }, [editor, removedFileEmbedIds]);
-  const updateContentRef = useRefToLatest(() => {
+  const updateContentRef = useRefToLatest((transaction?: Transaction | null) => {
     if (!editor) return;
     // Mounted doc still belongs to the previous page during the switch window
     // (gp#1943); skip rather than misfile it under the newly selected page.
@@ -614,6 +613,13 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
 
     if (selectedPage) setPages(pages.map((page) => (page === selectedPage ? { ...page, description } : page)));
     else addPage(description);
+
+    if (!transaction?.docChanged) return;
+    const embedChanges = fileEmbedChanges(transaction.before, transaction.doc);
+    if (embedChanges.deleted.size > 0 || embedChanges.inserted.size > 0)
+      updateProduct((current) => {
+        current.files = reconcileFileRemovalsWithEmbeds(current, embedChanges);
+      });
   });
   const handleCreatePageClick = () => {
     setPagesExpanded(true);
@@ -622,7 +628,8 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   React.useEffect(() => {
     if (!editor) return;
 
-    const updateContent = () => updateContentRef.current();
+    const updateContent = ({ transaction }: { transaction?: Transaction | null }) =>
+      updateContentRef.current(transaction);
     editor.on("update", updateContent);
     editor.on("blur", updateContent);
     return () => {
@@ -718,35 +725,12 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     return existingFiles.filter((file) => regex.test(file.display_name));
   }, [existingFiles, selectingExistingFiles?.query]);
 
-  // Marking the file removed is what puts it in the save's deleted_ids.files; stripping its embeds
-  // keeps the `files` payload from re-creating it. Nothing is deleted until the seller saves.
-  const attachedFileIds = new Set(
-    product.files.filter((file) => file.status.type !== "removed").map((file) => file.id),
-  );
-  // Read against the library only once it has loaded, or a file saved this session shows here first.
-  const attachedFilesMissingFromLibrary =
-    selectingExistingFiles && !selectingExistingFiles.isLoading
-      ? attachmentsWithoutLibraryRow(
-          product.files,
-          existingFiles.map((file) => file.id),
-        ).filter((file) => new RegExp(escapeRegExp(selectingExistingFiles.query), "iu").test(file.display_name))
-      : [];
-  const pendingRemovedFileIds = new Set(
-    product.files.filter((file) => file.status.type === "removed").map((file) => file.id),
-  );
-  const removeProductFile = (fileId: string) => {
-    // The mounted doc still holds this page's embed; a state-only strip would not survive the
-    // seller's next edit to the page.
-    if (editor) reconcileMountedEditorFileEmbeds(editor, [fileId]);
+  // On no page means no embed to strip: the removed status alone puts the file in deleted_ids.files.
+  const unplacedFiles = React.useMemo(() => filesOnNoPage(product), [product]);
+  const removeProductFile = (fileId: string) =>
     updateProduct((product) => {
       product.files = markFileRemoved(product.files, fileId);
-      product.rich_content = withoutFileEmbeds(product.rich_content, fileId);
-      withoutFileEmbedsFromVariants(product.variants, fileId);
     });
-    setSelectingExistingFiles((current) =>
-      current ? { ...current, selected: current.selected.filter((file) => file.id !== fileId) } : null,
-    );
-  };
 
   const fetchLatestExistingFiles = async () => {
     try {
@@ -947,6 +931,37 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
             </Alert>
           </div>
         ) : null}
+        {unplacedFiles.length > 0 ? (
+          <div className="p-4 md:px-8">
+            <Alert role="status" variant="info">
+              <p>
+                {unplacedFiles.length === 1 ? "This file is" : "These files are"} attached to this product but not on
+                any page.
+              </p>
+              <ul className="m-0 mt-2 grid list-none gap-2 p-0">
+                {unplacedFiles.map((file) => (
+                  <li key={file.id} className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                    <strong className="break-all">{file.display_name}</strong>
+                    <span className="flex gap-4">
+                      <LinkButton
+                        aria-label={`Add ${file.display_name} to this page`}
+                        onClick={() => onSelectFiles([file.id])}
+                      >
+                        Add to page
+                      </LinkButton>
+                      <LinkButton
+                        aria-label={`Remove ${file.display_name} from this product`}
+                        onClick={() => removeProductFile(file.id)}
+                      >
+                        Remove
+                      </LinkButton>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Alert>
+          </div>
+        ) : null}
         {editor ? (
           <RichTextEditorToolbar
             color="ghost"
@@ -981,16 +996,22 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                         <Button
                           color="primary"
                           onClick={() => {
-                            // A picked file already attached to this product is a deliberate
-                            // re-attach (e.g. embedding it on another version), so submit it
-                            // under a fresh client id: resending the row's canonical id would
-                            // resolve to the existing row on the server and no second row —
-                            // and no second embed target — would ever be created.
+                            // A file no page shows goes back as itself. Any other attached file is a
+                            // deliberate re-attach: a fresh client id makes the server create a
+                            // second row, where the row's own id would resolve to the first.
                             const existingIds = new Set(product.files.map((file) => file.id));
+                            const placeableIds = new Set([
+                              ...product.files.filter((file) => file.status.type === "removed").map((file) => file.id),
+                              ...unplacedFiles.map((file) => file.id),
+                            ]);
                             const selected = selectingExistingFiles.selected.map((file) =>
-                              existingIds.has(file.id) ? { ...file, id: FileUtils.generateGuid() } : file,
+                              existingIds.has(file.id) && !placeableIds.has(file.id)
+                                ? { ...file, id: FileUtils.generateGuid() }
+                                : file,
                             );
-                            updateProduct({ files: [...product.files, ...selected] });
+                            updateProduct({
+                              files: [...product.files, ...selected.filter((file) => !existingIds.has(file.id))],
+                            });
                             onSelectFiles(selected.map((file) => file.id));
                             setSelectingExistingFiles(null);
                           }}
@@ -1019,74 +1040,33 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             <LoadingSpinner className="size-8" />
                           </div>
                         ) : (
-                          filteredExistingFiles
-                            .filter((file) => !pendingRemovedFileIds.has(file.id))
-                            .map((file) => (
-                              <Row key={file.id} role="option" className="cursor-pointer" asChild>
-                                {/* Bound to the checkbox: an unbound label controls its first button, Remove. */}
-                                <Label htmlFor={`${uid}-existing-file-${file.id}`}>
-                                  <RowContent>
-                                    <FileKindIcon extension={file.extension} />
-                                    <div className="flex-1">
-                                      <h4>{file.display_name}</h4>
-                                      <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
-                                    </div>
-                                    {attachedFileIds.has(file.id) ? (
-                                      <Button
-                                        size="icon"
-                                        aria-label={`Remove ${file.display_name} from this product`}
-                                        onClick={(event) => {
-                                          // The row is a label for its checkbox: the click must not
-                                          // also toggle the pick.
-                                          event.stopPropagation();
-                                          event.preventDefault();
-                                          removeProductFile(file.id);
-                                        }}
-                                      >
-                                        <Trash className="size-5" />
-                                      </Button>
-                                    ) : null}
-                                    <Checkbox
-                                      id={`${uid}-existing-file-${file.id}`}
-                                      checked={selectingExistingFiles.selected.includes(file)}
-                                      onChange={() => {
-                                        setSelectingExistingFiles({
-                                          ...selectingExistingFiles,
-                                          selected: selectingExistingFiles.selected.includes(file)
-                                            ? selectingExistingFiles.selected.filter((id) => id !== file)
-                                            : [...selectingExistingFiles.selected, file],
-                                        });
-                                      }}
-                                      className="ml-auto"
-                                    />
-                                  </RowContent>
-                                </Label>
-                              </Row>
-                            ))
+                          filteredExistingFiles.map((file) => (
+                            <Row key={file.id} role="option" className="cursor-pointer" asChild>
+                              <Label>
+                                <RowContent>
+                                  <FileKindIcon extension={file.extension} />
+                                  <div className="flex-1">
+                                    <h4>{file.display_name}</h4>
+                                    <span>{`${file.attached_product_name || "N/A"} (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
+                                  </div>
+                                  <Checkbox
+                                    checked={selectingExistingFiles.selected.includes(file)}
+                                    onChange={() => {
+                                      setSelectingExistingFiles({
+                                        ...selectingExistingFiles,
+                                        selected: selectingExistingFiles.selected.includes(file)
+                                          ? selectingExistingFiles.selected.filter((id) => id !== file)
+                                          : [...selectingExistingFiles.selected, file],
+                                      });
+                                    }}
+                                    className="ml-auto"
+                                  />
+                                </RowContent>
+                              </Label>
+                            </Row>
+                          ))
                         )}
                       </Rows>
-                      {attachedFilesMissingFromLibrary.length > 0 ? (
-                        <Rows className="overflow-auto" style={{ maxHeight: "20rem", textAlign: "initial" }}>
-                          {attachedFilesMissingFromLibrary.map((file) => (
-                            <Row key={file.id}>
-                              <RowContent>
-                                <FileKindIcon extension={file.extension} />
-                                <div className="flex-1">
-                                  <h4>{file.display_name}</h4>
-                                  <span>{`Attached to this product (${FileUtils.getFullFileSizeString(file.file_size ?? 0)})`}</span>
-                                </div>
-                                <Button
-                                  size="icon"
-                                  aria-label={`Remove ${file.display_name} from this product`}
-                                  onClick={() => removeProductFile(file.id)}
-                                >
-                                  <Trash className="size-5" />
-                                </Button>
-                              </RowContent>
-                            </Row>
-                          ))}
-                        </Rows>
-                      ) : null}
                     </div>
                   </Modal>
                 ) : null}

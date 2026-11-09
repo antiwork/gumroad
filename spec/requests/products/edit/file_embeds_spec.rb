@@ -640,8 +640,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
 
   describe "removing a file from the product" do
     let(:product) { create(:product_with_digital_versions, user: seller) }
-    # Attaching a file to a second version makes a second product file with the same url, and the
-    # picker's library list is grouped by url, so it carries only one of the two.
+    # Attaching a file to a second version makes a second product file with the same url.
     let!(:workbook) { create(:readable_document, link: product, display_name: "Workbook") }
     let!(:workbook_copy) { create(:readable_document, link: product, display_name: "Workbook", url: workbook.url) }
     let!(:orphan) { create(:listenable_audio, link: product, display_name: "Orphan") }
@@ -684,11 +683,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
       allow(ErrorNotifier).to receive(:notify).and_call_original
 
       visit edit_link_path(product.unique_permalink) + "/content"
-      open_existing_files_picker
-      within_modal "Select existing product files" do
-        click_on "Remove Orphan from this product"
-        click_on "Cancel"
-      end
+      click_on "Remove Orphan from this product"
 
       # Clears the fail-open wrapper's cached value from the page load, so the save's read fails.
       Feature.activate_user(:product_editor_save_contract, seller)
@@ -721,11 +716,7 @@ describe("File embeds in product content editor", type: :system, js: true) do
       def remove_orphan_then_keep_version_content
         visit edit_link_path(product.unique_permalink) + "/content"
         expect(page).to have_text("Product-level shared content")
-        open_existing_files_picker
-        within_modal "Select existing product files" do
-          click_on "Remove Orphan from this product"
-          click_on "Cancel"
-        end
+        click_on "Remove Orphan from this product"
         yield if block_given?
 
         # Clears the fail-open wrapper's cached value from the page load, so the save's reads fail.
@@ -766,45 +757,50 @@ describe("File embeds in product content editor", type: :system, js: true) do
       end
     end
 
-    it "detaches the attachment the library list leaves out and a file no page embeds, and keeps them detached" do
-      listed_ids = seller.alive_product_files_preferred_for_product(product).map(&:external_id)
-      unlisted, listed = [workbook, workbook_copy].partition { listed_ids.exclude?(_1.external_id) }.map(&:sole)
-
+    it "detaches a file when the seller deletes its last block, and keeps the copy another version shows" do
       visit edit_link_path(product.unique_permalink) + "/content"
-      open_existing_files_picker
-
-      within_modal "Select existing product files" do
-        expect(page).to have_button("Remove Workbook from this product", count: 2)
-        click_on "Remove Orphan from this product"
-        expect(page).to_not have_text("Orphan")
-        within(:xpath, ".//*[@role='listbox']/following-sibling::*") do
-          click_on "Remove Workbook from this product"
+      expect(page).to have_combo_box("Select a version", text: "Editing: Untitled 1")
+      within find_embed(name: "Workbook").hover do
+        select_disclosure "Actions" do
+          click_on "Delete"
         end
-        expect(page).to have_button("Remove Workbook from this product", count: 1)
-        click_on "Cancel"
       end
+      expect(page).to_not have_embed(name: "Workbook")
 
       save_change
-      expect(product.product_files.alive).to eq([listed])
-      expect(unlisted.reload).to be_deleted
-      expect(orphan.reload).to be_deleted
-      embedded_ids = product.alive_variants.flat_map { _1.alive_rich_contents.flat_map(&:description) }.filter_map { _1.dig("attrs", "id") if _1["type"] == "fileEmbed" }
-      expect(embedded_ids).to eq([listed.external_id])
+      expect(workbook.reload).to be_deleted
+      expect(product.product_files.alive).to contain_exactly(workbook_copy, orphan)
 
       # Another editor moves the revision this tab saved under; a save that deletes nothing must still land.
-      listed.touch
+      workbook_copy.touch
       select_tab "Product"
       fill_in "Name", with: "Renamed after another save", match: :first
       save_change
       expect(product.reload.name).to eq("Renamed after another save")
-      expect(product.product_files.alive).to eq([listed])
+      expect(product.product_files.alive).to contain_exactly(workbook_copy, orphan)
+    end
 
+    it "lists a file no page shows, and removes it" do
       visit edit_link_path(product.unique_permalink) + "/content"
-      open_existing_files_picker
-      within_modal "Select existing product files" do
-        expect(page).to have_button("Remove Workbook from this product", count: 1)
-        expect(page).to_not have_text("Orphan")
-      end
+      expect(page).to have_text("This file is attached to this product but not on any page.")
+      click_on "Remove Orphan from this product"
+      expect(page).to_not have_text("not on any page")
+
+      save_change
+      expect(orphan.reload).to be_deleted
+      expect(product.product_files.alive).to contain_exactly(workbook, workbook_copy)
+    end
+
+    it "puts a file no page shows on the open page" do
+      visit edit_link_path(product.unique_permalink) + "/content"
+      click_on "Add Orphan to this page"
+      expect(page).to have_embed(name: "Orphan")
+      expect(page).to_not have_text("not on any page")
+
+      save_change
+      expect(orphan.reload).to be_alive
+      embedded_ids = product.alive_variants.find_by!(name: "Untitled 1").alive_rich_contents.sole.description.filter_map { _1.dig("attrs", "id") if _1["type"] == "fileEmbed" }
+      expect(embedded_ids).to contain_exactly(workbook.external_id, orphan.external_id)
     end
   end
 end
