@@ -484,7 +484,7 @@ class Rack::Attack
   # format suffix: `throttle_by_ip`'s regexp form keys on the whole path, so `/resend_receipt.json`
   # would land in its own bucket and bypass the limit.
   throttle_with_exponential_backoff(name: "/ip:resend_receipt", requests: 2, period: 60.seconds) do |req|
-    m = req.path.match(%r{\A(/(?:purchases|service_charges|charges)/[^/]+/resend_receipt)(?:\.[^/]+)?\z})
+    m = req.path.match(%r{\A(/(?:purchases|service_charges)/[^/]+/resend_receipt)(?:\.[^/]+)?\z})
     "#{m[1]}:#{req.remote_ip}" if m && req.post?
   end
 

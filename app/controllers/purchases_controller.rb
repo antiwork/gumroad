@@ -334,8 +334,13 @@ class PurchasesController < ApplicationController
        (params[:email].present? && ActiveSupport::SecurityUtils.secure_compare(@purchase.email.downcase, params[:email].to_s.strip.downcase))
       return e404 if receipt_orderable_missing?(@purchase)
 
-      single_purchase = @purchase.charge&.purchase_receipt_page_single_purchase? || false
-      message = CustomerMailer.receipt(@purchase.id, for_email: false, single_purchase:)
+      whole_order_charge = @purchase.whole_order_receipt_charge
+      message = if whole_order_charge
+        CustomerMailer.receipt(nil, whole_order_charge.id, for_email: false)
+      else
+        # Another email's items are on this charge, so show only what this email bought.
+        CustomerMailer.receipt(@purchase.id, for_email: false, single_purchase: true)
+      end
       # Generate the same markup used in the email
       Premailer::Rails::Hook.perform(message)
 

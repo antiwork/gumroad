@@ -8,8 +8,8 @@
   <% end %>
 </p>
 
-<% if @shared_receipt_url.present? %>
-  <p><%= link_to("View your order", @shared_receipt_url) %></p>
+<% if @order_receipt_url.present? %>
+  <p><%= link_to("View every item in this order", @order_receipt_url) %></p>
 <% end %>
 
 <% presenter.items_infos.each do |item_info| %>

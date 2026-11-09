@@ -86,6 +86,20 @@ describe CustomerMailer do
         expect(purchase.split_charge_receipt_sent?).to be(false)
         expect(rendered.subject).to eq("You bought Paid edition and Free edition")
       end
+
+      it "links each split receipt to the receipt page for the whole order" do
+        rendered = described_class.receipt(purchase.id, single_purchase: true)
+
+        expect(rendered.body).to have_link("View every item in this order", href: receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol))
+      end
+
+      it "omits the whole-order link when the items went to different buyer emails" do
+        purchase_two.update!(email: "another-buyer@example.com")
+
+        rendered = described_class.receipt(purchase.id, single_purchase: true)
+
+        expect(rendered.body).not_to have_link("View every item in this order")
+      end
     end
 
     context "when the charge has no successful purchases" do
@@ -1296,7 +1310,7 @@ describe CustomerMailer do
     end
   end
 
-  describe "receipt with a shared charge receipt link" do
+  describe "receipt with the graphics-light pilot" do
     let(:seller) { create(:named_seller) }
     let(:email) { "buyer@example.com" }
     let(:purchase_one) { create(:purchase, link: create(:product, user: seller, name: "Book One"), seller:, email:) }
@@ -1310,78 +1324,44 @@ describe CustomerMailer do
       allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).and_return([])
     end
 
-    def shared_receipt_link(body, text = "View every item in this order")
-      URI(Nokogiri::HTML(body).at_xpath("//a[normalize-space()='#{text}']")["href"])
+    it "stays on the designed receipt while the flag is off for the seller" do
+      mail = CustomerMailer.receipt(nil, charge.id)
+
+      expect(mail.body.decoded).to include("class=\"button primary\"")
     end
 
-    it "links the shared receipt from a single-item receipt without adding the other item" do
-      body = CustomerMailer.receipt(purchase_one.id, nil, single_purchase: true).body.decoded
+    it "sends a plain receipt with text links, the same items and total, when the flag is on for the seller" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      mail = CustomerMailer.receipt(nil, charge.id)
+      body = mail.body.decoded
 
-      expect(body).to include("/charges/#{charge.external_id}/receipt")
-      expect(body).to include("Book One")
-      expect(body).not_to include("Upsell Two")
+      expect(body).to include("Book One", "Upsell Two", "Total:")
+      expect(body).to include(purchase_one.url_redirect.download_page_url, purchase_two.url_redirect.download_page_url)
+      expect(body).not_to include("<img")
+      expect(body).not_to include("class=\"button primary\"")
     end
 
-    it "carries a token in the buyer's link that opens only this charge" do
-      link = shared_receipt_link(CustomerMailer.receipt(purchase_one.id, nil, single_purchase: true).body.decoded)
-      token = Rack::Utils.parse_query(link.query)["token"]
-
-      expect(link.path).to eq("/charges/#{charge.external_id}/receipt")
-      expect(Charge.find_by_secure_external_id(token, scope: Charge::SHARED_RECEIPT_SCOPE)).to eq(charge)
-    end
-
-    it "links the shared receipt from the combined receipt" do
+    it "keeps presenter links clickable instead of escaping them" do
+      Feature.activate_user(:graphics_light_receipt, seller)
       body = CustomerMailer.receipt(nil, charge.id).body.decoded
 
-      expect(body).to include("/charges/#{charge.external_id}/receipt")
+      expect(body).not_to include("&lt;a ")
+      expect(Nokogiri::HTML(body).at_xpath("//a[normalize-space()='Generate invoice']")["href"]).to eq(charge.invoice_url)
     end
 
-    it "does not link a shared receipt when the buyer emails differ" do
-      purchase_two.update_column(:email, "other@example.com")
-
+    it "links each split receipt to the receipt page for the whole order" do
+      Feature.activate_user(:graphics_light_receipt, seller)
       body = CustomerMailer.receipt(purchase_one.id, nil, single_purchase: true).body.decoded
 
-      expect(body).not_to include("/charges/")
+      expect(body).to include("Book One")
+      expect(body).not_to include("Upsell Two")
+      expect(body).to have_link("View every item in this order", href: receipt_purchase_url(purchase_one.external_id, host: UrlService.domain_with_protocol))
     end
 
-    it "does not put the link on the page version of the receipt" do
-      body = CustomerMailer.receipt(nil, charge.id, for_email: false).body.decoded
+    it "does not apply to another seller's receipt" do
+      Feature.activate_user(:graphics_light_receipt, create(:user))
 
-      expect(body).not_to include("/charges/")
-    end
-
-    context "with the graphics-light pilot" do
-      it "stays on the designed receipt while the flag is off for the seller" do
-        mail = CustomerMailer.receipt(nil, charge.id)
-
-        expect(mail.body.decoded).to include("class=\"button primary\"")
-      end
-
-      it "sends a plain receipt with text links, the same items and total, when the flag is on for the seller" do
-        Feature.activate_user(:graphics_light_receipt, seller)
-        mail = CustomerMailer.receipt(nil, charge.id)
-        body = mail.body.decoded
-
-        expect(body).to include("Book One", "Upsell Two", "Total:", "/charges/#{charge.external_id}/receipt")
-        expect(body).to include(purchase_one.url_redirect.download_page_url, purchase_two.url_redirect.download_page_url)
-        expect(body).not_to include("<img")
-        expect(body).not_to include("class=\"button primary\"")
-      end
-
-      it "keeps presenter links clickable instead of escaping them" do
-        Feature.activate_user(:graphics_light_receipt, seller)
-        body = CustomerMailer.receipt(nil, charge.id).body.decoded
-
-        expect(body).not_to include("&lt;a ")
-        expect(Nokogiri::HTML(body).at_xpath("//a[normalize-space()='Generate invoice']")["href"]).to eq(charge.invoice_url)
-        expect(shared_receipt_link(body, "View your order").path).to eq("/charges/#{charge.external_id}/receipt")
-      end
-
-      it "does not apply to another seller's receipt" do
-        Feature.activate_user(:graphics_light_receipt, create(:user))
-
-        expect(CustomerMailer.receipt(nil, charge.id).body.decoded).to include("class=\"button primary\"")
-      end
+      expect(CustomerMailer.receipt(nil, charge.id).body.decoded).to include("class=\"button primary\"")
     end
   end
 

@@ -78,12 +78,10 @@ class CustomerMailer < ApplicationMailer
     return if for_email && suppress_receipt_from_unproven_seller?(@chargeable)
 
     @receipt_presenter = ReceiptPresenter.new(@chargeable, for_email:)
+    @order_receipt_url = receipt_purchase_url(@chargeable.external_id) if for_email && @chargeable.is_a?(Purchase) && @chargeable.whole_order_receipt_charge
 
     is_receipt_for_gift_receiver = receipt_for_gift_receiver?(@chargeable)
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
-    shared_charge = shared_receipt_charge(@chargeable)
-    # Only the buyer's own mail carries the token; the seller's sale notification links the bare URL.
-    @shared_receipt_url = receipt_charge_url(shared_charge.external_id, token: shared_charge.secure_external_id(scope: Charge::SHARED_RECEIPT_SCOPE)) if for_email && shared_charge
     graphics_light = !is_receipt_for_gift_receiver && Feature.active?(:graphics_light_receipt, @chargeable.seller)
     template = is_receipt_for_gift_receiver ? "gift_receiver_receipt" : (graphics_light ? "receipt_light" : "receipt")
     mail(
@@ -493,12 +491,6 @@ class CustomerMailer < ApplicationMailer
     rescue => e
       ErrorNotifier.notify(e)
       true
-    end
-
-    # The charge whose one shared receipt page covers this receipt, if it has one.
-    def shared_receipt_charge(chargeable)
-      charge = chargeable.is_a?(Charge) ? chargeable : chargeable.charge
-      charge if charge&.shared_receipt_eligible?
     end
 
     def receipt_for_gift_receiver?(chargeable)
