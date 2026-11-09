@@ -120,6 +120,13 @@ describe "Shared charge receipt", type: :request do
     expect(flash[:notice]).not_to include(email)
   end
 
+  it "mails the receipt on the format-suffixed route too" do
+    # The router accepts a format suffix here, which is why the throttle keys on the path without it.
+    expect do
+      post "#{resend_receipt_charge_path(charge.external_id)}.json"
+    end.to change { SendPurchaseReceiptJob.jobs.size }.by(1)
+  end
+
   it "404s for an unknown charge" do
     get receipt_charge_url("nope")
     expect(response).to have_http_status(:not_found)

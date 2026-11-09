@@ -229,6 +229,20 @@ describe "Rack::Attack throttle", type: :request do
         expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt"))).to be(true)
       end
     end
+
+    it "shares one budget with the format-suffixed route" do
+      travel_to(Time.current) do
+        2.times { |i| expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt"))).to be(false), "request #{i + 1} unexpectedly throttled" }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt.json"))).to be(true)
+      end
+    end
+
+    it "keeps a separate budget per charge" do
+      travel_to(Time.current) do
+        2.times { expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt"))).to be(false) }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/charges/def/resend_receipt"))).to be(false)
+      end
+    end
   end
 
   describe "POST /oauth/token device grant throttle with malformed params" do
