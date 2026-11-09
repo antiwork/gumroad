@@ -604,10 +604,17 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     // (gp#1943); skip rather than misfile it under the newly selected page.
     if (editorContentPageKeyRef.current !== selectedScopedPageKey) return;
 
-    // Mapped first: undo can restore a block under the id its file had before a save mapped it.
-    const isDeletedFileId = (fileId: string) => deletedFileIds.has(fileIdMappings[fileId] ?? fileId);
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
+    // Undo can restore a block under the id its file had before a save mapped it. A block pasted from
+    // another product (it carries a url) keeps that product's id, so its mapping is not followed.
+    const pastedFileIds = new Set(
+      Array.from(fragment.querySelectorAll("file-embed[url]"), (node) => node.getAttribute("id"))
+        // A drag leaves a url as well, so only a file the library lists counts as pasted.
+        .filter((id) => existingFiles.some((file) => file.id === id)),
+    );
+    const isDeletedFileId = (fileId: string) =>
+      deletedFileIds.has(fileId) || (!pastedFileIds.has(fileId) && deletedFileIds.has(fileIdMappings[fileId] ?? fileId));
     // A block for a file a save deleted is taken back below, so it must not resolve to another file
     // with the same url and reach the page content.
     for (const node of fragment.querySelectorAll("file-embed"))
@@ -1029,8 +1036,11 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                               ...product.files.filter((file) => file.status.type === "removed").map((file) => file.id),
                               ...unplacedFiles.map((file) => file.id),
                             ]);
+                            // So is a library file whose copy here a save deleted: under its own id, it
+                            // would read as that deleted copy.
                             const selected = selectingExistingFiles.selected.map((file) =>
-                              existingIds.has(file.id) && !placeableIds.has(file.id)
+                              (existingIds.has(file.id) && !placeableIds.has(file.id)) ||
+                              deletedFileIds.has(fileIdMappings[file.id] ?? "")
                                 ? { ...file, id: FileUtils.generateGuid() }
                                 : file,
                             );
