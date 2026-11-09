@@ -122,4 +122,55 @@ describe ReceiptPresenter::FooterInfo, :vcr do
       expect(presenter.unsubscribe_link).to include(expected_url)
     end
   end
+
+  describe "#show_refund_request_link? and #refund_request_link" do
+    let(:chargeable) { create(:purchase) }
+
+    context "when the buyer_refund_requests flag is off" do
+      it "does not show the link" do
+        expect(presenter.show_refund_request_link?).to be(false)
+      end
+    end
+
+    context "when the buyer_refund_requests flag is on for the seller" do
+      before { Feature.activate_user(:buyer_refund_requests, chargeable.seller) }
+
+      it "shows the link for an eligible purchase" do
+        expect(presenter.show_refund_request_link?).to be(true)
+      end
+
+      it "does not show the link for a refunded purchase" do
+        chargeable.update!(stripe_refunded: true)
+        expect(presenter.show_refund_request_link?).to be(false)
+      end
+
+      it "shows the link for a checkout Charge receipt with one purchase, signed for that purchase" do
+        charge_presenter = described_class.new(create(:charge, seller: chargeable.seller, purchases: [chargeable]))
+        token_purchase = nil
+        allow_any_instance_of(Purchase).to receive(:secure_external_id) { |purchase, **| token_purchase = purchase; "sample-secure-id" }
+
+        expect(charge_presenter.show_refund_request_link?).to be(true)
+        expect(charge_presenter.refund_request_link).to include("sample-secure-id")
+        expect(token_purchase).to eq(chargeable)
+      end
+
+      it "does not show the link for a Charge receipt with several purchases" do
+        other_purchase = create(:purchase, link: create(:product, user: chargeable.seller), seller: chargeable.seller)
+        charge_presenter = described_class.new(create(:charge, seller: chargeable.seller, purchases: [chargeable, other_purchase]))
+
+        expect(charge_presenter.show_refund_request_link?).to be(false)
+      end
+
+      it "links to the signed refund request page" do
+        allow_any_instance_of(Purchase).to receive(:secure_external_id).and_return("sample-secure-id")
+        expected_url = Rails.application.routes.url_helpers.purchase_refund_request_url(
+          "sample-secure-id",
+          host: UrlService.domain_with_protocol,
+        )
+
+        expect(presenter.refund_request_link).to include("Request a refund")
+        expect(presenter.refund_request_link).to include(expected_url)
+      end
+    end
+  end
 end

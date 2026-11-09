@@ -114,6 +114,14 @@ class CustomerLowPriorityMailerPreview < ActionMailer::Preview
     CustomerLowPriorityMailer.wishlist_updated(wishlist_follower&.id, wishlist_follower&.wishlist&.wishlist_products&.alive&.count || 0)
   end
 
+  def refund_request_received
+    CustomerLowPriorityMailer.refund_request_received(PurchaseRefundRequest.last&.id)
+  end
+
+  def refund_request_escalated
+    CustomerLowPriorityMailer.refund_request_escalated(PurchaseRefundRequest.last&.id)
+  end
+
   private
     # Shipment now validates this on create, so the preview needs a sale that actually ships.
     def shippable_purchase

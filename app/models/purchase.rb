@@ -183,6 +183,7 @@ class Purchase < ApplicationRecord
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy
   has_one :purchase_refund_policy, dependent: :destroy
+  has_one :refund_request, class_name: "PurchaseRefundRequest", dependent: :destroy
   has_one :order_purchase, dependent: :destroy
   has_one :order, through: :order_purchase, dependent: :destroy
   has_one :charge_purchase, dependent: :destroy

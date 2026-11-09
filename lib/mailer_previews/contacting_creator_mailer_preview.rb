@@ -105,6 +105,10 @@ class ContactingCreatorMailerPreview < ActionMailer::Preview
     ContactingCreatorMailer.purchase_refunded(Purchase.last&.id)
   end
 
+  def refund_requested
+    ContactingCreatorMailer.refund_requested(PurchaseRefundRequest.last&.id)
+  end
+
   def payment_returned
     ContactingCreatorMailer.payment_returned(Payment.completed.last&.id)
   end

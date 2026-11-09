@@ -1,0 +1,6 @@
+<%= header_section("Gumroad support is reviewing your refund request") %>
+<div>
+  <p><%= @seller_name %> hasn't refunded your purchase of <%= @purchase.link.name %> (<%= @purchase.formatted_display_price %>), so Gumroad support is now reviewing your request.</p>
+  <p>We'll email you at <%= @refund_request.email %> when we have an answer. To add something, reply to this email.</p>
+  <p><%= link_to "View your request", @page_link, class: "button primary" %></p>
+</div>

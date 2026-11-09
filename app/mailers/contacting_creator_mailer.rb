@@ -564,6 +564,26 @@ class ContactingCreatorMailer < ApplicationMailer
     @subject = "A sale has been refunded"
   end
 
+  def refund_requested(refund_request_id)
+    # Same primary read as #purchase_refunded: the row was created moments
+    # before this delivers, so a lagging replica could miss it.
+    ApplicationRecord.connected_to(role: :writing) do
+      @refund_request = PurchaseRefundRequest.find_by(id: refund_request_id)
+      return do_not_send if @refund_request.nil?
+
+      @purchase = @refund_request.purchase
+    end
+    # The flag can be turned off, or the purchase refunded, before this delivers. A send delayed
+    # past escalation still goes out: the seller is the one who can refund.
+    return do_not_send unless Feature.active?(:buyer_refund_requests, @purchase.seller)
+    return do_not_send unless @refund_request.status.in?(%w[requested escalated])
+
+    @seller = @purchase.seller
+    @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
+    @respond_by = @refund_request.escalation_deadline.strftime(PurchaseRefundRequest::DATE_FORMAT)
+    @subject = "Refund requested for #{@purchase.link.name} (#{@purchase.formatted_display_price})"
+  end
+
   def payment_returned(payment_id)
     @payment = Payment.find(payment_id)
     @seller = @payment.user
