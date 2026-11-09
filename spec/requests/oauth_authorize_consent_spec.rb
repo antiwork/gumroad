@@ -45,33 +45,28 @@ describe "OAuth authorize consent screen", type: :request do
     expect(Nokogiri::HTML(response.body).text).not_to include("Your authorization code will be sent to")
   end
 
-  it "shows the Gumroad mark for a dynamically registered MCP client" do
+  it "shows the Gumroad mark only for dynamically registered MCP clients without an icon" do
     registration = Mcp::OauthClientRegistration.create!("client_name" => "Claude", "redirect_uris" => ["https://claude.ai/api/mcp/auth_callback"])
-    application = OauthApplication.find_by!(uid: registration[:client_id])
+    mcp_client = OauthApplication.find_by!(uid: registration[:client_id])
+    other_application = create(:oauth_application, owner: create(:named_user), redirect_uri: "https://example.com/callback", confidential: false, scopes: "view_public")
 
     get "/oauth/authorize", params: {
       response_type: "code",
-      client_id: application.uid,
-      redirect_uri: application.redirect_uri,
+      client_id: mcp_client.uid,
+      redirect_uri: mcp_client.redirect_uri,
       code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
       code_challenge_method: "S256",
       resource: Mcp::DynamicClientOauth.resource_identifier("/claude/v1/mcp")
     }
-
     expect(response).to have_http_status(:ok)
     expect(Nokogiri::HTML(response.body).at_css("header img")["src"]).to end_with("/logo-g.svg")
-  end
-
-  it "keeps the generic app placeholder for an application without an icon" do
-    application = create(:oauth_application, owner: create(:named_user), redirect_uri: "https://example.com/callback", confidential: false, scopes: "view_public")
 
     get "/oauth/authorize", params: {
       response_type: "code",
-      client_id: application.uid,
-      redirect_uri: application.redirect_uri,
+      client_id: other_application.uid,
+      redirect_uri: other_application.redirect_uri,
       scope: "view_public"
     }
-
     expect(response).to have_http_status(:ok)
     expect(Nokogiri::HTML(response.body).at_css("header img")["src"]).to end_with("/gumroad_app.png")
   end
