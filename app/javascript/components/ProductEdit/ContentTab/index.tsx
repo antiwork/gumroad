@@ -596,6 +596,17 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       );
   }, [editor, fileIdMappings]);
   const savedThisSessionFileIds = React.useMemo(() => new Set(Object.values(fileIdMappings)), [fileIdMappings]);
+  // A file restored while its deleting save ran is stored anew by the next save, so its first id can
+  // map through several copies before one is deleted. The walk stops at a file the product still has.
+  const mapsToDeletedFile = (fileId: string) => {
+    const seen = new Set([fileId]);
+    for (let id = fileIdMappings[fileId]; id !== undefined && !seen.has(id); id = fileIdMappings[id]) {
+      if (deletedFileIds.has(id)) return true;
+      if (filesById.has(id)) return false;
+      seen.add(id);
+    }
+    return false;
+  };
   React.useEffect(() => {
     if (editor && removedFileEmbedIds?.length) {
       // A save can remove a legacy file node from product state while this
@@ -622,8 +633,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
         .filter((id) => existingFiles.some((file) => file.id === id)),
     );
     const isDeletedFileId = (fileId: string) =>
-      deletedFileIds.has(fileId) ||
-      (!filesById.has(fileId) && !pastedFileIds.has(fileId) && deletedFileIds.has(fileIdMappings[fileId] ?? fileId));
+      deletedFileIds.has(fileId) || (!filesById.has(fileId) && !pastedFileIds.has(fileId) && mapsToDeletedFile(fileId));
     // A block for a file a save deleted is taken back below, so it must not resolve to another file
     // with the same url and reach the page content.
     for (const node of fragment.querySelectorAll("file-embed"))
@@ -1048,8 +1058,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                             // So is a library file whose copy here a save deleted: under its own id, it
                             // would read as that deleted copy.
                             const selected = selectingExistingFiles.selected.map((file) =>
-                              (existingIds.has(file.id) && !placeableIds.has(file.id)) ||
-                              deletedFileIds.has(fileIdMappings[file.id] ?? "")
+                              (existingIds.has(file.id) && !placeableIds.has(file.id)) || mapsToDeletedFile(file.id)
                                 ? { ...file, id: FileUtils.generateGuid() }
                                 : file,
                             );
