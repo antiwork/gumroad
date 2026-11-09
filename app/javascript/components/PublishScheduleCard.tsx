@@ -28,18 +28,20 @@ const send = async (url: string, method: "POST" | "DELETE", data?: Record<string
   return cast<Response>(await response.json());
 };
 
+// The schedule lives in the editor's state, so a manual publish there clears it here too.
 export const PublishScheduleCard = ({
   permalink,
-  schedule: initialSchedule,
+  schedule,
+  onChange,
   canCreate,
   isPublished,
 }: {
   permalink: string;
   schedule: PublishSchedule | null;
+  onChange: (schedule: PublishSchedule | null) => void;
   canCreate: boolean;
   isPublished: boolean;
 }) => {
-  const [schedule, setSchedule] = React.useState(initialSchedule);
   const [localTime, setLocalTime] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const pending = schedule && (schedule.status === "scheduled" || schedule.status === "publishing") ? schedule : null;
@@ -63,7 +65,7 @@ export const PublishScheduleCard = ({
     run(async () => {
       const result = await send(Routes.link_publish_schedule_path(permalink), "POST", { local_time: localTime });
       if (!result.success) return showAlert(errorMessage(result), "error");
-      setSchedule(result.publish_schedule ?? null);
+      onChange(result.publish_schedule ?? null);
       showAlert("Publish scheduled.", "success");
     });
 
@@ -72,7 +74,7 @@ export const PublishScheduleCard = ({
     run(async () => {
       const result = await send(Routes.link_publish_schedule_path(permalink), "DELETE");
       if (!result.success) return showAlert(errorMessage(result), "error");
-      setSchedule(null);
+      onChange(null);
       setLocalTime("");
       if (notice) showAlert(notice, "success");
     });

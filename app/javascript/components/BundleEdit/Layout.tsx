@@ -84,6 +84,10 @@ export const BundleEditLayout = ({
 
   const url = useProductUrl(uniquePermalink, customPermalink);
 
+  // Every Inertia visit brings the server's schedule, e.g. none after a publish or unpublish.
+  const [schedule, setSchedule] = React.useState(publishSchedule);
+  React.useEffect(() => setSchedule(publishSchedule), [publishSchedule]);
+
   const isDesktop = useIsAboveBreakpoint("lg");
 
   const isUploadingFiles = publicFiles.some(
@@ -149,7 +153,8 @@ export const BundleEditLayout = ({
       {uniquePermalink ? (
         <PublishScheduleCard
           permalink={uniquePermalink}
-          schedule={publishSchedule}
+          schedule={schedule}
+          onChange={setSchedule}
           canCreate={canCreatePublishSchedule}
           isPublished={isPublished}
         />

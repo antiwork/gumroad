@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -50,5 +50,22 @@ describe("BundleEditLayout", () => {
     );
 
     expect(getByTestId("scroller").style.getPropertyValue("--page-header-height")).toBe("120px");
+  });
+
+  it("shows the schedule from the latest server props", () => {
+    const pending = { status: "scheduled", label: "December 2, 2026 at 9:30 AM PST", failure_message: null };
+    const renderBundle = (publishSchedule: typeof pending | null) => (
+      <CurrentSellerProvider value={null}>
+        <BundleEditLayout id="bundle" uniquePermalink="bundle" isPublished={false} publishSchedule={publishSchedule}>
+          <div />
+        </BundleEditLayout>
+      </CurrentSellerProvider>
+    );
+
+    const { rerender } = render(renderBundle(pending));
+    expect(screen.getByText("Scheduled to publish on December 2, 2026 at 9:30 AM PST.")).toBeTruthy();
+
+    rerender(renderBundle(null));
+    expect(screen.queryByText(/Scheduled to publish/u)).toBeNull();
   });
 });

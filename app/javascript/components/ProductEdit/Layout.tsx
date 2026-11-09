@@ -187,7 +187,12 @@ export const Layout = ({
       // The publish request is what records the date, so take it from the response — otherwise
       // the editor keeps showing the listing as never published until a full reload.
       const { first_published_at } = await setProductPublished(uniquePermalink, published);
-      updateProduct(first_published_at ? { is_published: published, first_published_at } : { is_published: published });
+      updateProduct({
+        is_published: published,
+        ...(first_published_at ? { first_published_at } : {}),
+        // Publishing deletes a pending schedule on the server, and a product that has been live can't be scheduled.
+        ...(published ? { publish_schedule: null, can_create_publish_schedule: false } : {}),
+      });
       showAlert(published ? "Published!" : "Unpublished!", "success");
       if (tab === "share") {
         if (!published) {
@@ -275,6 +280,7 @@ export const Layout = ({
       <PublishScheduleCard
         permalink={uniquePermalink}
         schedule={product.publish_schedule ?? null}
+        onChange={(publish_schedule) => updateProduct({ publish_schedule })}
         canCreate={product.can_create_publish_schedule ?? false}
         isPublished={product.is_published}
       />
