@@ -18,32 +18,38 @@ class PurchaseRefundRequests::NotifyJob
       next unless Feature.active?(:buyer_refund_requests, refund_request.purchase.seller)
       next if refund_request.close_if_purchase_resolved!
 
-      # Buyer first: a seller address the mail server rejects must not hold back the buyer's notice.
+      # Each recipient is tried even when an earlier one fails, so one rejected address can't hold
+      # back the others; the first failure is re-raised at the end so Sidekiq retries what is still owed.
       # Past the deadline the escalation emails replace the confirmation, which would quote a date
       # already gone, and the support copy, which would duplicate support's notice.
       past_deadline = refund_request.escalation_deadline.past?
+      failures = []
       if refund_request.state_escalated?
-        notify_buyer(refund_request, :buyer_escalation_notified_at) do
+        failures << notify_buyer(refund_request, :buyer_escalation_notified_at) do
           CustomerLowPriorityMailer.refund_request_escalated(refund_request.id)
         end
       elsif refund_request.open? && !past_deadline
-        notify_buyer(refund_request, :buyer_notified_at) do
+        failures << notify_buyer(refund_request, :buyer_notified_at) do
           CustomerLowPriorityMailer.refund_request_received(refund_request.id)
         end
       end
 
-      notify(refund_request, :seller_notified_at) do
+      failures << notify(refund_request, :seller_notified_at) do
         ContactingCreatorMailer.refund_requested(refund_request.id)
       end
-      next if past_deadline
-
-      notify(refund_request, :support_notified_at) do
-        SupportContactMailer.contact_form(
-          email: refund_request.email,
-          category: PurchaseRefundRequest::SUPPORT_CATEGORY,
-          message: support_message(refund_request),
-        )
+      # After the seller attempt: the support copy says whether the seller was reached.
+      unless past_deadline
+        failures << notify(refund_request, :support_notified_at) do
+          SupportContactMailer.contact_form(
+            email: refund_request.email,
+            category: PurchaseRefundRequest::SUPPORT_CATEGORY,
+            message: support_message(refund_request),
+          )
+        end
       end
+
+      failure = failures.compact.first
+      raise failure if failure
     end
   end
 
@@ -53,18 +59,23 @@ class PurchaseRefundRequests::NotifyJob
       return notify(refund_request, stamp, &) if EmailFormatValidator.valid?(refund_request.email)
 
       refund_request.update_column(stamp, Time.current) if refund_request.public_send(stamp).nil?
+      nil
     end
 
+    # Returns the delivery error instead of raising it, so the caller can try the other recipients first.
     def notify(refund_request, stamp)
       return if refund_request.public_send(stamp).present?
 
       mail = yield.deliver_now
       # RescueSmtpErrors returns a rejected send instead of raising it; don't stamp it as sent.
-      raise mail if mail.is_a?(Exception)
+      return mail if mail.is_a?(Exception)
       # The mailer can also skip the send (e.g. a malformed seller address); leave it owed.
       return unless mail.is_a?(Mail::Message)
 
       refund_request.update_column(stamp, Time.current)
+      nil
+    rescue StandardError => e
+      e
     end
 
     def seller_status(refund_request)

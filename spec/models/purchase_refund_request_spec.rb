@@ -148,6 +148,12 @@ describe PurchaseRefundRequest do
 
       expect(described_class.ineligibility(purchase)).to eq("previous_request_closed")
     end
+
+    it "names the dispute, not the earlier partial refund, for a disputed purchase" do
+      purchase.update_columns(stripe_partially_refunded: true, chargeback_date: Time.current)
+
+      expect(described_class.ineligibility(purchase)).to eq("chargedback")
+    end
   end
 
   describe ".purchase_eligible?" do

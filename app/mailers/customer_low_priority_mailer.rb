@@ -478,7 +478,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
     @respond_by = @refund_request.escalation_deadline.strftime(PurchaseRefundRequest::DATE_FORMAT)
     @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
     send_refund_request_email(
-      subject: "Your refund request for #{@purchase.link.name} was sent to #{@creator_name}",
+      subject: "Your refund request for #{@purchase.link.name} was sent to #{@seller_name}",
       reply_to: @purchase.seller.support_or_form_email
     )
   end
@@ -502,7 +502,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
       end
       return false if @purchase.nil? || !EmailFormatValidator.valid?(@refund_request.email)
 
-      @creator_name = @purchase.seller.name_or_username
+      @seller_name = @purchase.seller.name_or_username
       @page_link = PurchaseRefundRequest.page_link(@purchase)
       true
     end

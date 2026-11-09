@@ -15,7 +15,7 @@ describe CustomerLowPriorityMailer do
       expect(mail.reply_to).to eq([seller.support_or_form_email])
       expect(mail.subject).to eq("Your refund request for Brush pack was sent to Jane")
       body = mail.body.decoded.squish
-      expect(body).to include("If you aren't refunded by Tuesday, November 10, Gumroad support will review your request.")
+      expect(body).to include("Jane decides whether to refund you. If you aren't refunded by Tuesday, November 10, Gumroad support will review your request.")
       expect(body).to include("/purchases/")
       expect(body).to include("/refund_request")
     end

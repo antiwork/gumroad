@@ -25,7 +25,7 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
         ineligibility: nil,
       )
       expect(inertia.props[:reasons].map { _1[:value] }).to eq(PurchaseRefundRequest::REASONS)
-      expect(inertia.props[:creator_name]).to eq(seller.name_or_username)
+      expect(inertia.props[:seller_name]).to eq(seller.name_or_username)
       expect(response.headers["Cache-Control"]).to eq("no-store")
       expect(response.headers["Referrer-Policy"]).to eq("no-referrer")
     end
@@ -85,6 +85,16 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
       get :show, params: { purchase_id: token }
 
       expect(inertia.props[:ineligibility]).to eq("partially_refunded")
+    end
+
+    it "tells a buyer who disputed after a partial refund that the dispute closed the request" do
+      create(:purchase_refund_request, purchase:, state: "escalated")
+      purchase.update_columns(stripe_partially_refunded: true, chargeback_date: Time.current)
+
+      get :show, params: { purchase_id: token }
+
+      expect(inertia.props[:refund_request][:state]).to eq("expired")
+      expect(inertia.props[:ineligibility]).to eq("chargedback")
     end
 
     it "gives the deadline a request sent now would get" do

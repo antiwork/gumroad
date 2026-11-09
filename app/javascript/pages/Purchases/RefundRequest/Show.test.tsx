@@ -25,7 +25,7 @@ vi.mock("@inertiajs/react", () => ({
 const baseProps = {
   purchase_route_id: "signed-token",
   product_name: "Watercolor brush pack",
-  creator_name: "Jane",
+  seller_name: "Jane",
   formatted_price: "$29",
   respond_by: "Wednesday, November 11",
   max_message_length: 2000,
@@ -127,5 +127,15 @@ describe("RefundRequest Show", () => {
 
     expect(screen.getByRole("heading", { name: "Refund request closed" })).toBeTruthy();
     expect(screen.getByText("The refund for this purchase didn't go through, so this request is closed.")).toBeTruthy();
+  });
+
+  it("explains a request closed by the buyer's dispute", () => {
+    renderWith({
+      refund_request: { state: "expired", email: "buyer@example.com", reason_label: "Something else" },
+      ineligibility: "chargedback",
+    });
+
+    expect(screen.getByText("This request was closed because you disputed the purchase with your bank.")).toBeTruthy();
+    expect(screen.queryByText(/didn't go through/u)).toBeNull();
   });
 });

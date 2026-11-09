@@ -98,8 +98,9 @@ class PurchaseRefundRequest < ApplicationRecord
     # Not preorder authorizations: the card is only held, so there is nothing to refund.
     return "not_charged" if !purchase.successful? || purchase.price_cents.to_i <= 0
     return "refunded" if purchase.refunded?
-    return "partially_refunded" if purchase.stripe_partially_refunded?
+    # Before the partial refund: a dispute is what closed the buyer's request, and the page says so.
     return "chargedback" if purchase.chargedback?
+    return "partially_refunded" if purchase.stripe_partially_refunded?
     return "previous_request_closed" if where(purchase_id: purchase.id, state: TERMINAL_BLOCKING_STATES).exists?
 
     max_days = refund_period_in_days(purchase)

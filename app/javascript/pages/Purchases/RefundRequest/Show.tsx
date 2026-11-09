@@ -27,7 +27,7 @@ type Ineligibility =
 type Props = {
   purchase_route_id: string;
   product_name: string;
-  creator_name: string;
+  seller_name: string;
   formatted_price: string;
   respond_by: string;
   max_message_length: number;
@@ -48,12 +48,12 @@ const STATUS_HEADINGS: Record<RefundRequest["state"], string> = {
 
 const RequestStatus = ({
   refundRequest,
-  creatorName,
+  sellerName,
   respondBy,
   ineligibility,
 }: {
   refundRequest: RefundRequest;
-  creatorName: string;
+  sellerName: string;
   respondBy: string;
   ineligibility: Ineligibility | null;
 }) => {
@@ -62,10 +62,10 @@ const RequestStatus = ({
       return (
         <>
           <p>
-            <strong>We sent your request to {creatorName}.</strong>
+            <strong>We sent your request to {sellerName}.</strong>
           </p>
           <p>
-            {creatorName} decides whether to refund you. If you aren't refunded by {respondBy}, Gumroad support will
+            {sellerName} decides whether to refund you. If you aren't refunded by {respondBy}, Gumroad support will
             review your request. We'll email updates to {refundRequest.email}.
           </p>
         </>
@@ -83,7 +83,7 @@ const RequestStatus = ({
       return (
         <>
           <p>
-            <strong>{creatorName} hasn't refunded this purchase yet.</strong>
+            <strong>{sellerName} hasn't refunded this purchase yet.</strong>
           </p>
           <p>We'll email you at {refundRequest.email} when we have an answer.</p>
         </>
@@ -108,11 +108,11 @@ const RequestStatus = ({
 
 const IneligibleMessage = ({
   ineligibility,
-  creatorName,
+  sellerName,
   refundWindowEndedOn,
 }: {
   ineligibility: Ineligibility;
-  creatorName: string;
+  sellerName: string;
   refundWindowEndedOn: string | null;
 }) => {
   switch (ineligibility) {
@@ -130,14 +130,14 @@ const IneligibleMessage = ({
     case "outside_window":
       return (
         <p>
-          The refund window for this purchase ended on {refundWindowEndedOn}. To ask {creatorName} anyway, reply to your
+          The refund window for this purchase ended on {refundWindowEndedOn}. To ask {sellerName} anyway, reply to your
           receipt email.
         </p>
       );
     case "no_refunds":
       return (
         <p>
-          {creatorName} doesn't offer refunds for this product. If something is wrong with your purchase, contact{" "}
+          {sellerName} doesn't offer refunds for this product. If something is wrong with your purchase, contact{" "}
           <SupportEmailLink /> and include your receipt.
         </p>
       );
@@ -183,7 +183,7 @@ export default function Show() {
         <CardContent className="flex-col items-start">
           <RequestStatus
             refundRequest={props.refund_request}
-            creatorName={props.creator_name}
+            sellerName={props.seller_name}
             respondBy={props.respond_by}
             ineligibility={props.ineligibility}
           />
@@ -193,7 +193,7 @@ export default function Show() {
         <CardContent className="flex-col items-start">
           <IneligibleMessage
             ineligibility={props.ineligibility}
-            creatorName={props.creator_name}
+            sellerName={props.seller_name}
             refundWindowEndedOn={props.refund_window_ended_on}
           />
         </CardContent>
@@ -201,7 +201,7 @@ export default function Show() {
         <CardContent asChild>
           <form onSubmit={submit} className="flex-col items-stretch">
             <p>
-              Sending this request doesn't refund you yet. {props.creator_name} decides first. If you aren't refunded by{" "}
+              Sending this request doesn't refund you yet. {props.seller_name} decides first. If you aren't refunded by{" "}
               {props.respond_by}, Gumroad support will review your request.
             </p>
             <Fieldset>
@@ -221,7 +221,7 @@ export default function Show() {
             </Fieldset>
             <Fieldset>
               <FieldsetTitle>
-                <Label htmlFor={messageUID}>Anything else {props.creator_name} should know? (optional)</Label>
+                <Label htmlFor={messageUID}>Anything else {props.seller_name} should know? (optional)</Label>
               </FieldsetTitle>
               <Textarea
                 id={messageUID}

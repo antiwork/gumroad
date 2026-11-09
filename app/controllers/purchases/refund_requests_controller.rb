@@ -63,7 +63,7 @@ class Purchases::RefundRequestsController < ApplicationController
       {
         purchase_route_id: params[:purchase_id],
         product_name: @purchase.link.name,
-        creator_name: @purchase.seller.name_or_username,
+        seller_name: @purchase.seller.name_or_username,
         formatted_price: @purchase.formatted_display_price,
         respond_by: respond_by.strftime(PurchaseRefundRequest::DATE_FORMAT),
         max_message_length: PurchaseRefundRequest::MAX_MESSAGE_LENGTH,
