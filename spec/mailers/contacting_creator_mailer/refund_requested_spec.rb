@@ -30,23 +30,10 @@ describe ContactingCreatorMailer do
       end
     end
 
-    it "tells a seller emailed after escalation that support already has the request" do
-      refund_request.update_columns(state: "escalated", open_key: nil, created_at: 5.days.ago)
+    it "does not send when the purchase was refunded before delivery" do
+      refund_request.purchase.update!(stripe_refunded: true)
 
-      body = described_class.refund_requested(refund_request.id).body.encoded
-
-      expect(body).to include("Gumroad support is already looking at it")
-      expect(body).not_to include("Please respond by")
-    end
-
-    it "does not ask for a reply within the deadline once the deadline has passed, nor claim support has it yet" do
-      refund_request.update_columns(created_at: 5.days.ago)
-
-      body = described_class.refund_requested(refund_request.id).body.encoded
-
-      expect(body).to include("is being passed to Gumroad support")
-      expect(body).not_to include("Please respond by")
-      expect(body).not_to include("already looking at it")
+      expect(described_class.refund_requested(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
     end
 
     it "does not send when the request is gone" do

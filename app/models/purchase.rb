@@ -183,7 +183,7 @@ class Purchase < ApplicationRecord
   has_one :purchasing_power_parity_info, dependent: :destroy
   has_one :upsell_purchase, dependent: :destroy
   has_one :purchase_refund_policy, dependent: :destroy
-  has_many :refund_requests, class_name: "PurchaseRefundRequest", dependent: :destroy
+  has_one :refund_request, class_name: "PurchaseRefundRequest", dependent: :destroy
   has_one :order_purchase, dependent: :destroy
   has_one :order, through: :order_purchase, dependent: :destroy
   has_one :charge_purchase, dependent: :destroy
@@ -444,15 +444,6 @@ class Purchase < ApplicationRecord
   }
 
   before_save :schedule_product_search_refresh_after_refund
-
-  # Refunds, refund reversals (true -> false) and chargebacks; not the charging
-  # flow's nil -> false write. refund_purchase! saves more than once per
-  # transaction, so previous_changes misses it there and it calls the sync itself.
-  after_commit :sync_open_refund_request_state, if: -> (purchase) {
-    (purchase.stripe_refunded_previously_changed? &&
-      purchase.previous_changes["stripe_refunded"].any? { |value| value == true }) ||
-      (purchase.chargeback_date_previously_changed? && purchase.chargeback_date.present?)
-  }
 
   after_commit :enqueue_record_order_charge_outcome, if: -> (purchase) {
     purchase.purchase_state_previously_changed? &&
@@ -6632,32 +6623,6 @@ class Purchase < ApplicationRecord
       return if (previous_value == true) == (new_value == true)
 
       after_commit { enqueue_product_search_refresh_after_refund }
-    end
-
-    # Same purchase lock the request-create path takes, but by id: #with_lock
-    # reloads self, which clears previous_changes for the after_commit callbacks
-    # that run after this one.
-    def sync_open_refund_request_state
-      return unless PurchaseRefundRequest.exists?(purchase_id: id)
-
-      Purchase.transaction do
-        purchase = Purchase.lock.find(id)
-        resolvable = PurchaseRefundRequest.where(purchase_id: id, state: PurchaseRefundRequest::RESOLVABLE_STATES)
-        if purchase.stripe_refunded?
-          resolvable.find_each { |request| request.update!(state: "refunded") }
-        elsif purchase.chargedback?
-          # Buyer went to the bank anyway; the request is moot.
-          resolvable.find_each { |request| request.update!(state: "expired") }
-        else
-          # Refund reversal: don't display "refunded" for money that came back.
-          PurchaseRefundRequest.where(purchase_id: id, state: "refunded")
-                               .find_each { |request| request.update!(state: "expired") }
-        end
-      end
-    rescue => e
-      # Bookkeeping must never fail the refund/chargeback commit path. EscalateJob closes an open
-      # request this misses, and the buyer page reads the purchase's own refund/dispute state.
-      ErrorNotifier.notify(e, purchase_id: id)
     end
 
     def send_failure_email

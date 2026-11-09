@@ -21,22 +21,20 @@ class Purchases::RefundRequestsController < ApplicationController
       return redirect_to purchase_refund_request_path(params[:purchase_id]), alert: "Please select a reason for your refund request.", status: :see_other
     end
 
-    # Same purchase lock the refund paths take, so a refund committing concurrently
-    # either makes this purchase ineligible or sees and closes the new row.
-    @purchase.with_lock do
-      next if PurchaseRefundRequest.open_for(@purchase).present?
-      next unless PurchaseRefundRequest.purchase_eligible?(@purchase)
-
-      PurchaseRefundRequest.create!(
-        purchase: @purchase,
-        email: @purchase.email,
-        reason:,
-        message: params[:message].to_s.strip.first(PurchaseRefundRequest::MAX_MESSAGE_LENGTH).presence,
-      )
+    if PurchaseRefundRequest.purchase_eligible?(@purchase)
+      begin
+        PurchaseRefundRequest.create!(
+          purchase: @purchase,
+          email: @purchase.email,
+          reason:,
+          message: params[:message].to_s.strip.first(PurchaseRefundRequest::MAX_MESSAGE_LENGTH).presence,
+        )
+      rescue ActiveRecord::RecordNotUnique
+        # A repeat submit lands here: a purchase gets one request, and the page shows it.
+      end
     end
 
-    # The show page renders whatever the purchase now has: the new or existing
-    # request, or why it isn't eligible.
+    # The show page renders whatever the purchase now has: the request, or why it isn't eligible.
     redirect_to purchase_refund_request_path(params[:purchase_id]), status: :see_other
   end
 
@@ -56,7 +54,7 @@ class Purchases::RefundRequestsController < ApplicationController
     end
 
     def page_props
-      refund_request = PurchaseRefundRequest.where(purchase_id: @purchase.id).order(:id).last
+      refund_request = @purchase.refund_request
       ineligibility = PurchaseRefundRequest.ineligibility(@purchase)
       # A request made now would get this deadline; an existing one keeps its own.
       respond_by = refund_request&.escalation_deadline || PurchaseRefundRequest.escalation_deadline_from(Time.current)
@@ -69,21 +67,12 @@ class Purchases::RefundRequestsController < ApplicationController
         max_message_length: PurchaseRefundRequest::MAX_MESSAGE_LENGTH,
         reasons: PurchaseRefundRequest::REASON_LABELS.map { |value, label| { value:, label: } },
         refund_request: refund_request && {
-          state: displayed_state(refund_request),
+          status: refund_request.status,
           email: refund_request.email,
           reason_label: PurchaseRefundRequest::REASON_LABELS[refund_request.reason],
         },
         ineligibility:,
         refund_window_ended_on: (PurchaseRefundRequest.refund_window_end(@purchase)&.strftime(PurchaseRefundRequest::DATE_FORMAT) if ineligibility == "outside_window"),
       }
-    end
-
-    # The purchase is the source of truth if the refund/chargeback sync missed this row.
-    def displayed_state(refund_request)
-      return "refunded" if @purchase.refunded?
-      return "expired" if @purchase.chargedback? && refund_request.state != "refunded"
-      return "expired" if refund_request.state_refunded?
-
-      refund_request.state
     end
 end

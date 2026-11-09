@@ -5,6 +5,5 @@ FactoryBot.define do
     purchase
     email { purchase.email }
     reason { "not_as_described" }
-    state { "requested" }
   end
 end

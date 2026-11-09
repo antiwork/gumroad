@@ -473,7 +473,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   # Replies go to the creator, who is the one deciding.
   def refund_request_received(refund_request_id)
-    return unless load_refund_request(refund_request_id)
+    return unless load_refund_request(refund_request_id, status: "requested")
 
     @respond_by = @refund_request.escalation_deadline.strftime(PurchaseRefundRequest::DATE_FORMAT)
     @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
@@ -485,7 +485,7 @@ class CustomerLowPriorityMailer < ApplicationMailer
 
   # Replies go to support, who now owns the request.
   def refund_request_escalated(refund_request_id)
-    return unless load_refund_request(refund_request_id)
+    return unless load_refund_request(refund_request_id, status: "escalated")
 
     send_refund_request_email(
       subject: "Gumroad support is reviewing your refund request for #{@purchase.link.name}",
@@ -494,13 +494,16 @@ class CustomerLowPriorityMailer < ApplicationMailer
   end
 
   private
-    def load_refund_request(refund_request_id)
-      # NotifyJob sends this right after the row changes, before a replica may have it.
+    # Skips the send when the purchase was refunded or disputed before this delivered.
+    def load_refund_request(refund_request_id, status:)
+      # Queued right after the row changes, before a replica may have it.
       ApplicationRecord.connected_to(role: :writing) do
         @refund_request = PurchaseRefundRequest.find_by(id: refund_request_id)
         @purchase = @refund_request&.purchase
       end
       return false if @purchase.nil? || !EmailFormatValidator.valid?(@refund_request.email)
+      return false unless Feature.active?(:buyer_refund_requests, @purchase.seller)
+      return false unless @refund_request.status == status
 
       @seller_name = @purchase.seller.name_or_username
       @page_link = PurchaseRefundRequest.page_link(@purchase)

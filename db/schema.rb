@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000004) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000001) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2348,18 +2348,11 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.string "email", null: false
     t.string "reason", null: false
     t.text "message"
-    t.string "state", default: "requested", null: false
-    t.bigint "open_key"
-    t.datetime "seller_notified_at"
-    t.datetime "support_notified_at"
+    t.datetime "escalated_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.datetime "buyer_notified_at"
-    t.datetime "buyer_escalation_notified_at"
-    t.index ["open_key"], name: "index_purchase_refund_requests_one_open_per_purchase", unique: true
-    t.index ["purchase_id"], name: "index_purchase_refund_requests_on_purchase_id"
-    t.index ["state", "buyer_escalation_notified_at", "created_at"], name: "index_purchase_refund_requests_on_owed_buyer_retry"
-    t.index ["state", "seller_notified_at", "created_at"], name: "index_purchase_refund_requests_on_owed_seller_retry"
+    t.index ["escalated_at", "created_at"], name: "index_purchase_refund_requests_on_escalated_at_and_created_at"
+    t.index ["purchase_id"], name: "index_purchase_refund_requests_on_purchase_id", unique: true
   end
 
   create_table "purchase_sales_tax_infos", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

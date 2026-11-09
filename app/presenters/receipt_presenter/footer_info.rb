@@ -64,11 +64,11 @@ class ReceiptPresenter::FooterInfo
   end
 
   def show_refund_request_link?
-    purchase = refund_request_purchase
-    return false if purchase.nil?
-    return false unless Feature.active?(:buyer_refund_requests, purchase.seller)
+    # Flag first: it skips the purchases query on every receipt while the flag is off.
+    return false unless Feature.active?(:buyer_refund_requests, chargeable.seller)
 
-    PurchaseRefundRequest.purchase_eligible?(purchase)
+    purchase = refund_request_purchase
+    purchase.present? && PurchaseRefundRequest.purchase_eligible?(purchase)
   end
 
   def refund_request_link

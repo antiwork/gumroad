@@ -145,7 +145,7 @@ describe ReceiptPresenter::FooterInfo, :vcr do
       end
 
       it "shows the link for a checkout Charge receipt with one purchase, signed for that purchase" do
-        charge_presenter = described_class.new(create(:charge, purchases: [chargeable]))
+        charge_presenter = described_class.new(create(:charge, seller: chargeable.seller, purchases: [chargeable]))
         token_purchase = nil
         allow_any_instance_of(Purchase).to receive(:secure_external_id) { |purchase, **| token_purchase = purchase; "sample-secure-id" }
 
@@ -156,7 +156,7 @@ describe ReceiptPresenter::FooterInfo, :vcr do
 
       it "does not show the link for a Charge receipt with several purchases" do
         other_purchase = create(:purchase, link: create(:product, user: chargeable.seller), seller: chargeable.seller)
-        charge_presenter = described_class.new(create(:charge, purchases: [chargeable, other_purchase]))
+        charge_presenter = described_class.new(create(:charge, seller: chargeable.seller, purchases: [chargeable, other_purchase]))
 
         expect(charge_presenter.show_refund_request_link?).to be(false)
       end

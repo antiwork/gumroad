@@ -10,19 +10,12 @@ import { Radio } from "$app/components/ui/Radio";
 import { Textarea } from "$app/components/ui/Textarea";
 
 type RefundRequest = {
-  state: "requested" | "refunded" | "expired" | "escalated";
+  status: "requested" | "escalated" | "refunded" | "disputed";
   email: string;
   reason_label: string;
 };
 
-type Ineligibility =
-  | "not_charged"
-  | "refunded"
-  | "partially_refunded"
-  | "chargedback"
-  | "previous_request_closed"
-  | "no_refunds"
-  | "outside_window";
+type Ineligibility = "not_charged" | "refunded" | "partially_refunded" | "disputed" | "no_refunds" | "outside_window";
 
 type Props = {
   purchase_route_id: string;
@@ -39,25 +32,23 @@ type Props = {
 
 const SupportEmailLink = () => <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>;
 
-const STATUS_HEADINGS: Record<RefundRequest["state"], string> = {
+const STATUS_HEADINGS: Record<RefundRequest["status"], string> = {
   requested: "Refund requested",
-  refunded: "Refunded",
   escalated: "Gumroad support is reviewing your request",
-  expired: "Refund request closed",
+  refunded: "Refunded",
+  disputed: "Refund request closed",
 };
 
 const RequestStatus = ({
   refundRequest,
   sellerName,
   respondBy,
-  ineligibility,
 }: {
   refundRequest: RefundRequest;
   sellerName: string;
   respondBy: string;
-  ineligibility: Ineligibility | null;
 }) => {
-  switch (refundRequest.state) {
+  switch (refundRequest.status) {
     case "requested":
       return (
         <>
@@ -71,14 +62,7 @@ const RequestStatus = ({
         </>
       );
     case "refunded":
-      return (
-        <>
-          <p>
-            <strong>This purchase has been refunded.</strong>
-          </p>
-          <p>Refunds usually appear on your statement within 5–10 business days.</p>
-        </>
-      );
+      return <p>Refunds usually appear on your statement within 5–10 business days.</p>;
     case "escalated":
       return (
         <>
@@ -88,20 +72,11 @@ const RequestStatus = ({
           <p>We'll email you at {refundRequest.email} when we have an answer.</p>
         </>
       );
-    case "expired":
-      return ineligibility === "chargedback" ? (
+    case "disputed":
+      return (
         <p>
           <strong>This request was closed because you disputed the purchase with your bank.</strong>
         </p>
-      ) : (
-        <>
-          <p>
-            <strong>The refund for this purchase didn't go through, so this request is closed.</strong>
-          </p>
-          <p>
-            Contact <SupportEmailLink /> and include your receipt.
-          </p>
-        </>
       );
   }
 };
@@ -125,7 +100,7 @@ const IneligibleMessage = ({
           include your receipt.
         </p>
       );
-    case "chargedback":
+    case "disputed":
       return <p>You disputed this purchase with your bank, so you can't also request a refund here.</p>;
     case "outside_window":
       return (
@@ -139,13 +114,6 @@ const IneligibleMessage = ({
         <p>
           {sellerName} doesn't offer refunds for this product. If something is wrong with your purchase, contact{" "}
           <SupportEmailLink /> and include your receipt.
-        </p>
-      );
-    case "previous_request_closed":
-      return (
-        <p>
-          You already sent a refund request for this purchase. If you still need help, contact <SupportEmailLink /> and
-          include your receipt.
         </p>
       );
     case "not_charged":
@@ -164,7 +132,7 @@ export default function Show() {
   };
 
   const heading = props.refund_request
-    ? STATUS_HEADINGS[props.refund_request.state]
+    ? STATUS_HEADINGS[props.refund_request.status]
     : props.ineligibility
       ? "Refund not available"
       : "Request a refund";
@@ -185,7 +153,6 @@ export default function Show() {
             refundRequest={props.refund_request}
             sellerName={props.seller_name}
             respondBy={props.respond_by}
-            ineligibility={props.ineligibility}
           />
           <p className="text-muted">Reason: {props.refund_request.reason_label}</p>
         </CardContent>

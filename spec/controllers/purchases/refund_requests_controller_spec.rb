@@ -52,31 +52,21 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
       expect { get :show, params: { purchase_id: wrong_scope_token } }.to raise_error(ActionController::RoutingError)
     end
 
-    it "shows the current request without enqueueing anything" do
+    it "shows the current request" do
       create(:purchase_refund_request, purchase:, reason: "other")
-      PurchaseRefundRequests::NotifyJob.jobs.clear
 
       get :show, params: { purchase_id: token }
 
-      expect(inertia.props[:refund_request]).to eq(state: "requested", email: purchase.email, reason_label: "Something else")
-      expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
+      expect(inertia.props[:refund_request]).to eq(status: "requested", email: purchase.email, reason_label: "Something else")
     end
 
-    it "shows the purchase as refunded even if the sync missed the request row" do
-      create(:purchase_refund_request, purchase:, state: "escalated")
+    it "reads the status from the purchase" do
+      create(:purchase_refund_request, purchase:, escalated_at: Time.current)
       purchase.update_column(:stripe_refunded, true)
 
       get :show, params: { purchase_id: token }
 
-      expect(inertia.props[:refund_request][:state]).to eq("refunded")
-    end
-
-    it "does not show a reversed refund as refunded even if the sync missed the request row" do
-      create(:purchase_refund_request, purchase:, state: "refunded")
-
-      get :show, params: { purchase_id: token }
-
-      expect(inertia.props[:refund_request][:state]).to eq("expired")
+      expect(inertia.props[:refund_request][:status]).to eq("refunded")
     end
 
     it "explains ineligibility for a partly refunded purchase" do
@@ -88,13 +78,12 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
     end
 
     it "tells a buyer who disputed after a partial refund that the dispute closed the request" do
-      create(:purchase_refund_request, purchase:, state: "escalated")
+      create(:purchase_refund_request, purchase:)
       purchase.update_columns(stripe_partially_refunded: true, chargeback_date: Time.current)
 
       get :show, params: { purchase_id: token }
 
-      expect(inertia.props[:refund_request][:state]).to eq("expired")
-      expect(inertia.props[:ineligibility]).to eq("chargedback")
+      expect(inertia.props[:refund_request][:status]).to eq("disputed")
     end
 
     it "gives the deadline a request sent now would get" do
@@ -125,32 +114,31 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
   end
 
   describe "POST create" do
-    it "creates the request and enqueues the notify job once" do
+    it "creates the request and queues the seller and buyer emails" do
       expect do
         post :create, params: { purchase_id: token, reason: "not_as_described", message: "Files are corrupted." }
       end.to change(PurchaseRefundRequest, :count).by(1)
+        .and have_enqueued_mail(ContactingCreatorMailer, :refund_requested)
+        .and have_enqueued_mail(CustomerLowPriorityMailer, :refund_request_received)
 
       request = PurchaseRefundRequest.last
       expect(request.purchase).to eq(purchase)
       expect(request.email).to eq(purchase.email)
       expect(request.reason).to eq("not_as_described")
       expect(request.message).to eq("Files are corrupted.")
-      expect(request.state).to eq("requested")
-      expect(PurchaseRefundRequests::NotifyJob.jobs.map { _1["args"] }).to eq([[request.id]])
       expect(response).to redirect_to(purchase_refund_request_path(token))
     end
 
-    it "returns the existing open request without enqueueing anything" do
+    it "keeps the existing request on a second submit" do
       existing = create(:purchase_refund_request, purchase:)
-      PurchaseRefundRequests::NotifyJob.jobs.clear
 
       expect do
         post :create, params: { purchase_id: token, reason: "other" }
-      end.not_to change(PurchaseRefundRequest, :count)
+      end.to not_change(PurchaseRefundRequest, :count)
+        .and not_have_enqueued_mail(ContactingCreatorMailer, :refund_requested)
 
-      expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
       expect(response).to redirect_to(purchase_refund_request_path(token))
-      expect(PurchaseRefundRequest.open_for(purchase)).to eq(existing)
+      expect(PurchaseRefundRequest.find_by(purchase_id: purchase.id)).to eq(existing)
     end
 
     it "rejects a refunded purchase without creating anything" do
@@ -158,17 +146,6 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
 
       expect do
         post :create, params: { purchase_id: token, reason: "not_as_described" }
-      end.not_to change(PurchaseRefundRequest, :count)
-
-      expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
-      expect(response).to redirect_to(purchase_refund_request_path(token))
-    end
-
-    it "rejects a purchase whose previous request expired" do
-      create(:purchase_refund_request, purchase:, state: "expired")
-
-      expect do
-        post :create, params: { purchase_id: token, reason: "other" }
       end.not_to change(PurchaseRefundRequest, :count)
 
       expect(response).to redirect_to(purchase_refund_request_path(token))

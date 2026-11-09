@@ -7,6 +7,8 @@ describe CustomerLowPriorityMailer do
   let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Brush pack")) }
   let(:refund_request) { travel_to(Time.utc(2026, 11, 6, 12)) { create(:purchase_refund_request, purchase:) } } # Friday
 
+  before { Feature.activate_user(:buyer_refund_requests, seller) }
+
   describe "#refund_request_received" do
     it "tells the buyer who decides, by when, and links to the status page" do
       mail = described_class.refund_request_received(refund_request.id)
@@ -23,6 +25,7 @@ describe CustomerLowPriorityMailer do
 
   describe "#refund_request_escalated" do
     it "tells the buyer support has the request and sends replies to support" do
+      refund_request.update!(escalated_at: Time.current)
       mail = described_class.refund_request_escalated(refund_request.id)
 
       expect(mail.to).to eq([refund_request.email])
@@ -32,7 +35,11 @@ describe CustomerLowPriorityMailer do
     end
   end
 
-  it "does not send when the request is gone" do
+  it "does not send when the request is gone, or no longer has the status the email describes" do
     expect(described_class.refund_request_received(nil).message).to be_a(ActionMailer::Base::NullMail)
+    expect(described_class.refund_request_escalated(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
+
+    purchase.update!(stripe_refunded: true)
+    expect(described_class.refund_request_received(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
   end
 end

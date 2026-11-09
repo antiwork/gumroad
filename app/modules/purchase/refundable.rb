@@ -391,8 +391,6 @@ class Purchase
       # After commit: ChargeProcessor.refund! has already moved the money.
       # A failed license write must not roll back stripe_refunded.
       disable_attached_license_if_fully_refunded!(for_fraud: is_for_fraud) if refunded
-      # Charge#refund_and_save! wraps this in its own transaction.
-      ActiveRecord.after_all_transactions_commit { sync_open_refund_request_state } if refunded && stripe_refunded?
     end
   end
 

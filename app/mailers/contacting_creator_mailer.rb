@@ -573,8 +573,9 @@ class ContactingCreatorMailer < ApplicationMailer
 
       @purchase = @refund_request.purchase
     end
-    # The flag can be turned off after the job was queued.
+    # The flag can be turned off, or the purchase refunded, before this delivers.
     return do_not_send unless Feature.active?(:buyer_refund_requests, @purchase.seller)
+    return do_not_send unless @refund_request.status == "requested"
 
     @seller = @purchase.seller
     @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
