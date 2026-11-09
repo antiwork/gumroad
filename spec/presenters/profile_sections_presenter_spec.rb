@@ -70,6 +70,33 @@ describe ProfileSectionsPresenter do
     end
   end
 
+  describe "single-flight cache rebuild" do
+    before { Rails.cache.clear }
+
+    it "searches once when several requests miss the same cold entry together" do
+      allow(Link).to receive(:search).and_call_original
+      threads = Array.new(4) { Thread.new { described_class.new(seller:, query: subject.send(:query)).cached_sections } }
+      results = threads.map(&:value)
+
+      expect(results.uniq.size).to eq(1)
+      expect(Link).to have_received(:search).at_most(3).times
+    end
+
+    it "builds itself when the lock holder never finishes" do
+      stub_const("#{described_class}::BUILD_WAIT_TIMEOUT", 0.2)
+      Rails.cache.write("sections-key-build-lock", true, expires_in: 30.seconds)
+
+      expect(subject.send(:fetch_single_flight, "sections-key") { :built }).to eq(:built)
+    end
+
+    it "lets a second request reuse the value the first one wrote" do
+      builds = 0
+      2.times { subject.send(:fetch_single_flight, "sections-key") { builds += 1 } }
+
+      expect(builds).to eq(1)
+    end
+  end
+
   describe "#props" do
     def common_sections_props
       sections = cached_sections_props
