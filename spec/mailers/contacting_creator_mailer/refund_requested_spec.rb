@@ -31,13 +31,14 @@ describe ContactingCreatorMailer do
       expect(body).not_to include("Please respond within")
     end
 
-    it "does not ask for a reply within the deadline once the deadline has passed" do
+    it "does not ask for a reply within the deadline once the deadline has passed, nor claim support has it yet" do
       refund_request.update_columns(created_at: 5.days.ago)
 
       body = described_class.refund_requested(refund_request.id).body.encoded
 
-      expect(body).to include("Gumroad support is already looking at it")
+      expect(body).to include("is being passed to Gumroad support")
       expect(body).not_to include("Please respond within")
+      expect(body).not_to include("already looking at it")
     end
 
     it "does not send when the request is gone" do
