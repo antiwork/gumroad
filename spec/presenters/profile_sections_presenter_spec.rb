@@ -70,6 +70,54 @@ describe ProfileSectionsPresenter do
     end
   end
 
+  describe "single-flight cache rebuild" do
+    before { Rails.cache.clear }
+
+    it "builds once when concurrent requests miss the same cold entry, with a request-local cache" do
+      store = ActiveSupport::Cache::MemoryStore.new
+      store.singleton_class.prepend(ActiveSupport::Cache::Strategy::LocalCache)
+      allow(Rails).to receive(:cache).and_return(store)
+      stub_const("#{described_class}::BUILD_WAIT_INTERVAL", 0.01)
+      builds = Concurrent::AtomicFixnum.new(0)
+      waiting = Queue.new
+      release = Queue.new
+
+      threads = Array.new(4) do
+        Thread.new do
+          store.send(:with_local_cache) do
+            subject.send(:fetch_single_flight, "sections-key") do
+              builds.increment
+              3.times { waiting.pop }
+              release.pop
+              :built
+            end
+          end
+        end
+      end
+      # Each waiter has read the cold entry (local-cache miss) before the builder finishes.
+      3.times { waiting.push(true) }
+      sleep 0.2
+      release.push(true)
+
+      expect(threads.map(&:value)).to all(eq(:built))
+      expect(builds.value).to eq(1)
+    end
+
+    it "builds itself when the lock holder never finishes" do
+      stub_const("#{described_class}::BUILD_WAIT_TIMEOUT", 0.2)
+      Rails.cache.write("sections-key-build-lock", true, expires_in: 30.seconds)
+
+      expect(subject.send(:fetch_single_flight, "sections-key") { :built }).to eq(:built)
+    end
+
+    it "lets a second request reuse the value the first one wrote" do
+      builds = 0
+      2.times { subject.send(:fetch_single_flight, "sections-key") { builds += 1 } }
+
+      expect(builds).to eq(1)
+    end
+  end
+
   describe "#props" do
     def common_sections_props
       sections = cached_sections_props

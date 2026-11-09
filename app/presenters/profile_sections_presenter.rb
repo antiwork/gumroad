@@ -14,6 +14,14 @@ class ProfileSectionsPresenter
   DEFAULT_PRODUCTS_SECTION_TYPE = "SellerProfileProductsSection"
   DEFAULT_PRODUCTS_TAB_NAME = "Products"
 
+  CACHE_EXPIRES_IN = 10.minutes
+  # A cold entry costs ~130 Elasticsearch searches for a large catalog. A visitor opening many of
+  # one seller's product links at once used to run that on every request and queue the search
+  # thread pool for ~20s, so only one request per key rebuilds while the rest wait for its write.
+  BUILD_LOCK_TTL = 30.seconds
+  BUILD_WAIT_TIMEOUT = 25.seconds
+  BUILD_WAIT_INTERVAL = 0.1.seconds
+
   def self.default_products_section_available?(seller:, sections:)
     sections.empty? && seller.products.alive.not_archived.exists?
   end
@@ -65,7 +73,7 @@ class ProfileSectionsPresenter
   def cached_sections
     sections_cache_key = query.cache_key_with_version
     cache_key = "#{CACHE_KEY_PREFIX}_#{REVISION}-#{products_cache_key}-#{sections_cache_key}"
-    Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
+    fetch_single_flight(cache_key) do
       query.map do |section|
         data = {
           id: section.external_id,
@@ -106,13 +114,52 @@ class ProfileSectionsPresenter
       @products_cache_key ||= seller.products.cache_key_with_version
     end
 
+    # Rails.cache.fetch lets every concurrent miss rebuild. The builder writes the value before it
+    # releases the lock, so a waiter that sees the lock gone finds the entry. If the holder dies or
+    # is slow, a waiter builds after BUILD_WAIT_TIMEOUT rather than failing the page. One plain
+    # read up front keeps the cache hit/miss metric at one event per request.
+    def fetch_single_flight(cache_key, &build)
+      cached = Rails.cache.read(cache_key)
+      return cached unless cached.nil?
+
+      lock_key = "#{cache_key}-build-lock"
+      if shared_cache { Rails.cache.write(lock_key, true, unless_exist: true, expires_in: BUILD_LOCK_TTL) }
+        begin
+          # Another request may have finished between our miss and taking the lock.
+          return shared_cache { Rails.cache.read(cache_key) } if shared_cache { Rails.cache.exist?(cache_key) }
+
+          build_and_write(cache_key, &build)
+        ensure
+          shared_cache { Rails.cache.delete(lock_key) }
+        end
+      else
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + BUILD_WAIT_TIMEOUT
+        while shared_cache { Rails.cache.exist?(lock_key) } && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+          sleep BUILD_WAIT_INTERVAL
+        end
+        shared_cache { Rails.cache.read(cache_key) } || build_and_write(cache_key, &build)
+      end
+    end
+
+    def build_and_write(cache_key)
+      yield.tap { |value| Rails.cache.write(cache_key, value, expires_in: CACHE_EXPIRES_IN) }
+    end
+
+    # The memcached store keeps a per-request copy of everything it reads, misses included, so a
+    # poll would keep seeing the first answer. Reads and lock operations here must reach memcached.
+    def shared_cache(&block)
+      return yield unless Rails.cache.respond_to?(:bypass_local_cache, true)
+
+      Rails.cache.send(:bypass_local_cache, &block)
+    end
+
     # Builds the cacheable data for the virtual default products section after the shared
     # availability check above. Cached with the same 10-minute window as saved sections; the cache
     # key includes the products' cache version so publishing, archiving, or deleting a product
     # refreshes it.
     def cached_default_products_section
       cache_key = "#{CACHE_KEY_PREFIX}_default_#{REVISION}-#{products_cache_key}"
-      Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
+      fetch_single_flight(cache_key) do
         {
           id: DEFAULT_PRODUCTS_SECTION_ID,
           header: nil,
