@@ -33,10 +33,6 @@ describe "mysql2 proxy charge receipt routing" do
     primary_setup do
       seller = create(:user)
       purchase = create(:purchase, seller:, link: create(:product, user: seller, name:))
-      # create_artifacts_and_send_receipt! mints the url_redirect on the transition to successful,
-      # so a factory-made successful purchase is only receipt-ready once it has one. Without it the
-      # job defers the receipt (it renders no download button for the line) and never delivers.
-      purchase.create_url_redirect!
       charge = create(:charge, seller:, purchases: [purchase])
       charge.order.purchases << purchase
       charge

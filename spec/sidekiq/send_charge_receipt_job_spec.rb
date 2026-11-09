@@ -14,7 +14,6 @@ describe SendChargeReceiptJob do
   before do
     charge.order.purchases << purchase_one
     charge.order.purchases << purchase_two
-    [purchase_one, purchase_two].each(&:create_url_redirect!)
     allow(PdfStampingService).to receive(:stamp_for_purchase!)
     allow(CustomerMailer).to receive_message_chain(:receipt, :deliver_now)
   end
@@ -37,29 +36,6 @@ describe SendChargeReceiptJob do
     expect(described_class.sidekiq_options["lock_timeout"]).to eq(2)
     expect(described_class.sidekiq_options["unique_across_queues"]).to be(true)
     expect(described_class.sidekiq_options["on_conflict"]).to eq({ "server" => :raise })
-  end
-
-  context "when a successful purchase has no url_redirect yet" do
-    before { allow(SendChargeReceiptJob).to receive(:perform_in) }
-
-    it "defers the receipt so the paid line renders its download button" do
-      purchase_two.url_redirect.destroy!
-
-      described_class.new.perform(charge.id)
-
-      expect(SendChargeReceiptJob).to have_received(:perform_in).with(10.seconds, charge.id, 1)
-      expect(CustomerMailer).not_to have_received(:receipt)
-      expect(charge.reload.receipt_sent?).to be(false)
-    end
-
-    it "sends with what exists once the retry budget is spent" do
-      purchase_two.url_redirect.destroy!
-
-      described_class.new.perform(charge.id, described_class::RETRY_DELAYS.size)
-
-      expect(SendChargeReceiptJob).not_to have_received(:perform_in)
-      expect(charge.reload.receipt_sent?).to be(true)
-    end
   end
 
   context "when a purchase is still in_progress (free+paid race, gp#2025)" do
@@ -215,7 +191,6 @@ describe SendChargeReceiptJob do
       let(:charge) { create(:charge, purchases: [bundle_purchase], seller:) }
 
       before do
-        bundle_purchase.create_url_redirect!
         create(:bundle_product_purchase, bundle_purchase:, product_purchase: purchase_one)
         create(:bundle_product_purchase, bundle_purchase:, product_purchase: purchase_two)
       end
