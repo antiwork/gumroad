@@ -29,6 +29,14 @@ describe PurchaseRefundRequests::EscalateJob do
     expect(refund_request.reload.state).to eq("refunded")
   end
 
+  it "tells support when the seller was never notified, since escalation stops the notification retries" do
+    refund_request.update_columns(seller_notified_at: nil, support_notified_at: Time.current)
+
+    described_class.new.perform(refund_request.id)
+
+    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("Seller notified: no, the email was never delivered")
+  end
+
   it "tells support when the seller already refunded part of the purchase" do
     purchase.refund_partial_purchase!(purchase.total_transaction_cents / 2, purchase.seller.id)
 

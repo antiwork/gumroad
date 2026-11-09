@@ -28,6 +28,7 @@ class PurchaseRefundRequests::EscalateJob
           Amount: #{purchase.formatted_display_price}
           Reason: #{PurchaseRefundRequest::REASON_LABELS[refund_request.reason]}
           Refunded so far: #{purchase.stripe_partially_refunded? ? "partially" : "nothing"}
+          Seller notified: #{refund_request.seller_notified_at? ? "yes" : "no, the email was never delivered"}
         MESSAGE
       ).deliver_now
       # RescueSmtpErrors returns a rejected send instead of raising it.
