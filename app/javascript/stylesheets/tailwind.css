@@ -104,6 +104,24 @@
   }
 }
 
+/*
+ * The hover lift translates an element up and left, leaving a pointer on its right or bottom edge
+ * outside it, so hover and idle alternate; this covers the strip it vacates (`contain: layout`
+ * anchors the ::after to the element, where a `position` would lose to a caller's own className).
+ */
+@utility lift-halo {
+  contain: layout;
+
+  &:hover::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: calc(-1 * (var(--lift-halo-offset, 0.25rem) + 1px));
+    bottom: calc(-1 * (var(--lift-halo-offset, 0.25rem) + 1px));
+  }
+}
+
 /* Coins parallax animation */
 .parallax-up {
   transform: translateY(0);

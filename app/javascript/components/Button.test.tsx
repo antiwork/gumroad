@@ -59,8 +59,8 @@ describe("Button brand colors", () => {
 });
 
 describe("Button hover halo", () => {
-  const haloAndLiftOffsets = (className: string) =>
-    ["hover:-translate-", "hover:after:right-", "hover:after:bottom-"].map((prefix) => {
+  const offsets = (className: string, prefixes: string[]) =>
+    prefixes.map((prefix) => {
       const token = className.split(" ").find((name) => name.startsWith(prefix));
 
       return token?.match(/\((--[\w-]+)\)/u)?.[1];
@@ -73,22 +73,21 @@ describe("Button hover halo", () => {
 
     const button = screen.getByRole("button", { name: "Buy" });
 
-    expect(haloAndLiftOffsets(button.className)).toEqual([
-      "--button-hover-offset",
+    expect(offsets(button.className, ["hover:-translate-", "[--lift-halo-offset:"])).toEqual([
       "--button-hover-offset",
       "--button-hover-offset",
     ]);
   });
 
-  // An always-on halo would let the button hover from outside its own box, and its content would be
-  // an extra flex item on every button.
-  it("keeps the halo behind the hover state", () => {
+  // A halo is applied bare because a `hover:` prefix would take `contain: layout` off with it, and
+  // that would re-anchor the halo to a caller's own positioning.
+  it("holds the halo's anchor still", () => {
     render(<Button>Buy</Button>);
 
     const button = screen.getByRole("button", { name: "Buy" });
-    const halo = button.className.split(" ").filter((name) => name.startsWith("after:"));
 
-    expect(halo).toEqual([]);
+    expect(button.className.split(" ")).toContain("lift-halo");
+    expect(button.className).not.toMatch(/hover:lift-halo|after:/u);
   });
 
   // A halo anchored to an ancestor instead of the button would cover that ancestor and swallow its
@@ -98,7 +97,7 @@ describe("Button hover halo", () => {
 
     const button = screen.getByRole("button", { name: "Remove icon" });
 
-    expect(button.className).toContain("[contain:layout]");
+    expect(button.className.split(" ")).toContain("lift-halo");
     expect(button.className).not.toMatch(/(^|\s)relative(\s|$)/u);
     expect(button.className).toContain("absolute");
   });

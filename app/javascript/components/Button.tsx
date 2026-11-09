@@ -29,11 +29,8 @@ export const buttonVariants = cva(
   // The default `shadow` token resolves to `currentColor`, which flips to near-white in dark
   // mode (text color becomes rgb(221 221 221)) and renders a strange white button shadow.
   // Matching light mode's black keeps the neobrutalist look consistent across color schemes.
-  // The hover lift moves the button up and left, leaving a pointer on its right or bottom edge
-  // outside it, so the button flickers. This hover-only ::after covers the strip it moves away from
-  // (the offset, plus the 1px border its padding-box anchor sits inside); `contain: layout` anchors
-  // it to the button, where a `position` would lose to a caller's own className.
-  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-(--button-hover-offset) hover:shadow-[var(--button-hover-offset)_var(--button-hover-offset)_0_var(--color-black)] active:translate-0 active:shadow-none data-[state=open]:translate-0! data-[state=open]:shadow-none! [contain:layout] hover:after:absolute hover:after:top-0 hover:after:left-0 hover:after:content-[''] hover:after:right-[calc(-1*(var(--button-hover-offset)+1px))] hover:after:bottom-[calc(-1*(var(--button-hover-offset)+1px))]",
+  // lift-halo has to grow by exactly the distance the lift moves, so it tracks the store's offset.
+  "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded text-current font-[inherit] no-underline transition-transform hover:-translate-(--button-hover-offset) hover:shadow-[var(--button-hover-offset)_var(--button-hover-offset)_0_var(--color-black)] active:translate-0 active:shadow-none data-[state=open]:translate-0! data-[state=open]:shadow-none! lift-halo [--lift-halo-offset:var(--button-hover-offset)]",
   {
     variants: {
       variant: {

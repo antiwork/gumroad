@@ -91,11 +91,12 @@ const PostCard = ({
   const showSnippet = !featureImageUrl && post.message_snippet && (clamp === undefined || clamp > 0);
 
   return (
-    <article className="h-full">
+    <article className="group/card h-full">
       <Link
         href={Routes.gumroad_blog_post_path(post.slug)}
         className={cx(
-          "override grid h-full overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]",
+          // `group-hover` on the stationary article instead of a halo: overflow-hidden would clip it.
+          "override grid h-full overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out group-hover/card:-translate-x-1 group-hover/card:-translate-y-1 group-hover/card:shadow-[3px_3px_#000]",
           { "grid-rows-[auto_1fr]": !!featureImageUrl },
         )}
       >
