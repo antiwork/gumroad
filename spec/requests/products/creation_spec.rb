@@ -291,6 +291,51 @@ describe "Product creation", type: :system, js: true do
     end
   end
 
+  describe "price commas" do
+    it "explains how a typed comma is read" do
+      visit new_product_path
+
+      expect(page).to have_text("Use a comma for thousands (7,900) or for cents (7,90).")
+    end
+
+    { "1,500" => 1500_00, "7,9" => 7_90 }.each do |typed, cents|
+      it "creates a product priced #{typed} as #{cents} cents" do
+        visit new_product_path
+        fill_in("Name", with: "Comma product")
+        choose("Digital product")
+        fill_in("Price", with: typed)
+        click_on("Next: Customize")
+
+        expect(page).to have_title("Comma product")
+        expect(seller.links.last.price_cents).to eq(cents)
+      end
+    end
+
+    it "keeps every digit of a grouped price longer than ten characters" do
+      visit new_product_path
+      fill_in("Name", with: "Comma product")
+      choose("Digital product")
+      select("COL$ (Colombian Peso)", from: "Currency", visible: false)
+      fill_in("Price", with: "1,000,000.50")
+      click_on("Next: Customize")
+
+      expect(page).to have_title("Comma product")
+      expect(seller.links.last.price_cents).to eq(1_000_000_50)
+    end
+
+    it "rounds a decimal comma in yen instead of reading it as thousands" do
+      visit new_product_path
+      fill_in("Name", with: "Comma product")
+      choose("Digital product")
+      select("¥ (Yen)", from: "Currency", visible: false)
+      fill_in("Price", with: "150,50")
+      click_on("Next: Customize")
+
+      expect(page).to have_title("Comma product")
+      expect(seller.links.last.price_cents).to eq(151)
+    end
+  end
+
   describe "form validations" do
     it "shows error state when name is not filled" do
       visit new_product_path

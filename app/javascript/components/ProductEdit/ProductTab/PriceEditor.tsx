@@ -1,6 +1,7 @@
 import * as React from "react";
 
-import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol } from "$app/utils/currency";
+import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol, getIsSingleUnitCurrency } from "$app/utils/currency";
+import { priceCommaHint } from "$app/utils/price";
 
 import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
@@ -93,6 +94,7 @@ export const PriceEditor = ({
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
       />
+      <p className="text-sm text-muted">{priceCommaHint(getIsSingleUnitCurrency(currencyType))}</p>
       {mustBePWYW ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details open={pwywOn}>
         <DetailsToggle chevronPosition="none" className="mb-0">

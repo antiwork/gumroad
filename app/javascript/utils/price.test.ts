@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 
-import { formatPrice, parseUnitStringToPriceCents, priceCentsToUnit, priceUnitToCents } from "$app/utils/price";
+import {
+  formatPrice,
+  parseUnitStringToPriceCents,
+  priceCommaHint,
+  sanitizePriceRangeInput,
+  priceCentsToUnit,
+  priceUnitToCents,
+} from "$app/utils/price";
 
 describe("priceCentsToUnit", () => {
   it("converts cents to a two-decimal unit amount for a regular currency", () => {
@@ -59,5 +66,29 @@ describe("parseUnitStringToPriceCents", () => {
 
   it("returns null for a null input", () => {
     expect(parseUnitStringToPriceCents(null, false)).toBeNull();
+  });
+});
+
+describe("sanitizePriceRangeInput", () => {
+  it("keeps a thousands comma so the server reads 7,900 as grouping", () => {
+    expect(sanitizePriceRangeInput("7,900")).toBe("7,900");
+  });
+
+  it("keeps a Euro decimal comma", () => {
+    expect(sanitizePriceRangeInput("7,90")).toBe("7,90");
+  });
+
+  it("strips non-amount characters and extra decimal points", () => {
+    expect(sanitizePriceRangeInput("₩1.2.3abc")).toBe("1.23");
+  });
+});
+
+describe("priceCommaHint", () => {
+  it("names both readings the server gives a typed comma", () => {
+    expect(priceCommaHint(false)).toBe("Use a comma for thousands (7,900) or for cents (7,90).");
+  });
+
+  it("offers only thousands for a currency without minor units", () => {
+    expect(priceCommaHint(true)).toBe("Use a comma for thousands (7,900).");
   });
 });
