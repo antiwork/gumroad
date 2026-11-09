@@ -82,6 +82,17 @@ describe PurchaseRefundRequests::NotifyJob do
     expect(refund_request.reload.seller_notified_at).to be_nil
   end
 
+  it "still sends an owed seller email after the request escalated" do
+    refund_request.update_columns(state: "escalated", open_key: nil, support_notified_at: Time.current)
+
+    expect do
+      described_class.new.perform(refund_request.id)
+    end.to change { ActionMailer::Base.deliveries.count }.by(1)
+
+    expect(ActionMailer::Base.deliveries.last.to).to eq([purchase.seller.email])
+    expect(refund_request.reload.seller_notified_at).to be_present
+  end
+
   it "does nothing for a closed request" do
     refund_request.update!(state: "declined")
 

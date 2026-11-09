@@ -14,7 +14,7 @@ class PurchaseRefundRequests::NotifyJob
     # The create-time push runs right after the commit, before a replica may have the row.
     with_primary_database do
       refund_request = PurchaseRefundRequest.find_by(id: refund_request_id)
-      next if refund_request.nil? || !refund_request.open?
+      next if refund_request.nil? || !refund_request.awaiting_outcome?
       next unless Feature.active?(:buyer_refund_requests, refund_request.purchase.seller)
 
       notify(refund_request, :seller_notified_at) do

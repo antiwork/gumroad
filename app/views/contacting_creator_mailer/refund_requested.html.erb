@@ -9,7 +9,11 @@
     <p>Message from the customer: <%= @refund_request.message %></p>
   <% end %>
   <p>
-    Please respond within <%= PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS %> business days — after that, Gumroad support will step in.
+    <% if @refund_request.state_escalated? %>
+      This request passed the <%= PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS %>-business-day deadline, so Gumroad support is already looking at it.
+    <% else %>
+      Please respond within <%= PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS %> business days — after that, Gumroad support will step in.
+    <% end %>
     Refunding now keeps the purchase from turning into a chargeback, which costs more
     and counts against your account.
   </p>

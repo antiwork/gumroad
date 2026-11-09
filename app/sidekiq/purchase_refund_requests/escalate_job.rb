@@ -28,14 +28,15 @@ class PurchaseRefundRequests::EscalateJob
           Amount: #{purchase.formatted_display_price}
           Reason: #{PurchaseRefundRequest::REASON_LABELS[refund_request.reason]}
           Refunded so far: #{purchase.stripe_partially_refunded? ? "partially" : "nothing"}
-          Seller notified: #{refund_request.seller_notified_at? ? "yes" : "not confirmed, contact the seller directly"}
+          Seller notified: #{refund_request.seller_notified_at? ? "yes" : "not yet, the email is still being retried"}
         MESSAGE
       ).deliver_now
       # RescueSmtpErrors returns a rejected send instead of raising it.
       raise mail if mail.is_a?(Exception)
 
       refund_request.with_lock do
-        refund_request.update!(state: "escalated") if refund_request.open?
+        # The escalation email is support's notice, so a still-owed support copy is not sent later.
+        refund_request.update!(state: "escalated", support_notified_at: refund_request.support_notified_at || Time.current) if refund_request.open?
       end
     end
   end

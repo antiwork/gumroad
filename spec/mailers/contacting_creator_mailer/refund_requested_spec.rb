@@ -22,6 +22,15 @@ describe ContactingCreatorMailer do
       expect(body).to include("customers/sale/#{purchase.external_id}")
     end
 
+    it "tells a seller emailed after escalation that support already has the request" do
+      refund_request.update_columns(state: "escalated", open_key: nil)
+
+      body = described_class.refund_requested(refund_request.id).body.encoded
+
+      expect(body).to include("Gumroad support is already looking at it")
+      expect(body).not_to include("Please respond within")
+    end
+
     it "does not send when the request is gone" do
       mail = described_class.refund_requested(nil)
 

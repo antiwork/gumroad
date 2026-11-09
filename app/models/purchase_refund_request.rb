@@ -23,7 +23,8 @@ class PurchaseRefundRequest < ApplicationRecord
   OPEN_STATES = %w[requested seen].freeze
   # Refunded needs no entry: purchase_eligible? already rejects refunded purchases.
   TERMINAL_BLOCKING_STATES = %w[declined expired escalated].freeze
-  # Escalated requests are with support, so a later refund or chargeback still closes them.
+  # Still awaiting an outcome: a later refund or chargeback closes these, and owed
+  # notifications are still sent (escalation closes the buyer form, not the seller's email).
   RESOLVABLE_STATES = (OPEN_STATES + %w[escalated]).freeze
   enum :state, STATES.index_by(&:itself), prefix: true, validate: true
 
@@ -43,8 +44,10 @@ class PurchaseRefundRequest < ApplicationRecord
 
   def open? = OPEN_STATES.include?(state)
 
+  def awaiting_outcome? = RESOLVABLE_STATES.include?(state)
+
   def notifications_pending?
-    open? && (seller_notified_at.nil? || support_notified_at.nil?)
+    awaiting_outcome? && (seller_notified_at.nil? || support_notified_at.nil?)
   end
 
   def enqueue_notifications

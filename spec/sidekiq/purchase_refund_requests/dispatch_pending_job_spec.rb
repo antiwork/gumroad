@@ -32,8 +32,49 @@ describe PurchaseRefundRequests::DispatchPendingJob do
     expect([recent, notified].map { _1.reload.state }).to eq(%w[requested requested])
   end
 
+  it "keeps retrying a seller notification still owed after escalation, without a second support email" do
+    request = create_request(created_at: Time.utc(2026, 11, 4, 12))
+    PurchaseRefundRequests::NotifyJob.jobs.clear
+    seller_mail_down = true
+    allow_any_instance_of(Mail::Message).to receive(:deliver).and_wrap_original do |original, *args|
+      raise Net::SMTPFatalError.new("550 unavailable") if seller_mail_down && original.receiver.to == [seller.email]
+      original.call(*args)
+    end
+
+    described_class.new.perform
+    expect { PurchaseRefundRequests::NotifyJob.drain }.to raise_error(Net::SMTPFatalError)
+    PurchaseRefundRequests::EscalateJob.drain
+    request.reload
+    expect(request.state).to eq("escalated")
+    expect(request.seller_notified_at).to be_nil
+    support_emails = ActionMailer::Base.deliveries.count { _1.to == [ApplicationMailer::SUPPORT_EMAIL] }
+
+    seller_mail_down = false
+    PurchaseRefundRequests::NotifyJob.jobs.clear
+    described_class.new.perform
+    PurchaseRefundRequests::NotifyJob.drain
+
+    expect(request.reload.seller_notified_at).to be_present
+    expect(request.state).to eq("escalated")
+    expect(ActionMailer::Base.deliveries.count { _1.to == [seller.email] }).to eq(1)
+    expect(ActionMailer::Base.deliveries.count { _1.to == [ApplicationMailer::SUPPORT_EMAIL] }).to eq(support_emails)
+  end
+
+  it "re-pushes escalated requests only while the seller email is owed and inside the retry window" do
+    owed = create_request(created_at: 3.days.ago, state: "escalated", support_notified_at: 1.day.ago)
+    create_request(created_at: 3.days.ago, state: "escalated", seller_notified_at: 2.days.ago, support_notified_at: 1.day.ago)
+    create_request(created_at: (described_class::OWED_NOTIFICATION_RETRY_WINDOW + 1.day).ago, state: "escalated", support_notified_at: 1.day.ago)
+    create_request(created_at: 3.days.ago, state: "refunded")
+    PurchaseRefundRequests::NotifyJob.jobs.clear
+
+    described_class.new.perform
+
+    expect(PurchaseRefundRequests::NotifyJob.jobs.map { _1["args"] }).to eq([[owed.id]])
+  end
+
   it "skips sellers whose flag is off" do
     create_request(created_at: Time.utc(2026, 11, 4, 12))
+    create_request(created_at: 3.days.ago, state: "escalated", support_notified_at: 1.day.ago)
     PurchaseRefundRequests::NotifyJob.jobs.clear
     Feature.deactivate_user(:buyer_refund_requests, seller)
 

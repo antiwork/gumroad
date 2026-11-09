@@ -29,12 +29,21 @@ describe PurchaseRefundRequests::EscalateJob do
     expect(refund_request.reload.state).to eq("refunded")
   end
 
-  it "tells support when the seller was never notified, since escalation stops the notification retries" do
+  it "tells support when the seller has not been notified yet" do
     refund_request.update_columns(seller_notified_at: nil, support_notified_at: Time.current)
 
     described_class.new.perform(refund_request.id)
 
-    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("Seller notified: not confirmed, contact the seller directly")
+    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("Seller notified: not yet, the email is still being retried")
+  end
+
+  it "counts the escalation email as support's notice, so no later support copy is owed" do
+    refund_request.update_columns(seller_notified_at: Time.current, support_notified_at: nil)
+
+    described_class.new.perform(refund_request.id)
+
+    expect(refund_request.reload.support_notified_at).to be_present
+    expect(refund_request.notifications_pending?).to eq(false)
   end
 
   it "tells support when the seller already refunded part of the purchase" do

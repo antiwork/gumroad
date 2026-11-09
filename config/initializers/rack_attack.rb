@@ -222,7 +222,8 @@ class Rack::Attack
 
   # Same shape as the help-center form: each submission emails the seller and support.
   # The token segment differs per purchase, so key on IP only.
-  throttle_with_exponential_backoff(name: "purchase_refund_request/ip", requests: 3, period: 60.seconds, max_level: 1) do |req|
+  PURCHASE_REFUND_REQUEST_POSTS_PER_MINUTE = 3
+  throttle_with_exponential_backoff(name: "purchase_refund_request/ip", requests: PURCHASE_REFUND_REQUEST_POSTS_PER_MINUTE, period: 1.minute, max_level: 1) do |req|
     req.remote_ip if req.path.match?(%r{\A/purchases/[^/]+/refund_request(?:\.[^/]+)?\z}) && req.post?
   end
 
