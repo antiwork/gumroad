@@ -5,7 +5,7 @@ module Mcp
   # keyed on the persisted `oauth_applications.mcp_dynamic_client` flag, so manually created and
   # first-party applications never reach them and keep Doorkeeper's default behaviour.
   module DynamicClientOauth
-    CONNECTORS = %w[muse claude chatgpt].freeze
+    CONNECTORS = %w[muse claude chatgpt cursor antigravity].freeze
     CODE_CHALLENGE_METHOD = "S256"
 
     class ErrorResponse < Doorkeeper::OAuth::ErrorResponse
