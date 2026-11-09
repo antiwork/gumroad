@@ -89,6 +89,16 @@ class CheckoutPresenter
     }
   end
 
+  # Products in the saved cart that the buyer already owns, so the page can warn before a repeat charge.
+  def owned_products_in_cart(cart:)
+    return [] if cart.blank?
+
+    owned_ids = cart.purchased_product_ids
+    return [] if owned_ids.empty?
+
+    Link.where(id: owned_ids).map { { permalink: _1.unique_permalink, name: _1.name } }
+  end
+
   # The product link adds nothing because its tier, or every tier, is closed or sold out (see
   # add_single_product_props), so the page has to say why. Name the product and its real state, and
   # link to the product page: "pick another option" is a dead end on a single-tier membership, and

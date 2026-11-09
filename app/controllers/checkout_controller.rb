@@ -20,6 +20,7 @@ class CheckoutController < ApplicationController
       # viewport. The page strips the link's params after the first render, so it shows once rather
       # than on every cart save.
       sold_out_arrival: -> { checkout_presenter.sold_out_arrival_notice(params: checkout_params) },
+      owned_in_cart: -> { checkout_presenter.owned_products_in_cart(cart: cart_presenter.cart) },
       cart: -> { cart_presenter.cart_props },
       checkout: -> { checkout_presenter.checkout_props(params: checkout_params, browser_guid: cookies[:_gumroad_guid], cart: cart_presenter.cart, arrival_props: load_arrival_props.call) },
       # Depends on the cart's contents, so the page re-requests just this prop after every cart

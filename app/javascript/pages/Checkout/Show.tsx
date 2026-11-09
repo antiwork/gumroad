@@ -130,6 +130,8 @@ type CheckoutIndexPageProps = {
   // Set once, when a legacy /checkout link named a tier that is closed or sold out and so added
   // nothing. See CheckoutPresenter#sold_out_arrival_notice.
   sold_out_arrival?: { message: string; url: string } | null;
+  // Saved-cart products the buyer already owns. See CheckoutPresenter#owned_products_in_cart.
+  owned_in_cart?: { permalink: string; name: string }[];
 };
 
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";
@@ -1198,6 +1200,7 @@ const CheckoutIndexPage = () => {
             updateCart={(updated) => cartForm.setData((prev) => ({ cart: { ...prev.cart, ...updated } }))}
             recommendedProducts={props.recommended_products ?? null}
             soldOutArrival={props.sold_out_arrival ?? null}
+            ownedInCart={props.owned_in_cart ?? []}
           />
         </CheckoutThemeProvider>
       )}
