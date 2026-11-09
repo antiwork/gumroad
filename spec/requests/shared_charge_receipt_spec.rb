@@ -122,8 +122,9 @@ describe "Shared charge receipt", type: :request do
 
   it "mails the receipt on the format-suffixed route too" do
     # The router accepts a format suffix here, which is why the throttle keys on the path without it.
+    # These routes sit on the app host, so the request needs the _url helper to match at all.
     expect do
-      post "#{resend_receipt_charge_path(charge.external_id)}.json"
+      post "#{resend_receipt_charge_url(charge.external_id)}.json"
     end.to change { SendPurchaseReceiptJob.jobs.size }.by(1)
   end
 

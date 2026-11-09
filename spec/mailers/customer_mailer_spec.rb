@@ -1306,6 +1306,8 @@ describe CustomerMailer do
     before do
       purchase_one.create_url_redirect!
       purchase_two.create_url_redirect!
+      # Receipt recommendations can list the other item's product; these examples check order lines only.
+      allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).and_return([])
     end
 
     def shared_receipt_link(body, text = "View every item in this order")
