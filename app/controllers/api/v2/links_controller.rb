@@ -432,6 +432,14 @@ class Api::V2::LinksController < Api::V2::BaseController
     previous_custom_html = nil
     sanitization_report = nil
     file_id_mappings = {}
+    # MySQL rolls the whole transaction back when it picks it as a deadlock victim, so the update
+    # is replayed once from a clean start. The save writes many rows (product, prices, files, pages,
+    # tags, rich content) whose lock order varies with the payload, and two overlapping saves can
+    # still deadlock. SaveFilesService and the rich-content savers mutate the normalized inputs, so
+    # each attempt works on its own copy.
+    deadlock_retried = false
+    normalized_files_input = @normalized_files.deep_dup
+    normalized_rich_content_input = @normalized_rich_content.deep_dup
     begin
       ActiveRecord::Base.transaction do
         # Lock the product row so concurrent custom_html PUTs serialize their
@@ -562,6 +570,18 @@ class Api::V2::LinksController < Api::V2::BaseController
 
         @product.generate_product_files_archives! if !@normalized_files.nil? || rich_content_or_flag_changed
       end
+    rescue ActiveRecord::Deadlocked
+      raise if deadlock_retried || performed?
+
+      deadlock_retried = true
+      # reload drops the attributes the rolled-back attempt assigned; lock! refuses a dirty record.
+      @product.reload
+      @normalized_files = normalized_files_input.deep_dup
+      @normalized_rich_content = normalized_rich_content_input.deep_dup
+      previous_custom_html = nil
+      sanitization_report = nil
+      file_id_mappings = {}
+      retry
     rescue Link::LinkInvalid => e
       return if performed?
       return render_response(false, message: e.message)

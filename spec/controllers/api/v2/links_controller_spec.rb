@@ -1979,6 +1979,54 @@ describe Api::V2::LinksController do
         expect(body["warning"]).to be_present
       end
 
+      it "replays the update once when MySQL picks it as a deadlock victim" do
+        @product.save_tags!(["old-tag"])
+        attempts = 0
+        allow_any_instance_of(Link).to receive(:save_tags!).and_wrap_original do |original, *args|
+          attempts += 1
+          raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if attempts == 1
+          original.call(*args)
+        end
+
+        put @action, params: @params.merge(name: "After Retry", tags: ["new-tag"])
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(attempts).to eq(2)
+        @product.reload
+        expect(@product.name).to eq("After Retry")
+        expect(@product.tags.pluck(:name)).to eq(["new-tag"])
+      end
+
+      it "replays a files and rich_content update from the original payload after a deadlock" do
+        file = create(:product_file, link: @product, url: "#{S3_BASE_URL}specs/test.pdf")
+        attempts = 0
+        allow_any_instance_of(Link).to receive(:generate_product_files_archives!).and_wrap_original do |original, *args, **kwargs|
+          attempts += 1
+          raise ActiveRecord::Deadlocked, "Deadlock found when trying to get lock" if attempts == 1
+          original.call(*args, **kwargs)
+        end
+        rich_content = [{ title: "Page 1", description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: file.external_id, uid: SecureRandom.uuid } }] } }]
+
+        put @action, params: @params.merge(files: [{ id: file.external_id }], rich_content:), as: :json
+
+        expect(response.parsed_body["success"]).to be(true)
+        expect(attempts).to eq(2)
+        expect(@product.reload.alive_product_files).to eq([file])
+        expect(@product.alive_rich_contents.map(&:title)).to eq(["Page 1"])
+      end
+
+      it "raises when the replayed update deadlocks again" do
+        original_name = @product.name
+        allow_any_instance_of(Link).to receive(:save_tags!).and_raise(ActiveRecord::Deadlocked, "Deadlock found when trying to get lock")
+
+        expect do
+          put @action, params: @params.merge(name: "Should Not Persist", tags: ["new-tag"])
+        end.to raise_error(ActiveRecord::Deadlocked)
+
+        expect(@product.reload.name).to eq(original_name)
+        expect(@product.tags).to be_empty
+      end
+
       it "rolls back all changes on validation failure" do
         original_name = @product.name
         allow_any_instance_of(Link).to receive(:save!).and_raise(ActiveRecord::RecordNotSaved.new("failed", @product))
