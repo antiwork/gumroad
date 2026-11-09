@@ -3243,17 +3243,15 @@ describe "MCP server" do
       expect(response).to have_http_status(:ok)
     end
 
-    it "refuses an unregistered redirect URI and an unregistered scope without creating a grant" do
+    it "refuses an unregistered redirect URI and a scope registration never grants without creating a grant" do
       expect do
         get "/claude/v1/oauth2/authorize", params: authorize_params(redirect_uri: "https://evil.example/callback")
         expect(response).to have_http_status(:bad_request)
         expect(response.body).to include("match client redirect URI.")
 
-        get "/claude/v1/oauth2/authorize", params: authorize_params(scope: "edit_products")
+        get "/claude/v1/oauth2/authorize", params: authorize_params(scope: "edit_emails")
         expect(response).to have_http_status(:bad_request)
-        # A dynamically registered client gets an explanation naming it, not Doorkeeper's protocol error.
-        expect(response.body).to include("asked for a permission it was not set up with")
-        expect(response.body).not_to include("The requested scope is invalid, unknown, or malformed.")
+        expect(response.body).to include("The requested scope is invalid, unknown, or malformed.")
       end.not_to change(Doorkeeper::AccessGrant, :count)
     end
 

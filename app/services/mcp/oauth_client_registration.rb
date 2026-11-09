@@ -41,6 +41,8 @@ module Mcp
         scopes: assigned_scopes,
         mcp_dynamic_client: true
       )
+      # Dynamic clients are not owned by a Gumroad user.
+      application.define_singleton_method(:validate_owner?) { false }
 
       raise Error, application.errors.full_messages.to_sentence unless application.save
 

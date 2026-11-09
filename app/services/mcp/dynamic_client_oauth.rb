@@ -7,8 +7,6 @@ module Mcp
   module DynamicClientOauth
     CONNECTORS = %w[muse claude chatgpt cursor antigravity].freeze
     CODE_CHALLENGE_METHOD = "S256"
-    # Added after some clients registered; a client that predates it may gain it when the person consents.
-    LATE_SCOPES = %w[view_library].freeze
 
     class ErrorResponse < Doorkeeper::OAuth::ErrorResponse
       attr_reader :description
@@ -51,20 +49,8 @@ module Mcp
     end
 
     def self.screen(pre_auth)
-      authorizable = pre_auth.authorizable?
-      application = pre_auth.client&.application
-      return pre_auth unless application&.mcp_dynamic_client
-
-      unless authorizable
-        return pre_auth unless pre_auth.error == Doorkeeper::Errors::InvalidScope
-
-        pre_auth = accept_late_scopes(pre_auth, application)
-        unless pre_auth.authorizable?
-          return pre_auth unless pre_auth.error == Doorkeeper::Errors::InvalidScope && registrable_scopes?(pre_auth.scope)
-
-          return explain_unknown_scope(pre_auth, application)
-        end
-      end
+      accept_registrable_scopes(pre_auth) if !pre_auth.authorizable? && pre_auth.error == Doorkeeper::Errors::InvalidScope
+      return pre_auth unless pre_auth.authorizable? && pre_auth.client.application.mcp_dynamic_client
 
       error = authorization_error(
         code_challenge: pre_auth.code_challenge,
@@ -80,49 +66,21 @@ module Mcp
       )
     end
 
-    def self.late_scopes_for(application, requested)
-      registered = application.scopes.to_s.split
-      missing = requested.to_s.split - registered
-      missing.presence if missing.all? { LATE_SCOPES.include?(_1) }
-    end
+    # Registration is open, so a dynamic client's stored scopes only record the policy on the day it
+    # registered, and registering again would grant the current one. Checking against the current
+    # policy lets an older client ask for a newer scope; the consent screen still lists each scope.
+    def self.accept_registrable_scopes(pre_auth)
+      application = pre_auth.client.application
+      return unless application.mcp_dynamic_client
 
-    # Validates the request as if the client had registered the late scope. Nothing is saved until
-    # the person consents (see grant_late_scopes!).
-    def self.accept_late_scopes(pre_auth, application)
-      return pre_auth if late_scopes_for(application, pre_auth.scope).blank?
-
-      widened = Doorkeeper::OAuth::Scopes.from_string((application.scopes.to_s.split + LATE_SCOPES).uniq.join(" "))
+      allowed = Doorkeeper::OAuth::Scopes.from_array(
+        application.scopes.to_a | OauthClientRegistration::MCP_SCOPES | OauthClientRegistration::LEGACY_SCOPES
+      )
       pre_auth.define_singleton_method(:validate_scopes) do
         Doorkeeper::OAuth::Helpers::ScopeChecker.valid?(
-          scope_str: scope, server_scopes: Doorkeeper.config.scopes, app_scopes: widened, grant_type: send(:grant_type)
+          scope_str: scope, server_scopes: Doorkeeper.config.scopes, app_scopes: allowed, grant_type: send(:grant_type)
         )
       end
-      pre_auth
-    end
-
-    def self.grant_late_scopes!(application, requested)
-      missing = late_scopes_for(application, requested)
-      return if missing.blank?
-
-      application.update!(scopes: (application.scopes.to_s.split + missing).uniq.join(" "))
-    end
-
-    # Registering again only helps when registration would grant every requested scope.
-    def self.registrable_scopes?(scope)
-      scope.to_s.split(/ +/).all? { Mcp::OauthClientRegistration::MCP_SCOPES.include?(_1) || Mcp::OauthClientRegistration::LEGACY_SCOPES.include?(_1) }
-    end
-
-    def self.explain_unknown_scope(pre_auth, application)
-      # Registration stores the client's own name behind "MCP ", and "MCP MCP client" when it sent none.
-      client = application.name.delete_prefix("MCP ")
-      client = "your AI app" if client == "MCP client"
-      # Only a new registration carries the new scopes, so the fix is on the client's side.
-      description = "#{client.upcase_first} can't connect to Gumroad because it asked for a permission it was not set up with. " \
-                    "Remove Gumroad from #{client}, then add it again."
-      RejectedPreAuthorization.new(
-        pre_auth,
-        ErrorResponse.new(name: :invalid_scope, description:, state: pre_auth.state, redirect_uri: pre_auth.redirect_uri)
-      )
     end
 
     def self.authorization_error(code_challenge:, code_challenge_method:, resource:)

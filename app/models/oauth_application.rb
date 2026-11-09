@@ -13,12 +13,6 @@ class OauthApplication < Doorkeeper::Application
 
   belongs_to :owner, class_name: "User", optional: true
 
-  # Dynamic MCP clients are registered without an owner (Mcp::OauthClientRegistration), and
-  # Doorkeeper checks the owner on every save, not only on create.
-  def validate_owner?
-    !mcp_dynamic_client && super
-  end
-
   before_validation :set_default_scopes, on: :create
 
   validates :scopes, presence: true
