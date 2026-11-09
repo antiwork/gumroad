@@ -2,7 +2,9 @@
 <main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
   <header class="flex flex-col gap-4 p-4 text-center">
     <div>
-      <%= image_tag OauthApplication.find(@pre_auth.client.id).icon_url || image_path("gumroad_app.png"), size: "72" %>
+      <% application = OauthApplication.find(@pre_auth.client.id) %>
+      <%# Dynamic MCP clients can't upload an icon, and a registered logo_uri is unverified, so they show Gumroad's own mark. %>
+      <%= image_tag application.icon_url || image_path(application.mcp_dynamic_client? ? "logo-g.svg" : "gumroad_app.png"), size: "72", alt: "" %>
     </div>
     <h2>
       Authorize
