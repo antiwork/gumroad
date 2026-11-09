@@ -5,9 +5,13 @@ require "spec_helper"
 describe CustomerLowPriorityMailer do
   let(:seller) { create(:user, name: "Jane") }
   let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Brush pack")) }
-  let(:refund_request) { travel_to(Time.utc(2026, 11, 6, 12)) { create(:purchase_refund_request, purchase:) } } # Friday
+  let(:refund_request) { create(:purchase_refund_request, purchase:) }
 
-  before { Feature.activate_user(:buyer_refund_requests, seller) }
+  before do
+    # Friday, so the deadline is Tuesday, November 10; the whole example renders at this time.
+    travel_to(Time.utc(2026, 11, 6, 12))
+    Feature.activate_user(:buyer_refund_requests, seller)
+  end
 
   describe "#refund_request_received" do
     it "tells the buyer who decides, by when, and links to the status page" do
@@ -39,11 +43,14 @@ describe CustomerLowPriorityMailer do
     expect(described_class.refund_request_received(nil).message).to be_a(ActionMailer::Base::NullMail)
     expect(described_class.refund_request_escalated(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
 
-    travel_to(Time.utc(2026, 11, 11, 12)) do # past the Tuesday deadline
-      expect(described_class.refund_request_received(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
-    end
-
     purchase.update!(stripe_refunded: true)
+    expect(described_class.refund_request_received(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
+  end
+
+  it "does not send a confirmation whose deadline has passed" do
+    refund_request
+    travel_to(Time.utc(2026, 11, 11, 12))
+
     expect(described_class.refund_request_received(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
   end
 end
