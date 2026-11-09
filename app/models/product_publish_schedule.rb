@@ -27,10 +27,16 @@ class ProductPublishSchedule < ApplicationRecord
   scope :notice_unsent, -> { where(status: %w[published failed], notice_sent_at: nil) }
 
   class Invalid < StandardError; end
+  class Withdrawn < StandardError; end
 
   class << self
     def creation_enabled_for?(seller)
       Feature.active?(FEATURE_FLAG, seller)
+    end
+
+    # The product left the never-published draft state the schedule was accepted for.
+    def withdrawn?(product)
+      product.nil? || product.deleted_at.present? || !product.draft? || product.banned_at.present? || product.archived?
     end
 
     # A schedule the job has already claimed is left alone: the job re-checks the product itself.
@@ -95,15 +101,18 @@ class ProductPublishSchedule < ApplicationRecord
     published = false
     fresh = Link.find_by(id: product_id)
     # The Link after_save cancellation only reaches unclaimed rows, and never sees an archive.
-    return discard! if fresh.nil? || fresh.deleted_at || !fresh.draft? || fresh.banned_at || fresh.archived?
+    return discard! if self.class.withdrawn?(fresh)
     return finish!("failed", LATE_MESSAGE) if now > publish_at + MAX_LATENESS
     return finish!("failed", AUTHORITY_REVOKED_MESSAGE) unless scheduler_authorized?(fresh)
 
     begin
       # A fresh instance, never reused after a failure: publish! assigns draft=false before it validates.
-      fresh.publish!
+      # The block reruns the check under publish!'s product lock, which archive, delete and ban writes also take.
+      fresh.publish! { raise Withdrawn if self.class.withdrawn?(Link.lock.find_by(id: product_id)) }
       published = true
       finish!("published")
+    rescue Withdrawn
+      discard!
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid => e
       finish!("failed", fresh.errors.full_messages.first.presence || e.message)
     end

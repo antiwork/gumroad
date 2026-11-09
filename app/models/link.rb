@@ -615,6 +615,8 @@ class Link < ApplicationRecord
         # The checks at the top read this record as loaded; a takedown or hold that committed since is only visible now.
         enforce_not_unpublished_by_admin!
         enforce_no_active_sales_hold!(lock: true)
+        # Callers recheck their own preconditions here: under the product lock, before anything is written.
+        yield if block_given?
         self.transcode_videos_on_purchase = true
         save!
 
