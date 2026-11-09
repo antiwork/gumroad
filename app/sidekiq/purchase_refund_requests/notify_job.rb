@@ -37,6 +37,8 @@ class PurchaseRefundRequests::NotifyJob
       mail = yield.deliver_now
       # RescueSmtpErrors returns a rejected send instead of raising it; don't stamp it as sent.
       raise mail if mail.is_a?(Exception)
+      # The mailer can also skip the send (e.g. a malformed seller address); leave it owed.
+      return unless mail.is_a?(Mail::Message)
 
       refund_request.update_column(stamp, Time.current)
     end

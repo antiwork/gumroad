@@ -34,7 +34,7 @@ describe PurchaseRefundRequests::EscalateJob do
 
     described_class.new.perform(refund_request.id)
 
-    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("Seller notified: no, the email was never delivered")
+    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("Seller notified: not confirmed, contact the seller directly")
   end
 
   it "tells support when the seller already refunded part of the purchase" do

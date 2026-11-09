@@ -163,6 +163,15 @@ describe PurchaseRefundRequest do
       expect(described_class.purchase_eligible?(purchase)).to eq(false)
     end
 
+    it "applies the original purchase's no-refunds policy to a subscription renewal" do
+      original = create(:membership_purchase)
+      create(:purchase_refund_policy, purchase: original, title: "No refunds allowed", max_refund_period_in_days: 0)
+      renewal = create(:purchase, link: original.link, subscription: original.subscription, is_original_subscription_purchase: false, email: original.email, price_cents: 5_00)
+
+      expect(renewal.purchase_refund_policy).to be_nil
+      expect(described_class.purchase_eligible?(renewal)).to eq(false)
+    end
+
     it "rejects a preorder authorization, which has not been charged" do
       expect(described_class.purchase_eligible?(create(:preorder_authorization_purchase, stripe_transaction_id: nil))).to eq(false)
     end

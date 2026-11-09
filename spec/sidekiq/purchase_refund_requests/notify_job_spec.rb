@@ -46,6 +46,15 @@ describe PurchaseRefundRequests::NotifyJob do
     expect(refund_request.reload.seller_notified_at).to be_present
   end
 
+  it "leaves the seller notification owed when the mailer skips the send" do
+    purchase.seller.update_columns(email: "not-an-email", unconfirmed_email: nil)
+
+    described_class.new.perform(refund_request.id)
+
+    expect(refund_request.reload.seller_notified_at).to be_nil
+    expect(refund_request.support_notified_at).to be_present
+  end
+
   it "raises without stamping when the mail server rejects the email" do
     allow_any_instance_of(Mail::Message).to receive(:deliver).and_raise(Net::SMTPFatalError.new("550 rejected"))
 
