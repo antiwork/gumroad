@@ -167,11 +167,21 @@ module Purchase::ChargebackRingSignal
     end
 
     # A purchase loaded in a later request (the India-mandate resume in Order::ConfirmService)
-    # never ran the before_create, so evaluate on first read.
+    # never ran the before_create, so evaluate on first read. Its create commit has already
+    # passed, so record (telemetry + containment) once the current transaction commits: the
+    # resume refuses inside a purchase lock, and the seller's hold must not depend on it.
     def chargeback_ring_signal_result
       return @chargeback_ring_signal_result if defined?(@chargeback_ring_signal_result)
+      return @chargeback_ring_signal_result = nil unless chargeback_ring_signal_applicable?
 
-      @chargeback_ring_signal_result = (Purchase::ChargebackRingSignal.evaluate(seller:) if chargeback_ring_signal_applicable?)
+      @chargeback_ring_signal_result = begin
+        Purchase::ChargebackRingSignal.evaluate(seller:)
+      rescue StandardError => e
+        Purchase::ChargebackRingSignal.safe_notify(e, purchase_id: id, seller_id: seller&.id)
+        Purchase::ChargebackRingSignal::Result.new(decision: Purchase::ChargebackRingSignal::DECISION_ERROR)
+      end
+      after_commit { record_chargeback_ring_signal } if persisted?
+      @chargeback_ring_signal_result
     end
 
   public
@@ -207,13 +217,16 @@ module Purchase::ChargebackRingSignal
     end
 
   private
-    # after_commit on: :create. Containment is durable and runs FIRST; telemetry and the ops
-    # alert are best-effort. Each step is isolated so none can take the others down, and nothing
-    # here can surface as a purchase failure.
+    # after_commit on: :create, or after the commit that follows a lazy evaluation. Containment is
+    # durable and runs FIRST; telemetry and the ops alert are best-effort. Each step is isolated so
+    # none can take the others down, and nothing here can surface as a purchase failure.
     def record_chargeback_ring_signal
       result = @chargeback_ring_signal_result
       return if result.nil?
       return unless result.recordable?
+      # A lazy read before this purchase's own create commit schedules both callbacks.
+      return if @chargeback_ring_signal_recorded
+      @chargeback_ring_signal_recorded = true
 
       if result.hit?
         begin

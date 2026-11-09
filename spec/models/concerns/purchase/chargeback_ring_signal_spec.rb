@@ -509,7 +509,12 @@ describe Purchase::ChargebackRingSignal do
           Purchase.find(purchase.id)
         end
 
-        before { seed_paid_sales(seller, count: 5) }
+        before do
+          seed_paid_sales(seller, count: 5)
+          allow(ErrorNotifier).to receive(:notify)
+        end
+
+        def ring_signal_rows(purchase) = ChargebackRingSignal.where(purchase_id: purchase.id).pluck(:decision)
 
         it "evaluates on first read and refuses the charge" do
           purchase = reloaded_ring_purchase
@@ -517,6 +522,81 @@ describe Purchase::ChargebackRingSignal do
 
           expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(true)
           expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        end
+
+        # Its create commit has already passed, so the lazy hit needs its own recording.
+        it "records the lazy hit and contains the seller once, however often it is read" do
+          purchase = reloaded_ring_purchase
+          arm_flags
+
+          2.times { purchase.refuse_charge_for_chargeback_ring_signal? }
+
+          expect(ring_signal_rows(purchase)).to eq(["blocked"])
+          seller.reload
+          expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+          expect(seller.flagged_for_fraud?).to be(true)
+          expect(ErrorNotifier).to have_received(:notify).with(a_string_including("chargeback_ring_signal hit")).once
+        end
+
+        it "records and contains for a buyer it does not refuse" do
+          purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "88.12.99.99")
+          purchase.save!
+          purchase = Purchase.find(purchase.id)
+          arm_flags
+
+          expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(false)
+          expect(ring_signal_rows(purchase)).to eq(["blocked"])
+          expect(seller.reload.payouts_paused_for_chargeback_ring_signal?).to be(true)
+        end
+
+        it "records nothing until the surrounding transaction commits, and nothing if it rolls back" do
+          committed = reloaded_ring_purchase
+          rolled_back = reloaded_ring_purchase
+          arm_flags
+
+          ActiveRecord::Base.transaction do
+            committed.refuse_charge_for_chargeback_ring_signal?
+            expect(ring_signal_rows(committed)).to be_empty
+            expect(seller.reload.payouts_paused_internally?).to be(false)
+          end
+          expect(ring_signal_rows(committed)).to eq(["blocked"])
+
+          ActiveRecord::Base.transaction do
+            rolled_back.refuse_charge_for_chargeback_ring_signal?
+            raise ActiveRecord::Rollback
+          end
+          expect(ring_signal_rows(rolled_back)).to be_empty
+        end
+
+        it "records once when the lazy read happens before the purchase's own create commit" do
+          purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")
+
+          ActiveRecord::Base.transaction do
+            purchase.save!
+            arm_flags
+            purchase.refuse_charge_for_chargeback_ring_signal?
+          end
+
+          expect(ring_signal_rows(purchase)).to eq(["blocked"])
+        end
+
+        it "keeps a human's release when a later resumed charge is refused" do
+          pending_purchase = reloaded_ring_purchase
+          arm_flags
+          build_checkout_purchase(seller, card_country: "US", ip_address: "88.12.1.1").save!
+          expect(seller.reload.payouts_paused_for_chargeback_ring_signal?).to be(true)
+          reviewer = create(:user)
+          seller.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+          seller.comments.create!(author_id: reviewer.id, comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED, content: "Payouts resumed.")
+          seller.mark_compliant!(author_id: reviewer.id)
+
+          resumed = Purchase.find(pending_purchase.id)
+
+          expect(resumed.refuse_charge_for_chargeback_ring_signal?).to be(true)
+          expect(ring_signal_rows(resumed)).to eq(["blocked"])
+          seller.reload
+          expect(seller.payouts_paused_internally?).to be(false)
+          expect(seller.compliant?).to be(true)
         end
 
         it "memoizes the verdict per purchase and shares the per-seller cache across purchases" do
@@ -537,6 +617,7 @@ describe Purchase::ChargebackRingSignal do
 
           expect(described_class).not_to receive(:evaluate)
           expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(false)
+          expect(ring_signal_rows(purchase)).to be_empty
         end
 
         it "does not evaluate a recurring subscription charge" do
@@ -546,17 +627,19 @@ describe Purchase::ChargebackRingSignal do
 
           expect(described_class).not_to receive(:evaluate)
           expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(false)
+          expect(ring_signal_rows(purchase)).to be_empty
         end
 
-        it "fails open when the lazy evaluation raises" do
+        it "fails open when the lazy evaluation raises, and records an error row" do
           purchase = reloaded_ring_purchase
           arm_flags
           allow(described_class).to receive(:evaluate).and_raise(Timeout::Error)
-          allow(ErrorNotifier).to receive(:notify)
 
           expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(false)
           expect(purchase.errors).to be_empty
           expect(purchase.error_code).to be_nil
+          expect(ring_signal_rows(purchase)).to eq(["error"])
+          expect(seller.reload.payouts_paused_internally?).to be(false)
         end
       end
 
