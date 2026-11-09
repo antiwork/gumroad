@@ -344,6 +344,8 @@ export const ProductEditContext = React.createContext<{
   // content tab uses this one-shot response signal to reconcile its mounted
   // TipTap document; changing product state alone does not update that editor.
   richContentRemovedFileEmbedIds: Record<string, string[]>;
+  // Files a save deleted this session. Undo can bring their blocks back, and nothing would render them.
+  deletedFileIds: ReadonlySet<string>;
   googleClientId: string;
   seller_refund_policy_enabled: boolean;
   seller_refund_policy: Pick<RefundPolicy, "title" | "fine_print">;

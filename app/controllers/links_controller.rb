@@ -2053,6 +2053,9 @@ class LinksController < ApplicationController
         rich_content_removed_file_embed_ids: save_id_mappings[:removed_file_embeds],
         **content_updated_at_response,
         **editor_revision_response,
+        # A failed flag lookup saves files without deleting any (SaveFilesService), so the editor
+        # must keep the seller's removals and send them again instead of treating them as done.
+        **(product_save_contract.degraded? ? { file_deletions_skipped: true } : {}),
       }
     end
 
@@ -2064,9 +2067,13 @@ class LinksController < ApplicationController
     #
     # Only emitted when the contract is enforced: with the flag off the client
     # has no use for it, and computing it would put the fingerprint queries back
-    # on the default path that must stay free of them.
+    # on the default path that must stay free of them. A degraded save gets one
+    # too, so the deletions it skipped are not refused as stale once they are
+    # resent — but only for a client whose own token was current, or a stale tab
+    # would have its deletion authorized after the flag store recovers.
     def editor_revision_response
-      return {} unless product_save_contract.enforced?
+      contract = product_save_contract
+      return {} unless contract.enforced? || (contract.degraded? && contract.may_delete?)
 
       {
         editor_revision: Product::EditorRevision.current(@product.reload),

@@ -6,16 +6,17 @@ import { describe, expect, it, vi } from "vitest";
 import {
   applyFileIdMappingsToRichContent,
   applyRichContentPageSaveResponse,
-  attachmentsWithoutLibraryRow,
   buildRichContentFileIdMappingTransaction,
   buildRichContentReconciliationTransaction,
   HiddenVariantContentConflictError,
   canonicalRichContentScope,
   copyRichContentPages,
   filesForSave,
+  filesOnNoPage,
   markFileRemoved,
   prepareRichContentPagesForMove,
   reconcileConfirmedRemovalIds,
+  reconcileFileRemovalsWithEmbeds,
   removeFileEmbedsFromRichContent,
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
@@ -62,6 +63,14 @@ describe("filesForSave", () => {
 
     expect(filesForSave(editorFiles, new Set(["uploaded-id", "failed-id"]), false)).toEqual([uploaded]);
     expect(filesForSave(editorFiles, new Set(), true)).toEqual([uploaded]);
+  });
+
+  it("keeps a file the seller removed out of the keep-all retry", () => {
+    const kept = { id: "kept-id", status: { type: "saved" } };
+    const removed = { id: "removed-id", status: { type: "removed", previousStatus: { type: "saved" } } };
+
+    // The legacy save deletes a file missing from the payload; sending this one would keep it attached.
+    expect(filesForSave([kept, removed], new Set(), true)).toEqual([kept]);
   });
 });
 
@@ -110,24 +119,6 @@ describe("markFileRemoved and withoutFileEmbeds", () => {
     expect(markFileRemoved(files, "gone")).toEqual([file]);
   });
 
-  it("rows an attachment the url-deduped library list does not carry", () => {
-    const files = savedFiles(["attach-a", "attach-b"]);
-
-    // The library list holds one row per url, so a second attachment of the same file arrives here
-    // without one and would otherwise have no way to be removed.
-    expect(attachmentsWithoutLibraryRow(files, ["attach-a"])).toEqual([{ id: "attach-b", status: { type: "saved" } }]);
-    expect(attachmentsWithoutLibraryRow(files, ["attach-a", "attach-b"])).toEqual([]);
-  });
-
-  it("does not row Dropbox uploads, which polling re-adds", () => {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs id and status
-    const files = [
-      { id: "ext-1", status: { type: "dropbox", externalId: "ext-1", uploadState: "in_progress" } },
-    ] as unknown as Parameters<typeof attachmentsWithoutLibraryRow>[0];
-
-    expect(attachmentsWithoutLibraryRow(files, [])).toEqual([]);
-  });
-
   it("strips the file's embeds from each variant's own pages", () => {
     const variants = variantWithPages([
       { id: "page", description: { type: "doc", content: [embedGroup("group", ["detach-me"])] } },
@@ -144,6 +135,82 @@ vi.mock("$app/utils/request", async (importOriginal) => ({
   ...(await importOriginal<typeof import("$app/utils/request")>()),
   request: requestMock,
 }));
+
+describe("removing a file by deleting its blocks", () => {
+  const embedPage = (id: string, fileIds: string[]) => ({
+    id,
+    description: { type: "doc", content: fileIds.map((fileId) => ({ type: "fileEmbed", attrs: { id: fileId } })) },
+  });
+  const product = (
+    files: { id: string; status: object }[],
+    rich_content: ReturnType<typeof embedPage>[],
+    variantPages: ReturnType<typeof embedPage>[] = [],
+  ) =>
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only needs files and pages
+    ({ files, rich_content, variants: [{ id: "variant-a", rich_content: variantPages }] }) as unknown as Parameters<
+      typeof reconcileFileRemovalsWithEmbeds
+    >[0];
+  const saved = (id: string) => ({ id, status: { type: "saved" } });
+  const removed = (id: string) => ({ id, status: { type: "removed", previousStatus: { type: "saved" } } });
+  const uploading = { id: "uploading", status: { type: "unsaved", uploadStatus: { type: "uploaded" }, url: "blob:x" } };
+
+  it("removes a file once its last block is gone, and keeps one another page still embeds", () => {
+    const files = reconcileFileRemovalsWithEmbeds(
+      product([saved("gone"), saved("elsewhere")], [embedPage("page-1", [])], [embedPage("page-2", ["elsewhere"])]),
+      { deleted: new Set(["gone", "elsewhere"]), inserted: new Set() },
+      new Set(),
+    );
+
+    expect(files).toEqual([removed("gone"), saved("elsewhere")]);
+    expect(buildDeletionOperations({ files }).deleted_ids.files).toEqual(["gone"]);
+  });
+
+  it("cancels the removal when the block comes back", () => {
+    const files = reconcileFileRemovalsWithEmbeds(
+      product([removed("back")], [embedPage("page-1", ["back"])]),
+      { deleted: new Set(), inserted: new Set(["back"]) },
+      new Set(),
+    );
+
+    expect(files).toEqual([saved("back")]);
+  });
+
+  it("leaves an upload that has not saved to its own controls", () => {
+    expect(
+      reconcileFileRemovalsWithEmbeds(
+        product([uploading], [embedPage("page-1", [])]),
+        { deleted: new Set(["uploading"]), inserted: new Set() },
+        new Set(),
+      ),
+    ).toEqual([uploading]);
+  });
+
+  it("lists the saved files no page embeds", () => {
+    expect(
+      filesOnNoPage(
+        product(
+          [saved("on-page"), saved("on-version-page"), saved("on-no-page"), removed("removed"), uploading],
+          [embedPage("page-1", ["on-page"])],
+          [embedPage("page-2", ["on-version-page"])],
+        ),
+        new Set(),
+      ),
+    ).toEqual([saved("on-no-page")]);
+  });
+
+  it("treats an upload a save stored this session as saved", () => {
+    const stored = { ...uploading, id: "canonical-upload" };
+
+    const files = reconcileFileRemovalsWithEmbeds(
+      product([stored], [embedPage("page-1", [])]),
+      { deleted: new Set(["canonical-upload"]), inserted: new Set() },
+      new Set(["canonical-upload"]),
+    );
+
+    expect(buildDeletionOperations({ files }).deleted_ids.files).toEqual(["canonical-upload"]);
+    expect(filesOnNoPage(product([stored], []), new Set(["canonical-upload"]))).toEqual([stored]);
+  });
+});
 
 describe("saveProduct with a failed upload", () => {
   const failedId = "failed-file";

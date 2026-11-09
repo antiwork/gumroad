@@ -6,10 +6,12 @@ import { RouteObject, RouterProvider } from "react-router-dom";
 import {
   applyRichContentPageSaveResponse,
   canonicalRichContentScope,
+  clearSkippedFileRemovals,
   embeddedFailedUploadIds,
   failedUploadFileIds,
   hasMoveSourceScope,
   HiddenVariantContentConflictError,
+  readSkippedFileRemovals,
   reconcileConfirmedRemovalIds,
   richContentMoveSourceIds,
   SaveProductResponse,
@@ -19,7 +21,9 @@ import {
   UnmarkedInstallmentPlanClearConflictError,
   saveProduct,
   scopedRichContentPageKey,
+  storeSkippedFileRemovals,
   withoutFailedFileEmbeds,
+  withSkippedFileRemovals,
 } from "$app/data/product_edit";
 import { OtherRefundPolicy } from "$app/data/products/other_refund_policies";
 import { Thumbnail } from "$app/data/thumbnails";
@@ -164,6 +168,7 @@ const createContextValue = (props: Props) => ({
   richContentIdMappings: {},
   fileIdMappings: {},
   richContentRemovedFileEmbedIds: {},
+  deletedFileIds: new Set(),
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
@@ -538,10 +543,23 @@ const ProductEditPage = (props: Props) => {
   // Products predating the backend guard can load with a PWYW flag the guard
   // would move on the next save; reconcile up front so the editor and preview
   // never show a state that can't survive a save.
-  const [product, setProduct] = React.useState<Product>(() => ({
-    ...props.product,
-    customizable_price: reconcileCustomizablePrice(props.product),
-  }));
+  const [skippedFileRemovals] = React.useState(() => readSkippedFileRemovals(props.id));
+  const [product, setProduct] = React.useState<Product>(() => {
+    const loaded = withSkippedFileRemovals(props.product, skippedFileRemovals);
+    return { ...loaded, customizable_price: reconcileCustomizablePrice(loaded) };
+  });
+  React.useEffect(() => {
+    if (!skippedFileRemovals) return;
+    clearSkippedFileRemovals(props.id);
+    if (!props.product.files.some((file) => skippedFileRemovals.fileIds.includes(file.id))) return;
+    if (withSkippedFileRemovals(props.product, skippedFileRemovals) !== props.product)
+      showAlert("A file you removed is still attached. Save changes to remove it.", "warning");
+    else
+      showAlert(
+        "A file you removed is still attached because the product changed since. Remove it again to detach it.",
+        "warning",
+      );
+  }, [skippedFileRemovals]);
   const [contentUpdates, setContentUpdates] = React.useState<ContentUpdates>(null);
   const [webAppUploading, setWebAppUploading] = React.useState(false);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
@@ -616,6 +634,7 @@ const ProductEditPage = (props: Props) => {
   const [richContentRemovedFileEmbedIds, setRichContentRemovedFileEmbedIds] = React.useState<Record<string, string[]>>(
     {},
   );
+  const [deletedFileIds, setDeletedFileIds] = React.useState<ReadonlySet<string>>(new Set());
   // Resolves true only when the save request actually succeeded — callers that
   // chain follow-up actions on save() (navigating to the next tab, opening the
   // preview) use this to stay put when the save failed or the seller cancelled
@@ -655,6 +674,13 @@ const ProductEditPage = (props: Props) => {
         preserved_rich_content_ids: conflictResolution.hiddenPageIds,
       };
     }
+    // A removed file this product never saved (picked from the library, then its block deleted) has
+    // no row here, so it leaves the save rather than naming one in deleted_ids.
+    const savedFileIds = new Set(lastSavedProductRef.current.files.map((file) => file.id));
+    productToSave = {
+      ...productToSave,
+      files: productToSave.files.filter((file) => file.status.type !== "removed" || savedFileIds.has(file.id)),
+    };
     // Stamp every page with its client-only identity before freezing the
     // snapshot: reconciliation matches each page back to its sent snapshot by
     // this stamp, because scope, id, and move marker together cannot always
@@ -683,6 +709,9 @@ const ProductEditPage = (props: Props) => {
       ]),
     );
     const sentConfirmedVariantIds = new Set(productSent.confirmed_removed_variant_ids ?? []);
+    const sentRemovedFileIds = new Set(
+      productSent.files.filter((file) => file.status.type === "removed").map((file) => file.id),
+    );
     try {
       setSaving(true);
       const response = await saveProduct(props.unique_permalink, props.id, productSent, currencyType, {
@@ -704,6 +733,11 @@ const ProductEditPage = (props: Props) => {
       // editor session (the shared-content flag hid them), so the in-memory
       // state can't render the outcome. Reload to pick up the kept content.
       if (conflictResolution?.choice === "keep_version") {
+        if (response.file_deletions_skipped && sentRemovedFileIds.size > 0)
+          storeSkippedFileRemovals(props.id, {
+            fileIds: [...sentRemovedFileIds],
+            editorRevision: response.editor_revision ?? null,
+          });
         // Leave Save disabled until the page is gone, so a second click cannot save again.
         setReloadRequired("Your changes were saved. Reloading the page to show them.");
         setReloadModalOpen(true);
@@ -727,6 +761,12 @@ const ProductEditPage = (props: Props) => {
       applyCanonicalIds(reconciled, response, sentPagesById);
       reconciled.confirmed_removed_variant_ids = [];
       reconciled.confirmed_removed_rich_content_ids = [];
+      // A removed file restated by a later save would count as a deletion and be refused once the
+      // editor revision moves, so the removals this save carried are spent like the ids above —
+      // unless the server skipped them, in which case they stay pending for the next save.
+      const spentFileIds = response.file_deletions_skipped ? new Set<string>() : sentRemovedFileIds;
+      reconciled.files = reconciled.files.filter((file) => !spentFileIds.has(file.id));
+      if (spentFileIds.size > 0) setDeletedFileIds((previous) => new Set([...previous, ...spentFileIds]));
       // The marker is per-save. Keeping it would let a later content-tab
       // snapshot still claim a description clear.
       reconciled.description_changed = false;
@@ -766,6 +806,7 @@ const ProductEditPage = (props: Props) => {
           sentConfirmedPageIds,
           confirmedPageIdMappings,
         );
+        current.files = current.files.filter((file) => !(file.status.type === "removed" && spentFileIds.has(file.id)));
         // The marker this request carried is spent. A description edited while
         // the save was in flight was not part of it, so its marker stays.
         if (current.description === productSent.description) current.description_changed = false;
@@ -914,6 +955,7 @@ const ProductEditPage = (props: Props) => {
       richContentIdMappings,
       fileIdMappings,
       richContentRemovedFileEmbedIds,
+      deletedFileIds,
       contentUpdates,
       setContentUpdates,
       webAppUploading,
@@ -930,6 +972,7 @@ const ProductEditPage = (props: Props) => {
       richContentIdMappings,
       fileIdMappings,
       richContentRemovedFileEmbedIds,
+      deletedFileIds,
       webAppUploading,
       savedWaitlistEnabled,
     ],

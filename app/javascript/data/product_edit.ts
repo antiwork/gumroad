@@ -1,5 +1,5 @@
 import { Editor, findChildren } from "@tiptap/core";
-import { type Mark } from "@tiptap/pm/model";
+import { type Mark, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { EditorState, Transaction } from "@tiptap/pm/state";
 
 import { buildDeletionOperations } from "$app/data/product_save_contract";
@@ -44,6 +44,8 @@ export type SaveProductResponse = {
   loaded_integrations?: Record<string, boolean>;
   // The same baseline, per version, keyed by variant external id.
   variant_loaded_integrations?: Record<string, Record<string, boolean>>;
+  // Set when the save could not apply file deletions, so the removals it carried are still pending.
+  file_deletions_skipped?: boolean;
 };
 
 const optional = (value: unknown, check: (item: unknown) => boolean) => value === undefined || check(value);
@@ -65,7 +67,8 @@ const isSaveProductResponse = (value: unknown): value is SaveProductResponse =>
   optional(value.variant_updated_at, isStringMap) &&
   optional(value.editor_revision, (revision) => revision === null || isString(revision)) &&
   optional(value.loaded_integrations, isBooleanMap) &&
-  optional(value.variant_loaded_integrations, (variants) => isRecordOf(variants, isBooleanMap));
+  optional(value.variant_loaded_integrations, (variants) => isRecordOf(variants, isBooleanMap)) &&
+  optional(value.file_deletions_skipped, isBoolean);
 
 // The server's fail-closed answer when a save would delete version-level pages
 // that are hidden by the "use the same content for all versions" flag while
@@ -170,7 +173,7 @@ export const filesForSave = <
   embeddedFileIds: Set<unknown>,
   keepAllFiles: boolean,
 ) => {
-  const savable = files.filter((file) => !isFailedUpload(file));
+  const savable = files.filter((file) => !isFailedUpload(file) && file.status?.type !== "removed");
   return keepAllFiles ? savable : savable.filter((file) => embeddedFileIds.has(file.id));
 };
 
@@ -422,8 +425,7 @@ export const embeddedFailedUploadIds = (
   files: { id: string; status?: { type?: string; uploadStatus?: { type?: string } } | null }[],
   pages: { description: object }[],
 ) => {
-  const embedded = new Set<string>();
-  pages.forEach((page) => collectFileEmbedIds(page.description, embedded));
+  const embedded = embeddedFileIds(pages);
   return new Set([...failedUploadFileIds(files)].filter((id) => embedded.has(id)));
 };
 
@@ -456,10 +458,114 @@ export const withoutFileEmbedsFromVariants = (variants: Variant[], fileId: strin
   });
 };
 
-// The library list a picker shows carries one row per url, so a second attachment of the same file
-// has no row of its own — and no way to be removed. Every attachment needs a row.
-export const attachmentsWithoutLibraryRow = (files: Product["files"], libraryFileIds: string[]): Product["files"] =>
-  files.filter((file) => file.status.type === "saved" && !libraryFileIds.includes(file.id));
+const embeddedFileIds = (pages: { description: object }[]) => {
+  const ids = new Set<string>();
+  pages.forEach((page) => collectFileEmbedIds(page.description, ids));
+  return ids;
+};
+
+const embeddedFileIdsInProduct = (product: Pick<Product, "rich_content" | "variants">) =>
+  embeddedFileIds([...product.rich_content, ...product.variants.flatMap((variant) => variant.rich_content)]);
+
+// A file embed is a block, so the walk never needs to enter a paragraph.
+const fileEmbedIdsInDoc = (doc: ProseMirrorNode): Set<string> => {
+  const ids = new Set<string>();
+  doc.descendants((node) => {
+    if (node.type.name === FileEmbed.name && typeof node.attrs.id === "string") ids.add(node.attrs.id);
+    return !node.isTextblock;
+  });
+  return ids;
+};
+
+export const fileEmbedChanges = (before: ProseMirrorNode, after: ProseMirrorNode) => {
+  const idsBefore = fileEmbedIdsInDoc(before);
+  const idsAfter = fileEmbedIdsInDoc(after);
+  return {
+    deleted: new Set([...idsBefore].filter((id) => !idsAfter.has(id))),
+    inserted: new Set([...idsAfter].filter((id) => !idsBefore.has(id))),
+  };
+};
+
+// Deleting a file's last block removes the file; an embed that comes back (undo, paste) cancels the
+// removal. Only editor edits feed this, so content lost any other way never becomes a deletion.
+// An upload keeps its "unsaved" status after the save that stores it; only its id changes, to the
+// canonical one the save maps it to.
+const isSavedFile = (file: Product["files"][number], savedThisSessionIds: ReadonlySet<string>) =>
+  file.status.type === "saved" || (file.status.type !== "removed" && savedThisSessionIds.has(file.id));
+
+export const reconcileFileRemovalsWithEmbeds = (
+  product: Pick<Product, "files" | "rich_content" | "variants">,
+  { deleted, inserted }: { deleted: Set<string>; inserted: Set<string> },
+  savedThisSessionIds: ReadonlySet<string>,
+): Product["files"] => {
+  const embedded = embeddedFileIdsInProduct(product);
+  let files = product.files.map((file) =>
+    file.status.type === "removed" && inserted.has(file.id) ? { ...file, status: file.status.previousStatus } : file,
+  );
+  for (const file of files)
+    if (isSavedFile(file, savedThisSessionIds) && deleted.has(file.id) && !embedded.has(file.id))
+      files = markFileRemoved(files, file.id);
+  return files;
+};
+
+// Pages the shared-content setting hides are not loaded, so a file only they embed is listed too.
+export const filesOnNoPage = (
+  product: Pick<Product, "files" | "rich_content" | "variants">,
+  savedThisSessionIds: ReadonlySet<string>,
+): Product["files"] => {
+  const embedded = embeddedFileIdsInProduct(product);
+  return product.files.filter((file) => isSavedFile(file, savedThisSessionIds) && !embedded.has(file.id));
+};
+
+// "Keep version content" reloads the editor as soon as it saves, so removals that save skipped
+// (`file_deletions_skipped`) cross the reload here, with the revision that save left behind.
+export type SkippedFileRemovals = { fileIds: string[]; editorRevision: string | null };
+const skippedFileRemovalsKey = (productId: string) => `product-edit:skipped-file-removals:${productId}`;
+
+export const storeSkippedFileRemovals = (productId: string, removals: SkippedFileRemovals) => {
+  try {
+    window.sessionStorage.setItem(skippedFileRemovalsKey(productId), JSON.stringify(removals));
+  } catch {
+    // Without storage the reloaded editor shows the file as still attached, as it did before.
+  }
+};
+
+export const readSkippedFileRemovals = (productId: string): SkippedFileRemovals | null => {
+  try {
+    const value: unknown = JSON.parse(window.sessionStorage.getItem(skippedFileRemovalsKey(productId)) ?? "null");
+    return isPlainObject(value) &&
+      isStringList(value.fileIds) &&
+      (value.editorRevision === null || isString(value.editorRevision))
+      ? { fileIds: value.fileIds, editorRevision: value.editorRevision }
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+export const clearSkippedFileRemovals = (productId: string) => {
+  try {
+    window.sessionStorage.removeItem(skippedFileRemovalsKey(productId));
+  } catch {
+    // Nothing was stored.
+  }
+};
+
+// Removes the files again on the reloaded product, embeds included. Only safe when the product is
+// still exactly as the skipping save left it, which the matching editor revision proves; otherwise
+// the removal is decided against content the seller has not seen.
+export const withSkippedFileRemovals = (product: Product, removals: SkippedFileRemovals | null): Product => {
+  if (!removals?.editorRevision || removals.editorRevision !== product.editor_revision) return product;
+  const fileIds = removals.fileIds.filter((id) => product.files.some((file) => file.id === id));
+  if (fileIds.length === 0) return product;
+  const updated = structuredClone(product);
+  for (const id of fileIds) {
+    updated.files = markFileRemoved(updated.files, id);
+    updated.rich_content = withoutFileEmbeds(updated.rich_content, id);
+    withoutFileEmbedsFromVariants(updated.variants, id);
+  }
+  return updated;
+};
 
 export const buildRichContentReconciliationTransaction = (
   state: EditorState,

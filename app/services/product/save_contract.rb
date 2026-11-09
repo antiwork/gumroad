@@ -89,13 +89,14 @@ class Product::SaveContract
     @params = params || ActionController::Parameters.new
     @product = product
     # The fingerprint costs five COUNT/ordering queries against the product's
-    # children, and with the flag off nothing can consume the answer.
+    # children, and with the flag off nothing can consume the answer. A
+    # degraded save consumes it to decide whether it may issue a new token.
     #
     # When enabled it must be answered eagerly, before any write: the save
     # mutates rows as it runs, so a lazy check would compare the client's token
     # against state this request itself changed, silently dropping a legitimate
     # deletion submitted alongside a new page. Callers construct this first.
-    may_delete? if enforced?
+    may_delete? if enforced? || degraded?
   end
 
   # Read once per save and passed down, so a flag flipped mid-request cannot
