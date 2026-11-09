@@ -338,7 +338,8 @@ class PurchasesController < ApplicationController
       message = if whole_order_charge
         CustomerMailer.receipt(nil, whole_order_charge.id, for_email: false)
       else
-        CustomerMailer.receipt(@purchase.id, for_email: false)
+        # Another email's items are on this charge, so show only what this email bought.
+        CustomerMailer.receipt(@purchase.id, for_email: false, single_purchase: true)
       end
       # Generate the same markup used in the email
       Premailer::Rails::Hook.perform(message)

@@ -1978,6 +1978,25 @@ describe PurchasesController, :vcr do
         end
       end
 
+      context "when a three-item charge has an item for another buyer email" do
+        let(:seller) { create(:named_seller) }
+        let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Paid edition"), seller:, email: "test@example.com") }
+        let(:purchase_two) { create(:purchase, link: create(:product, user: seller, name: "Free edition"), seller:, email: "test@example.com") }
+        let(:other_buyer_purchase) { create(:purchase, link: create(:product, user: seller, name: "Other edition"), seller:, email: "another-buyer@example.com") }
+
+        before do
+          purchases = [purchase, purchase_two, other_buyer_purchase]
+          create(:charge, order: create(:order, purchases:), purchases:, seller:)
+        end
+
+        it "shows only this purchase" do
+          get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
+
+          expect(response).to be_successful
+          expect(Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }).to eq(["Paid edition"])
+        end
+      end
+
       context "when the order has no successful purchases" do
         # A charge-backed purchase promotes the receipt's chargeable to its Order;
         # when that Order has no successful purchase, the orderable has no email and
@@ -2023,7 +2042,7 @@ describe PurchasesController, :vcr do
         end
 
         it "calls CustomerMailer with correct args" do
-          expect(CustomerMailer).to receive(:receipt).with(purchase.id, for_email: false).and_call_original
+          expect(CustomerMailer).to receive(:receipt).with(purchase.id, for_email: false, single_purchase: true).and_call_original
           get :receipt, params: { id: purchase.external_id }
           expect(response).to be_successful
         end

@@ -36,9 +36,10 @@ module Purchase::Receipt
     charge.split_receipt_sent?
   end
 
-  # A two-item charge mails one receipt per item, but its receipt page shows the whole order.
+  # The charge whose receipt page this purchase's buyer may see: only when every item on it went to this email.
+  # A two-item charge mails one receipt per item, but its receipt page still shows the whole order.
   def whole_order_receipt_charge
-    charge if uses_charge_receipt? && charge.split_receipt_eligible? && charge.all_items_sent_to?(email)
+    charge if uses_charge_receipt? && charge.all_items_sent_to?(email)
   end
 
   def send_receipt
