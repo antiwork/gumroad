@@ -604,8 +604,14 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     // (gp#1943); skip rather than misfile it under the newly selected page.
     if (editorContentPageKeyRef.current !== selectedScopedPageKey) return;
 
+    // Mapped first: undo can restore a block under the id its file had before a save mapped it.
+    const isDeletedFileId = (fileId: string) => deletedFileIds.has(fileIdMappings[fileId] ?? fileId);
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
+    // A block for a file a save deleted is taken back below, so it must not resolve to another file
+    // with the same url and reach the page content.
+    for (const node of fragment.querySelectorAll("file-embed"))
+      if (isDeletedFileId(node.getAttribute("id") ?? "")) node.remove();
     const newFiles: FileEntry[] = resolveCopiedFileEmbeds(fragment, filesById, existingFiles);
     if (newFiles.length > 0) {
       updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
@@ -624,7 +630,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       updateProduct((current) => {
         current.files = reconcileFileRemovalsWithEmbeds(current, embedChanges, savedThisSessionFileIds);
       });
-    const deletedFileEmbedIds = [...embedChanges.inserted].filter((fileId) => deletedFileIds.has(fileId));
+    const deletedFileEmbedIds = [...embedChanges.inserted].filter(isDeletedFileId);
     if (deletedFileEmbedIds.length > 0) {
       // Queued: this runs inside the editor's own update.
       queueMicrotask(() => reconcileMountedEditorFileEmbeds(editor, deletedFileEmbedIds));
