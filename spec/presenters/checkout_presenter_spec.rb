@@ -897,6 +897,12 @@ describe CheckoutPresenter do
       expect(instance.owned_products_in_cart(cart:)).to eq([])
     end
 
+    it "returns nothing for a guest cart" do
+      guest_cart = create(:cart, user: nil, email: buyer.email)
+      create(:cart_product, cart: guest_cart, product: owned)
+      expect(instance.owned_products_in_cart(cart: guest_cart)).to eq([])
+    end
+
     it "returns nothing without a cart" do
       expect(instance.owned_products_in_cart(cart: nil)).to eq([])
     end

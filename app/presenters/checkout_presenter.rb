@@ -91,7 +91,7 @@ class CheckoutPresenter
 
   # Products in the saved cart that the buyer already owns, so the page can warn before a repeat charge.
   def owned_products_in_cart(cart:)
-    return [] if cart.blank?
+    return [] if cart.blank? || cart.user_id.blank?
 
     owned_ids = cart.purchased_product_ids
     return [] if owned_ids.empty?

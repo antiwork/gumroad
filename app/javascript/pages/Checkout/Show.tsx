@@ -986,7 +986,7 @@ const CheckoutIndexPage = () => {
       // Asking for it in the same request means there is no window where the persisted cart and
       // the payment configuration on screen describe different carts. checkout_style rides along
       // for the same reason: branding cannot outlive a one-to-mixed-seller transition.
-      only: ["cart", "flash", "checkout_payment", "checkout_style"],
+      only: ["cart", "flash", "checkout_payment", "checkout_style", "owned_in_cart"],
       preserveUrl: true,
       preserveScroll: true,
       // The generation is captured when the save is issued, so this refuses exactly the saves that
