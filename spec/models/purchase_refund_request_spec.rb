@@ -68,6 +68,18 @@ describe PurchaseRefundRequest do
     end
   end
 
+  describe ".escalation_candidates" do
+    it "leaves out refunded, disputed, escalated, and recent requests" do
+      candidate = create(:purchase_refund_request, purchase:, created_at: 3.days.ago)
+      create(:purchase_refund_request, created_at: 3.days.ago).purchase.update!(stripe_refunded: true)
+      create(:purchase_refund_request, created_at: 3.days.ago).purchase.update!(chargeback_date: Time.current)
+      create(:purchase_refund_request, created_at: 3.days.ago, escalated_at: 1.day.ago)
+      create(:purchase_refund_request)
+
+      expect(described_class.escalation_candidates).to contain_exactly(candidate)
+    end
+  end
+
   describe "#escalation_deadline" do
     it "adds two business days, skipping weekends" do
       request = travel_to(Time.utc(2026, 11, 6, 12)) { create(:purchase_refund_request, purchase:) } # Friday

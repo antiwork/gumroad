@@ -29,6 +29,17 @@ describe PurchaseRefundRequests::EscalateOverdueJob do
     expect(PurchaseRefundRequest.where.not(escalated_at: nil).pluck(:id)).to contain_exactly(overdue.id, already.id)
   end
 
+  it "still escalates an old request once the seller's flag comes back on" do
+    request = create_request(created_at: 45.days.ago)
+    Feature.deactivate_user(:buyer_refund_requests, seller)
+    described_class.new.perform
+    expect(request.reload.escalated_at).to be_nil
+
+    Feature.activate_user(:buyer_refund_requests, seller)
+    described_class.new.perform
+    expect(request.reload.escalated_at).to be_present
+  end
+
   it "skips sellers whose flag is off" do
     request = create_request(created_at: Time.utc(2026, 11, 4, 12))
     Feature.deactivate_user(:buyer_refund_requests, seller)

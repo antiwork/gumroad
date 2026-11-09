@@ -39,6 +39,10 @@ describe CustomerLowPriorityMailer do
     expect(described_class.refund_request_received(nil).message).to be_a(ActionMailer::Base::NullMail)
     expect(described_class.refund_request_escalated(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
 
+    travel_to(Time.utc(2026, 11, 11, 12)) do # past the Tuesday deadline
+      expect(described_class.refund_request_received(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
+    end
+
     purchase.update!(stripe_refunded: true)
     expect(described_class.refund_request_received(refund_request.id).message).to be_a(ActionMailer::Base::NullMail)
   end

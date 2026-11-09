@@ -9,7 +9,11 @@
     <p>Message from the customer: <%= @refund_request.message %></p>
   <% end %>
   <p>
-    Please respond by <%= @respond_by %>. After that, Gumroad support will review the request.
+    <% if @refund_request.escalation_deadline.past? %>
+      This request is past its deadline, so Gumroad support will review it.
+    <% else %>
+      Please respond by <%= @respond_by %>. After that, Gumroad support will review the request.
+    <% end %>
     Refunding now keeps the purchase from turning into a chargeback, which costs more
     and counts against your account.
   </p>

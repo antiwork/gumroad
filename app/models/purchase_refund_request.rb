@@ -14,8 +14,6 @@ class PurchaseRefundRequest < ApplicationRecord
   SUPPORT_CATEGORY = "purchases & refunds"
   # Weekdays only, no holiday calendar — same approximation as PiracyReport.
   ESCALATION_BUSINESS_DAYS = 2
-  # Bounds the scan: refunded and disputed requests stay unescalated for good.
-  ESCALATION_LOOKBACK = 30.days
 
   REASONS = %w[not_received not_as_described no_longer_needed duplicate_purchase other].freeze
   REASON_LABELS = {
@@ -33,9 +31,11 @@ class PurchaseRefundRequest < ApplicationRecord
 
   after_create_commit :notify_seller_and_buyer
 
-  # The deadline is always at least ESCALATION_BUSINESS_DAYS after creation, so this is a superset.
+  # Unresolved requests only: refunded and disputed ones never escalate. The deadline is at least
+  # ESCALATION_BUSINESS_DAYS after creation, so the created_at bound is a superset.
   scope :escalation_candidates, -> {
-    where(escalated_at: nil, created_at: ESCALATION_LOOKBACK.ago..ESCALATION_BUSINESS_DAYS.days.ago)
+    where(escalated_at: nil, created_at: ..ESCALATION_BUSINESS_DAYS.days.ago)
+      .joins(:purchase).merge(Purchase.not_fully_refunded).merge(Purchase.not_chargedback)
   }
 
   # A dispute closes the request even if the seller later wins it: the buyer went to the bank.

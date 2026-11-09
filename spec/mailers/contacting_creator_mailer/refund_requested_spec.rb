@@ -30,6 +30,15 @@ describe ContactingCreatorMailer do
       end
     end
 
+    it "does not ask for a reply by a date that has passed" do
+      refund_request.update_columns(created_at: Time.utc(2026, 11, 4, 12)) # Wednesday; deadline Friday
+
+      body = travel_to(Time.utc(2026, 11, 9, 12)) { described_class.refund_requested(refund_request.id).body.encoded }
+
+      expect(body).to include("This request is past its deadline, so Gumroad support will review it.")
+      expect(body).not_to include("Please respond by")
+    end
+
     it "does not send when the purchase was refunded before delivery" do
       refund_request.purchase.update!(stripe_refunded: true)
 

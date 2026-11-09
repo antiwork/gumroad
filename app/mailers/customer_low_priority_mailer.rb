@@ -474,6 +474,8 @@ class CustomerLowPriorityMailer < ApplicationMailer
   # Replies go to the creator, who is the one deciding.
   def refund_request_received(refund_request_id)
     return unless load_refund_request(refund_request_id, status: "requested")
+    # A late send would quote a date already gone; the escalation notice follows instead.
+    return if @refund_request.escalation_deadline.past?
 
     @respond_by = @refund_request.escalation_deadline.strftime(PurchaseRefundRequest::DATE_FORMAT)
     @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
