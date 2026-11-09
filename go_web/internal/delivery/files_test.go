@@ -379,11 +379,11 @@ func TestADeletedPurchasedVariantDefersToTheProduct(t *testing.T) {
 	e.expectFiles(r, base+102, base+101)
 
 	// An alive purchased variant sorts ahead of the deleted one.
-	e.buys(purchase, base+11)
-	e.expectFiles(r, base+102, base+101)
+	e.buys(purchase, base+10)
+	e.expectFiles(r, base+103)
 
 	// Orphaned, the deleted variant is its own provider.
-	e.exec("DELETE FROM base_variants_purchases WHERE purchase_id = ? AND base_variant_id = ?", purchase, base+11)
+	e.exec("DELETE FROM base_variants_purchases WHERE purchase_id = ? AND base_variant_id = ?", purchase, base+10)
 	e.exec("UPDATE base_variants SET variant_category_id = ? WHERE id = ?", base+9, base+12)
 	e.expectFiles(r, base+104)
 }
@@ -403,14 +403,17 @@ func TestADeletedPurchasedVariantGetsTheClosestPricedAliveVariant(t *testing.T) 
 	// 90 and 50 are both 20 from the deleted 70: the cheaper wins, not the cheapest (10).
 	e.expectFiles(r, base+104)
 
-	// An exact price tie goes to the lower id.
-	e.exec("UPDATE base_variants SET price_difference_cents = 50 WHERE id = ?", base+11)
-	e.expectFiles(r, base+102, base+101)
+	// NULL prices count as 0, so 10 is closer to the deleted 100 than the NULL rows the sort puts first.
+	e.exec("UPDATE base_variants SET price_difference_cents = NULL WHERE id IN (?, ?)", base+11, base+13)
+	e.exec("UPDATE base_variants SET price_difference_cents = 100 WHERE id = ?", base+12)
+	e.expectFiles(r, base+103)
+}
 
-	// A NULL price counts as 0.
-	e.exec("UPDATE base_variants SET price_difference_cents = NULL WHERE id = ?", base+12)
-	e.exec("UPDATE base_variants SET price_difference_cents = NULL WHERE id = ?", base+13)
-	e.expectFiles(r, base+104)
+func TestClosestPricedBreaksAnExactPriceTieByID(t *testing.T) {
+	got := closestPriced([]*variant{{id: 13, priceDifferenceCents: 50}, {id: 11, priceDifferenceCents: 50}}, 70)
+	if got == nil || got.id != 11 {
+		t.Fatalf("closestPriced = %+v, want id 11", got)
+	}
 }
 
 func TestASkuIsItsOwnProviderOnlyNextToAVariant(t *testing.T) {
