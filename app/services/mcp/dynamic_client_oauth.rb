@@ -59,7 +59,9 @@ module Mcp
         return pre_auth unless pre_auth.error == Doorkeeper::Errors::InvalidScope
 
         pre_auth = accept_late_scopes(pre_auth, application)
-        return explain_unknown_scope(pre_auth, application) unless pre_auth.authorizable?
+        unless pre_auth.authorizable?
+          return pre_auth.error == Doorkeeper::Errors::InvalidScope ? explain_unknown_scope(pre_auth, application) : pre_auth
+        end
       end
 
       error = authorization_error(
@@ -104,8 +106,12 @@ module Mcp
     end
 
     def self.explain_unknown_scope(pre_auth, application)
-      description = "#{application.name} asked for a permission it was not set up with. " \
-                    "Remove the connector in Settings > Applications, then add Gumroad again from #{application.name.delete_prefix("MCP ")}."
+      # Registration stores the client's own name behind "MCP ", or "MCP client" when it sent none.
+      client = application.name.delete_prefix("MCP ")
+      client = "your AI app" if client == "client"
+      # Only a new registration carries the new scopes, so the fix is on the client's side.
+      description = "#{client.upcase_first} can't connect to Gumroad because it asked for a permission it was not set up with. " \
+                    "Remove Gumroad from #{client}, then add it again."
       RejectedPreAuthorization.new(
         pre_auth,
         ErrorResponse.new(name: :invalid_scope, description:, state: pre_auth.state, redirect_uri: pre_auth.redirect_uri)

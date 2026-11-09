@@ -7,12 +7,14 @@ describe "OAuth consent for an MCP client registered before view_library", type:
 
   let(:user) { create(:named_user) }
   let(:resource) { Mcp::DynamicClientOauth.resource_identifier("/claude/v1/mcp") }
-  # Through the real registration path: a dynamic client has no owner, which is what the consent
-  # save has to cope with.
+  let(:registered_scopes) { "view_public view_profile view_sales" }
+  # Registered through the real path with the scopes clients received before view_library, so the
+  # client is ownerless like every dynamic client in production.
   let(:application) do
-    payload = Mcp::OauthClientRegistration.create!(client_name: "Claude", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
-                                                   token_endpoint_auth_method: "none", scope: "view_public view_profile view_sales")
-    OauthApplication.find_by!(uid: payload.fetch(:client_id))
+    client = Mcp::OauthClientRegistration.create!(
+      "client_name" => "Claude", "redirect_uris" => ["https://claude.ai/api/mcp/auth_callback"], "scope" => registered_scopes
+    )
+    OauthApplication.find_by!(uid: client[:client_id])
   end
   let(:params) do
     { response_type: "code", client_id: application.uid, redirect_uri: application.redirect_uri, scope: "view_public view_library",
@@ -26,8 +28,14 @@ describe "OAuth consent for an MCP client registered before view_library", type:
     allow_any_instance_of(ActionView::Base).to receive(:vite_react_refresh_tag).and_return("")
     allow_any_instance_of(ActionView::Base).to receive(:vite_typescript_tag).and_return("")
     Rails.application.reload_routes!
-    application.update_columns(scopes: "view_public view_profile view_sales")
     sign_in user
+  end
+
+  def approve_form_fields
+    get "/oauth/authorize", params: params
+    expect(response).to have_http_status(:ok)
+    form = Nokogiri::HTML(response.body).css("form").find { _1.at_css("input[name='_method']").nil? }
+    form.css("input[type='hidden']").to_h { [_1["name"], _1["value"]] }
   end
 
   it "shows the consent screen without changing the client until the person agrees" do
@@ -35,39 +43,79 @@ describe "OAuth consent for an MCP client registered before view_library", type:
 
     expect(response).to have_http_status(:ok)
     expect(response.body).to include("See the products you bought.")
-    expect(application.reload.scopes.to_s).to eq("view_public view_profile view_sales")
+    expect(application.reload.scopes.to_s).to eq(registered_scopes)
   end
 
-  it "adds view_library to the client when the person consents" do
-    allow_any_instance_of(ActionController::Base).to receive(:verify_authenticity_token)
-    post "/oauth/authorize", params: params.merge(consented_account: "")
+  it "adds view_library to the ownerless client when the person consents" do
+    expect(application.owner).to be_nil
 
-    expect(application.reload.scopes.to_s.split).to include("view_library")
-    expect(Doorkeeper::AccessGrant.where(application_id: application.id).last.scopes.to_s).to eq("view_public view_library")
-  end
-
-  it "leaves the client alone when the request is refused" do
-    allow_any_instance_of(ActionController::Base).to receive(:verify_authenticity_token)
-
-    expect do
-      post "/oauth/authorize", params: params.merge(resource: "https://evil.example/mcp", consented_account: "")
-    end.not_to change { application.reload.scopes.to_s }
+    post "/oauth/authorize", params: approve_form_fields
 
     expect(response).to have_http_status(:found)
-    expect(Rack::Utils.parse_query(URI.parse(response.location).query)).to include("error" => "invalid_target")
+    expect(application.reload.scopes.to_s).to eq("#{registered_scopes} view_library")
+    expect(application.access_grants.sole.scopes.to_s).to eq("view_public view_library")
+  end
+
+  it "leaves the client unchanged when the consented request is rejected" do
+    fields = approve_form_fields
+
+    expect do
+      post "/oauth/authorize", params: fields.merge("resource" => "https://evil.example/mcp")
+    end.not_to change { application.access_grants.count }
+
+    expect(response.location).to include("error=invalid_target")
+    expect(application.reload.scopes.to_s).to eq(registered_scopes)
+  end
+
+  it "leaves the client unchanged when the person denies" do
+    get "/oauth/authorize", params: params
+    deny_form = Nokogiri::HTML(response.body).css("form").find { _1.at_css("input[name='_method'][value='delete']") }
+
+    delete "/oauth/authorize", params: params.merge(authenticity_token: deny_form.at_css("input[name='authenticity_token']")["value"])
+
+    expect(response.location).to include("error=access_denied")
+    expect(application.reload.scopes.to_s).to eq(registered_scopes)
+    expect(application.access_grants).to be_empty
   end
 
   it "does not widen a client for a scope outside the late list" do
-    get "/oauth/authorize", params: params.merge(scope: "view_public edit_products")
+    fields = approve_form_fields
 
-    expect(response.body).to include("Remove the connector in Settings")
-    expect(application.reload.scopes.to_s).not_to include("edit_products")
+    post "/oauth/authorize", params: fields.merge("scope" => "view_public edit_products")
+
+    expect(response.location).to include("error=invalid_scope")
+    expect(application.reload.scopes.to_s).to eq(registered_scopes)
+    expect(application.access_grants).to be_empty
   end
 
   it "refuses an unknown scope with an explanation, not the protocol error" do
     get "/oauth/authorize", params: params.merge(scope: "view_public bogus")
 
     expect(response.body).not_to include("invalid, unknown, or malformed")
-    expect(response.body).to include("Remove the connector in Settings")
+    expect(response.body).to include("Claude can&#39;t connect to Gumroad because it asked for a permission it was not set up with. Remove Gumroad from Claude, then add it again.")
+  end
+
+  it "names the app plainly when it registered without a name" do
+    application.update_columns(name: "MCP client")
+
+    get "/oauth/authorize", params: params.merge(scope: "view_public bogus")
+
+    expect(response.body).to include("Your AI app can&#39;t connect to Gumroad because it asked for a permission it was not set up with. Remove Gumroad from your AI app, then add it again.")
+  end
+
+  it "keeps the protocol error when a late scope is fine but another check fails" do
+    get "/oauth/authorize", params: params.merge(code_challenge_method: "unsupported")
+
+    expect(response.body).not_to include("asked for a permission")
+    expect(application.reload.scopes.to_s).to eq(registered_scopes)
+  end
+
+  it "keeps the protocol error for an application that was not dynamically registered" do
+    ordinary = create(:oauth_application, scopes: registered_scopes)
+
+    get "/oauth/authorize", params: params.merge(client_id: ordinary.uid, redirect_uri: ordinary.redirect_uri, scope: "view_public view_library")
+
+    expect(response.body).to include("The requested scope is invalid, unknown, or malformed.")
+    expect(ordinary.reload.scopes.to_s).to eq(registered_scopes)
   end
 end
