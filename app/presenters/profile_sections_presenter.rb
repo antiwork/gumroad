@@ -117,23 +117,35 @@ class ProfileSectionsPresenter
     # Rails.cache.fetch lets every concurrent miss rebuild. If the lock holder dies or is slow, a
     # waiter builds after BUILD_WAIT_TIMEOUT rather than failing the page.
     def fetch_single_flight(cache_key, &block)
-      cached = Rails.cache.read(cache_key)
+      cached = shared_cache_read(cache_key)
       return cached unless cached.nil?
 
       lock_key = "#{cache_key}-build-lock"
-      if Rails.cache.write(lock_key, true, unless_exist: true, expires_in: BUILD_LOCK_TTL)
+      if shared_cache { Rails.cache.write(lock_key, true, unless_exist: true, expires_in: BUILD_LOCK_TTL) }
         begin
           Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRES_IN, &block)
         ensure
-          Rails.cache.delete(lock_key)
+          shared_cache { Rails.cache.delete(lock_key) }
         end
       else
         deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + BUILD_WAIT_TIMEOUT
-        while Rails.cache.exist?(lock_key) && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+        while shared_cache { Rails.cache.exist?(lock_key) } && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
           sleep BUILD_WAIT_INTERVAL
         end
-        Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRES_IN, &block)
+        shared_cache_read(cache_key) || Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRES_IN, &block)
       end
+    end
+
+    def shared_cache_read(key)
+      shared_cache { Rails.cache.read(key) }
+    end
+
+    # The memcached store keeps a per-request copy of everything it reads, misses included, so a
+    # poll would keep seeing the first answer. Reads and lock operations here must reach memcached.
+    def shared_cache(&block)
+      return yield unless Rails.cache.respond_to?(:bypass_local_cache, true)
+
+      Rails.cache.send(:bypass_local_cache, &block)
     end
 
     # Builds the cacheable data for the virtual default products section after the shared

@@ -73,13 +73,34 @@ describe ProfileSectionsPresenter do
   describe "single-flight cache rebuild" do
     before { Rails.cache.clear }
 
-    it "searches once when several requests miss the same cold entry together" do
-      allow(Link).to receive(:search).and_call_original
-      threads = Array.new(4) { Thread.new { described_class.new(seller:, query: subject.send(:query)).cached_sections } }
-      results = threads.map(&:value)
+    it "builds once when concurrent requests miss the same cold entry, with a request-local cache" do
+      store = ActiveSupport::Cache::MemoryStore.new
+      store.singleton_class.prepend(ActiveSupport::Cache::Strategy::LocalCache)
+      allow(Rails).to receive(:cache).and_return(store)
+      stub_const("#{described_class}::BUILD_WAIT_INTERVAL", 0.01)
+      builds = Concurrent::AtomicFixnum.new(0)
+      waiting = Queue.new
+      release = Queue.new
 
-      expect(results.uniq.size).to eq(1)
-      expect(Link).to have_received(:search).at_most(3).times
+      threads = Array.new(4) do
+        Thread.new do
+          store.send(:with_local_cache) do
+            subject.send(:fetch_single_flight, "sections-key") do
+              builds.increment
+              3.times { waiting.pop }
+              release.pop
+              :built
+            end
+          end
+        end
+      end
+      # Each waiter has read the cold entry (local-cache miss) before the builder finishes.
+      3.times { waiting.push(true) }
+      sleep 0.2
+      release.push(true)
+
+      expect(threads.map(&:value)).to all(eq(:built))
+      expect(builds.value).to eq(1)
     end
 
     it "builds itself when the lock holder never finishes" do
