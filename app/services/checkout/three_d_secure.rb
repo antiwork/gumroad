@@ -16,8 +16,6 @@ class Checkout::ThreeDSecure
   FEATURE = :card_3ds_challenge
   CARD_PAYMENT_METHOD_TYPE = "card"
 
-  # Stripe rejects card options on an intent that does not offer card, so callers
-  # must already know the intent is card-scoped.
   REQUEST_PARAMS = { payment_method_options: { card: { request_three_d_secure: "any" } } }.freeze
 
   def self.request?(seller = nil)

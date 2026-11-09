@@ -84,9 +84,7 @@ describe Order::PreparePaymentIntentService, :vcr do
     end
 
     context "with a card cart and the 3DS challenge flag" do
-      before do
-        create(:merchant_account, user: seller, charge_processor_merchant_id: create_verified_stripe_account(country: "US").id)
-      end
+      before { create(:merchant_account, user: seller) }
 
       after { Feature.deactivate_user(Checkout::ThreeDSecure::FEATURE, seller) }
 

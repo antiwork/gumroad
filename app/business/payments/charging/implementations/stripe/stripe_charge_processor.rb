@@ -372,7 +372,7 @@ class StripeChargeProcessor
     # Request 3DS manually when preparing future charges for all Indian cards. Ref: https://github.com/gumroad/web/issues/20783
     chargeable.prepare! # loads the payment method's info, including card country
     params.deep_merge!(REQUEST_MANUAL_3DS_PARAMS) if chargeable.country == Compliance::Countries::IND.alpha2
-    params.deep_merge!(Checkout::ThreeDSecure::REQUEST_PARAMS) if Checkout::ThreeDSecure.request?(three_d_secure_seller(merchant_account, seller)) && Checkout::ThreeDSecure.card_scoped?(params)
+    params.deep_merge!(Checkout::ThreeDSecure::REQUEST_PARAMS) if Checkout::ThreeDSecure.request?(three_d_secure_seller(merchant_account, seller))
 
     with_stripe_error_handler do
       if merchant_migrated? merchant_account

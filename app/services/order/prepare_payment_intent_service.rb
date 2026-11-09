@@ -443,7 +443,7 @@ class Order::PreparePaymentIntentService
       return unless @previewed_payment_method_type == "card"
       return unless Checkout::ThreeDSecure.request?(seller)
 
-      { card: { request_three_d_secure: "any" } }
+      Checkout::ThreeDSecure::REQUEST_PARAMS[:payment_method_options]
     end
 
     # Stripe rejects options for a method the intent doesn't list, so only when Pix was

@@ -1337,7 +1337,15 @@ describe StripeChargeProcessor, :vcr do
     end
 
     describe "3DS challenge on customer-present charges" do
-      before { chargeable.prepare! }
+      let(:chargeable) do
+        instance_double(
+          StripeChargeablePaymentMethod,
+          prepare!: true,
+          country: "US",
+          requires_mandate?: false,
+          stripe_charge_params: { payment_method: "pm_3ds" }
+        )
+      end
 
       # The flag is scoped per seller, and the merchant account a seller charges through has no user
       # when it is the shared Gumroad account, so the seller arrives as an argument on both paths.
