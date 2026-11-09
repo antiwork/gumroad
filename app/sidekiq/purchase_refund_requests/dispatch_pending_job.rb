@@ -20,10 +20,13 @@ class PurchaseRefundRequests::DispatchPendingJob
         next unless refund_request.open?
         next unless Feature.active?(:buyer_refund_requests, refund_request.purchase.seller)
 
-        if refund_request.notifications_pending? && refund_request.created_at <= NOTIFICATION_GRACE_PERIOD.ago
+        # Past the deadline escalate first; an owed seller email then goes out from the escalated
+        # scan below with the "support already has it" wording, not racing the escalation email.
+        if refund_request.escalation_deadline.past?
+          PurchaseRefundRequests::EscalateJob.perform_async(refund_request.id)
+        elsif refund_request.notifications_pending? && refund_request.created_at <= NOTIFICATION_GRACE_PERIOD.ago
           PurchaseRefundRequests::NotifyJob.perform_async(refund_request.id)
         end
-        PurchaseRefundRequests::EscalateJob.perform_async(refund_request.id) if refund_request.escalation_deadline.past?
       end
 
       # Escalation clears open_key, so a seller email still owed then is retried from here.

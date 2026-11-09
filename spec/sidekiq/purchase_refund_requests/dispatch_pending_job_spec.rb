@@ -22,35 +22,38 @@ describe PurchaseRefundRequests::DispatchPendingJob do
     recent = create_request(created_at: 1.minute.ago)
     notified = create_request(created_at: 1.hour.ago, seller_notified_at: 1.hour.ago, support_notified_at: 1.hour.ago)
     overdue = create_request(created_at: Time.utc(2026, 11, 4, 12), seller_notified_at: 5.days.ago, support_notified_at: 5.days.ago)
+    overdue_owed = create_request(created_at: Time.utc(2026, 11, 4, 12))
     create_request(created_at: Time.utc(2026, 11, 4, 12), state: "refunded")
     PurchaseRefundRequests::NotifyJob.jobs.clear
 
     described_class.new.perform
 
     expect(PurchaseRefundRequests::NotifyJob.jobs.map { _1["args"] }).to eq([[lost_push.id]])
-    expect(PurchaseRefundRequests::EscalateJob.jobs.map { _1["args"] }).to eq([[overdue.id]])
+    expect(PurchaseRefundRequests::EscalateJob.jobs.map { _1["args"] }).to eq([[overdue.id], [overdue_owed.id]])
     expect([recent, notified].map { _1.reload.state }).to eq(%w[requested requested])
   end
 
   it "keeps retrying a seller notification still owed after escalation, without a second support email" do
-    request = create_request(created_at: Time.utc(2026, 11, 4, 12))
-    PurchaseRefundRequests::NotifyJob.jobs.clear
     seller_mail_down = true
     allow_any_instance_of(Mail::Message).to receive(:deliver).and_wrap_original do |original, *args|
       raise Net::SMTPFatalError.new("550 unavailable") if seller_mail_down && original.receiver.to == [seller.email]
       original.call(*args)
     end
+    request = create_request(created_at: Time.utc(2026, 11, 4, 12))
+    expect { PurchaseRefundRequests::NotifyJob.drain }.to raise_error(Net::SMTPFatalError)
 
     described_class.new.perform
-    expect { PurchaseRefundRequests::NotifyJob.drain }.to raise_error(Net::SMTPFatalError)
+    expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
     PurchaseRefundRequests::EscalateJob.drain
     request.reload
     expect(request.state).to eq("escalated")
     expect(request.seller_notified_at).to be_nil
     support_emails = ActionMailer::Base.deliveries.count { _1.to == [ApplicationMailer::SUPPORT_EMAIL] }
 
+    described_class.new.perform
+    expect { PurchaseRefundRequests::NotifyJob.drain }.to raise_error(Net::SMTPFatalError)
+
     seller_mail_down = false
-    PurchaseRefundRequests::NotifyJob.jobs.clear
     described_class.new.perform
     PurchaseRefundRequests::NotifyJob.drain
 
