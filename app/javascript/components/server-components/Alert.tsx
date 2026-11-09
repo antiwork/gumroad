@@ -80,7 +80,7 @@ const ToastAlert = ({ initial }: { initial: AlertPayload | null }) => {
       key={alert?.position ?? "top"}
       data-testid="toast-alert"
       className={classNames(
-        "fixed left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded bg-background md:max-w-md starting:translate-y-(--toast-offset)",
+        "fixed left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded bg-background shadow md:max-w-md starting:translate-y-(--toast-offset)",
         isBottom
           ? "bottom-[calc(1rem+env(safe-area-inset-bottom))] [--toast-offset:calc(100%+var(--spacer-4)+env(safe-area-inset-bottom))]"
           : "top-4 [--toast-offset:calc(-100%-var(--spacer-4))]",
