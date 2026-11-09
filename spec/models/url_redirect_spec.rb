@@ -1058,7 +1058,7 @@ describe UrlRedirect do
         old_variant.mark_deleted!
         old_variant.alive_rich_contents.find_each(&:mark_deleted!)
 
-        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: variant1_rich_content.external_id, page_id: variant1_rich_content.external_id, variant_id: variant1.external_id, title: "Variant 2 page title", description: { type: "doc", content: variant1_rich_content.description }, updated_at: variant1_rich_content.updated_at }])
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: variant1_rich_content.external_id, page_id: variant1_rich_content.external_id, variant_id: variant1.external_id, title: "Variant 1 page title", description: { type: "doc", content: variant1_rich_content.description }, updated_at: variant1_rich_content.updated_at }])
       end
 
       it "returns the product-level rich content when the purchase is associated with a deleted variant and there are no other variants" do
