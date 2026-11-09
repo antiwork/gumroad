@@ -125,9 +125,15 @@ class ProfileSectionsPresenter
       lock_key = "#{cache_key}-build-lock"
       if shared_cache { Rails.cache.write(lock_key, true, unless_exist: true, expires_in: BUILD_LOCK_TTL) }
         begin
-          # Another request may have finished between our miss and taking the lock. Read rather than
-          # trust `exist?`: the entry can expire between the two calls, and a nil here breaks the page.
-          shared_cache { Rails.cache.read(cache_key) } || build_and_write(cache_key, &build)
+          # Another request may have finished between our miss and taking the lock. `exist?` keeps the
+          # usual cold path to one read (the hit/miss metric counts reads), and the entry can still
+          # expire before the read, so an empty read falls through to building.
+          if shared_cache { Rails.cache.exist?(cache_key) }
+            cached = shared_cache { Rails.cache.read(cache_key) }
+            return cached unless cached.nil?
+          end
+
+          build_and_write(cache_key, &build)
         ensure
           shared_cache { Rails.cache.delete(lock_key) }
         end
