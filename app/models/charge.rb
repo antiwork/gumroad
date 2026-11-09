@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
 class Charge < ApplicationRecord
-  include ExternalId, Chargeable, Purchase::ChargeEventsHandler, Disputable, FlagShihTzu, Refundable
+  include ExternalId, SecureExternalId, Chargeable, Purchase::ChargeEventsHandler, Disputable, FlagShihTzu, Refundable
 
   COMBINED_CHARGE_PREFIX = "CH-"
+  SHARED_RECEIPT_SCOPE = "shared_receipt"
 
   belongs_to :order
   belongs_to :seller, class_name: "User"
@@ -276,6 +277,26 @@ class Charge < ApplicationRecord
     successful_purchases.size == 2
   end
 
+  # One buyer-facing page for every item of this seller's charge. Only for a plain multi-item order
+  # whose items all went to the same buyer email, so the link mailed to that address opens exactly what was bought.
+  def shared_receipt_eligible?
+    items = successful_purchases.to_a
+    return false unless plain_multi_item?(items)
+
+    emails = buyer_emails(items)
+    emails.one? && emails.first.present?
+  end
+
+  # A purchase's own receipt page shows only that purchase when its items went to different buyer emails
+  # (gift, preorder and test items included), or for a plain multi-item order, whose whole order is on the
+  # shared receipt. Counts every purchase in any state, so an item that did not succeed still shows only itself.
+  def purchase_receipt_page_single_purchase?
+    items = purchases.to_a
+    return false if items.size < 2
+
+    buyer_emails(items).many? || plain_multi_item?(items)
+  end
+
   def split_receipt_mode?
     return false unless split_receipt_eligible?
 
@@ -324,6 +345,15 @@ class Charge < ApplicationRecord
   end
 
   private
+    # Several items, none of them a gift, preorder or test purchase.
+    def plain_multi_item?(items)
+      items.size >= 2 && items.none? { _1.is_gift_sender_purchase || _1.is_gift_receiver_purchase || _1.is_preorder_authorization || _1.is_test_purchase? }
+    end
+
+    def buyer_emails(items)
+      items.map { _1.email.to_s.strip.downcase }.uniq
+    end
+
     def split_receipt_email_info_scope
       CustomerEmailInfo.where(
         purchase_id: successful_purchases.select(:id),

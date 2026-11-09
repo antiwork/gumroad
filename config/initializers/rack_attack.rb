@@ -220,6 +220,13 @@ class Rack::Attack
     req.remote_ip if req.path.match?(%r{\A/help/contact(?:\.[^/]+)?\z}) && req.post?
   end
 
+  # Same shape as the help-center form: each submission emails the seller and the buyer.
+  # The token segment differs per purchase, so key on IP only.
+  PURCHASE_REFUND_REQUEST_POSTS_PER_MINUTE = 3
+  throttle_with_exponential_backoff(name: "purchase_refund_request/ip", requests: PURCHASE_REFUND_REQUEST_POSTS_PER_MINUTE, period: 1.minute, max_level: 1) do |req|
+    req.remote_ip if req.path.match?(%r{\A/purchases/[^/]+/refund_request(?:\.[^/]+)?\z}) && req.post?
+  end
+
   # Each hit that matches purchases sends a grouped receipt email to the given address,
   # unauthenticated. Throttle by IP and, separately, by target email — the harm is to the
   # RECIPIENT, so an abuser rotating IPs must not be able to mailbomb one buyer
@@ -473,11 +480,13 @@ class Rack::Attack
                  period: 60.seconds
 
   # Throttle requests to resend receipts
-  # Initial: 2rpm, Max: 20 requests/9 hours (per purchase, per IP)
-  throttle_by_ip path: /\A\/(purchases|service_charges)\/.+\/resend_receipt\z/,
-                 method: :post,
-                 requests: 2,
-                 period: 60.seconds
+  # Initial: 2rpm, Max: 20 requests/9 hours (per purchase, per IP). Keyed on the path without its
+  # format suffix: `throttle_by_ip`'s regexp form keys on the whole path, so `/resend_receipt.json`
+  # would land in its own bucket and bypass the limit.
+  throttle_with_exponential_backoff(name: "/ip:resend_receipt", requests: 2, period: 60.seconds) do |req|
+    m = req.path.match(%r{\A(/(?:purchases|service_charges|charges)/[^/]+/resend_receipt)(?:\.[^/]+)?\z})
+    "#{m[1]}:#{req.remote_ip}" if m && req.post?
+  end
 
   # Throttle community chat messages
   # 60 requests per 60 seconds (per community, per IP)

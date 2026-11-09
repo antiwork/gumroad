@@ -4,7 +4,7 @@ module Mcp
   class OauthClientRegistration
     class Error < StandardError; end
 
-    MCP_SCOPES = %w[view_public view_profile view_sales edit_products view_payouts].freeze
+    MCP_SCOPES = %w[view_public view_profile view_sales edit_products view_payouts view_library].freeze
     # Not advertised or granted by default, but kept for a client that still names it: Doorkeeper
     # rejects an authorization request naming a scope its application was not registered with.
     LEGACY_SCOPES = %w[account].freeze
@@ -13,6 +13,10 @@ module Mcp
     # oauth_applications.redirect_uri (newline-joined) and oauth_access_grants.redirect_uri are
     # varchar(255), and the session sql_mode is non-strict, so MySQL truncates instead of raising.
     REDIRECT_URIS_MAX_LENGTH = 255
+    # Native-app callbacks that are neither https nor loopback, accepted only as exact strings.
+    # Cursor (and Grok Bot, which uses Cursor's client) registers this alongside its https and
+    # loopback callbacks in one request, so rejecting it fails the whole registration.
+    NATIVE_APP_REDIRECT_URIS = %w[cursor://anysphere.cursor-mcp/oauth/callback].freeze
 
     def self.create!(params)
       new(params).create!
@@ -94,6 +98,7 @@ module Mcp
         # Doorkeeper matches a requested redirect_uri against this list by URI equality, so a
         # wildcard can only register a callback that never resolves.
         raise Error, "redirect_uris must not contain wildcards" if value.include?("*")
+        return if NATIVE_APP_REDIRECT_URIS.include?(value)
 
         uri = URI.parse(value)
         raise Error, "redirect_uris must be absolute http(s) URLs" if uri.host.blank?

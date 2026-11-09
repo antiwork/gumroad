@@ -24,7 +24,7 @@ describe TestPingsController do
       create(:purchase, link: product)
       last_purchase = create(:purchase, link: product, created_at: 2.hours.from_now)
       ping_url = last_purchase.seller.notification_endpoint
-      ping_params = last_purchase.payload_for_ping_notification
+      ping_params = last_purchase.payload_for_ping_notification(resource_name: ResourceSubscription::SALE_RESOURCE_NAME)
       http_double = double(success?: true, code: 200)
       expect(HTTParty).to receive(:post).with(ping_url,
                                               timeout: 5,

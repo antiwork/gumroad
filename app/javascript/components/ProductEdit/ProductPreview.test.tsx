@@ -158,6 +158,7 @@ const renderPreview = ({
         richContentIdMappings: {},
         fileIdMappings: {},
         richContentRemovedFileEmbedIds: {},
+        deletedFileIds: new Set(),
         googleClientId: "",
         seller_refund_policy_enabled: sellerRefundPolicyEnabled,
         seller_refund_policy: sellerRefundPolicy,

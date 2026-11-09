@@ -375,16 +375,45 @@ func TestADeletedPurchasedVariantDefersToTheProduct(t *testing.T) {
 	e.attach(base+12, base+104)
 	e.buys(purchase, base+12)
 	r := &Redirect{PurchaseID: ptr(purchase)}
-	e.expectFiles(r, base+103)
-
-	// An alive purchased variant sorts ahead of the deleted one.
-	e.buys(purchase, base+11)
+	// Variant 11 (100) is the closest-priced alive variant.
 	e.expectFiles(r, base+102, base+101)
 
+	// An alive purchased variant sorts ahead of the deleted one.
+	e.buys(purchase, base+10)
+	e.expectFiles(r, base+103)
+
 	// Orphaned, the deleted variant is its own provider.
-	e.exec("DELETE FROM base_variants_purchases WHERE purchase_id = ? AND base_variant_id = ?", purchase, base+11)
+	e.exec("DELETE FROM base_variants_purchases WHERE purchase_id = ? AND base_variant_id = ?", purchase, base+10)
 	e.exec("UPDATE base_variants SET variant_category_id = ? WHERE id = ?", base+9, base+12)
 	e.expectFiles(r, base+104)
+}
+
+func TestADeletedPurchasedVariantGetsTheClosestPricedAliveVariant(t *testing.T) {
+	e := newEnv(t)
+	product, purchase := variantProduct(e, 0)
+	e.exec("UPDATE base_variants SET price_difference_cents = 10 WHERE id = ?", base+10)
+	e.exec("UPDATE base_variants SET price_difference_cents = 90 WHERE id = ?", base+11)
+	e.variant(base+12, base+5, map[string]any{"price_difference_cents": 70, "deleted_at": stamp})
+	e.variant(base+13, base+5, map[string]any{"price_difference_cents": 50})
+	e.file(base+104, map[string]any{"link_id": product})
+	e.attach(base+12, base+104)
+	e.attach(base+13, base+104)
+	e.buys(purchase, base+12)
+	r := &Redirect{PurchaseID: ptr(purchase)}
+	// 90 and 50 are both 20 from the deleted 70: the cheaper wins, not the cheapest (10).
+	e.expectFiles(r, base+104)
+
+	// NULL prices count as 0, so 10 is closer to the deleted 100 than the NULL rows the sort puts first.
+	e.exec("UPDATE base_variants SET price_difference_cents = NULL WHERE id IN (?, ?)", base+11, base+13)
+	e.exec("UPDATE base_variants SET price_difference_cents = 100 WHERE id = ?", base+12)
+	e.expectFiles(r, base+103)
+}
+
+func TestClosestPricedBreaksAnExactPriceTieByID(t *testing.T) {
+	got := closestPriced([]*variant{{id: 13, priceDifferenceCents: 50}, {id: 11, priceDifferenceCents: 50}}, 70)
+	if got == nil || got.id != 11 {
+		t.Fatalf("closestPriced = %+v, want id 11", got)
+	}
 }
 
 func TestASkuIsItsOwnProviderOnlyNextToAVariant(t *testing.T) {

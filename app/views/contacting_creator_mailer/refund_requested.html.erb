@@ -1,0 +1,23 @@
+<%= header_section("A customer has requested a refund.") %>
+<div>
+  <p>
+    <%= @purchase.email %> has requested a refund for their purchase of
+    <%= @purchase.link.name %> (<%= @purchase.formatted_display_price %>).
+  </p>
+  <p>Reason: <%= @reason_copy %></p>
+  <% if @refund_request.message.present? %>
+    <p>Message from the customer: <%= @refund_request.message %></p>
+  <% end %>
+  <p>
+    <% if @refund_request.escalation_deadline.past? %>
+      This request is past its deadline, so Gumroad support will review it.
+    <% else %>
+      Please respond by <%= @respond_by %>. After that, Gumroad support will review the request.
+    <% end %>
+    Refunding now keeps the purchase from turning into a chargeback, which costs more
+    and counts against your account.
+  </p>
+  <p>
+    <%= link_to "Refund this purchase", customer_sale_url(@purchase.external_id), class: "button primary" %>
+  </p>
+</div>

@@ -9,6 +9,7 @@ import { cast } from "$app/utils/cast";
 import { classNames } from "$app/utils/classNames";
 import { CurrencyCode, currencyCodeList, findCurrencyByCode, isCurrencyCode } from "$app/utils/currency";
 import { isNumber, isRecord, isString } from "$app/utils/guards";
+import { priceCommaHint, sanitizePriceRangeInput } from "$app/utils/price";
 import {
   RecurrenceId,
   durationInMonthsToRecurrenceId,
@@ -23,7 +24,7 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "$app/com
 import { showAlert } from "$app/components/server-components/Alert";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
 import { Alert } from "$app/components/ui/Alert";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { FormSection } from "$app/components/ui/FormSection";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -49,6 +50,10 @@ const nativeTypeIcons = Object.fromEntries(
 const defaultRecurrence: RecurrenceId = "monthly";
 
 const MIN_AI_PROMPT_LENGTH = 10;
+
+// Typed grouping commas count toward the limit, so it must fit the largest storable grouped
+// amount ("21,474,836.47"); a cut-off keystroke otherwise saves a smaller price.
+const MAX_PRICE_INPUT_LENGTH = 15;
 
 // The details come from a language model, which can leave fields out, so they are checked before they
 // reach the form.
@@ -457,22 +462,16 @@ const NewProductPage = () => {
                     id={`price-${formUID}`}
                     type="text"
                     inputMode="decimal"
-                    maxLength={10}
+                    maxLength={MAX_PRICE_INPUT_LENGTH}
                     value={form.data.link.price_range}
                     onChange={(e) => {
-                      let newValue = e.target.value;
-                      newValue = newValue.replace(/[.,]+/gu, ".");
-                      newValue = newValue.replace(/[^0-9.]/gu, "");
-                      const firstDotIndex = newValue.indexOf(".");
-                      if (firstDotIndex !== -1) {
-                        newValue =
-                          newValue.slice(0, firstDotIndex + 1) + newValue.slice(firstDotIndex + 1).replace(/\./gu, "");
-                      }
+                      const newValue = sanitizePriceRangeInput(e.target.value);
                       form.setData("link.price_range", newValue);
                       form.clearErrors("link.price_range");
                     }}
                     autoComplete="off"
                     aria-invalid={!!errors["link.price_range"] || !!errors["link.base"]}
+                    aria-describedby={`price-hint-${formUID}`}
                     ref={priceInputRef}
                   />
 
@@ -497,6 +496,9 @@ const NewProductPage = () => {
                     </Pill>
                   ) : null}
                 </InputGroup>
+                <FieldsetDescription id={`price-hint-${formUID}`}>
+                  {priceCommaHint(selectedCurrency.isSingleUnit)}
+                </FieldsetDescription>
                 <Errors errors={errors["link.price_range"]} label="Price" />
                 <Errors errors={errors["link.base"]} label="" />
               </Fieldset>

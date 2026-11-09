@@ -122,3 +122,17 @@ export const formatInstallmentPaymentSchedule = (
 
   return `First installment of ${firstInstallmentAmountFormatted}, followed by ${numberOfInstallments - 1} monthly installments of ${baseInstallmentAmountFormatted}`;
 };
+
+// Keeps commas: the server's `clean_price` reads "7,900" as grouping and "7,90" as a Euro decimal.
+export function sanitizePriceRangeInput(value: string): string {
+  const cleaned = value.replace(/[^0-9.,]/gu, "");
+  const firstDotIndex = cleaned.indexOf(".");
+  if (firstDotIndex === -1) return cleaned;
+  return cleaned.slice(0, firstDotIndex + 1) + cleaned.slice(firstDotIndex + 1).replace(/\./gu, "");
+}
+
+// Under the new-product Price field and the editor's Amount field: `clean_price` and `PriceInput` both
+// read a comma before three digits as thousands and before one or two as cents. Currencies without
+// minor units have no cents, so they only get the thousands half.
+export const priceCommaHint = (isSingleUnit: boolean): string =>
+  isSingleUnit ? "Use a comma for thousands (7,900)." : "Use a comma for thousands (7,900) or for cents (7,90).";

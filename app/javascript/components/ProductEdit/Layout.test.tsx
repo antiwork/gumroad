@@ -249,6 +249,7 @@ const renderLayout = (
             richContentIdMappings: {},
             fileIdMappings: {},
             richContentRemovedFileEmbedIds: {},
+            deletedFileIds: new Set(),
             googleClientId: "",
             seller_refund_policy_enabled: false,
             seller_refund_policy: { title: "", fine_print: null },

@@ -1,0 +1,8 @@
+<%= header_section("Your refund request was sent") %>
+<div>
+  <p>We sent your refund request for <%= @purchase.link.name %> (<%= @purchase.formatted_display_price %>) to <%= @seller_name %>.</p>
+  <p>Reason: <%= @reason_copy %></p>
+  <p><%= @seller_name %> decides whether to refund you. If you aren't refunded by <%= @respond_by %>, Gumroad support will review your request.</p>
+  <p>To add something for <%= @seller_name %>, reply to this email.</p>
+  <p><%= link_to "View your request", @page_link, class: "button primary" %></p>
+</div>

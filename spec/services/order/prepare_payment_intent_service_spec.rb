@@ -83,6 +83,39 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "with a card cart and the 3DS challenge flag" do
+      before { create(:merchant_account, user: seller) }
+
+      after { Feature.deactivate_user(Checkout::ThreeDSecure::FEATURE, seller) }
+
+      def card_intent_create_args
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_3ds", client_secret: "pi_3ds_secret")
+        create_args = nil
+        allow(StripeDeferredPaymentIntent).to receive(:create) do |**kwargs|
+          create_args = kwargs
+          charge_intent
+        end
+
+        order, params = build_order
+        described_class.new(order:, params:, confirmation_token: "ctoken_3ds").perform
+        create_args
+      end
+
+      it "asks the Payment Element to request authentication when the flag is on for the seller" do
+        Feature.activate_user(Checkout::ThreeDSecure::FEATURE, seller)
+
+        expect(card_intent_create_args[:payment_method_options]).to eq(card: { request_three_d_secure: "any" })
+      end
+
+      it "leaves the decision to Stripe when the flag is off" do
+        expect(card_intent_create_args[:payment_method_options].to_h[:card]).to be_nil
+      end
+    end
+
     context "when the previewed card country fails purchasing power parity verification" do
       before { create(:merchant_account, user: seller) }
 
@@ -530,6 +563,51 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BLOCKED_CUSTOMER_EMAIL_ADDRESS)
         expect(order.charges).to be_empty
         expect(order.purchases.first.reload).to be_failed
+      end
+    end
+
+    context "when the seller matches the chargeback-ring signal with enforcement on" do
+      before do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test")
+        # Seeded before the flags so the history itself isn't evaluated.
+        ring_product = create(:product, user: seller, price_cents: 2200)
+        5.times { |i| create(:purchase, link: ring_product, seller:, card_country: "BR", ip_address: "151.240.1.#{i + 1}") }
+        Feature.activate_user(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
+        Feature.activate_user(Purchase::ChargebackRingSignal::ENFORCE_FLAG, seller)
+        allow(ErrorNotifier).to receive(:notify)
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "BR" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+      end
+
+      it "refuses a buyer carrying the ring evidence before the PaymentIntent exists" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_address: "151.240.7.7") }
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_ring").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        expect(responses["unique-id-0"][:error_message]).to eq("Your card was not charged.")
+        expect(order.charges).to be_empty
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+      end
+
+      it "creates the PaymentIntent as usual for a buyer on a non-hosting IP" do
+        order, params = build_order
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_ring_allowed", client_secret: "pi_ring_allowed_secret")
+        expect(StripeDeferredPaymentIntent).to receive(:create).once.and_return(charge_intent)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_ring").perform
+
+        expect(responses["unique-id-0"][:requires_payment_confirmation]).to eq(true)
+        expect(order.purchases.first.reload).to be_in_progress
       end
     end
 

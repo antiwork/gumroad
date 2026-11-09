@@ -91,48 +91,53 @@ const PostCard = ({
   const showSnippet = !featureImageUrl && post.message_snippet && (clamp === undefined || clamp > 0);
 
   return (
-    <article className="h-full">
+    <article className="group/card h-full">
       <Link
         href={Routes.gumroad_blog_post_path(post.slug)}
-        className={cx(
-          "override grid h-full overflow-hidden rounded-lg border border-black bg-white text-black no-underline transition-all duration-200 ease-in-out hover:-translate-x-1 hover:-translate-y-1 hover:shadow-[3px_3px_#000]",
-          { "grid-rows-[auto_1fr]": !!featureImageUrl },
-        )}
+        className="override block h-full rounded-lg text-black no-underline"
       >
-        {featureImageUrl ? (
-          <figure className="aspect-1800/1080 overflow-hidden border-b border-black">
-            <img src={featureImageUrl} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
-          </figure>
-        ) : null}
+        {/* Only the face moves, so a click on the strip its lift vacates still opens the post. */}
+        <div
+          className={cx(
+            "grid h-full overflow-hidden rounded-lg border border-black bg-white transition-all duration-200 ease-in-out group-hover/card:-translate-x-1 group-hover/card:-translate-y-1 group-hover/card:shadow-[3px_3px_#000]",
+            { "grid-rows-[auto_1fr]": !!featureImageUrl },
+          )}
+        >
+          {featureImageUrl ? (
+            <figure className="aspect-1800/1080 overflow-hidden border-b border-black">
+              <img src={featureImageUrl} alt={post.subject} className="h-full w-full object-cover" loading="lazy" />
+            </figure>
+          ) : null}
 
-        <div className="flex h-full grow flex-col space-y-2 p-6">
-          <h3 className={cx("flex-none leading-tight", title_size_class)}>{post.subject}</h3>
-          {showSnippet ? (
-            <div className="relative flex-1" ref={snippetContainerRef}>
-              <p
-                className="text-md inset-0 flex-1 overflow-hidden text-ellipsis text-dark-gray opacity-90"
-                style={{
-                  position: clamp === undefined ? "absolute" : "relative",
-                  display: "-webkit-box",
-                  WebkitBoxOrient: "vertical",
-                  WebkitLineClamp: clamp,
-                }}
-                ref={snippetRef}
-              >
-                {post.message_snippet}
-              </p>
-            </div>
-          ) : (
-            <div className="flex-1" />
-          )}
-          <p className="text-md flex-none text-dark-gray">{formatPostDate(post.published_at, "en-US")}</p>
-          {post.tags.length > 0 && (
-            <div className="flex flex-none flex-row flex-wrap">
-              {post.tags.map((tag) => (
-                <Tag key={tag} name={tag} />
-              ))}
-            </div>
-          )}
+          <div className="flex h-full grow flex-col space-y-2 p-6">
+            <h3 className={cx("flex-none leading-tight", title_size_class)}>{post.subject}</h3>
+            {showSnippet ? (
+              <div className="relative flex-1" ref={snippetContainerRef}>
+                <p
+                  className="text-md inset-0 flex-1 overflow-hidden text-ellipsis text-dark-gray opacity-90"
+                  style={{
+                    position: clamp === undefined ? "absolute" : "relative",
+                    display: "-webkit-box",
+                    WebkitBoxOrient: "vertical",
+                    WebkitLineClamp: clamp,
+                  }}
+                  ref={snippetRef}
+                >
+                  {post.message_snippet}
+                </p>
+              </div>
+            ) : (
+              <div className="flex-1" />
+            )}
+            <p className="text-md flex-none text-dark-gray">{formatPostDate(post.published_at, "en-US")}</p>
+            {post.tags.length > 0 && (
+              <div className="flex flex-none flex-row flex-wrap">
+                {post.tags.map((tag) => (
+                  <Tag key={tag} name={tag} />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </Link>
     </article>

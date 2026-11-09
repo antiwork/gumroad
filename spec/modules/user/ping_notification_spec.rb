@@ -18,7 +18,7 @@ describe User::PingNotification do
     before do
       @user = create(:user)
       @purchase = create(:purchase, seller: @user, link: create(:product, user: @user))
-      @ping_params = @purchase.payload_for_ping_notification.merge(test: true)
+      @ping_params = @purchase.payload_for_ping_notification(resource_name: ResourceSubscription::SALE_RESOURCE_NAME).merge(test: true)
     end
 
     context "when notification_content_type if application/json" do
@@ -41,6 +41,16 @@ describe User::PingNotification do
 
       expect(HTTParty).to receive(:post) do |_url, options|
         expect(JSON.parse(options[:body])["url_params"]).to eq("utm_source" => "newsletter")
+      end
+
+      @user.send_test_ping("https://example.com")
+    end
+
+    it "carries the resource name every live sale ping sends" do
+      @user.update_attribute(:notification_content_type, Mime[:json])
+
+      expect(HTTParty).to receive(:post) do |_url, options|
+        expect(JSON.parse(options[:body])["resource_name"]).to eq(ResourceSubscription::SALE_RESOURCE_NAME)
       end
 
       @user.send_test_ping("https://example.com")

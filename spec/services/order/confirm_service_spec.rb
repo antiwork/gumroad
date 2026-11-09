@@ -307,6 +307,72 @@ describe Order::ConfirmService, :vcr do
         end
       end
 
+      context "when the seller matches the chargeback-ring signal with enforcement on" do
+        before do
+          # Seeded before the flags so the history itself isn't evaluated.
+          ring_product = create(:product, user: seller, price_cents: 2200)
+          5.times { |i| create(:purchase, link: ring_product, seller:, card_country: "IN", ip_address: "151.240.1.#{i + 1}") }
+          purchases.each { _1.update!(card_country: "IN", ip_address: "151.240.7.7") }
+          Feature.activate_user(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
+          Feature.activate_user(Purchase::ChargebackRingSignal::ENFORCE_FLAG, seller)
+          allow(ErrorNotifier).to receive(:notify)
+          allow(ChargeProcessor).to receive(:get_setup_intent).and_return(instance_double(StripeSetupIntent, succeeded?: true))
+        end
+
+        it "refuses the resumed debit even though the purchases were loaded without their checkout-time verdict" do
+          expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+          responses, = Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform
+
+          purchases.each do |purchase|
+            purchase.reload
+            expect(purchase).to be_failed
+            expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+            expect(responses[purchase.id][:success]).to eq(false)
+          end
+        end
+      end
+
+      # Checkout ran with the signal on while the seller was below the volume floor, so nothing was
+      # recorded at creation; later ring sales cross the floor before the buyer finishes the mandate.
+      context "when the seller crosses the ring threshold between checkout and the mandate resume" do
+        let(:ring_product) { create(:product, user: seller, price_cents: 2200) }
+        let!(:purchases) do
+          create(:purchase, link: ring_product, seller:, card_country: "IN", ip_address: "151.240.1.1")
+          Feature.activate_user(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
+          Feature.activate_user(Purchase::ChargebackRingSignal::ENFORCE_FLAG, seller)
+          super().each { _1.update!(card_country: "IN", ip_address: "151.240.7.7") }
+        end
+
+        before do
+          allow(ErrorNotifier).to receive(:notify)
+          allow(ChargeProcessor).to receive(:get_setup_intent).and_return(instance_double(StripeSetupIntent, succeeded?: true))
+        end
+
+        it "refuses the resumed debit and durably records the new hit and seller containment" do
+          2.times { |i| create(:purchase, link: ring_product, seller:, card_country: "IN", ip_address: "151.240.2.#{i + 1}") }
+          expect(ChargebackRingSignal.where(seller_id: seller.id)).to be_empty
+          expect(seller.reload.payouts_paused_internally?).to be(false)
+          travel(Purchase::ChargebackRingSignal::CACHE_TTL + 1.minute)
+          expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+          responses, = Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform
+
+          purchases.each do |purchase|
+            purchase.reload
+            expect(purchase).to be_failed
+            expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+            expect(responses[purchase.id][:success]).to eq(false)
+          end
+          rows = ChargebackRingSignal.where(seller_id: seller.id)
+          expect(rows.pluck(:decision)).to eq(["blocked"])
+          expect(rows.pluck(:purchase_id)).to all(be_in(purchases.map(&:id)))
+          seller.reload
+          expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+          expect(seller.flagged_for_fraud?).to be(true)
+        end
+      end
+
       it "creates one combined off-session charge and reports the group's processing debit as pending" do
         setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
         expect(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_confirm_india").once.and_return(setup_intent)

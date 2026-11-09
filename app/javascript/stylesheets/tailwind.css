@@ -104,6 +104,30 @@
   }
 }
 
+/*
+ * The hover lift translates an element up and left, leaving a pointer on its right or bottom edge
+ * outside it, so hover and idle alternate; this covers the strip it vacates (`contain: layout`
+ * anchors the ::after to the element, where a `position` would lose to a caller's own className).
+ * `z-index: -1` keeps the halo under the element's own content: painted above it, the halo swallows
+ * the click on any control inside the element (the cover tab's "Remove cover") and the element's own
+ * click handler runs instead. `contain: layout` makes the element a stacking context, so -1 still
+ * leaves the halo above the element's background, where a pointer resting on the vacated strip has
+ * to land, and below its in-flow and positioned children.
+ */
+@utility lift-halo {
+  contain: layout;
+
+  &:hover::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: calc(-1 * (var(--lift-halo-offset, 0.25rem) + 1px));
+    bottom: calc(-1 * (var(--lift-halo-offset, 0.25rem) + 1px));
+    z-index: -1;
+  }
+}
+
 /* Coins parallax animation */
 .parallax-up {
   transform: translateY(0);

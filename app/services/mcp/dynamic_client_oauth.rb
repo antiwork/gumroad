@@ -5,7 +5,7 @@ module Mcp
   # keyed on the persisted `oauth_applications.mcp_dynamic_client` flag, so manually created and
   # first-party applications never reach them and keep Doorkeeper's default behaviour.
   module DynamicClientOauth
-    CONNECTORS = %w[muse claude chatgpt].freeze
+    CONNECTORS = %w[muse claude chatgpt cursor antigravity].freeze
     CODE_CHALLENGE_METHOD = "S256"
 
     class ErrorResponse < Doorkeeper::OAuth::ErrorResponse
@@ -49,6 +49,7 @@ module Mcp
     end
 
     def self.screen(pre_auth)
+      accept_registrable_scopes(pre_auth) if !pre_auth.authorizable? && pre_auth.error == Doorkeeper::Errors::InvalidScope
       return pre_auth unless pre_auth.authorizable? && pre_auth.client.application.mcp_dynamic_client
 
       error = authorization_error(
@@ -63,6 +64,29 @@ module Mcp
         pre_auth,
         ErrorResponse.new(name:, description:, state: pre_auth.state, redirect_uri: pre_auth.redirect_uri)
       )
+    end
+
+    # Registration is open, so a dynamic client's stored scopes only record the policy on the day it
+    # registered, and registering again would grant the current one. Checking against the current
+    # policy lets an older client ask for a newer scope; the consent screen still lists each scope.
+    def self.requestable_scopes(application)
+      return application.scopes unless application.mcp_dynamic_client
+
+      Doorkeeper::OAuth::Scopes.from_array(
+        application.scopes.to_a | OauthClientRegistration::MCP_SCOPES | OauthClientRegistration::LEGACY_SCOPES
+      )
+    end
+
+    def self.accept_registrable_scopes(pre_auth)
+      application = pre_auth.client.application
+      return unless application.mcp_dynamic_client
+
+      allowed = requestable_scopes(application)
+      pre_auth.define_singleton_method(:validate_scopes) do
+        Doorkeeper::OAuth::Helpers::ScopeChecker.valid?(
+          scope_str: scope, server_scopes: Doorkeeper.config.scopes, app_scopes: allowed, grant_type: send(:grant_type)
+        )
+      end
     end
 
     def self.authorization_error(code_challenge:, code_challenge_method:, resource:)

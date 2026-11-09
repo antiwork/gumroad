@@ -139,6 +139,12 @@ describe CreatorHomePresenter do
         expect(connected_ai).to eq(true)
       end
 
+      it "is true for a Cursor token" do
+        mcp_token(path: "/cursor/v1/mcp")
+
+        expect(connected_ai).to eq(true)
+      end
+
       it "is false when the seller's only MCP token is revoked" do
         mcp_token(revoked_at: 1.day.ago)
 

@@ -113,7 +113,8 @@ describe ChargeProcessor do
         off_session: true,
         setup_future_charges: true,
         mandate_options: nil,
-        mandate_expected: false
+        mandate_expected: false,
+        seller: nil
       )
       ChargeProcessor.create_payment_intent_or_charge!(
         merchant_account,
@@ -158,7 +159,8 @@ describe ChargeProcessor do
         off_session: true,
         setup_future_charges: true,
         mandate_options:,
-        mandate_expected: false
+        mandate_expected: false,
+        seller: nil
       )
 
       ChargeProcessor.create_payment_intent_or_charge!(
@@ -173,6 +175,37 @@ describe ChargeProcessor do
         off_session: true,
         setup_future_charges: true,
         mandate_options:
+      )
+    end
+
+    it "passes the seller of the charge through to the processor" do
+      seller = create(:user)
+
+      expect_any_instance_of(StripeChargeProcessor).to receive(:create_payment_intent_or_charge!).with(
+        merchant_account,
+        stripe_chargeable,
+        1_00,
+        0_30,
+        "reference",
+        "description",
+        metadata: nil,
+        statement_description: nil,
+        transfer_group: nil,
+        off_session: true,
+        setup_future_charges: false,
+        mandate_options: nil,
+        mandate_expected: false,
+        seller:
+      )
+
+      ChargeProcessor.create_payment_intent_or_charge!(
+        merchant_account,
+        chargeable,
+        1_00,
+        0_30,
+        "reference",
+        "description",
+        seller:
       )
     end
   end
@@ -252,7 +285,7 @@ describe ChargeProcessor do
     end
 
     it "calls setup_future_charges! on the correct charge processor" do
-      expect_any_instance_of(StripeChargeProcessor).to receive(:setup_future_charges!).with(merchant_account, stripe_chargeable, mandate_options: nil)
+      expect_any_instance_of(StripeChargeProcessor).to receive(:setup_future_charges!).with(merchant_account, stripe_chargeable, mandate_options: nil, seller: nil)
       ChargeProcessor.setup_future_charges!(merchant_account, chargeable)
     end
 
@@ -273,8 +306,15 @@ describe ChargeProcessor do
         }
       }
 
-      expect_any_instance_of(StripeChargeProcessor).to receive(:setup_future_charges!).with(merchant_account, stripe_chargeable, mandate_options:)
+      expect_any_instance_of(StripeChargeProcessor).to receive(:setup_future_charges!).with(merchant_account, stripe_chargeable, mandate_options:, seller: nil)
       ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
+    end
+
+    it "passes the seller of the charge through to the processor" do
+      seller = create(:user)
+
+      expect_any_instance_of(StripeChargeProcessor).to receive(:setup_future_charges!).with(merchant_account, stripe_chargeable, mandate_options: nil, seller:)
+      ChargeProcessor.setup_future_charges!(merchant_account, chargeable, seller:)
     end
   end
 

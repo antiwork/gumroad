@@ -1,0 +1,13 @@
+<main class="grid divide-y divide-border bg-background border border-border rounded mx-auto my-4 h-min max-w-md w-[calc(100%-2rem)]">
+  <header class="flex flex-col gap-4 p-4 text-center">
+    <h2>View your receipt</h2>
+    <p>Open the receipt link in the email we sent you after your purchase, or log in with the account you used to buy.</p>
+  </header>
+  <div class="flex flex-col gap-4 p-4">
+    <%= link_to "Log in", login_path(next: receipt_charge_path(@charge.external_id)), class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none px-4 py-3 text-base leading-snug bg-primary text-primary-foreground hover:bg-accent-with-text hover:text-accent-foreground w-full" %>
+    <%= button_to "Email me my receipt", resend_receipt_charge_path(@charge.external_id), form_class: "contents", class: "inline-flex items-center justify-center gap-2 cursor-pointer border border-border rounded font-[inherit] no-underline transition-transform hover:-translate-1 hover:shadow active:translate-0 active:shadow-none px-4 py-3 text-base leading-snug bg-background text-foreground w-full" %>
+  </div>
+</main>
+<% content_for :footer do %>
+  <%= default_footer_content %>
+<% end %>

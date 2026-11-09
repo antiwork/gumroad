@@ -11,6 +11,40 @@ describe Product::Prices do
     create(:price, link: @subscription_product, price_cents: 35_00, recurrence: BasePrice::Recurrence::YEARLY)
   end
 
+  describe "#clean_price" do
+    it "reads a comma before three digits as thousands grouping" do
+      @product.price_currency_type = "usd"
+      expect(@product.clean_price("7,900")).to eq(790_000)
+    end
+
+    it "reads a comma before two digits as a Euro decimal" do
+      @product.price_currency_type = "usd"
+      expect(@product.clean_price("7,90")).to eq(790)
+    end
+
+    it "reads a comma before one digit as a decimal" do
+      @product.price_currency_type = "usd"
+      expect(@product.clean_price("7,9")).to eq(790)
+    end
+  end
+
+  describe "#clean_price single-unit currency" do
+    # JPY and VND have no minor units: "150,50" is the seller writing 150.50, which rounds to 151.
+    # Reading that comma as grouping is what turns the price into 15050.
+    it "reads a decimal comma as a decimal for JPY" do
+      @product.price_currency_type = "jpy"
+      expect(@product.clean_price("150,50")).to eq(151)
+      expect(@product.clean_price("7,900")).to eq(7_900)
+      expect(@product.clean_price("150.50")).to eq(151)
+    end
+
+    it "reads a decimal comma as a decimal for VND" do
+      @product.price_currency_type = "vnd"
+      expect(@product.clean_price("25,618")).to eq(25_618)
+      expect(@product.clean_price("256,18")).to eq(256)
+    end
+  end
+
   describe "#discounted_price_cents with a shop-wide auto-applied code" do
     let(:seller) { @product.user }
     let(:product) { @product }

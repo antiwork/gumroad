@@ -107,7 +107,8 @@ describe Charge::CreateService, :vcr do
                                                                                  off_session:,
                                                                                  setup_future_charges:,
                                                                                  metadata: purchase_details,
-                                                                                 mandate_options:).and_call_original
+                                                                                 mandate_options:,
+                                                                                 seller: seller_1).and_call_original
 
       expect do
         expect do
@@ -181,7 +182,8 @@ describe Charge::CreateService, :vcr do
                                                                                  off_session:,
                                                                                  setup_future_charges:,
                                                                                  metadata: purchase_details,
-                                                                                 mandate_options:).and_call_original
+                                                                                 mandate_options:,
+                                                                                 seller: seller_1).and_call_original
 
       expect do
         expect do
@@ -278,7 +280,8 @@ describe Charge::CreateService, :vcr do
         processor_currency: Currency::CAD,
         processor_gumroad_amount_cents: 3_75,
         stripe_fx_quote_id: "fxq_test",
-        idempotency_key: a_string_matching(/\Abuyer-currency-charge-.+-fxq_test\z/)
+        idempotency_key: a_string_matching(/\Abuyer-currency-charge-.+-fxq_test\z/),
+        seller: seller_1
       ).and_return(nil)
 
       Charge::CreateService.new(order:,
@@ -944,7 +947,8 @@ describe Charge::CreateService, :vcr do
           off_session: false,
           setup_future_charges: false,
           metadata: { "purchases{0}" => purchase.external_id },
-          mandate_options: nil
+          mandate_options: nil,
+          seller:
         ).and_return(nil)
 
         Charge::CreateService.new(order:,
@@ -1399,7 +1403,8 @@ describe Charge::CreateService, :vcr do
         off_session: false,
         setup_future_charges: false,
         metadata: { "purchases{0}" => purchase.external_id },
-        mandate_options: nil
+        mandate_options: nil,
+        seller: seller_1
       ).and_return(nil)
 
       Charge::CreateService.new(order:,

@@ -861,6 +861,13 @@ Rails.application.routes.draw do
 
     resources :recommended_products, only: :index
 
+    resources :charges, only: [] do
+      member do
+        get :receipt
+        post :resend_receipt
+      end
+    end
+
     # purchases
     resources :purchases, only: [:update] do
       member do
@@ -886,6 +893,7 @@ Rails.application.routes.draw do
       resource :dispute_evidence, controller: "purchases/dispute_evidence", only: %i[show update] do
         get :success
       end
+      resource :refund_request, controller: "purchases/refund_requests", only: %i[show create]
     end
 
     resources :orders, only: [:create] do

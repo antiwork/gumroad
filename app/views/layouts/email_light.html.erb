@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= @subject %></title>
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+    <meta name="viewport" content="initial-scale = 1.0, width=device-width">
+  </head>
+  <body style="font-family: Helvetica, Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #000;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 16px;">
+      <%= yield %>
+      <div style="margin-top: 24px; font-size: 14px;">
+        <%= render(@footer_template) if @footer_template %>
+        <p><%= GumroadAddress.full %></p>
+      </div>
+    </div>
+  </body>
+</html>

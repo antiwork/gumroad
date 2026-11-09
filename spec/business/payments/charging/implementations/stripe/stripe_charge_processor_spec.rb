@@ -1336,6 +1336,110 @@ describe StripeChargeProcessor, :vcr do
       end
     end
 
+    describe "3DS challenge on customer-present charges" do
+      let(:chargeable) do
+        instance_double(
+          StripeChargeablePaymentMethod,
+          prepare!: true,
+          country: "US",
+          requires_mandate?: false,
+          stripe_charge_params: { payment_method: "pm_3ds" }
+        )
+      end
+
+      # The flag is scoped per seller, and the merchant account a seller charges through has no user
+      # when it is the shared Gumroad account, so the seller arrives as an argument on both paths.
+      let(:flagged_seller) { create(:user) }
+
+      after do
+        Feature.deactivate(:card_3ds_challenge)
+        Feature.deactivate_user(:card_3ds_challenge, flagged_seller)
+      end
+
+      def captured_intent_params(off_session:, seller: nil)
+        params = nil
+        allow(Stripe::PaymentIntent).to receive(:create) do |stripe_params, _options = {}|
+          params = stripe_params
+          raise "stop after capture"
+        end
+
+        expect do
+          subject.create_payment_intent_or_charge!(merchant_account, chargeable, 1_00, 30, "reference", "test description", off_session:, seller:)
+        end.to raise_error(RuntimeError, "stop after capture")
+        params
+      end
+
+      it "requests authentication when the flag is on and the buyer is present" do
+        Feature.activate(:card_3ds_challenge)
+
+        params = captured_intent_params(off_session: false)
+
+        expect(params.dig(:payment_method_options, :card, :request_three_d_secure)).to eq("any")
+      end
+
+      it "reads the flag off the seller, so a seller on the shared Gumroad merchant account still gets the request" do
+        expect(merchant_account.user).to be_nil
+        Feature.activate_user(:card_3ds_challenge, flagged_seller)
+
+        params = captured_intent_params(off_session: false, seller: flagged_seller)
+
+        expect(params.dig(:payment_method_options, :card, :request_three_d_secure)).to eq("any")
+      end
+
+      it "leaves a seller the flag is off for alone while another seller is on" do
+        Feature.activate_user(:card_3ds_challenge, flagged_seller)
+
+        params = captured_intent_params(off_session: false, seller: create(:user))
+
+        expect(params.dig(:payment_method_options, :card)).to be_nil
+      end
+
+      it "reads the card-save request off the seller too" do
+        Feature.activate_user(:card_3ds_challenge, flagged_seller)
+        params = nil
+        allow(Stripe::SetupIntent).to receive(:create) do |setup_params, _options = {}|
+          params = setup_params
+          raise "stop after capture"
+        end
+
+        expect do
+          subject.setup_future_charges!(merchant_account, chargeable, seller: flagged_seller)
+        end.to raise_error(RuntimeError, "stop after capture")
+
+        expect(params.dig(:payment_method_options, :card, :request_three_d_secure)).to eq("any")
+      end
+
+      it "adds no authentication request on an off-session charge, where there is no buyer to authenticate" do
+        Feature.activate(:card_3ds_challenge)
+
+        params = captured_intent_params(off_session: true)
+
+        expect(params.dig(:payment_method_options, :card)).to be_nil
+      end
+
+      it "leaves the decision to Stripe when the flag is off" do
+        params = captured_intent_params(off_session: false)
+
+        expect(params.dig(:payment_method_options, :card)).to be_nil
+      end
+
+      it "requests authentication at card save too, so a saved card is verified before it is ever charged off-session" do
+        Feature.activate(:card_3ds_challenge)
+        params = nil
+        allow(Stripe::SetupIntent).to receive(:create) do |setup_params, _options = {}|
+          params = setup_params
+          raise "stop after capture"
+        end
+
+        expect do
+          subject.setup_future_charges!(merchant_account, chargeable)
+        end.to raise_error(RuntimeError, "stop after capture")
+
+        expect(params.dig(:payment_method_options, :card, :request_three_d_secure)).to eq("any")
+      end
+    end
+
+
     # https://support.stripe.com/questions/faqs-for-setup-intents-and-payment-intents-api-recurring-charges-from-indian-cardholders
     describe "Support for RBI regulations for Indian cards" do
       before do

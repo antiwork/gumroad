@@ -7,6 +7,10 @@ module PurchaseErrorCode
   BLOCKED_BROWSER_GUID = "blocked_browser_guid"
   BLOCKED_EMAIL_DOMAIN = "blocked_email_domain"
   BLOCKED_IP_ADDRESS = "blocked_ip_address"
+  # Refused pre-charge by the checkout chargeback-ring signal (Purchase::ChargebackRingSignal):
+  # the SELLER's recent paid sales match a card-testing cash-out shape, so the refusal is about
+  # the storefront, not this buyer.
+  CHARGEBACK_RING_SIGNAL = "chargeback_ring_signal"
   BLOCKED_CHARGE_PROCESSOR_FINGERPRINT = "blocked_charge_processor_fingerprint"
   BLOCKED_CUSTOMER_EMAIL_ADDRESS = "blocked_customer_email_address"
   BLOCKED_CUSTOMER_CHARGE_PROCESSOR_FINGERPRINT = "blocked_customer_charge_processor_fingerprint"

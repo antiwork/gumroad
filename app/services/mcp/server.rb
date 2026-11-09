@@ -23,11 +23,11 @@ module Mcp
     HEADER_MISMATCH = -32020
     UNSUPPORTED_PROTOCOL_VERSION = -32022
     TRANSPORT_ERROR_CODES = [HEADER_MISMATCH, UNSUPPORTED_PROTOCOL_VERSION].freeze
-    # A caller only ever sees their own store, so no result of ours is shareable between callers.
+    # Most tools answer for the caller's own store, so no result of ours is shareable between callers.
     TOOLS_LIST_CACHE = { ttlMs: 0, cacheScope: "private" }.freeze
     # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
-    INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
+    INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. search_products also searches the rest of Gumroad's catalogue. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
     DEFAULT_BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
     PRODUCT_TYPES = %w[digital membership].freeze
@@ -501,6 +501,10 @@ module Mcp
                  "query" => { type: "string", description: "What to search for, e.g. \"learn to draw\" or \"tax spreadsheet\"." },
                  "limit" => { type: "integer", description: "Max products to return (1-#{SEARCH_MAX_LIMIT}, default #{SEARCH_DEFAULT_LIMIT})." }
                }, required: %w[query], read_only: true),
+          tool("list_purchases", "The products the connected creator bought, newest first, so an assistant can answer \"what did I buy?\" and open it. Each purchase links to the creator's library. When next_cursor is returned, pass it as cursor for the next page.", {
+                 "limit" => { type: "integer", description: "Max purchases to return (1-50, default 25)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
+               }, read_only: true),
           tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
                  "name" => { type: "string", description: "Bundle name." },
                  "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
@@ -1486,6 +1490,38 @@ module Mcp
         raise ToolError, "Churn took too long for this range. Try a shorter range."
       end
 
+      # The creator is also a buyer: this is the shelf behind "what did I buy, and where is it".
+      # Read through the same purchases the library shows, so an assistant cannot see anything the
+      # creator cannot open themselves.
+      def tool_list_purchases(args)
+        # Deliberately not :account, which every older tool still accepts: the creator's own
+        # library needs its own consent, not the legacy blanket scope.
+        require_scopes!(:view_library)
+        purchases = user.purchases.all_success_states.not_is_gift_sender_purchase.not_recurring_charge
+          .where.not(link_id: nil)
+          .includes(:link, :seller)
+          .order(created_at: :desc)
+        page, next_cursor = paginate(purchases, args, default: 25, table: "purchases")
+        {
+          purchases: page.filter_map do |purchase|
+            next unless purchase.link
+
+            {
+              id: purchase.external_id,
+              product_name: purchase.link.name,
+              product_permalink: purchase.link.unique_permalink,
+              seller_name: purchase.seller.display_name,
+              price_cents: purchase.displayed_price_cents,
+              currency: purchase.displayed_price_currency_type.to_s,
+              purchased_at: purchase.created_at&.iso8601,
+              refunded: purchase.refunded?,
+              url: "#{PROTOCOL}://#{DOMAIN}/library"
+            }
+          end,
+          next_cursor:
+        }.compact
+      end
+
       def tool_list_payouts(args)
         require_scopes!(:view_payouts, :account)
         page, next_cursor = paginate(user.payments, args, default: 10, table: "payments")
@@ -1540,11 +1576,11 @@ module Mcp
         limit = SEARCH_DEFAULT_LIMIT if limit <= 0
         limit = [limit, SEARCH_MAX_LIMIT].min
 
-        # The index lags the database: a product unpublished or a seller suspended since the last
-        # reindex still comes back, so every hit is checked against the row before it is offered.
+        # The index lags the database. Only these row states are re-checked here: unpublished, deleted,
+        # banned, adult, seller suspended. The rest of Discover eligibility waits for the reindex.
         hits = Link.search(Link.search_options(query: words, size: limit)).records
-        # Reload in one query with the associations the payload reads, keeping the index order.
-        loaded = Link.where(id: hits.map(&:id)).includes(:user, :thumbnail_alive, :alive_prices).index_by(&:id)
+        # Reload in one query with the Discover card's associations, keeping the index order.
+        loaded = Link.where(id: hits.map(&:id)).includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).index_by(&:id)
         products = hits.filter_map { |hit| loaded[hit.id] }
           .select { |product| product.alive? && !product.rated_as_adult? && product.user.present? && !product.user.suspended? }
         {
@@ -1552,10 +1588,11 @@ module Mcp
             {
               id: product.external_id,
               name: product.name,
-              seller_name: product.user&.name.presence,
+              seller_name: product.user.name_or_username,
               price_cents: product.discounted_price_cents(product.display_price_cents(for_default_duration: true)),
               currency: product.price_currency_type,
               recurring: product.is_recurring_billing?,
+              recurrence: product.default_price_recurrence&.recurrence,
               pay_what_you_want: product.has_customizable_price_option?,
               thumbnail_url: product.thumbnail_or_cover_url,
               url: with_mcp_referrer(product.long_url)
@@ -1921,10 +1958,10 @@ module Mcp
         raise @insufficient_scope
       end
 
-      # A dynamic client may have registered only some of the scopes a tool accepts; naming one
-      # it never registered sends it into an invalid_scope error on re-authorization.
+      # Naming a scope the client cannot request sends it into an invalid_scope error on
+      # re-authorization. Must match what authorization accepts.
       def obtainable_scope(scopes)
-        registered = token.application&.scopes.presence
+        registered = token.application && DynamicClientOauth.requestable_scopes(token.application).presence
         scopes.map(&:to_s).find { |scope| registered.nil? || registered.include?(scope) }
       end
 

@@ -1087,6 +1087,17 @@ describe ContactingCreatorMailer do
 
       def notify_body = ContactingCreatorMailer.notify(purchase.reload.id).body.decoded
 
+      it "links the charge's shared receipt when the order has several items for one buyer" do
+        other = create(:purchase, link: create(:product, user: seller), seller:, email: buyer.email)
+        charge = create(:charge, purchases: [purchase, other], seller:)
+
+        body = ContactingCreatorMailer.notify(purchase.id).body.decoded
+        link = Nokogiri::HTML(body).at_xpath("//h4[starts-with(normalize-space(), \"Buyer's\")]/ancestor::tr[1]//a")
+
+        expect(URI(link["href"]).path).to eq("/charges/#{charge.external_id}/receipt")
+        expect(URI(link["href"]).query).to be_nil
+      end
+
       {
         "has no url redirect" => -> { purchase.url_redirect.destroy! },
         "is refunded" => -> { purchase.update!(stripe_refunded: true) },

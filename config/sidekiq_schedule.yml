@@ -8,6 +8,11 @@ dispatch_pending_partner_migration_notifications:
   class: DispatchPendingPartnerMigrationNotificationsJob
   description: Re-enqueues finished partner imports whose result email is still pending
 
+escalate_overdue_purchase_refund_requests:
+  cron: "0 * * * *"
+  class: PurchaseRefundRequests::EscalateOverdueJob
+  description: Hands buyer refund requests still unrefunded past their deadline to support
+
 resume_stalled_partner_migrations:
   cron: "*/30 * * * *"
   class: ResumeStalledPartnerMigrationsJob

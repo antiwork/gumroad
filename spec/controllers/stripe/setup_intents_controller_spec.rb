@@ -8,6 +8,31 @@ describe Stripe::SetupIntentsController, :vcr do
       create(:merchant_account, user: nil, charge_processor_id: StripeChargeProcessor.charge_processor_id)
   end
 
+  describe "#three_d_secure_seller" do
+    it "returns the seller of the products on the request when the flag is on for that seller" do
+      flagged_seller = create(:user)
+      unflagged_seller = create(:user)
+      flagged_product = create(:product, user: flagged_seller)
+      unflagged_product = create(:product, user: unflagged_seller)
+      allow(controller).to receive(:product_params_list).and_return(
+        [{ "permalink" => unflagged_product.unique_permalink }, { "permalink" => flagged_product.unique_permalink }]
+      )
+      Feature.activate_user(:card_3ds_challenge, flagged_seller)
+
+      expect(controller.send(:three_d_secure_seller)).to eq(flagged_seller)
+    ensure
+      Feature.deactivate_user(:card_3ds_challenge, flagged_seller) if flagged_seller
+    end
+
+    it "returns nothing when no seller on the request is in the cohort" do
+      product = create(:product)
+
+      allow(controller).to receive(:product_params_list).and_return([{ "permalink" => product.unique_permalink }])
+
+      expect(controller.send(:three_d_secure_seller)).to be_nil
+    end
+  end
+
   describe "POST create" do
     context "when card params are invalid" do
       it "responds with an error" do
@@ -92,9 +117,53 @@ describe Stripe::SetupIntentsController, :vcr do
                                                                                                               })
                                                                             }
                                                                           }
-                                                                        }).and_call_original
+                                                                        }, seller: nil).and_call_original
 
         post :create, params: card_with_sca.to_stripejs_params.merge!(products: [{ price: 10_00 }, { price: 5_00 }, { price: 7_00 }])
+      end
+
+      context "when the cart holds a product whose seller is in the 3DS cohort", vcr: false do
+        let(:chargeable) { double(prepare!: nil, reusable_token_for!: "cus_test", requires_mandate?: false) }
+        let(:flagged_seller) { create(:user) }
+
+        before do
+          allow(CardParamsHelper).to receive(:check_for_errors).and_return(nil)
+          allow(CardParamsHelper).to receive(:build_chargeable).and_return(chargeable)
+          Feature.activate_user(:card_3ds_challenge, flagged_seller)
+        end
+
+        after { Feature.deactivate_user(:card_3ds_challenge, flagged_seller) }
+
+        def post_and_capture_card_setup(*products)
+          captured = nil
+          allow(ChargeProcessor).to receive(:setup_future_charges!) do |account, card, **kwargs|
+            captured = { account:, card:, **kwargs }
+            instance_double(StripeSetupIntent, id: "seti_3ds", succeeded?: true)
+          end
+
+          post :create, params: {
+            stripe_payment_method_id: "pm_test",
+            products: products.map { { price: _1.price_cents, permalink: _1.unique_permalink } }
+          }
+
+          captured
+        end
+
+        it "sets the card up for that seller on the shared Gumroad account" do
+          captured = post_and_capture_card_setup(create(:product, user: flagged_seller))
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to eq("success" => true, "reusable_token" => "cus_test", "setup_intent_id" => "seti_3ds")
+          expect(captured).to include(account: merchant_account, card: chargeable, mandate_options: nil, seller: flagged_seller)
+        end
+
+        it "sets the card up for the flagged seller when an unflagged seller's product comes first" do
+          captured = post_and_capture_card_setup(create(:product), create(:product, user: flagged_seller))
+
+          expect(response).to have_http_status(:ok)
+          expect(response.parsed_body).to include("success" => true, "setup_intent_id" => "seti_3ds")
+          expect(captured[:seller]).to eq(flagged_seller)
+        end
       end
 
       it "uses server-owned subscription terms for a subscription mandate" do
@@ -564,7 +633,7 @@ describe Stripe::SetupIntentsController, :vcr do
         double(prepare!: nil, reusable_token_for!: "cus_replacement", requires_mandate?: true, fingerprint: "fingerprint_replacement")
       )
       options = nil
-      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_merchant_account, _chargeable, mandate_options:|
+      allow(ChargeProcessor).to receive(:setup_future_charges!) do |_merchant_account, _chargeable, mandate_options:, **_rest|
         options = mandate_options
         instance_double(StripeSetupIntent, id: "seti_replacement", succeeded?: true)
       end

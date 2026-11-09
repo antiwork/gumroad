@@ -1040,16 +1040,17 @@ describe UrlRedirect do
         expect(file_data.map { _1[:id] }).to eq([@variant.product_files.first.external_id])
       end
 
-      it "returns the rich content of the cheapest variant when the purchase is associated with a deleted variant" do
+      it "returns the rich content of the closest-priced alive variant when the purchase is associated with a deleted variant" do
         @product.alive_rich_contents.find_each(&:mark_deleted!)
 
         variant_category = create(:variant_category, link: @product)
-        old_variant = create(:variant, variant_category:, price_difference_cents: 100, product_files: @product.product_files)
-        variant1 = create(:variant, variant_category:, price_difference_cents: 100, product_files: @product.product_files)
-        variant2 = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        # @variant (100) is alive too; the deleted 60 is closest to variant1 (50), not the cheapest variant2 (30).
+        old_variant = create(:variant, variant_category:, price_difference_cents: 60, product_files: @product.product_files)
+        variant1 = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        variant2 = create(:variant, variant_category:, price_difference_cents: 30, product_files: @product.product_files)
         old_variant_rich_content = create(:rich_content, entity: old_variant, title: "Old variant page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
-        create(:rich_content, entity: variant1, title: "Variant 1 page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
-        variant2_rich_content = create(:rich_content, entity: variant2, title: "Variant 2 page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+        variant1_rich_content = create(:rich_content, entity: variant1, title: "Variant 1 page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+        create(:rich_content, entity: variant2, title: "Variant 2 page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
 
         @purchase.variant_attributes = [old_variant]
 
@@ -1058,7 +1059,46 @@ describe UrlRedirect do
         old_variant.mark_deleted!
         old_variant.alive_rich_contents.find_each(&:mark_deleted!)
 
-        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: variant2_rich_content.external_id, page_id: variant2_rich_content.external_id, variant_id: variant2.external_id, title: "Variant 2 page title", description: { type: "doc", content: variant2_rich_content.description }, updated_at: variant2_rich_content.updated_at }])
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: variant1_rich_content.external_id, page_id: variant1_rich_content.external_id, variant_id: variant1.external_id, title: "Variant 1 page title", description: { type: "doc", content: variant1_rich_content.description }, updated_at: variant1_rich_content.updated_at }])
+      end
+
+      it "breaks an equal-distance tie toward the cheaper alive variant when the purchase is associated with a deleted variant" do
+        @product.alive_rich_contents.find_each(&:mark_deleted!)
+
+        variant_category = create(:variant_category, link: @product)
+        # @variant (100) is alive too. 50 and 90 are both 20 from the deleted 70; 10 is the cheapest.
+        old_variant = create(:variant, variant_category:, price_difference_cents: 70, product_files: @product.product_files)
+        pricier = create(:variant, variant_category:, price_difference_cents: 90, product_files: @product.product_files)
+        cheaper = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        cheapest = create(:variant, variant_category:, price_difference_cents: 10, product_files: @product.product_files)
+        create(:rich_content, entity: old_variant, title: "Old variant page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+        create(:rich_content, entity: pricier, title: "Pricier page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+        cheaper_rich_content = create(:rich_content, entity: cheaper, title: "Cheaper page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+        create(:rich_content, entity: cheapest, title: "Cheapest page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+
+        @purchase.variant_attributes = [old_variant]
+        old_variant.mark_deleted!
+        old_variant.alive_rich_contents.find_each(&:mark_deleted!)
+
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: cheaper_rich_content.external_id, page_id: cheaper_rich_content.external_id, variant_id: cheaper.external_id, title: "Cheaper page title", description: { type: "doc", content: cheaper_rich_content.description }, updated_at: cheaper_rich_content.updated_at }])
+      end
+
+      it "breaks an exact price tie toward the lower id when the purchase is associated with a deleted variant" do
+        @product.alive_rich_contents.find_each(&:mark_deleted!)
+
+        variant_category = create(:variant_category, link: @product)
+        old_variant = create(:variant, variant_category:, price_difference_cents: 70, product_files: @product.product_files)
+        lower_id = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        higher_id = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        # MySQL usually returns equal prices in id order, which would hide a missing tie-break.
+        allow_any_instance_of(Link).to receive(:alive_variants).and_wrap_original { |original| original.call.order(id: :desc) }
+        lower_id_rich_content = create(:rich_content, entity: lower_id, title: "Lower id page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+        create(:rich_content, entity: higher_id, title: "Higher id page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+
+        @purchase.variant_attributes = [old_variant]
+        old_variant.mark_deleted!
+
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: lower_id_rich_content.external_id, page_id: lower_id_rich_content.external_id, variant_id: lower_id.external_id, title: "Lower id page title", description: { type: "doc", content: lower_id_rich_content.description }, updated_at: lower_id_rich_content.updated_at }])
       end
 
       it "returns the product-level rich content when the purchase is associated with a deleted variant and there are no other variants" do

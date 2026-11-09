@@ -196,7 +196,7 @@ export const HomeNav = () => {
             href="https://github.com/antiwork/gumroad"
             target="_blank"
             rel="noopener noreferrer"
-            className="flex gap-1.5 rounded-full border border-black p-1.5 text-black no-underline transition-all duration-100 hover:-translate-x-[2px] hover:-translate-y-[2px] hover:bg-gray-100 hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:border-white/35 dark:text-white dark:hover:bg-gray-700 dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.35)]"
+            className="lift-halo flex gap-1.5 rounded-full border border-black p-1.5 text-black no-underline transition-all duration-100 [--lift-halo-offset:2px] hover:-translate-x-[2px] hover:-translate-y-[2px] hover:bg-gray-100 hover:shadow-[2px_2px_0_0_rgba(0,0,0,1)] dark:border-white/35 dark:text-white dark:hover:bg-gray-700 dark:hover:shadow-[2px_2px_0_0_rgba(255,255,255,0.35)]"
             aria-label="Visit Gumroad on GitHub"
             data-github-stars
           >

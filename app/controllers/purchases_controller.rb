@@ -334,7 +334,8 @@ class PurchasesController < ApplicationController
        (params[:email].present? && ActiveSupport::SecurityUtils.secure_compare(@purchase.email.downcase, params[:email].to_s.strip.downcase))
       return e404 if receipt_orderable_missing?(@purchase)
 
-      message = CustomerMailer.receipt(@purchase.id, for_email: false)
+      single_purchase = @purchase.charge&.purchase_receipt_page_single_purchase? || false
+      message = CustomerMailer.receipt(@purchase.id, for_email: false, single_purchase:)
       # Generate the same markup used in the email
       Premailer::Rails::Hook.perform(message)
 

@@ -239,3 +239,24 @@ describe("Tabs radiogroup", () => {
     expect(piracyReports.getAttribute("aria-selected")).toBe("true");
   });
 });
+
+describe("Tabs hover halo", () => {
+  // The buttons variant lifts the tab up and left, so it has to carry the halo that keeps a pointer
+  // resting on its right or bottom edge inside it.
+  it("pairs the lift with the halo", () => {
+    render(
+      <Tabs variant="buttons">
+        <Tab isSelected={false}>All products</Tab>
+        <Tab isSelected>Piracy reports</Tab>
+      </Tabs>,
+    );
+
+    const tab = screen.getByRole("tab", { name: "All products" });
+
+    expect(tab.className).toContain("not-active:hover:-translate-1");
+    expect(tab.className.split(" ")).toContain("lift-halo");
+    // A Button inside the tab sets the halo to the store's offset, while the tab's `-translate-1` is the
+    // lift that applies, so the halo is pinned back to that lift under the same condition.
+    expect(tab.className).toContain("not-active:hover:[--lift-halo-offset:var(--spacing)]");
+  });
+});
