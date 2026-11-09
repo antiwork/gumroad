@@ -115,29 +115,25 @@ class ProfileSectionsPresenter
     end
 
     # Rails.cache.fetch lets every concurrent miss rebuild. If the lock holder dies or is slow, a
-    # waiter builds after BUILD_WAIT_TIMEOUT rather than failing the page.
-    def fetch_single_flight(cache_key, &block)
-      cached = shared_cache_read(cache_key)
-      return cached unless cached.nil?
-
-      lock_key = "#{cache_key}-build-lock"
-      if shared_cache { Rails.cache.write(lock_key, true, unless_exist: true, expires_in: BUILD_LOCK_TTL) }
-        begin
-          Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRES_IN, &block)
-        ensure
-          shared_cache { Rails.cache.delete(lock_key) }
+    # waiter builds after BUILD_WAIT_TIMEOUT rather than failing the page. The single outer fetch
+    # keeps the cache hit/miss metric at one event per request.
+    def fetch_single_flight(cache_key, &build)
+      Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRES_IN) do
+        lock_key = "#{cache_key}-build-lock"
+        if shared_cache { Rails.cache.write(lock_key, true, unless_exist: true, expires_in: BUILD_LOCK_TTL) }
+          begin
+            build.call
+          ensure
+            shared_cache { Rails.cache.delete(lock_key) }
+          end
+        else
+          deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + BUILD_WAIT_TIMEOUT
+          while shared_cache { Rails.cache.exist?(lock_key) } && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+            sleep BUILD_WAIT_INTERVAL
+          end
+          shared_cache { Rails.cache.read(cache_key) } || build.call
         end
-      else
-        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + BUILD_WAIT_TIMEOUT
-        while shared_cache { Rails.cache.exist?(lock_key) } && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
-          sleep BUILD_WAIT_INTERVAL
-        end
-        shared_cache_read(cache_key) || Rails.cache.fetch(cache_key, expires_in: CACHE_EXPIRES_IN, &block)
       end
-    end
-
-    def shared_cache_read(key)
-      shared_cache { Rails.cache.read(key) }
     end
 
     # The memcached store keeps a per-request copy of everything it reads, misses included, so a
