@@ -3251,8 +3251,7 @@ describe "MCP server" do
 
         get "/claude/v1/oauth2/authorize", params: authorize_params(scope: "edit_products")
         expect(response).to have_http_status(:bad_request)
-        # A dynamically registered client now gets the explanation naming the connector, not the
-        # raw protocol error Doorkeeper returns for every other application.
+        # A dynamically registered client gets an explanation naming it, not Doorkeeper's protocol error.
         expect(response.body).to include("asked for a permission it was not set up with")
         expect(response.body).not_to include("The requested scope is invalid, unknown, or malformed.")
       end.not_to change(Doorkeeper::AccessGrant, :count)

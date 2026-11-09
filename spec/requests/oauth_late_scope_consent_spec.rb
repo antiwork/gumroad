@@ -31,10 +31,10 @@ describe "OAuth consent for an MCP client registered before view_library", type:
     sign_in user
   end
 
-  def approve_form_fields
+  def consent_form_fields(method: nil)
     get "/oauth/authorize", params: params
     expect(response).to have_http_status(:ok)
-    form = Nokogiri::HTML(response.body).css("form").find { _1.at_css("input[name='_method']").nil? }
+    form = Nokogiri::HTML(response.body).css("form").find { _1.at_css("input[name='_method']")&.[]("value") == method }
     form.css("input[type='hidden']").to_h { [_1["name"], _1["value"]] }
   end
 
@@ -49,7 +49,7 @@ describe "OAuth consent for an MCP client registered before view_library", type:
   it "adds view_library to the ownerless client when the person consents" do
     expect(application.owner).to be_nil
 
-    post "/oauth/authorize", params: approve_form_fields
+    post "/oauth/authorize", params: consent_form_fields
 
     expect(response).to have_http_status(:found)
     expect(application.reload.scopes.to_s).to eq("#{registered_scopes} view_library")
@@ -57,7 +57,7 @@ describe "OAuth consent for an MCP client registered before view_library", type:
   end
 
   it "leaves the client unchanged when the consented request is rejected" do
-    fields = approve_form_fields
+    fields = consent_form_fields
 
     expect do
       post "/oauth/authorize", params: fields.merge("resource" => "https://evil.example/mcp")
@@ -68,10 +68,7 @@ describe "OAuth consent for an MCP client registered before view_library", type:
   end
 
   it "leaves the client unchanged when the person denies" do
-    get "/oauth/authorize", params: params
-    deny_form = Nokogiri::HTML(response.body).css("form").find { _1.at_css("input[name='_method'][value='delete']") }
-
-    delete "/oauth/authorize", params: params.merge(authenticity_token: deny_form.at_css("input[name='authenticity_token']")["value"])
+    delete "/oauth/authorize", params: consent_form_fields(method: "delete")
 
     expect(response.location).to include("error=access_denied")
     expect(application.reload.scopes.to_s).to eq(registered_scopes)
@@ -79,7 +76,7 @@ describe "OAuth consent for an MCP client registered before view_library", type:
   end
 
   it "does not widen a client for a scope outside the late list" do
-    fields = approve_form_fields
+    fields = consent_form_fields
 
     post "/oauth/authorize", params: fields.merge("scope" => "view_public edit_products")
 
@@ -88,9 +85,10 @@ describe "OAuth consent for an MCP client registered before view_library", type:
     expect(application.access_grants).to be_empty
   end
 
-  it "refuses an unknown scope with an explanation, not the protocol error" do
-    get "/oauth/authorize", params: params.merge(scope: "view_public bogus")
+  it "explains a scope the client was not registered with instead of giving the protocol error" do
+    get "/oauth/authorize", params: params.merge(scope: "view_public edit_products")
 
+    expect(response).to have_http_status(:bad_request)
     expect(response.body).not_to include("invalid, unknown, or malformed")
     expect(response.body).to include("Claude can&#39;t connect to Gumroad because it asked for a permission it was not set up with. Remove Gumroad from Claude, then add it again.")
   end
@@ -98,16 +96,24 @@ describe "OAuth consent for an MCP client registered before view_library", type:
   it "names the app plainly when it registered without a name" do
     application.update_columns(name: "MCP client")
 
-    get "/oauth/authorize", params: params.merge(scope: "view_public bogus")
+    get "/oauth/authorize", params: params.merge(scope: "view_public edit_products")
 
     expect(response.body).to include("Your AI app can&#39;t connect to Gumroad because it asked for a permission it was not set up with. Remove Gumroad from your AI app, then add it again.")
+  end
+
+  it "keeps the protocol error for a scope that registering again would not grant" do
+    get "/oauth/authorize", params: params.merge(scope: "view_public bogus")
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.body).to include("The requested scope is invalid, unknown, or malformed.")
   end
 
   it "keeps the protocol error when a late scope is fine but another check fails" do
     get "/oauth/authorize", params: params.merge(code_challenge_method: "unsupported")
 
+    expect(response).to have_http_status(:bad_request)
+    expect(response.body).to include("The code challenge method must be plain or S256.")
     expect(response.body).not_to include("asked for a permission")
-    expect(application.reload.scopes.to_s).to eq(registered_scopes)
   end
 
   it "keeps the protocol error for an application that was not dynamically registered" do

@@ -60,7 +60,9 @@ module Mcp
 
         pre_auth = accept_late_scopes(pre_auth, application)
         unless pre_auth.authorizable?
-          return pre_auth.error == Doorkeeper::Errors::InvalidScope ? explain_unknown_scope(pre_auth, application) : pre_auth
+          return pre_auth unless pre_auth.error == Doorkeeper::Errors::InvalidScope && registrable_scopes?(pre_auth.scope)
+
+          return explain_unknown_scope(pre_auth, application)
         end
       end
 
@@ -103,6 +105,11 @@ module Mcp
       return if missing.blank?
 
       application.update!(scopes: (application.scopes.to_s.split + missing).uniq.join(" "))
+    end
+
+    # Registering again only helps when registration would grant every requested scope.
+    def self.registrable_scopes?(scope)
+      scope.to_s.split(/ +/).all? { Mcp::OauthClientRegistration::MCP_SCOPES.include?(_1) || Mcp::OauthClientRegistration::LEGACY_SCOPES.include?(_1) }
     end
 
     def self.explain_unknown_scope(pre_auth, application)
