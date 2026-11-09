@@ -170,7 +170,7 @@ describe PurchaseRefundRequests::NotifyJob do
     expect(refund_request.notifications_pending?).to eq(false)
   end
 
-  it "still sends the buyer confirmation when the mail server rejects the seller email" do
+  it "still sends the buyer confirmation when the mail server rejects the seller email, and holds the support copy for the retry" do
     allow_any_instance_of(Mail::Message).to receive(:deliver).and_wrap_original do |original, *args|
       raise Net::SMTPFatalError.new("550 rejected") if original.receiver.to == [purchase.seller.email]
 
@@ -180,6 +180,7 @@ describe PurchaseRefundRequests::NotifyJob do
     expect { described_class.new.perform(refund_request.id) }.to raise_error(Net::SMTPFatalError)
     expect(refund_request.reload.buyer_notified_at).to be_present
     expect(refund_request.seller_notified_at).to be_nil
+    expect(refund_request.support_notified_at).to be_nil
   end
 
   it "still sends and stamps the seller and support emails when the mail server rejects the buyer email" do

@@ -34,11 +34,13 @@ class PurchaseRefundRequests::NotifyJob
         end
       end
 
-      failures << notify(refund_request, :seller_notified_at) do
+      seller_failure = notify(refund_request, :seller_notified_at) do
         ContactingCreatorMailer.refund_requested(refund_request.id)
       end
-      # After the seller attempt: the support copy says whether the seller was reached.
-      unless past_deadline
+      failures << seller_failure
+      # The support copy says whether the seller was reached, so it waits for a run where the seller
+      # attempt didn't error; otherwise a passing SMTP blip would tell support to contact the seller.
+      unless past_deadline || seller_failure
         failures << notify(refund_request, :support_notified_at) do
           SupportContactMailer.contact_form(
             email: refund_request.email,
