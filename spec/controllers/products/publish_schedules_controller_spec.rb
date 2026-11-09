@@ -22,7 +22,22 @@ describe Products::PublishSchedulesController do
     expect(response.parsed_body["publish_schedule"]["status"]).to eq("scheduled")
 
     delete :destroy, params: { link_id: product.unique_permalink }
-    expect(product.reload.publish_schedule.status).to eq("cancelled")
+    expect(response).to have_http_status(:ok)
+    expect(product.reload.publish_schedule).to be_nil
+  end
+
+  it "refuses a second schedule while one is pending" do
+    create(:product_publish_schedule, product:)
+    post :create, params: { link_id: product.unique_permalink, local_time: local(2) }
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(response.parsed_body["error_message"]).to match(/already has a schedule/)
+  end
+
+  it "does not cancel a schedule the job has claimed" do
+    schedule = create(:product_publish_schedule, product:, status: "publishing", claimed_at: Time.current)
+    delete :destroy, params: { link_id: product.unique_permalink }
+    expect(response).to have_http_status(:unprocessable_entity)
+    expect(schedule.reload.status).to eq("publishing")
   end
 
   it "returns the validation message for a too-soon time" do
@@ -36,8 +51,9 @@ describe Products::PublishSchedulesController do
   end
 
   it "dismisses a failure banner" do
-    schedule = create(:product_publish_schedule, product:, status: "failed", failure_message: "x")
-    post :dismiss_failure, params: { link_id: product.unique_permalink }
-    expect(schedule.reload.failure_dismissed_at).to be_present
+    create(:product_publish_schedule, product:, status: "failed", failure_message: "x")
+    delete :destroy, params: { link_id: product.unique_permalink }
+    expect(response).to have_http_status(:ok)
+    expect(product.reload.publish_schedule).to be_nil
   end
 end

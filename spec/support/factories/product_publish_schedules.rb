@@ -5,7 +5,6 @@ FactoryBot.define do
     association :product, factory: :product
     scheduled_by { product.user }
     publish_at { 1.hour.from_now }
-    version { 1 }
     status { "scheduled" }
   end
 end

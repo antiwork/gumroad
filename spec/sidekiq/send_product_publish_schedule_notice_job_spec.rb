@@ -13,7 +13,7 @@ describe SendProductPublishScheduleNoticeJob do
     mails = ActionMailer::Base.deliveries.select { _1.subject == "#{product.name} is live" }
     expect(mails.size).to eq(1)
     expect(mails.first.body.encoded).to include("9:30 AM PST")
-    expect(schedule.reload.success_notice_sent_at).to be_present
+    expect(ProductPublishSchedule.exists?(schedule.id)).to eq(false)
   end
 
   it "sends the failure mail once" do
@@ -24,5 +24,6 @@ describe SendProductPublishScheduleNoticeJob do
     mails = ActionMailer::Base.deliveries.select { _1.subject == "#{product.name} was not published" }
     expect(mails.size).to eq(1)
     expect(mails.first.body.encoded).to include("Gate failed")
+    expect(schedule.reload.notice_sent_at).to be_present
   end
 end

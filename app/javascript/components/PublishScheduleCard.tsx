@@ -7,17 +7,21 @@ import { Button } from "$app/components/Button";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
 import { Input } from "$app/components/ui/Input";
+import { Label } from "$app/components/ui/Label";
 
 export type PublishSchedule = {
   status: string;
-  publish_at: string;
-  local_time: string;
-  time_zone: string;
   label: string;
   failure_message: string | null;
 };
 
-type Response = { success: true; publish_schedule?: PublishSchedule } | { success: false; error_message: string };
+// Authorization failures answer with `error`; this controller answers with `error_message`.
+type Response =
+  | { success: true; publish_schedule?: PublishSchedule }
+  | { success: false; error_message?: string; error?: string };
+
+const errorMessage = (result: { error_message?: string; error?: string }) =>
+  result.error_message ?? result.error ?? "Something went wrong.";
 
 const send = async (url: string, method: "POST" | "DELETE", data?: Record<string, string>) => {
   const response = await request({ url, method, accept: "json", ...(data ? { data } : {}) });
@@ -28,18 +32,20 @@ export const PublishScheduleCard = ({
   permalink,
   schedule: initialSchedule,
   canCreate,
+  isPublished,
 }: {
   permalink: string;
   schedule: PublishSchedule | null;
   canCreate: boolean;
+  isPublished: boolean;
 }) => {
   const [schedule, setSchedule] = React.useState(initialSchedule);
-  const [localTime, setLocalTime] = React.useState(initialSchedule?.local_time ?? "");
+  const [localTime, setLocalTime] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const pending = schedule && (schedule.status === "scheduled" || schedule.status === "publishing") ? schedule : null;
   const failure = schedule?.status === "failed" && schedule.failure_message ? schedule : null;
 
-  if (!pending && !failure && !canCreate) return null;
+  if (isPublished || (!pending && !failure && !canCreate)) return null;
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -56,24 +62,19 @@ export const PublishScheduleCard = ({
   const save = () =>
     run(async () => {
       const result = await send(Routes.link_publish_schedule_path(permalink), "POST", { local_time: localTime });
-      if (!result.success) return showAlert(result.error_message, "error");
+      if (!result.success) return showAlert(errorMessage(result), "error");
       setSchedule(result.publish_schedule ?? null);
       showAlert("Publish scheduled.", "success");
     });
 
-  const cancel = () =>
+  // Cancelling a pending schedule and dismissing a failure both delete the schedule.
+  const remove = (notice?: string) =>
     run(async () => {
       const result = await send(Routes.link_publish_schedule_path(permalink), "DELETE");
-      if (!result.success) return showAlert(result.error_message, "error");
+      if (!result.success) return showAlert(errorMessage(result), "error");
       setSchedule(null);
       setLocalTime("");
-      showAlert("Schedule cancelled.", "success");
-    });
-
-  const dismiss = () =>
-    run(async () => {
-      await send(Routes.dismiss_failure_link_publish_schedule_path(permalink), "POST");
-      setSchedule(null);
+      if (notice) showAlert(notice, "success");
     });
 
   return (
@@ -82,7 +83,7 @@ export const PublishScheduleCard = ({
         <Alert variant="danger">
           <div className="flex items-center justify-between gap-4">
             <span>Scheduled publish failed: {failure.failure_message}</span>
-            <Button disabled={busy} onClick={() => void dismiss()}>
+            <Button disabled={busy} onClick={() => void remove()}>
               Dismiss
             </Button>
           </div>
@@ -92,7 +93,10 @@ export const PublishScheduleCard = ({
         <Alert variant="info">
           <div className="flex items-center justify-between gap-4">
             <span>Scheduled to publish on {pending.label}.</span>
-            <Button disabled={busy || pending.status === "publishing"} onClick={() => void cancel()}>
+            <Button
+              disabled={busy || pending.status === "publishing"}
+              onClick={() => void remove("Schedule cancelled.")}
+            >
               Cancel schedule
             </Button>
           </div>
@@ -100,7 +104,7 @@ export const PublishScheduleCard = ({
       ) : null}
       {canCreate && !pending ? (
         <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="publish-schedule-time">Publish at</label>
+          <Label htmlFor="publish-schedule-time">Publish at</Label>
           <Input
             id="publish-schedule-time"
             type="datetime-local"

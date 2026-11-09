@@ -276,6 +276,7 @@ export const Layout = ({
         permalink={uniquePermalink}
         schedule={product.publish_schedule ?? null}
         canCreate={product.can_create_publish_schedule ?? false}
+        isPublished={product.is_published}
       />
       {!currentSeller?.isBuyer && currentSeller && !currentSeller.can_publish_products && !product.is_published ? (
         <div className="p-4 pb-0 md:p-8 md:pb-0">

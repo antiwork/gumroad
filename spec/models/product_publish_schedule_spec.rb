@@ -14,11 +14,11 @@ describe ProductPublishSchedule do
   end
 
   describe ".schedule!" do
-    it "stores the seller-zone wall time as UTC and enqueues the job" do
+    it "stores the seller-zone wall time as UTC" do
       schedule = schedule!("2026-12-02T09:30")
 
       expect(schedule.publish_at).to eq(Time.utc(2026, 12, 2, 17, 30))
-      expect(PublishScheduledProductJob).to have_enqueued_sidekiq_job(schedule.id, schedule.version)
+      expect(schedule.status).to eq("scheduled")
     end
 
     it "requires the lead time" do
@@ -30,8 +30,10 @@ describe ProductPublishSchedule do
       expect { schedule!("2027-11-07T01:30") }.to raise_error(described_class::Invalid, /happens twice/)
     end
 
-    it "rejects garbage input" do
-      expect { schedule!("tomorrow") }.to raise_error(described_class::Invalid, /valid date/)
+    it "rejects text, empty input and dates that do not exist" do
+      ["tomorrow", "", nil, "2026-13-45T10:00", "2027-02-30T10:00"].each do |input|
+        expect { schedule!(input) }.to raise_error(described_class::Invalid, /valid date/)
+      end
     end
 
     it "is refused when the creation flag is off" do
@@ -52,14 +54,21 @@ describe ProductPublishSchedule do
       expect { schedule!("2026-12-02T09:30") }.to raise_error(described_class::Invalid)
     end
 
-    it "reschedules by bumping the version so the old job no-ops" do
-      first = schedule!("2026-12-02T09:30")
-      second = schedule!("2026-12-03T09:30")
+    it "refuses a second schedule until the first is cancelled" do
+      schedule!("2026-12-02T09:30")
 
-      expect(second.id).to eq(first.id)
-      expect(second.version).to eq(first.version + 1)
-      PublishScheduledProductJob.new.perform(first.id, first.version)
-      expect(product.reload.draft?).to eq(true)
+      expect { schedule!("2026-12-03T09:30") }.to raise_error(described_class::Invalid, /already has a schedule/)
+      expect(described_class.where(product:).pluck(:publish_at)).to eq([Time.utc(2026, 12, 2, 17, 30)])
+    end
+
+    it "replaces a failed schedule" do
+      failed = create(:product_publish_schedule, product:, scheduled_by: seller, status: "failed", failure_message: "x", notice_sent_at: Time.current)
+
+      replacement = schedule!("2026-12-02T09:30")
+
+      expect(described_class.where(product:).ids).to eq([replacement.id])
+      expect(replacement.id).not_to eq(failed.id)
+      expect(replacement).to have_attributes(status: "scheduled", failure_message: nil, notice_sent_at: nil)
     end
 
     it "works for bundles" do
@@ -87,7 +96,7 @@ describe ProductPublishSchedule do
     let(:due) { schedule.publish_at }
 
     it "publishes through publish! and records the outcome" do
-      schedule.run!(expected_version: schedule.version, now: due + 1.minute)
+      schedule.run!(now: due + 1.minute)
 
       expect(product.reload.draft?).to eq(false)
       expect(schedule.reload.status).to eq("published")
@@ -95,7 +104,7 @@ describe ProductPublishSchedule do
     end
 
     it "leaves the product unpublished and records a failure when late by more than five minutes" do
-      schedule.run!(expected_version: schedule.version, now: due + 6.minutes)
+      schedule.run!(now: due + 6.minutes)
 
       expect(product.reload.draft?).to eq(true)
       expect(schedule.reload.status).to eq("failed")
@@ -103,72 +112,124 @@ describe ProductPublishSchedule do
 
     it "fails safely when a publish gate trips at fire time" do
       create(:product_sales_hold, product:)
-      schedule.run!(expected_version: schedule.version, now: due + 1.minute)
+      schedule.run!(now: due + 1.minute)
 
       expect(product.reload.draft?).to eq(true)
       expect(schedule.reload).to have_attributes(status: "failed")
       expect(schedule.failure_message).to be_present
     end
 
-    it "does nothing before the time is due or with a stale version" do
-      expect(schedule.run!(expected_version: schedule.version, now: due - 1.minute)).to be_nil
-      expect(schedule.run!(expected_version: schedule.version - 1, now: due + 1.minute)).to be_nil
+    it "does nothing before the time is due" do
+      expect(schedule.run!(now: due - 1.minute)).to be_nil
       expect(schedule.reload.status).to eq("scheduled")
+      expect(product.reload.draft?).to eq(true)
+    end
+
+    it "publishes once when two jobs run for one schedule" do
+      expect(schedule.run!(now: due + 1.minute)).to eq("published")
+      expect(described_class.find(schedule.id).run!(now: due + 1.minute)).to be_nil
+      expect(SendProductPublishScheduleNoticeJob.jobs.size).to eq(1)
     end
 
     it "does not resurrect a deleted product" do
       product.delete!
-      expect(schedule.reload.status).to eq("cancelled")
+      expect(described_class.exists?(schedule.id)).to eq(false)
 
-      schedule.run!(expected_version: schedule.version, now: due + 1.minute)
+      schedule.run!(now: due + 1.minute)
       expect(product.reload.deleted_at).to be_present
       expect(product.draft?).to eq(true)
     end
 
-    it "cancels when the scheduler lost authority" do
-      member = create(:user)
-      create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
-      other = schedule!("2026-12-01T05:00", by: member)
-      member.user_memberships.update_all(deleted_at: Time.current)
+    it "removes a claimed schedule without a notice when the product was deleted before the job published" do
+      allow(Link).to receive(:find_by).and_wrap_original do |original, *args|
+        product.update_columns(deleted_at: Time.current)
+        original.call(*args)
+      end
 
-      other.run!(expected_version: other.version, now: due + 1.minute)
-      expect(other.reload).to have_attributes(status: "cancelled", cancellation_reason: "authority_revoked")
+      expect(schedule.run!(now: due + 10.minutes)).to be_nil
+
+      expect(described_class.exists?(schedule.id)).to eq(false)
       expect(product.reload.draft?).to eq(true)
+      expect(SendProductPublishScheduleNoticeJob.jobs.size).to eq(0)
     end
 
-    it "cancels when the scheduler was suspended after scheduling" do
-      member = create(:user)
-      create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
-      other = schedule!("2026-12-01T05:00", by: member)
-      member.suspend_for_fraud!(author_name: "test")
+    context "when a team member scheduled the publish" do
+      let(:member) { create(:user) }
+      let!(:schedule) do
+        create(:team_membership, user: member, seller:, role: TeamMembership::ROLE_ADMIN)
+        schedule!("2026-12-01T05:00", by: member)
+      end
 
-      other.run!(expected_version: other.version, now: due + 1.minute)
-      expect(other.reload).to have_attributes(status: "cancelled", cancellation_reason: "authority_revoked")
-      expect(product.reload.draft?).to eq(true)
+      it "publishes while the member keeps the role" do
+        expect(schedule.run!(now: due + 1.minute)).to eq("published")
+      end
+
+      it "fails with a notice when the member left the team" do
+        member.user_memberships.update_all(deleted_at: Time.current)
+
+        schedule.run!(now: due + 1.minute)
+
+        expect(schedule.reload).to have_attributes(status: "failed", failure_message: described_class::AUTHORITY_REVOKED_MESSAGE)
+        expect(product.reload.draft?).to eq(true)
+        expect(SendProductPublishScheduleNoticeJob).to have_enqueued_sidekiq_job(schedule.id)
+      end
+
+      it "fails when the member was suspended after scheduling" do
+        member.suspend_for_fraud!(author_name: "test")
+
+        schedule.run!(now: due + 1.minute)
+
+        expect(schedule.reload.status).to eq("failed")
+        expect(product.reload.draft?).to eq(true)
+      end
     end
 
-    it "cancels a claimed schedule when the draft was archived before the job published" do
+    it "removes a claimed schedule when the draft was archived before the job published" do
       # The claim lands first, then the product becomes unavailable: the state is re-read at fire time.
       allow(Link).to receive(:find_by).and_wrap_original do |original, *args|
         product.update!(archived: true)
         original.call(*args)
       end
 
-      schedule.run!(expected_version: schedule.version, now: due + 1.minute)
+      schedule.run!(now: due + 1.minute)
 
       expect(product.reload.draft?).to eq(true)
-      expect(schedule.reload).to have_attributes(status: "cancelled", cancellation_reason: "unavailable")
+      expect(described_class.exists?(schedule.id)).to eq(false)
     end
 
     it "honors an accepted schedule after the creation flag is turned off" do
       Feature.deactivate_user(:scheduled_product_publishing, seller)
-      schedule.run!(expected_version: schedule.version, now: due + 1.minute)
+      schedule.run!(now: due + 1.minute)
       expect(product.reload.draft?).to eq(false)
     end
 
-    it "releases the claim on an infrastructure error so the retry can run" do
+    it "keeps the claim when the publish succeeded but recording it failed, then recovers it as published" do
+      allow(SendProductPublishScheduleNoticeJob).to receive(:perform_async).and_raise(Redis::BaseConnectionError)
+      expect { schedule.run!(now: due + 1.minute) }.to raise_error(Redis::BaseConnectionError)
+      expect(product.reload.draft?).to eq(false)
+      allow(SendProductPublishScheduleNoticeJob).to receive(:perform_async).and_call_original
+
+      stale = described_class.find(schedule.id)
+      stale.update_columns(status: "publishing", claimed_at: 1.hour.ago)
+      stale.recover_stale_claim!
+
+      expect(stale.reload.status).to eq("published")
+      expect(SendProductPublishScheduleNoticeJob).to have_enqueued_sidekiq_job(schedule.id)
+    end
+
+    it "does not finish a claim that another job took over" do
+      stale = described_class.find(schedule.id)
+      stale.update_columns(status: "publishing", claimed_at: 1.hour.ago)
+      described_class.where(id: schedule.id).update_all(claimed_at: Time.current)
+
+      expect(stale.recover_stale_claim!).to be_nil
+      expect(schedule.reload.status).to eq("publishing")
+      expect(SendProductPublishScheduleNoticeJob.jobs.size).to eq(0)
+    end
+
+    it "releases the claim on an infrastructure error so the dispatcher can try again" do
       allow_any_instance_of(Link).to receive(:publish!).and_raise(Redis::BaseConnectionError)
-      expect { schedule.run!(expected_version: schedule.version, now: due + 1.minute) }.to raise_error(Redis::BaseConnectionError)
+      expect { schedule.run!(now: due + 1.minute) }.to raise_error(Redis::BaseConnectionError)
       expect(schedule.reload.status).to eq("scheduled")
     end
   end
@@ -176,24 +237,30 @@ describe ProductPublishSchedule do
   describe "cancellation from every route" do
     let!(:schedule) { schedule!("2026-12-02T09:30") }
 
-    it "cancels on manual publish" do
+    it "removes the schedule on manual publish" do
       product.publish!
-      expect(schedule.reload).to have_attributes(status: "cancelled", cancellation_reason: "published_manually")
+      expect(described_class.exists?(schedule.id)).to eq(false)
     end
 
-    it "cancels on delete" do
+    it "removes the schedule on delete" do
       product.delete!
-      expect(schedule.reload.status).to eq("cancelled")
+      expect(described_class.exists?(schedule.id)).to eq(false)
     end
 
-    it "cancels on admin unpublish / takedown" do
+    it "removes the schedule on admin unpublish / takedown" do
       product.unpublish!(is_unpublished_by_admin: true)
-      expect(schedule.reload.status).to eq("cancelled")
+      expect(described_class.exists?(schedule.id)).to eq(false)
     end
 
-    it "does not cancel on an unrelated edit" do
+    it "keeps the schedule on an unrelated edit" do
       product.update!(name: "Renamed")
       expect(schedule.reload.status).to eq("scheduled")
+    end
+
+    it "keeps a schedule the job has already claimed" do
+      schedule.update_columns(status: "publishing", claimed_at: Time.current)
+      product.delete!
+      expect(schedule.reload.status).to eq("publishing")
     end
   end
 end

@@ -10,15 +10,11 @@ class Products::PublishSchedulesController < Sellers::BaseController
     render json: { success: false, error_message: e.message }, status: :unprocessable_entity
   end
 
+  # Cancels a pending schedule, or dismisses the saved failure banner.
   def destroy
-    cancelled = ProductPublishSchedule.cancel_pending!(@product.id, reason: "seller_cancelled")
-    return render json: { success: false, error_message: "There is no pending schedule to cancel." }, status: :unprocessable_entity if cancelled.zero?
+    removed = ProductPublishSchedule.where(product_id: @product.id, status: %w[scheduled failed]).delete_all
+    return render json: { success: false, error_message: "There is no schedule to cancel." }, status: :unprocessable_entity if removed.zero?
 
-    render json: { success: true }
-  end
-
-  def dismiss_failure
-    ProductPublishSchedule.where(product_id: @product.id, status: "failed", failure_dismissed_at: nil).update_all(failure_dismissed_at: Time.current)
     render json: { success: true }
   end
 

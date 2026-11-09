@@ -151,6 +151,7 @@ export const BundleEditLayout = ({
           permalink={uniquePermalink}
           schedule={publishSchedule}
           canCreate={canCreatePublishSchedule}
+          isPublished={isPublished}
         />
       ) : null}
       <PageHeader

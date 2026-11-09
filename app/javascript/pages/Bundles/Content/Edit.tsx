@@ -13,6 +13,7 @@ import { Button } from "$app/components/Button";
 import { CartItemList } from "$app/components/CartItemList";
 import { LoadingSpinner } from "$app/components/LoadingSpinner";
 import { Card } from "$app/components/Product/Card";
+import { PublishSchedule } from "$app/components/PublishScheduleCard";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -29,6 +30,8 @@ type ContentPageProps = {
     is_published: boolean;
     products: BundleProduct[];
     custom_permalink: string | null;
+    publish_schedule?: PublishSchedule | null;
+    can_create_publish_schedule?: boolean;
   };
   id: string;
   unique_permalink: string;
@@ -206,6 +209,8 @@ export default function BundlesContentEdit() {
       customPermalink={bundle.custom_permalink}
       uniquePermalink={unique_permalink}
       isPublished={bundle.is_published}
+      publishSchedule={bundle.publish_schedule ?? null}
+      canCreatePublishSchedule={bundle.can_create_publish_schedule ?? false}
       preview={
         <div>
           <header>

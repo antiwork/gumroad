@@ -2,21 +2,17 @@
 
 class SendProductPublishScheduleNoticeJob
   include Sidekiq::Job
-  sidekiq_options retry: 5, queue: :default
+  # The lock keeps two jobs for one schedule from both reading an empty notice_sent_at.
+  sidekiq_options retry: 5, queue: :default, lock: :until_executed
+
+  MAILERS = { "published" => :product_scheduled_publish_succeeded, "failed" => :product_scheduled_publish_failed }.freeze
 
   def perform(schedule_id)
-    schedule = ProductPublishSchedule.find_by(id: schedule_id)
+    schedule = ProductPublishSchedule.notice_unsent.find_by(id: schedule_id)
     return if schedule.nil?
 
-    case schedule.status
-    when "published"
-      return if schedule.success_notice_sent_at
-      CreatorMailer.product_scheduled_publish_succeeded(schedule_id:).deliver_now
-      schedule.update_columns(success_notice_sent_at: Time.current)
-    when "failed"
-      return if schedule.failure_notice_sent_at
-      CreatorMailer.product_scheduled_publish_failed(schedule_id:).deliver_now
-      schedule.update_columns(failure_notice_sent_at: Time.current)
-    end
+    CreatorMailer.public_send(MAILERS.fetch(schedule.status), schedule_id:).deliver_now
+    # A published schedule has nothing left to show; a failed one stays for the editor banner.
+    schedule.status == "published" ? schedule.delete : schedule.update_columns(notice_sent_at: Time.current)
   end
 end

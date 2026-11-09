@@ -173,7 +173,7 @@ class Link < ApplicationRecord
   has_many :affiliate_credits
   has_many :comments, as: :commentable
   has_many :sales_holds, class_name: "ProductSalesHold", foreign_key: :product_id
-  has_one :publish_schedule, class_name: "ProductPublishSchedule", foreign_key: :product_id
+  has_one :publish_schedule, class_name: "ProductPublishSchedule", foreign_key: :product_id, inverse_of: :product
   has_many :workflows
   has_many :dropbox_files
   has_many :shipping_destinations
@@ -571,12 +571,7 @@ class Link < ApplicationRecord
   end
 
   def publish!(skip_seller_plan_gate: false)
-    enforce_not_unpublished_by_admin!
-    enforce_no_active_sales_hold!
-    enforce_shipping_destinations_presence!
-    enforce_user_email_confirmation!
-    enforce_seller_plan! unless skip_seller_plan_gate
-    enforce_merchant_account_exits_for_new_users!
+    enforce_publish_gates!(skip_seller_plan_gate:)
     transcode_after_publish = auto_transcode_videos?
     caller_flags_change = changes["flags"]&.map(&:to_i)
 
@@ -663,12 +658,7 @@ class Link < ApplicationRecord
   def publish_precheck_error
     return "To publish a product, we need you to have an email." if user.email.blank?
 
-    enforce_not_unpublished_by_admin!
-    enforce_no_active_sales_hold!
-    enforce_shipping_destinations_presence!
-    enforce_user_email_confirmation!
-    enforce_seller_plan!
-    enforce_merchant_account_exits_for_new_users!
+    enforce_publish_gates!
     nil
   rescue LinkInvalid => e
     ActionController::Base.helpers.strip_tags(e.message)
@@ -2054,11 +2044,16 @@ class Link < ApplicationRecord
     end
 
     def cancel_pending_publish_schedule
-      reason = if deleted_at.present? then "deleted"
-      elsif saved_change_to_draft?(to: false) then "published_manually"
-      else "unavailable"
-      end
-      ProductPublishSchedule.cancel_pending!(id, reason:)
+      ProductPublishSchedule.cancel_pending!(id)
+    end
+
+    def enforce_publish_gates!(skip_seller_plan_gate: false)
+      enforce_not_unpublished_by_admin!
+      enforce_no_active_sales_hold!
+      enforce_shipping_destinations_presence!
+      enforce_user_email_confirmation!
+      enforce_seller_plan! unless skip_seller_plan_gate
+      enforce_merchant_account_exits_for_new_users!
     end
 
     def enforce_no_active_sales_hold!(lock: false)

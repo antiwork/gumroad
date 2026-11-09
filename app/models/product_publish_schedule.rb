@@ -2,14 +2,17 @@
 
 # A seller's request to publish a never-published draft at a later time. Created only while the
 # :scheduled_product_publishing flag is on for the seller; an accepted schedule is honored after the flag
-# is turned off. The row is the source of truth: the Sidekiq job is a fast path and
-# DispatchProductPublishSchedulesJob recovers lost jobs, stuck claims and unsent notices.
+# is turned off. The row is the only trigger state: DispatchProductPublishSchedulesJob finds due rows
+# every minute, so there is no per-schedule delayed job to go stale. Cancelling deletes the row, and
+# so does a delivered success notice: a row that remains is pending or is a failure the seller must see.
 class ProductPublishSchedule < ApplicationRecord
   FEATURE_FLAG = :scheduled_product_publishing
   MIN_LEAD_TIME = 5.minutes
   MAX_LATENESS = 5.minutes
   CLAIM_TIMEOUT = 15.minutes
-  STATUSES = %w[scheduled publishing published failed cancelled].freeze
+  STATUSES = %w[scheduled publishing published failed].freeze
+  LATE_MESSAGE = "We couldn't publish your product at the scheduled time, so it was left unpublished. Publish it from the editor when you're ready."
+  AUTHORITY_REVOKED_MESSAGE = "The person who scheduled this product can no longer publish it, so it was left unpublished."
   GENERIC_FAILURE_MESSAGE = "We couldn't publish your product automatically. Review it and publish it from the editor."
 
   belongs_to :product, class_name: "Link"
@@ -21,6 +24,7 @@ class ProductPublishSchedule < ApplicationRecord
   scope :scheduled, -> { where(status: "scheduled") }
   scope :due, ->(now = Time.current) { scheduled.where(publish_at: ..now) }
   scope :stale_claims, ->(now = Time.current) { where(status: "publishing", claimed_at: ..(now - CLAIM_TIMEOUT)) }
+  scope :notice_unsent, -> { where(status: %w[published failed], notice_sent_at: nil) }
 
   class Invalid < StandardError; end
 
@@ -29,12 +33,9 @@ class ProductPublishSchedule < ApplicationRecord
       Feature.active?(FEATURE_FLAG, seller)
     end
 
-    # Cancels a pending schedule from any route (manual publish, unpublish, delete, takedown). A schedule
-    # already claimed by the job is left alone: the job re-checks the product itself.
-    def cancel_pending!(product_id, reason:)
-      scheduled.where(product_id:).update_all(
-        status: "cancelled", cancellation_reason: reason, version: Arel.sql("version + 1"), updated_at: Time.current
-      )
+    # A schedule the job has already claimed is left alone: the job re-checks the product itself.
+    def cancel_pending!(product_id)
+      scheduled.where(product_id:).delete_all
     end
 
     # `local_time` is wall-clock time in the seller's zone, e.g. "2026-12-01T09:30".
@@ -46,34 +47,21 @@ class ProductPublishSchedule < ApplicationRecord
       raise Invalid, "Choose a time at least #{MIN_LEAD_TIME.in_minutes.to_i} minutes from now." if publish_at < now + MIN_LEAD_TIME
 
       transaction do
+        # Serializes concurrent requests for one product; the unique index is the backstop.
         product.lock!
         reason = ineligibility_reason(product)
         raise Invalid, reason if reason
 
-        schedule = find_or_initialize_by(product_id: product.id)
-        # Take the row lock before reading the status: the publishing job claims this same row with one
-        # conditional UPDATE, so either the claim commits first (we read "publishing" and refuse) or this
-        # reschedule commits first and the claim's version condition matches nothing.
-        schedule.lock! if schedule.persisted?
-        raise Invalid, "This product is being published right now." if schedule.status == "publishing"
+        where(product_id: product.id, status: "failed").delete_all
+        raise Invalid, "This product already has a schedule. Cancel it first." if exists?(product_id: product.id)
 
-        schedule.assign_attributes(
-          scheduled_by:, publish_at:, status: "scheduled", claimed_at: nil, published_at: nil, failure_message: nil,
-          cancellation_reason: nil, success_notice_sent_at: nil, failure_notice_sent_at: nil, failure_dismissed_at: nil,
-          version: schedule.version + 1
-        )
-        schedule.save!
-        PublishScheduledProductJob.perform_at(publish_at, schedule.id, schedule.version)
-        schedule
+        create!(product:, scheduled_by:, publish_at:)
       end
     end
 
     def ineligibility_reason(product)
       return "Only products that have never been published can be scheduled." unless product.draft? && product.first_published_at.nil?
-      # `purchase_disabled_at` is deliberately NOT a blocker: product creation stamps it on every draft
-      # (LinksController#create), so testing it would refuse every normally created draft. This line only
-      # sees never-published drafts, and an admin takedown is caught by `is_unpublished_by_admin` inside
-      # `publish_precheck_error` below.
+      # `purchase_disabled_at` is not a blocker: LinksController#create stamps it on every new draft.
       return "This product can't be scheduled." if product.deleted_at || product.banned_at || product.archived?
       return "Pre-orders can't be scheduled." if product.is_in_preorder_state
       return "Your account can't publish products right now." if product.user.suspended?
@@ -83,58 +71,46 @@ class ProductPublishSchedule < ApplicationRecord
 
     def parse_local_time(local_time, seller)
       zone = ActiveSupport::TimeZone[seller.timezone_id]
-      naive = Time.zone.parse(local_time.to_s) if local_time.present? && local_time.to_s.match?(/\A\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/)
-      raise Invalid, "Enter a valid date and time." if naive.nil?
-
-      begin
-        utc = zone.tzinfo.local_to_utc(Time.utc(naive.year, naive.month, naive.day, naive.hour, naive.min))
-      rescue TZInfo::PeriodNotFound
-        raise Invalid, "That time doesn't exist in #{zone.name} because clocks skip forward. Choose a different time."
-      rescue TZInfo::AmbiguousTime
-        raise Invalid, "That time happens twice in #{zone.name} because clocks go back. Choose a different time."
-      end
-      utc.in_time_zone("UTC")
+      # strptime rejects impossible dates (February 30) that Time.zone.parse rolls over without a message.
+      naive = DateTime.strptime(local_time.to_s[0, 16].tr(" ", "T"), "%Y-%m-%dT%H:%M")
+      zone.tzinfo.local_to_utc(Time.utc(naive.year, naive.month, naive.day, naive.hour, naive.min)).in_time_zone("UTC")
+    rescue TZInfo::PeriodNotFound
+      raise Invalid, "That time doesn't exist in #{zone.name} because clocks skip forward. Choose a different time."
+    rescue TZInfo::AmbiguousTime
+      raise Invalid, "That time happens twice in #{zone.name} because clocks go back. Choose a different time."
+    rescue ArgumentError
+      raise Invalid, "Enter a valid date and time."
     end
   end
-
-  def scheduled? = status == "scheduled"
-  def active? = %w[scheduled publishing].include?(status)
 
   def local_time_label(time = publish_at)
-    zone = ActiveSupport::TimeZone[product.user.timezone_id]
-    time.in_time_zone(zone).strftime("%B %-d, %Y at %-l:%M %p %Z")
+    time.in_time_zone(ActiveSupport::TimeZone[product.user.timezone_id]).strftime("%B %-d, %Y at %-l:%M %p %Z")
   end
 
-  def local_input_value
-    publish_at.in_time_zone(ActiveSupport::TimeZone[product.user.timezone_id]).strftime("%Y-%m-%dT%H:%M")
-  end
+  # Short claim, then publish without holding any schedule lock. Returns the final status, or nil
+  # when the row was not claimed or was removed.
+  def run!(now: Time.current)
+    return unless claim!(now)
 
-  # Short claim, then publish without holding any schedule lock. Returns the final status.
-  def run!(expected_version:, now: Time.current)
-    return unless claim!(expected_version, now)
-
-    if now > publish_at + MAX_LATENESS
-      return finish!("failed", "We couldn't publish your product at the scheduled time, so it was left unpublished. Publish it from the editor when you're ready.")
-    end
-
+    published = false
     fresh = Link.find_by(id: product_id)
-    return finish!("cancelled", "deleted") if fresh.nil? || fresh.deleted_at
-    return finish!("cancelled", "already_published") unless fresh.draft?
-    # A claimed row escapes the Link after_save cancellation (that only cancels `scheduled` rows), so the
-    # states a seller or an admin can set after the claim are re-checked here.
-    return finish!("cancelled", "unavailable") if fresh.banned_at || fresh.archived? || fresh.is_unpublished_by_admin?
-    return finish!("cancelled", "authority_revoked") unless scheduler_authorized?(fresh)
+    # The Link after_save cancellation only reaches unclaimed rows, and never sees an archive.
+    return discard! if fresh.nil? || fresh.deleted_at || !fresh.draft? || fresh.banned_at || fresh.archived?
+    return finish!("failed", LATE_MESSAGE) if now > publish_at + MAX_LATENESS
+    return finish!("failed", AUTHORITY_REVOKED_MESSAGE) unless scheduler_authorized?(fresh)
 
     begin
       # A fresh instance, never reused after a failure: publish! assigns draft=false before it validates.
       fresh.publish!
+      published = true
       finish!("published")
     rescue Link::LinkInvalid, ActiveRecord::RecordInvalid => e
       finish!("failed", fresh.errors.full_messages.first.presence || e.message)
     end
   rescue StandardError => e
-    # Infrastructure error: release the claim so the Sidekiq retry (or the dispatcher) can take it again.
-    self.class.where(id:, status: "publishing").update_all(status: "scheduled", claimed_at: nil)
+    # Infrastructure error: release the claim so the dispatcher tries again each minute until
+    # MAX_LATENESS. After a publish the claim stays, and recover_stale_claim! records the outcome.
+    claimed.update_all(status: "scheduled", claimed_at: nil) unless published
     ErrorNotifier.notify(e, product_schedule_id: id)
     raise
   end
@@ -149,41 +125,41 @@ class ProductPublishSchedule < ApplicationRecord
     end
   end
 
-  def cancel_for_revoked_authority!
-    return unless scheduled?
-
-    self.class.where(id:, status: "scheduled").update_all(status: "cancelled", cancellation_reason: "authority_revoked", version: version + 1)
-  end
-
-  def scheduler_authorized_now?
-    product = Link.find_by(id: product_id)
-    product.present? && scheduler_authorized?(product)
-  end
-
   private
-    def claim!(expected_version, now)
-      claimed = self.class.where(id:, status: "scheduled", version: expected_version, publish_at: ..now)
-        .update_all(status: "publishing", claimed_at: now, updated_at: now)
-      claimed == 1 && reload
+    def claim!(now)
+      # Rounded to the column precision, because `claimed` matches on the stored value.
+      self.claimed_at = now.floor(6)
+      self.class.due(now).where(id:).update_all(status: "publishing", claimed_at:, updated_at: now) == 1
     end
 
-    def finish!(outcome, detail = nil)
-      attrs = { status: outcome, claimed_at: nil, updated_at: Time.current }
-      case outcome
-      when "published" then attrs[:published_at] = Time.current
-      when "failed" then attrs[:failure_message] = ActionController::Base.helpers.strip_tags(detail.to_s).truncate(250)
-      when "cancelled" then attrs[:cancellation_reason] = detail
-      end
-      self.class.where(id:, status: "publishing").update_all(attrs)
-      reload
+    # This instance's claim only: a row that was released and claimed again belongs to another job.
+    def claimed
+      self.class.where(id:, status: "publishing", claimed_at:)
+    end
+
+    def discard!
+      claimed.delete_all
+      nil
+    end
+
+    def finish!(outcome, failure_message = nil)
+      finished = claimed.update_all(
+        status: outcome,
+        claimed_at: nil,
+        published_at: (Time.current if outcome == "published"),
+        failure_message: (ActionController::Base.helpers.strip_tags(failure_message).truncate(250) if failure_message),
+        updated_at: Time.current
+      )
+      return if finished.zero?
+
       SendProductPublishScheduleNoticeJob.perform_async(id)
-      status
+      outcome
     end
 
     def scheduler_authorized?(product)
       seller = product.user
       scheduled_by.alive? && !scheduled_by.suspended? && !seller.suspended? &&
-        (scheduled_by.role_admin_for?(seller) || scheduled_by.role_marketing_for?(seller))
+        LinkPolicy.new(SellerContext.new(user: scheduled_by, seller:), product).publish?
     rescue ActiveRecord::RecordNotFound
       false
     end
