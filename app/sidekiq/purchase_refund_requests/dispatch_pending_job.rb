@@ -10,7 +10,7 @@ class PurchaseRefundRequests::DispatchPendingJob
 
   # Leaves room for the create-time NotifyJob push to run first.
   NOTIFICATION_GRACE_PERIOD = 10.minutes
-  # Stops re-pushing a seller email that never goes through (e.g. a bad address).
+  # Stops re-pushing an email that never goes through (e.g. a bad address).
   OWED_NOTIFICATION_RETRY_WINDOW = 30.days
 
   def perform
@@ -26,9 +26,12 @@ class PurchaseRefundRequests::DispatchPendingJob
         PurchaseRefundRequests::EscalateJob.perform_async(refund_request.id) if refund_request.escalation_deadline.past?
       end
 
-      # Escalation clears open_key, so a seller email still owed then is retried from here.
-      PurchaseRefundRequest.state_escalated.where(seller_notified_at: nil, created_at: OWED_NOTIFICATION_RETRY_WINDOW.ago..)
-                           .includes(purchase: :seller).find_each do |refund_request|
+      # Escalation clears open_key, so an email still owed then is retried from here.
+      # One query per stamp, so each one walks its own index.
+      owed_ids = %i[seller_notified_at buyer_escalation_notified_at].flat_map do |stamp|
+        PurchaseRefundRequest.state_escalated.where(stamp => nil, created_at: OWED_NOTIFICATION_RETRY_WINDOW.ago..).pluck(:id)
+      end
+      PurchaseRefundRequest.where(id: owed_ids.uniq).includes(purchase: :seller).find_each do |refund_request|
         next unless Feature.active?(:buyer_refund_requests, refund_request.purchase.seller)
 
         PurchaseRefundRequests::NotifyJob.perform_async(refund_request.id)

@@ -471,7 +471,51 @@ class CustomerLowPriorityMailer < ApplicationMailer
     )
   end
 
+  # Replies go to the creator, who is the one deciding.
+  def refund_request_received(refund_request_id)
+    return unless load_refund_request(refund_request_id)
+
+    @respond_by = @refund_request.escalation_deadline.strftime(PurchaseRefundRequest::DATE_FORMAT)
+    @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
+    send_refund_request_email(
+      subject: "Your refund request for #{@purchase.link.name} was sent to #{@creator_name}",
+      reply_to: @purchase.seller.support_or_form_email
+    )
+  end
+
+  # Replies go to support, who now owns the request.
+  def refund_request_escalated(refund_request_id)
+    return unless load_refund_request(refund_request_id)
+
+    send_refund_request_email(
+      subject: "Gumroad support is reviewing your refund request for #{@purchase.link.name}",
+      reply_to: ApplicationMailer::SUPPORT_EMAIL
+    )
+  end
+
   private
+    def load_refund_request(refund_request_id)
+      # NotifyJob sends this right after the row changes, before a replica may have it.
+      ApplicationRecord.connected_to(role: :writing) do
+        @refund_request = PurchaseRefundRequest.find_by(id: refund_request_id)
+        @purchase = @refund_request&.purchase
+      end
+      return false if @purchase.nil? || !EmailFormatValidator.valid?(@refund_request.email)
+
+      @creator_name = @purchase.seller.name_or_username
+      @page_link = PurchaseRefundRequest.page_link(@purchase)
+      true
+    end
+
+    def send_refund_request_email(subject:, reply_to:)
+      mail(
+        to: @refund_request.email,
+        reply_to:,
+        subject:,
+        delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @purchase.seller, to: @refund_request.email)
+      )
+    end
+
     # The token is a sessionless capability over the purchaser account's preference, so it may
     # only travel to that account's own address. A purchase can be claimed into a different
     # account (Users#add_purchase_to_library, UrlRedirects, support reassignment) while

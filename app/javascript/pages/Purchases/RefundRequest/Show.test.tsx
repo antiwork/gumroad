@@ -25,8 +25,9 @@ vi.mock("@inertiajs/react", () => ({
 const baseProps = {
   purchase_route_id: "signed-token",
   product_name: "Watercolor brush pack",
+  creator_name: "Jane",
   formatted_price: "$29",
-  escalation_business_days: 2,
+  respond_by: "Wednesday, November 11",
   max_message_length: 2000,
   reasons: [
     { value: "not_received", label: "I never received the product" },
@@ -34,6 +35,7 @@ const baseProps = {
   ],
   refund_request: null,
   ineligibility: null,
+  refund_window_ended_on: null,
 };
 
 const renderWith = (props: Record<string, unknown>) => {
@@ -57,7 +59,7 @@ describe("RefundRequest Show", () => {
     renderWith({});
 
     fireEvent.click(screen.getByRole("radio", { name: "Something else" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Anything else the creator should know? (optional)" }), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Anything else Jane should know? (optional)" }), {
       target: { value: "Files are corrupted." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send refund request" }));
@@ -68,12 +70,24 @@ describe("RefundRequest Show", () => {
     });
   });
 
+  it("tells the buyer who decides and by when before they send", () => {
+    renderWith({});
+
+    expect(
+      screen.getByText(
+        "Sending this request doesn't refund you yet. Jane decides first. If you aren't refunded by Wednesday, November 11, Gumroad support will review your request.",
+      ),
+    ).toBeTruthy();
+  });
+
   it("shows the existing request's status instead of the form", () => {
     renderWith({
       refund_request: { state: "requested", email: "buyer@example.com", reason_label: "Something else" },
     });
 
-    expect(screen.getByText("Your refund request has been sent to the creator.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Refund requested" })).toBeTruthy();
+    expect(screen.getByText("We sent your request to Jane.")).toBeTruthy();
+    expect(screen.getByText(/If you aren't refunded by Wednesday, November 11/u)).toBeTruthy();
     expect(screen.getByText("Reason: Something else")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Send refund request" })).toBeNull();
   });
@@ -83,14 +97,35 @@ describe("RefundRequest Show", () => {
       refund_request: { state: "escalated", email: "buyer@example.com", reason_label: "Something else" },
     });
 
-    expect(screen.getByText("Gumroad support is reviewing your refund request.")).toBeTruthy();
-    expect(screen.getByText("You'll hear from us at buyer@example.com.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Gumroad support is reviewing your request" })).toBeTruthy();
+    expect(screen.getByText("We'll email you at buyer@example.com when we have an answer.")).toBeTruthy();
   });
 
   it("explains why a refunded purchase is not eligible", () => {
     renderWith({ ineligibility: "refunded" });
 
-    expect(screen.getByText("It has already been refunded.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Refund not available" })).toBeTruthy();
+    expect(screen.getByText("This purchase has already been refunded.")).toBeTruthy();
     expect(screen.queryByRole("radio")).toBeNull();
+  });
+
+  it("gives the date the refund window ended", () => {
+    renderWith({ ineligibility: "outside_window", refund_window_ended_on: "Friday, October 9" });
+
+    expect(
+      screen.getByText(
+        "The refund window for this purchase ended on Friday, October 9. To ask Jane anyway, reply to your receipt email.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("explains a request closed by a refund that didn't go through", () => {
+    renderWith({
+      refund_request: { state: "expired", email: "buyer@example.com", reason_label: "Something else" },
+      ineligibility: "previous_request_closed",
+    });
+
+    expect(screen.getByRole("heading", { name: "Refund request closed" })).toBeTruthy();
+    expect(screen.getByText("The refund for this purchase didn't go through, so this request is closed.")).toBeTruthy();
   });
 });

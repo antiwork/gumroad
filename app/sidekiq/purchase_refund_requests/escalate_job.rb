@@ -39,6 +39,8 @@ class PurchaseRefundRequests::EscalateJob
         # The escalation email is support's notice, so a still-owed support copy is not sent later.
         refund_request.update!(state: "escalated", support_notified_at: refund_request.support_notified_at || Time.current) if refund_request.open?
       end
+      # Tells the buyer, and sends the seller email if it is still owed.
+      PurchaseRefundRequests::NotifyJob.perform_async(refund_request.id)
     end
   end
 end

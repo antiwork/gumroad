@@ -6,7 +6,7 @@ require "inertia_rails/rspec"
 describe Purchases::RefundRequestsController, type: :controller, inertia: true do
   let(:purchase) { create(:purchase) }
   let(:seller) { purchase.seller }
-  let(:token) { purchase.secure_external_id(scope: described_class::SECURE_ID_SCOPE, expires_at: described_class::LINK_EXPIRY.from_now) }
+  let(:token) { purchase.secure_external_id(scope: PurchaseRefundRequest::SECURE_ID_SCOPE, expires_at: PurchaseRefundRequest::LINK_EXPIRY.from_now) }
 
   before do
     Feature.activate_user(:buyer_refund_requests, seller)
@@ -25,6 +25,7 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
         ineligibility: nil,
       )
       expect(inertia.props[:reasons].map { _1[:value] }).to eq(PurchaseRefundRequest::REASONS)
+      expect(inertia.props[:creator_name]).to eq(seller.name_or_username)
       expect(response.headers["Cache-Control"]).to eq("no-store")
       expect(response.headers["Referrer-Policy"]).to eq("no-referrer")
     end
@@ -40,7 +41,7 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
     end
 
     it "404s for an expired token" do
-      expired_token = purchase.secure_external_id(scope: described_class::SECURE_ID_SCOPE, expires_at: 1.minute.ago)
+      expired_token = purchase.secure_external_id(scope: PurchaseRefundRequest::SECURE_ID_SCOPE, expires_at: 1.minute.ago)
 
       expect { get :show, params: { purchase_id: expired_token } }.to raise_error(ActionController::RoutingError)
     end
@@ -84,6 +85,24 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
       get :show, params: { purchase_id: token }
 
       expect(inertia.props[:ineligibility]).to eq("partially_refunded")
+    end
+
+    it "gives the deadline a request sent now would get" do
+      travel_to(Time.utc(2026, 11, 6, 12)) do # Friday
+        get :show, params: { purchase_id: token }
+      end
+
+      expect(inertia.props[:respond_by]).to eq("Tuesday, November 10")
+    end
+
+    it "gives the date the refund window ended" do
+      create(:purchase_refund_policy, purchase:, max_refund_period_in_days: 30)
+      purchase.update_column(:created_at, Time.utc(2026, 9, 9, 12))
+
+      get :show, params: { purchase_id: token }
+
+      expect(inertia.props[:ineligibility]).to eq("outside_window")
+      expect(inertia.props[:refund_window_ended_on]).to eq("Friday, October 9")
     end
 
     it "explains ineligibility for a refunded purchase" do
@@ -135,8 +154,8 @@ describe Purchases::RefundRequestsController, type: :controller, inertia: true d
       expect(response).to redirect_to(purchase_refund_request_path(token))
     end
 
-    it "rejects a purchase whose previous request was declined" do
-      create(:purchase_refund_request, purchase:, state: "declined")
+    it "rejects a purchase whose previous request expired" do
+      create(:purchase_refund_request, purchase:, state: "expired")
 
       expect do
         post :create, params: { purchase_id: token, reason: "other" }

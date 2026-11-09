@@ -10,17 +10,31 @@ describe PurchaseRefundRequests::NotifyJob do
     Feature.activate_user(:buyer_refund_requests, purchase.seller)
   end
 
-  it "delivers both notifications and stamps them" do
+  it "delivers the seller, buyer and support notifications and stamps them" do
     expect do
       described_class.new.perform(refund_request.id)
-    end.to change { ActionMailer::Base.deliveries.count }.by(2)
+    end.to change { ActionMailer::Base.deliveries.count }.by(3)
 
     refund_request.reload
     expect(refund_request.seller_notified_at).to be_present
+    expect(refund_request.buyer_notified_at).to be_present
     expect(refund_request.support_notified_at).to be_present
 
     seller_mail = ActionMailer::Base.deliveries.find { |mail| mail.to == [purchase.seller.email] }
-    expect(seller_mail.subject).to eq("A customer has requested a refund")
+    expect(seller_mail.subject).to eq("Refund requested for #{purchase.link.name} (#{purchase.formatted_display_price})")
+    buyer_mail = ActionMailer::Base.deliveries.find { |mail| mail.to == [refund_request.email] }
+    expect(buyer_mail.subject).to eq("Your refund request for #{purchase.link.name} was sent to #{purchase.seller.name_or_username}")
+  end
+
+  it "sends the buyer the escalation notice once, and no confirmation, after escalation" do
+    refund_request.update_columns(state: "escalated", created_at: 5.days.ago, seller_notified_at: 5.days.ago)
+
+    described_class.new.perform(refund_request.id)
+    described_class.new.perform(refund_request.id)
+
+    expect(ActionMailer::Base.deliveries.map(&:subject)).to eq(["Gumroad support is reviewing your refund request for #{purchase.link.name}"])
+    expect(refund_request.reload.buyer_escalation_notified_at).to be_present
+    expect(refund_request.buyer_notified_at).to be_nil
   end
 
   it "is idempotent: a second run delivers nothing" do
@@ -42,7 +56,7 @@ describe PurchaseRefundRequests::NotifyJob do
 
     described_class.new.perform(refund_request.id)
 
-    expect(open_during_delivery).to eq([baseline, baseline])
+    expect(open_during_delivery).to eq([baseline] * 3)
     expect(refund_request.reload.seller_notified_at).to be_present
   end
 
@@ -64,7 +78,7 @@ describe PurchaseRefundRequests::NotifyJob do
   end
 
   it "delivers only the missing notification on retry after a partial failure" do
-    refund_request.update_column(:seller_notified_at, Time.current)
+    refund_request.update_columns(seller_notified_at: Time.current, buyer_notified_at: Time.current)
 
     expect do
       described_class.new.perform(refund_request.id)
@@ -83,7 +97,7 @@ describe PurchaseRefundRequests::NotifyJob do
   end
 
   it "still sends an owed seller email after the request escalated" do
-    refund_request.update_columns(state: "escalated", open_key: nil, support_notified_at: Time.current)
+    refund_request.update_columns(state: "escalated", open_key: nil, support_notified_at: Time.current, buyer_escalation_notified_at: Time.current)
 
     expect do
       described_class.new.perform(refund_request.id)
@@ -104,7 +118,10 @@ describe PurchaseRefundRequests::NotifyJob do
   end
 
   context "when the refund/chargeback sync missed an escalated request" do
-    before { refund_request.update_columns(state: "escalated", open_key: nil, created_at: 5.days.ago, support_notified_at: 5.days.ago) }
+    before do
+      refund_request.update_columns(state: "escalated", open_key: nil, created_at: 5.days.ago, support_notified_at: 5.days.ago,
+                                    buyer_escalation_notified_at: 5.days.ago)
+    end
 
     it "closes it as refunded instead of emailing the seller about a refunded purchase" do
       purchase.update_column(:stripe_refunded, true)
@@ -136,11 +153,33 @@ describe PurchaseRefundRequests::NotifyJob do
   end
 
   it "does nothing for a closed request" do
-    refund_request.update!(state: "declined")
+    refund_request.update!(state: "expired")
 
     expect do
       described_class.new.perform(refund_request.id)
     end.not_to change { ActionMailer::Base.deliveries.count }
+  end
+
+  it "settles a malformed buyer address instead of retrying it" do
+    refund_request.update_column(:email, "not-an-email")
+
+    described_class.new.perform(refund_request.id)
+
+    expect(ActionMailer::Base.deliveries.flat_map(&:to)).not_to include("not-an-email")
+    expect(refund_request.reload.buyer_notified_at).to be_present
+    expect(refund_request.notifications_pending?).to eq(false)
+  end
+
+  it "still sends the buyer confirmation when the mail server rejects the seller email" do
+    allow_any_instance_of(Mail::Message).to receive(:deliver).and_wrap_original do |original, *args|
+      raise Net::SMTPFatalError.new("550 rejected") if original.receiver.to == [purchase.seller.email]
+
+      original.call(*args)
+    end
+
+    expect { described_class.new.perform(refund_request.id) }.to raise_error(Net::SMTPFatalError)
+    expect(refund_request.reload.buyer_notified_at).to be_present
+    expect(refund_request.seller_notified_at).to be_nil
   end
 
   it "does nothing for a deleted request" do

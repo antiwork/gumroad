@@ -29,7 +29,7 @@ describe PurchaseRefundRequest do
     end
 
     it "allows a new request after the previous one closed" do
-      create(:purchase_refund_request, purchase:, state: "declined")
+      create(:purchase_refund_request, purchase:, state: "expired")
 
       expect(create(:purchase_refund_request, purchase:)).to be_persisted
     end
@@ -38,9 +38,6 @@ describe PurchaseRefundRequest do
   describe "#sync_open_key" do
     it "holds the purchase id while open and clears it on close" do
       request = create(:purchase_refund_request, purchase:)
-      expect(request.open_key).to eq(purchase.id)
-
-      request.update!(state: "seen")
       expect(request.open_key).to eq(purchase.id)
 
       request.update!(state: "refunded")
@@ -86,7 +83,7 @@ describe PurchaseRefundRequest do
       request = create(:purchase_refund_request, purchase:)
       PurchaseRefundRequests::NotifyJob.jobs.clear
 
-      request.update!(state: "seen")
+      request.update!(state: "escalated")
 
       expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
     end
@@ -97,11 +94,59 @@ describe PurchaseRefundRequest do
       request = create(:purchase_refund_request, purchase:)
       expect(request.notifications_pending?).to eq(true)
 
-      request.update_columns(seller_notified_at: Time.current, support_notified_at: Time.current)
+      request.update_columns(seller_notified_at: Time.current, support_notified_at: Time.current, buyer_notified_at: Time.current)
       expect(request.reload.notifications_pending?).to eq(false)
 
-      request.update_columns(support_notified_at: nil, state: "declined")
+      request.update_columns(support_notified_at: nil, state: "expired")
       expect(request.reload.notifications_pending?).to eq(false)
+    end
+
+    it "owes the buyer a confirmation while the request is open" do
+      request = create(:purchase_refund_request, purchase:, seller_notified_at: Time.current, support_notified_at: Time.current)
+
+      expect(request.notifications_pending?).to eq(true)
+    end
+
+    it "owes the buyer the escalation notice once support has the request" do
+      request = create(:purchase_refund_request, purchase:, state: "escalated", seller_notified_at: Time.current,
+                                                 support_notified_at: Time.current)
+      expect(request.notifications_pending?).to eq(true)
+
+      request.update_columns(buyer_escalation_notified_at: Time.current)
+      expect(request.reload.notifications_pending?).to eq(false)
+    end
+  end
+
+  describe ".ineligibility" do
+    it "is nil for an eligible purchase" do
+      expect(described_class.ineligibility(purchase)).to be_nil
+    end
+
+    it "names a purchase past the refund window" do
+      create(:purchase_refund_policy, purchase:, max_refund_period_in_days: 30)
+      purchase.update_column(:created_at, 31.days.ago)
+
+      expect(described_class.ineligibility(purchase)).to eq("outside_window")
+      expect(described_class.refund_window_end(purchase)).to be_within(1.second).of(purchase.created_at + 30.days)
+    end
+
+    it "names a no-refunds policy" do
+      create(:purchase_refund_policy, purchase:, title: "No refunds allowed", max_refund_period_in_days: 0)
+
+      expect(described_class.ineligibility(purchase)).to eq("no_refunds")
+      expect(described_class.refund_window_end(purchase)).to be_nil
+    end
+
+    it "names a purchase that was never charged" do
+      purchase.update_column(:purchase_state, "preorder_authorization_successful")
+
+      expect(described_class.ineligibility(purchase)).to eq("not_charged")
+    end
+
+    it "names a purchase whose previous request closed" do
+      create(:purchase_refund_request, purchase:, state: "escalated")
+
+      expect(described_class.ineligibility(purchase)).to eq("previous_request_closed")
     end
   end
 
@@ -153,8 +198,8 @@ describe PurchaseRefundRequest do
       expect(described_class.purchase_eligible?(purchase)).to eq(false)
     end
 
-    it "rejects a purchase whose previous request was declined or expired" do
-      create(:purchase_refund_request, purchase:, state: "declined")
+    it "rejects a purchase whose previous request expired" do
+      create(:purchase_refund_request, purchase:, state: "expired")
       expect(described_class.purchase_eligible?(purchase)).to eq(false)
     end
 
@@ -232,11 +277,11 @@ describe PurchaseRefundRequest do
     end
 
     it "does not touch already-closed requests" do
-      request = create(:purchase_refund_request, purchase:, state: "declined")
+      request = create(:purchase_refund_request, purchase:, state: "expired")
 
       purchase.update!(stripe_refunded: true)
 
-      expect(request.reload.state).to eq("declined")
+      expect(request.reload.state).to eq("expired")
     end
 
     it "marks the open request refunded when the seller refunds through refund_purchase!" do

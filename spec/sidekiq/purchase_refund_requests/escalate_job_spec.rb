@@ -19,6 +19,15 @@ describe PurchaseRefundRequests::EscalateJob do
     expect(ActionMailer::Base.deliveries.last.body.encoded).to include("is still open after 2 business days")
   end
 
+  it "queues the buyer's escalation notice after escalating" do
+    refund_request
+    PurchaseRefundRequests::NotifyJob.jobs.clear
+
+    described_class.new.perform(refund_request.id)
+
+    expect(PurchaseRefundRequests::NotifyJob.jobs.map { _1["args"] }).to eq([[refund_request.id]])
+  end
+
   it "closes the request without emailing support when the purchase was refunded but the sync missed it" do
     refund_request
     purchase.update_column(:stripe_refunded, true)
@@ -44,7 +53,11 @@ describe PurchaseRefundRequests::EscalateJob do
 
     expect(ActionMailer::Base.deliveries.last.text_part.decoded.squish).to include("Message: The files were corrupted.")
     expect(refund_request.reload.support_notified_at).to be_present
-    expect(refund_request.notifications_pending?).to eq(false)
+
+    # The queued NotifyJob then owes the buyer's escalation notice only.
+    expect { PurchaseRefundRequests::NotifyJob.drain }.to change { ActionMailer::Base.deliveries.count }.by(1)
+    expect(ActionMailer::Base.deliveries.last.to).to eq([refund_request.email])
+    expect(refund_request.reload.notifications_pending?).to eq(false)
   end
 
   it "tells support when the seller already refunded part of the purchase" do

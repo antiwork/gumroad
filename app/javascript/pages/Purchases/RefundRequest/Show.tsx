@@ -2,6 +2,7 @@ import { useForm, usePage } from "@inertiajs/react";
 import * as React from "react";
 
 import { Button } from "$app/components/Button";
+import { SUPPORT_EMAIL } from "$app/components/Support/ContactSupportModal";
 import { Card, CardContent } from "$app/components/ui/Card";
 import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
@@ -9,44 +10,63 @@ import { Radio } from "$app/components/ui/Radio";
 import { Textarea } from "$app/components/ui/Textarea";
 
 type RefundRequest = {
-  state: "requested" | "seen" | "refunded" | "declined" | "expired" | "escalated";
+  state: "requested" | "refunded" | "expired" | "escalated";
   email: string;
   reason_label: string;
 };
 
+type Ineligibility =
+  | "not_charged"
+  | "refunded"
+  | "partially_refunded"
+  | "chargedback"
+  | "previous_request_closed"
+  | "no_refunds"
+  | "outside_window";
+
 type Props = {
   purchase_route_id: string;
   product_name: string;
+  creator_name: string;
   formatted_price: string;
-  escalation_business_days: number;
+  respond_by: string;
   max_message_length: number;
   reasons: { value: string; label: string }[];
   refund_request: RefundRequest | null;
-  ineligibility: "refunded" | "partially_refunded" | "chargedback" | "other" | null;
+  ineligibility: Ineligibility | null;
+  refund_window_ended_on: string | null;
 };
 
-const SupportEmailLink = () => <a href="mailto:support@gumroad.com">support@gumroad.com</a>;
+const SupportEmailLink = () => <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>;
+
+const STATUS_HEADINGS: Record<RefundRequest["state"], string> = {
+  requested: "Refund requested",
+  refunded: "Refunded",
+  escalated: "Gumroad support is reviewing your request",
+  expired: "Refund request closed",
+};
 
 const RequestStatus = ({
   refundRequest,
-  businessDays,
+  creatorName,
+  respondBy,
   ineligibility,
 }: {
   refundRequest: RefundRequest;
-  businessDays: number;
-  ineligibility: Props["ineligibility"];
+  creatorName: string;
+  respondBy: string;
+  ineligibility: Ineligibility | null;
 }) => {
   switch (refundRequest.state) {
     case "requested":
-    case "seen":
       return (
         <>
           <p>
-            <strong>Your refund request has been sent to the creator.</strong>
+            <strong>We sent your request to {creatorName}.</strong>
           </p>
           <p>
-            The creator has {businessDays} business days to respond. If they don't, Gumroad support will step in. You'll
-            hear from us at {refundRequest.email}.
+            {creatorName} decides whether to refund you. If you aren't refunded by {respondBy}, Gumroad support will
+            review your request. We'll email updates to {refundRequest.email}.
           </p>
         </>
       );
@@ -59,66 +79,79 @@ const RequestStatus = ({
           <p>Refunds usually appear on your statement within 5–10 business days.</p>
         </>
       );
-    case "declined":
-      return (
-        <>
-          <p>
-            <strong>The creator declined this refund request.</strong>
-          </p>
-          <p>
-            If you believe this is a mistake, reply to your receipt email or contact <SupportEmailLink />.
-          </p>
-        </>
-      );
     case "escalated":
       return (
         <>
           <p>
-            <strong>Gumroad support is reviewing your refund request.</strong>
+            <strong>{creatorName} hasn't refunded this purchase yet.</strong>
           </p>
-          <p>You'll hear from us at {refundRequest.email}.</p>
+          <p>We'll email you at {refundRequest.email} when we have an answer.</p>
         </>
       );
     case "expired":
       return ineligibility === "chargedback" ? (
         <p>
-          <strong>This refund request was closed because the purchase was disputed with your bank.</strong>
+          <strong>This request was closed because you disputed the purchase with your bank.</strong>
         </p>
       ) : (
         <>
           <p>
-            <strong>This refund request is closed.</strong>
+            <strong>The refund for this purchase didn't go through, so this request is closed.</strong>
           </p>
           <p>
-            If you still need help, contact <SupportEmailLink /> and include your receipt.
+            Contact <SupportEmailLink /> and include your receipt.
           </p>
         </>
       );
   }
 };
 
-const IneligibleMessage = ({ ineligibility }: { ineligibility: NonNullable<Props["ineligibility"]> }) => (
-  <>
-    <p>
-      <strong>This purchase isn't eligible for a refund request.</strong>
-    </p>
-    {ineligibility === "refunded" ? (
-      <p>It has already been refunded.</p>
-    ) : ineligibility === "partially_refunded" ? (
-      <p>
-        It has already been partly refunded. To ask about the rest, contact <SupportEmailLink /> and include your
-        receipt.
-      </p>
-    ) : ineligibility === "chargedback" ? (
-      <p>It has already been disputed with your bank.</p>
-    ) : (
-      <p>
-        It may be outside the creator's refund window, or a previous request was already resolved. If you still need
-        help, contact <SupportEmailLink /> and include your receipt.
-      </p>
-    )}
-  </>
-);
+const IneligibleMessage = ({
+  ineligibility,
+  creatorName,
+  refundWindowEndedOn,
+}: {
+  ineligibility: Ineligibility;
+  creatorName: string;
+  refundWindowEndedOn: string | null;
+}) => {
+  switch (ineligibility) {
+    case "refunded":
+      return <p>This purchase has already been refunded.</p>;
+    case "partially_refunded":
+      return (
+        <p>
+          This purchase has already been partly refunded. To ask about the rest, contact <SupportEmailLink /> and
+          include your receipt.
+        </p>
+      );
+    case "chargedback":
+      return <p>You disputed this purchase with your bank, so you can't also request a refund here.</p>;
+    case "outside_window":
+      return (
+        <p>
+          The refund window for this purchase ended on {refundWindowEndedOn}. To ask {creatorName} anyway, reply to your
+          receipt email.
+        </p>
+      );
+    case "no_refunds":
+      return (
+        <p>
+          {creatorName} doesn't offer refunds for this product. If something is wrong with your purchase, contact{" "}
+          <SupportEmailLink /> and include your receipt.
+        </p>
+      );
+    case "previous_request_closed":
+      return (
+        <p>
+          You already sent a refund request for this purchase. If you still need help, contact <SupportEmailLink /> and
+          include your receipt.
+        </p>
+      );
+    case "not_charged":
+      return <p>You haven't been charged for this purchase, so there is nothing to refund.</p>;
+  }
+};
 
 export default function Show() {
   const props = usePage<Props>().props;
@@ -130,11 +163,17 @@ export default function Show() {
     form.post(Routes.purchase_refund_request_path(props.purchase_route_id));
   };
 
+  const heading = props.refund_request
+    ? STATUS_HEADINGS[props.refund_request.state]
+    : props.ineligibility
+      ? "Refund not available"
+      : "Request a refund";
+
   return (
     <Card className="mx-auto my-8 w-[calc(100%-2rem)] max-w-md">
       <CardContent asChild>
         <header className="flex-col items-start gap-1">
-          <h2>Request a refund</h2>
+          <h2>{heading}</h2>
           <p className="text-muted">
             {props.product_name} — {props.formatted_price}
           </p>
@@ -144,22 +183,26 @@ export default function Show() {
         <CardContent className="flex-col items-start">
           <RequestStatus
             refundRequest={props.refund_request}
-            businessDays={props.escalation_business_days}
+            creatorName={props.creator_name}
+            respondBy={props.respond_by}
             ineligibility={props.ineligibility}
           />
           <p className="text-muted">Reason: {props.refund_request.reason_label}</p>
         </CardContent>
       ) : props.ineligibility ? (
         <CardContent className="flex-col items-start">
-          <IneligibleMessage ineligibility={props.ineligibility} />
+          <IneligibleMessage
+            ineligibility={props.ineligibility}
+            creatorName={props.creator_name}
+            refundWindowEndedOn={props.refund_window_ended_on}
+          />
         </CardContent>
       ) : (
         <CardContent asChild>
           <form onSubmit={submit} className="flex-col items-stretch">
             <p>
-              Tell the creator why you'd like a refund. They have {props.escalation_business_days} business days to
-              respond; if they don't, Gumroad support will step in. No money moves until the creator (or Gumroad)
-              approves the refund.
+              Sending this request doesn't refund you yet. {props.creator_name} decides first. If you aren't refunded by{" "}
+              {props.respond_by}, Gumroad support will review your request.
             </p>
             <Fieldset>
               <FieldsetTitle>Reason</FieldsetTitle>
@@ -178,7 +221,7 @@ export default function Show() {
             </Fieldset>
             <Fieldset>
               <FieldsetTitle>
-                <Label htmlFor={messageUID}>Anything else the creator should know? (optional)</Label>
+                <Label htmlFor={messageUID}>Anything else {props.creator_name} should know? (optional)</Label>
               </FieldsetTitle>
               <Textarea
                 id={messageUID}

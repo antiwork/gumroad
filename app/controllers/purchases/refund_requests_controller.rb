@@ -3,9 +3,6 @@
 class Purchases::RefundRequestsController < ApplicationController
   layout "inertia"
 
-  SECURE_ID_SCOPE = "refund_request"
-  LINK_EXPIRY = 6.months
-
   before_action :set_purchase
   before_action :check_feature_flag
   # The signed token is the URL itself: keep it out of shared caches and Referer headers.
@@ -45,7 +42,7 @@ class Purchases::RefundRequestsController < ApplicationController
 
   private
     def set_purchase
-      @purchase = Purchase.find_by_secure_external_id(params[:purchase_id], scope: SECURE_ID_SCOPE)
+      @purchase = Purchase.find_by_secure_external_id(params[:purchase_id], scope: PurchaseRefundRequest::SECURE_ID_SCOPE)
       e404 if @purchase.nil?
     end
 
@@ -60,11 +57,15 @@ class Purchases::RefundRequestsController < ApplicationController
 
     def page_props
       refund_request = PurchaseRefundRequest.where(purchase_id: @purchase.id).order(:id).last
+      ineligibility = PurchaseRefundRequest.ineligibility(@purchase)
+      # A request made now would get this deadline; an existing one keeps its own.
+      respond_by = refund_request&.escalation_deadline || PurchaseRefundRequest.escalation_deadline_from(Time.current)
       {
         purchase_route_id: params[:purchase_id],
         product_name: @purchase.link.name,
+        creator_name: @purchase.seller.name_or_username,
         formatted_price: @purchase.formatted_display_price,
-        escalation_business_days: PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS,
+        respond_by: respond_by.strftime(PurchaseRefundRequest::DATE_FORMAT),
         max_message_length: PurchaseRefundRequest::MAX_MESSAGE_LENGTH,
         reasons: PurchaseRefundRequest::REASON_LABELS.map { |value, label| { value:, label: } },
         refund_request: refund_request && {
@@ -72,7 +73,8 @@ class Purchases::RefundRequestsController < ApplicationController
           email: refund_request.email,
           reason_label: PurchaseRefundRequest::REASON_LABELS[refund_request.reason],
         },
-        ineligibility: ineligibility,
+        ineligibility:,
+        refund_window_ended_on: (PurchaseRefundRequest.refund_window_end(@purchase)&.strftime(PurchaseRefundRequest::DATE_FORMAT) if ineligibility == "outside_window"),
       }
     end
 
@@ -83,14 +85,5 @@ class Purchases::RefundRequestsController < ApplicationController
       return "expired" if refund_request.state_refunded?
 
       refund_request.state
-    end
-
-    def ineligibility
-      return if PurchaseRefundRequest.purchase_eligible?(@purchase)
-      return "refunded" if @purchase.refunded?
-      return "partially_refunded" if @purchase.stripe_partially_refunded?
-      return "chargedback" if @purchase.chargedback?
-
-      "other"
     end
 end

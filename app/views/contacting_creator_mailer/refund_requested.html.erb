@@ -14,7 +14,7 @@
     <% elsif @refund_request.escalation_deadline.past? %>
       This request passed the <%= PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS %>-business-day deadline and is being passed to Gumroad support.
     <% else %>
-      Please respond within <%= PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS %> business days — after that, Gumroad support will step in.
+      Please respond by <%= @respond_by %>. After that, Gumroad support will review the request.
     <% end %>
     Refunding now keeps the purchase from turning into a chargeback, which costs more
     and counts against your account.

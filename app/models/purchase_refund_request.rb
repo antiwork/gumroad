@@ -4,6 +4,10 @@ class PurchaseRefundRequest < ApplicationRecord
   belongs_to :purchase
 
   MAX_MESSAGE_LENGTH = 2_000
+  SECURE_ID_SCOPE = "refund_request"
+  # The link is the buyer's only way back to the status page, so it outlives any refund window.
+  LINK_EXPIRY = 6.months
+  DATE_FORMAT = "%A, %B %-d"
   SUPPORT_CATEGORY = "purchases & refunds"
   # Weekdays only, no holiday calendar — same approximation as PiracyReport.
   ESCALATION_BUSINESS_DAYS = 2
@@ -19,10 +23,10 @@ class PurchaseRefundRequest < ApplicationRecord
 
   enum :reason, REASONS.index_by(&:itself), prefix: true, validate: true
 
-  STATES = %w[requested seen refunded declined expired escalated].freeze
-  OPEN_STATES = %w[requested seen].freeze
-  # Refunded needs no entry: purchase_eligible? already rejects refunded purchases.
-  TERMINAL_BLOCKING_STATES = %w[declined expired escalated].freeze
+  STATES = %w[requested refunded expired escalated].freeze
+  OPEN_STATES = %w[requested].freeze
+  # Refunded needs no entry: ineligibility already rejects refunded purchases.
+  TERMINAL_BLOCKING_STATES = %w[expired escalated].freeze
   # Still awaiting an outcome: a later refund or chargeback closes these, and owed
   # notifications are still sent (escalation closes the buyer form, not the seller's email).
   RESOLVABLE_STATES = (OPEN_STATES + %w[escalated]).freeze
@@ -46,9 +50,16 @@ class PurchaseRefundRequest < ApplicationRecord
 
   def awaiting_outcome? = RESOLVABLE_STATES.include?(state)
 
-  # Past the deadline the escalation email is support's notice, so only the seller can be owed.
+  # Past the deadline the escalation email is support's notice, so no support copy is owed.
   def notifications_pending?
-    awaiting_outcome? && (seller_notified_at.nil? || (support_notified_at.nil? && !escalation_deadline.past?))
+    awaiting_outcome? &&
+      (seller_notified_at.nil? || buyer_notice_owed? || (support_notified_at.nil? && !escalation_deadline.past?))
+  end
+
+  # Past the deadline the confirmation would quote a date already gone; the escalation notice replaces it.
+  def buyer_notice_owed?
+    (open? && buyer_notified_at.nil? && !escalation_deadline.past?) ||
+      (state_escalated? && buyer_escalation_notified_at.nil?)
   end
 
   def enqueue_notifications
@@ -69,8 +80,10 @@ class PurchaseRefundRequest < ApplicationRecord
     true
   end
 
-  def escalation_deadline
-    deadline = created_at.to_date
+  def escalation_deadline = self.class.escalation_deadline_from(created_at)
+
+  def self.escalation_deadline_from(time)
+    deadline = time.to_date
     ESCALATION_BUSINESS_DAYS.times do
       deadline += 1
       deadline += 1 while deadline.saturday? || deadline.sunday?
@@ -78,22 +91,41 @@ class PurchaseRefundRequest < ApplicationRecord
     deadline.end_of_day
   end
 
-  def self.purchase_eligible?(purchase)
+  def self.purchase_eligible?(purchase) = ineligibility(purchase).nil?
+
+  # Why the buyer can't request a refund, or nil when they can.
+  def self.ineligibility(purchase)
     # Not preorder authorizations: the card is only held, so there is nothing to refund.
-    return false unless purchase.successful?
-    return false if purchase.price_cents.to_i <= 0
-    return false if purchase.refunded? || purchase.stripe_partially_refunded?
-    return false if purchase.chargedback?
-    return false if where(purchase_id: purchase.id, state: TERMINAL_BLOCKING_STATES).exists?
+    return "not_charged" if !purchase.successful? || purchase.price_cents.to_i <= 0
+    return "refunded" if purchase.refunded?
+    return "partially_refunded" if purchase.stripe_partially_refunded?
+    return "chargedback" if purchase.chargedback?
+    return "previous_request_closed" if where(purchase_id: purchase.id, state: TERMINAL_BLOCKING_STATES).exists?
 
-    # Renewals and plan changes get no policy row of their own; the checkout purchase has it.
-    policy = purchase.purchase_refund_policy || purchase.subscription&.true_original_purchase&.purchase_refund_policy
-    max_days = policy&.max_refund_period_in_days
+    max_days = refund_period_in_days(purchase)
     # 0 = seller sells "no refunds"; the form would promise what they never offered.
-    return false if max_days && max_days <= 0
-    return false if max_days && purchase.created_at <= max_days.days.ago
+    return "no_refunds" if max_days && max_days <= 0
+    return "outside_window" if max_days && purchase.created_at <= max_days.days.ago
 
-    true
+    nil
+  end
+
+  def self.refund_window_end(purchase)
+    max_days = refund_period_in_days(purchase)
+    purchase.created_at + max_days.days if max_days&.positive?
+  end
+
+  # Renewals and plan changes get no policy row of their own; the checkout purchase has it.
+  def self.refund_period_in_days(purchase)
+    policy = purchase.purchase_refund_policy || purchase.subscription&.true_original_purchase&.purchase_refund_policy
+    policy&.max_refund_period_in_days
+  end
+
+  def self.page_link(purchase)
+    Rails.application.routes.url_helpers.purchase_refund_request_url(
+      purchase.secure_external_id(scope: SECURE_ID_SCOPE, expires_at: LINK_EXPIRY.from_now),
+      host: UrlService.domain_with_protocol
+    )
   end
 
   private

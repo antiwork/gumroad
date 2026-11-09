@@ -72,13 +72,7 @@ class ReceiptPresenter::FooterInfo
   end
 
   def refund_request_link
-    link_to(
-      "Request a refund",
-      Rails.application.routes.url_helpers.purchase_refund_request_url(
-        refund_request_purchase.secure_external_id(scope: Purchases::RefundRequestsController::SECURE_ID_SCOPE, expires_at: Purchases::RefundRequestsController::LINK_EXPIRY.from_now),
-        host: UrlService.domain_with_protocol
-      )
-    )
+    link_to("Request a refund", PurchaseRefundRequest.page_link(refund_request_purchase))
   end
 
   private

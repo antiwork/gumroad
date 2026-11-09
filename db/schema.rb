@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000003) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -2354,8 +2354,11 @@ create_table "ping_deliveries", charset: "utf8mb4", collation: "utf8mb4_unicode_
     t.datetime "support_notified_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "buyer_notified_at"
+    t.datetime "buyer_escalation_notified_at"
     t.index ["open_key"], name: "index_purchase_refund_requests_one_open_per_purchase", unique: true
     t.index ["purchase_id"], name: "index_purchase_refund_requests_on_purchase_id"
+    t.index ["state", "buyer_escalation_notified_at", "created_at"], name: "index_purchase_refund_requests_on_owed_buyer_retry"
     t.index ["state", "seller_notified_at", "created_at"], name: "index_purchase_refund_requests_on_owed_seller_retry"
   end
 

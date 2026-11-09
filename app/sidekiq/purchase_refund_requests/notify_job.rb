@@ -18,11 +18,24 @@ class PurchaseRefundRequests::NotifyJob
       next unless Feature.active?(:buyer_refund_requests, refund_request.purchase.seller)
       next if refund_request.close_if_purchase_resolved!
 
+      # Buyer first: a seller address the mail server rejects must not hold back the buyer's notice.
+      # Past the deadline the escalation emails replace the confirmation, which would quote a date
+      # already gone, and the support copy, which would duplicate support's notice.
+      past_deadline = refund_request.escalation_deadline.past?
+      if refund_request.state_escalated?
+        notify_buyer(refund_request, :buyer_escalation_notified_at) do
+          CustomerLowPriorityMailer.refund_request_escalated(refund_request.id)
+        end
+      elsif refund_request.open? && !past_deadline
+        notify_buyer(refund_request, :buyer_notified_at) do
+          CustomerLowPriorityMailer.refund_request_received(refund_request.id)
+        end
+      end
+
       notify(refund_request, :seller_notified_at) do
         ContactingCreatorMailer.refund_requested(refund_request.id)
       end
-      # Past the deadline the escalation email is support's notice, so the copy would only duplicate it.
-      next if refund_request.escalation_deadline.past?
+      next if past_deadline
 
       notify(refund_request, :support_notified_at) do
         SupportContactMailer.contact_form(
@@ -35,6 +48,13 @@ class PurchaseRefundRequests::NotifyJob
   end
 
   private
+    # The buyer's address never changes, so a malformed one is settled here instead of retried every run.
+    def notify_buyer(refund_request, stamp, &)
+      return notify(refund_request, stamp, &) if EmailFormatValidator.valid?(refund_request.email)
+
+      refund_request.update_column(stamp, Time.current) if refund_request.public_send(stamp).nil?
+    end
+
     def notify(refund_request, stamp)
       return if refund_request.public_send(stamp).present?
 

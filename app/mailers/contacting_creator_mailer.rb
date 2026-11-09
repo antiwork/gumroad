@@ -578,7 +578,8 @@ class ContactingCreatorMailer < ApplicationMailer
 
     @seller = @purchase.seller
     @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]
-    @subject = "A customer has requested a refund"
+    @respond_by = @refund_request.escalation_deadline.strftime(PurchaseRefundRequest::DATE_FORMAT)
+    @subject = "Refund requested for #{@purchase.link.name} (#{@purchase.formatted_display_price})"
   end
 
   def payment_returned(payment_id)
