@@ -2042,7 +2042,9 @@ class Link < ApplicationRecord
 
     def publish_schedule_invalidated?
       (saved_change_to_deleted_at? && deleted_at.present?) || saved_change_to_draft?(to: false) ||
-        (saved_change_to_purchase_disabled_at? && purchase_disabled_at.present?) || (saved_change_to_banned_at? && banned_at.present?)
+        (saved_change_to_purchase_disabled_at? && purchase_disabled_at.present?) || (saved_change_to_banned_at? && banned_at.present?) ||
+        # A new draft already has purchase_disabled_at, so taking one down changes only this flag.
+        (saved_change_to_flags? && is_unpublished_by_admin? && !flags_before_last_save.to_i.anybits?(Link.flag_mapping["flags"][:is_unpublished_by_admin]))
     end
 
     def cancel_pending_publish_schedule

@@ -269,6 +269,13 @@ describe ProductPublishSchedule do
       expect(described_class.exists?(schedule.id)).to eq(false)
     end
 
+    it "removes the schedule when an admin takes down a draft created in the editor" do
+      # LinksController#create marks every new draft purchase_disabled_at, so the takedown changes only a flag.
+      product.update_columns(purchase_disabled_at: 1.day.ago)
+      product.reload.unpublish!(is_unpublished_by_admin: true)
+      expect(described_class.exists?(schedule.id)).to eq(false)
+    end
+
     it "keeps the schedule on an unrelated edit" do
       product.update!(name: "Renamed")
       expect(schedule.reload.status).to eq("scheduled")
