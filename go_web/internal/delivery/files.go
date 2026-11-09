@@ -78,6 +78,8 @@ type variant struct {
 	categoryID sql.NullInt64
 	productID  sql.NullInt64
 	deleted    bool
+	// priceDifferenceCents is NULL-as-0, as Ruby's to_i reads it.
+	priceDifferenceCents int64
 }
 
 // owner is what with_product_files and rich_content_provider return.
@@ -148,7 +150,7 @@ const (
 	inPosition = " ORDER BY `product_files`.`position` ASC"
 
 	variantColumns = "SELECT `base_variants`.`id`, `base_variants`.`type`, `base_variants`.`variant_category_id`, " +
-		"`base_variants`.`link_id`, `base_variants`.`deleted_at` FROM `base_variants`"
+		"`base_variants`.`link_id`, `base_variants`.`deleted_at`, `base_variants`.`price_difference_cents` FROM `base_variants`"
 	variantAttributesJoin = " INNER JOIN `base_variants_purchases` ON `base_variants`.`id` = `base_variants_purchases`.`base_variant_id`" +
 		" WHERE `base_variants_purchases`.`purchase_id` = ?"
 	// Link#alive_variants.
@@ -432,6 +434,16 @@ func (l *loader) productOrCheapestVariant(entity *owner) (*owner, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !recoverable && entity.variant != nil {
+		variants, err := l.variants(cheapestFirst, true, product.id)
+		if err != nil {
+			return nil, err
+		}
+		if v := closestPriced(variants, entity.variant.priceDifferenceCents); v != nil {
+			return &owner{variant: v}, nil
+		}
+		return nil, nil
+	}
 	if !recoverable {
 		// An unloaded relation's first is its own LIMIT 1 query, whose pick among equal prices
 		// can differ from the full sort's.
@@ -458,6 +470,35 @@ func (l *loader) productOrCheapestVariant(entity *owner) (*owner, error) {
 		return nil, nil
 	}
 	return &owner{variant: variants[0]}, nil
+}
+
+// closestPriced is the min_by on [|price - target|, price, id] that picks a deleted variant's replacement.
+func closestPriced(variants []*variant, target int64) *variant {
+	var best *variant
+	for _, v := range variants {
+		if best == nil || closerThan(v, best, target) {
+			best = v
+		}
+	}
+	return best
+}
+
+func closerThan(a, b *variant, target int64) bool {
+	distA, distB := absDiff(a.priceDifferenceCents, target), absDiff(b.priceDifferenceCents, target)
+	if distA != distB {
+		return distA < distB
+	}
+	if a.priceDifferenceCents != b.priceDifferenceCents {
+		return a.priceDifferenceCents < b.priceDifferenceCents
+	}
+	return a.id < b.id
+}
+
+func absDiff(a, b int64) int64 {
+	if a > b {
+		return a - b
+	}
+	return b - a
 }
 
 // recoverableHiddenVariantRichContent is Link#recoverable_hidden_variant_rich_content?.
@@ -802,7 +843,8 @@ func (l *loader) scanVariant(scan func(...any) error, asVariant bool) (*variant,
 	v := &variant{}
 	var typ sql.NullString
 	var deletedAt db.NullTime
-	err := scan(&v.id, &typ, &v.categoryID, &v.productID, &deletedAt)
+	var price sql.NullInt64
+	err := scan(&v.id, &typ, &v.categoryID, &v.productID, &deletedAt, &price)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -813,6 +855,7 @@ func (l *loader) scanVariant(scan func(...any) error, asVariant bool) (*variant,
 		return nil, err
 	}
 	v.deleted = deletedAt.Valid
+	v.priceDifferenceCents = price.Int64
 	return v, nil
 }
 
