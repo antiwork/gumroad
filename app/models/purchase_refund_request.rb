@@ -68,8 +68,8 @@ class PurchaseRefundRequest < ApplicationRecord
     return false if purchase.chargedback?
     return false if where(purchase_id: purchase.id, state: TERMINAL_BLOCKING_STATES).exists?
 
-    # Renewals get no policy row of their own; the subscription's original purchase has it.
-    policy = purchase.purchase_refund_policy || purchase.subscription&.original_purchase&.purchase_refund_policy
+    # Renewals and plan changes get no policy row of their own; the checkout purchase has it.
+    policy = purchase.purchase_refund_policy || purchase.subscription&.true_original_purchase&.purchase_refund_policy
     max_days = policy&.max_refund_period_in_days
     # 0 = seller sells "no refunds"; the form would promise what they never offered.
     return false if max_days && max_days <= 0

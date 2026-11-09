@@ -172,6 +172,17 @@ describe PurchaseRefundRequest do
       expect(described_class.purchase_eligible?(renewal)).to eq(false)
     end
 
+    it "keeps the checkout purchase's policy after a plan change archives the original purchase" do
+      original = create(:membership_purchase)
+      create(:purchase_refund_policy, purchase: original, title: "No refunds allowed", max_refund_period_in_days: 0)
+      original.update!(is_archived_original_subscription_purchase: true)
+      create(:purchase, link: original.link, subscription: original.subscription, is_original_subscription_purchase: true, email: original.email)
+      renewal = create(:purchase, link: original.link, subscription: original.subscription, is_original_subscription_purchase: false, email: original.email, price_cents: 5_00)
+
+      expect(original.subscription.reload.original_purchase.purchase_refund_policy).to be_nil
+      expect(described_class.purchase_eligible?(renewal)).to eq(false)
+    end
+
     it "rejects a preorder authorization, which has not been charged" do
       expect(described_class.purchase_eligible?(create(:preorder_authorization_purchase, stripe_transaction_id: nil))).to eq(false)
     end

@@ -53,6 +53,7 @@ describe PurchaseRefundRequests::NotifyJob do
 
     expect(refund_request.reload.seller_notified_at).to be_nil
     expect(refund_request.support_notified_at).to be_present
+    expect(ActionMailer::Base.deliveries.last.text_part.decoded.squish).to include("the seller could not be emailed, so contact them directly")
   end
 
   it "raises without stamping when the mail server rejects the email" do

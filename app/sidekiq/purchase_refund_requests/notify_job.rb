@@ -43,10 +43,18 @@ class PurchaseRefundRequests::NotifyJob
       refund_request.update_column(stamp, Time.current)
     end
 
+    def seller_status(refund_request)
+      if refund_request.seller_notified_at?
+        "the seller was notified and has #{PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS} business days to respond"
+      else
+        "the seller could not be emailed, so contact them directly"
+      end
+    end
+
     def support_message(refund_request)
       purchase = refund_request.purchase
       <<~MESSAGE
-        Buyer refund request ##{refund_request.id} (automated copy for visibility; the seller was notified and has #{PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS} business days to respond).
+        Buyer refund request ##{refund_request.id} (automated copy for visibility; #{seller_status(refund_request)}).
 
         Purchase: #{purchase.external_id}
         Product: #{purchase.link.name}
