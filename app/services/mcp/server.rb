@@ -1958,10 +1958,10 @@ module Mcp
         raise @insufficient_scope
       end
 
-      # A dynamic client may have registered only some of the scopes a tool accepts; naming one
-      # it never registered sends it into an invalid_scope error on re-authorization.
+      # Naming a scope the client cannot request sends it into an invalid_scope error on
+      # re-authorization. Must match what authorization accepts.
       def obtainable_scope(scopes)
-        registered = token.application&.scopes.presence
+        registered = token.application && DynamicClientOauth.requestable_scopes(token.application).presence
         scopes.map(&:to_s).find { |scope| registered.nil? || registered.include?(scope) }
       end
 
