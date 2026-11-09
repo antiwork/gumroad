@@ -772,7 +772,12 @@ const ProductEditPage = (props: Props) => {
       // unless the server skipped them, in which case they stay pending for the next save.
       const spentFileIds = response.file_deletions_skipped ? new Set<string>() : sentRemovedFileIds;
       reconciled.files = reconciled.files.filter((file) => !spentFileIds.has(file.id));
-      if (spentFileIds.size > 0) setDeletedFileIds((previous) => new Set([...previous, ...spentFileIds]));
+      if (spentFileIds.size > 0) {
+        setDeletedFileIds((previous) => new Set([...previous, ...spentFileIds]));
+        // The library list is loaded once and lists this product's own files, so a pasted block or a
+        // pick could otherwise add a deleted file back.
+        setExistingFiles((files) => files.filter((file) => !spentFileIds.has(file.id)));
+      }
       // The marker is per-save. Keeping it would let a later content-tab
       // snapshot still claim a description clear.
       reconciled.description_changed = false;

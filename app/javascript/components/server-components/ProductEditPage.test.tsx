@@ -14,6 +14,7 @@ import {
 import { buildDeletionOperations, confirmRemovedVariantPageDeletions } from "$app/data/product_save_contract";
 import { cast } from "$app/utils/cast";
 
+import { resolveCopiedFileEmbeds } from "$app/components/ProductEdit/ContentTab/resolveCopiedFileEmbeds";
 import { CancellationDiscountSelector } from "$app/components/ProductEdit/ProductTab/CancellationDiscountSelector";
 import { ShippingDestinationsEditor } from "$app/components/ProductEdit/ProductTab/ShippingDestinationsEditor";
 import { type FileEntry, ProductEditContext, type Product, type Version } from "$app/components/ProductEdit/state";
@@ -2174,6 +2175,25 @@ describe("a file removal", () => {
     expect(sentDeletedFileIds(1)).toBeUndefined();
     expect(contextCapture.current?.product.files.map(({ id }) => id)).toEqual(["keep"]);
     expect(contextCapture.current?.deletedFileIds).toEqual(new Set(["detach"]));
+  });
+
+  it("drops a file a save deleted from the library, so pasting its copied block does not add it back", async () => {
+    const product = { ...buildTieredProduct([]), files: [savedFile("keep"), savedFile("detach")] };
+    const library = product.files.map((file) => ({ ...file, attached_product_name: "Product" }));
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    render(<ProductEditPage {...buildTieredProps(product)} existing_files={library} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+    markRemoved("detach");
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+
+    // A block copied before the save carries the file's url, as FileEmbed's transformCopied leaves it.
+    const pasted = document.createElement("div");
+    pasted.innerHTML = '<file-embed id="detach" url="https://example.com/detach.pdf"></file-embed>';
+    const context = contextCapture.current;
+    expect(context && resolveCopiedFileEmbeds(pasted, context.filesById, context.existingFiles)).toEqual([]);
   });
 
   it("of a file this product never saved names nothing to delete", async () => {
