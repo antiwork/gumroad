@@ -161,5 +161,13 @@ describe PurchaseRefundRequest do
       expect(original.subscription.reload.original_purchase.purchase_refund_policy).to be_nil
       expect(described_class.ineligibility(renewal.reload)).to eq("no_refunds")
     end
+
+    it "applies the authorization purchase's policy to a released preorder's charge" do
+      preorder = create(:preorder)
+      authorization = create(:preorder_authorization_purchase, link: preorder.preorder_link.link, preorder:, is_preorder_authorization: true)
+      create(:purchase_refund_policy, purchase: authorization, title: "No refunds allowed", max_refund_period_in_days: 0)
+      charge = create(:purchase, link: authorization.link, preorder:, email: authorization.email)
+      expect(described_class.ineligibility(charge)).to eq("no_refunds")
+    end
   end
 end

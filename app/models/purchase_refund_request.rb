@@ -92,9 +92,12 @@ class PurchaseRefundRequest < ApplicationRecord
     purchase.created_at + max_days.days if max_days&.positive?
   end
 
-  # Renewals and plan changes get no policy row of their own; the checkout purchase has it.
+  # Renewals, plan changes and released preorder charges get no policy row of their own;
+  # the checkout (or preorder authorization) purchase has it.
   def self.refund_period_in_days(purchase)
-    policy = purchase.purchase_refund_policy || purchase.subscription&.true_original_purchase&.purchase_refund_policy
+    policy = purchase.purchase_refund_policy ||
+      purchase.subscription&.true_original_purchase&.purchase_refund_policy ||
+      purchase.preorder&.authorization_purchase&.purchase_refund_policy
     policy&.max_refund_period_in_days
   end
 
