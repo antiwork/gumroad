@@ -749,6 +749,16 @@ export const scalarSettingsForSave = (
   return settings;
 };
 
+const submittedRichContent = (product: Product) =>
+  product.has_same_rich_content_for_all_variants || !product.variants.length
+    ? product.rich_content
+    : product.variants.flatMap((variant) => variant.rich_content);
+
+// The files a save sends: those its submitted pages embed. "Keep version content" sends every file,
+// but its save reloads the page instead of reading this.
+export const filesSentBySave = (product: Product) =>
+  filesForSave(product.files, embeddedFileIds(submittedRichContent(product)), false);
+
 export const saveProduct = async (
   permalink: string,
   id: string,
@@ -775,12 +785,7 @@ export const saveProduct = async (
   // TODO remove this once we have a better content uploader
   const editor = new Editor(baseEditorOptions(extensions(id)));
   const failedFileIds = failedUploadFileIds(product.files);
-  const richContents = withoutFailedFileEmbeds(
-    product.has_same_rich_content_for_all_variants || !product.variants.length
-      ? product.rich_content
-      : product.variants.flatMap((variant) => variant.rich_content),
-    failedFileIds,
-  );
+  const richContents = withoutFailedFileEmbeds(submittedRichContent(product), failedFileIds);
   const fileIds = new Set(
     richContents.flatMap((content) =>
       findChildren(

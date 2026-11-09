@@ -9,6 +9,7 @@ import {
   clearSkippedFileRemovals,
   embeddedFailedUploadIds,
   failedUploadFileIds,
+  filesSentBySave,
   hasMoveSourceScope,
   HiddenVariantContentConflictError,
   readSkippedFileRemovals,
@@ -63,6 +64,7 @@ import {
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { useRefToLatest } from "$app/components/useRefToLatest";
 
 const routes: RouteObject[] = [
   {
@@ -564,6 +566,8 @@ const ProductEditPage = (props: Props) => {
   const [webAppUploading, setWebAppUploading] = React.useState(false);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  // What the seller has by the time a save's response lands, which the closure's `product` predates.
+  const productRef = useRefToLatest(product);
   const [savedWaitlistEnabled, setSavedWaitlistEnabled] = React.useState(props.product.waitlist_enabled);
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
@@ -631,6 +635,9 @@ const ProductEditPage = (props: Props) => {
   const [variantIdMappings, setVariantIdMappings] = React.useState<Record<string, string>>({});
   const [richContentIdMappings, setRichContentIdMappings] = React.useState<Record<string, string>>({});
   const [fileIdMappings, setFileIdMappings] = React.useState<Record<string, string>>({});
+  // Every file the server has stored for this product: the loaded ones and each file a save sent,
+  // under the id the save mapped it to. Append-only: a second copy of a library file maps the same id.
+  const storedFileIdsRef = React.useRef(new Set(props.product.files.map((file) => file.id)));
   const [richContentRemovedFileEmbedIds, setRichContentRemovedFileEmbedIds] = React.useState<Record<string, string[]>>(
     {},
   );
@@ -675,11 +682,13 @@ const ProductEditPage = (props: Props) => {
       };
     }
     // A removed file this product never saved (picked from the library, then its block deleted) has
-    // no row here, so it leaves the save rather than naming one in deleted_ids.
-    const savedFileIds = new Set(lastSavedProductRef.current.files.map((file) => file.id));
+    // no row here, so it leaves the save rather than naming one in deleted_ids. Not read from the
+    // saved baseline: that also lists files a save left out because no page embedded them.
     productToSave = {
       ...productToSave,
-      files: productToSave.files.filter((file) => file.status.type !== "removed" || savedFileIds.has(file.id)),
+      files: productToSave.files.filter(
+        (file) => file.status.type !== "removed" || storedFileIdsRef.current.has(file.id),
+      ),
     };
     // Stamp every page with its client-only identity before freezing the
     // snapshot: reconciliation matches each page back to its sent snapshot by
@@ -766,7 +775,19 @@ const ProductEditPage = (props: Props) => {
       // unless the server skipped them, in which case they stay pending for the next save.
       const spentFileIds = response.file_deletions_skipped ? new Set<string>() : sentRemovedFileIds;
       reconciled.files = reconciled.files.filter((file) => !spentFileIds.has(file.id));
-      if (spentFileIds.size > 0) setDeletedFileIds((previous) => new Set([...previous, ...spentFileIds]));
+      // A file the seller restored (undo) while this save ran stays attached: the next save sends it
+      // with its url again and the server stores it anew.
+      const deletedIds = new Set(
+        productRef.current.files
+          .filter((file) => file.status.type === "removed" && spentFileIds.has(file.id))
+          .map((file) => file.id),
+      );
+      if (deletedIds.size > 0) {
+        setDeletedFileIds((previous) => new Set([...previous, ...deletedIds]));
+        // The library list keeps this product's own files until the picker refreshes it, and a pasted
+        // block resolves by url there, so a deleted file listed first would come back instead.
+        setExistingFiles((files) => files.filter((file) => !deletedIds.has(file.id)));
+      }
       // The marker is per-save. Keeping it would let a later content-tab
       // snapshot still claim a description clear.
       reconciled.description_changed = false;
@@ -785,6 +806,9 @@ const ProductEditPage = (props: Props) => {
         return { ...previous, ...response.rich_content_id_mappings, ...Object.fromEntries(scopedMappings) };
       });
       setFileIdMappings((previous) => ({ ...previous, ...response.file_id_mappings }));
+      // A file the save named by an id this product already has is kept without a mapping.
+      for (const file of filesSentBySave(productSent))
+        storedFileIdsRef.current.add(response.file_id_mappings?.[file.id] ?? file.id);
       setRichContentRemovedFileEmbedIds(response.rich_content_removed_file_embed_ids ?? {});
       updateProduct((current) => {
         applyCanonicalIds(current, response, sentPagesById);

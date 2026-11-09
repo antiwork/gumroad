@@ -1180,7 +1180,7 @@ describe("removing a file from the product", () => {
     toolbarCustom.openPopover = null;
     context.filesById = new Map();
     context.deletedFileIds = new Set();
-    Object.assign(context, { existingFiles: [] });
+    Object.assign(context, { existingFiles: [], fileIdMappings: {} });
   });
 
   it("takes back a block that undo restores for a file a save already deleted", async () => {
@@ -1202,6 +1202,175 @@ describe("removing a file from the product", () => {
 
     expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
     expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
+    expect(alerts).toContainEqual({
+      message: "This file was deleted from the product when you saved. Upload it again to add it back.",
+      level: "warning",
+    });
+  });
+
+  const deleteWorkbookCopyAndSave = (current: () => Product, rerender: () => void) => {
+    act(() => {
+      getMountedEditor().chain().setNodeSelection(0).deleteSelection().run();
+    });
+    // What a save that spent the removal leaves behind.
+    context.updateProduct((product: Product) => {
+      product.files = product.files.filter((entry) => entry.id !== workbookCopy.id);
+    });
+    context.filesById = new Map(current().files.map((entry) => [entry.id, entry]));
+    context.deletedFileIds = new Set([workbookCopy.id]);
+    rerender();
+  };
+
+  it.each([
+    ["a file of this product", "https://example.com/workbook.pdf"],
+    ["another product's file", "https://example.com/elsewhere.pdf"],
+  ])(
+    "takes back a pasted block for a file a save deleted, rather than resolving it to %s with the same url",
+    async (_case, url) => {
+      const { current, rerender } = await mount();
+      deleteWorkbookCopyAndSave(current, rerender);
+
+      await act(async () => {
+        getMountedEditor().view.pasteHTML(`<file-embed id="${workbookCopy.id}" url="${url}"></file-embed>`);
+        await Promise.resolve();
+      });
+
+      expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
+      expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
+      expect(current().files.map((entry) => entry.id)).toEqual([workbook.id, orphan.id]);
+      expect(alerts).toContainEqual({
+        message: "This file was deleted from the product when you saved. Upload it again to add it back.",
+        level: "warning",
+      });
+    },
+  );
+
+  it("places a library file whose copy on this product a save deleted", async () => {
+    // A save that attaches another product's file maps that file's id to the copy it makes here.
+    Object.assign(context, { fileIdMappings: { "file-elsewhere": "file-elsewhere-copy" } });
+    context.deletedFileIds = new Set(["file-elsewhere-copy"]);
+    const { current } = await mount();
+    await openPicker();
+
+    fireEvent.click(screen.getByRole("heading", { name: "Elsewhere" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await act(async () => {});
+
+    // Placed under a fresh id, so the mapping to the deleted copy cannot claim it.
+    const placed = current().files.find((entry) => entry.display_name === "Elsewhere");
+    expect(placed?.id).not.toBe("file-elsewhere");
+    expect(placed?.url).toBe("https://example.com/elsewhere.pdf");
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toContain(placed?.id);
+    expect(alerts).toEqual([]);
+  });
+
+  it("places a block pasted from a library file's product after a save deleted its copy here", async () => {
+    Object.assign(context, { fileIdMappings: { "file-elsewhere": "file-elsewhere-copy" } });
+    context.deletedFileIds = new Set(["file-elsewhere-copy"]);
+    const { current } = await mount();
+
+    await act(async () => {
+      getMountedEditor().view.pasteHTML(
+        '<file-embed id="file-elsewhere" url="https://example.com/elsewhere.pdf"></file-embed>',
+      );
+      await Promise.resolve();
+    });
+
+    expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toContain("file-elsewhere");
+    expect(current().files.map((entry) => entry.id)).toContain("file-elsewhere");
+    expect(alerts).toEqual([]);
+  });
+
+  it("keeps a pasted library file's block when the tab mounts after a save deleted its copy", async () => {
+    // A block pasted from the library file's product attaches it again under its own id; only its first
+    // copy was mapped and deleted.
+    Object.assign(context, { fileIdMappings: { [workbookCopy.id]: "file-workbook-copy-copy" } });
+    context.deletedFileIds = new Set(["file-workbook-copy-copy"]);
+    const { current } = await mount();
+
+    act(() => {
+      getMountedEditor().chain().focus("end").insertContent("More").run();
+    });
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([workbookCopy.id]);
+    expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([workbookCopy.id]);
+  });
+
+  it("takes back a block undo restores under a library file's id after a save deleted its copy here", async () => {
+    // The block left the page while the save that copied the library file ran, and a later save deleted the copy.
+    Object.assign(context, { fileIdMappings: { "file-elsewhere": "file-elsewhere-copy" } });
+    context.deletedFileIds = new Set(["file-elsewhere-copy"]);
+    const { current } = await mount();
+
+    await act(async () => {
+      getMountedEditor().commands.insertContentAt(0, { type: "fileEmbed", attrs: { id: "file-elsewhere" } });
+      await Promise.resolve();
+    });
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([workbookCopy.id]);
+    expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([workbookCopy.id]);
+    expect(alerts).toContainEqual({
+      message: "This file was deleted from the product when you saved. Upload it again to add it back.",
+      level: "warning",
+    });
+  });
+
+  it("takes back a restored block that still carries the id the file had before a save mapped it", async () => {
+    Object.assign(context, { fileIdMappings: { "client-workbook": workbookCopy.id } });
+    const { current, rerender } = await mount();
+    deleteWorkbookCopyAndSave(current, rerender);
+
+    // History can hold the block under its upload id when it left the page while the mapping save ran.
+    await act(async () => {
+      getMountedEditor().commands.insertContentAt(0, { type: "fileEmbed", attrs: { id: "client-workbook" } });
+      await Promise.resolve();
+    });
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
+    expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
+    expect(alerts).toContainEqual({
+      message: "This file was deleted from the product when you saved. Upload it again to add it back.",
+      level: "warning",
+    });
+  });
+
+  it("takes back a restored block whose upload id maps through a copy a later save stored anew", async () => {
+    // The first copy was restored while its deleting save ran, so the next save stored it again as the
+    // copy that was then deleted.
+    Object.assign(context, {
+      fileIdMappings: { "client-workbook": "file-workbook-first-copy", "file-workbook-first-copy": workbookCopy.id },
+    });
+    const { current, rerender } = await mount();
+    deleteWorkbookCopyAndSave(current, rerender);
+
+    await act(async () => {
+      getMountedEditor().commands.insertContentAt(0, { type: "fileEmbed", attrs: { id: "client-workbook" } });
+      await Promise.resolve();
+    });
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
+    expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
+    expect(alerts).toContainEqual({
+      message: "This file was deleted from the product when you saved. Upload it again to add it back.",
+      level: "warning",
+    });
+  });
+
+  it.each([
+    ["an upload", "blob:https://example.com/workbook"],
+    ["a Dropbox file", "/products/product-id/files/download?product_file_ids%5B%5D=client-workbook"],
+  ])("takes back a restored block of %s that was dragged before a save mapped its id", async (_case, url) => {
+    Object.assign(context, { fileIdMappings: { "client-workbook": workbookCopy.id } });
+    const { current, rerender } = await mount();
+    deleteWorkbookCopyAndSave(current, rerender);
+
+    // A drag leaves the file's url on the block, the same marker a paste from another product carries.
+    await act(async () => {
+      getMountedEditor().commands.insertContentAt(0, { type: "fileEmbed", attrs: { id: "client-workbook", url } });
+      await Promise.resolve();
+    });
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
     expect(alerts).toContainEqual({
       message: "This file was deleted from the product when you saved. Upload it again to add it back.",
       level: "warning",

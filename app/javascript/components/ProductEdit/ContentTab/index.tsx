@@ -586,9 +586,27 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     });
   }, [selectedScopedPageKey, editor]);
   React.useEffect(() => {
-    if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
+    // Runs again for every new editor, so only ids no product file has still need it: a save renames
+    // its files in the same commit, and a library file pasted, or picked again while its copy here is
+    // attached, keeps its own id.
+    if (editor)
+      reconcileMountedEditorFileEmbedIds(
+        editor,
+        Object.fromEntries(Object.entries(fileIdMappings).filter(([fileId]) => !filesById.has(fileId))),
+      );
   }, [editor, fileIdMappings]);
   const savedThisSessionFileIds = React.useMemo(() => new Set(Object.values(fileIdMappings)), [fileIdMappings]);
+  // A file restored while its deleting save ran is stored anew by the next save, so its first id can
+  // map through several copies before one is deleted. The walk stops at a file the product still has.
+  const mapsToDeletedFile = (fileId: string) => {
+    const seen = new Set([fileId]);
+    for (let id = fileIdMappings[fileId]; id !== undefined && !seen.has(id); id = fileIdMappings[id]) {
+      if (deletedFileIds.has(id)) return true;
+      if (filesById.has(id)) return false;
+      seen.add(id);
+    }
+    return false;
+  };
   React.useEffect(() => {
     if (editor && removedFileEmbedIds?.length) {
       // A save can remove a legacy file node from product state while this
@@ -606,6 +624,20 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
 
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
+    // Undo can restore a block under the id its file had before a save mapped it. A block pasted from
+    // another product (it carries a url) keeps that product's id, and a save renames the product files
+    // it maps, so neither mapping is followed.
+    const pastedFileIds = new Set(
+      Array.from(fragment.querySelectorAll("file-embed[url]"), (node) => node.getAttribute("id"))
+        // A drag leaves a url as well, so only a file the library lists counts as pasted.
+        .filter((id) => existingFiles.some((file) => file.id === id)),
+    );
+    const isDeletedFileId = (fileId: string) =>
+      deletedFileIds.has(fileId) || (!filesById.has(fileId) && !pastedFileIds.has(fileId) && mapsToDeletedFile(fileId));
+    // A block for a file a save deleted is taken back below, so it must not resolve to another file
+    // with the same url and reach the page content.
+    for (const node of fragment.querySelectorAll("file-embed"))
+      if (isDeletedFileId(node.getAttribute("id") ?? "")) node.remove();
     const newFiles: FileEntry[] = resolveCopiedFileEmbeds(fragment, filesById, existingFiles);
     if (newFiles.length > 0) {
       updateProduct({ files: [...product.files.filter((f) => !newFiles.includes(f)), ...newFiles] });
@@ -624,7 +656,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       updateProduct((current) => {
         current.files = reconcileFileRemovalsWithEmbeds(current, embedChanges, savedThisSessionFileIds);
       });
-    const deletedFileEmbedIds = [...embedChanges.inserted].filter((fileId) => deletedFileIds.has(fileId));
+    const deletedFileEmbedIds = [...embedChanges.inserted].filter(isDeletedFileId);
     if (deletedFileEmbedIds.length > 0) {
       // Queued: this runs inside the editor's own update.
       queueMicrotask(() => reconcileMountedEditorFileEmbeds(editor, deletedFileEmbedIds));
@@ -1023,8 +1055,10 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
                               ...product.files.filter((file) => file.status.type === "removed").map((file) => file.id),
                               ...unplacedFiles.map((file) => file.id),
                             ]);
+                            // So is a library file whose copy here a save deleted: under its own id, it
+                            // would read as that deleted copy.
                             const selected = selectingExistingFiles.selected.map((file) =>
-                              existingIds.has(file.id) && !placeableIds.has(file.id)
+                              (existingIds.has(file.id) && !placeableIds.has(file.id)) || mapsToDeletedFile(file.id)
                                 ? { ...file, id: FileUtils.generateGuid() }
                                 : file,
                             );
