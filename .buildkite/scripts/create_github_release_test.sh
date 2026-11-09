@@ -1,18 +1,14 @@
 #!/bin/bash
 # Harness for .buildkite/scripts/create_github_release.sh, the last thing deploy_production.sh
-# sources and therefore the last thing that can fail its step.
+# sources and therefore the last thing that can fail its step. Nothing here may fail: production is
+# already live by then, so a red step marks a shipped commit failed and every PR cut from main
+# inherits it. The cases below pin the behaviours that keep that bookkeeping from doing it:
 #
-# It exists because the step failed on a SHIPPED deploy: builds 28142 and 28143 each lost the gh
-# CLI download to a 504 from github.com's release CDN, and under `set -e` that aborted the step
-# after `bin/deploy` had already switched production traffic. The commit was marked failed, main
-# went red, and every PR cut from main inherited it. So the cases below pin the two decisions
-# that came out of it:
-#
-#   * the tag push stays fatal (deploy_relevance.sh diffs against the tag) -- reversed in November:
-#     it failed a live deploy again, so the push is now retried, then a warning, and
+#   * tag fetch and push failures are retried, then warned because production is already live,
 #   * creating the Release is best effort over two transports -- the gh CLI, then the REST API on
 #     api.github.com, a different host from the CDN the CLI download needs -- and when BOTH fail
-#     the step still exits 0, with a warning and a Buildkite annotation.
+#     the step still exits 0, with a warning and a Buildkite annotation, and
+#   * a release is only claimed when the tag GitHub holds is this deploy's commit.
 #
 # The whole shipped script runs, with gh/git/curl/buildkite-agent doubled on PATH.
 #
