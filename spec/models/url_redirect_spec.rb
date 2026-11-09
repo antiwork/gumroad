@@ -1083,6 +1083,24 @@ describe UrlRedirect do
         expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: cheaper_rich_content.external_id, page_id: cheaper_rich_content.external_id, variant_id: cheaper.external_id, title: "Cheaper page title", description: { type: "doc", content: cheaper_rich_content.description }, updated_at: cheaper_rich_content.updated_at }])
       end
 
+      it "breaks an exact price tie toward the lower id when the purchase is associated with a deleted variant" do
+        @product.alive_rich_contents.find_each(&:mark_deleted!)
+
+        variant_category = create(:variant_category, link: @product)
+        old_variant = create(:variant, variant_category:, price_difference_cents: 70, product_files: @product.product_files)
+        lower_id = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        higher_id = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        # MySQL usually returns equal prices in id order, which would hide a missing tie-break.
+        allow_any_instance_of(Link).to receive(:alive_variants).and_wrap_original { |original| original.call.order(id: :desc) }
+        lower_id_rich_content = create(:rich_content, entity: lower_id, title: "Lower id page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+        create(:rich_content, entity: higher_id, title: "Higher id page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
+
+        @purchase.variant_attributes = [old_variant]
+        old_variant.mark_deleted!
+
+        expect(UrlRedirect.find(@url_redirect.id).rich_content_json).to eq([{ id: lower_id_rich_content.external_id, page_id: lower_id_rich_content.external_id, variant_id: lower_id.external_id, title: "Lower id page title", description: { type: "doc", content: lower_id_rich_content.description }, updated_at: lower_id_rich_content.updated_at }])
+      end
+
       it "returns the product-level rich content when the purchase is associated with a deleted variant and there are no other variants" do
         old_variant_rich_content = @variant.alive_rich_contents.first
         expect(@url_redirect.rich_content_json).to eq([{ id: old_variant_rich_content.external_id, page_id: old_variant_rich_content.external_id, variant_id: @variant.external_id, title: "Variant-level page", description: { type: "doc", content: old_variant_rich_content.description }, updated_at: old_variant_rich_content.updated_at }])
