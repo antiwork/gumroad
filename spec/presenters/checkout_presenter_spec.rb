@@ -875,6 +875,39 @@ describe CheckoutPresenter do
     end
   end
 
+  describe "#owned_products_in_cart" do
+    let(:buyer) { create(:user) }
+    let(:owned) { create(:product, name: "Owned thing") }
+    let(:fresh) { create(:product, name: "Fresh thing") }
+    let(:cart) { create(:cart, user: buyer) }
+    let(:instance) { described_class.new(logged_in_user: buyer, ip: "104.193.168.19") }
+
+    before do
+      create(:free_purchase, link: owned, purchaser: buyer, email: buyer.email)
+      create(:cart_product, cart:, product: owned)
+      create(:cart_product, cart:, product: fresh)
+    end
+
+    it "returns only products the buyer already owns" do
+      expect(instance.owned_products_in_cart(cart:)).to eq([{ permalink: owned.unique_permalink, name: "Owned thing" }])
+    end
+
+    it "ignores a fully refunded purchase" do
+      Purchase.where(link: owned).update_all(stripe_refunded: true)
+      expect(instance.owned_products_in_cart(cart:)).to eq([])
+    end
+
+    it "returns nothing for a guest cart" do
+      guest_cart = create(:cart, user: nil, email: buyer.email)
+      create(:cart_product, cart: guest_cart, product: owned)
+      expect(instance.owned_products_in_cart(cart: guest_cart)).to eq([])
+    end
+
+    it "returns nothing without a cart" do
+      expect(instance.owned_products_in_cart(cart: nil)).to eq([])
+    end
+  end
+
   describe "#checkout_payment_props" do
     let(:instance) { described_class.new(logged_in_user: nil, ip: "104.193.168.19") }
 
