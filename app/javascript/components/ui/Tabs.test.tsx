@@ -255,8 +255,8 @@ describe("Tabs hover halo", () => {
 
     expect(tab.className).toContain("not-active:hover:-translate-1");
     expect(tab.className.split(" ")).toContain("lift-halo");
-    // `-translate-1` moves 0.25rem, which is the halo's own default; an override here would have to
-    // match a different lift.
-    expect(tab.className).not.toContain("[--lift-halo-offset:");
+    // A Button inside the tab sets the halo to the store's offset, while the tab's `-translate-1` is the
+    // lift that applies, so the halo is pinned back to that lift under the same condition.
+    expect(tab.className).toContain("not-active:hover:[--lift-halo-offset:var(--spacing)]");
   });
 });
