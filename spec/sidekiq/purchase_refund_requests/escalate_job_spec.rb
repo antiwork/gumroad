@@ -34,14 +34,15 @@ describe PurchaseRefundRequests::EscalateJob do
 
     described_class.new.perform(refund_request.id)
 
-    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("Seller notified: not yet, the email is still being retried")
+    expect(ActionMailer::Base.deliveries.last.body.encoded).to include("Seller notified: not yet (still retrying), so contact the seller directly")
   end
 
   it "counts the escalation email as support's notice, so no later support copy is owed" do
-    refund_request.update_columns(seller_notified_at: Time.current, support_notified_at: nil)
+    refund_request.update_columns(seller_notified_at: Time.current, support_notified_at: nil, message: "The files were corrupted.")
 
     described_class.new.perform(refund_request.id)
 
+    expect(ActionMailer::Base.deliveries.last.text_part.decoded.squish).to include("Message: The files were corrupted.")
     expect(refund_request.reload.support_notified_at).to be_present
     expect(refund_request.notifications_pending?).to eq(false)
   end
