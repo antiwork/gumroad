@@ -38,6 +38,7 @@ const context = vi.hoisted(() => ({
   richContentIdMappings: {},
   fileIdMappings: {},
   richContentRemovedFileEmbedIds: {},
+  deletedFileIds: new Set<string>(),
 }));
 
 vi.mock("$app/components/ProductEdit/state", async (importOriginal) => {
@@ -1178,7 +1179,33 @@ describe("removing a file from the product", () => {
     toolbarCustom.render = false;
     toolbarCustom.openPopover = null;
     context.filesById = new Map();
+    context.deletedFileIds = new Set();
     Object.assign(context, { existingFiles: [] });
+  });
+
+  it("takes back a block that undo restores for a file a save already deleted", async () => {
+    const { current, rerender } = await mount();
+    act(() => {
+      getMountedEditor().chain().setNodeSelection(0).deleteSelection().run();
+    });
+    // What a save that spent the removal leaves behind.
+    context.updateProduct((product: Product) => {
+      product.files = product.files.filter((entry) => entry.id !== workbookCopy.id);
+    });
+    context.deletedFileIds = new Set([workbookCopy.id]);
+    rerender();
+
+    await act(async () => {
+      getMountedEditor().commands.undo();
+      await Promise.resolve();
+    });
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([]);
+    expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([]);
+    expect(alerts).toContainEqual({
+      message: "This file was deleted from the product when you saved. Upload it again to add it back.",
+      level: "warning",
+    });
   });
 
   it("removes a file when the seller deletes its last block, and keeps it when the block comes back", async () => {

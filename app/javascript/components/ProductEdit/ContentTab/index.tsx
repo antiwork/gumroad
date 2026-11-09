@@ -46,6 +46,8 @@ import {
   removedFileEmbedIdsForPage,
   resolveServerIdMapping,
   scopedRichContentPageKey,
+  withoutFileEmbeds,
+  withoutFileEmbedsFromVariants,
 } from "$app/data/product_edit";
 import { reorderRowsPreservingMembership } from "$app/data/product_save_contract";
 import { type Post } from "$app/types/workflow";
@@ -240,6 +242,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     richContentIdMappings,
     fileIdMappings,
     richContentRemovedFileEmbedIds,
+    deletedFileIds,
     hasWebBuilds,
     webBuildPlayerEnabled,
   } = useProductEditContext();
@@ -620,6 +623,18 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
       updateProduct((current) => {
         current.files = reconcileFileRemovalsWithEmbeds(current, embedChanges);
       });
+    const deletedFileEmbedIds = [...embedChanges.inserted].filter((fileId) => deletedFileIds.has(fileId));
+    if (deletedFileEmbedIds.length > 0) {
+      // Queued: this runs inside the editor's own update.
+      queueMicrotask(() => reconcileMountedEditorFileEmbeds(editor, deletedFileEmbedIds));
+      updateProduct((current) => {
+        for (const fileId of deletedFileEmbedIds) {
+          current.rich_content = withoutFileEmbeds(current.rich_content, fileId);
+          withoutFileEmbedsFromVariants(current.variants, fileId);
+        }
+      });
+      showAlert("This file was deleted from the product when you saved. Upload it again to add it back.", "warning");
+    }
   });
   const handleCreatePageClick = () => {
     setPagesExpanded(true);

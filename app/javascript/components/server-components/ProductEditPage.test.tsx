@@ -2173,6 +2173,7 @@ describe("a file removal", () => {
     });
     expect(sentDeletedFileIds(1)).toBeUndefined();
     expect(contextCapture.current?.product.files.map(({ id }) => id)).toEqual(["keep"]);
+    expect(contextCapture.current?.deletedFileIds).toEqual(new Set(["detach"]));
   });
 
   it("of a file this product never saved names nothing to delete", async () => {
@@ -2213,6 +2214,8 @@ describe("a file removal", () => {
     });
     expect(sentDeletedFileIds(1)).toEqual(["detach"]);
     expect(contextCapture.current?.product.files.map(({ id }) => id)).toEqual(["keep"]);
+    // Only the second save deleted it.
+    expect(contextCapture.current?.deletedFileIds).toEqual(new Set(["detach"]));
   });
 
   describe("skipped by a save that kept version content", () => {

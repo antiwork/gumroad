@@ -168,6 +168,7 @@ const createContextValue = (props: Props) => ({
   richContentIdMappings: {},
   fileIdMappings: {},
   richContentRemovedFileEmbedIds: {},
+  deletedFileIds: new Set(),
   googleClientId: props.google_client_id,
   seller_refund_policy_enabled: props.seller_refund_policy_enabled,
   seller_refund_policy: props.seller_refund_policy,
@@ -633,6 +634,7 @@ const ProductEditPage = (props: Props) => {
   const [richContentRemovedFileEmbedIds, setRichContentRemovedFileEmbedIds] = React.useState<Record<string, string[]>>(
     {},
   );
+  const [deletedFileIds, setDeletedFileIds] = React.useState<ReadonlySet<string>>(new Set());
   // Resolves true only when the save request actually succeeded — callers that
   // chain follow-up actions on save() (navigating to the next tab, opening the
   // preview) use this to stay put when the save failed or the seller cancelled
@@ -764,6 +766,7 @@ const ProductEditPage = (props: Props) => {
       // unless the server skipped them, in which case they stay pending for the next save.
       const spentFileIds = response.file_deletions_skipped ? new Set<string>() : sentRemovedFileIds;
       reconciled.files = reconciled.files.filter((file) => !spentFileIds.has(file.id));
+      if (spentFileIds.size > 0) setDeletedFileIds((previous) => new Set([...previous, ...spentFileIds]));
       // The marker is per-save. Keeping it would let a later content-tab
       // snapshot still claim a description clear.
       reconciled.description_changed = false;
@@ -952,6 +955,7 @@ const ProductEditPage = (props: Props) => {
       richContentIdMappings,
       fileIdMappings,
       richContentRemovedFileEmbedIds,
+      deletedFileIds,
       contentUpdates,
       setContentUpdates,
       webAppUploading,
@@ -968,6 +972,7 @@ const ProductEditPage = (props: Props) => {
       richContentIdMappings,
       fileIdMappings,
       richContentRemovedFileEmbedIds,
+      deletedFileIds,
       webAppUploading,
       savedWaitlistEnabled,
     ],
