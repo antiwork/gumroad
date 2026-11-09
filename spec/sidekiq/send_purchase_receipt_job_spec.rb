@@ -85,6 +85,29 @@ describe SendPurchaseReceiptJob do
     end
   end
 
+  context "when the purchase has joined an order's charge since this was enqueued" do
+    let(:charge) { create(:charge, seller:, purchases: [purchase]) }
+
+    before { charge.order.purchases << purchase }
+
+    it "hands the receipt to the charge job, which waits for the charge's other lines" do
+      expect(CustomerMailer).not_to receive(:receipt)
+
+      described_class.new.perform(purchase.id)
+
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
+    end
+
+    it "still sends a resend directly" do
+      expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+      described_class.new.perform(purchase.id, true)
+
+      expect(mail_double).to have_received(:deliver_now)
+      expect(SendChargeReceiptJob.jobs).to be_empty
+    end
+  end
+
   context "when the purchase is a bundle product purchae" do
     before do
       allow_any_instance_of(Purchase).to receive(:is_bundle_product_purchase?).and_return(true)

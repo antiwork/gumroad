@@ -4093,6 +4093,42 @@ describe Order::PreparePaymentIntentService, :vcr do
         # The charge amount stays paid-only; the free item contributes nothing.
         expect(charge.amount_cents).to eq(paid_purchase.total_transaction_cents)
       end
+
+      # Marking the free line successful enqueues its purchase receipt before the line joins the
+      # charge; that job runs while the paid line is still being confirmed (gp#4453).
+      it "waits for the paid line before sending receipts when the free line's receipt job runs first" do
+        free_product = create(:product, user: seller, price_cents: 0, name: "Free Line")
+        product.update!(name: "Paid Line")
+        params = {
+          line_items: [
+            line_item,
+            { uid: "unique-id-1", permalink: free_product.unique_permalink, perceived_price_cents: 0, quantity: 1 },
+          ],
+        }.merge(common_params)
+        order, = Order::CreateService.new(params:).perform
+        paid_purchase = order.purchases.find { _1.link_id == product.id }
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "US" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
+        allow(StripeDeferredPaymentIntent).to receive(:create).and_return(charge_intent)
+
+        described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+        expect(paid_purchase.reload).to be_in_progress
+        SendPurchaseReceiptJob.drain
+        receipts = -> { ActionMailer::Base.deliveries.select { _1.to == [common_params[:email]] } }
+        expect(receipts.call).to be_empty
+
+        paid_purchase.update!(purchase_state: "successful", stripe_transaction_id: "ch_test", stripe_fingerprint: "fp_test")
+        order.send_charge_receipts
+        SendChargeReceiptJob.drain
+
+        # Two lines on one charge get one receipt per line.
+        bodies = receipts.call.map { _1.body.encoded }
+        expect(bodies.size).to eq(2)
+        expect(bodies.join).to include("Free Line").and include("Paid Line")
+      end
     end
   end
 end

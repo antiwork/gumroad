@@ -4,6 +4,7 @@
 # Bundle product purchases are dummy rows and get no receipt.
 class SendPurchaseReceiptJob
   include Sidekiq::Job
+  include DatabaseRoleRouting
   sidekiq_options queue: :critical, retry: 5, lock: :until_executed
 
   # A resend passes true as the second arg. Include it in the digest so a
@@ -15,6 +16,11 @@ class SendPurchaseReceiptJob
   end
 
   def perform(purchase_id, resend = false)
+    # Client-confirm prepare marks a free line successful, enqueuing this, before it joins the paid
+    # charge. Sending here would render the charge receipt without the still in-progress paid line.
+    charge_id = charge_receipt_id(purchase_id) unless resend
+    return SendChargeReceiptJob.perform_async(charge_id) if charge_id
+
     purchase = Purchase.find(purchase_id)
 
     stamp_error = enqueue_stamping(purchase)
@@ -23,6 +29,14 @@ class SendPurchaseReceiptJob
   end
 
   private
+    # The charge is attached after this is enqueued, so a replica can still miss it.
+    def charge_receipt_id(purchase_id)
+      with_primary_database do
+        purchase = Purchase.find(purchase_id)
+        purchase.charge.id if purchase.uses_charge_receipt?
+      end
+    end
+
     def enqueue_stamping(purchase)
       url_redirect = purchase.url_redirect
       return unless url_redirect && purchase.link.has_stampable_pdfs? && !url_redirect.is_done_pdf_stamping?
