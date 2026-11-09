@@ -7,9 +7,12 @@ describe "OAuth consent for an MCP client registered before view_library", type:
 
   let(:user) { create(:named_user) }
   let(:resource) { Mcp::DynamicClientOauth.resource_identifier("/claude/v1/mcp") }
+  # Through the real registration path: a dynamic client has no owner, which is what the consent
+  # save has to cope with.
   let(:application) do
-    create(:oauth_application, owner: create(:named_user), redirect_uri: "https://claude.ai/api/mcp/auth_callback", confidential: false,
-                               scopes: "view_public view_profile view_sales", mcp_dynamic_client: true, name: "MCP Claude")
+    payload = Mcp::OauthClientRegistration.create!(client_name: "Claude", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+                                                   token_endpoint_auth_method: "none", scope: "view_public view_profile view_sales")
+    OauthApplication.find_by!(uid: payload.fetch(:client_id))
   end
   let(:params) do
     { response_type: "code", client_id: application.uid, redirect_uri: application.redirect_uri, scope: "view_public view_library",
@@ -41,6 +44,17 @@ describe "OAuth consent for an MCP client registered before view_library", type:
 
     expect(application.reload.scopes.to_s.split).to include("view_library")
     expect(Doorkeeper::AccessGrant.where(application_id: application.id).last.scopes.to_s).to eq("view_public view_library")
+  end
+
+  it "leaves the client alone when the request is refused" do
+    allow_any_instance_of(ActionController::Base).to receive(:verify_authenticity_token)
+
+    expect do
+      post "/oauth/authorize", params: params.merge(resource: "https://evil.example/mcp", consented_account: "")
+    end.not_to change { application.reload.scopes.to_s }
+
+    expect(response).to have_http_status(:found)
+    expect(Rack::Utils.parse_query(URI.parse(response.location).query)).to include("error" => "invalid_target")
   end
 
   it "does not widen a client for a scope outside the late list" do

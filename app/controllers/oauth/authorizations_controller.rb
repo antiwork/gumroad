@@ -64,14 +64,22 @@ class Oauth::AuthorizationsController < Doorkeeper::AuthorizationsController
       oauth_application = OauthApplication.alive.find_by(uid: params[:client_id])
       return super if oauth_application.nil?
 
-      # Consent to the request is what adds a late scope to a client registered before it existed.
-      if oauth_application.mcp_dynamic_client && Mcp::DynamicClientOauth.late_scopes_for(oauth_application, params[:scope])
-        oauth_application.with_application_lock { Mcp::DynamicClientOauth.grant_late_scopes!(oauth_application, params[:scope]) }
-      end
+      late_scopes = oauth_application.mcp_dynamic_client &&
+                    Mcp::DynamicClientOauth.late_scopes_for(oauth_application, params[:scope])
 
-      oauth_application.with_application_lock(shared: true) do
+      oauth_application.with_application_lock(shared: late_scopes.blank?) do
         @pre_auth = nil
         @strategy = nil
+
+        # Consent is what adds a late scope to a client registered before it existed, so the write
+        # rides with the grant: the whole request is checked first, and one the server refuses
+        # leaves the client as it was.
+        if late_scopes.present? && pre_auth.authorizable?
+          Mcp::DynamicClientOauth.grant_late_scopes!(oauth_application, params[:scope])
+          @pre_auth = nil
+          @strategy = nil
+        end
+
         bind_grant_to_selected_account(super)
       end
     end
