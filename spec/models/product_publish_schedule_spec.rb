@@ -217,7 +217,7 @@ describe ProductPublishSchedule do
       expect(SendProductPublishScheduleNoticeJob).to have_enqueued_sidekiq_job(schedule.id)
     end
 
-    it "keeps the claim when publish! raises after the product went live" do
+    it "keeps the claim when publish! raises after the product went live, then sends the success notice" do
       allow_any_instance_of(Link).to receive(:publish!).and_wrap_original do |m, *args|
         m.call(*args)
         raise Redis::BaseConnectionError
@@ -225,6 +225,13 @@ describe ProductPublishSchedule do
       expect { schedule.run!(now: due + 1.minute) }.to raise_error(Redis::BaseConnectionError)
       expect(product.reload.draft?).to eq(false)
       expect(schedule.reload.status).to eq("publishing")
+
+      travel_to(schedule.claimed_at + described_class::CLAIM_TIMEOUT + 1.minute) do
+        DispatchProductPublishSchedulesJob.new.perform
+        expect(schedule.reload.status).to eq("published")
+        SendProductPublishScheduleNoticeJob.drain
+      end
+      expect(ActionMailer::Base.deliveries.map(&:subject)).to eq(["#{product.name} is live"])
     end
 
     it "does not finish a claim that another job took over" do
