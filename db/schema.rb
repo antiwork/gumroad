@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000001) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000002) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1454,6 +1454,21 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_26_000001) do
     t.boolean "marketing_holdout", null: false
     t.datetime "marketing_holdout_assigned_at", null: false
     t.index ["user_id"], name: "index_marketing_holdout_assignments_on_user_id", unique: true
+  end
+
+  create_table "mcp_event_subscriptions", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.json "arguments", null: false
+    t.string "callback_url", limit: 2048, null: false
+    t.datetime "created_at", null: false
+    t.string "event_name", null: false
+    t.datetime "expires_at", null: false
+    t.string "key_digest", limit: 64, null: false
+    t.bigint "oauth_application_id", null: false
+    t.string "secret", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["key_digest"], name: "index_mcp_event_subscriptions_on_key_digest", unique: true
+    t.index ["user_id", "event_name", "expires_at"], name: "index_mcp_event_subscriptions_on_user_id_event_name_expires_at"
   end
 
   create_table "media_locations", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
