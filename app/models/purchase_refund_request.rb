@@ -55,6 +55,20 @@ class PurchaseRefundRequest < ApplicationRecord
     PurchaseRefundRequests::NotifyJob.perform_async(id)
   end
 
+  # Backstop for a missed refund/chargeback sync: close the request from the purchase's own
+  # state. Returns true when the purchase is resolved, so callers send nothing.
+  def close_if_purchase_resolved!
+    resolved_state = if purchase.stripe_refunded?
+      "refunded"
+    elsif purchase.chargedback?
+      "expired"
+    end
+    return false if resolved_state.nil?
+
+    with_lock { update!(state: resolved_state) if awaiting_outcome? }
+    true
+  end
+
   def escalation_deadline
     deadline = created_at.to_date
     ESCALATION_BUSINESS_DAYS.times do

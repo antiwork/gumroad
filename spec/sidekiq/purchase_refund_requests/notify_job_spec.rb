@@ -103,6 +103,38 @@ describe PurchaseRefundRequests::NotifyJob do
     expect(refund_request.notifications_pending?).to eq(false)
   end
 
+  context "when the refund/chargeback sync missed an escalated request" do
+    before { refund_request.update_columns(state: "escalated", open_key: nil, created_at: 5.days.ago, support_notified_at: 5.days.ago) }
+
+    it "closes it as refunded instead of emailing the seller about a refunded purchase" do
+      purchase.update_column(:stripe_refunded, true)
+
+      expect do
+        described_class.new.perform(refund_request.id)
+      end.not_to change { ActionMailer::Base.deliveries.count }
+      expect(refund_request.reload.state).to eq("refunded")
+      expect(refund_request.seller_notified_at).to be_nil
+    end
+
+    it "closes it as expired instead of emailing the seller about a charged-back purchase" do
+      purchase.update_column(:chargeback_date, Time.current)
+
+      expect do
+        described_class.new.perform(refund_request.id)
+      end.not_to change { ActionMailer::Base.deliveries.count }
+      expect(refund_request.reload.state).to eq("expired")
+    end
+
+    it "still sends the seller email after a partial refund" do
+      purchase.update_column(:stripe_partially_refunded, true)
+
+      expect do
+        described_class.new.perform(refund_request.id)
+      end.to change { ActionMailer::Base.deliveries.count }.by(1)
+      expect(refund_request.reload.state).to eq("escalated")
+    end
+  end
+
   it "does nothing for a closed request" do
     refund_request.update!(state: "declined")
 

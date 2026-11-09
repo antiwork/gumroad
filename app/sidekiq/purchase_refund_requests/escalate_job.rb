@@ -13,7 +13,7 @@ class PurchaseRefundRequests::EscalateJob
       purchase = refund_request.purchase
       next unless Feature.active?(:buyer_refund_requests, purchase.seller)
       # Backstop for a missed refund/chargeback sync: close the request instead of escalating it.
-      next if close_if_purchase_resolved(refund_request, purchase)
+      next if refund_request.close_if_purchase_resolved!
 
       # Email first, escalate second: a failed delivery leaves the request open, so
       # the retry (or the next DispatchPendingJob run) sends it again.
@@ -41,17 +41,4 @@ class PurchaseRefundRequests::EscalateJob
       end
     end
   end
-
-  private
-    def close_if_purchase_resolved(refund_request, purchase)
-      state = if purchase.stripe_refunded?
-        "refunded"
-      elsif purchase.chargedback?
-        "expired"
-      end
-      return false if state.nil?
-
-      refund_request.with_lock { refund_request.update!(state:) if refund_request.open? }
-      true
-    end
 end

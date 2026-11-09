@@ -16,6 +16,7 @@ class PurchaseRefundRequests::NotifyJob
       refund_request = PurchaseRefundRequest.find_by(id: refund_request_id)
       next if refund_request.nil? || !refund_request.awaiting_outcome?
       next unless Feature.active?(:buyer_refund_requests, refund_request.purchase.seller)
+      next if refund_request.close_if_purchase_resolved!
 
       notify(refund_request, :seller_notified_at) do
         ContactingCreatorMailer.refund_requested(refund_request.id)
