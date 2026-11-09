@@ -501,6 +501,10 @@ module Mcp
                  "query" => { type: "string", description: "What to search for, e.g. \"learn to draw\" or \"tax spreadsheet\"." },
                  "limit" => { type: "integer", description: "Max products to return (1-#{SEARCH_MAX_LIMIT}, default #{SEARCH_DEFAULT_LIMIT})." }
                }, required: %w[query], read_only: true),
+          tool("list_purchases", "The products the connected creator bought, newest first, so an assistant can answer \"what did I buy?\" and open it. Each purchase links to the creator's library. When next_cursor is returned, pass it as cursor for the next page.", {
+                 "limit" => { type: "integer", description: "Max purchases to return (1-50, default 25)." },
+                 "cursor" => { type: "string", description: "next_cursor from the previous page." }
+               }, read_only: true),
           tool("create_bundle", "Create a draft bundle: one product that sells several of the creator's own products together at the bundle's own price. It is not for sale until publish_product runs. Confirm the products and the price with the creator first.", {
                  "name" => { type: "string", description: "Bundle name." },
                  "price_cents" => { type: "integer", description: "Price of the bundle in minor units (cents for USD). It is not derived from the products it contains; use 0 for a free bundle." },
@@ -1484,6 +1488,38 @@ module Mcp
         }
       rescue Faraday::TimeoutError
         raise ToolError, "Churn took too long for this range. Try a shorter range."
+      end
+
+      # The creator is also a buyer: this is the shelf behind "what did I buy, and where is it".
+      # Read through the same purchases the library shows, so an assistant cannot see anything the
+      # creator cannot open themselves.
+      def tool_list_purchases(args)
+        # Deliberately not :account, which every older tool still accepts: the creator's own
+        # library needs its own consent, not the legacy blanket scope.
+        require_scopes!(:view_library)
+        purchases = user.purchases.all_success_states.not_is_gift_sender_purchase.not_recurring_charge
+          .where.not(link_id: nil)
+          .includes(:link, :seller)
+          .order(created_at: :desc)
+        page, next_cursor = paginate(purchases, args, default: 25, table: "purchases")
+        {
+          purchases: page.filter_map do |purchase|
+            next unless purchase.link
+
+            {
+              id: purchase.external_id,
+              product_name: purchase.link.name,
+              product_permalink: purchase.link.unique_permalink,
+              seller_name: purchase.seller.display_name,
+              price_cents: purchase.displayed_price_cents,
+              currency: purchase.displayed_price_currency_type.to_s,
+              purchased_at: purchase.created_at&.iso8601,
+              refunded: purchase.refunded?,
+              url: "#{PROTOCOL}://#{DOMAIN}/library"
+            }
+          end,
+          next_cursor:
+        }.compact
       end
 
       def tool_list_payouts(args)
