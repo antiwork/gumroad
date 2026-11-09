@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HiddenVariantContentConflictError,
   markFileRemoved,
+  reconcileFileRemovalsWithEmbeds,
   type SaveProductResponse,
   saveProductError,
   UnconfirmedSaveError,
@@ -2177,9 +2178,12 @@ describe("a file removal", () => {
     expect(contextCapture.current?.deletedFileIds).toEqual(new Set(["detach"]));
   });
 
-  it("drops a file a save deleted from the library, so pasting its copied block does not add it back", async () => {
+  it("drops a file a save deleted from the library, so a pasted block with its url resolves to the file it names", async () => {
     const product = { ...buildTieredProduct([]), files: [savedFile("keep"), savedFile("detach")] };
-    const library = product.files.map((file) => ({ ...file, attached_product_name: "Product" }));
+    const library = [
+      ...product.files.map((file) => ({ ...file, attached_product_name: "Product" })),
+      { ...savedFile("linked-copy"), url: "https://example.com/detach.pdf", attached_product_name: "Other" },
+    ];
     saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
     render(<ProductEditPage {...buildTieredProps(product)} existing_files={library} />);
     await waitFor(() => expect(contextCapture.current).not.toBeNull());
@@ -2189,11 +2193,57 @@ describe("a file removal", () => {
       await contextCapture.current?.save();
     });
 
-    // A block copied before the save carries the file's url, as FileEmbed's transformCopied leaves it.
+    // Another product's copy of the same object: the url alone would match the deleted file listed first.
     const pasted = document.createElement("div");
-    pasted.innerHTML = '<file-embed id="detach" url="https://example.com/detach.pdf"></file-embed>';
+    pasted.innerHTML = '<file-embed id="linked-copy" url="https://example.com/detach.pdf"></file-embed>';
     const context = contextCapture.current;
-    expect(context && resolveCopiedFileEmbeds(pasted, context.filesById, context.existingFiles)).toEqual([]);
+    expect(
+      context && resolveCopiedFileEmbeds(pasted, context.filesById, context.existingFiles).map(({ id }) => id),
+    ).toEqual(["linked-copy"]);
+  });
+
+  it("keeps a file restored while the save deleting it ran, so the next save stores it again", async () => {
+    const product = { ...buildTieredProduct([]), files: [savedFile("keep"), savedFile("detach")] };
+    const library = product.files.map((file) => ({ ...file, attached_product_name: "Product" }));
+    const requests: { resolve: (response: SaveProductResponse) => void }[] = [];
+    saveProductMock.mockImplementation(() => new Promise<SaveProductResponse>((resolve) => requests.push({ resolve })));
+    render(<ProductEditPage {...buildTieredProps(product)} existing_files={library} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+    markRemoved("detach");
+    let save: Promise<boolean> | undefined;
+    act(() => {
+      save = contextCapture.current?.save();
+    });
+    await waitFor(() => expect(saveProductMock).toHaveBeenCalledOnce());
+    // Undo brings the block back while the request runs.
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        current.files = reconcileFileRemovalsWithEmbeds(
+          current,
+          { deleted: new Set(), inserted: new Set(["detach"]) },
+          new Set(),
+        );
+      }),
+    );
+    await act(async () => {
+      requests[0]?.resolve({});
+      await save;
+    });
+
+    expect(contextCapture.current?.deletedFileIds).toEqual(new Set());
+    expect(contextCapture.current?.existingFiles.map(({ id }) => id)).toEqual(["keep", "detach"]);
+    act(() => {
+      save = contextCapture.current?.save();
+    });
+    await waitFor(() => expect(saveProductMock).toHaveBeenCalledTimes(2));
+    expect(sentDeletedFileIds(1)).toBeUndefined();
+    const sent = cast<Product | undefined>(saveProductMock.mock.calls[1]?.[2]);
+    expect(sent?.files.find(({ id }) => id === "detach")?.status).toEqual({ type: "saved" });
+    await act(async () => {
+      requests[1]?.resolve({});
+      await save;
+    });
   });
 
   it("of a file this product never saved names nothing to delete", async () => {

@@ -64,6 +64,7 @@ import {
 import { ImageUploadSettingsContext } from "$app/components/RichTextEditor";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Alert } from "$app/components/ui/Alert";
+import { useRefToLatest } from "$app/components/useRefToLatest";
 
 const routes: RouteObject[] = [
   {
@@ -565,6 +566,8 @@ const ProductEditPage = (props: Props) => {
   const [webAppUploading, setWebAppUploading] = React.useState(false);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  // What the seller has by the time a save's response lands, which the closure's `product` predates.
+  const productRef = useRefToLatest(product);
   const [savedWaitlistEnabled, setSavedWaitlistEnabled] = React.useState(props.product.waitlist_enabled);
 
   const updateProduct = (update: Partial<Product> | ((product: Product) => void)) =>
@@ -772,11 +775,18 @@ const ProductEditPage = (props: Props) => {
       // unless the server skipped them, in which case they stay pending for the next save.
       const spentFileIds = response.file_deletions_skipped ? new Set<string>() : sentRemovedFileIds;
       reconciled.files = reconciled.files.filter((file) => !spentFileIds.has(file.id));
-      if (spentFileIds.size > 0) {
-        setDeletedFileIds((previous) => new Set([...previous, ...spentFileIds]));
-        // The library list is loaded once and lists this product's own files, so a pasted block or a
-        // pick could otherwise add a deleted file back.
-        setExistingFiles((files) => files.filter((file) => !spentFileIds.has(file.id)));
+      // A file the seller restored (undo) while this save ran stays attached: the next save sends it
+      // with its url again and the server stores it anew.
+      const deletedIds = new Set(
+        productRef.current.files
+          .filter((file) => file.status.type === "removed" && spentFileIds.has(file.id))
+          .map((file) => file.id),
+      );
+      if (deletedIds.size > 0) {
+        setDeletedFileIds((previous) => new Set([...previous, ...deletedIds]));
+        // The library list keeps this product's own files until the picker refreshes it, and a pasted
+        // block resolves by url there, so a deleted file listed first would come back instead.
+        setExistingFiles((files) => files.filter((file) => !deletedIds.has(file.id)));
       }
       // The marker is per-save. Keeping it would let a later content-tab
       // snapshot still claim a description clear.
