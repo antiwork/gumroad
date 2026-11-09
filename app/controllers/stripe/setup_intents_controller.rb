@@ -49,7 +49,7 @@ class Stripe::SetupIntentsController < ApplicationController
 
     mandate_options = mandate_options_for_stripe(chargeable, subscription:, selected_plan_mandate_terms:)
 
-    setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
+    setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:, seller: three_d_secure_seller)
 
     remember_setup_intent(subscription, setup_intent)
 
@@ -139,6 +139,19 @@ class Stripe::SetupIntentsController < ApplicationController
       else
         MerchantAccount.gumroad(processor_id)
       end
+    end
+
+    # The 3DS flag is scoped per seller, while the merchant account this endpoint charges through is
+    # usually the shared Gumroad one, whose user is nil. The seller therefore comes from the
+    # products the card is being saved for, and a cart covering several sellers asks for the
+    # challenge as soon as one of them is in the cohort.
+    def three_d_secure_seller
+      sellers = product_params_list.filter_map do |product|
+        next if product["permalink"].blank?
+
+        Link.find_by(unique_permalink: product["permalink"])&.user
+      end
+      sellers.find { |seller| Checkout::ThreeDSecure.request?(seller) }
     end
 
     def mandate_terms_for_selected_plan(subscription, chargeable)

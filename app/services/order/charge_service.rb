@@ -206,7 +206,7 @@ class Order::ChargeService
     if merchant_account.stripe_charge_processor? && (!card_already_saved || saved_card_needs_indian_mandate)
       mandate_options = mandate_options_for_stripe(purchases:, with_currency: true)
       mandate_options = mandate_options_in_setup_currency(mandate_options, locked_quote)
-      self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
+      self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:, seller: purchases.first&.seller)
 
       if setup_intent.present?
         purchases.each do |purchase|
@@ -363,7 +363,7 @@ class Order::ChargeService
       chargeable.stripe_setup_intent_id = nil
     end
 
-    self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:)
+    self.setup_intent = ChargeProcessor.setup_future_charges!(merchant_account, chargeable, mandate_options:, seller: purchases.first&.seller)
     return unless setup_intent.present?
 
     # setup_future_charges! may clone another Connect PM inside prepare!; bind to the SI's PM
