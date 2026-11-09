@@ -110,6 +110,15 @@ describe "OAuth consent for an MCP client asking for a scope it did not register
     end.not_to change(Doorkeeper::AccessGrant, :count)
   end
 
+  it "keeps the error from a later check when the newer scope is accepted" do
+    expect do
+      get "/claude/v1/oauth2/authorize", params: authorize_params(scope: "view_public view_library").merge(code_challenge_method: "unsupported")
+    end.not_to change(Doorkeeper::AccessGrant, :count)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.body).to include("The code challenge method must be plain or S256.")
+  end
+
   it "keeps the registered scopes as the limit for an application that was not dynamically registered" do
     ordinary = create(:oauth_application, scopes: registered_scopes, redirect_uri:)
 
