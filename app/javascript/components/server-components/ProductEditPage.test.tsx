@@ -2196,6 +2196,76 @@ describe("a file removal", () => {
     expect(sentDeletedFileIds(0)).toBeUndefined();
   });
 
+  it("names a file a save stored, but not one that save left out", async () => {
+    const product = { ...buildTieredProduct([]), files: [savedFile("keep")] };
+    saveProductMock.mockResolvedValueOnce({ file_id_mappings: { "client-upload": "stored-upload" } });
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    render(<ProductEditPage {...buildTieredProps(product)} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+    // A removal is sent only for a file in the loaded files or sent by a save. The save sends the
+    // upload, which a page embeds, and leaves out the library file, which no page embeds.
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        current.files = [...current.files, savedFile("client-upload"), savedFile("from-another-product")];
+        current.rich_content = [
+          {
+            id: "page",
+            title: null,
+            description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: "client-upload", uid: "uid" } }] },
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ];
+      }),
+    );
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    markRemoved("stored-upload");
+    markRemoved("from-another-product");
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+
+    expect(sentDeletedFileIds(1)).toEqual(["stored-upload"]);
+    // The id the editor's blocks carry after the first save's mapping.
+    expect(contextCapture.current?.deletedFileIds).toEqual(new Set(["stored-upload"]));
+  });
+
+  it("names a file a save sent under its own id, which the server keeps without a mapping", async () => {
+    const product = { ...buildTieredProduct([]), files: [savedFile("keep")] };
+    saveProductMock.mockResolvedValue({} satisfies SaveProductResponse);
+    render(<ProductEditPage {...buildTieredProps(product)} />);
+    await waitFor(() => expect(contextCapture.current).not.toBeNull());
+
+    // This product's file that another tab added, picked from the library and placed on a page.
+    act(() =>
+      contextCapture.current?.updateProduct((current) => {
+        current.files = [...current.files, savedFile("added-elsewhere")];
+        current.rich_content = [
+          {
+            id: "page",
+            title: null,
+            description: {
+              type: "doc",
+              content: [{ type: "fileEmbed", attrs: { id: "added-elsewhere", uid: "uid" } }],
+            },
+            updated_at: "2026-01-01T00:00:00Z",
+          },
+        ];
+      }),
+    );
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+    markRemoved("added-elsewhere");
+    await act(async () => {
+      await contextCapture.current?.save();
+    });
+
+    expect(sentDeletedFileIds(1)).toEqual(["added-elsewhere"]);
+  });
+
   it("is kept when the server skipped file deletions, and sent again by the next save", async () => {
     const product = { ...buildTieredProduct([]), files: [savedFile("keep"), savedFile("detach")] };
     saveProductMock.mockResolvedValueOnce({ file_deletions_skipped: true } satisfies SaveProductResponse);
