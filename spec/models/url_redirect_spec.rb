@@ -1044,9 +1044,13 @@ describe UrlRedirect do
         @product.alive_rich_contents.find_each(&:mark_deleted!)
 
         variant_category = create(:variant_category, link: @product)
-        old_variant = create(:variant, variant_category:, price_difference_cents: 100, product_files: @product.product_files)
-        variant1 = create(:variant, variant_category:, price_difference_cents: 100, product_files: @product.product_files)
-        variant2 = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        # The outer before block's @variant also sits at 100: if the deleted variant's price ties
+        # with it, "closest" is decided by row order instead of the rule under test. Keep exactly
+        # one alive variant closest (deleted 60 -> variant1 50, distance 10 vs variant2 @variant 40)
+        # and keep variant2 the cheapest alive variant, so serving the cheapest still fails here.
+        old_variant = create(:variant, variant_category:, price_difference_cents: 60, product_files: @product.product_files)
+        variant1 = create(:variant, variant_category:, price_difference_cents: 50, product_files: @product.product_files)
+        variant2 = create(:variant, variant_category:, price_difference_cents: 30, product_files: @product.product_files)
         old_variant_rich_content = create(:rich_content, entity: old_variant, title: "Old variant page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
         variant1_rich_content = create(:rich_content, entity: variant1, title: "Variant 1 page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
         create(:rich_content, entity: variant2, title: "Variant 2 page title", description: [{ "type" => "paragraph", "content" => [{ "text" => "Lorem ipsum", "type" => "text" }] }])
