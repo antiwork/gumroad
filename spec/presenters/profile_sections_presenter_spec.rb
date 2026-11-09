@@ -110,6 +110,13 @@ describe ProfileSectionsPresenter do
       expect(subject.send(:fetch_single_flight, "sections-key") { :built }).to eq(:built)
     end
 
+    it "builds when the entry exists but reads back empty after the lock is taken" do
+      Rails.cache.write("sections-key", :stale)
+      allow(Rails.cache).to receive(:read).and_return(nil)
+
+      expect(subject.send(:fetch_single_flight, "sections-key") { :built }).to eq(:built)
+    end
+
     it "lets a second request reuse the value the first one wrote" do
       builds = 0
       2.times { subject.send(:fetch_single_flight, "sections-key") { builds += 1 } }
