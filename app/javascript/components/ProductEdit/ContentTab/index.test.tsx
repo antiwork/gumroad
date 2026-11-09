@@ -1281,6 +1281,21 @@ describe("removing a file from the product", () => {
     expect(alerts).toEqual([]);
   });
 
+  it("keeps a pasted library file's block when the tab mounts after a save deleted its copy", async () => {
+    // A block pasted from the library file's product attaches it again under its own id; only its first
+    // copy was mapped and deleted.
+    Object.assign(context, { fileIdMappings: { [workbookCopy.id]: "file-workbook-copy-copy" } });
+    context.deletedFileIds = new Set(["file-workbook-copy-copy"]);
+    const { current } = await mount();
+
+    act(() => {
+      getMountedEditor().chain().focus("end").insertContent("More").run();
+    });
+
+    expect(embeddedFileIds(getMountedEditor().getJSON())).toEqual([workbookCopy.id]);
+    expect(embeddedFileIds(current().variants[1]?.rich_content[0]?.description ?? {})).toEqual([workbookCopy.id]);
+  });
+
   it("takes back a block undo restores under a library file's id after a save deleted its copy here", async () => {
     // The block left the page while the save that copied the library file ran, and a later save deleted the copy.
     Object.assign(context, { fileIdMappings: { "file-elsewhere": "file-elsewhere-copy" } });

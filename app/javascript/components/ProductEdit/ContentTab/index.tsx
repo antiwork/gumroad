@@ -586,7 +586,14 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     });
   }, [selectedScopedPageKey, editor]);
   React.useEffect(() => {
-    if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
+    // Runs again for every new editor, so only ids no product file has still need it: a save renames
+    // its files in the same commit, and a library file pasted, or picked again while its copy here is
+    // attached, keeps its own id.
+    if (editor)
+      reconcileMountedEditorFileEmbedIds(
+        editor,
+        Object.fromEntries(Object.entries(fileIdMappings).filter(([fileId]) => !filesById.has(fileId))),
+      );
   }, [editor, fileIdMappings]);
   const savedThisSessionFileIds = React.useMemo(() => new Set(Object.values(fileIdMappings)), [fileIdMappings]);
   React.useEffect(() => {
@@ -607,14 +614,16 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     // Correctly set the IDs of the file embeds copied from another product
     const fragment = DOMSerializer.fromSchema(editor.schema).serializeFragment(editor.state.doc.content);
     // Undo can restore a block under the id its file had before a save mapped it. A block pasted from
-    // another product (it carries a url) keeps that product's id, so its mapping is not followed.
+    // another product (it carries a url) keeps that product's id, and a save renames the product files
+    // it maps, so neither mapping is followed.
     const pastedFileIds = new Set(
       Array.from(fragment.querySelectorAll("file-embed[url]"), (node) => node.getAttribute("id"))
         // A drag leaves a url as well, so only a file the library lists counts as pasted.
         .filter((id) => existingFiles.some((file) => file.id === id)),
     );
     const isDeletedFileId = (fileId: string) =>
-      deletedFileIds.has(fileId) || (!pastedFileIds.has(fileId) && deletedFileIds.has(fileIdMappings[fileId] ?? fileId));
+      deletedFileIds.has(fileId) ||
+      (!filesById.has(fileId) && !pastedFileIds.has(fileId) && deletedFileIds.has(fileIdMappings[fileId] ?? fileId));
     // A block for a file a save deleted is taken back below, so it must not resolve to another file
     // with the same url and reach the page content.
     for (const node of fragment.querySelectorAll("file-embed"))
