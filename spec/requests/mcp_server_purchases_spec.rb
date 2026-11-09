@@ -80,4 +80,14 @@ describe "MCP server purchases" do
 
     expect(response.parsed_body.dig("error", "message")).to include("view_library")
   end
+
+  it "refuses the legacy account scope that reaches every older tool" do
+    create(:purchase, purchaser: @buyer, link: @bought)
+    legacy = create("doorkeeper/access_token", application: @app, resource_owner_id: @buyer.id, scopes: "account")
+    post "/muse/v1/mcp", params: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_purchases", arguments: {} } }.to_json,
+                         headers: { "CONTENT_TYPE" => "application/json", "HOST" => DOMAIN, "Authorization" => "Bearer #{legacy.token}" }
+
+    expect(response.parsed_body.dig("error", "message")).to include("view_library")
+    expect(response.parsed_body.dig("result", "structuredContent", "purchases")).to be_nil
+  end
 end

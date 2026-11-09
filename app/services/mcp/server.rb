@@ -1494,7 +1494,9 @@ module Mcp
       # Read through the same purchases the library shows, so an assistant cannot see anything the
       # creator cannot open themselves.
       def tool_list_purchases(args)
-        require_scopes!(:view_library, :account)
+        # Deliberately not :account, which every older tool still accepts: the creator's own
+        # library needs its own consent, not the legacy blanket scope.
+        require_scopes!(:view_library)
         purchases = user.purchases.all_success_states.not_is_gift_sender_purchase.not_recurring_charge
           .where.not(link_id: nil)
           .includes(:link, :seller)
