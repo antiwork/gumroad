@@ -81,14 +81,21 @@ class CustomerMailer < ApplicationMailer
 
     is_receipt_for_gift_receiver = receipt_for_gift_receiver?(@chargeable)
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
+    shared_charge = shared_receipt_charge(@chargeable)
+    # Only the buyer's own mail carries the token; the seller's sale notification links the bare URL.
+    @shared_receipt_url = receipt_charge_url(shared_charge.external_id, token: shared_charge.secure_external_id(scope: Charge::SHARED_RECEIPT_SCOPE)) if for_email && shared_charge
+    graphics_light = !is_receipt_for_gift_receiver && Feature.active?(:graphics_light_receipt, @chargeable.seller)
+    template = is_receipt_for_gift_receiver ? "gift_receiver_receipt" : (graphics_light ? "receipt_light" : "receipt")
     mail(
       to: @chargeable.orderable.email,
       from: from_email_address_with_name(@chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: @chargeable.support_email,
       subject: @receipt_presenter.mail_subject,
-      template_name: is_receipt_for_gift_receiver ? "gift_receiver_receipt" : "receipt",
+      template_name: template,
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller, to: @chargeable.orderable.email)
-    )
+    ) do |format|
+      format.html { render(template, layout: graphics_light ? "layouts/email_light" : "layouts/email") }
+    end
   end
 
   def auto_invoice(purchase_id = nil, charge_id = nil)
@@ -486,6 +493,12 @@ class CustomerMailer < ApplicationMailer
     rescue => e
       ErrorNotifier.notify(e)
       true
+    end
+
+    # The charge whose one shared receipt page covers this receipt, if it has one.
+    def shared_receipt_charge(chargeable)
+      charge = chargeable.is_a?(Charge) ? chargeable : chargeable.charge
+      charge if charge&.shared_receipt_eligible?
     end
 
     def receipt_for_gift_receiver?(chargeable)

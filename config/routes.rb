@@ -861,6 +861,13 @@ Rails.application.routes.draw do
 
     resources :recommended_products, only: :index
 
+    resources :charges, only: [] do
+      member do
+        get :receipt
+        post :resend_receipt
+      end
+    end
+
     # purchases
     resources :purchases, only: [:update] do
       member do
