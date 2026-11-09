@@ -67,6 +67,17 @@ describe "OAuth consent for an MCP client registered before view_library", type:
     expect(application.reload.scopes.to_s).to eq(registered_scopes)
   end
 
+  it "takes the client exclusively for a late scope it already has, since the lock decides from the request" do
+    application.update_columns(scopes: "#{registered_scopes} view_library")
+    fields = consent_form_fields
+    expect_any_instance_of(OauthApplication).to receive(:with_application_lock).with(shared: false).and_call_original
+
+    post "/oauth/authorize", params: fields
+
+    expect(response).to have_http_status(:found)
+    expect(application.reload.scopes.to_s).to eq("#{registered_scopes} view_library")
+  end
+
   it "leaves the client unchanged when the person denies" do
     delete "/oauth/authorize", params: consent_form_fields(method: "delete")
 
@@ -94,9 +105,9 @@ describe "OAuth consent for an MCP client registered before view_library", type:
   end
 
   it "names the app plainly when it registered without a name" do
-    application.update_columns(name: "MCP client")
+    client = Mcp::OauthClientRegistration.create!("redirect_uris" => ["https://claude.ai/api/mcp/auth_callback"], "scope" => registered_scopes)
 
-    get "/oauth/authorize", params: params.merge(scope: "view_public edit_products")
+    get "/oauth/authorize", params: params.merge(client_id: client[:client_id], scope: "view_public edit_products")
 
     expect(response.body).to include("Your AI app can&#39;t connect to Gumroad because it asked for a permission it was not set up with. Remove Gumroad from your AI app, then add it again.")
   end

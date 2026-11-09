@@ -113,9 +113,9 @@ module Mcp
     end
 
     def self.explain_unknown_scope(pre_auth, application)
-      # Registration stores the client's own name behind "MCP ", or "MCP client" when it sent none.
+      # Registration stores the client's own name behind "MCP ", and "MCP MCP client" when it sent none.
       client = application.name.delete_prefix("MCP ")
-      client = "your AI app" if client == "client"
+      client = "your AI app" if client == "MCP client"
       # Only a new registration carries the new scopes, so the fix is on the client's side.
       description = "#{client.upcase_first} can't connect to Gumroad because it asked for a permission it was not set up with. " \
                     "Remove Gumroad from #{client}, then add it again."
