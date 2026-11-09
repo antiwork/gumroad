@@ -573,9 +573,10 @@ class ContactingCreatorMailer < ApplicationMailer
 
       @purchase = @refund_request.purchase
     end
-    # The flag can be turned off, or the purchase refunded, before this delivers.
+    # The flag can be turned off, or the purchase refunded, before this delivers. A send delayed
+    # past escalation still goes out: the seller is the one who can refund.
     return do_not_send unless Feature.active?(:buyer_refund_requests, @purchase.seller)
-    return do_not_send unless @refund_request.status == "requested"
+    return do_not_send unless @refund_request.status.in?(%w[requested escalated])
 
     @seller = @purchase.seller
     @reason_copy = PurchaseRefundRequest::REASON_LABELS[@refund_request.reason]

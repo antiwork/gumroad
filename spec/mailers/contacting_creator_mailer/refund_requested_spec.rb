@@ -30,8 +30,9 @@ describe ContactingCreatorMailer do
       end
     end
 
-    it "does not ask for a reply by a date that has passed" do
-      refund_request.update_columns(created_at: Time.utc(2026, 11, 4, 12)) # Wednesday; deadline Friday
+    it "still tells the seller after a delayed send, without a date that has passed" do
+      # Wednesday; deadline Friday; escalated by the hourly job before this send.
+      refund_request.update_columns(created_at: Time.utc(2026, 11, 4, 12), escalated_at: Time.utc(2026, 11, 7, 1))
 
       body = travel_to(Time.utc(2026, 11, 9, 12)) { described_class.refund_requested(refund_request.id).body.encoded }
 
