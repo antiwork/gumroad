@@ -93,6 +93,16 @@ describe PurchaseRefundRequests::NotifyJob do
     expect(refund_request.reload.seller_notified_at).to be_present
   end
 
+  it "sends only the seller email past the deadline, since the escalation email is support's notice" do
+    refund_request.update_columns(created_at: 5.days.ago)
+
+    described_class.new.perform(refund_request.id)
+
+    expect(ActionMailer::Base.deliveries.map(&:to)).to eq([[purchase.seller.email]])
+    expect(refund_request.reload.support_notified_at).to be_nil
+    expect(refund_request.notifications_pending?).to eq(false)
+  end
+
   it "does nothing for a closed request" do
     refund_request.update!(state: "declined")
 

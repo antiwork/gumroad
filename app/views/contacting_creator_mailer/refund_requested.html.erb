@@ -9,7 +9,7 @@
     <p>Message from the customer: <%= @refund_request.message %></p>
   <% end %>
   <p>
-    <% if @refund_request.state_escalated? %>
+    <% if @refund_request.escalation_deadline.past? %>
       This request passed the <%= PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS %>-business-day deadline, so Gumroad support is already looking at it.
     <% else %>
       Please respond within <%= PurchaseRefundRequest::ESCALATION_BUSINESS_DAYS %> business days — after that, Gumroad support will step in.

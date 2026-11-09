@@ -20,6 +20,9 @@ class PurchaseRefundRequests::NotifyJob
       notify(refund_request, :seller_notified_at) do
         ContactingCreatorMailer.refund_requested(refund_request.id)
       end
+      # Past the deadline the escalation email is support's notice, so the copy would only duplicate it.
+      next if refund_request.escalation_deadline.past?
+
       notify(refund_request, :support_notified_at) do
         SupportContactMailer.contact_form(
           email: refund_request.email,

@@ -23,7 +23,16 @@ describe ContactingCreatorMailer do
     end
 
     it "tells a seller emailed after escalation that support already has the request" do
-      refund_request.update_columns(state: "escalated", open_key: nil)
+      refund_request.update_columns(state: "escalated", open_key: nil, created_at: 5.days.ago)
+
+      body = described_class.refund_requested(refund_request.id).body.encoded
+
+      expect(body).to include("Gumroad support is already looking at it")
+      expect(body).not_to include("Please respond within")
+    end
+
+    it "does not ask for a reply within the deadline once the deadline has passed" do
+      refund_request.update_columns(created_at: 5.days.ago)
 
       body = described_class.refund_requested(refund_request.id).body.encoded
 

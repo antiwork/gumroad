@@ -28,7 +28,7 @@ describe PurchaseRefundRequests::DispatchPendingJob do
 
     described_class.new.perform
 
-    expect(PurchaseRefundRequests::NotifyJob.jobs.map { _1["args"] }).to eq([[lost_push.id]])
+    expect(PurchaseRefundRequests::NotifyJob.jobs.map { _1["args"] }).to eq([[lost_push.id], [overdue_owed.id]])
     expect(PurchaseRefundRequests::EscalateJob.jobs.map { _1["args"] }).to eq([[overdue.id], [overdue_owed.id]])
     expect([recent, notified].map { _1.reload.state }).to eq(%w[requested requested])
   end
@@ -43,7 +43,7 @@ describe PurchaseRefundRequests::DispatchPendingJob do
     expect { PurchaseRefundRequests::NotifyJob.drain }.to raise_error(Net::SMTPFatalError)
 
     described_class.new.perform
-    expect(PurchaseRefundRequests::NotifyJob.jobs.size).to eq(0)
+    expect { PurchaseRefundRequests::NotifyJob.drain }.to raise_error(Net::SMTPFatalError)
     PurchaseRefundRequests::EscalateJob.drain
     request.reload
     expect(request.state).to eq("escalated")
@@ -61,6 +61,23 @@ describe PurchaseRefundRequests::DispatchPendingJob do
     expect(request.state).to eq("escalated")
     expect(ActionMailer::Base.deliveries.count { _1.to == [seller.email] }).to eq(1)
     expect(ActionMailer::Base.deliveries.count { _1.to == [ApplicationMailer::SUPPORT_EMAIL] }).to eq(support_emails)
+  end
+
+  it "sends a deliverable seller email past the deadline even while support rejects the escalation email" do
+    allow_any_instance_of(Mail::Message).to receive(:deliver).and_wrap_original do |original, *args|
+      raise Net::SMTPFatalError.new("550 unavailable") if original.receiver.to == [ApplicationMailer::SUPPORT_EMAIL]
+      original.call(*args)
+    end
+    request = create_request(created_at: Time.utc(2026, 11, 4, 12))
+    PurchaseRefundRequests::NotifyJob.jobs.clear
+
+    described_class.new.perform
+    PurchaseRefundRequests::NotifyJob.drain
+    expect { PurchaseRefundRequests::EscalateJob.drain }.to raise_error(Net::SMTPFatalError)
+
+    expect(request.reload.state).to eq("requested")
+    expect(request.seller_notified_at).to be_present
+    expect(ActionMailer::Base.deliveries.map(&:to)).to eq([[seller.email]])
   end
 
   it "re-pushes escalated requests only while the seller email is owed and inside the retry window" do

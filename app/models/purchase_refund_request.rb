@@ -46,8 +46,9 @@ class PurchaseRefundRequest < ApplicationRecord
 
   def awaiting_outcome? = RESOLVABLE_STATES.include?(state)
 
+  # Past the deadline the escalation email is support's notice, so only the seller can be owed.
   def notifications_pending?
-    awaiting_outcome? && (seller_notified_at.nil? || support_notified_at.nil?)
+    awaiting_outcome? && (seller_notified_at.nil? || (support_notified_at.nil? && !escalation_deadline.past?))
   end
 
   def enqueue_notifications
