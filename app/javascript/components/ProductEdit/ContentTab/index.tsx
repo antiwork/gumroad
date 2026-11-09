@@ -588,6 +588,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   React.useEffect(() => {
     if (editor) reconcileMountedEditorFileEmbedIds(editor, fileIdMappings);
   }, [editor, fileIdMappings]);
+  const savedThisSessionFileIds = React.useMemo(() => new Set(Object.values(fileIdMappings)), [fileIdMappings]);
   React.useEffect(() => {
     if (editor && removedFileEmbedIds?.length) {
       // A save can remove a legacy file node from product state while this
@@ -621,7 +622,7 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
     const embedChanges = fileEmbedChanges(transaction.before, transaction.doc);
     if (embedChanges.deleted.size > 0 || embedChanges.inserted.size > 0)
       updateProduct((current) => {
-        current.files = reconcileFileRemovalsWithEmbeds(current, embedChanges);
+        current.files = reconcileFileRemovalsWithEmbeds(current, embedChanges, savedThisSessionFileIds);
       });
     const deletedFileEmbedIds = [...embedChanges.inserted].filter((fileId) => deletedFileIds.has(fileId));
     if (deletedFileEmbedIds.length > 0) {
@@ -741,7 +742,10 @@ export const ContentTabContent = ({ selectedVariantId }: { selectedVariantId: st
   }, [existingFiles, selectingExistingFiles?.query]);
 
   // On no page means no embed to strip: the removed status alone puts the file in deleted_ids.files.
-  const unplacedFiles = React.useMemo(() => filesOnNoPage(product), [product]);
+  const unplacedFiles = React.useMemo(
+    () => filesOnNoPage(product, savedThisSessionFileIds),
+    [product, savedThisSessionFileIds],
+  );
   const removeProductFile = (fileId: string) =>
     updateProduct((product) => {
       product.files = markFileRemoved(product.files, fileId);

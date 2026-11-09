@@ -780,6 +780,26 @@ describe("File embeds in product content editor", type: :system, js: true) do
       expect(product.product_files.alive).to contain_exactly(workbook_copy, orphan)
     end
 
+    it "detaches a file uploaded and saved in the same visit when the seller deletes its block" do
+      visit edit_link_path(product.unique_permalink) + "/content"
+      select_disclosure "Upload files"
+      attach_product_file(file_fixture("Alice's Adventures in Wonderland.pdf"))
+      wait_for_file_embed_to_finish_uploading(name: "Alice's Adventures in Wonderland")
+      save_change
+      uploaded = product.product_files.alive.find_by!(display_name: "Alice's Adventures in Wonderland")
+
+      within find_embed(name: "Alice's Adventures in Wonderland").hover do
+        select_disclosure "Actions" do
+          click_on "Delete"
+        end
+      end
+      expect(page).to_not have_embed(name: "Alice's Adventures in Wonderland")
+      save_change
+
+      expect(uploaded.reload).to be_deleted
+      expect(product.product_files.alive).to contain_exactly(workbook, workbook_copy, orphan)
+    end
+
     it "lists a file no page shows, and removes it" do
       visit edit_link_path(product.unique_permalink) + "/content"
       expect(page).to have_text("This file is attached to this product but not on any page.")

@@ -488,24 +488,33 @@ export const fileEmbedChanges = (before: ProseMirrorNode, after: ProseMirrorNode
 
 // Deleting a file's last block removes the file; an embed that comes back (undo, paste) cancels the
 // removal. Only editor edits feed this, so content lost any other way never becomes a deletion.
+// An upload keeps its "unsaved" status after the save that stores it; only its id changes, to the
+// canonical one the save maps it to.
+const isSavedFile = (file: Product["files"][number], savedThisSessionIds: ReadonlySet<string>) =>
+  file.status.type === "saved" || (file.status.type !== "removed" && savedThisSessionIds.has(file.id));
+
 export const reconcileFileRemovalsWithEmbeds = (
   product: Pick<Product, "files" | "rich_content" | "variants">,
   { deleted, inserted }: { deleted: Set<string>; inserted: Set<string> },
+  savedThisSessionIds: ReadonlySet<string>,
 ): Product["files"] => {
   const embedded = embeddedFileIdsInProduct(product);
   let files = product.files.map((file) =>
     file.status.type === "removed" && inserted.has(file.id) ? { ...file, status: file.status.previousStatus } : file,
   );
   for (const file of files)
-    if (file.status.type === "saved" && deleted.has(file.id) && !embedded.has(file.id))
+    if (isSavedFile(file, savedThisSessionIds) && deleted.has(file.id) && !embedded.has(file.id))
       files = markFileRemoved(files, file.id);
   return files;
 };
 
 // Pages the shared-content setting hides are not loaded, so a file only they embed is listed too.
-export const filesOnNoPage = (product: Pick<Product, "files" | "rich_content" | "variants">): Product["files"] => {
+export const filesOnNoPage = (
+  product: Pick<Product, "files" | "rich_content" | "variants">,
+  savedThisSessionIds: ReadonlySet<string>,
+): Product["files"] => {
   const embedded = embeddedFileIdsInProduct(product);
-  return product.files.filter((file) => file.status.type === "saved" && !embedded.has(file.id));
+  return product.files.filter((file) => isSavedFile(file, savedThisSessionIds) && !embedded.has(file.id));
 };
 
 // "Keep version content" reloads the editor as soon as it saves, so removals that save skipped

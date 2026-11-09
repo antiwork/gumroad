@@ -158,6 +158,7 @@ describe("removing a file by deleting its blocks", () => {
     const files = reconcileFileRemovalsWithEmbeds(
       product([saved("gone"), saved("elsewhere")], [embedPage("page-1", [])], [embedPage("page-2", ["elsewhere"])]),
       { deleted: new Set(["gone", "elsewhere"]), inserted: new Set() },
+      new Set(),
     );
 
     expect(files).toEqual([removed("gone"), saved("elsewhere")]);
@@ -165,20 +166,22 @@ describe("removing a file by deleting its blocks", () => {
   });
 
   it("cancels the removal when the block comes back", () => {
-    const files = reconcileFileRemovalsWithEmbeds(product([removed("back")], [embedPage("page-1", ["back"])]), {
-      deleted: new Set(),
-      inserted: new Set(["back"]),
-    });
+    const files = reconcileFileRemovalsWithEmbeds(
+      product([removed("back")], [embedPage("page-1", ["back"])]),
+      { deleted: new Set(), inserted: new Set(["back"]) },
+      new Set(),
+    );
 
     expect(files).toEqual([saved("back")]);
   });
 
   it("leaves an upload that has not saved to its own controls", () => {
     expect(
-      reconcileFileRemovalsWithEmbeds(product([uploading], [embedPage("page-1", [])]), {
-        deleted: new Set(["uploading"]),
-        inserted: new Set(),
-      }),
+      reconcileFileRemovalsWithEmbeds(
+        product([uploading], [embedPage("page-1", [])]),
+        { deleted: new Set(["uploading"]), inserted: new Set() },
+        new Set(),
+      ),
     ).toEqual([uploading]);
   });
 
@@ -190,8 +193,22 @@ describe("removing a file by deleting its blocks", () => {
           [embedPage("page-1", ["on-page"])],
           [embedPage("page-2", ["on-version-page"])],
         ),
+        new Set(),
       ),
     ).toEqual([saved("on-no-page")]);
+  });
+
+  it("treats an upload a save stored this session as saved", () => {
+    const stored = { ...uploading, id: "canonical-upload" };
+
+    const files = reconcileFileRemovalsWithEmbeds(
+      product([stored], [embedPage("page-1", [])]),
+      { deleted: new Set(["canonical-upload"]), inserted: new Set() },
+      new Set(["canonical-upload"]),
+    );
+
+    expect(buildDeletionOperations({ files }).deleted_ids.files).toEqual(["canonical-upload"]);
+    expect(filesOnNoPage(product([stored], []), new Set(["canonical-upload"]))).toEqual([stored]);
   });
 });
 
