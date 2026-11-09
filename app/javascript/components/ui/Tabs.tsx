@@ -21,8 +21,9 @@ const tabVariants = cva("", {
   variants: {
     variant: {
       pills: "shrink-0 rounded-full border-transparent px-3 py-2 hover:border-border",
+      // A Button inside the tab sets the halo to the store's offset, but this lift wins while hovered.
       buttons:
-        "flex items-start gap-3 rounded-sm border-border px-4 py-3 text-left transition-all not-active:hover:-translate-1 not-active:hover:shadow lift-halo",
+        "flex items-start gap-3 rounded-sm border-border px-4 py-3 text-left transition-all not-active:hover:-translate-1 not-active:hover:shadow lift-halo not-active:hover:[--lift-halo-offset:var(--spacing)]",
     },
     active: {
       true: "bg-background",
