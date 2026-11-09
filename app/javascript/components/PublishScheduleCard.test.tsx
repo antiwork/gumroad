@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import * as React from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { type CurrentSeller, CurrentSellerProvider } from "$app/components/CurrentSeller";
 import { PublishScheduleCard } from "$app/components/PublishScheduleCard";
 
 vi.mock("$app/components/server-components/Alert", () => ({ showAlert: vi.fn() }));
@@ -30,21 +31,68 @@ const respondWith = (body: unknown) =>
     vi.fn(() => Promise.resolve(new Response(JSON.stringify(body)))),
   );
 
+const seller: CurrentSeller = {
+  id: "1",
+  email: "seller@example.com",
+  name: "Seller",
+  subdomain: "seller",
+  avatarUrl: "",
+  isBuyer: false,
+  timeZone: { name: "America/Los_Angeles", offset: -28800 },
+  has_published_products: false,
+  can_publish_products: true,
+  publishBlockedReason: null,
+  noPayoutRailInComplianceCountry: false,
+  legalGuardianRequirementMet: false,
+  legalGuardianUnsupported: false,
+  isNameInvalidForEmailDelivery: false,
+  profileBackgroundColor: "#ffffff",
+  profileHighlightColor: "#000000",
+  profileFont: "ABC Favorit",
+};
+
+const renderCard = (ui: React.ReactElement, currentSeller: CurrentSeller | null = null) =>
+  render(ui, {
+    wrapper: ({ children }) => <CurrentSellerProvider value={currentSeller}>{children}</CurrentSellerProvider>,
+  });
+
 describe("PublishScheduleCard", () => {
+  it("names the seller's time zone for the chosen time", () => {
+    renderCard(
+      <PublishScheduleCard permalink="abc" schedule={null} onChange={vi.fn()} canCreate isPublished={false} />,
+      seller,
+    );
+
+    fireEvent.change(screen.getByLabelText("Publish at"), { target: { value: "2026-12-02T09:30" } });
+    expect(screen.getByText("PST")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Publish at"), { target: { value: "2027-07-02T09:30" } });
+    expect(screen.getByText("PDT")).toBeTruthy();
+  });
+
+  it("announces a pending schedule as a status rather than an alert", () => {
+    renderCard(
+      <PublishScheduleCard permalink="abc" schedule={schedule} onChange={vi.fn()} canCreate isPublished={false} />,
+    );
+    expect(screen.getByRole("status").textContent).toContain("Scheduled to publish on");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("renders nothing when scheduling is unavailable", () => {
-    const { container } = render(
+    const { container } = renderCard(
       <PublishScheduleCard permalink="abc" schedule={null} onChange={vi.fn()} canCreate={false} isPublished={false} />,
     );
     expect(container.innerHTML).toBe("");
   });
 
   it("offers scheduling when enabled", () => {
-    render(<PublishScheduleCard permalink="abc" schedule={null} onChange={vi.fn()} canCreate isPublished={false} />);
+    renderCard(
+      <PublishScheduleCard permalink="abc" schedule={null} onChange={vi.fn()} canCreate isPublished={false} />,
+    );
     expect(screen.getByRole<HTMLButtonElement>("button", { name: "Schedule publish" }).disabled).toBe(true);
   });
 
   it("shows a pending schedule in local time with a cancel button, even when creation is off", () => {
-    render(
+    renderCard(
       <PublishScheduleCard
         permalink="abc"
         schedule={schedule}
@@ -58,14 +106,14 @@ describe("PublishScheduleCard", () => {
   });
 
   it("renders nothing once the product is published", () => {
-    const { container } = render(
+    const { container } = renderCard(
       <PublishScheduleCard permalink="abc" schedule={null} onChange={vi.fn()} canCreate isPublished />,
     );
     expect(container.innerHTML).toBe("");
   });
 
   it("shows a saved failure banner", () => {
-    render(
+    renderCard(
       <PublishScheduleCard
         permalink="abc"
         schedule={{ ...schedule, status: "failed", failure_message: "Gate failed" }}
@@ -78,7 +126,7 @@ describe("PublishScheduleCard", () => {
   });
 
   it("shows the schedule the editor holds, not the one it first rendered with", () => {
-    const { rerender } = render(
+    const { rerender } = renderCard(
       <PublishScheduleCard permalink="abc" schedule={schedule} onChange={vi.fn()} canCreate isPublished={false} />,
     );
     rerender(<PublishScheduleCard permalink="abc" schedule={null} onChange={vi.fn()} canCreate isPublished={false} />);
@@ -90,7 +138,9 @@ describe("PublishScheduleCard", () => {
   it("hands the saved schedule to the editor", async () => {
     respondWith({ success: true, publish_schedule: schedule });
     const onChange = vi.fn();
-    render(<PublishScheduleCard permalink="abc" schedule={null} onChange={onChange} canCreate isPublished={false} />);
+    renderCard(
+      <PublishScheduleCard permalink="abc" schedule={null} onChange={onChange} canCreate isPublished={false} />,
+    );
 
     fireEvent.change(screen.getByLabelText("Publish at"), { target: { value: "2026-12-02T09:30" } });
     fireEvent.click(screen.getByRole("button", { name: "Schedule publish" }));
@@ -101,7 +151,7 @@ describe("PublishScheduleCard", () => {
   it("clears the editor's schedule after cancelling", async () => {
     respondWith({ success: true });
     const onChange = vi.fn();
-    render(
+    renderCard(
       <PublishScheduleCard permalink="abc" schedule={schedule} onChange={onChange} canCreate isPublished={false} />,
     );
 
