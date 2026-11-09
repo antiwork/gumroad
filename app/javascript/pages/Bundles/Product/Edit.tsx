@@ -35,6 +35,7 @@ import { PriceEditor } from "$app/components/ProductEdit/ProductTab/PriceEditor"
 import { ThumbnailEditor } from "$app/components/ProductEdit/ProductTab/ThumbnailEditor";
 import { RefundPolicy, RefundPolicySelector } from "$app/components/ProductEdit/RefundPolicy";
 import { OfferCode, PublicFileWithStatus } from "$app/components/ProductEdit/state";
+import { PublishSchedule } from "$app/components/PublishScheduleCard";
 import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
 import { InputGroup } from "$app/components/ui/InputGroup";
@@ -69,6 +70,8 @@ type ProductPageProps = {
     public_files: PublicFileWithStatus[];
     retained_files: RetainedFile[];
     is_published: boolean;
+    publish_schedule?: PublishSchedule | null;
+    can_create_publish_schedule?: boolean;
     products: BundleProduct[];
     default_offer_code: OfferCode | null;
   };
@@ -285,6 +288,8 @@ export default function BundlesProductEdit() {
       customPermalink={form.data.custom_permalink}
       uniquePermalink={unique_permalink}
       isPublished={bundle.is_published}
+      publishSchedule={bundle.publish_schedule ?? null}
+      canCreatePublishSchedule={bundle.can_create_publish_schedule ?? false}
       publicFiles={publicFiles}
       preview={
         <ProductPreview

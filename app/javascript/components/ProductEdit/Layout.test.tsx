@@ -82,6 +82,8 @@ afterEach(() => {
   product.files = [];
   product.is_published = false;
   product.native_type = "digital";
+  product.publish_schedule = null;
+  product.can_create_publish_schedule = false;
   matchHandle.current = "product";
   navigate.mockClear();
   vi.unstubAllGlobals();
@@ -380,7 +382,31 @@ describe("ProductEdit Layout publish and unpublish", () => {
       expect(updateProduct).toHaveBeenCalledWith({
         is_published: true,
         first_published_at: "2026-01-23T12:00:00Z",
+        publish_schedule: null,
+        can_create_publish_schedule: false,
       }),
+    );
+  });
+});
+
+describe("ProductEdit Layout scheduled publishing", () => {
+  const pending = { status: "scheduled", label: "December 2, 2026 at 9:30 AM PST", failure_message: null };
+
+  it("drops a pending schedule from the editor state when the seller publishes by hand", async () => {
+    const updateProduct = vi.fn();
+    matchHandle.current = "content";
+    setProductPublished.mockResolvedValueOnce({ first_published_at: "2026-01-23T12:00:00Z" });
+    product.publish_schedule = pending;
+    product.can_create_publish_schedule = true;
+    renderLayout(minor, { updateProduct });
+
+    expect(screen.getByText("Scheduled to publish on December 2, 2026 at 9:30 AM PST.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Publish and continue" }));
+
+    await waitFor(() =>
+      expect(updateProduct).toHaveBeenCalledWith(
+        expect.objectContaining({ is_published: true, publish_schedule: null, can_create_publish_schedule: false }),
+      ),
     );
   });
 });
@@ -413,6 +439,8 @@ describe("ProductEdit Layout Share tab on a draft", () => {
       expect(updateProduct).toHaveBeenCalledWith({
         is_published: true,
         first_published_at: "2026-01-23T12:00:00Z",
+        publish_schedule: null,
+        can_create_publish_schedule: false,
       }),
     );
     expect(navigate).not.toHaveBeenCalled();

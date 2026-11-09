@@ -23,6 +23,7 @@ import { ProfileSectionsEditor } from "$app/components/ProductEdit/ShareTab/Prof
 import { TagSelector } from "$app/components/ProductEdit/ShareTab/TagSelector";
 import { TaxonomyEditor } from "$app/components/ProductEdit/ShareTab/TaxonomyEditor";
 import { ProfileSection, PublicFileWithStatus } from "$app/components/ProductEdit/state";
+import { PublishSchedule } from "$app/components/PublishScheduleCard";
 import { TwitterShareButton } from "$app/components/TwitterShareButton";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Switch } from "$app/components/ui/Switch";
@@ -32,6 +33,8 @@ type SharePageProps = {
     name: string;
     description: string;
     custom_permalink: string | null;
+    publish_schedule?: PublishSchedule | null;
+    can_create_publish_schedule?: boolean;
     covers: AssetPreview[];
     collaborating_user: Seller | null;
     customizable_price: boolean;
@@ -132,6 +135,8 @@ export default function BundlesShareEdit() {
       customPermalink={bundle.custom_permalink}
       uniquePermalink={unique_permalink}
       isPublished={bundle.is_published}
+      publishSchedule={bundle.publish_schedule ?? null}
+      canCreatePublishSchedule={bundle.can_create_publish_schedule ?? false}
       preview={
         <ProductPreview
           bundle={{ ...bundle, hide_bundle_product_reviews: form.data.hide_bundle_product_reviews }}

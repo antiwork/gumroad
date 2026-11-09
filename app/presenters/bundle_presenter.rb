@@ -149,6 +149,7 @@ class BundlePresenter
           discover_fee_per_thousand: bundle.discover_fee_per_thousand,
           section_ids: bundle.user.seller_profile_products_sections.on_profile.filter_map { |section| section.external_id if section.shown_products.include?(bundle.id) },
           is_published: !bundle.draft && bundle.alive?,
+          **PublishSchedulePresenter.editor_props(bundle),
           products: bundle.bundle_products.alive.in_order.includes(:variant, product: ProductPresenter::ASSOCIATIONS_FOR_CARD).map { self.class.bundle_product(product: _1.product, quantity: _1.quantity, selected_variant_id: _1.variant&.external_id) },
           collaborating_user: collaborator.present? ? UserPresenter.new(user: collaborator).author_byline_props : nil,
           public_files: bundle.alive_public_files.attached.map { PublicFilePresenter.new(public_file: _1).props },
