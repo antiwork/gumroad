@@ -216,6 +216,35 @@ describe "MCP server" do
     expect(OauthApplication.find_by!(uid: response.parsed_body["client_id"]).redirect_uri).to eq(redirect_uris.join("\n"))
   end
 
+  it "registers Cursor's full callback set, including its native-app callback" do
+    redirect_uris = %w[
+      cursor://anysphere.cursor-mcp/oauth/callback
+      https://www.cursor.com/agents/mcp/oauth/callback
+      http://localhost:8787/callback
+    ]
+
+    post "/cursor/v1/oauth2/register",
+         params: { client_name: "Cursor", redirect_uris:, grant_types: %w[authorization_code refresh_token], response_types: ["code"], token_endpoint_auth_method: "none" }.to_json,
+         headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+
+    expect(response).to have_http_status(:created)
+    expect(response.parsed_body["redirect_uris"]).to eq(redirect_uris)
+    expect(OauthApplication.find_by!(uid: response.parsed_body["client_id"]).redirect_uri).to eq(redirect_uris.join("\n"))
+  end
+
+  ["cursor://evil.example/oauth/callback", "cursor://anysphere.cursor-mcp/oauth/callback/extra", "evil://anysphere.cursor-mcp/oauth/callback"].each do |redirect_uri|
+    it "rejects the custom-scheme callback #{redirect_uri} without creating a client" do
+      expect do
+        post "/cursor/v1/oauth2/register",
+             params: { redirect_uris: [redirect_uri] }.to_json,
+             headers: { "HOST" => DOMAIN, "CONTENT_TYPE" => "application/json" }
+      end.not_to change(OauthApplication, :count)
+
+      expect(response).to have_http_status(:bad_request)
+      expect(response.parsed_body["error_description"]).to eq("redirect_uris must be https (or http on localhost)")
+    end
+  end
+
   it "rejects more redirect URIs than a registration may hold without creating a client" do
     redirect_uris = (1..(Mcp::OauthClientRegistration::REDIRECT_URIS_MAX + 1)).map { |i| "https://example.com/callback/#{i}" }
 
