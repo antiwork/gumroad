@@ -279,7 +279,8 @@ class Charge < ApplicationRecord
   # A buyer may see the whole charge only when every item on it went to their email.
   def all_items_sent_to?(email)
     email = email.to_s.strip.downcase
-    successful_purchases.pluck(:email).all? { _1.to_s.strip.downcase == email }
+    emails = successful_purchases.pluck(:email)
+    emails.any? && emails.all? { _1.to_s.strip.downcase == email }
   end
 
   def split_receipt_mode?

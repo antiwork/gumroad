@@ -1997,6 +1997,24 @@ describe PurchasesController, :vcr do
         end
       end
 
+      context "when the purchase's charge has no successful items but the order has another seller's" do
+        let(:purchase) { create(:failed_purchase, link: create(:product, name: "Declined edition"), email: "test@example.com") }
+
+        before do
+          other_purchase = create(:purchase, email: "test@example.com")
+          order = create(:order, purchases: [purchase, other_purchase])
+          create(:charge, order:, purchases: [purchase], seller: purchase.seller)
+          create(:charge, order:, purchases: [other_purchase], seller: other_purchase.seller)
+        end
+
+        it "shows this purchase" do
+          get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
+
+          expect(response).to be_successful
+          expect(Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }).to eq(["Declined edition"])
+        end
+      end
+
       context "when the order has no successful purchases" do
         # A charge-backed purchase promotes the receipt's chargeable to its Order;
         # when that Order has no successful purchase, the orderable has no email and
