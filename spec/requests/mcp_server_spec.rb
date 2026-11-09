@@ -92,6 +92,14 @@ describe "MCP server" do
     )
   end
 
+  # Each client is told to use the address the discovery document publishes for it, so an address
+  # the authorization server does not accept as a resource leaves that connector unable to connect.
+  it "accepts every connector address the discovery document publishes as a resource" do
+    published = Mcp::Server.discovery("#{PROTOCOL}://#{DOMAIN}")[:clients].values
+
+    expect(Mcp::DynamicClientOauth.resource_identifiers).to match_array(published)
+  end
+
   it "returns OAuth protected resource metadata" do
     get "/.well-known/oauth-protected-resource", headers: { "HOST" => DOMAIN }
 
@@ -3355,6 +3363,56 @@ describe "MCP server" do
 
     def mcp_call(token, payload)
       post "/claude/v1/mcp", params: payload.to_json, headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{token}" }
+    end
+  end
+
+  # The addresses the discovery document publishes for Cursor and Antigravity are the ones those
+  # clients are told to use, so each has to authorize on its own address and serve calls there.
+  context "with a dynamically registered client on a published connector address" do
+    let(:code_verifier) { SecureRandom.urlsafe_base64(48) }
+    let(:code_challenge) { Base64.urlsafe_encode64(Digest::SHA256.digest(code_verifier), padding: false) }
+    let(:ping) { { jsonrpc: "2.0", id: 1, method: "ping" } }
+
+    before do
+      host! DOMAIN
+      stub_vite_layout_helpers
+
+      sign_in @seller
+    end
+
+    %w[cursor antigravity].each do |client|
+      it "authorizes #{client} on its own address and answers MCP calls there" do
+        resource = "#{PROTOCOL}://#{DOMAIN}/#{client}/v1/mcp"
+        redirect_uri = "https://#{client}.example/callback"
+
+        post "/#{client}/v1/oauth2/register",
+             params: { client_name: client.humanize, redirect_uris: [redirect_uri], token_endpoint_auth_method: "none", scope: "view_sales" }.to_json,
+             headers: { "CONTENT_TYPE" => "application/json" }
+        client_id = response.parsed_body.fetch("client_id")
+        authorize_params = { response_type: "code", client_id:, redirect_uri:, scope: "view_sales", state: "xyz", code_challenge:, code_challenge_method: "S256", resource: }
+
+        get "/#{client}/v1/oauth2/authorize", params: authorize_params
+        expect(response).to have_http_status(:ok)
+        doc = Nokogiri::HTML(response.body)
+        expect(doc.at_css("input[name='resource']")["value"]).to eq(resource)
+
+        post "/oauth/authorize", params: authorize_params.merge(authenticity_token: authenticity_token(doc))
+        expect(response).to have_http_status(:found)
+        code = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("code")
+
+        post "/#{client}/v1/oauth2/token", params: { grant_type: "authorization_code", code:, redirect_uri:, client_id:, code_verifier:, resource: }
+        expect(response).to have_http_status(:ok)
+        token = response.parsed_body.fetch("access_token")
+        expect(Doorkeeper::AccessToken.by_token(token).resource).to eq(resource)
+
+        post "/#{client}/v1/mcp", params: ping.to_json, headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{token}" }
+        expect(response).to have_http_status(:ok)
+
+        # RFC 8707: a token is only valid at the address it was issued for.
+        other = client == "cursor" ? "antigravity" : "cursor"
+        post "/#{other}/v1/mcp", params: ping.to_json, headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{token}" }
+        expect(response).to have_http_status(:unauthorized)
+      end
     end
   end
 
