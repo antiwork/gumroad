@@ -758,7 +758,8 @@ class UrlRedirect < ApplicationRecord
         cheapest_first.detect { |variant| variant.alive_rich_contents.any?(&:has_editor_content?) } || cheapest_first.first
       elsif entity.is_a?(BaseVariant)
         target = entity.price_difference_cents.to_i
-        cheapest_first.min_by { |variant| [(variant.price_difference_cents.to_i - target).abs, variant.price_difference_cents.to_i] }
+        # id breaks exact price ties, which the price sort alone leaves to MySQL. go_web mirrors this pick.
+        cheapest_first.min_by { |variant| price = variant.price_difference_cents.to_i; [(price - target).abs, price, variant.id] }
       else
         cheapest_first.first
       end
