@@ -8,7 +8,8 @@
 # went red, and every PR cut from main inherited it. So the cases below pin the two decisions
 # that came out of it:
 #
-#   * the tag push stays fatal (deploy_relevance.sh diffs against the tag), and
+#   * the tag push stays fatal (deploy_relevance.sh diffs against the tag) -- reversed in November:
+#     it failed a live deploy again, so the push is now retried, then a warning, and
 #   * creating the Release is best effort over two transports -- the gh CLI, then the REST API on
 #     api.github.com, a different host from the CDN the CLI download needs -- and when BOTH fail
 #     the step still exits 0, with a warning and a Buildkite annotation.
@@ -29,6 +30,7 @@ trap 'rm -rf "$WORK" /tmp/gh.tar.gz "/tmp/gh_2.65.0_linux_amd64" /tmp/gh_release
 COMMIT=649542321aaaabbbbccccddddeeeeffff0000111
 TODAY=$(date -u +%Y.%m.%d)
 PREV_TAG="v2026.11.08.4"
+OTHER_COMMIT=1111222233334444555566667777888899990000
 VERSION_TAG="v${TODAY}.1"
 
 mkdir -p "$WORK/bin" "$WORK/ghbin"
@@ -66,6 +68,27 @@ case "$*" in
     for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
     [ -n "$out" ] && printf '%s' "${LATEST_RESPONSE:-{\"tag_name\": \"$LATEST_TAG\"}}" > "$out"
     printf '%s' "${LATEST_HTTP_CODE:-200}"
+    exit 0 ;;
+  *api.github.com*git/ref/tags*)
+    out=""; prev=""; tag=""
+    for a in "$@"; do
+      [ "$prev" = "-o" ] && out="$a"
+      case "$a" in *git/ref/tags/*) tag="${a##*/}" ;; esac
+      prev="$a"
+    done
+    code=""; sha=""
+    if [ -n "${REF_TAKEN_TAG:-}" ] && [ "$tag" = "$REF_TAKEN_TAG" ]; then
+      code=200; sha="${REF_OTHER_SHA:-}"
+    else
+      case "${REF_MODE:-ours}" in
+        ours) code=200; sha="${BUILDKITE_COMMIT:-}" ;;
+        other) code=200; sha="${REF_OTHER_SHA:-}" ;;
+        free) code=404 ;;
+        *) code="${REF_MODE}" ;;
+      esac
+    fi
+    [ "$code" = 200 ] && [ -n "$out" ] && printf '{"ref":"refs/tags/%s","object":{"sha":"%s","type":"commit"}}' "$tag" "$sha" > "$out"
+    printf '%s' "$code"
     exit 0 ;;
   *api.github.com*)
     out=""; prev=""
@@ -111,7 +134,7 @@ run_case() {
     TODAY_TAGS="" PREVIOUS_TAGS="$PREV_TAG" STUB_COMMIT_TITLE="stub subject"
     API_HTTP_CODE=201 API_RESPONSE_TEXT="" GH_EXIT=0 GIT_PUSH_EXIT=0 DOWNLOAD_EXIT=0
     GIT_FETCH_EXIT=0 LATEST_TAG="$PREV_TAG" LATEST_HTTP_CODE=200 LATEST_RESPONSE=""
-    RELEASE_GIT_RETRY_DELAY=0
+    RELEASE_GIT_RETRY_DELAY=0 REF_MODE=ours REF_TAKEN_TAG= REF_OTHER_SHA="$OTHER_COMMIT"
   )
   for o in "$@"; do
     case "$o" in
@@ -218,6 +241,32 @@ cases() {
     fail "422 already-exists -> status $st, out: $(grep -c 'was NOT created' "$WORK/out")"
   fi
 
+  # 5b. The name a sibling build already owns on GitHub. The fetch that would have shown it
+  #     failed, so the sequence computed from local tags collides: releasing under that name
+  #     records THEIR commit's release, which the step logged as its own success.
+  st=$(run_case GH_PRESENT=1 GIT_FETCH_EXIT=1 REF_TAKEN_TAG="$VERSION_TAG")
+  if [ "$st" = 0 ] && grep -q -- "release create v${TODAY}.2 --target $COMMIT" "$WORK/gh.log" &&
+    ! grep -q -- "release create $VERSION_TAG " "$WORK/gh.log" &&
+    grep -q "already belongs to another commit" "$WORK/out"; then
+    pass "a tag another commit owns is skipped for the next sequence"
+  else
+    fail "colliding tag name -> status $st, gh log: $(cat "$WORK/gh.log")"
+  fi
+
+  # 5c. The push failed AND the name is another commit's: the create call answers "already
+  #     exists" (422) for THEIR release, so the step must report the loss, not a release.
+  st=$(run_case GH_PRESENT=1 GH_EXIT=1 GIT_PUSH_EXIT=1 API_HTTP_CODE=422 REF_MODE=other)
+  if [ "$st" = 0 ] && grep -q "was NOT created" "$WORK/out" && ! grep -q "created successfully" "$WORK/out"; then
+    pass "a release for another commit's tag is not claimed as this deploy's"
+  else
+    fail "another commit's release claimed -> status $st, out: $(tail -3 "$WORK/out" | tr '\n' ' ')"
+  fi
+  if grep -q -- "--style warning --context release-not-created" "$WORK/annotations"; then
+    pass "a release owned by another commit is annotated"
+  else
+    fail "annotation for another commit's release -> $(cat "$WORK/annotations" 2>/dev/null)"
+  fi
+
   # 6. A failed tag push or fetch is retried, then a warning: the deploy is already live, so the
   #    step must not fail (the October regression), and the release is still attempted.
   st=$(run_case GH_PRESENT=1 GIT_PUSH_EXIT=1 GIT_FETCH_EXIT=1)
@@ -297,6 +346,10 @@ if [ "${1:-}" = "--mutate" ]; then
     's/"generate_release_notes":true/"generate_release_notes":false/'
   mutate "an already-created release counts as a failure" \
     's/201\|422\)/201)/'
+  mutate "a tag another commit owns is reused instead of skipped" \
+    's/^  \[ "\$TAG_STATE" = other \] \|\| break$/  break/m'
+  mutate "a release for another commit's tag is claimed as this deploy's" \
+    's/^if \[ "\$TAG_PUSHED" = 0 \] &&/if false \&\& [ "$TAG_PUSHED" = 0 ] \&\&/m'
   echo
   echo "MUTANTS_ESCAPED=$ESCAPES"
   [ "$ESCAPES" -eq 0 ] && [ "$BASE_FAIL" -eq 0 ] && echo "ALL GREEN: cases pass, every mutant caught"
