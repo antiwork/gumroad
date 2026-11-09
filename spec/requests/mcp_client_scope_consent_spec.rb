@@ -41,27 +41,49 @@ describe "OAuth consent for an MCP client asking for a scope it did not register
     form.css("input[type='hidden']").to_h { [_1["name"], _1["value"]] }
   end
 
-  it "lets a client registered before view_library get it on consent, and the token reaches list_purchases" do
-    fields = consent_form_fields(authorize_params(scope: "view_public view_library"))
-    expect(response.body).to include("See the products you bought.")
-
-    post "/oauth/authorize", params: fields
+  # Consents and exchanges the code, returning the token response.
+  def connect(scope)
+    post "/oauth/authorize", params: consent_form_fields(authorize_params(scope:))
     expect(response).to have_http_status(:found)
     code = Rack::Utils.parse_query(URI.parse(response.location).query).fetch("code")
 
     post "/claude/v1/oauth2/token", params: { grant_type: "authorization_code", code:, redirect_uri:, client_id: application.uid, code_verifier:, resource: }
     expect(response).to have_http_status(:ok)
-    expect(response.parsed_body.fetch("scope").split).to match_array(%w[view_public view_library])
+    response.parsed_body
+  end
 
+  def list_purchases(access_token)
     post "/claude/v1/mcp",
          params: { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "list_purchases", arguments: {} } }.to_json,
-         headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{response.parsed_body.fetch("access_token")}" }
+         headers: { "CONTENT_TYPE" => "application/json", "Authorization" => "Bearer #{access_token}" }
+  end
+
+  it "lets a client registered before view_library get it on consent, and the token reaches list_purchases" do
+    consent_form_fields(authorize_params(scope: "view_public view_library"))
+    expect(response.body).to include("See the products you bought.")
+
+    token = connect("view_public view_library")
+    expect(token.fetch("scope").split).to match_array(%w[view_public view_library])
+
+    list_purchases(token.fetch("access_token"))
     expect(response).to have_http_status(:ok)
     expect(response.headers["WWW-Authenticate"]).to be_nil
     expect(response.parsed_body.dig("result", "structuredContent", "purchases")).to eq([])
 
     # Nothing is written to the client: the current policy is checked on every request.
     expect(application.reload.scopes.to_s).to eq(registered_scopes)
+  end
+
+  it "challenges a connected client's older token for view_library, so it can step up on consent" do
+    old_token = connect("view_public view_sales")
+
+    list_purchases(old_token.fetch("access_token"))
+    expect(response).to have_http_status(:forbidden)
+    expect(response.headers["WWW-Authenticate"]).to include(%(error="insufficient_scope", scope="view_public view_sales view_library"))
+
+    stepped_up = connect("view_public view_sales view_library")
+    list_purchases(stepped_up.fetch("access_token"))
+    expect(response).to have_http_status(:ok)
   end
 
   it "lets a client registered with only the legacy account scope reconnect on the current scopes" do

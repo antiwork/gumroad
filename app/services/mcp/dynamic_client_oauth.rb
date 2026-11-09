@@ -69,13 +69,19 @@ module Mcp
     # Registration is open, so a dynamic client's stored scopes only record the policy on the day it
     # registered, and registering again would grant the current one. Checking against the current
     # policy lets an older client ask for a newer scope; the consent screen still lists each scope.
+    def self.requestable_scopes(application)
+      return application.scopes unless application.mcp_dynamic_client
+
+      Doorkeeper::OAuth::Scopes.from_array(
+        application.scopes.to_a | OauthClientRegistration::MCP_SCOPES | OauthClientRegistration::LEGACY_SCOPES
+      )
+    end
+
     def self.accept_registrable_scopes(pre_auth)
       application = pre_auth.client.application
       return unless application.mcp_dynamic_client
 
-      allowed = Doorkeeper::OAuth::Scopes.from_array(
-        application.scopes.to_a | OauthClientRegistration::MCP_SCOPES | OauthClientRegistration::LEGACY_SCOPES
-      )
+      allowed = requestable_scopes(application)
       pre_auth.define_singleton_method(:validate_scopes) do
         Doorkeeper::OAuth::Helpers::ScopeChecker.valid?(
           scope_str: scope, server_scopes: Doorkeeper.config.scopes, app_scopes: allowed, grant_type: send(:grant_type)
