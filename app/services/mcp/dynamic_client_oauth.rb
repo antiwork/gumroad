@@ -7,6 +7,8 @@ module Mcp
   module DynamicClientOauth
     CONNECTORS = %w[muse claude chatgpt cursor antigravity].freeze
     CODE_CHALLENGE_METHOD = "S256"
+    # Added after some clients registered; a client that predates it may gain it when the person consents.
+    LATE_SCOPES = %w[view_library].freeze
 
     class ErrorResponse < Doorkeeper::OAuth::ErrorResponse
       attr_reader :description
@@ -49,7 +51,16 @@ module Mcp
     end
 
     def self.screen(pre_auth)
-      return pre_auth unless pre_auth.authorizable? && pre_auth.client.application.mcp_dynamic_client
+      authorizable = pre_auth.authorizable?
+      application = pre_auth.client&.application
+      return pre_auth unless application&.mcp_dynamic_client
+
+      unless authorizable
+        return pre_auth unless pre_auth.error == Doorkeeper::Errors::InvalidScope
+
+        pre_auth = accept_late_scopes(pre_auth, application)
+        return explain_unknown_scope(pre_auth, application) unless pre_auth.authorizable?
+      end
 
       error = authorization_error(
         code_challenge: pre_auth.code_challenge,
@@ -62,6 +73,42 @@ module Mcp
       RejectedPreAuthorization.new(
         pre_auth,
         ErrorResponse.new(name:, description:, state: pre_auth.state, redirect_uri: pre_auth.redirect_uri)
+      )
+    end
+
+    def self.late_scopes_for(application, requested)
+      registered = application.scopes.to_s.split
+      missing = requested.to_s.split - registered
+      missing.presence if missing.all? { LATE_SCOPES.include?(_1) }
+    end
+
+    # Validates the request as if the client had registered the late scope. Nothing is saved until
+    # the person consents (see grant_late_scopes!).
+    def self.accept_late_scopes(pre_auth, application)
+      return pre_auth if late_scopes_for(application, pre_auth.scope).blank?
+
+      widened = Doorkeeper::OAuth::Scopes.from_string((application.scopes.to_s.split + LATE_SCOPES).uniq.join(" "))
+      pre_auth.define_singleton_method(:validate_scopes) do
+        Doorkeeper::OAuth::Helpers::ScopeChecker.valid?(
+          scope_str: scope, server_scopes: Doorkeeper.config.scopes, app_scopes: widened, grant_type: send(:grant_type)
+        )
+      end
+      pre_auth
+    end
+
+    def self.grant_late_scopes!(application, requested)
+      missing = late_scopes_for(application, requested)
+      return if missing.blank?
+
+      application.update!(scopes: (application.scopes.to_s.split + missing).uniq.join(" "))
+    end
+
+    def self.explain_unknown_scope(pre_auth, application)
+      description = "#{application.name} asked for a permission it was not set up with. " \
+                    "Remove the connector in Settings > Applications, then add Gumroad again from #{application.name.delete_prefix("MCP ")}."
+      RejectedPreAuthorization.new(
+        pre_auth,
+        ErrorResponse.new(name: :invalid_scope, description:, state: pre_auth.state, redirect_uri: pre_auth.redirect_uri)
       )
     end
 
