@@ -3517,7 +3517,7 @@ describe "MCP server" do
     # client must keep getting exactly these.
     def legacy_initialize_body
       <<~'JSON'.chomp
-        {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"gumroad","title":"Gumroad","version":"1.0.0"},"instructions":"Use these tools for a connected creator's own store: products, sales, and payouts. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."}}
+        {"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-03-26","capabilities":{"tools":{"listChanged":false}},"serverInfo":{"name":"gumroad","title":"Gumroad","version":"1.0.0"},"instructions":"Use these tools for a connected creator's own store: products, sales, and payouts. search_products also searches the rest of Gumroad's catalogue. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."}}
       JSON
     end
 
