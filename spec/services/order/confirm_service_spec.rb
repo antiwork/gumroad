@@ -307,6 +307,32 @@ describe Order::ConfirmService, :vcr do
         end
       end
 
+      context "when the seller matches the chargeback-ring signal with enforcement on" do
+        before do
+          # Seeded before the flags so the history itself isn't evaluated.
+          ring_product = create(:product, user: seller, price_cents: 2200)
+          5.times { |i| create(:purchase, link: ring_product, seller:, card_country: "IN", ip_address: "151.240.1.#{i + 1}") }
+          purchases.each { _1.update!(card_country: "IN", ip_address: "151.240.7.7") }
+          Feature.activate_user(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
+          Feature.activate_user(Purchase::ChargebackRingSignal::ENFORCE_FLAG, seller)
+          allow(ErrorNotifier).to receive(:notify)
+          allow(ChargeProcessor).to receive(:get_setup_intent).and_return(instance_double(StripeSetupIntent, succeeded?: true))
+        end
+
+        it "refuses the resumed debit even though the purchases were loaded without their checkout-time verdict" do
+          expect(ChargeProcessor).not_to receive(:create_payment_intent_or_charge!)
+
+          responses, = Order::ConfirmService.new(order: Order.find(order.id), params: {}).perform
+
+          purchases.each do |purchase|
+            purchase.reload
+            expect(purchase).to be_failed
+            expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+            expect(responses[purchase.id][:success]).to eq(false)
+          end
+        end
+      end
+
       it "creates one combined off-session charge and reports the group's processing debit as pending" do
         setup_intent = instance_double(StripeSetupIntent, succeeded?: true)
         expect(ChargeProcessor).to receive(:get_setup_intent).with(merchant_account, "seti_confirm_india").once.and_return(setup_intent)

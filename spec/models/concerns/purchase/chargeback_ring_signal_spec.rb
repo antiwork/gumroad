@@ -222,6 +222,49 @@ describe Purchase::ChargebackRingSignal do
         ).to eq(1)
       end
 
+      # Over an admin pause the ring skips its pause step, so its fraud flag is the only
+      # containment record a human decision can be measured against.
+      context "when the seller was already paused by an admin" do
+        let(:reviewer) { create(:user) }
+
+        before do
+          seller.update!(payouts_paused_internally: true, payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN)
+          seed_paid_sales(seller, count: 5)
+          arm_flag
+          allow(ErrorNotifier).to receive(:notify)
+          build_checkout_purchase(seller).save!
+          expect(seller.reload.flagged_for_fraud?).to be(true)
+          seller.mark_compliant!(author_id: reviewer.id)
+        end
+
+        it "keeps the reviewer's compliant verdict on the next sale" do
+          build_checkout_purchase(seller).save!
+
+          seller.reload
+          expect(seller.compliant?).to be(true)
+          expect(seller.payouts_paused_by_source).to eq(User::PAYOUT_PAUSE_SOURCE_ADMIN)
+        end
+
+        it "does not re-pause or re-flag on the next sale when the reviewer also resumed payouts" do
+          seller.update!(payouts_paused_internally: false, payouts_paused_by: nil)
+          seller.comments.create!(
+            author_id: reviewer.id,
+            comment_type: Comment::COMMENT_TYPE_PAYOUTS_RESUMED,
+            content: "Payouts resumed."
+          )
+
+          build_checkout_purchase(seller).save!
+
+          seller.reload
+          expect(seller.compliant?).to be(true)
+          expect(seller.payouts_paused_internally?).to be(false)
+          expect(
+            seller.comments.with_type_on_probation
+                  .where(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal])
+          ).to be_empty
+        end
+      end
+
       # The other half of the same guard: a LATER AUTOMATIC hold replacing the ring's as the
       # newest pausing comment is not a human decision, so the ring must re-record its hold over
       # it — otherwise the rate-recovery release could lift it and pay a ring seller out.
@@ -245,6 +288,20 @@ describe Purchase::ChargebackRingSignal do
         expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
         expect(seller.payouts_paused_for_chargeback_rate?).to be(false)
         expect(seller.payouts_paused_internally?).to be(true)
+      end
+
+      it "pauses a verified seller's payouts without attempting the fraud flag that not_verified? would halt" do
+        seller.update!(verified: true)
+        seed_paid_sales(seller, count: 5)
+        arm_flag
+        allow(ErrorNotifier).to receive(:notify)
+
+        build_checkout_purchase(seller).save!
+
+        seller.reload
+        expect(seller.payouts_paused_for_chargeback_ring_signal?).to be(true)
+        expect(seller.flagged_for_fraud?).to be(false)
+        expect(ErrorNotifier).not_to have_received(:notify).with(instance_of(StateMachines::InvalidTransition), anything)
       end
 
       it "leaves an admin payout pause untouched" do
@@ -444,6 +501,65 @@ describe Purchase::ChargebackRingSignal do
         expect(purchase.errors[:base]).to be_present
       end
 
+      context "with a purchase loaded in a later request (no checkout-time verdict)" do
+        def reloaded_ring_purchase
+          # Saved before the flags are armed, so before_create never stored a verdict.
+          purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")
+          purchase.save!
+          Purchase.find(purchase.id)
+        end
+
+        before { seed_paid_sales(seller, count: 5) }
+
+        it "evaluates on first read and refuses the charge" do
+          purchase = reloaded_ring_purchase
+          arm_flags
+
+          expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(true)
+          expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        end
+
+        it "memoizes the verdict per purchase and shares the per-seller cache across purchases" do
+          first = reloaded_ring_purchase
+          second = reloaded_ring_purchase
+          arm_flags
+
+          expect(described_class).to receive(:evaluate).twice.and_call_original
+          expect(described_class).to receive(:evaluate_uncached).once.and_call_original
+          first.refuse_charge_for_chargeback_ring_signal?
+          first.refuse_charge_for_chargeback_ring_signal?
+          second.refuse_charge_for_chargeback_ring_signal?
+        end
+
+        it "does not evaluate when only the shadow flag is on" do
+          purchase = reloaded_ring_purchase
+          Feature.activate_user(described_class::FEATURE_FLAG, seller)
+
+          expect(described_class).not_to receive(:evaluate)
+          expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(false)
+        end
+
+        it "does not evaluate a recurring subscription charge" do
+          purchase = reloaded_ring_purchase
+          arm_flags
+          allow(purchase).to receive(:is_recurring_subscription_charge).and_return(true)
+
+          expect(described_class).not_to receive(:evaluate)
+          expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(false)
+        end
+
+        it "fails open when the lazy evaluation raises" do
+          purchase = reloaded_ring_purchase
+          arm_flags
+          allow(described_class).to receive(:evaluate).and_raise(Timeout::Error)
+          allow(ErrorNotifier).to receive(:notify)
+
+          expect(purchase.refuse_charge_for_chargeback_ring_signal?).to be(false)
+          expect(purchase.errors).to be_empty
+          expect(purchase.error_code).to be_nil
+        end
+      end
+
       # The suspension lands AFTER the pause step and through a SECOND object, so the copy the
       # purchase holds is still stale exactly when the flag step reads the account's state. The
       # example fails if that read is not taken again under the lock: a stale copy reports
@@ -462,7 +578,7 @@ describe Purchase::ChargebackRingSignal do
         expect(seller.reload.suspended_for_fraud?).to be(true)
       end
 
-      it "raises PurchaseInvalid through the create-service path so the purchase rolls back to failed" do
+      it "leaves the refusal on the purchase's errors, which Purchase::CreateService turns into PurchaseInvalid" do
         seed_paid_sales(seller, count: 5)
         arm_flags
         purchase = build_checkout_purchase(seller, card_country: "BR", ip_address: "151.240.50.1")

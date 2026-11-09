@@ -145,11 +145,7 @@ module Purchase::ChargebackRingSignal
     # in refuse_charge_for_chargeback_ring_signal? at charge time, where card_country is known.
     def evaluate_chargeback_ring_signal
       return if errors.present?
-      return if seller.nil?
-      return if free_purchase?
-      # Renewals aren't new ring sales — same carve-out as check_for_past_fraudulent_ips.
-      return if is_recurring_subscription_charge
-      return unless Feature.active?(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
+      return unless chargeback_ring_signal_applicable?
 
       @chargeback_ring_signal_result = Purchase::ChargebackRingSignal.evaluate(seller:)
       nil
@@ -161,18 +157,37 @@ module Purchase::ChargebackRingSignal
       nil
     end
 
+    def chargeback_ring_signal_applicable?
+      return false if seller.nil?
+      return false if free_purchase?
+      # Renewals aren't new ring sales — same carve-out as check_for_past_fraudulent_ips.
+      return false if is_recurring_subscription_charge
+
+      Feature.active?(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
+    end
+
+    # A purchase loaded in a later request (the India-mandate resume in Order::ConfirmService)
+    # never ran the before_create, so evaluate on first read.
+    def chargeback_ring_signal_result
+      return @chargeback_ring_signal_result if defined?(@chargeback_ring_signal_result)
+
+      @chargeback_ring_signal_result = (Purchase::ChargebackRingSignal.evaluate(seller:) if chargeback_ring_signal_applicable?)
+    end
+
   public
 
-    # Called before any processor call — at the top of Purchase#charge! for single purchases and
-    # from Charge::CreateService#perform for combined (cart) charges — so a refusal provably
-    # never reaches the processor. Public because Charge::CreateService invokes it per purchase.
+    # Called before any processor call — at the top of Purchase#charge! for single purchases,
+    # from Charge::CreateService#perform for combined (cart) charges, and from
+    # Order::PreparePaymentIntentService before a client-confirm intent exists — so a refusal
+    # provably never reaches the processor. Public because those services invoke it per purchase.
     # Refuses only on buyer-level evidence: this purchase's IP inside the matched hosting CIDR
     # AND its card country equal to the dominant one. The containment (payout pause, fraud flag,
     # alert) does not depend on this refusal.
     def refuse_charge_for_chargeback_ring_signal?
-      result = @chargeback_ring_signal_result
-      return false unless result&.hit?
+      # Enforce first: in shadow mode a reloaded purchase must not trigger the lazy evaluation.
       return false unless Feature.active?(Purchase::ChargebackRingSignal::ENFORCE_FLAG, seller)
+      result = chargeback_ring_signal_result
+      return false unless result&.hit?
       return false if result.matched_cidr.nil? || result.dominant_card_country.nil?
       return false unless Purchase::ChargebackRingSignal.matching_cidr(ip_address) == result.matched_cidr
       return false unless card_country.present? && card_country == result.dominant_card_country
@@ -258,10 +273,12 @@ module Purchase::ChargebackRingSignal
     # payouts resume or from a risk-state transition (`mark_compliant`, `put_on_probation`, ...).
     def human_decided_after_ring_containment?
       ring_author = User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal]
+      # FLAGGED too: over an admin pause the pause step is skipped, so the fraud flag is the
+      # ring's only containment record.
       ring_containment = seller.comments
-        .with_type_on_probation
+        .where(comment_type: [Comment::COMMENT_TYPE_ON_PROBATION, Comment::COMMENT_TYPE_FLAGGED])
         .where(author_name: ring_author)
-        .order(:created_at, :id)
+        .order(:id)
         .last
       return false if ring_containment.nil?
 
@@ -283,7 +300,9 @@ module Purchase::ChargebackRingSignal
     def flag_seller_for_ring_review!
       seller.with_lock do
         next if human_decided_after_ring_containment?
-        next unless seller.reload.can_flag_for_fraud?
+        seller.reload
+        # not_verified? halts the transition, so flag_for_fraud! would raise on every hit.
+        next if seller.verified? || !seller.can_flag_for_fraud?
 
         seller.flag_for_fraud!(author_name: User::SYSTEM_PAYOUT_PAUSE_COMMENT_AUTHORS[:chargeback_ring_signal])
       end

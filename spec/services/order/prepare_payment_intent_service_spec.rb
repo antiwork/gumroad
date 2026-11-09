@@ -533,6 +533,51 @@ describe Order::PreparePaymentIntentService, :vcr do
       end
     end
 
+    context "when the seller matches the chargeback-ring signal with enforcement on" do
+      before do
+        MerchantAccount.gumroad(StripeChargeProcessor.charge_processor_id) ||
+          create(:merchant_account, user: nil, charge_processor_merchant_id: "acct_#{SecureRandom.hex(8)}")
+        create(:merchant_account, user: seller, charge_processor_merchant_id: "acct_test")
+        # Seeded before the flags so the history itself isn't evaluated.
+        ring_product = create(:product, user: seller, price_cents: 2200)
+        5.times { |i| create(:purchase, link: ring_product, seller:, card_country: "BR", ip_address: "151.240.1.#{i + 1}") }
+        Feature.activate_user(Purchase::ChargebackRingSignal::FEATURE_FLAG, seller)
+        Feature.activate_user(Purchase::ChargebackRingSignal::ENFORCE_FLAG, seller)
+        allow(ErrorNotifier).to receive(:notify)
+
+        preview = Stripe::StripeObject.construct_from(card: { country: "BR" })
+        allow(Stripe::ConfirmationToken).to receive(:retrieve)
+          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+      end
+
+      it "refuses a buyer carrying the ring evidence before the PaymentIntent exists" do
+        order, params = build_order
+        order.purchases.each { _1.update!(ip_address: "151.240.7.7") }
+        expect(StripeDeferredPaymentIntent).not_to receive(:create)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_ring").perform
+
+        expect(responses["unique-id-0"][:success]).to eq(false)
+        expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+        expect(responses["unique-id-0"][:error_message]).to eq("Your card was not charged.")
+        expect(order.charges).to be_empty
+        purchase = order.purchases.first.reload
+        expect(purchase).to be_failed
+        expect(purchase.error_code).to eq(PurchaseErrorCode::CHARGEBACK_RING_SIGNAL)
+      end
+
+      it "creates the PaymentIntent as usual for a buyer on a non-hosting IP" do
+        order, params = build_order
+        charge_intent = instance_double(StripeChargeIntent, id: "pi_ring_allowed", client_secret: "pi_ring_allowed_secret")
+        expect(StripeDeferredPaymentIntent).to receive(:create).once.and_return(charge_intent)
+
+        responses = described_class.new(order:, params:, confirmation_token: "ctoken_ring").perform
+
+        expect(responses["unique-id-0"][:requires_payment_confirmation]).to eq(true)
+        expect(order.purchases.first.reload).to be_in_progress
+      end
+    end
+
     # The deferred intent's payment_method_types/currency MUST equal the Payment Element's, or Stripe
     # rejects the ConfirmationToken. Both sides read Checkout::PaymentMethodResolver so they can't drift.
     context "the deferred intent method/currency contract" do

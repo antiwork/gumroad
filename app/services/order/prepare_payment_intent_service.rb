@@ -54,6 +54,7 @@ class Order::PreparePaymentIntentService
     return responses if preview.nil?
 
     apply_previewed_card_country(preview)
+    return responses if block_chargeback_ring_signal
     return responses if block_unsupported_recurring_payment_method
     return responses if block_region_locked_payment_method_country_mismatch
     return responses if block_purchasing_power_parity_mismatches
@@ -456,6 +457,18 @@ class Order::PreparePaymentIntentService
     # the platform, outside Brazil.
     def pix_iof_applies?
       !merchant_account&.is_a_brazilian_stripe_connect_account?
+    end
+
+    # Server-confirm checkout refuses in Purchase#charge! / Charge::CreateService; here the browser
+    # confirms with Stripe directly, so this is the last check before money moves. Needs the
+    # previewed card_country, hence after apply_previewed_card_country.
+    def block_chargeback_ring_signal
+      refused = purchases_to_charge.find(&:refuse_charge_for_chargeback_ring_signal?)
+      return false if refused.nil?
+
+      purchases_to_charge.each { _1.error_code = PurchaseErrorCode::CHARGEBACK_RING_SIGNAL }
+      fail_purchases_with(refused.errors.first.message)
+      true
     end
 
     # Server-confirm checkout runs this at charge time; client-confirm combined charges skip it at
