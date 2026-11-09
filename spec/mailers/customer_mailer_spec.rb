@@ -1310,6 +1310,61 @@ describe CustomerMailer do
     end
   end
 
+  describe "receipt with the graphics-light pilot" do
+    let(:seller) { create(:named_seller) }
+    let(:email) { "buyer@example.com" }
+    let(:purchase_one) { create(:purchase, link: create(:product, user: seller, name: "Book One"), seller:, email:) }
+    let(:purchase_two) { create(:purchase, link: create(:product, user: seller, name: "Upsell Two"), seller:, email:) }
+    let!(:charge) { create(:charge, purchases: [purchase_one, purchase_two], seller:) }
+
+    before do
+      purchase_one.create_url_redirect!
+      purchase_two.create_url_redirect!
+      # Receipt recommendations can list the other item's product; these examples check order lines only.
+      allow(RecommendedProducts::CheckoutService).to receive(:fetch_for_receipt).and_return([])
+    end
+
+    it "stays on the designed receipt while the flag is off for the seller" do
+      mail = CustomerMailer.receipt(nil, charge.id)
+
+      expect(mail.body.decoded).to include("class=\"button primary\"")
+    end
+
+    it "sends a plain receipt with text links, the same items and total, when the flag is on for the seller" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      mail = CustomerMailer.receipt(nil, charge.id)
+      body = mail.body.decoded
+
+      expect(body).to include("Book One", "Upsell Two", "Total:")
+      expect(body).to include(purchase_one.url_redirect.download_page_url, purchase_two.url_redirect.download_page_url)
+      expect(body).not_to include("<img")
+      expect(body).not_to include("class=\"button primary\"")
+    end
+
+    it "keeps presenter links clickable instead of escaping them" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      body = CustomerMailer.receipt(nil, charge.id).body.decoded
+
+      expect(body).not_to include("&lt;a ")
+      expect(Nokogiri::HTML(body).at_xpath("//a[normalize-space()='Generate invoice']")["href"]).to eq(charge.invoice_url)
+    end
+
+    it "links each split receipt to the receipt page for the whole order" do
+      Feature.activate_user(:graphics_light_receipt, seller)
+      body = CustomerMailer.receipt(purchase_one.id, nil, single_purchase: true).body.decoded
+
+      expect(body).to include("Book One")
+      expect(body).not_to include("Upsell Two")
+      expect(body).to have_link("View every item in this order", href: receipt_purchase_url(purchase_one.external_id, host: UrlService.domain_with_protocol))
+    end
+
+    it "does not apply to another seller's receipt" do
+      Feature.activate_user(:graphics_light_receipt, create(:user))
+
+      expect(CustomerMailer.receipt(nil, charge.id).body.decoded).to include("class=\"button primary\"")
+    end
+  end
+
   describe ".abandoned_cart_preview" do
     let(:buyer) { create(:named_user) }
     let(:seller) { create(:named_seller, name: "John Doe") }

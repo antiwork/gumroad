@@ -1,0 +1,68 @@
+<% presenter = @receipt_presenter %>
+<% charge_info = presenter.charge_info %>
+<p>
+  Order ID: <%= charge_info.order_id %><br>
+  Order date: <%= charge_info.formatted_created_at %>
+  <% if !charge_info.free? && charge_info.formatted_total_transaction_amount.present? %>
+    <br>Total: <%= charge_info.formatted_total_transaction_amount %>
+  <% end %>
+</p>
+
+<% if @order_receipt_url.present? %>
+  <p><%= link_to("View every item in this order", @order_receipt_url) %></p>
+<% end %>
+
+<% presenter.items_infos.each do |item_info| %>
+  <% item_props = item_info.props %>
+  <p>
+    <strong><%= item_props.dig(:product, :name) %></strong>
+    <% item_props[:notes].each do |line| %>
+      <br><%= line %>
+    <% end %>
+    <% (item_props[:gift_attributes] + item_props[:general_attributes]).each do |attribute| %>
+      <br>
+      <% if attribute[:label].present? %><%= attribute[:label] %>: <% end %>
+      <%= safe_join(Array(attribute[:value]).map { |v| auto_link(v.to_s, html: { target: "_blank" }) }, ", ") %>
+    <% end %>
+    <% if item_props[:manage_subscription_note].present? %>
+      <br><%= item_props[:manage_subscription_note] %>
+    <% end %>
+    <% if item_props[:license_key].present? %>
+      <br>License key: <%= item_props[:license_key] %>
+    <% end %>
+    <% if item_props[:show_download_button] %>
+      <% purchase = item_info.purchase %>
+      <% url_redirect = purchase.is_commission_completion_purchase? ? purchase.commission.deposit_purchase.url_redirect : purchase.url_redirect %>
+      <% if url_redirect.present? && !url_redirect.is_rental? %>
+        <br><%= link_to(view_content_button_text(item_info.product), url_redirect_download_page_url(url_redirect.token)) %>
+      <% elsif url_redirect.present? && item_info.product.streamable? %>
+        <br><%= link_to("Watch", url_redirect_stream_page_url(url_redirect.token)) %>
+      <% end %>
+    <% end %>
+  </p>
+  <% if item_props[:custom_receipt_note].present? %>
+    <%= simple_format(item_props[:custom_receipt_note]) %>
+  <% end %>
+<% end %>
+
+<% if presenter.payment_info.present? %>
+  <p>
+    <% presenter.payment_info.notes.each do |note| %><%= note %><br><% end %>
+    <% (presenter.payment_info.today_payment_attributes + presenter.payment_info.upcoming_payment_attributes + [presenter.payment_info.payment_method_attribute].compact).each do |attribute| %>
+      <% if attribute[:label].present? %><%= attribute[:label] %>: <% end %><%= safe_join(Array(attribute[:value]).map { |value| auto_link(value.to_s, html: { target: "_blank" }) }, ", ") %><br>
+    <% end %>
+  </p>
+<% end %>
+
+<% if presenter.shipping_info.present? %>
+  <p>
+    <strong><%= presenter.shipping_info.title %></strong><br>
+    <% presenter.shipping_info.attributes.each do |attribute| %>
+      <% if attribute[:label].present? %><%= attribute[:label] %>: <% end %><%= safe_join(Array(attribute[:value]).map { |value| auto_link(value.to_s, html: { target: "_blank" }) }, ", ") %><br>
+    <% end %>
+  </p>
+<% end %>
+
+<% if charge_info.product_questions_note.present? %>
+  <p><%= charge_info.product_questions_note %></p>
+<% end %>

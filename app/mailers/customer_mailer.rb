@@ -82,14 +82,18 @@ class CustomerMailer < ApplicationMailer
 
     is_receipt_for_gift_receiver = receipt_for_gift_receiver?(@chargeable)
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
+    graphics_light = !is_receipt_for_gift_receiver && Feature.active?(:graphics_light_receipt, @chargeable.seller)
+    template = is_receipt_for_gift_receiver ? "gift_receiver_receipt" : (graphics_light ? "receipt_light" : "receipt")
     mail(
       to: @chargeable.orderable.email,
       from: from_email_address_with_name(@chargeable.seller.name, "noreply@#{CUSTOMERS_MAIL_DOMAIN}"),
       reply_to: @chargeable.support_email,
       subject: @receipt_presenter.mail_subject,
-      template_name: is_receipt_for_gift_receiver ? "gift_receiver_receipt" : "receipt",
+      template_name: template,
       delivery_method_options: MailerInfo.random_delivery_method_options(domain: :customers, seller: @chargeable.seller, to: @chargeable.orderable.email)
-    )
+    ) do |format|
+      format.html { render(template, layout: graphics_light ? "layouts/email_light" : "layouts/email") }
+    end
   end
 
   def auto_invoice(purchase_id = nil, charge_id = nil)

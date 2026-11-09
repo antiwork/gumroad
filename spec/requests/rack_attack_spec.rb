@@ -215,6 +215,36 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
+  describe "receipt resend throttle" do
+    def resend_request(path)
+      Rack::Attack::Request.new(Rack::MockRequest.env_for(path, method: "POST", "HTTP_CF_CONNECTING_IP" => "203.0.113.201"))
+    end
+
+    before { reset_rack_attack! }
+    after { reset_rack_attack! }
+
+    it "throttles resending a purchase's receipt by IP" do
+      travel_to(Time.current) do
+        2.times { |i| expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(false), "request #{i + 1} unexpectedly throttled" }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(true)
+      end
+    end
+
+    it "shares one budget with the format-suffixed route" do
+      travel_to(Time.current) do
+        2.times { |i| expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(false), "request #{i + 1} unexpectedly throttled" }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt.json"))).to be(true)
+      end
+    end
+
+    it "keeps a separate budget per purchase" do
+      travel_to(Time.current) do
+        2.times { expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(false) }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/def/resend_receipt"))).to be(false)
+      end
+    end
+  end
+
   describe "POST /oauth/token device grant throttle with malformed params" do
     it "does not raise when the params parser rejects malformed form params" do
       post "/oauth/token",
