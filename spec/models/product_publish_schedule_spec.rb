@@ -217,6 +217,16 @@ describe ProductPublishSchedule do
       expect(SendProductPublishScheduleNoticeJob).to have_enqueued_sidekiq_job(schedule.id)
     end
 
+    it "keeps the claim when publish! raises after the product went live" do
+      allow_any_instance_of(Link).to receive(:publish!).and_wrap_original do |m, *args|
+        m.call(*args)
+        raise Redis::BaseConnectionError
+      end
+      expect { schedule.run!(now: due + 1.minute) }.to raise_error(Redis::BaseConnectionError)
+      expect(product.reload.draft?).to eq(false)
+      expect(schedule.reload.status).to eq("publishing")
+    end
+
     it "does not finish a claim that another job took over" do
       stale = described_class.find(schedule.id)
       stale.update_columns(status: "publishing", claimed_at: 1.hour.ago)

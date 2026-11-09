@@ -110,6 +110,8 @@ class ProductPublishSchedule < ApplicationRecord
   rescue StandardError => e
     # Infrastructure error: release the claim so the dispatcher tries again each minute until
     # MAX_LATENESS. After a publish the claim stays, and recover_stale_claim! records the outcome.
+    # publish! can raise from an after_commit callback after the product is already live.
+    published ||= Link.where(id: product_id, draft: false).exists?
     claimed.update_all(status: "scheduled", claimed_at: nil) unless published
     ErrorNotifier.notify(e, product_schedule_id: id)
     raise
