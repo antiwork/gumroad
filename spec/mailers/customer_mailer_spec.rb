@@ -86,6 +86,20 @@ describe CustomerMailer do
         expect(purchase.split_charge_receipt_sent?).to be(false)
         expect(rendered.subject).to eq("You bought Paid edition and Free edition")
       end
+
+      it "links each split receipt to the receipt page for the whole order" do
+        rendered = described_class.receipt(purchase.id, single_purchase: true)
+
+        expect(rendered.body).to have_link("View every item in this order", href: receipt_purchase_url(purchase.external_id, host: UrlService.domain_with_protocol))
+      end
+
+      it "omits the whole-order link when the items went to different buyer emails" do
+        purchase_two.update!(email: "another-buyer@example.com")
+
+        rendered = described_class.receipt(purchase.id, single_purchase: true)
+
+        expect(rendered.body).not_to have_link("View every item in this order")
+      end
     end
 
     context "when the charge has no successful purchases" do

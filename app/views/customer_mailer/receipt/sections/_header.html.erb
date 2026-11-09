@@ -14,4 +14,9 @@
       <span class="info-value"><%= charge_info.formatted_total_transaction_amount %></span>
     </div>
   <% end %>
+  <% if local_assigns[:order_receipt_url] %>
+    <div class="info-row with-top-margin">
+      <%= link_to "View every item in this order", order_receipt_url %>
+    </div>
+  <% end %>
 </div>

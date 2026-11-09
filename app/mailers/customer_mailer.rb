@@ -78,6 +78,7 @@ class CustomerMailer < ApplicationMailer
     return if for_email && suppress_receipt_from_unproven_seller?(@chargeable)
 
     @receipt_presenter = ReceiptPresenter.new(@chargeable, for_email:)
+    @order_receipt_url = receipt_purchase_url(@chargeable.external_id) if for_email && @chargeable.is_a?(Purchase) && @chargeable.whole_order_receipt_charge
 
     is_receipt_for_gift_receiver = receipt_for_gift_receiver?(@chargeable)
     @footer_template = "layouts/mailers/receipt_footer" unless is_receipt_for_gift_receiver
