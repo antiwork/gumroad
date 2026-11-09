@@ -40,7 +40,7 @@ cat > "$WORK/bin/git" <<'STUB'
 #!/bin/bash
 printf 'git %s\n' "$*" >> "$GIT_LOG"
 case "$1" in
-  fetch) exit 0 ;;
+  fetch) exit "${GIT_FETCH_EXIT:-0}" ;;
   push) exit "${GIT_PUSH_EXIT:-0}" ;;
   log) printf '%s\n' "${STUB_COMMIT_TITLE:-stub subject}"; exit 0 ;;
   tag)
@@ -61,6 +61,12 @@ cat > "$WORK/bin/curl" <<'STUB'
 #!/bin/bash
 printf 'curl %s\n' "$*" >> "$CURL_LOG"
 case "$*" in
+  *api.github.com*releases/latest*)
+    out=""; prev=""
+    for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+    [ -n "$out" ] && printf '%s' "${LATEST_RESPONSE:-{\"tag_name\": \"$LATEST_TAG\"}}" > "$out"
+    printf '%s' "${LATEST_HTTP_CODE:-200}"
+    exit 0 ;;
   *api.github.com*)
     out=""; prev=""
     for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
@@ -104,6 +110,8 @@ run_case() {
     ANNOTATIONS="$WORK/annotations" API_BODY="$WORK/api_body" STUB_TODAY="$TODAY"
     TODAY_TAGS="" PREVIOUS_TAGS="$PREV_TAG" STUB_COMMIT_TITLE="stub subject"
     API_HTTP_CODE=201 API_RESPONSE_TEXT="" GH_EXIT=0 GIT_PUSH_EXIT=0 DOWNLOAD_EXIT=0
+    GIT_FETCH_EXIT=0 LATEST_TAG="$PREV_TAG" LATEST_HTTP_CODE=200 LATEST_RESPONSE=""
+    RELEASE_GIT_RETRY_DELAY=0
   )
   for o in "$@"; do
     case "$o" in
@@ -130,7 +138,7 @@ json_field() { # <field> -> the payload the REST fallback sent
 json_valid() {
   python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$WORK/api_body" 2>/dev/null
 }
-api_called() { grep -q "api.github.com" "$WORK/curl.log"; }
+api_called() { grep -q -- "-X POST" "$WORK/curl.log"; }
 
 cases() {
   local st
@@ -210,18 +218,34 @@ cases() {
     fail "422 already-exists -> status $st, out: $(grep -c 'was NOT created' "$WORK/out")"
   fi
 
-  # 6. The tag push stays fatal: it is what deploy_relevance.sh reads, so a missing tag must fail
-  #    the step rather than be papered over.
-  st=$(run_case GH_PRESENT=1 GIT_PUSH_EXIT=1)
-  if [ "$st" != 0 ] && ! api_called; then
-    pass "a failed tag push still fails the step"
+  # 6. A failed tag push or fetch is retried, then a warning: the deploy is already live, so the
+  #    step must not fail (the October regression), and the release is still attempted.
+  st=$(run_case GH_PRESENT=1 GIT_PUSH_EXIT=1 GIT_FETCH_EXIT=1)
+  if [ "$st" = 0 ] && grep -q "created with the gh CLI" "$WORK/out" &&
+    [ "$(grep -c '^git push' "$WORK/git.log")" = 4 ] && grep -q "git push of $VERSION_TAG failed" "$WORK/out"; then
+    pass "a failing tag push/fetch is retried then warned, release still created"
   else
-    fail "a failed tag push -> status $st, api called: $(api_called && echo yes || echo no)"
+    fail "failing tag push/fetch -> status $st, pushes: $(grep -c '^git push' "$WORK/git.log")"
+  fi
+
+  # 6b. The notes start at the newest PUBLISHED release, not the newest tag: an orphan tag
+  #     (tag pushed, release never created) must not swallow the PRs before it.
+  st=$(run_case GH_PRESENT=1 PREVIOUS_TAGS="$PREV_TAG v2026.11.08.9" LATEST_TAG="$PREV_TAG")
+  if [ "$st" = 0 ] && grep -q -- "--notes-start-tag $PREV_TAG\$" "$WORK/gh.log"; then
+    pass "notes start tag is the latest published release, not an orphan tag"
+  else
+    fail "notes start tag -> $(cat "$WORK/gh.log")"
+  fi
+  st=$(run_case GH_PRESENT=1 PREVIOUS_TAGS="$PREV_TAG v2026.11.08.9" LATEST_HTTP_CODE=500)
+  if [ "$st" = 0 ] && grep -q -- "--notes-start-tag v2026.11.08.9" "$WORK/gh.log"; then
+    pass "latest-release lookup fails -> falls back to the newest tag"
+  else
+    fail "latest-release fallback -> $(cat "$WORK/gh.log")"
   fi
 
   # 7. A first release ever: no previous tag, so the notes are the hand-built initial ones and the
   #    REST body must carry them (and stay valid JSON even when the subject has quotes in it).
-  st=$(run_case GH_PRESENT=1 PREVIOUS_TAGS= STUB_COMMIT_TITLE='Say "hello" \ goodbye' GH_EXIT=1)
+  st=$(run_case GH_PRESENT=1 PREVIOUS_TAGS= LATEST_HTTP_CODE=404 STUB_COMMIT_TITLE='Say "hello" \ goodbye' GH_EXIT=1)
   if [ "$st" = 0 ] && grep -q "created over the REST API" "$WORK/out" && json_valid; then
     pass "first release, subject with quotes -> valid REST body"
   else

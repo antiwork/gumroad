@@ -15,6 +15,34 @@ warn() {
 # default-and-override shape as PREVIEW_GITHUB_REPO in preview_gate.sh.
 RELEASE_GITHUB_REPO="${RELEASE_GITHUB_REPO:-antiwork/gumroad}"
 RELEASE_API_RESPONSE="/tmp/gh_release_api_response.json"
+RELEASE_GIT_RETRIES="${RELEASE_GIT_RETRIES:-4}"
+RELEASE_GIT_RETRY_DELAY="${RELEASE_GIT_RETRY_DELAY:-5}"
+
+# Runs a command up to RELEASE_GIT_RETRIES times; returns non-zero instead of aborting the step.
+retry_git() {
+  local attempt=1
+  while true; do
+    "$@" && return 0
+    [ "$attempt" -ge "$RELEASE_GIT_RETRIES" ] && return 1
+    warn "'$*' failed (attempt ${attempt}/${RELEASE_GIT_RETRIES}); retrying"
+    attempt=$((attempt + 1))
+    sleep "$RELEASE_GIT_RETRY_DELAY"
+  done
+}
+
+# Newest PUBLISHED release, not newest tag: a tag whose release was never created must not
+# become the notes start, or the PRs between it and the previous release drop out of every body.
+latest_published_release_tag() {
+  local code tag
+  rm -f "$RELEASE_API_RESPONSE"
+  code=$(curl -sS -o "$RELEASE_API_RESPONSE" -w '%{http_code}' \
+    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/${RELEASE_GITHUB_REPO}/releases/latest") || return 1
+  [ "$code" = 200 ] || return 1
+  tag=$(sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' "$RELEASE_API_RESPONSE" | head -1)
+  case "$tag" in v[0-9]*.[0-9]*.[0-9]*.[0-9]*) printf '%s' "$tag" ;; *) return 1 ;; esac
+}
 
 # The gh CLI is downloaded from github.com's release CDN, and the release is then created
 # through github.com's API: when that CDN is having a burst, both used to go down with the
@@ -22,7 +50,8 @@ RELEASE_API_RESPONSE="/tmp/gh_release_api_response.json"
 # this file is the last thing deploy_production.sh sources under `set -e`, the step exited
 # 22 AFTER its deploy was already live: the commit was marked failed and every PR cut from
 # main inherited the red. A missing CLI is therefore a warning that switches to the REST
-# API, not an abort. The tag push below stays fatal — deploy_relevance.sh diffs against it.
+# API, not an abort. Tag fetch and push are retried and then warn: the release creation
+# below creates a missing tag itself, and deploy_relevance.sh only widens its next diff.
 gh_cli_available() {
   source .buildkite/scripts/ensure_gh.sh
   ensure_gh
@@ -109,7 +138,8 @@ COMMIT_SHA=${BUILDKITE_COMMIT}
 TODAY=$(date -u +%Y.%m.%d)
 
 # Fetch existing tags for today to determine sequence number
-git fetch --tags --force > /dev/null 2>&1
+retry_git git fetch --tags --force > /dev/null 2>&1 ||
+  warn "git fetch --tags failed; the sequence number may collide, which the release call reports"
 EXISTING_TAGS=$(git tag -l "v${TODAY}.*" | sort -t. -k4 -n)
 
 if [ -z "$EXISTING_TAGS" ]; then
@@ -122,13 +152,17 @@ fi
 VERSION_TAG="v${TODAY}.${SEQUENCE}"
 
 # Find the previous release tag for changelog range
-PREVIOUS_TAG=$(git tag -l "v*.*.*.*" | sort -t. -k1,1 -k2,2n -k3,3n -k4,4n | tail -1)
+if ! PREVIOUS_TAG=$(latest_published_release_tag); then
+  warn "could not read the latest published release; using the newest tag"
+  PREVIOUS_TAG=$(git tag -l "v*.*.*.*" | sort -t. -k1,1 -k2,2n -k3,3n -k4,4n | tail -1)
+fi
 
 logger "Creating GitHub Release ${VERSION_TAG} at commit ${COMMIT_SHA}"
 
 # Create and push the git tag
 git tag "$VERSION_TAG" "$COMMIT_SHA"
-git push origin "$VERSION_TAG"
+retry_git git push origin "$VERSION_TAG" ||
+  warn "git push of ${VERSION_TAG} failed; the release call will create the tag server-side"
 
 COMMIT_TITLE=""
 if [ -z "$PREVIOUS_TAG" ]; then
