@@ -94,6 +94,13 @@ describe ProcessEarlyFraudWarningJob, :vcr do
 
               expect(early_fraud_warning.reload.resolved?).to eq(false)
             end
+
+            it "notifies the error tracker when the refund fails" do
+              expect_any_instance_of(Purchase).to receive(:refund_for_fraud_and_block_buyer!).once.with(GUMROAD_ADMIN_ID).and_return(false)
+              expect(ErrorNotifier).to receive(:notify).with("Early fraud warning refund failed", context: hash_including(early_fraud_warning_id: early_fraud_warning.id))
+
+              described_class.new.perform(early_fraud_warning.id)
+            end
           end
 
           context "when associated with a charge" do
