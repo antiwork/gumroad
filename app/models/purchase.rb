@@ -2737,6 +2737,8 @@ class Purchase < ApplicationRecord
       mark_gift_receiver_purchase_successful!
     else
       set_succeeded_at
+      # The provider's fee is only known once the charge has been captured.
+      self.affiliate_credit_cents = determine_affiliate_balance_cents if affiliate.present? && paypal_fee_usd_cents > 0
       increment_sellers_balance!
       mark_successful!
     end
@@ -5135,8 +5137,13 @@ class Purchase < ApplicationRecord
       return 0 if fee_cents.blank? || (!affiliate.collaborator? && (seller.bears_affiliate_fee? || Feature.active?(:sellers_bear_affiliate_fees)))
       # With a direct affiliate on a collab purchase, the collaborator pays their cut of the fee that
       # is left after the direct affiliate's share.
-      return affiliate_cut * (fee_cents - determine_direct_affiliate_fee_cents) if credits_direct_affiliate?
-      affiliate_cut * fee_cents
+      return affiliate_cut * (shared_fee_cents - determine_direct_affiliate_fee_cents) if credits_direct_affiliate?
+      affiliate_cut * shared_fee_cents
+    end
+
+    # Gumroad's fee plus the provider's own fee when it is booked separately (PayPal), in USD.
+    def shared_fee_cents
+      total_fee_cents
     end
 
     def direct_affiliate_cut
@@ -5147,7 +5154,7 @@ class Purchase < ApplicationRecord
     # Same rule as a direct affiliate on a product without a collaborator.
     def determine_direct_affiliate_fee_cents
       return 0 if fee_cents.blank? || seller.bears_affiliate_fee? || Feature.active?(:sellers_bear_affiliate_fees)
-      direct_affiliate_cut * fee_cents
+      direct_affiliate_cut * shared_fee_cents
     end
 
     # Private: truncate the referrer so that they fit in our mysql string column.
