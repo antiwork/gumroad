@@ -1,7 +1,6 @@
 import * as React from "react";
 
 import { CurrencyCode, formatPriceCentsWithoutCurrencySymbol, getIsSingleUnitCurrency } from "$app/utils/currency";
-import { priceCommaHint } from "$app/utils/price";
 
 import { Dropdown } from "$app/components/Dropdown";
 import { PriceInput } from "$app/components/PriceInput";
@@ -10,7 +9,7 @@ import { InstallmentPlanEditor } from "$app/components/ProductEdit/ProductTab/In
 import { OfferCode, ProductEditContext } from "$app/components/ProductEdit/state";
 import { Alert } from "$app/components/ui/Alert";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
-import { Fieldset } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Switch } from "$app/components/ui/Switch";
 
@@ -93,8 +92,13 @@ export const PriceEditor = ({
         cents={priceCents}
         onChange={(newAmount) => setPriceCents(newAmount ?? 0)}
         currencyCodeSelector={currencyCodeSelector}
+        ariaDescribedBy={`${uid}-price-cents-hint`}
       />
-      <p className="text-sm text-muted">{priceCommaHint(getIsSingleUnitCurrency(currencyType))}</p>
+      <FieldsetDescription id={`${uid}-price-cents-hint`}>
+        {getIsSingleUnitCurrency(currencyType)
+          ? "Enter a whole amount like 7900."
+          : "Enter an amount like 7900 or 9.99."}
+      </FieldsetDescription>
       {mustBePWYW ? <Alert variant="info">Free products require a pay what they want price.</Alert> : null}
       <Details open={pwywOn}>
         <DetailsToggle chevronPosition="none" className="mb-0">

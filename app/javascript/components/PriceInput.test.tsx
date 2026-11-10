@@ -131,21 +131,57 @@ describe("PriceInput", () => {
 });
 
 describe("PriceInput amount typing", () => {
-  const renderAmount = (currencyCode: "usd" | "krw" | "eur", cents: number | null = null) => {
+  type AmountCurrency = "usd" | "krw" | "eur";
+
+  // Holds a number and echoes cents back the way PriceEditor does, so the field's resync from
+  // `cents` runs too.
+  const ControlledPriceInput = ({
+    currencyCode,
+    onChange,
+  }: {
+    currencyCode: AmountCurrency;
+    onChange: (cents: number | null) => void;
+  }) => {
+    const [cents, setCents] = React.useState(0);
+    return (
+      <PriceInput
+        currencyCode={currencyCode}
+        cents={cents}
+        ariaLabel="Amount"
+        onChange={(newCents) => {
+          onChange(newCents);
+          setCents(newCents ?? 0);
+        }}
+      />
+    );
+  };
+
+  const renderAmount = (currencyCode: AmountCurrency) => {
     const onChange = vi.fn();
-    render(<PriceInput currencyCode={currencyCode} cents={cents} ariaLabel="Amount" onChange={onChange} />);
+    render(<ControlledPriceInput currencyCode={currencyCode} onChange={onChange} />);
     const input = screen.getByLabelText<HTMLInputElement>("Amount");
+    // Cleared over a parent that already holds 0, so reporting 0 does not re-render the field.
+    fireEvent.change(input, { target: { value: "" } });
     // Each key appends to what the field shows, the way a keyboard does: the field's own rewrites
     // between keystrokes are part of what these tests have to survive.
     const type = (keys: string) => {
       for (const key of keys) fireEvent.change(input, { target: { value: input.value + key } });
     };
-    return { input, onChange, type };
+    const paste = (value: string) => fireEvent.change(input, { target: { value } });
+    return { input, onChange, type, paste };
   };
 
   it("keeps a grouped amount as thousands", () => {
     const { input, onChange, type } = renderAmount("krw");
     type("7,900");
+
+    expect(input.value).toBe("7900");
+    expect(onChange).toHaveBeenLastCalledWith(790_000);
+  });
+
+  it.each(["7,900 ", "7,900₩"])("keeps a pasted grouped amount with a suffix (%j) as thousands", (pasted) => {
+    const { input, onChange, paste } = renderAmount("krw");
+    paste(pasted);
 
     expect(input.value).toBe("7900");
     expect(onChange).toHaveBeenLastCalledWith(790_000);
@@ -169,11 +205,23 @@ describe("PriceInput amount typing", () => {
     expect(onChange).toHaveBeenLastCalledWith(1_234_567);
   });
 
-  it("reports a clamped zero for a negative amount", () => {
-    const { input, onChange } = renderAmount("usd");
-    fireEvent.change(input, { target: { value: "-1.00" } });
+  it.each(["-1.00", "-1,50", "-1,5", "-1,", "-1."])("reports a clamped zero for a negative amount (%j)", (pasted) => {
+    const { input, onChange, paste } = renderAmount("usd");
+    paste(pasted);
 
+    expect(input.value).toBe("0");
     expect(onChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it("waits for an IME composition to end before settling the amount", () => {
+    const { input, onChange, type } = renderAmount("krw");
+    fireEvent.compositionStart(input);
+    type("7,900");
+
+    expect(input.value).toBe("7,900");
+    fireEvent.compositionEnd(input);
+    expect(input.value).toBe("7900");
+    expect(onChange).toHaveBeenLastCalledWith(790_000);
   });
 
   it("caps the fraction at two digits", () => {
@@ -184,11 +232,7 @@ describe("PriceInput amount typing", () => {
     expect(onChange).toHaveBeenLastCalledWith(199);
   });
 
-  // A pasted amount can carry both separators: the comma groups thousands and the fraction after
-  // the decimal point is complete, so neither reading can change with another key and the field
-  // has to settle on the amount instead of keeping the grouping comma in the display. This is
-  // spec/requests/products/show/show_spec.rb "ensures correct price formatting", where `fill_in`
-  // types the keys one at a time.
+  // Once the fraction is complete neither separator can change meaning, so the grouping comma goes.
   it("settles a typed amount that carries both separators", () => {
     const { input, onChange, type } = renderAmount("usd");
     type("-1234,.439");
