@@ -1,6 +1,7 @@
 import { Check, ChevronDown, ChevronRight, Cog, Dropbox as DropboxIcon, Folder, Pencil } from "@boxicons/react";
 import { Node as TiptapNode } from "@tiptap/core";
-import { Node as ProseMirrorNode } from "@tiptap/pm/model";
+import { Fragment, Node as ProseMirrorNode, Slice } from "@tiptap/pm/model";
+import { Plugin } from "@tiptap/pm/state";
 import { NodeViewContent, NodeViewProps, NodeViewWrapper, ReactNodeViewRenderer } from "@tiptap/react";
 import * as React from "react";
 
@@ -309,6 +310,37 @@ export const FileEmbedGroup = TiptapNode.create<{ getConfig: () => FileGroupConf
   parseHTML: () => [{ tag: "file-embed-group" }],
   renderHTML: ({ HTMLAttributes }) => ["file-embed-group", HTMLAttributes, 0],
   addStorage: () => ({ lastCreatedUid: null }),
+  // An incoming slice (paste, drag or browser drop) carries the source node's attributes, `uid`
+  // included, and that uid is the folder's identity wherever it is looked up. A copy of a folder
+  // already on the page gets a fresh one, so two nodes cannot end up sharing a uid.
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          transformPasted: (slice, view) => {
+            const onPage = new Map<string, ProseMirrorNode>();
+            view.state.doc.descendants((node) => {
+              if (node.type.name === FileEmbedGroup.name) onPage.set(assertString(node.attrs.uid), node);
+            });
+            const rewrite = (node: ProseMirrorNode): ProseMirrorNode => {
+              if (node.childCount === 0) return node;
+              const children: ProseMirrorNode[] = [];
+              for (let i = 0; i < node.childCount; i++) children.push(rewrite(node.child(i)));
+              const content = Fragment.fromArray(children);
+              if (node.type.name !== FileEmbedGroup.name) return node.copy(content);
+              const existing = onPage.get(assertString(node.attrs.uid));
+              // `existing === node` is this node being moved, not a second copy of it.
+              if (!existing || existing === node) return node.copy(content);
+              return node.type.create({ ...node.attrs, uid: GuidGenerator.generate() }, content, node.marks);
+            };
+            const children: ProseMirrorNode[] = [];
+            for (let i = 0; i < slice.content.childCount; i++) children.push(rewrite(slice.content.child(i)));
+            return new Slice(Fragment.fromArray(children), slice.openStart, slice.openEnd);
+          },
+        },
+      }),
+    ];
+  },
   addNodeView() {
     const renderer = ReactNodeViewRenderer((props: NodeViewProps) =>
       FileEmbedGroupNodeView({
