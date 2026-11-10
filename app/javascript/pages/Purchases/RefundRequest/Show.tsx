@@ -198,8 +198,8 @@ export default function Show() {
                 onChange={(event) => form.setData("message", event.target.value)}
               />
             </Fieldset>
-            <Button type="submit" color="primary" disabled={form.processing}>
-              Send refund request
+            <Button type="submit" color="primary" disabled={form.processing} aria-busy={form.processing}>
+              {form.processing ? "Sending..." : "Send refund request"}
             </Button>
           </form>
         </CardContent>
