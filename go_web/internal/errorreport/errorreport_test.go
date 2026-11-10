@@ -56,7 +56,7 @@ func TestReportedRequestsLeaveOutSecrets(t *testing.T) {
 func TestErrorLinesAreReportedWithTheirRequestAndCallSite(t *testing.T) {
 	logger, logs, sent := newTestLogger(t)
 	r := httptest.NewRequest("GET", "/l/abc?wanted=true", nil)
-	r.Host = "seller.gumroad.com"
+	r.Host = "seller.example.com"
 	r.Header.Set("Cookie", "_gumroad_app_session=secret")
 	logger.With("uuid", "req-1", errorreport.Request(r, "req-1")).Error("product page failed", "error", "Unknown column")
 
@@ -69,7 +69,7 @@ func TestErrorLinesAreReportedWithTheirRequestAndCallSite(t *testing.T) {
 		e.Contexts["log"]["error"] != "Unknown column" || strings.Join(e.Fingerprint, ",") != "product page failed" {
 		t.Errorf("event %q %s %v %v %v", e.Message, e.Level, e.Tags, e.Contexts["log"], e.Fingerprint)
 	}
-	if e.Request == nil || e.Request.URL != "http://seller.gumroad.com/l/abc" || e.Request.QueryString != "wanted=true" ||
+	if e.Request == nil || e.Request.URL != "http://seller.example.com/l/abc" || e.Request.QueryString != "wanted=true" ||
 		strings.Contains(e.Request.Cookies+e.Request.Headers["Cookie"], "secret") {
 		t.Errorf("request %+v", e.Request)
 	}
