@@ -26,17 +26,8 @@ class BankCodeDirectoryCheck
   # input for that country.
   DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES = [EgyptBankAccount].freeze
 
-  # The second path: rows whose Stripe payload carries NO routing number, so the only detail sent is
-  # the account number and the bank is looked up from it. The first list can never reach these —
-  # `routing_number.present?` is false by construction on every SEPA IBAN — and without this path
-  # they save silently and never attach.
-  #
-  # Measured live 2026-11-10 (gumroad-private#4495): a seller on a Swedish account saved a GB IBAN
-  # whose bank is absent from Stripe's directory. The probe below was skipped, the row stored with
-  # `stripe_bank_account_id` NULL, the form reported success, and Stripe answered
-  # `bank_account_unusable` / "We couldn't find the bank for this account number" on the attach that
-  # followed. Re-entering any account at that bank misses the same way, so the seller has to be told
-  # at save time, and told to use a different bank.
+  # Rows whose Stripe payload carries no routing number (SEPA IBANs): the bank is looked up from the
+  # account number alone, so the routing-number opt-in above can never reach them.
   ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES = [IbanBankAccount].freeze
 
   # Short budget: this runs inside a settings-save request, before the row lock is taken.
@@ -150,16 +141,8 @@ class BankCodeDirectoryCheck
       Rejection.new(message:, field: :bank_code)
     end
 
-    # An account-number miss means one of two different things, and which one it is is decided by
-    # what the payload carried — not by which box the seller filled in.
-    #
-    # A routing number was sent and it resolved, so only the branch inside the account number is
-    # left, and the code resolving no better under an 8-character SWIFT/BIC is what to name.
-    #
-    # With no routing number in the payload the account number was the ONLY detail Stripe had, so
-    # the miss is the bank itself. Re-entering any account at that bank misses the same way, so
-    # naming the account number as something to check would send the seller round a loop: the one
-    # piece of advice that changes the outcome is a different bank.
+    # With a routing number the miss is the branch; with none, the bank itself is unknown to Stripe,
+    # so only a different bank helps.
     def account_number_rejection
       return missing_branch_rejection if routing_number.present?
 
