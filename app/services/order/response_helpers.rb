@@ -19,6 +19,24 @@ module Order::ResponseHelpers
       end
     end
 
+    # The submitted permalink only has to match case-insensitively: `Link.find_by(unique_permalink:)`
+    # relies on the column's collation, and a link URL canonicalises case, so a case-sensitive
+    # comparison here matches no line item and stores the response under nil, which drops it.
+    def line_item_uid_for(purchase)
+      permalink = purchase.link.unique_permalink
+      line_item = params[:line_items].find do |candidate|
+        candidate[:permalink].to_s.downcase == permalink.to_s.downcase &&
+          (candidate[:variants].blank? || purchase.variant_attributes.first&.external_id == candidate[:variants]&.first)
+      end
+      line_item&.dig(:uid) || cart_item_uid_for(purchase)
+    end
+
+    # Mirrors the browser's getCartItemUid, so a purchase with no submitted line item (e.g. a bundle
+    # child) still gets a response key instead of a nil one.
+    def cart_item_uid_for(purchase)
+      "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
+    end
+
     def error_response(error_message, purchase: nil, guest: false)
       card_country = purchase&.card_country
       card_country = "CN" if card_country == "C2" # PayPal (wrongly) returns CN2 for China users transacting with USD

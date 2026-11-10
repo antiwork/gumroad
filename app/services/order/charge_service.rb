@@ -161,7 +161,7 @@ class Order::ChargeService
     if purchase.in_progress? && (purchase.free_purchase? || (purchase.is_test_purchase? && !purchase.is_preorder_authorization?))
       Purchase::MarkSuccessfulService.new(purchase).perform
       handle_recommended_purchase(purchase)
-      line_item_uid = params[:line_items].select { |line_item| line_item[:permalink] == purchase.link.unique_permalink }[0][:uid]
+      line_item_uid = line_item_uid_for(purchase)
       charge_responses[line_item_uid] = purchase.purchase_response
     end
   end
@@ -709,10 +709,7 @@ class Order::ChargeService
     return if purchases.nil?
 
     purchases.each do |purchase|
-      line_item_uid = params[:line_items].find do |line_item|
-        purchase.link.unique_permalink == line_item[:permalink] &&
-          (line_item[:variants].blank? || purchase.variant_attributes.first&.external_id == line_item[:variants]&.first)
-      end[:uid]
+      line_item_uid = line_item_uid_for(purchase)
 
       next if charge_responses[line_item_uid].present?
 

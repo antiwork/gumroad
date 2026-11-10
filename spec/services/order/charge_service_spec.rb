@@ -1375,6 +1375,27 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses[charge_responses.keys[1]]).to eq(order.purchases.last.purchase_response)
     end
 
+    it "keys a free purchase's response by the submitted uid when its permalink differs in case" do
+      params = {
+        line_items: [
+          {
+            uid: "unique-id-0",
+            permalink: free_product_1.unique_permalink.upcase,
+            perceived_price_cents: 0,
+            quantity: 1
+          }
+        ]
+      }.merge!(common_order_params_without_payment)
+
+      order, _ = Order::CreateService.new(params:).perform
+      expect(order.purchases.in_progress.count).to eq(1)
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      expect(order.reload.purchases.successful.count).to eq(1)
+      expect(charge_responses.keys).to contain_exactly("unique-id-0")
+    end
+
     it "creates a charge with no amount for a free trial membership product" do
       line_items_params = {
         line_items: [
