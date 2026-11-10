@@ -1252,6 +1252,7 @@ class User < ApplicationRecord
     Doorkeeper::AccessGrant.where(resource_owner_id: id, revoked_at: nil).update_all(revoked_at:)
     Doorkeeper::AccessToken.where(resource_owner_id: id, revoked_at: nil).update_all(revoked_at:)
     resource_subscriptions.alive.update_all(deleted_at: revoked_at)
+    McpEventSubscription.where(user_id: id).delete_all
   end
 
   # Confirmation can sign in a record that fails validation; that must not keep its old sessions alive.

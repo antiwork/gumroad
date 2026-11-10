@@ -16,7 +16,7 @@ module Mcp
     # Every published revision, so a client declaring one we do not serve is still named.
     VERSIONS = (Server::SUPPORTED_VERSIONS + %w[2024-11-05 2025-06-18 2025-11-25]).uniq.freeze
     # The methods this endpoint dispatches.
-    METHODS = %w[initialize notifications/cancelled notifications/initialized ping server/discover tools/call tools/list].freeze
+    METHODS = (%w[initialize notifications/cancelled notifications/initialized ping server/discover tools/call tools/list] + Events::METHODS).freeze
     # The tools this endpoint serves, so a tool count stays a closed list too. A name the server no
     # longer advertises is counted as OTHER rather than dropped: a client calling a retired name is
     # exactly what the counter is for. spec/services/mcp/protocol_telemetry_spec.rb fails if this

@@ -200,6 +200,15 @@ describe OauthApplication do
       expect(@oauth_application.resource_subscriptions.alive.count).to eq(0)
     end
 
+    it "deletes the application's MCP event subscriptions and leaves other applications' alone" do
+      create(:mcp_event_subscription, oauth_application: @oauth_application)
+      other_subscription = create(:mcp_event_subscription)
+
+      @oauth_application.mark_deleted!
+
+      expect(McpEventSubscription.all).to eq([other_subscription])
+    end
+
     it "revokes access grants" do
       expect do
         @oauth_application.mark_deleted!
@@ -297,6 +306,16 @@ describe OauthApplication do
 
       expect(@oauth_application.resource_subscriptions.where(user: @subscriber_1).alive.count).to eq(0)
       expect(@oauth_application.resource_subscriptions.where(user: @subscriber_2).alive.count).to eq(1)
+    end
+
+    it "deletes the user's MCP event subscriptions to the application, and no one else's" do
+      create(:mcp_event_subscription, oauth_application: @oauth_application, user: @subscriber_1)
+      other_user_subscription = create(:mcp_event_subscription, oauth_application: @oauth_application, user: @subscriber_2)
+      other_application_subscription = create(:mcp_event_subscription, user: @subscriber_1)
+
+      @oauth_application.revoke_access_for(@subscriber_1)
+
+      expect(McpEventSubscription.all).to contain_exactly(other_user_subscription, other_application_subscription)
     end
 
     it "denies approved device authorizations for the user" do

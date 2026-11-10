@@ -82,6 +82,7 @@ class OauthApplication < Doorkeeper::Application
         .where(status: [OauthDeviceAuthorization::STATUS_PENDING, OauthDeviceAuthorization::STATUS_APPROVED])
         .update_all(status: OauthDeviceAuthorization::STATUS_DENIED, denied_at: deleted_at, updated_at: deleted_at)
       resource_subscriptions.alive.update_all(deleted_at:)
+      McpEventSubscription.where(oauth_application_id: id).delete_all
       update!(deleted_at:)
     end
   end
@@ -127,6 +128,7 @@ class OauthApplication < Doorkeeper::Application
       deny_approved_device_authorizations_for(user, denied_at: revoked_at)
       Doorkeeper::AccessToken.revoke_all_for(id, user)
       resource_subscriptions.where(user:).alive.update_all(deleted_at: revoked_at)
+      McpEventSubscription.where(user_id: user.id, oauth_application_id: id).delete_all
       # A seller who only linked through this partner leaves its listings. A seller who migrated keeps
       # the link, which the revenue share reads.
       partner_sellers.where(user:).alive.update_all(deleted_at: revoked_at) unless PartnerMigration.exists?(oauth_application_id: id, user_id: user.id)
