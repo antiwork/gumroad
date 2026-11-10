@@ -668,7 +668,7 @@ describe StripeChargeProcessor, :vcr do
                                                   refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
                                                   cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
                                                   refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
-                                                })),
+                                                }.compact_blank)),
         hash_including(:idempotency_key)
       ).and_call_original
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -738,6 +738,62 @@ describe StripeChargeProcessor, :vcr do
         )
 
         subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
+      end
+    end
+
+    context "with seller statement fields left blank" do
+      # Stripe treats an empty evidence string as "clear this field", which would wipe the refund
+      # line it drafts on a dispute filed after a refund, so blanks must not reach the request.
+      let!(:stripe_charge) { nil }
+      let(:charge_id) { "ch_blank_fields" }
+      let(:dispute_evidence) { disputed_purchase.dispute.dispute_evidence }
+
+      before do
+        allow(Stripe::Charge).to receive(:retrieve).and_return(Stripe::Charge.construct_from(id: charge_id, dispute: "dp_blank_fields"))
+        allow(Stripe::File).to receive(:create).and_return(double(id: "file_blank_fields"))
+        stub_request(:post, "https://api.stripe.com/v1/disputes/dp_blank_fields")
+          .to_return(status: 200, body: { id: "dp_blank_fields", object: "dispute" }.to_json)
+      end
+
+      def request_body
+        subject.fight_chargeback(charge_id, dispute_evidence)
+        body = nil
+        expect(a_request(:post, "https://api.stripe.com/v1/disputes/dp_blank_fields").with { |req| body = req.body }).to have_been_made.once
+        Rack::Utils.parse_nested_query(body)
+      end
+
+      it "does not send blank text fields, so they cannot clear what Stripe drafted" do
+        dispute_evidence.update!(reason_for_winning: "", cancellation_rebuttal: "", refund_refusal_explanation: "")
+
+        body = request_body
+
+        expect(body["evidence"]).not_to have_key("refund_refusal_explanation")
+        expect(body["evidence"]).not_to have_key("cancellation_rebuttal")
+        expect(body["evidence"].values).not_to include("")
+        expect(body["evidence"]["product_description"]).to eq(dispute_evidence.product_description)
+      end
+
+      it "sends the text fields the seller filled in" do
+        dispute_evidence.update!(cancellation_rebuttal: "Cancelled after delivery.", refund_refusal_explanation: "Refunded in full on Nov 6.")
+
+        body = request_body
+
+        expect(body["evidence"]["refund_refusal_explanation"]).to eq("Refunded in full on Nov 6.")
+        expect(body["evidence"]["cancellation_rebuttal"]).to eq("Cancelled after delivery.")
+      end
+
+      it "leaves out the win headline when there is no reason for winning" do
+        dispute_evidence.update!(reason_for_winning: "", uncategorized_text: "Device location: GA, United States")
+
+        expect(request_body["evidence"]["uncategorized_text"]).to eq("Device location: GA, United States")
+      end
+
+      it "keeps the win headline above the reason when there is one" do
+        dispute_evidence.update!(reason_for_winning: "The buyer downloaded the file.", uncategorized_text: "Device location: GA, United States")
+
+        expect(request_body["evidence"]["uncategorized_text"]).to eq(
+          "The merchant should win the dispute because:\nThe buyer downloaded the file.\n\nDevice location: GA, United States"
+        )
       end
     end
   end
