@@ -89,7 +89,7 @@ class Purchase
         return false
       end
 
-      # Fraud refunds skip the creator balance guard like a staff refund: the buyer's money goes back
+      # Fraud refunds skip the creator refund guards like a staff refund: the buyer's money goes back
       # regardless and the seller's balance may go negative.
       unless refunded_by_team_member || is_for_fraud
         if seller.refunds_disabled?

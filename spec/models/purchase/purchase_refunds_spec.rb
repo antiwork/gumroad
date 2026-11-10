@@ -2279,7 +2279,7 @@ describe "PurchaseRefunds", :vcr do
       expect(@purchase.refund_for_fraud!(create(:admin_user).id)).to be(false)
     end
 
-    it "refunds even when the seller balance is below the refund amount" do
+    it "refunds even when the seller balance is below the refund amount", vcr: { cassette_name: "PurchaseRefunds/_refund_for_fraud_/refunds_the_original_purchase" } do
       allow_any_instance_of(User).to receive(:unpaid_balance_cents).and_return(0)
       expect(@purchase.charged_using_gumroad_merchant_account?).to be(true)
 
@@ -2287,7 +2287,14 @@ describe "PurchaseRefunds", :vcr do
       expect(@purchase.reload.stripe_refunded).to be(true)
     end
 
-    it "does not queue the creator email for a free purchase with nothing to refund" do
+    it "refunds even when the seller has refunds disabled", vcr: { cassette_name: "PurchaseRefunds/_refund_for_fraud_/refunds_the_original_purchase" } do
+      @purchase.seller.disable_refunds!
+
+      expect(@purchase.refund_for_fraud!(create(:user).id)).to be(true)
+      expect(@purchase.reload.stripe_refunded).to be(true)
+    end
+
+    it "does not queue the creator email for a free purchase with nothing to refund", vcr: { cassette_name: "PurchaseRefunds/_refund_for_fraud_/queues_an_email_to_the_seller_informing_them_of_the_refund" } do
       allow(@purchase).to receive(:price_cents).and_return(0)
       allow(@purchase).to receive(:refund_and_save!).and_return(nil)
 
