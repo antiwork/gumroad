@@ -388,21 +388,27 @@ class OrdersController < ApplicationController
       ).to_h
     end
 
-    # line_items is an array of purchase params. A bare string or scalar is malformed, and refusing
-    # it here keeps the later reads (any?, all?, each) from raising (GUMROAD-283).
     def normalize_line_items
       if params[:line_items].is_a?(ActionController::Parameters)
         params[:line_items] = params[:line_items].values
       end
+      # A blank non-array ("", null) means no cart; drop it so `fetch(:line_items, [])` defaults.
+      params.delete(:line_items) if params[:line_items].blank? && !params[:line_items].is_a?(Array)
+    end
 
-      return unless params[:line_items].present? && !params[:line_items].is_a?(Array)
-
-      render_error("Sorry, something went wrong.")
+    # Blank is the legacy single-price shape.
+    def valid_line_items_shape?
+      line_items = params[:line_items]
+      line_items.blank? || (line_items.is_a?(Array) && line_items.all? { |item| item.is_a?(ActionController::Parameters) })
     end
 
     def validate_order_request
       # Don't allow the order to go through if the buyer is a bot. Pretend that the order succeeded instead.
       return render json: { success: true } if is_bot?
+
+      # A bare string or an array of scalars would make the any?/all?/each reads and the per-item
+      # lookups raise (GUMROAD-283, GUMROAD-284). Sentry ignores ActionController::BadRequest.
+      raise ActionController::BadRequest unless valid_line_items_shape?
 
       if params[:line_items].is_a?(Array) && params[:line_items].length > Cart::MAX_ALLOWED_CART_PRODUCTS
         return render_error("You cannot add more than #{Cart::MAX_ALLOWED_CART_PRODUCTS} products to the cart.")

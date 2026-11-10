@@ -76,11 +76,37 @@ describe OrdersController, :vcr do
       )
     end
 
-    it "refuses a line_items payload that is not an array instead of raising" do
-      post :create, params: { line_items: "not-an-array" }.merge(common_purchase_params_without_payment)
+    it "rejects a line_items payload that is not an array" do
+      expect(Order::CreateService).not_to receive(:new)
+
+      expect do
+        post :create, params: { line_items: "not-an-array" }.merge(common_purchase_params_without_payment)
+      end.to raise_error(ActionController::BadRequest)
+    end
+
+    it "rejects a line_items payload whose entries are not objects" do
+      expect(Order::CreateService).not_to receive(:new)
+
+      expect do
+        post :create, params: { line_items: ["unique-id-0"] }
+      end.to raise_error(ActionController::BadRequest)
+    end
+
+    it "still answers a bot that sends a malformed line_items with the usual fake success" do
+      @request.env["HTTP_USER_AGENT"] = "EventMachine HttpClient"
+
+      post :create, params: { line_items: "not-an-array" }
+
+      expect(response.parsed_body["success"]).to be(true)
+    end
+
+    it "treats a blank line_items as no cart instead of raising" do
+      allow(controller).to receive(:skip_recaptcha?).and_return(true)
+
+      post :create, params: { line_items: "" }.merge(common_purchase_params_without_payment)
 
       expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["success"]).to be(false)
+      expect(response.parsed_body["success"]).to be(true)
     end
 
     context "single purchase" do
