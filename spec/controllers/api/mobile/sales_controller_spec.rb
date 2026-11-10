@@ -41,6 +41,16 @@ describe Api::Mobile::SalesController, :vcr do
       expect(body["emails"].first).to include("type" => "receipt", "id" => @purchase.external_id)
     end
 
+    it "returns a post whose email info has no state timestamp" do
+      post = create(:published_installment, link: @product, seller: @seller)
+      create(:creator_contacting_customers_email_info, installment: post, purchase: @purchase)
+      get :show, params: @params.merge(id: @purchase.external_id)
+
+      expect(response).to be_successful
+      emails = response.parsed_body["emails"]
+      expect(emails.find { _1["type"] == "post" }["state_at"]).to be_present
+    end
+
     it "omits the rating of a review soft-deleted by a full refund",
        vcr: { cassette_name: "Api_Mobile_SalesController/GET_show/returns_customer_details_charges_and_emails" } do
       review = create(:product_review, purchase: @purchase, rating: 4)

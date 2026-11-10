@@ -523,6 +523,24 @@ describe CustomersController, :vcr, type: :controller, inertia: true do
         expect(response.parsed_body[3]["id"]).to eq @post3.external_id
         expect(response.parsed_body[3]["state"]).to eq "Delivered"
       end
+
+      # A bounce that overtook the send leaves the row with no timestamp at all.
+      it "returns a post whose email info has no state timestamp" do
+        create(:creator_contacting_customers_email_info, installment: @post1, purchase: @purchase)
+        get :customer_emails, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body[1]["type"]).to eq("post")
+        expect(response.parsed_body[1]["state"]).to eq "Created"
+        expect(response.parsed_body[1]["state_at"]).to be_present
+      end
+
+      it "returns a receipt whose email info has no state timestamp" do
+        create(:customer_email_info, purchase: @purchase)
+        get :customer_emails, params: { purchase_id: @purchase.external_id }
+        expect(response).to be_successful
+        expect(response.parsed_body[0]["state"]).to eq "Created"
+        expect(response.parsed_body[0]["state_at"]).to be_present
+      end
     end
 
     context "with subscription product" do

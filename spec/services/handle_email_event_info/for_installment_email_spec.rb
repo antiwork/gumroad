@@ -194,6 +194,17 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             expect(@email_info.reload.state).to eq "bounced"
           end
 
+          it "reads the row on the primary, so a row written moments earlier is visible" do
+            allow(ApplicationRecord).to receive(:connected_to).and_call_original
+            HandleSendgridEventJob.new.perform(
+              "_json" => [{ "event" => "bounce", "type" => "CreatorContactingCustomersMailer.purchase_installment",
+                            "identifier" => @identifier, "installment_id" => @installment.id }]
+            )
+
+            expect(ApplicationRecord).to have_received(:connected_to).with(role: :writing)
+            expect(CreatorContactingCustomersEmailInfo.where(installment: @installment, purchase: @purchase).count).to eq 1
+          end
+
           it "buffers the delivered mark and applies it on flush" do
             params = { "_json" => [{ "event" => "delivered", "type" => "CreatorContactingCustomersMailer.purchase_installment",
                                      "identifier" => @identifier, "installment_id" => @installment.id, "timestamp" => 1.day.ago.to_i }] }
@@ -312,6 +323,7 @@ describe HandleEmailEventInfo::ForInstallmentEmail do
             expect(CreatorContactingCustomersEmailInfo.count).to eq 1
             expect(CreatorContactingCustomersEmailInfo.last.state).to eq "bounced"
             expect(CreatorContactingCustomersEmailInfo.last.email_name).to eq "purchase_installment"
+            expect(CreatorContactingCustomersEmailInfo.last.sent_at).to be_present
           end
 
           it "does not create a new email info for a delivered event" do

@@ -164,6 +164,9 @@ class EmailInfo < ApplicationRecord
     opened?
   end
 
+  # `sent_at` is nil until a send is recorded, and a bounce is the one transition
+  # that sets no timestamp of its own, so this can return nil — email_infos has no
+  # created_at to fall back on, and callers rendering it must supply their own.
   def most_recent_state_at
     if opened_at.present?
       opened_at

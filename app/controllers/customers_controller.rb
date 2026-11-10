@@ -254,7 +254,7 @@ class CustomersController < Sellers::BaseController
           name: receipt_email_info&.email_name&.humanize || "Receipt",
           id: purchase.external_id,
           state: receipt_email_info&.state&.humanize || "Delivered",
-          state_at: receipt_email_info.present? ? receipt_email_info.most_recent_state_at.in_time_zone(current_seller.timezone) : purchase.created_at.in_time_zone(current_seller.timezone),
+          state_at: (receipt_email_info&.most_recent_state_at || purchase.created_at).in_time_zone(current_seller.timezone),
           url: receipt_purchase_url(purchase.external_id, email: purchase.email),
           date: purchase.created_at
         }
@@ -274,7 +274,7 @@ class CustomersController < Sellers::BaseController
           name: post.name,
           id: post.external_id,
           state: email_info.state.humanize,
-          state_at: email_info.most_recent_state_at.in_time_zone(current_seller.timezone),
+          state_at: (email_info.most_recent_state_at || post.published_at || post.created_at).in_time_zone(current_seller.timezone),
           date: post.published_at
         }
       end

@@ -84,13 +84,20 @@ class HandleEmailEventInfo::ForInstallmentEmail
       ids = creator_contacting_customers_email_info_ids(email_event_info)
       return nil if ids.nil?
 
-      email_info = CreatorContactingCustomersEmailInfo.where(purchase_id: ids[:purchase_id], installment_id: ids[:installment_id]).last
+      # The send writes this row seconds before the provider's event arrives, so a
+      # replica read here misses it and inserts a second row, which the event then
+      # marks — leaving the row that was actually sent misreporting its state.
+      email_info = ApplicationRecord.connected_to(role: :writing) do
+        CreatorContactingCustomersEmailInfo.where(purchase_id: ids[:purchase_id], installment_id: ids[:installment_id]).last
+      end
 
       # We create these records when sending emails so we shouldn't really need to create them again here.
       # However, this code needs to stay so as to support events which are triggered on emails which were sent before
       # the code to create these records was in place. From our investigation, we saw that we still receive events
       # for ancient purchases.
-      email_info || CreatorContactingCustomersEmailInfo.new(**ids)
+      # The event's own time stands in for `sent_at`: the bounce path sets no
+      # timestamp, which would leave the row with nothing to date its state.
+      email_info || CreatorContactingCustomersEmailInfo.new(**ids, sent_at: email_event_info.created_at || Time.current)
     end
 
     def creator_contacting_customers_email_info_ids(email_event_info)
