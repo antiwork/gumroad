@@ -55,8 +55,8 @@ class McpEventSubscription < ApplicationRecord
         lock_seller!(user.id)
         subscription = find_by(key_digest:) ||
           create_or_find_by!(key_digest:) { _1.assign_attributes(user:, oauth_application:, event_name:, arguments:, callback_url:, **lease) }
-        # Not only for a refresh: two first subscribes can race, and the loser gets the winner's row.
-        subscription.update!(lease)
+        # A refresh, or a first subscribe that lost a race and got the winner's row.
+        subscription.update!(lease) unless subscription.previously_new_record?
         subscription
       end
     end

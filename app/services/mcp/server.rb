@@ -25,8 +25,10 @@ module Mcp
     TRANSPORT_ERROR_CODES = [HEADER_MISMATCH, UNSUPPORTED_PROTOCOL_VERSION].freeze
     # Most tools answer for the caller's own store, so no result of ours is shareable between callers.
     TOOLS_LIST_CACHE = { ttlMs: 0, cacheScope: "private" }.freeze
-    # Nothing in it is caller-specific, but its versions follow the flag, so it is never fresh.
+    # Its versions follow a flag, so it is never fresh.
     DISCOVER_CACHE = { ttlMs: 0, cacheScope: "public" }.freeze
+    # Mcp::Events follows ChatGPT's draft of the extension, which another client would misread.
+    EVENTS_CONNECTOR = "chatgpt"
     INSTRUCTIONS = "Use these tools for a connected creator's own store: products, sales, and payouts. search_products also searches the rest of Gumroad's catalogue. Confirm with the person before publishing or unpublishing. Buyers still check out on the product URL. This server does not take payment."
     DEFAULT_BUNDLE_MEMBER_QUANTITY = 1
     SERVER_INFO = { name: "gumroad", title: "Gumroad", version: "1.0.0" }.freeze
@@ -307,6 +309,14 @@ module Mcp
 
       # This revision removed the handshake and ping: a modern client starts at server/discover.
       def dispatch(method, params)
+        # Either revision: ChatGPT handshakes without one and declares it on later calls.
+        if Events::METHODS.include?(method) && events_enabled?
+          # Each first subscribe can wait seconds on a challenge, and a batch has no size limit.
+          raise Error.new("Send events/subscribe on its own, not in a batch.", code: -32600) if @batch && method == "events/subscribe"
+
+          return events.call(method, params)
+        end
+
         if era == :modern
           case method
           when "server/discover" then discover_result
@@ -334,11 +344,34 @@ module Mcp
       def discover_result
         {
           supportedVersions: supported_versions,
-          capabilities: { tools: { listChanged: false } },
+          capabilities:,
           _meta: { SERVER_INFO_META_KEY => SERVER_INFO },
           instructions: INSTRUCTIONS,
-          **DISCOVER_CACHE
+          # The events capability follows a per-seller flag, so a result that carries it is the caller's own.
+          **(events_enabled? ? DISCOVER_CACHE.merge(cacheScope: "private") : DISCOVER_CACHE)
         }
+      end
+
+      def capabilities
+        capabilities = { tools: { listChanged: false } }
+        # Top-level, where ChatGPT reads it: see Mcp::Events.
+        capabilities[:events] = {} if events_enabled?
+        capabilities
+      end
+
+      def events_enabled?
+        return @events_enabled if defined?(@events_enabled)
+
+        @events_enabled = @connector == EVENTS_CONNECTOR && token&.application_id.present? && Feature.active?(:mcp_events, user)
+      end
+
+      def events
+        @events ||= Events.new(
+          user:,
+          token:,
+          authorize_sales: -> { require_scopes!(:view_sales, :account, subject: "Subscribing to an event") },
+          validate_arguments: method(:validate_tool_arguments!)
+        )
       end
 
       def valid_id?(id)
@@ -357,7 +390,7 @@ module Mcp
       def initialize_result
         {
           protocolVersion: LEGACY_PROTOCOL_VERSION,
-          capabilities: { tools: { listChanged: false } },
+          capabilities:,
           serverInfo: SERVER_INFO,
           instructions: INSTRUCTIONS
         }
@@ -1944,11 +1977,11 @@ module Mcp
         n
       end
 
-      def require_scopes!(*scopes)
+      def require_scopes!(*scopes, subject: "This tool")
         token_scopes = token.scopes
         return if scopes.any? { |scope| token_scopes.include?(scope.to_s) }
 
-        message = "This tool requires the #{scopes.to_sentence(two_words_connector: ' or ', last_word_connector: ' or ')} scope."
+        message = "#{subject} requires the #{scopes.to_sentence(two_words_connector: ' or ', last_word_connector: ' or ')} scope."
         missing = obtainable_scope(scopes)
         # No challenge for a batch, or when the client registered none of the accepted scopes:
         # either step-up would fail, and a plain error stops the client from retrying.
