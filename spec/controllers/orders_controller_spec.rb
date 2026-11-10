@@ -76,11 +76,20 @@ describe OrdersController, :vcr do
       )
     end
 
-    it "refuses a line_items payload that is not an array instead of raising" do
-      post :create, params: { line_items: "not-an-array" }.merge(common_purchase_params_without_payment)
+    it "rejects a line_items payload that is not an array" do
+      expect(Order::CreateService).not_to receive(:new)
 
-      expect(response).to have_http_status(:ok)
-      expect(response.parsed_body["success"]).to be(false)
+      expect do
+        post :create, params: { line_items: "not-an-array" }.merge(common_purchase_params_without_payment)
+      end.to raise_error(ActionController::BadRequest)
+    end
+
+    it "rejects a line_items payload whose entries are not objects" do
+      expect(Order::CreateService).not_to receive(:new)
+
+      expect do
+        post :create, params: { line_items: ["unique-id-0"] }
+      end.to raise_error(ActionController::BadRequest)
     end
 
     context "single purchase" do
