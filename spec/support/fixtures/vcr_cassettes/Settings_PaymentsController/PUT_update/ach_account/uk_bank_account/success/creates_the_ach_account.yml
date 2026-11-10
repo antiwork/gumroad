@@ -367,4 +367,112 @@ http_interactions:
           "type": "custom"
         }
   recorded_at: Tue, 31 Oct 2023 19:50:36 GMT
+- request:
+    method: post
+    uri: https://api.stripe.com/v1/tokens
+    body:
+      encoding: UTF-8
+      string: bank_account[country]=GB&bank_account[currency]=gbp&bank_account[account_number]=00012345&bank_account[routing_number]=23-14-70
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - "<STRIPE_CLIENT_USER_AGENT>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 200
+      message: OK
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Tue, 10 Nov 2026 19:04:23 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '568'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=W2utBRseXo3fn4uNyNInBAc8JpckXpZ-hWytSPKRkJPy30vgXs0nyphKALa2bsJnAfvdHiQU0ErZYHcy;
+        report-to csp
+      Idempotency-Key:
+      - ae3be502-764c-43c9-84cd-96cf9d8f7d7b
+      Original-Request:
+      - req_OD0VATlDcvhWav
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=W2utBRseXo3fn4uNyNInBAc8JpckXpZ-hWytSPKRkJPy30vgXs0nyphKALa2bsJnAfvdHiQU0ErZYHcy&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=W2utBRseXo3fn4uNyNInBAc8JpckXpZ-hWytSPKRkJPy30vgXs0nyphKALa2bsJnAfvdHiQU0ErZYHcy&t=1"
+      Request-Id:
+      - req_OD0VATlDcvhWav
+      Stripe-Notice:
+      - You are using an outdated API version (2023-10-16). We recommend upgrading
+        to the latest API version, 2026-10-28.endive. See https://docs.stripe.com/upgrades
+      Stripe-Should-Retry:
+      - 'false'
+      Stripe-Version:
+      - '2023-10-16'
+      Vary:
+      - Origin
+      X-Stripe-Priority-Routing-Enabled:
+      - 'true'
+      X-Stripe-Routing-Context-Priority-Tier:
+      - api-testmode
+      X-Wc:
+      - 3c3
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |-
+        {
+          "id": "btok_1UaKLCIBOqvOFDrfw6oCzRld",
+          "object": "token",
+          "bank_account": {
+            "id": "ba_1UaKLCIBOqvOFDrff1DNPB43",
+            "object": "bank_account",
+            "account_holder_name": null,
+            "account_holder_type": null,
+            "account_type": null,
+            "bank_name": "WISE PAYMENTS LTD",
+            "country": "GB",
+            "currency": "gbp",
+            "fingerprint": "XKKfw7PIxKoBGsGC",
+            "last4": "2345",
+            "routing_number": "23-14-70",
+            "status": "new"
+          },
+          "client_ip": "0.0.0.0",
+          "created": 1794337462,
+          "livemode": false,
+          "type": "bank_account",
+          "used": false
+        }
+  recorded_at: Tue, 10 Nov 2026 19:04:23 GMT
 recorded_with: VCR 6.2.0

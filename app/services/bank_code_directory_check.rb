@@ -9,7 +9,8 @@
 #
 # Stripe resolves two separate things, and at least one country's directory answers for both: the
 # routing number's entry, and the branch the account number points at (EG refuses an IBAN whose
-# branch segment has no entry). Either miss leaves the row unattached, so both block the save.
+# branch segment has no entry). Either miss leaves the row unattached, so each blocks the save for
+# the rows opted in to that lookup.
 #
 # A row that sends a routing number is asked about that number; an IBAN row that sends none is asked
 # about the bank its account number points at.
@@ -21,7 +22,7 @@ class BankCodeDirectoryCheck
   # Opt-in per country, for rows that DO send Stripe a routing number. Add a class here only after
   # probing that Stripe's directory (not its format check) is the layer that refuses real seller
   # input for that country.
-  DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES = [EgyptBankAccount].freeze
+  DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES = [EgyptBankAccount, UkBankAccount].freeze
 
   # IBAN rows whose Stripe payload carries no routing number: the bank is looked up from the
   # account number alone, so the routing-number opt-in above can never reach them.
@@ -124,12 +125,17 @@ class BankCodeDirectoryCheck
     end
 
     # Narrower than the routing-number predicate above: Stripe reports a plain format rejection as
-    # account_number_invalid on the same param, and that must keep failing open.
+    # account_number_invalid on the same param, and that must keep failing open. A UK row opts in for
+    # its sort code only: no probe has shown the directory refusing a UK account number.
     def account_number_rejection?(error)
+      return false if bank_account.is_a?(UkBankAccount)
+
       error.code == "bank_account_unusable" && error.param.to_s == "bank_account[account_number]"
     end
 
     def missing_routing_number_rejection
+      return missing_sort_code_rejection if bank_account.is_a?(UkBankAccount)
+
       message = "Our payment partner couldn't find a bank for the #{bank_account.routing_fields_sentence}."
       if BRANCH_SUFFIXED_BIC_REGEX.match?(routing_number)
         message += " Use the 8-character SWIFT/BIC code instead: #{routing_number.first(8)} rather than #{routing_number}."
@@ -137,6 +143,16 @@ class BankCodeDirectoryCheck
         message += " Please check it against the SWIFT/BIC code your bank publishes."
       end
       Rejection.new(message:, field: :bank_code)
+    end
+
+    # The model validates the sort code's format first, so this is a directory miss on the sort code
+    # as entered.
+    def missing_sort_code_rejection
+      Rejection.new(
+        message: "Our payment partner couldn't find a bank for the #{bank_account.routing_fields_sentence}, " \
+                 "so it can't be used for payouts. Please enter an account at a different bank.",
+        field: :sort_code
+      )
     end
 
     # With a routing number the miss is the branch; with none, the bank itself is unknown to Stripe,
