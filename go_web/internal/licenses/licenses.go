@@ -17,6 +17,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/antiwork/gumroad/go_web/internal/errorreport"
 	"github.com/antiwork/gumroad/go_web/internal/oauth"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session"
@@ -302,7 +303,7 @@ func (h *handler) fetchValidLicense(ctx context.Context, w http.ResponseWriter, 
 				return nil, true, fmt.Errorf("link %d: %w (created_at)", prod.id, errMissingRecord)
 			}
 			if prod.createdAt.Time.After(*cutoff) {
-				web.Logger(req.HTTP).Error("[License Verification Error] product_id missing, responding with HTTP 500 for product: " + itoa(prod.id))
+				web.Logger(req.HTTP).Error("[License Verification Error] product_id missing, responding with HTTP 500 for product: "+itoa(prod.id), errorreport.LogOnly)
 				message := "The 'product_id' parameter is required to verify the license for this product. " +
 					"Please set 'product_id' to '" + h.ids.Encrypt(prod.id) + "' in the request."
 				rails.RenderJSON(w, req, http.StatusInternalServerError, errorBody(message))
@@ -434,6 +435,6 @@ func (h *handler) logMethodUse(ctx context.Context, req *rails.Request, token *o
 		return
 	}
 	if err := h.store.markCLIUser(ctx, owner.ID); err != nil {
-		logger.Error("Failed to mark CLI user: " + err.Error())
+		logger.Error("Failed to mark CLI user: "+err.Error(), errorreport.LogOnly)
 	}
 }

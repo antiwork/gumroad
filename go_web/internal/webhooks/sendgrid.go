@@ -46,6 +46,8 @@ func (h *handlers) sendgrid(v *sendgridVerifier, flag featureFlag) http.HandlerF
 			enforced, err := flag.Active(ctx)
 			cancel()
 			switch {
+			case err != nil && web.ClientLeft(w, r, err):
+				return
 			case err != nil:
 				logger.Error("Could not read "+sendgridFlag, "error", err.Error())
 				rails.Head(w, in.req, http.StatusServiceUnavailable)

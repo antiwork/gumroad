@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -219,6 +220,60 @@ func TestRailsProxyRetriesWithoutWaitingOnAStalledBody(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("the retry waited on the stalled body")
+	}
+}
+
+// A deploy stops a whole color, so the retry can land on a second stopping host.
+func TestRailsProxyKeepsTryingHostsWhileAColorStops(t *testing.T) {
+	var a, b int
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer good.Close()
+	tp := newTestProxy(t, addr(stoppingRails(t, http.StatusBadGateway, "0", &a)), addr(stoppingRails(t, http.StatusBadGateway, "0", &b)), addr(good))
+	if w := tp.forward(httptest.NewRequest("GET", "/l/abc/landing/version", nil)); w.Code != 200 || w.Body.String() != "ok" || a != 1 || b != 1 {
+		t.Errorf("%d %q, stopping hosts hit %d and %d times", w.Code, w.Body.String(), a, b)
+	}
+}
+
+func TestRailsProxyGivesUpAfterItsMaxAttempts(t *testing.T) {
+	hits := make([]int, railsMaxAttempts+1)
+	var hosts []string
+	for i := range hits {
+		hosts = append(hosts, addr(stoppingRails(t, http.StatusBadGateway, "0", &hits[i])))
+	}
+	tp := newTestProxy(t, hosts...)
+	if w := tp.forward(httptest.NewRequest("GET", "/x", nil)); w.Code != http.StatusBadGateway || hits[railsMaxAttempts] != 0 {
+		t.Errorf("%d, hits %v", w.Code, hits)
+	}
+}
+
+// A body too large to resend still tells the proxy the host is stopping.
+func TestRailsProxyMarksDownAHostItCouldNotRetryPast(t *testing.T) {
+	var hits int
+	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "ok") }))
+	defer good.Close()
+	tp := newTestProxy(t, addr(stoppingRails(t, http.StatusBadGateway, "0", &hits)), addr(good))
+	tp.forward(httptest.NewRequest("POST", "/x", strings.NewReader(strings.Repeat("a", maxReplayBody+1))))
+	if w := tp.forward(httptest.NewRequest("GET", "/x", nil)); w.Code != 200 || hits != 1 {
+		t.Errorf("%d, stopping host hit %d times", w.Code, hits)
+	}
+}
+
+// Past nginx's own retry budget a stopping host's answer goes to the client, but the first
+// retry still runs after a slow 504.
+func TestRailsProxyStopsTryingHostsPastNginxsRetryBudget(t *testing.T) {
+	var elapsed atomic.Int64
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		elapsed.Add(int64(railsNginxRetryBudget))
+		w.Header().Set("X-Upstream-Bytes-Sent", "0")
+		w.WriteHeader(http.StatusGatewayTimeout)
+	}))
+	defer slow.Close()
+	var b, c int
+	tp := newTestProxy(t, addr(slow), addr(stoppingRails(t, http.StatusBadGateway, "0", &b)), addr(stoppingRails(t, http.StatusOK, "", &c)))
+	start := tp.clock
+	tp.now = func() time.Time { return start.Add(time.Duration(elapsed.Load())) }
+	if w := tp.forward(httptest.NewRequest("GET", "/x", nil)); w.Code != http.StatusBadGateway || b != 1 || c != 0 {
+		t.Errorf("%d, hosts after the slow one hit %d and %d times", w.Code, b, c)
 	}
 }
 

@@ -66,6 +66,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.env.IsGumroadHost(web.Host(r)) {
 		var err error
 		if page, err = h.gumroadPage(r.Context()); err != nil {
+			if web.ClientLeft(w, r, err) {
+				return
+			}
 			web.Logger(r).Error("Could not load sitemap configs", "error", err.Error())
 			web.InternalServerError(w)
 			return

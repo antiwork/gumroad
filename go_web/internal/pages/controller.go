@@ -97,6 +97,9 @@ func (c *Controller) Serve(w http.ResponseWriter, r *http.Request, name string, 
 	case errors.Is(err, ErrNotFound) && p != nil:
 		rails.RenderException(w, p.Req, http.StatusNotFound)
 	default:
+		if web.ClientLeft(w, r, err) {
+			return
+		}
 		web.Logger(r).Error(name+" failed", "error", err.Error())
 		req := c.Stack.Fallback(r)
 		if p != nil {

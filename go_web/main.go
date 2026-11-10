@@ -16,6 +16,7 @@ import (
 	"github.com/redis/go-redis/v9/logging"
 
 	"github.com/antiwork/gumroad/go_web/internal/credentials"
+	"github.com/antiwork/gumroad/go_web/internal/errorreport"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -23,8 +24,9 @@ import (
 const (
 	defaultPort = "3000"
 
-	// Inside the Nomad task's kill_timeout.
-	shutdownTimeout = 25 * time.Second
+	// Inside the Nomad task's kill_timeout, with sentryFlushTimeout.
+	shutdownTimeout    = 25 * time.Second
+	sentryFlushTimeout = 2 * time.Second
 
 	startupPingTimeout = 30 * time.Second
 	pingRetryInterval  = time.Second
@@ -52,9 +54,10 @@ func getenv(name string) string {
 
 func main() {
 	logging.Disable()
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logger := slog.New(errorreport.NewHandler(slog.NewJSONHandler(os.Stdout, nil)))
 	if err := run(logger); err != nil {
 		logger.Error(err.Error())
+		errorreport.Flush(sentryFlushTimeout)
 		os.Exit(1)
 	}
 }
@@ -68,6 +71,13 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	deps := &dependencies{env: env, logger: logger, credentials: secrets}
+	// A bad DSN leaves reporting off, as sentry-ruby does, rather than the routes down.
+	reporting, err := errorreport.Init(deps.config("SENTRY_DSN"), env.Name, env.Revision)
+	if err != nil {
+		logger.Warn("Sentry is off", "error", err.Error())
+	}
+	defer errorreport.Flush(sentryFlushTimeout)
 
 	// $redis in Rails, not the Sidekiq Redis.
 	redisClient, err := newRedis("REDIS_HOST")
@@ -80,7 +90,7 @@ func run(logger *slog.Logger) error {
 	stack := rails.NewStack(env, getenv("CUSTOM_DOMAIN"))
 	app.HandleNotFound(stack.NotFound())
 
-	deps := &dependencies{env: env, logger: logger, redis: redisClient, stack: stack, credentials: secrets}
+	deps.redis, deps.stack = redisClient, stack
 	defer deps.close()
 	if err := registerRouteGroups(app, deps, getenv("GO_WEB_ROUTE_GROUPS")); err != nil {
 		return err
@@ -104,7 +114,7 @@ func run(logger *slog.Logger) error {
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.ListenAndServe() }()
-	logger.Info("listening", "port", port, "environment", env.Name)
+	logger.Info("listening", "port", port, "environment", env.Name, "sentry", reporting)
 
 	select {
 	case err := <-serveErr:
