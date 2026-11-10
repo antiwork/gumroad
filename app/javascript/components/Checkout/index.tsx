@@ -262,6 +262,7 @@ export const Checkout = ({
   updateCart,
   recommendedProducts,
   soldOutArrival,
+  ownedInCart = [],
 }: {
   discoverUrl: string;
   cart: CartState;
@@ -269,7 +270,12 @@ export const Checkout = ({
   recommendedProducts?: CardProduct[] | null;
   // Set when a legacy /checkout link named a tier that is closed or sold out, so nothing was added.
   soldOutArrival?: { message: string; url: string } | null;
+  // Filtered against the live cart, so removing a line clears its warning.
+  ownedInCart?: { permalink: string; name: string }[];
 }) => {
+  const ownedNames = ownedInCart
+    .filter(({ permalink }) => cart.items.some((item) => item.product.permalink === permalink))
+    .map(({ name }) => name);
   const [state] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
@@ -666,6 +672,14 @@ export const Checkout = ({
             <a href={soldOutArrival.url} className="underline">
               View the product
             </a>
+          </Alert>
+        </div>
+      ) : null}
+      {ownedNames.length > 0 ? (
+        <div className="px-4 pt-4 md:px-16 md:pt-8">
+          <Alert variant="warning">
+            You already own {ownedNames.join(", ")}. Remove {ownedNames.length > 1 ? "them" : "it"} from your cart if
+            you don't want to buy again.
           </Alert>
         </div>
       ) : null}

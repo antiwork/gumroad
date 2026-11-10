@@ -861,13 +861,6 @@ Rails.application.routes.draw do
 
     resources :recommended_products, only: :index
 
-    resources :charges, only: [] do
-      member do
-        get :receipt
-        post :resend_receipt
-      end
-    end
-
     # purchases
     resources :purchases, only: [:update] do
       member do
@@ -1008,6 +1001,7 @@ Rails.application.routes.draw do
 
     resources :links, except: [:edit, :show, :update, :new] do
       resources :asset_previews, only: [:create, :destroy]
+      resource :publish_schedule, only: [:create, :destroy], controller: "products/publish_schedules"
 
       resources :thumbnails, only: [:create, :destroy]
       resources :variants, only: [:index], controller: "products/variants"

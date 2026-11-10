@@ -1935,6 +1935,86 @@ describe PurchasesController, :vcr do
         end
       end
 
+      context "when the purchase is one of a charge's two split receipts" do
+        let(:seller) { create(:named_seller) }
+        let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Paid edition"), seller:, email: "test@example.com") }
+        let(:purchase_two) { create(:purchase, link: create(:product, user: seller, name: "Free edition"), seller:, email: "test@example.com") }
+
+        # Only the item cards: "More from this creator" can recommend the other product.
+        def receipt_item_names
+          Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }
+        end
+
+        before do
+          order = create(:order, purchases: [purchase, purchase_two])
+          create(:charge, order:, purchases: [purchase, purchase_two], seller:)
+          create(:customer_email_info, purchase:, email_name: SendgridEventInfo::RECEIPT_MAILER_METHOD)
+        end
+
+        it "shows every item in the order" do
+          get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
+
+          expect(response).to be_successful
+          expect(receipt_item_names).to eq(["Paid edition", "Free edition"])
+          expect(response.body).not_to include("View every item in this order")
+        end
+
+        it "shows only this purchase when the items went to different buyer emails" do
+          purchase_two.update!(email: "another-buyer@example.com")
+
+          get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
+
+          expect(response).to be_successful
+          expect(receipt_item_names).to eq(["Paid edition"])
+        end
+
+        it "does not show the order through another purchase on the charge with a different email" do
+          failed_purchase = create(:failed_purchase, link: create(:product, user: seller, name: "Declined edition"), seller:, email: "another-buyer@example.com")
+          failed_purchase.update!(charge: purchase.charge, order: purchase.charge.order)
+
+          get :receipt, params: { id: failed_purchase.external_id, email: "another-buyer@example.com" }
+
+          expect(receipt_item_names).to eq(["Declined edition"])
+        end
+      end
+
+      context "when a three-item charge has an item for another buyer email" do
+        let(:seller) { create(:named_seller) }
+        let(:purchase) { create(:purchase, link: create(:product, user: seller, name: "Paid edition"), seller:, email: "test@example.com") }
+        let(:purchase_two) { create(:purchase, link: create(:product, user: seller, name: "Free edition"), seller:, email: "test@example.com") }
+        let(:other_buyer_purchase) { create(:purchase, link: create(:product, user: seller, name: "Other edition"), seller:, email: "another-buyer@example.com") }
+
+        before do
+          purchases = [purchase, purchase_two, other_buyer_purchase]
+          create(:charge, order: create(:order, purchases:), purchases:, seller:)
+        end
+
+        it "shows only this purchase" do
+          get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
+
+          expect(response).to be_successful
+          expect(Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }).to eq(["Paid edition"])
+        end
+      end
+
+      context "when the purchase's charge has no successful items but the order has another seller's" do
+        let(:purchase) { create(:failed_purchase, link: create(:product, name: "Declined edition"), email: "test@example.com") }
+
+        before do
+          other_purchase = create(:purchase, email: "test@example.com")
+          order = create(:order, purchases: [purchase, other_purchase])
+          create(:charge, order:, purchases: [purchase], seller: purchase.seller)
+          create(:charge, order:, purchases: [other_purchase], seller: other_purchase.seller)
+        end
+
+        it "shows this purchase" do
+          get :receipt, params: { id: purchase.external_id, email: "test@example.com" }
+
+          expect(response).to be_successful
+          expect(Nokogiri::HTML(response.body).css(".item h4").map { _1.text.squish }).to eq(["Declined edition"])
+        end
+      end
+
       context "when the order has no successful purchases" do
         # A charge-backed purchase promotes the receipt's chargeable to its Order;
         # when that Order has no successful purchase, the orderable has no email and
@@ -1980,7 +2060,7 @@ describe PurchasesController, :vcr do
         end
 
         it "calls CustomerMailer with correct args" do
-          expect(CustomerMailer).to receive(:receipt).with(purchase.id, for_email: false, single_purchase: false).and_call_original
+          expect(CustomerMailer).to receive(:receipt).with(purchase.id, for_email: false, single_purchase: true).and_call_original
           get :receipt, params: { id: purchase.external_id }
           expect(response).to be_successful
         end

@@ -558,6 +558,8 @@ describe ProductPresenter do
             },
             is_published: true,
             first_published_at: nil,
+            can_create_publish_schedule: false,
+            publish_schedule: nil,
             covers: asset_previews.map(&:as_json),
             integrations: {
               "circle" => circle_integration.as_json,
@@ -1034,6 +1036,8 @@ describe ProductPresenter do
               },
               is_published: true,
               first_published_at: nil,
+              can_create_publish_schedule: false,
+              publish_schedule: nil,
               covers: [],
               integrations: {
                 "circle" => nil,
@@ -1364,6 +1368,8 @@ describe ProductPresenter do
               },
               is_published: true,
               first_published_at: nil,
+              can_create_publish_schedule: false,
+              publish_schedule: nil,
               covers: [],
               integrations: {
                 "circle" => nil,

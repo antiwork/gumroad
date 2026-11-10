@@ -215,7 +215,7 @@ describe "Rack::Attack throttle", type: :request do
     end
   end
 
-  describe "shared charge receipt resend throttle" do
+  describe "receipt resend throttle" do
     def resend_request(path)
       Rack::Attack::Request.new(Rack::MockRequest.env_for(path, method: "POST", "HTTP_CF_CONNECTING_IP" => "203.0.113.201"))
     end
@@ -223,24 +223,24 @@ describe "Rack::Attack throttle", type: :request do
     before { reset_rack_attack! }
     after { reset_rack_attack! }
 
-    it "throttles mailing a charge's receipt to the buyer by IP" do
+    it "throttles resending a purchase's receipt by IP" do
       travel_to(Time.current) do
-        2.times { |i| expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt"))).to be(false), "request #{i + 1} unexpectedly throttled" }
-        expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt"))).to be(true)
+        2.times { |i| expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(false), "request #{i + 1} unexpectedly throttled" }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(true)
       end
     end
 
     it "shares one budget with the format-suffixed route" do
       travel_to(Time.current) do
-        2.times { |i| expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt"))).to be(false), "request #{i + 1} unexpectedly throttled" }
-        expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt.json"))).to be(true)
+        2.times { |i| expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(false), "request #{i + 1} unexpectedly throttled" }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt.json"))).to be(true)
       end
     end
 
-    it "keeps a separate budget per charge" do
+    it "keeps a separate budget per purchase" do
       travel_to(Time.current) do
-        2.times { expect(Rack::Attack.configuration.throttled?(resend_request("/charges/abc/resend_receipt"))).to be(false) }
-        expect(Rack::Attack.configuration.throttled?(resend_request("/charges/def/resend_receipt"))).to be(false)
+        2.times { expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/abc/resend_receipt"))).to be(false) }
+        expect(Rack::Attack.configuration.throttled?(resend_request("/purchases/def/resend_receipt"))).to be(false)
       end
     end
   end

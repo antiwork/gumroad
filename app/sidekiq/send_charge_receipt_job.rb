@@ -35,7 +35,7 @@ class SendChargeReceiptJob
     charge = Charge.find(charge_id)
     return if charge.receipt_sent?
 
-    if charge.purchases.any?(&:in_progress?) && (delay = RETRY_DELAYS[attempt])
+    if (charge.purchases.any?(&:in_progress?) || awaiting_url_redirect?(charge)) && (delay = RETRY_DELAYS[attempt])
       self.class.perform_in(delay, charge_id, attempt + 1)
       return
     end
@@ -68,6 +68,15 @@ class SendChargeReceiptJob
   end
 
   private
+    # A purchase is successful before its after_transition creates the url_redirect; a receipt
+    # rendered in that gap has no download button for the line.
+    def awaiting_url_redirect?(charge)
+      charge.purchases.any? do |purchase|
+        purchase.successful? && purchase.url_redirect.nil? &&
+          !purchase.is_gift_sender_purchase && !purchase.is_commission_completion_purchase?
+      end
+    end
+
     def send_receipts(charge)
       purchases = charge.successful_purchases
       if charge.split_receipt_mode?

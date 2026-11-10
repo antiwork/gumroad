@@ -17,6 +17,7 @@ import { Taxonomy } from "$app/utils/discover";
 import { RecurrenceId } from "$app/utils/recurringPricing";
 
 import { PublicFile, Seller } from "$app/components/Product";
+import { PublishSchedule } from "$app/components/PublishScheduleCard";
 import { SubtitleFile } from "$app/components/SubtitleList/Row";
 
 import { Page } from "./ContentTab/PageTab";
@@ -169,6 +170,8 @@ export type Product = {
   refund_policy: RefundPolicy;
   is_published: boolean;
   first_published_at: string | null;
+  publish_schedule?: PublishSchedule | null;
+  can_create_publish_schedule?: boolean;
   free_trial_enabled: boolean;
   free_trial_duration_amount: 1 | null;
   free_trial_duration_unit: FreeTrialDurationUnit | null;

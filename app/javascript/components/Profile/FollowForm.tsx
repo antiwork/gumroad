@@ -8,6 +8,7 @@ import { isValidEmail } from "$app/utils/email";
 import { Button } from "$app/components/Button";
 import { ButtonColor } from "$app/components/design";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
+import { FollowPrivacyNotice } from "$app/components/Profile/FollowPrivacyNotice";
 import { showAlert } from "$app/components/server-components/Alert";
 import { Fieldset } from "$app/components/ui/Fieldset";
 import { Input } from "$app/components/ui/Input";
@@ -106,6 +107,7 @@ export const FollowForm = ({
                   : "Subscribe"}
           </Button>
         </div>
+        <FollowPrivacyNotice className="mt-2" />
         {recaptcha.container}
         {creatorProfile.follow_recaptcha_site_key != null ? <RecaptchaDisclosure className="mt-2" /> : null}
       </Fieldset>
