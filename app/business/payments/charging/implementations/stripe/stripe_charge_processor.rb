@@ -1289,8 +1289,8 @@ class StripeChargeProcessor
         shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
         shipping_tracking_number: dispute_evidence.shipping_tracking_number,
         uncategorized_text: [
-          "The merchant should win the dispute because:\n#{dispute_evidence.reason_for_winning}",
-          dispute_evidence.uncategorized_text
+          ("The merchant should win the dispute because:\n#{dispute_evidence.reason_for_winning}" if dispute_evidence.reason_for_winning.present?),
+          dispute_evidence.uncategorized_text.presence
         ].compact.join("\n\n"),
         access_activity_log: dispute_evidence.access_activity_log,
         cancellation_policy: create_dispute_evidence_stripe_file(dispute_evidence.cancellation_policy_image, request_options:),
@@ -1300,7 +1300,9 @@ class StripeChargeProcessor
         cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
         refund_refusal_explanation: dispute_evidence.refund_refusal_explanation,
         customer_communication:,
-      }
+      }.compact_blank
+      # An empty string CLEARS a field on Stripe (it does not leave it alone), so a seller field left
+      # blank would wipe what Stripe drafted, e.g. the refund line on a dispute filed after a refund.
 
       # Every attempt re-uploads the files and gets fresh Stripe file ids (Stripe does not dedupe
       # file uploads by idempotency key), so the key must cover them: a fixed key with new ids is

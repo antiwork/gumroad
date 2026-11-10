@@ -653,22 +653,22 @@ describe StripeChargeProcessor, :vcr do
       expect(Stripe::Dispute).to receive(:update).with(
         stripe_charge.dispute,
         hash_including(evidence: hash_including({
-                                                  billing_address: dispute_evidence.billing_address,
-                                                  customer_email_address: dispute_evidence.customer_email,
-                                                  customer_name: dispute_evidence.customer_name,
-                                                  customer_purchase_ip: dispute_evidence.customer_purchase_ip,
-                                                  product_description: dispute_evidence.product_description,
-                                                  service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
-                                                  shipping_address: dispute_evidence.shipping_address,
-                                                  shipping_carrier: dispute_evidence.shipping_carrier,
-                                                  shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
-                                                  shipping_tracking_number: dispute_evidence.shipping_tracking_number,
-                                                  uncategorized_text: expected_uncategorized_text,
-                                                  access_activity_log: dispute_evidence.access_activity_log,
-                                                  refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
-                                                  cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
-                                                  refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
-                                                })),
+          billing_address: dispute_evidence.billing_address,
+          customer_email_address: dispute_evidence.customer_email,
+          customer_name: dispute_evidence.customer_name,
+          customer_purchase_ip: dispute_evidence.customer_purchase_ip,
+          product_description: dispute_evidence.product_description,
+          service_date: dispute_evidence.purchased_at.to_fs(:formatted_date_full_month),
+          shipping_address: dispute_evidence.shipping_address,
+          shipping_carrier: dispute_evidence.shipping_carrier,
+          shipping_date: dispute_evidence.shipped_at&.to_fs(:formatted_date_full_month),
+          shipping_tracking_number: dispute_evidence.shipping_tracking_number,
+          uncategorized_text: expected_uncategorized_text,
+          access_activity_log: dispute_evidence.access_activity_log,
+          refund_policy_disclosure: dispute_evidence.refund_policy_disclosure,
+          cancellation_rebuttal: dispute_evidence.cancellation_rebuttal,
+          refund_refusal_explanation: dispute_evidence.refund_refusal_explanation
+        }.compact_blank)),
         hash_including(:idempotency_key)
       ).and_call_original
       subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
@@ -738,6 +738,75 @@ describe StripeChargeProcessor, :vcr do
         )
 
         subject.fight_chargeback(charge_id, disputed_purchase.dispute.dispute_evidence)
+      end
+    end
+
+    context "with seller statement fields left blank" do
+      # Stripe treats an empty evidence string as "clear this field", which would wipe the refund
+      # line it drafts on a dispute filed after a refund, so blanks must not reach the request.
+      # A free purchase so the setup never charges: these assert the request body, not the charge.
+      let(:disputed_purchase) do
+        create(:free_purchase, link: create(:physical_product), full_name: "John Example",
+                               street_address: "123 Sample St", city: "San Francisco", state: "CA",
+                               country: "United States", zip_code: "12343")
+      end
+      let!(:stripe_charge) { nil }
+      let(:charge_id) { "ch_blank_fields" }
+      let(:dispute_evidence) { disputed_purchase.dispute.dispute_evidence }
+
+      before do
+        allow(Stripe::Charge).to receive(:retrieve).and_return(Stripe::Charge.construct_from(id: charge_id, dispute: "dp_blank_fields"))
+        allow(Stripe::File).to receive(:create).and_return(double(id: "file_blank_fields"))
+        stub_request(:post, "https://api.stripe.com/v1/disputes/dp_blank_fields")
+          .to_return(status: 200, body: { id: "dp_blank_fields", object: "dispute" }.to_json)
+      end
+
+      def request_body
+        subject.fight_chargeback(charge_id, dispute_evidence)
+        body = nil
+        expect(a_request(:post, "https://api.stripe.com/v1/disputes/dp_blank_fields").with { |req| body = req.body }).to have_been_made.once
+        Rack::Utils.parse_nested_query(body)
+      end
+
+      it "does not send blank text fields, so they cannot clear what Stripe drafted" do
+        # stripped_fields nilifies blanks on save, so write the raw empty strings past it.
+        dispute_evidence.update_columns(reason_for_winning: "", cancellation_rebuttal: "", refund_refusal_explanation: "", uncategorized_text: "")
+
+        body = request_body
+
+        expect(body["evidence"]).not_to have_key("refund_refusal_explanation")
+        expect(body["evidence"]).not_to have_key("cancellation_rebuttal")
+        expect(body["evidence"].values).not_to include("")
+        expect(body["evidence"]["product_description"]).to eq(dispute_evidence.product_description)
+      end
+
+      it "sends the text fields the seller filled in" do
+        dispute_evidence.update!(cancellation_rebuttal: "Cancelled after delivery.", refund_refusal_explanation: "Refunded in full on Nov 6.")
+
+        body = request_body
+
+        expect(body["evidence"]["refund_refusal_explanation"]).to eq("Refunded in full on Nov 6.")
+        expect(body["evidence"]["cancellation_rebuttal"]).to eq("Cancelled after delivery.")
+      end
+
+      it "leaves out the win headline when there is no reason for winning" do
+        dispute_evidence.update!(reason_for_winning: "", uncategorized_text: "Device location: GA, United States")
+
+        expect(request_body["evidence"]["uncategorized_text"]).to eq("Device location: GA, United States")
+      end
+
+      it "does not send uncategorized_text at all when it and the reason for winning are both blank" do
+        dispute_evidence.update!(reason_for_winning: nil, uncategorized_text: nil)
+
+        expect(request_body["evidence"]).not_to have_key("uncategorized_text")
+      end
+
+      it "keeps the win headline above the reason when there is one" do
+        dispute_evidence.update!(reason_for_winning: "The buyer downloaded the file.", uncategorized_text: "Device location: GA, United States")
+
+        expect(request_body["evidence"]["uncategorized_text"]).to eq(
+          "The merchant should win the dispute because:\nThe buyer downloaded the file.\n\nDevice location: GA, United States"
+        )
       end
     end
   end
@@ -5912,8 +5981,8 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
 
     evidence = evidence_sent_to_stripe
 
-    expect(evidence[:uncategorized_text]).to_not include("shipment tracking URL")
-    expect(evidence[:uncategorized_text]).to_not include("confirmed delivery by phone")
+    expect(evidence[:uncategorized_text].to_s).to_not include("shipment tracking URL")
+    expect(evidence[:uncategorized_text].to_s).to_not include("confirmed delivery by phone")
   end
 
   describe "idempotency key" do
@@ -6015,9 +6084,9 @@ describe StripeChargeProcessor, "#fight_chargeback shipment evidence" do
       sent, omitted = fight
 
       expect(omitted).to eq([:customer_communication])
-      expect(sent).to include(customer_communication: nil)
+      expect(sent).not_to have_key(:customer_communication)
       expect(sent[:access_activity_log]).to eq(disputed_purchase.dispute.reload.dispute_evidence.access_activity_log)
-      expect(sent[:uncategorized_text]).to be_present
+      expect(sent[:product_description]).to be_present
     end
 
     it "still fails on any other file error, without submitting" do
