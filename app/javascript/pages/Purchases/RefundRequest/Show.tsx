@@ -4,7 +4,7 @@ import * as React from "react";
 import { Button } from "$app/components/Button";
 import { SUPPORT_EMAIL } from "$app/components/Support/ContactSupportModal";
 import { Card, CardContent } from "$app/components/ui/Card";
-import { Fieldset, FieldsetTitle } from "$app/components/ui/Fieldset";
+import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
 import { Label } from "$app/components/ui/Label";
 import { Radio } from "$app/components/ui/Radio";
 import { Textarea } from "$app/components/ui/Textarea";
@@ -125,6 +125,7 @@ export default function Show() {
   const props = usePage<Props>().props;
   const form = useForm({ reason: "", message: "" });
   const messageUID = React.useId();
+  const messageCountUID = React.useId();
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -193,10 +194,14 @@ export default function Show() {
               <Textarea
                 id={messageUID}
                 rows={4}
+                aria-describedby={messageCountUID}
                 maxLength={props.max_message_length}
                 value={form.data.message}
                 onChange={(event) => form.setData("message", event.target.value)}
               />
+              <FieldsetDescription id={messageCountUID}>
+                {form.data.message.length} of {props.max_message_length} characters used
+              </FieldsetDescription>
             </Fieldset>
             <Button type="submit" color="primary" disabled={form.processing} aria-busy={form.processing}>
               {form.processing ? "Sending..." : "Send refund request"}
