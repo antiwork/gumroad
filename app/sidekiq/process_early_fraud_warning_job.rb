@@ -54,7 +54,14 @@ class ProcessEarlyFraudWarningJob
     end
 
     def process_refundable_for_fraud!(early_fraud_warning)
-      return unless early_fraud_warning.chargeable.refund_for_fraud_and_block_buyer!(GUMROAD_ADMIN_ID)
+      chargeable = early_fraud_warning.chargeable
+      unless chargeable.refund_for_fraud_and_block_buyer!(GUMROAD_ADMIN_ID)
+        ErrorNotifier.notify(
+          "Early fraud warning refund failed",
+          context: { early_fraud_warning_id: early_fraud_warning.id, errors: chargeable.errors.full_messages }
+        )
+        return
+      end
 
       early_fraud_warning.update_as_resolved!(
         resolution: EarlyFraudWarning::RESOLUTION_RESOLVED_REFUNDED_FOR_FRAUD

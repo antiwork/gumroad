@@ -89,7 +89,9 @@ class Purchase
         return false
       end
 
-      unless refunded_by_team_member
+      # Fraud refunds skip the creator refund guards like a staff refund: the buyer's money goes back
+      # regardless and the seller's balance may go negative.
+      unless refunded_by_team_member || is_for_fraud
         if seller.refunds_disabled?
           errors.add :base, "Refunds are temporarily disabled in your account."
           return false
@@ -558,7 +560,9 @@ class Purchase
     return nil if skip_already_refunded && result.nil?
 
     subscription.cancel_effective_immediately! if subscription.present? && !subscription.deactivated?
-    ContactingCreatorMailer.purchase_refunded_for_fraud(id).deliver_later(queue: "default") unless seller.suspended?
+    # A free item on a fraud charge has nothing to refund, so there is nothing to tell the creator.
+    nothing_refunded = result.nil? && price_cents.zero?
+    ContactingCreatorMailer.purchase_refunded_for_fraud(id).deliver_later(queue: "default") unless seller.suspended? || nothing_refunded
     # Covers already-refunded retries: refund_and_save! is a no-op then, so the
     # post-commit hook on refund_purchase! never ran.
     disable_attached_license_if_fully_refunded!(for_fraud: true)
