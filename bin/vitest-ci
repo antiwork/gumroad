@@ -22,9 +22,10 @@ RESOLVE_EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mts", ".d.ts", ".json"
 ALIASES = { "$app/" => "app/javascript/", "$assets/" => "public/", "$vendor/" => "vendor/assets/javascripts/" }.freeze
 SPECIFIER = /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+|\brequire\s*\(\s*|\bvi\.mock\s*\(\s*|\bimportActual\s*(?:<[^>]*>)?\s*\(\s*)["']([^"']+)["']/
 GLOB_CALL = /import\.meta\.glob\b/
-# Modules that read repository files at runtime depend on files no import names, so
-# every test that reaches one always runs. import.meta.glob is followed as edges instead.
-READS_FILES = /\breadFileSync\b|\breadFile\s*\(|\breaddirSync\b|\bglobSync\b|["']node:fs["']|["']fs["']/
+# Modules that read repository files at runtime (file snapshots included) depend on files
+# no import names, so every test that reaches one always runs. import.meta.glob is
+# followed as edges instead.
+READS_FILES = /\breadFileSync\b|\breadFile\s*\(|\breaddirSync\b|\bglobSync\b|\btoMatchFileSnapshot\b|["']node:fs["']|["']fs["']/
 
 FULL_SUITE_PATHS = [
   %r{\Apackage(-lock)?\.json\z},
