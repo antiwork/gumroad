@@ -52,6 +52,16 @@ describe AngolaBankAccount do
       expect(account.reload.update(account_holder_full_name: "New Name")).to be(true)
       expect { account.mark_deleted! }.not_to raise_error
     end
+
+    it "rejects changing an existing account to a 9- or 10-character code" do
+      account = create(:angola_bank_account)
+
+      account.bank_code = "AAAAAOAOX"
+      expect(account).not_to be_valid
+      account.bank_code = "AAAAAOAOXX"
+      expect(account).not_to be_valid
+      expect(account.errors.full_messages.to_sentence).to eq("The bank code is invalid.")
+    end
   end
 
   describe "#validate_account_number" do
