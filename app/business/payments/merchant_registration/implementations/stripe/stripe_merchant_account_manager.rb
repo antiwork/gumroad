@@ -3221,12 +3221,15 @@ module StripeMerchantAccountManager
         }
       )
     elsif user_compliance_info.legal_entity_country_code == Compliance::Countries::CAN.alpha2 &&
-          UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.key?(user_compliance_info.business_type)
-      # A record can hold a legacy US-vocabulary type ("corporation") the Canadian form never offers,
-      # and Stripe rejects any structure outside its own Canadian set, so send only the form's values.
+          (UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.key?(user_compliance_info.business_type) ||
+           US_COMPANY_STRUCTURES.slice(UserComplianceInfo::BusinessTypes::CORPORATION, UserComplianceInfo::BusinessTypes::PARTNERSHIP).key?(user_compliance_info.business_type))
+      # A record can hold a legacy US-vocabulary type the Canadian form never offers, and Stripe rejects
+      # any structure outside its Canadian set: map legacy corporation/partnership, send none for llc/profit.
+      structure = US_COMPANY_STRUCTURES.slice(UserComplianceInfo::BusinessTypes::CORPORATION, UserComplianceInfo::BusinessTypes::PARTNERSHIP)
+                                       .fetch(user_compliance_info.business_type, user_compliance_info.business_type)
       hash.deep_merge!(
         company: {
-          structure: user_compliance_info.business_type == "non_profit" ? "" : user_compliance_info.business_type,
+          structure: structure == "non_profit" ? "" : structure,
         }
       )
     elsif user_compliance_info.legal_entity_country_code == Compliance::Countries::USA.alpha2 &&

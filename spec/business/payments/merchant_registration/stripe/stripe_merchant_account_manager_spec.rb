@@ -15893,17 +15893,28 @@ describe StripeMerchantAccountManager, :vcr do
       expect(company).not_to have_key(:vat_id)
     end
 
-    it "sends no structure for a Canadian legal entity holding a legacy US business type" do
-      canadian = create(:user_compliance_info_uae_business,
-                        user:,
-                        business_country: "Canada",
-                        business_state: "Ontario",
-                        business_city: "Toronto",
-                        business_zip_code: "M4C 1T2",
-                        business_type: UserComplianceInfo::BusinessTypes::CORPORATION)
-      company = described_class.send(:company_hash, canadian, passphrase)[:company]
+    {
+      UserComplianceInfo::BusinessTypes::CORPORATION => "private_corporation",
+      UserComplianceInfo::BusinessTypes::PARTNERSHIP => "private_partnership",
+      UserComplianceInfo::BusinessTypes::LLC => nil,
+      UserComplianceInfo::BusinessTypes::NON_PROFIT => nil,
+    }.each do |legacy_type, expected|
+      it "#{expected ? "maps" : "sends no structure for"} a Canadian legal entity holding legacy type #{legacy_type}" do
+        canadian = create(:user_compliance_info_uae_business,
+                          user:,
+                          business_country: "Canada",
+                          business_state: "Ontario",
+                          business_city: "Toronto",
+                          business_zip_code: "M4C 1T2",
+                          business_type: legacy_type)
+        company = described_class.send(:company_hash, canadian, passphrase)[:company]
 
-      expect(company).not_to have_key(:structure)
+        if expected
+          expect(company[:structure]).to eq(expected)
+        else
+          expect(company).not_to have_key(:structure)
+        end
+      end
     end
 
     describe "Japanese address blocks" do
