@@ -241,3 +241,60 @@ describe("a folder arriving as a copy", () => {
     expect(copied?.attrs.uid).not.toEqual(FOLDER_UID);
   });
 });
+
+describe("a folder moved with the rows around it", () => {
+  it("keeps its uid, so the folder's own download link survives the move", async () => {
+    const editor = await mount({
+      type: "doc",
+      content: [
+        row(FILE_A, "uid-a"),
+        {
+          type: "fileEmbedGroup",
+          attrs: { uid: FOLDER_UID, name: "Earlier Versions" },
+          content: [row(FILE_B, "uid-b")],
+        },
+      ],
+    });
+    editor.commands.setTextSelection({ from: 0, to: editor.state.doc.content.size });
+    // ProseMirror serializes a dragged selection through `transformCopied`, which reparses the
+    // slice, so the folder the drop carries is a new object that already holds its uid.
+    const dataTransfer = {
+      files: [],
+      types: ["text/html"],
+      html: "",
+      text: "",
+      setData: (type: string, value: string) => {
+        if (type === "text/html") dataTransfer.html = value;
+        else dataTransfer.text = value;
+      },
+      getData: (type: string) => (type === "text/html" ? dataTransfer.html : dataTransfer.text),
+      clearData: () => {},
+      setDragImage: () => {},
+      effectAllowed: "copyMove",
+      dropEffect: "move",
+    };
+    vi.spyOn(editor.view, "posAtCoords").mockReturnValue({ pos: 3, inside: -1 });
+
+    const dragstart = new Event("dragstart", { bubbles: true, cancelable: true });
+    Object.assign(dragstart, { dataTransfer, altKey: false, ctrlKey: false, clientX: 5, clientY: 5 });
+    act(() => {
+      editor.view.dom.dispatchEvent(dragstart);
+    });
+    // What ProseMirror records at dragstart for a plain drag: the reparsed slice and the move flag.
+    const dragging = editor.view.dragging;
+    expect(dragging?.move).toEqual(true);
+    expect(dragging?.slice.content.lastChild).not.toBe(editor.state.doc.child(1));
+
+    vi.spyOn(editor.view, "posAtCoords").mockReturnValue({ pos: editor.state.doc.content.size, inside: -1 });
+    const drop = new Event("drop", { bubbles: true, cancelable: true });
+    Object.assign(drop, { dataTransfer, clientX: 5, clientY: 5 });
+    act(() => {
+      editor.view.dom.dispatchEvent(drop);
+    });
+
+    const folders = (editor.getJSON().content ?? []).filter((node) => node.type === "fileEmbedGroup");
+    expect(folders).toHaveLength(1);
+    expect(folders[0]?.attrs?.uid).toEqual(FOLDER_UID);
+    expect(folders[0]?.content?.map((node) => cast<string>(node.attrs?.id))).toEqual([FILE_B]);
+  });
+});

@@ -310,14 +310,36 @@ export const FileEmbedGroup = TiptapNode.create<{ getConfig: () => FileGroupConf
   parseHTML: () => [{ tag: "file-embed-group" }],
   renderHTML: ({ HTMLAttributes }) => ["file-embed-group", HTMLAttributes, 0],
   addStorage: () => ({ lastCreatedUid: null }),
-  // An incoming slice (paste, drag or browser drop) carries the source node's attributes, `uid`
-  // included, and that uid is the folder's identity wherever it is looked up. A copy of a folder
-  // already on the page gets a fresh one, so two nodes cannot end up sharing a uid.
+  // A slice arriving from outside (paste, drag or browser drop) carries the source folder's `uid`,
+  // its identity wherever it is looked up, so a copy of a folder already on the page gets a fresh
+  // one. A folder the drag is moving keeps its own: `transformCopied` reparses the dragged slice,
+  // so a moved node is no longer the object the page holds.
   addProseMirrorPlugins() {
+    // Uids the drag in flight is moving rather than copying.
+    let movingUids = new Set<string>();
     return [
       new Plugin({
         props: {
+          // The drop event reaches this prop before ProseMirror applies the drop, so `view.dragging`
+          // still holds the drag and its move flag.
+          handleDOMEvents: {
+            drop: (view) => {
+              movingUids = new Set<string>();
+              if (!view.dragging?.move) return false;
+              view.dragging.slice.content.descendants((node) => {
+                if (node.type.name === FileEmbedGroup.name) movingUids.add(assertString(node.attrs.uid));
+              });
+              return false;
+            },
+            // A drop ProseMirror never transforms must not leave uids behind for a later paste.
+            dragend: () => {
+              movingUids = new Set<string>();
+              return false;
+            },
+          },
           transformPasted: (slice, view) => {
+            const moving = movingUids;
+            movingUids = new Set<string>();
             const onPage = new Map<string, ProseMirrorNode>();
             view.state.doc.descendants((node) => {
               if (node.type.name === FileEmbedGroup.name) onPage.set(assertString(node.attrs.uid), node);
@@ -328,9 +350,9 @@ export const FileEmbedGroup = TiptapNode.create<{ getConfig: () => FileGroupConf
               for (let i = 0; i < node.childCount; i++) children.push(rewrite(node.child(i)));
               const content = Fragment.fromArray(children);
               if (node.type.name !== FileEmbedGroup.name) return node.copy(content);
-              const existing = onPage.get(assertString(node.attrs.uid));
-              // `existing === node` is this node being moved, not a second copy of it.
-              if (!existing || existing === node) return node.copy(content);
+              const uid = assertString(node.attrs.uid);
+              // Moved, not copied: this node is on the page and the drop is relocating it.
+              if (!onPage.get(uid) || moving.has(uid)) return node.copy(content);
               return node.type.create({ ...node.attrs, uid: GuidGenerator.generate() }, content, node.marks);
             };
             const children: ProseMirrorNode[] = [];
