@@ -9,6 +9,7 @@ class McpEventSubscription < ApplicationRecord
   # A Standard Webhooks symmetric secret: the prefix, then the base64 of this many random bytes.
   SECRET_PREFIX = "whsec_"
   SECRET_BYTE_RANGE = (24..64)
+  SECRET_ERROR = "must be #{SECRET_PREFIX} followed by the base64 of #{SECRET_BYTE_RANGE.min} to #{SECRET_BYTE_RANGE.max} random bytes"
   MAX_CALLBACK_URL_LENGTH = 2048
   MAX_ARGUMENTS_BYTES = 1.kilobyte
   # A shorter lease would have a client refreshing in a loop.
@@ -39,6 +40,7 @@ class McpEventSubscription < ApplicationRecord
   validate :connection_has_a_free_slot
 
   scope :live, -> { where("mcp_event_subscriptions.expires_at > ?", Time.current) }
+  scope :expired, -> { where("mcp_event_subscriptions.expires_at <= ?", Time.current) }
 
   class << self
     # Creates the subscription for this key, or refreshes the one that exists: a new lease, and the
@@ -47,11 +49,29 @@ class McpEventSubscription < ApplicationRecord
     def subscribe!(user:, oauth_application:, event_name:, arguments:, callback_url:, secret:, ttl: nil)
       key_digest = key_digest_for(user_id: user.id, oauth_application_id: oauth_application.id, event_name:, arguments:, callback_url:)
       lease = { secret:, expires_at: Time.current + granted_ttl(ttl) }
-      subscription = find_by(key_digest:) ||
-        create_or_find_by!(key_digest:) { _1.assign_attributes(user:, oauth_application:, event_name:, arguments:, callback_url:, **lease) }
-      # Not only for a refresh: two first subscribes can race, and the loser gets the winner's row.
-      subscription.update!(lease)
-      subscription
+      transaction do
+        # The transaction's first read, so the limit's count after it sees what a subscribe that
+        # held the lock before this one committed.
+        lock_seller!(user.id)
+        subscription = find_by(key_digest:) ||
+          create_or_find_by!(key_digest:) { _1.assign_attributes(user:, oauth_application:, event_name:, arguments:, callback_url:, **lease) }
+        # Not only for a refresh: two first subscribes can race, and the loser gets the winner's row.
+        subscription.update!(lease)
+        subscription
+      end
+    end
+
+    # One seller's subscribes run one after another, so two at once cannot both pass the limit.
+    # Take it before any token row: account closure locks the seller, then the seller's tokens.
+    def lock_seller!(user_id)
+      User.where(id: user_id).lock.pick(:id)
+    end
+
+    def valid_secret?(value)
+      value.is_a?(String) && value.start_with?(SECRET_PREFIX) &&
+        SECRET_BYTE_RANGE.cover?(Base64.strict_decode64(value.delete_prefix(SECRET_PREFIX)).bytesize)
+    rescue ArgumentError
+      false
     end
 
     # The same values address the same row, whatever order the client wrote the arguments in.
@@ -101,16 +121,7 @@ class McpEventSubscription < ApplicationRecord
     end
 
     def secret_is_a_standard_webhooks_secret
-      return if SECRET_BYTE_RANGE.cover?(secret_bytesize)
-
-      errors.add(:secret, "must be #{SECRET_PREFIX} followed by the base64 of #{SECRET_BYTE_RANGE.min} to #{SECRET_BYTE_RANGE.max} random bytes")
-    end
-
-    def secret_bytesize
-      value = secret.to_s
-      value.start_with?(SECRET_PREFIX) ? Base64.strict_decode64(value.delete_prefix(SECRET_PREFIX)).bytesize : 0
-    rescue ArgumentError
-      0
+      errors.add(:secret, SECRET_ERROR) unless self.class.valid_secret?(secret)
     end
 
     def arguments_are_a_small_object

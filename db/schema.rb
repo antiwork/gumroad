@@ -1467,7 +1467,9 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_26_000002) do
     t.string "secret", null: false
     t.datetime "updated_at", null: false
     t.bigint "user_id", null: false
+    t.index ["expires_at"], name: "index_mcp_event_subscriptions_on_expires_at"
     t.index ["key_digest"], name: "index_mcp_event_subscriptions_on_key_digest", unique: true
+    t.index ["oauth_application_id"], name: "index_mcp_event_subscriptions_on_oauth_application_id"
     t.index ["user_id", "event_name", "expires_at"], name: "index_mcp_event_subscriptions_on_user_id_event_name_expires_at"
   end
 

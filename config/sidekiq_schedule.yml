@@ -580,6 +580,10 @@ delete_old_ping_deliveries:
   cron: "45 1 * * *" # UTC 01:45
   class: DeleteOldPingDeliveriesJob
   description: Deletes ping_deliveries rows past the support lookup window
+delete_expired_mcp_event_subscriptions:
+  cron: "15 2 * * *" # UTC 02:15
+  class: Mcp::DeleteExpiredEventSubscriptionsJob
+  description: Deletes MCP event subscriptions whose lease has ended, with the client secrets they hold
 australia_backtax_transfer:
   cron: "0 10 7 * *" # UTC 10:00 on 7th of every month
   class: RecoverAusBacktaxesFromStripeAccountsJob
