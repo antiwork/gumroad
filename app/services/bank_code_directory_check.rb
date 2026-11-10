@@ -11,13 +11,24 @@
 # routing number's entry, and the branch the account number points at (EG refuses an IBAN whose
 # branch segment has no entry). Either miss leaves the row unattached, so both block the save.
 #
+# Which of the two Stripe is asked about is decided by the payout shape the row sends, not by us:
+# a country that collects a routing number is asked to resolve THAT number, and a row whose payload
+# carries none (every SEPA IBAN, for instance) is asked to resolve the bank the account number
+# itself points at. Both questions are answered by the same directory, so both are worth asking
+# before we store the row — see ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES for the second path.
+#
 # Fail-open: only a rejection Stripe attributes to one of those two lookups blocks the save.
 # Anything else is logged and the save proceeds, so a Stripe blip cannot lock every seller out of
 # the form.
 class BankCodeDirectoryCheck
-  # Opt-in per country. Add a class here only after probing that Stripe's directory (not its format
-  # check) is the layer that refuses real seller input for that country.
+  # Opt-in per country, for rows that DO send Stripe a routing number. Add a class here only after
+  # probing that Stripe's directory (not its format check) is the layer that refuses real seller
+  # input for that country.
   DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES = [EgyptBankAccount].freeze
+
+  # Rows whose Stripe payload carries no routing number (SEPA IBANs): the bank is looked up from the
+  # account number alone, so the routing-number opt-in above can never reach them.
+  ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES = [IbanBankAccount].freeze
 
   # Short budget: this runs inside a settings-save request, before the row lock is taken.
   STRIPE_CLIENT_OPTIONS = { open_timeout: 5, read_timeout: 10, max_network_retries: 0 }.freeze
@@ -50,7 +61,7 @@ class BankCodeDirectoryCheck
     nil
   rescue Stripe::InvalidRequestError => e
     return missing_routing_number_rejection if routing_number_rejection?(e)
-    return missing_branch_rejection if account_number_rejection?(e)
+    return account_number_rejection if account_number_rejection?(e)
 
     fail_open(e)
   rescue Stripe::StripeError => e
@@ -61,7 +72,13 @@ class BankCodeDirectoryCheck
     attr_reader :bank_account, :previous_bank_account
 
     def applicable?
-      DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES.any? { |type| bank_account.is_a?(type) } && routing_number.present?
+      return false if account_number_of(bank_account).blank?
+
+      if routing_number.present?
+        DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES.any? { |type| bank_account.is_a?(type) }
+      else
+        ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES.any? { |type| bank_account.is_a?(type) }
+      end
     end
 
     # A seller correcting their holder name over details Stripe already attached gets no probe: the
@@ -86,15 +103,18 @@ class BankCodeDirectoryCheck
     end
 
     def probe_stripe
+      # The payload mirrors StripeMerchantAccountManager#bank_account_hash: the routing number key is
+      # ADDED only when the row sends one. Passing `routing_number: nil` instead would ask Stripe a
+      # different question than the attach does, so the answer would not be evidence about the attach.
+      details = {
+        country: bank_account.stripe_external_account_country,
+        currency: bank_account.stripe_external_account_currency,
+        account_number: account_number_of(bank_account),
+      }
+      details[:routing_number] = routing_number if routing_number.present?
+
       Stripe::Token.create(
-        {
-          bank_account: {
-            country: bank_account.stripe_external_account_country,
-            currency: bank_account.stripe_external_account_currency,
-            routing_number:,
-            account_number: account_number_of(bank_account),
-          },
-        },
+        { bank_account: details },
         { client: Stripe::StripeClient.new(STRIPE_CLIENT_OPTIONS) }
       )
     end
@@ -119,6 +139,18 @@ class BankCodeDirectoryCheck
         message += " Please check it against the SWIFT/BIC code your bank publishes."
       end
       Rejection.new(message:, field: :bank_code)
+    end
+
+    # With a routing number the miss is the branch; with none, the bank itself is unknown to Stripe,
+    # so only a different bank helps.
+    def account_number_rejection
+      return missing_branch_rejection if routing_number.present?
+
+      Rejection.new(
+        message: "Our payment partner couldn't find the bank this account number belongs to, so it " \
+                 "can't be used for payouts. Please enter an account number at a different bank.",
+        field: :account_number
+      )
     end
 
     # The code resolves here, and an 8-character SWIFT/BIC re-entered under it resolves no better,
