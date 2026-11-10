@@ -4108,16 +4108,24 @@ describe Order::PreparePaymentIntentService, :vcr do
         order, = Order::CreateService.new(params:).perform
         paid_purchase = order.purchases.find { _1.link_id == product.id }
 
+        free_purchase = order.purchases.find { _1.link_id == free_product.id }
+        receipts = -> { ActionMailer::Base.deliveries.select { _1.to == [common_params[:email]] } }
+
         preview = Stripe::StripeObject.construct_from(card: { country: "US" })
-        allow(Stripe::ConfirmationToken).to receive(:retrieve)
-          .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
+        # The token lookup runs after the free line is marked successful and before build_charge.
+        allow(Stripe::ConfirmationToken).to receive(:retrieve) do
+          SendPurchaseReceiptJob.perform_one
+          Stripe::StripeObject.construct_from(payment_method_preview: preview)
+        end
         charge_intent = instance_double(StripeChargeIntent, id: "pi_test", client_secret: "pi_test_secret")
         allow(StripeDeferredPaymentIntent).to receive(:create).and_return(charge_intent)
 
         described_class.new(order:, params:, confirmation_token: "ctoken_test").perform
+        expect(receipts.call).to be_empty
+        expect(SendPurchaseReceiptJob).to have_enqueued_sidekiq_job(free_purchase.id, false, 1)
+
         expect(paid_purchase.reload).to be_in_progress
         SendPurchaseReceiptJob.drain
-        receipts = -> { ActionMailer::Base.deliveries.select { _1.to == [common_params[:email]] } }
         expect(receipts.call).to be_empty
 
         paid_purchase.update!(purchase_state: "successful", stripe_transaction_id: "ch_test", stripe_fingerprint: "fp_test")

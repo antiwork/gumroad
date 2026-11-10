@@ -132,6 +132,19 @@ describe SendPurchaseReceiptJob do
       expect(described_class.jobs.size).to eq(0)
     end
 
+    context "when the seller's other line has already failed" do
+      before { sibling.update!(purchase_state: "failed") }
+
+      it "sends the receipt right away" do
+        expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+        described_class.new.perform(purchase.id)
+
+        expect(mail_double).to have_received(:deliver_now)
+        expect(described_class.jobs.size).to eq(0)
+      end
+    end
+
     context "when the in-progress line belongs to another seller" do
       let(:sibling_seller) { create(:user) }
 

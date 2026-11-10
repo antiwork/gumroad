@@ -15,7 +15,7 @@ class SendPurchaseReceiptJob
   # buyer-triggered resend is not dropped by an automatic run still holding
   # the until_executed lock for the same purchase. The stamp job has its own
   # per-purchase lock, so two runs here still collapse to one stamp.
-  # A retry's attempt is added too, or its perform_in from inside the running job would be dropped.
+  # A pending-charge re-enqueue adds its attempt, or its perform_in from inside the running job would be dropped.
   def self.lock_args(args)
     lock_args = [args.first, !!args[1]]
     attempt = args[2].to_i
@@ -23,7 +23,7 @@ class SendPurchaseReceiptJob
   end
 
   def perform(purchase_id, resend = false, attempt = 0)
-    return if !resend && deferred_to_charge?(purchase_id, attempt)
+    return if !resend && defer_to_charge(purchase_id, attempt)
 
     purchase = Purchase.find(purchase_id)
 
@@ -36,7 +36,7 @@ class SendPurchaseReceiptJob
     # Client-confirm prepare marks a free line successful, enqueuing this, before it joins the paid
     # charge. Sending before then renders a charge receipt without the paid line, and once it is sent
     # the charge job never sends the full one. Read on the primary: a replica can miss the attachment.
-    def deferred_to_charge?(purchase_id, attempt)
+    def defer_to_charge(purchase_id, attempt)
       with_primary_database do
         purchase = Purchase.find(purchase_id)
         if purchase.uses_charge_receipt?
