@@ -59,7 +59,8 @@ module Mcp
         arguments = object!(params["arguments"], "arguments")
         @validate_arguments.call(descriptor[:inputSchema], arguments)
         delivery = delivery!(params["delivery"])
-        raise invalid("delivery.secret must be a string") unless delivery["secret"].is_a?(String)
+        # Checked here as well as by the model: a refresh skips the model's checks until after the scope check.
+        raise invalid("delivery.secret #{McpEventSubscription::SECRET_ERROR}") unless McpEventSubscription.valid_secret?(delivery["secret"])
 
         ttl_ms = params["ttlMs"]
         raise invalid("ttlMs must be an integer or null") unless ttl_ms.nil? || ttl_ms.is_a?(Integer)
@@ -105,6 +106,8 @@ module Mcp
       # the revocation either deletes what is stored here, or comes first and is refused here.
       def store!(attributes, ttl:)
         McpEventSubscription.transaction do
+          # The seller before the token, the order account closure takes them in.
+          McpEventSubscription.lock_seller!(user.id)
           raise Server::Error.new("Access to this account was revoked.") if Doorkeeper::AccessToken.lock.find(token.id).revoked?
 
           McpEventSubscription.subscribe!(**attributes, ttl:)

@@ -159,9 +159,9 @@ describe "MCP server events" do
         { arguments: "abc" } => "arguments must be an object",
         { delivery: nil } => "delivery must be an object",
         { delivery: { mode: "push", url: callback_url, secret: } } => "delivery.mode must be webhook",
-        { delivery: { mode: "webhook", url: callback_url } } => "delivery.secret must be a string",
+        { delivery: { mode: "webhook", url: callback_url } } => "delivery.secret must be whsec_ followed by the base64 of 24 to 64 random bytes",
         { delivery: { mode: "webhook", url: "http://example.com/hooks/mcp", secret: } } => "Callback url must be an https URL",
-        { delivery: { mode: "webhook", url: callback_url, secret: "not a secret" } } => "Secret must be whsec_",
+        { delivery: { mode: "webhook", url: callback_url, secret: "not a secret" } } => "delivery.secret must be whsec_",
         { ttlMs: "1h" } => "ttlMs must be an integer or null"
       }.each do |overrides, message|
         error = subscribe(**overrides)["error"]
@@ -200,6 +200,15 @@ describe "MCP server events" do
         error = subscribe(delivery: { mode: "webhook", url: "http://example.com/hooks/mcp", secret: })["error"]
 
         expect(error).to include("code" => -32602, "message" => a_string_starting_with("Callback url must be an https URL"))
+        expect(response.headers["WWW-Authenticate"]).to be_nil
+      end
+
+      it "refuses a bad secret on a refresh first, without asking for more access" do
+        create(:mcp_event_subscription, user: seller, oauth_application: application, callback_url:)
+
+        error = subscribe(delivery: { mode: "webhook", url: callback_url, secret: "not a secret" })["error"]
+
+        expect(error).to include("code" => -32602, "message" => a_string_starting_with("delivery.secret must be whsec_"))
         expect(response.headers["WWW-Authenticate"]).to be_nil
       end
     end
