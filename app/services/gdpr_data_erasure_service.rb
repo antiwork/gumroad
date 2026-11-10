@@ -295,6 +295,8 @@ class GdprDataErasureService
       # The signing secret is a credential in its own table (CONTRIBUTING forbids schema changes on
       # `users`), so the update_columns above cannot reach it.
       @user.ping_signing_setting&.delete
+      # The same kind of credential: each row holds the signing secret an MCP client supplied.
+      McpEventSubscription.where(user_id: @user.id).delete_all
 
       # A removed PayPal payout address is the same email PII as `payment_address` above, just moved
       # into json_data (Payment#invalidate_paypal_payout_address). update_columns bypasses the

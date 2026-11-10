@@ -37,11 +37,14 @@ describe GdprDataErasureService do
 
     it "anonymizes user PII" do
       user.create_ping_signing_setting!(secret: "s3cret")
+      create(:mcp_event_subscription, user:)
+      other_subscription = create(:mcp_event_subscription)
 
       result = described_class.new(user, performed_by: admin).perform!
 
       expect(result[:success]).to eq(true)
       user.reload
+      expect(McpEventSubscription.all).to eq([other_subscription])
       expect(user.name).to eq("[deleted]")
       expect(user.email).to eq("deleted-#{user.id}@deleted.gumroad.com")
       expect(user.bio).to be_nil
