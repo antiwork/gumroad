@@ -21,6 +21,12 @@ describe "Apple OmniAuth strategy cookie-based nonce patch" do
     env
   end
 
+  def apple_cookie_header(env)
+    response = Rack::Response.new
+    ActionDispatch::Request.new(env).cookie_jar.write(response)
+    response.headers["set-cookie"]
+  end
+
   def prepare_strategy(env)
     strategy.instance_variable_set(:@env, env)
     strategy.instance_variable_set(:@cookie_data, nil)
@@ -155,9 +161,9 @@ describe "Apple OmniAuth strategy cookie-based nonce patch" do
       env = build_env("/users/auth/apple?referer=/library", method: "GET")
       prepare_strategy(env)
 
-      result = strategy.request_phase
+      strategy.request_phase
 
-      cookie_header = result[1]["set-cookie"] || result[1]["Set-Cookie"]
+      cookie_header = apple_cookie_header(env)
       expect(cookie_header).to be_present
       expect(cookie_header).to include(APPLE_OAUTH_COOKIE_NAME)
       expect(cookie_header.downcase).to include("samesite=none")
@@ -175,9 +181,9 @@ describe "Apple OmniAuth strategy cookie-based nonce patch" do
       env = build_env("/users/auth/apple", method: "GET")
       prepare_strategy(env)
 
-      result = strategy.request_phase
+      strategy.request_phase
 
-      cookie_header = result[1]["set-cookie"] || result[1]["Set-Cookie"]
+      cookie_header = apple_cookie_header(env)
       cookie_value = cookie_header.match(/#{APPLE_OAUTH_COOKIE_NAME}=([^;]+)/o)[1]
       decoded = Rails.application.message_verifier("apple_oauth").verified(
         Rack::Utils.unescape(cookie_value), purpose: :apple_oauth
