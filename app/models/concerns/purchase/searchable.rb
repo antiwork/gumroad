@@ -401,6 +401,7 @@ module Purchase::Searchable
 
   module AffiliateCreditCallbacks
     extend ActiveSupport::Concern
+    include TransactionalAttributeChangeTracker
 
     included do
       after_commit :update_purchase_index, on: [:create, :update]
@@ -413,7 +414,10 @@ module Purchase::Searchable
         amount_cents
         fee_cents
       ]
-      changed_tracked_columns = previous_changes.keys & tracked_columns
+      # Posting a credit assigns it to the purchase's has_one, and that save clears
+      # previous_changes before this commit callback runs. Read the transaction's
+      # accumulated changes instead.
+      changed_tracked_columns = attributes_committed.to_a & tracked_columns
       return if changed_tracked_columns.blank?
 
       fields = if is_direct_affiliate_credit?
@@ -434,17 +438,20 @@ module Purchase::Searchable
 
   module AffiliatePartialRefundCallbacks
     extend ActiveSupport::Concern
+    include TransactionalAttributeChangeTracker
 
     included do
       after_commit :update_purchase_index, on: [:create, :update]
     end
 
     def update_purchase_index
-      return unless previous_changes.key?("amount_cents")
+      # Same as AffiliateCreditCallbacks: another save in the refund's transaction clears
+      # previous_changes before this commit callback runs.
+      return unless attributes_committed.to_a.include?("amount_cents")
       fields = if affiliate_credit&.is_direct_affiliate_credit?
         ["direct_affiliate_credit_amount_partially_refunded_cents", "direct_affiliate_credit_fee_partially_refunded_cents"]
       else
-        ["affiliate_credit_amount_partially_refunded_cents", "affiliate_credit_amount_fee_partially_refunded_cents"]
+        ["affiliate_credit_amount_partially_refunded_cents", "affiliate_credit_fee_partially_refunded_cents"]
       end
       options = {
         "record_id" => purchase.id,
