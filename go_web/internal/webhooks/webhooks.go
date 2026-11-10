@@ -1,5 +1,5 @@
-// Package webhooks ports ForeignWebhooksController's #stripe, #stripe_connect, #sendgrid,
-// #mediaconvert and #sns_aws_config. The cookies ApplicationController's filters set on
+// Package webhooks ports ForeignWebhooksController's #stripe, #stripe_connect, #paypal,
+// #sendgrid, #mediaconvert and #sns_aws_config. The cookies ApplicationController's filters set on
 // them (set_gumroad_guid's and the like) are left out: no provider keeps or returns them.
 package webhooks
 
@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	// Per-route caps under nginx's 10M: SNS payloads are a few KB, Stripe events and
-	// SendGrid batches run larger.
+	// Per-route caps under nginx's 10M: SNS and PayPal payloads are a few KB, Stripe events
+	// and SendGrid batches run larger.
 	maxBodyBytes      = 1 << 20
 	maxLargeBodyBytes = 4 << 20
 	// A request peaks near 16x its body (raw read, Parse's copy, RawPost, the params, the
@@ -71,13 +71,18 @@ type Deps struct {
 	Env *web.Environment
 	// Stack is the shared Rack emulation.
 	Stack *rails.Stack
-	// Redis is $redis (REDIS_HOST), where Flipper keeps verify_sendgrid_webhook_signatures.
+	// Redis is $redis (REDIS_HOST), where Flipper keeps verify_sendgrid_webhook_signatures
+	// and PaypalPartnerRestCredentials its token.
 	Redis redis.Cmdable
 	// Sidekiq pushes to SIDEKIQ_REDIS_HOST.
 	Sidekiq *sidekiq.Client
 	// STRIPE__ENDPOINT_SECRET and STRIPE_CONNECT__ENDPOINT_SECRET.
 	StripeEndpointSecret        string
 	StripeConnectEndpointSecret string
+	// PAYPAL_WEBHOOK_ID, PAYPAL_PARTNER_CLIENT_ID and PAYPAL_PARTNER_CLIENT_SECRET.
+	PaypalWebhookID           string
+	PaypalPartnerClientID     string
+	PaypalPartnerClientSecret string
 	// SendgridPublicKeys' result; blank entries are skipped, as Rails skips them.
 	SendgridPublicKeys []string
 	// Logger takes one warning per route left unregistered.
@@ -120,6 +125,12 @@ func register(app *web.App, deps Deps, getCert certGetter) (*handlers, error) {
 	} else {
 		logger.Warn("STRIPE_CONNECT__ENDPOINT_SECRET is not set, so /stripe-connect-webhook is not served")
 	}
+	if v := newPaypalVerifier(deps); v != nil {
+		h.paypalVerifier = v
+		handle("/paypal-webhook", "paypal", h.paypal(v))
+	} else {
+		logger.Warn("PAYPAL_WEBHOOK_ID, PAYPAL_PARTNER_CLIENT_ID or PAYPAL_PARTNER_CLIENT_SECRET is not set, so /paypal-webhook is not served")
+	}
 
 	var keys, names []string
 	for i, key := range deps.SendgridPublicKeys {
@@ -153,6 +164,8 @@ type handlers struct {
 	sidekiq  *sidekiq.Client
 	now      func() time.Time
 	inFlight *budget
+	// paypalVerifier is nil when /paypal-webhook is left to Rails.
+	paypalVerifier *paypalVerifier
 }
 
 // onGumroadHost is GumroadDomainConstraint: on any other host no route matches. Past the

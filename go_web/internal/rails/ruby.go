@@ -265,6 +265,27 @@ func StringToF(s string) (f float64, exact bool) {
 	return f, exact
 }
 
+// JSONToI is #to_i on a JSON value: nil is 0, a Float truncates, a String reads as String#to_i;
+// ok is false where Ruby raises.
+func JSONToI(v any) (int64, bool) {
+	switch v := v.(type) {
+	case nil:
+		return 0, true
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			return n, true
+		}
+		f, err := v.Float64()
+		if err != nil || math.IsInf(f, 0) || math.Abs(f) >= math.MaxInt64 {
+			return 0, false
+		}
+		return int64(f), true
+	case string:
+		return StringToI(v)
+	}
+	return 0, false
+}
+
 // StringToI is String#to_i. ok is false where Ruby's result is a Bignum outside int64;
 // scanning stops there, so a long run of digits costs no more than twenty.
 func StringToI(s string) (n int64, ok bool) {
