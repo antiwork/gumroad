@@ -27,18 +27,17 @@ OmniAuth::Strategies::Apple.class_eval do
       cookie_data, purpose: :apple_oauth, expires_in: APPLE_OAUTH_COOKIE_TTL
     )
 
-    Rack::Utils.set_cookie_header!(
-      result[1],
-      APPLE_OAUTH_COOKIE_NAME,
-      {
-        value: signed,
-        path: "/users/auth/apple",
-        httponly: true,
-        secure: request.scheme == "https",
-        same_site: :none,
-        max_age: APPLE_OAUTH_COOKIE_TTL
-      }
-    )
+    # Apple always posts back to OmniAuth.config.full_host, so a login started on another
+    # Gumroad host (app.gumroad.com) needs the session cookie's domain to see this cookie.
+    ActionDispatch::Request.new(env).cookie_jar[APPLE_OAUTH_COOKIE_NAME] = {
+      value: signed,
+      path: "/users/auth/apple",
+      httponly: true,
+      secure: request.scheme == "https",
+      same_site: :none,
+      max_age: APPLE_OAUTH_COOKIE_TTL,
+      **Rails.application.config.session_options.slice(:domain, :tld_length)
+    }
 
     result
   end

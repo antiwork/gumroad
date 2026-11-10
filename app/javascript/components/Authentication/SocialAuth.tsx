@@ -12,12 +12,15 @@ export const SocialAuth = () => {
   const featureFlags = useFeatureFlags();
 
   const next = new URL(originalLocation).searchParams.get("next");
-  const isSignupPage = new URL(originalLocation).pathname === "/signup";
+  const pathname = new URL(originalLocation).pathname.replace(/\/+/gu, "/").replace(/\/$/u, "");
+  const isSignupPage = /^\/signup(\.html)?$/u.test(pathname);
   const showStripe = isSignupPage ? !featureFlags.disable_stripe_signup : true;
+  // An account created with Apple in the app has no password its owner knows, so the web needs this way in.
+  const showApple = is_gumroad_mobile_app || !isSignupPage;
 
   return (
     <section className="flex flex-col gap-4 pb-12">
-      {is_gumroad_mobile_app ? (
+      {showApple ? (
         <SocialAuthButton provider="apple" href={Routes.user_apple_omniauth_authorize_path({ referer: next })}>
           <Apple pack="brands" className="size-5" />
           Apple
