@@ -19,9 +19,8 @@ module Order::ResponseHelpers
       end
     end
 
-    # The submitted permalink only has to match case-insensitively: `Link.find_by(unique_permalink:)`
-    # relies on the column's collation, and a link URL canonicalises case, so a case-sensitive
-    # comparison here matches no line item and stores the response under nil, which drops it.
+    # CreateService finds the product through the column's case-insensitive collation, so the
+    # submitted permalink can differ in case from unique_permalink.
     def line_item_uid_for(purchase)
       permalink = purchase.link.unique_permalink
       line_item = params[:line_items].find do |candidate|
@@ -31,8 +30,8 @@ module Order::ResponseHelpers
       line_item&.dig(:uid) || cart_item_uid_for(purchase)
     end
 
-    # Mirrors the browser's getCartItemUid, so a purchase with no submitted line item (e.g. a bundle
-    # child) still gets a response key instead of a nil one.
+    # Mirrors the browser's getCartItemUid, so a purchase that matches no submitted line item still
+    # gets a response key instead of a nil one.
     def cart_item_uid_for(purchase)
       "#{purchase.link.unique_permalink} #{purchase.variant_attributes.first&.external_id}"
     end

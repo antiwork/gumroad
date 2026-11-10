@@ -1396,6 +1396,27 @@ describe Order::ChargeService, :vcr do
       expect(charge_responses.keys).to contain_exactly("unique-id-0")
     end
 
+    it "keys each free purchase's response by its own line when two lines share a permalink with different variants" do
+      category = create(:variant_category, title: "Tier", link: free_product_1)
+      variant_a = create(:variant, name: "A", variant_category: category)
+      variant_b = create(:variant, name: "B", variant_category: category)
+      params = {
+        line_items: [variant_a, variant_b].map do |variant|
+          { uid: "uid-#{variant.name}", permalink: free_product_1.unique_permalink, variants: [variant.external_id], perceived_price_cents: 0, quantity: 1 }
+        end
+      }.merge!(common_order_params_without_payment)
+
+      order, _ = Order::CreateService.new(params:).perform
+      expect(order.purchases.in_progress.count).to eq(2)
+
+      charge_responses = Order::ChargeService.new(order:, params:).perform
+
+      purchase_a, purchase_b = order.reload.purchases.successful.partition { _1.variant_attributes.first == variant_a }.map(&:sole)
+      expect(charge_responses.keys).to contain_exactly("uid-A", "uid-B")
+      expect(charge_responses["uid-A"]).to eq(purchase_a.purchase_response)
+      expect(charge_responses["uid-B"]).to eq(purchase_b.purchase_response)
+    end
+
     it "creates a charge with no amount for a free trial membership product" do
       line_items_params = {
         line_items: [
