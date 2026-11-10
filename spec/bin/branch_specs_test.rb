@@ -420,6 +420,37 @@ check(
   expect_specs: %w[spec/requests/library_spec.rb],
 )
 
+# Seller checkout settings: the same gap as Library, for the components the
+# Discounts, Upsells and Form pages mount.
+check(
+  "CheckoutDashboard component without a co-located test maps to the checkout settings specs",
+  base_files: {
+    "spec/requests/checkout/discounts_spec.rb" => SPEC_STUB,
+    "spec/requests/checkout/upsells_spec.rb" => SPEC_STUB,
+    "spec/requests/checkout/form_spec.rb" => SPEC_STUB,
+    "app/javascript/components/CheckoutDashboard/UpsellsPage.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/CheckoutDashboard/UpsellsPage.tsx" => "new" },
+  expect_specs: %w[
+    spec/requests/checkout/discounts_spec.rb
+    spec/requests/checkout/upsells_spec.rb
+    spec/requests/checkout/form_spec.rb
+  ],
+)
+
+# DiscountInput has importers outside the checkout settings pages, so those
+# specs do not cover it.
+check(
+  "CheckoutDashboard/DiscountInput still escalates",
+  base_files: {
+    "spec/requests/checkout/discounts_spec.rb" => SPEC_STUB,
+    "app/javascript/components/CheckoutDashboard/DiscountInput.tsx" => "old",
+  },
+  head_files: { "app/javascript/components/CheckoutDashboard/DiscountInput.tsx" => "new" },
+  expect_escalate: true,
+  expect_reason: "mapping gap",
+)
+
 # help_center article partial -> help_center request specs
 check(
   "help_center article partial maps to help_center request specs",

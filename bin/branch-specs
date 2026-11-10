@@ -48,6 +48,15 @@ CHECKOUT_FLOW_SPECS = %w[
   spec/requests/subscription
 ].freeze
 
+# Seller checkout settings: the Discounts, Upsells and Form pages.
+CHECKOUT_DASHBOARD_SPECS = %w[
+  spec/requests/checkout/discounts_spec.rb
+  spec/requests/checkout/discount_schedule_validation_spec.rb
+  spec/requests/checkout/upsells_spec.rb
+  spec/requests/checkout/form_spec.rb
+  spec/requests/select_buttons_spec.rb
+].freeze
+
 # Unauthenticated charge/license lookup surfaces (PublicController).
 PUBLIC_LOOKUP_SPECS = %w[
   spec/controllers/public_controller_spec.rb
@@ -107,6 +116,11 @@ PAYOUT_PAGE_SPECS = %w[
 FANOUT = {
   %r{\Aapp/presenters/checkout/} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/javascript/components/Checkout/} => CHECKOUT_FLOW_SPECS,
+  # Mounted by pages/Checkout/{Discounts/Index,Upsells/Index,Form/Show}; a
+  # component here without a co-located vitest file was a mapping gap.
+  # DiscountInput keeps escalating: RichTextEditor, UpsellSelectModal and
+  # ProductEdit import it too.
+  %r{\Aapp/javascript/components/CheckoutDashboard/(?!DiscountInput\.tsx\z)} => CHECKOUT_DASHBOARD_SPECS,
   %r{\Aapp/javascript/data/(purchase|order|payment)} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/javascript/pages/Checkout/} => CHECKOUT_FLOW_SPECS,
   %r{\Aapp/javascript/pages/Subscriptions/} => CHECKOUT_FLOW_SPECS,
