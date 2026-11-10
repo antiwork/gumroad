@@ -11,11 +11,8 @@
 # routing number's entry, and the branch the account number points at (EG refuses an IBAN whose
 # branch segment has no entry). Either miss leaves the row unattached, so both block the save.
 #
-# Which of the two Stripe is asked about is decided by the payout shape the row sends, not by us:
-# a country that collects a routing number is asked to resolve THAT number, and a row whose payload
-# carries none (every SEPA IBAN, for instance) is asked to resolve the bank the account number
-# itself points at. Both questions are answered by the same directory, so both are worth asking
-# before we store the row — see ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES for the second path.
+# A row that sends a routing number is asked about that number; an IBAN row that sends none is asked
+# about the bank its account number points at.
 #
 # Fail-open: only a rejection Stripe attributes to one of those two lookups blocks the save.
 # Anything else is logged and the save proceeds, so a Stripe blip cannot lock every seller out of
@@ -26,7 +23,7 @@ class BankCodeDirectoryCheck
   # input for that country.
   DIRECTORY_CHECKED_BANK_ACCOUNT_TYPES = [EgyptBankAccount].freeze
 
-  # Rows whose Stripe payload carries no routing number (SEPA IBANs): the bank is looked up from the
+  # IBAN rows whose Stripe payload carries no routing number: the bank is looked up from the
   # account number alone, so the routing-number opt-in above can never reach them.
   ACCOUNT_NUMBER_CHECKED_BANK_ACCOUNT_TYPES = [IbanBankAccount].freeze
 
@@ -120,6 +117,7 @@ class BankCodeDirectoryCheck
     end
 
     def routing_number_rejection?(error)
+      return false if routing_number.blank?
       return true if error.code == "routing_number_invalid"
 
       error.param.to_s == "bank_account[routing_number]"
@@ -147,8 +145,8 @@ class BankCodeDirectoryCheck
       return missing_branch_rejection if routing_number.present?
 
       Rejection.new(
-        message: "Our payment partner couldn't find the bank this account number belongs to, so it " \
-                 "can't be used for payouts. Please enter an account number at a different bank.",
+        message: "This IBAN can't receive payouts because our payment partner couldn't find its bank. " \
+                 "Please enter an IBAN from a different bank.",
         field: :account_number
       )
     end
