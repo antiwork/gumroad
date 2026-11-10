@@ -31,9 +31,13 @@ const (
 	// A host that refused, or whose nginx couldn't reach Puma, is likely stopping; Consul's
 	// check takes up to its 10s interval, plus the template render, to drop it.
 	railsUpstreamDownFor = 30 * time.Second
-	// nginx's proxy_next_upstream_timeout: a first attempt can spend it before its 504.
+	// nginx's proxy_next_upstream_timeout: a first attempt can spend it before its 504, and
+	// retryTransport starts no third attempt past it.
 	railsNginxRetryBudget = 10 * time.Second
-	maxReplayBody         = 64 << 10
+	// A deploy stops half the hosts, so four unmarked picks all stopping is 1 in 16; a cap keeps
+	// a fleet-wide outage from walking every host on every request.
+	railsMaxAttempts = 4
+	maxReplayBody    = 64 << 10
 )
 
 // RailsProxy hands a request to a Rails web host unchanged, for the cases a ported action
@@ -82,8 +86,7 @@ func NewRailsProxy(upstreamsFile string) *RailsProxy {
 		Transport:  &retryTransport{next: transport, proxy: p},
 		BufferPool: bufferPool{},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
-			if r.Context().Err() != nil {
-				Logger(r).Info("client left during Rails fallback", "error", err.Error())
+			if ClientLeft(w, r, err) {
 				return
 			}
 			Logger(r).Error("Rails fallback failed", "error", err.Error())
@@ -116,7 +119,8 @@ func (p *RailsProxy) Forward(w http.ResponseWriter, r *http.Request, reason stri
 	if keep {
 		body := make([]byte, r.ContentLength)
 		if _, err := io.ReadFull(r.Body, body); err != nil {
-			p.proxy.ErrorHandler(w, r, err)
+			// A client gone mid-upload; Rails' nginx reads the body before Puma sees it.
+			clientLeft(w, r, err)
 			return
 		}
 		r.Body = io.NopCloser(bytes.NewReader(body))
@@ -142,9 +146,9 @@ func (p *RailsProxy) rewrite(pr *httputil.ProxyRequest) {
 
 var errNoUpstream = errors.New("no Rails upstream")
 
-// upstream picks a Rails host other than skip, preferring hosts not marked down. One caller
+// upstream picks a Rails host not in skip, preferring hosts not marked down. One caller
 // rereads a stale list while the rest keep the last one.
-func (p *RailsProxy) upstream(skip string) (string, error) {
+func (p *RailsProxy) upstream(skip []string) (string, error) {
 	list := p.snapshot.Load()
 	if len(list.hosts) == 0 {
 		// Nothing to keep using: wait for whoever is reading the file, then read it again.
@@ -156,10 +160,10 @@ func (p *RailsProxy) upstream(skip string) (string, error) {
 		p.refreshing.Unlock()
 	}
 	hosts := list.hosts
-	if down := p.downHosts(); skip != "" || len(down) > 0 {
+	if down := p.downHosts(); len(skip) > 0 || len(down) > 0 {
 		up, rest := make([]string, 0, len(list.hosts)), make([]string, 0, len(list.hosts))
 		for _, h := range list.hosts {
-			if h == skip {
+			if slices.Contains(skip, h) {
 				continue
 			}
 			rest = append(rest, h)
@@ -277,43 +281,46 @@ func parseUpstreams(data string) []string {
 	return hosts
 }
 
-// retryTransport sends a request to a second Rails host when nothing reached Puma on the
-// first: the dial was refused, or its nginx answered 502 or 504 having sent Puma nothing.
-// Nothing ran, so any method whose body Forward kept can retry.
+// retryTransport sends a request on to another Rails host while nothing reached Puma: the
+// dial was refused, or its nginx answered 502 or 504 having sent Puma nothing. Nothing ran,
+// so any method whose body Forward kept can retry. A deploy stops a whole color at once, so
+// the second host can be stopping too.
 type retryTransport struct {
 	next  http.RoundTripper
 	proxy *RailsProxy
 }
 
 func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	first, err := t.proxy.upstream("")
+	host, err := t.proxy.upstream(nil)
 	if err != nil {
 		return nil, err
 	}
-	res, err := t.send(req, first, nil)
-	if !replayable(req) || !neverReachedPuma(res, err) {
-		return res, err
-	}
-	t.proxy.markDown(first)
-	second, uerr := t.proxy.upstream(first)
-	if uerr != nil {
-		return res, err
-	}
-	if res != nil {
-		// Unread: a host stalling mid-body would hold up the retry, and it's marked down anyway.
-		res.Body.Close()
-	}
+	start, tried := t.proxy.now(), []string{host}
 	var body io.ReadCloser
-	if req.GetBody != nil {
-		if body, err = req.GetBody(); err != nil {
-			return nil, err
+	for {
+		res, err := t.send(req, host, body)
+		if !neverReachedPuma(res, err) {
+			return res, err
 		}
+		t.proxy.markDown(host)
+		if !replayable(req) || len(tried) == railsMaxAttempts || (len(tried) > 1 && t.proxy.now().Sub(start) >= railsNginxRetryBudget) {
+			return res, err
+		}
+		next, uerr := t.proxy.upstream(tried)
+		if uerr != nil {
+			return res, err
+		}
+		if res != nil {
+			// Unread: a host stalling mid-body would hold up the retry, and it's marked down anyway.
+			res.Body.Close()
+		}
+		if req.GetBody != nil {
+			if body, err = req.GetBody(); err != nil {
+				return nil, err
+			}
+		}
+		host, tried = next, append(tried, next)
 	}
-	res, err = t.send(req, second, body)
-	if neverReachedPuma(res, err) {
-		t.proxy.markDown(second)
-	}
-	return res, err
 }
 
 // replayable is whether the request can be sent again: no body, or one Forward kept.

@@ -3,6 +3,7 @@ package web
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -40,6 +41,25 @@ func InternalServerError(w http.ResponseWriter) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.WriteHeader(http.StatusInternalServerError)
 	io.WriteString(w, "We're sorry, but something went wrong.\n")
+}
+
+// statusClientClosedRequest is nginx's 499, which it logs for these requests too.
+const statusClientClosedRequest = 499
+
+// ClientLeft reports whether err is r's own cancellation: the client went away, so nothing
+// failed. If so it answers the request, whose line then logs 499 instead of a 500 no one
+// received.
+func ClientLeft(w http.ResponseWriter, r *http.Request, err error) bool {
+	if ctxErr := r.Context().Err(); ctxErr == nil || !errors.Is(err, ctxErr) {
+		return false
+	}
+	clientLeft(w, r, err)
+	return true
+}
+
+func clientLeft(w http.ResponseWriter, r *http.Request, err error) {
+	Logger(r).Info("client left", "error", err.Error())
+	w.WriteHeader(statusClientClosedRequest)
 }
 
 // HTMLEscape is ERB::Util.html_escape, which <%= %> output and tag attributes go through.

@@ -275,6 +275,9 @@ func (h *handlers) fail(c *actionContext, r *http.Request, err error) {
 	case errors.As(err, &status):
 		rails.RenderException(c.w, req, int(status))
 	default:
+		if web.ClientLeft(c.w, r, err) {
+			return
+		}
 		web.Logger(r).Error("beacon failed", "error", err.Error())
 		rails.RenderException(c.w, req, http.StatusInternalServerError)
 	}

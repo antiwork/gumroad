@@ -2,7 +2,9 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -220,6 +222,40 @@ func TestAppRecoversFromAPanickingAction(t *testing.T) {
 	app.ServeHTTP(w, httptest.NewRequest("GET", "/boom", nil))
 	if w.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d", w.Code)
+	}
+}
+
+// A query cut short by the client's disconnect fails with the request's own cancellation,
+// sometimes joined to the I/O error it caused.
+func TestClientLeftLogsTheRequestAs499(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  func(ctx context.Context) error
+		left bool
+	}{
+		{"cancellation", func(ctx context.Context) error { return ctx.Err() }, true},
+		{"joined", func(ctx context.Context) error { return errors.Join(errors.New("read tcp: i/o timeout"), ctx.Err()) }, true},
+		{"unrelated", func(context.Context) error { return errors.New("Unknown column") }, false},
+	} {
+		app, logs := newTestApp(t, "")
+		app.Handle("GET /l/{id}", "LinksController#show", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !ClientLeft(w, r, tc.err(r.Context())) {
+				InternalServerError(w)
+			}
+		}))
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		app.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/l/abc", nil).WithContext(ctx))
+		var status float64
+		for line := range bytes.Lines(logs.Bytes()) {
+			var l map[string]any
+			if err := json.Unmarshal(line, &l); err == nil && l["msg"] == "request" {
+				status = l["status"].(float64)
+			}
+		}
+		if want := map[bool]float64{true: statusClientClosedRequest, false: http.StatusInternalServerError}[tc.left]; status != want {
+			t.Errorf("%s: logged %v, want %v", tc.name, status, want)
+		}
 	}
 }
 

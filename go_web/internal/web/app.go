@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/antiwork/gumroad/go_web/internal/errorreport"
 )
 
 // App routes the ported Rails actions. It sets the response headers every Rails response
@@ -79,7 +81,7 @@ func (a *App) wrap(action string, h http.Handler, redirect bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		id := requestID(r)
-		logger := a.logger.With("uuid", id)
+		logger := a.logger.With("uuid", id, errorreport.Request(r, id))
 		r = r.WithContext(context.WithValue(r.Context(), loggerKey{}, logger))
 		rec := &statusRecorder{ResponseWriter: w}
 		a.setDefaultHeaders(rec.Header(), id)
