@@ -510,7 +510,7 @@ const FileEmbedNodeView = ({
           e.currentTarget.contains(e.relatedTarget);
         if (!isMovedToChild) setDragOver(false);
       }}
-      onDrop={() => {
+      onDrop={(event: DragEvent) => {
         setDragOver(false);
         const dragged = getDraggedFileEmbed(editor);
         if (!isDropZone || !dragged) return;
@@ -519,18 +519,25 @@ const FileEmbedNodeView = ({
         const range = doc.resolve(pos).blockRange(doc.resolve(pos + node.nodeSize));
         if (!range) return;
         const targetNode = assertDefined(editor.view.state.schema.nodes[FileEmbed.name]).create(node.attrs);
+        // These commands delete the dragged node and this row before the group is inserted, so
+        // the group's position has to be read from that same transaction. Read from the original
+        // one and it can land after, or inside, whatever moved into the row's place.
+        const insertion = { content: [targetNode, dragged], pos };
         editor
           .chain()
           .command(({ tr }) => {
             tr.deleteSelection();
-            tr.delete(tr.mapping.map(pos), tr.mapping.map(pos + node.nodeSize));
+            insertion.pos = tr.mapping.map(pos);
+            tr.delete(insertion.pos, insertion.pos + node.nodeSize);
             return true;
           })
-          .insertFileEmbedGroup({
-            content: [targetNode, dragged],
-            pos: editor.state.tr.doc.resolve(editor.state.tr.mapping.map(pos)).pos,
-          })
+          .insertFileEmbedGroup(insertion)
           .run();
+        // ProseMirror applies this drag again from its dragstart coordinates, against the
+        // document the commands above just changed, which can delete the row that shifted into
+        // the dragged node's old position. The drop is handled here.
+        event.preventDefault();
+        event.stopPropagation();
       }}
       className={cx({ "relative rounded-sm border border-dashed border-accent": isDropZone })}
       contentEditable={false}
