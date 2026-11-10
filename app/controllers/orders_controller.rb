@@ -392,10 +392,11 @@ class OrdersController < ApplicationController
       if params[:line_items].is_a?(ActionController::Parameters)
         params[:line_items] = params[:line_items].values
       end
+      # A blank non-array ("", null) means no cart; drop it so `fetch(:line_items, [])` defaults.
+      params.delete(:line_items) if params[:line_items].blank? && !params[:line_items].is_a?(Array)
     end
 
-    # A blank cart is the legacy single-price shape and stays valid; anything present has to be
-    # the array of objects that the rest of the action indexes into.
+    # Blank is the legacy single-price shape.
     def valid_line_items_shape?
       line_items = params[:line_items]
       line_items.blank? || (line_items.is_a?(Array) && line_items.all? { |item| item.is_a?(ActionController::Parameters) })
