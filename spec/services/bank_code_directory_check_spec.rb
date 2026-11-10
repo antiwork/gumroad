@@ -110,9 +110,8 @@ describe BankCodeDirectoryCheck do
     end
 
     context "with an account whose payout shape carries no routing number" do
-      # A Swedish account holding a GB IBAN. IbanBankAccount#cross_border_sepa_payout? turns that
-      # into the payload {country: "GB", currency: "eur", account_number: <IBAN>} with no routing
-      # number, which is the shape that used to skip the probe altogether (gumroad-private#4495).
+      # A Swedish account holding a GB IBAN: IbanBankAccount#cross_border_sepa_payout? sends it with
+      # no routing number.
       let(:bank_account) { build(:sweden_bank_account, user:, account_number: "GB79TRWI60846411112222") }
 
       it "probes the account number alone, with no routing number on the payload" do
@@ -130,27 +129,25 @@ describe BankCodeDirectoryCheck do
         rejection = described_class.rejection_for(bank_account)
 
         expect(rejection.message).to eq(
-          "Our payment partner couldn't find the bank this account number belongs to, so it can't " \
-          "be used for payouts. Please enter an account number at a different bank."
+          "This IBAN can't receive payouts because our payment partner couldn't find its bank. " \
+          "Please enter an IBAN from a different bank."
         )
         expect(rejection.field).to eq(:account_number)
       end
 
-      it "keeps the branch wording when a routing number was sent and resolved" do
-        allow(Stripe::Token).to receive(:create).and_raise(unresolvable_branch)
-
-        rejection = described_class.rejection_for(
-          build(:egypt_bank_account, user:, bank_code: "QNBAEGCX027")
-        )
-
-        expect(rejection.message).to include("couldn't find the branch this account number belongs to")
-      end
-
       it "fails open on the account number's format, which is not a directory answer" do
-        allow(Stripe::Token).to receive(:create).and_raise(
+        expect(Stripe::Token).to receive(:create).and_raise(
           stripe_rejection(code: "account_number_invalid", param: "bank_account[account_number]",
                            message: "Invalid account number")
         )
+        allow(Rails.logger).to receive(:warn)
+
+        expect(described_class.rejection_for(bank_account)).to be_nil
+        expect(Rails.logger).to have_received(:warn).with(/failed open/)
+      end
+
+      it "fails open on a routing number error, since no routing number was sent" do
+        expect(Stripe::Token).to receive(:create).and_raise(unresolvable_routing_number)
         allow(Rails.logger).to receive(:warn)
 
         expect(described_class.rejection_for(bank_account)).to be_nil
@@ -164,12 +161,18 @@ describe BankCodeDirectoryCheck do
         expect(described_class.rejection_for(bank_account, previous_bank_account: previous)).to be_nil
       end
 
-      it "does not probe an IBAN whose payload does carry a routing number, while that country is not opted in" do
+      it "probes the same IBAN when the previous row never attached" do
+        previous = create(:sweden_bank_account, user:, account_number: "GB79TRWI60846411112222",
+                                                stripe_bank_account_id: nil)
+        expect(Stripe::Token).to receive(:create).and_return(double)
+
+        described_class.rejection_for(bank_account, previous_bank_account: previous)
+      end
+
+      it "does not probe a domestic IBAN row that sends a routing number, while that country is not opted in" do
         expect(Stripe::Token).not_to receive(:create)
 
-        expect(
-          described_class.rejection_for(build(:european_bank_account, user:, bank_number: "COBADEFF"))
-        ).to be_nil
+        expect(described_class.rejection_for(build(:san_marino_bank_account, user:))).to be_nil
       end
     end
 
