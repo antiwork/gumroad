@@ -88,8 +88,8 @@ module CheckoutHelpers
     if gift&.dig(:email).present?
       check "Give as a gift"
       expect(page).to have_text("Note: Free trials will be charged immediately. The membership will not auto-renew.") if product.is_recurring_billing
-      fill_in "Recipient email address", with: gift[:email]
-      fill_in "A personalized message (optional)", with: gift[:note]
+      fill_in "Recipient email", with: gift[:email]
+      fill_in "Message (optional)", with: gift[:note]
     end
 
     if country.present?

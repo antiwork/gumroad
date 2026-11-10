@@ -1309,7 +1309,6 @@ const Form = ({
           className="p-8!"
           header={
             <div className="flex flex-col gap-4">
-              <div>Create a discount code so your audience can buy your products at a reduced price.</div>
               <div>
                 Once the code is created, you can share it or copy a unique link per product that automatically applies
                 the discount.
@@ -1380,7 +1379,6 @@ const Form = ({
               value={selectedProductScopes}
               isMulti
               isClearable
-              placeholder="Products to which this discount will apply"
               onChange={(selected, { action, option }) => {
                 const added = action === "select-option" && option ? productScopeTargets.get(option.id) : undefined;
                 const scopes = selected.flatMap(({ id }) => {
@@ -1436,7 +1434,6 @@ const Form = ({
                 value={excludedProducts.map(({ id, name: label }) => ({ id, label }))}
                 isMulti
                 isClearable
-                placeholder="Select products to exclude"
                 onChange={(selectedIds) => setExcludedProductIds(selectedIds.map(({ id }) => id))}
               />
               <FieldsetDescription>
@@ -1689,7 +1686,6 @@ const Form = ({
               </DetailsToggle>
               <Dropdown>
                 <Fieldset className="gap-3">
-                  <FieldsetDescription>Add a tier for each ownership milestone.</FieldsetDescription>
                   <div className="flex flex-col gap-2">
                     {tiers.map((tier, index) => (
                       <div

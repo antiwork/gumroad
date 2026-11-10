@@ -214,10 +214,7 @@ const FormPage = ({
                 Learn more
               </a>
             </header>
-            <div>
-              You can add custom fields in your checkout form to get more information from your customers, such as their
-              name or more specific instructions.
-            </div>
+            <div>Ask your customers for more information at checkout, such as their name or specific instructions.</div>
             {customFields.length > 0 ? (
               <Card>
                 {customFields.map((field, i) => (
@@ -456,8 +453,7 @@ const FormPage = ({
                 />
                 <p className="text-muted">
                   Bank account payments take about 4 business days to clear, and customers only receive their purchase
-                  once the payment settles. Not recommended for time-sensitive products. Available to customers in the
-                  United States.
+                  once the payment settles. Available to customers in the United States.
                 </p>
               </div>
               <div className="space-y-2">
@@ -479,7 +475,6 @@ const FormPage = ({
                 />
                 <p className="text-muted">
                   PayPal adds this button next to the PayPal button for customers who would rather pay with a card.
-                  Turning it off leaves only the PayPal button.
                 </p>
               </div>
             </div>
