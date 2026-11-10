@@ -33,9 +33,12 @@ describe("Apple sign-in button", () => {
     expect(renderAt("https://gumroad.com/forgot_password")).not.toBeNull();
   });
 
-  it("stays off the web signup page", () => {
-    expect(renderAt("https://gumroad.com/signup")).toBeNull();
-  });
+  it.each(["/signup", "/signup/", "/signup.html", "/signup?next=%2Flibrary"])(
+    "stays off the web signup page at %s",
+    (path) => {
+      expect(renderAt(`https://gumroad.com${path}`)).toBeNull();
+    },
+  );
 
   it("shows on signup inside the mobile app", () => {
     expect(renderAt("https://gumroad.com/signup", true)).not.toBeNull();
