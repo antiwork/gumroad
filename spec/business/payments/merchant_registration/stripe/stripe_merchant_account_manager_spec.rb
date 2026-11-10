@@ -15899,7 +15899,7 @@ describe StripeMerchantAccountManager, :vcr do
       UserComplianceInfo::BusinessTypes::LLC => nil,
       UserComplianceInfo::BusinessTypes::NON_PROFIT => nil,
     }.each do |legacy_type, expected|
-      it "#{expected ? "maps" : "sends no structure for"} a Canadian legal entity holding legacy type #{legacy_type}" do
+      it "#{expected ? "maps" : "sends no structure for"} a Canadian legal entity holding legacy type #{legacy_type} on create" do
         canadian = create(:user_compliance_info_uae_business,
                           user:,
                           business_country: "Canada",
@@ -15907,12 +15907,57 @@ describe StripeMerchantAccountManager, :vcr do
                           business_city: "Toronto",
                           business_zip_code: "M4C 1T2",
                           business_type: legacy_type)
-        company = described_class.send(:company_hash, canadian, passphrase)[:company]
+        company = described_class.send(:account_hash, user, nil, canadian, passphrase:)[:company]
 
         if expected
           expect(company[:structure]).to eq(expected)
         else
           expect(company).not_to have_key(:structure)
+        end
+      end
+    end
+
+    describe "update_account for a Canadian legal entity" do
+      let(:merchant_account) { create(:merchant_account, user:) }
+      let(:update_params) { [] }
+
+      def canadian_info(business_type)
+        create(:user_compliance_info_uae_business, user:, business_country: "Canada", business_state: "Ontario",
+                                                   business_city: "Toronto", business_zip_code: "M4C 1T2", business_type:)
+      end
+
+      before do
+        create(:tos_agreement, user:)
+        allow(Stripe::Account).to receive(:list_persons).and_return({ "data" => [] })
+        allow(Stripe::Account).to receive(:update_person)
+        allow(Stripe::Account).to receive(:create_person)
+        allow(StripeGuardianManager).to receive(:sync)
+        allow(Stripe::Account).to receive(:update) { |_id, params| update_params << params }
+      end
+
+      # Only create_account maps legacy types; update_account sends what it sent before the mapping.
+      {
+        %w[llc corporation] => nil,
+        %w[llc partnership] => nil,
+        %w[corporation llc] => nil,
+        %w[corporation corporation] => nil,
+        %w[private_corporation corporation] => "private_corporation",
+        %w[corporation private_partnership] => "private_partnership",
+      }.each do |(last_type, current_type), expected|
+        it "#{expected ? "sends structure #{expected}" : "sends no structure"} when the type changes from #{last_type} to #{current_type}" do
+          last_info = canadian_info(last_type)
+          last_info.mark_deleted!
+          canadian_info(current_type)
+          stripe_account = Stripe::Account.construct_from(
+            id: merchant_account.charge_processor_merchant_id, object: "account", business_type: "company", capabilities: {},
+            metadata: { user_compliance_info_id: last_info.external_id },
+            requirements: { currently_due: [], eventually_due: [], past_due: [] }
+          )
+          allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(stripe_account)
+
+          described_class.update_account(user, passphrase:)
+
+          expect(update_params.sole.fetch(:company, {}).slice(:structure)).to eq(expected ? { structure: expected } : {})
         end
       end
     end
