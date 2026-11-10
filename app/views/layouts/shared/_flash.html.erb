@@ -2,20 +2,10 @@
   <% alert_text = flash[:alert] || flash[:warning] || flash[:info] || flash[:notice] %>
   <% if alert_text %>
     <% status = flash[:alert] ? "danger" : flash[:warning] ? "warning" : flash[:info] ? "info" : "success" %>
-    <%# Mirrors the React toast (ui/Alert): tinted box, status-colored icon, body-colored text. Icon paths are Boxicons' filled set. %>
-    <% box_class, icon_class, icon_path = {
-         "success" => ["border-success bg-success/20", "text-success", "M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10 10-4.49 10-10S17.51 2 12 2m-1.29 13.71c-.2.2-.45.29-.71.29s-.51-.1-.71-.29l-3-3L7.7 11.3l2.29 2.29 5.29-5.29 1.41 1.41-6 6Z"],
-         "danger" => ["border-danger bg-danger/20", "text-danger", "m19.07,19.07c3.9-3.9,3.9-10.24,0-14.14-1.89-1.89-4.4-2.93-7.07-2.93s-5.18,1.04-7.07,2.93c-3.9,3.9-3.9,10.24,0,14.14,1.95,1.95,4.51,2.92,7.07,2.92s5.12-.98,7.07-2.92Zm-11.31-4.24l2.83-2.83-2.83-2.83,1.41-1.41,2.83,2.83,2.83-2.83,1.41,1.41-2.83,2.83,2.83,2.83-1.41,1.41-2.83-2.83-2.83,2.83-1.41-1.41Z"],
-         "warning" => ["border-warning bg-warning/20", "text-warning", "m20.42 6.11-7.97-4c-.28-.14-.62-.14-.9 0l-7.97 4c-.31.15-.51.45-.55.79-.01.11-.96 10.77 8.55 15.01a.98.98 0 0 0 .82 0C21.91 17.66 20.97 7 20.95 6.9a.98.98 0 0 0-.55-.79ZM13 17h-2v-2h2zm0-4h-2V7h2z"],
-         "info" => ["border-info bg-info/20", "text-info", "M12 22c5.51 0 10-4.49 10-10S17.51 2 12 2 2 6.49 2 12s4.49 10 10 10M11 7h2v2h-2zm0 4h2v6h-2z"],
-       }.fetch(status) %>
     <div id="flash-toast"
          class="fixed top-4 left-1/2 z-100 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded bg-background shadow md:max-w-md"
          style="transition: all 0.3s ease-out 0.5s;">
-      <div role="status" class="flex items-start gap-2 rounded border p-3 <%= box_class %>">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" class="size-[1lh] shrink-0 <%= icon_class %>"><path d="<%= icon_path %>"/></svg>
-        <div class="flex-1"><%= alert_text %></div>
-      </div>
+      <%= render("layouts/shared/flash/#{status}", message: alert_text) %>
     </div>
     <script nonce="<%= SecureHeaders.content_security_policy_script_nonce(request) %>">
       setTimeout(function() {
