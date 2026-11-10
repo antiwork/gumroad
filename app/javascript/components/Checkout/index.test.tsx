@@ -1824,3 +1824,36 @@ describe("Checkout pay recap", () => {
     });
   });
 });
+
+describe("Checkout already-owned warning", () => {
+  const ownedCart = (names: string[]): CartState => ({
+    items: names.map((name) => cartItem({ product: cartProduct({ id: name, permalink: name, name }) })),
+    discountCodes: [],
+  });
+  const renderOwned = (names: string[], ownedNames: string[]) =>
+    render(
+      <StateContext.Provider value={[buildState(), vi.fn()]}>
+        <Checkout
+          discoverUrl="#"
+          cart={ownedCart(names)}
+          updateCart={vi.fn()}
+          ownedInCart={ownedNames.map((name) => ({ permalink: name, name }))}
+        />
+      </StateContext.Provider>,
+    );
+
+  it("leads with the second charge and joins several names with 'and'", () => {
+    const view = renderOwned(["A", "B", "C"], ["A", "B", "C"]);
+    expect(
+      view.getByText(
+        "You already own A, B, and C. Checking out charges you again. Remove them from your cart if you don't want to buy again.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("joins two names without a comma and notes only the owned line", () => {
+    const view = renderOwned(["A", "B", "C"], ["A", "B"]);
+    expect(view.getByText(/You already own A and B\. Checking out charges you again\./u)).toBeTruthy();
+    expect(view.getAllByText("You already own this. Checking out charges you again.")).toHaveLength(2);
+  });
+});

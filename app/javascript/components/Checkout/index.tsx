@@ -276,6 +276,11 @@ export const Checkout = ({
   const ownedNames = ownedInCart
     .filter(({ permalink }) => cart.items.some((item) => item.product.permalink === permalink))
     .map(({ name }) => name);
+  const ownedPermalinks = new Set(ownedInCart.map(({ permalink }) => permalink));
+  const ownedList =
+    ownedNames.length > 2
+      ? `${ownedNames.slice(0, -1).join(", ")}, and ${ownedNames[ownedNames.length - 1]}`
+      : ownedNames.join(" and ");
   const [state] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
@@ -678,8 +683,8 @@ export const Checkout = ({
       {ownedNames.length > 0 ? (
         <div className="px-4 pt-4 md:px-16 md:pt-8">
           <Alert variant="warning">
-            You already own {ownedNames.join(", ")}. Remove {ownedNames.length > 1 ? "them" : "it"} from your cart if
-            you don't want to buy again.
+            You already own {ownedList}. Checking out charges you again. Remove {ownedNames.length > 1 ? "them" : "it"}{" "}
+            from your cart if you don't want to buy again.
           </Alert>
         </div>
       ) : null}
@@ -700,6 +705,7 @@ export const Checkout = ({
                     key={`${item.product.permalink}${item.option_id ? `_${item.option_id}` : ""}`}
                     item={item}
                     cart={cart}
+                    alreadyOwned={ownedPermalinks.has(item.product.permalink)}
                     isGift={isGift}
                     buyerCurrencyDisplay={localCurrency}
                     presentmentPriceCents={localAmounts?.linePriceCents[index] ?? null}
@@ -1148,6 +1154,7 @@ const cartActionButtonClasses = "h-8 w-15 !p-0 !text-xs";
 const CartItemComponent = ({
   item,
   cart,
+  alreadyOwned = false,
   updateCart,
   isGift,
   buyerCurrencyDisplay,
@@ -1156,6 +1163,7 @@ const CartItemComponent = ({
 }: {
   item: CartItemProps;
   cart: CartState;
+  alreadyOwned?: boolean;
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
@@ -1270,8 +1278,11 @@ const CartItemComponent = ({
   return (
     <CartItem
       extra={
-        renewalNotice || bundleContents ? (
+        alreadyOwned || renewalNotice || bundleContents ? (
           <>
+            {alreadyOwned ? (
+              <span className="text-sm">You already own this. Checking out charges you again.</span>
+            ) : null}
             {renewalNotice ? <span className="text-sm">{renewalNotice}</span> : null}
             {bundleContents}
           </>
