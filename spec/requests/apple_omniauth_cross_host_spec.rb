@@ -2,7 +2,7 @@
 
 require "spec_helper"
 
-describe "Apple sign-in across Gumroad hosts", type: :request do
+describe "Apple sign-in across hosts", type: :request do
   let(:signing_key) { OpenSSL::PKey::RSA.new(2048) }
   let!(:user) { create(:user, email: "apple-web@example.com") }
 
@@ -18,6 +18,7 @@ describe "Apple sign-in across Gumroad hosts", type: :request do
   end
 
   before do
+    stub_const("VALID_REQUEST_HOSTS", ["app.example.com", "example.com"])
     client = OAuth2::Client.new("client_id", "fake_secret", site: "https://appleid.apple.com", authorize_url: "/auth/authorize", token_url: "/auth/token")
     allow_any_instance_of(OmniAuth::Strategies::Apple).to receive(:client).and_return(client)
     allow_any_instance_of(OmniAuth::Strategies::Apple).to receive(:build_access_token).and_return(OAuth2::AccessToken.new(client, "access-token"))
@@ -33,23 +34,23 @@ describe "Apple sign-in across Gumroad hosts", type: :request do
   end
 
   it "signs in on the callback host when the login started on a subdomain" do
-    host! "app.test.gumroad.com"
+    host! "app.example.com"
     post "/users/auth/apple", params: { referer: "/library" }
     expect(response.location).to start_with("https://appleid.apple.com/auth/authorize")
     nonce = Rack::Utils.parse_query(URI(response.location).query).fetch("nonce")
 
-    host! "test.gumroad.com"
+    host! "example.com"
     post "/users/auth/apple/callback", params: { code: "authorization-code", id_token: id_token(nonce:) }
 
-    expect(response).to redirect_to("http://test.gumroad.com/library")
+    expect(response).to redirect_to("http://example.com/library")
     expect(controller.current_user).to eq(user)
   end
 
   it "rejects a callback whose nonce does not match the one issued" do
-    host! "app.test.gumroad.com"
+    host! "app.example.com"
     post "/users/auth/apple", params: { referer: "/library" }
 
-    host! "test.gumroad.com"
+    host! "example.com"
     post "/users/auth/apple/callback", params: { code: "authorization-code", id_token: id_token(nonce: "forged-nonce") }
 
     expect(response.location).not_to end_with("/library")
