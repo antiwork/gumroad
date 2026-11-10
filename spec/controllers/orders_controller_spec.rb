@@ -77,7 +77,7 @@ describe OrdersController, :vcr do
     end
 
     it "refuses a line_items payload that is not an array instead of raising" do
-      post :create, params: { line_items: "not-an-array" }.merge(common_purchase_params)
+      post :create, params: { line_items: "not-an-array" }.merge(common_purchase_params_without_payment)
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body["success"]).to be(false)
