@@ -3220,7 +3220,10 @@ module StripeMerchantAccountManager
           vat_id: user_compliance_info.business_vat_id_number
         }
       )
-    elsif user_compliance_info.legal_entity_country_code == Compliance::Countries::CAN.alpha2
+    elsif user_compliance_info.legal_entity_country_code == Compliance::Countries::CAN.alpha2 &&
+          UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.key?(user_compliance_info.business_type)
+      # A record can hold a legacy US-vocabulary type ("corporation") the Canadian form never offers,
+      # and Stripe rejects any structure outside its own Canadian set, so send only the form's values.
       hash.deep_merge!(
         company: {
           structure: user_compliance_info.business_type == "non_profit" ? "" : user_compliance_info.business_type,
