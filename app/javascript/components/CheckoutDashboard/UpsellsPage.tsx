@@ -765,9 +765,7 @@ const Form = ({
                 <Radio name="paused" value="true" checked={paused} onChange={handlePausedChange} />
                 Paused
               </Label>
-              <FieldsetDescription>
-                Paused upsells will not appear at checkout. You can resume anytime.
-              </FieldsetDescription>
+              <FieldsetDescription>Paused upsells will not appear at checkout.</FieldsetDescription>
             </Fieldset>
             <Fieldset>
               <FieldsetTitle>Type of offer</FieldsetTitle>

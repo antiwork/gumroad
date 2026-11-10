@@ -17,12 +17,12 @@ describe "Sign up after purchase", type: :system, js: true do
   context "when password is valid" do
     it "creates the account and saves payment method" do
       expect do
-        fill_in("Enter password", with: SecureRandom.hex(24))
+        fill_in("Password", with: SecureRandom.hex(24))
         click_on("Sign up")
         wait_for_ajax
 
         expect(page).to have_content("Your account has been created. You'll get a confirmation email shortly.")
-        expect(page).not_to have_field("Enter password", visible: false)
+        expect(page).not_to have_field("Password", visible: false)
         expect(page).not_to have_selector("button", text: "Sign up")
       end.to change { User.count }.by(1)
 
@@ -35,7 +35,7 @@ describe "Sign up after purchase", type: :system, js: true do
   context "when password is invalid" do
     it "shows an error message for compromised passwords" do
       expect do
-        fill_in("Enter password", with: "password")
+        fill_in("Password", with: "password")
 
         vcr_turned_on do
           only_matching_vcr_request_from(["pwnedpasswords"]) do
@@ -56,7 +56,7 @@ describe "Sign up after purchase", type: :system, js: true do
 
     it "shows an error message for passwords too short" do
       expect do
-        fill_in("Enter password", with: "1")
+        fill_in("Password", with: "1")
         click_on("Sign up")
         wait_for_ajax
 
@@ -67,7 +67,7 @@ describe "Sign up after purchase", type: :system, js: true do
 
     it "allows to fix a validation error and submit again" do
       expect do
-        fill_in("Enter password", with: "1")
+        fill_in("Password", with: "1")
         click_on("Sign up")
         wait_for_ajax
 
@@ -76,12 +76,12 @@ describe "Sign up after purchase", type: :system, js: true do
       end.not_to change { User.count }
 
       expect do
-        fill_in("Enter password", with: SecureRandom.hex(24))
+        fill_in("Password", with: SecureRandom.hex(24))
         click_on("Sign up")
         wait_for_ajax
 
         expect(page).to have_content("Your account has been created. You'll get a confirmation email shortly.")
-        expect(page).not_to have_field("Enter password", visible: false)
+        expect(page).not_to have_field("Password", visible: false)
         expect(page).not_to have_selector("button", text: "Sign up")
       end.to change { User.count }.by(1)
     end

@@ -243,7 +243,7 @@ describe "Wishlist show page", :js, type: :system do
 
     check "Give as a gift"
 
-    expect(page).to have_field("Recipient email address")
+    expect(page).to have_field("Recipient email")
     expect(page).not_to have_text("Wishlist User's email has been hidden for privacy purposes.")
   end
 

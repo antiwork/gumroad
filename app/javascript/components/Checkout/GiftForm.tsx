@@ -64,7 +64,6 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
                 value={gift.email}
                 disabled={processing}
                 onChange={(evt) => dispatch({ type: "set-value", gift: { ...gift, email: evt.target.value } })}
-                placeholder="Recipient email address"
                 aria-invalid={hasError}
               />
             </Fieldset>
@@ -92,21 +91,20 @@ export const GiftForm = ({ isMembership, className }: { isMembership: boolean; c
                 }
                 title="Reset gift option?"
               >
-                You are about to switch off the gift option. To gift this wishlist again, you will need to return to the
-                wishlist page and select "Gift this product".
+                To gift this wishlist again, you will need to return to the wishlist page and select "Gift this
+                product".
               </Modal>
             </Alert>
           )}
           <Fieldset className="w-full">
             <FieldsetTitle>
-              <Label htmlFor={giftNoteUID}>Message</Label>
+              <Label htmlFor={giftNoteUID}>Message (optional)</Label>
             </FieldsetTitle>
             <Textarea
               id={giftNoteUID}
               value={gift.note}
               disabled={processing}
               onChange={(evt) => dispatch({ type: "set-value", gift: { ...gift, note: evt.target.value } })}
-              placeholder="A personalized message (optional)"
               className="w-full"
             />
           </Fieldset>

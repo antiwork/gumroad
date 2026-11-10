@@ -272,7 +272,6 @@ export const CreateAccountForm = ({
             </FieldsetTitle>
             <Input
               type="password"
-              placeholder="Enter password"
               value={password}
               onChange={(evt) => setPassword(evt.target.value)}
               id={`${uid}password`}

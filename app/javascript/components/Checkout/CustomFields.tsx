@@ -17,20 +17,20 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
   const uid = React.useId();
   const hasError = getErrors(state).has(`customFields.${fieldKey}`);
   const value = state.customFieldValues[fieldKey];
+  const label = field.required ? field.name : `${field.name} (optional)`;
 
   switch (field.type) {
     case "text": {
       return (
         <Fieldset state={hasError ? "danger" : undefined}>
           <FieldsetTitle>
-            <Label htmlFor={uid}>{field.name}</Label>
+            <Label htmlFor={uid}>{label}</Label>
           </FieldsetTitle>
           <Input
             id={uid}
             type="text"
             aria-invalid={hasError}
             aria-describedby={hasError ? `${uid}-error` : undefined}
-            placeholder={`${field.name}${field.required ? "" : " (optional)"}`}
             value={value ?? ""}
             onChange={(e) => dispatch({ type: "set-custom-field", key: fieldKey, value: e.target.value })}
             disabled={isProcessing(state)}
@@ -53,7 +53,7 @@ const CustomField = ({ field, fieldKey }: { field: CustomFieldDescriptor; fieldK
               style={{ margin: 0 }}
               disabled={isProcessing(state)}
             />
-            {field.required ? field.name : `${field.name} (optional)`}
+            {label}
           </Label>
           {hasError ? <FieldsetDescription id={`${uid}-error`}>This field is required.</FieldsetDescription> : null}
         </Fieldset>
