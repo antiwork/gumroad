@@ -3,7 +3,8 @@
 class AngolaBankAccount < BankAccount
   BANK_ACCOUNT_TYPE = "AO"
 
-  BANK_CODE_FORMAT_REGEX = /^([0-9a-zA-Z]){8,11}$/
+  # Stripe resolves only the 8-character BIC or its 11-character form.
+  BANK_CODE_FORMAT_REGEX = /\A[0-9a-zA-Z]{8}([0-9a-zA-Z]{3})?\z/
   private_constant :BANK_CODE_FORMAT_REGEX
 
   ACCOUNT_NUMBER_FORMAT_REGEX = /\AAO[0-9]{23}\z/
@@ -12,7 +13,8 @@ class AngolaBankAccount < BankAccount
   alias_attribute :bank_code, :bank_number
 
   before_validation :normalize_account_number
-  validate :validate_bank_code
+  # Legacy 9/10-character codes must not block unrelated saves, including payout-method deletion.
+  validate :validate_bank_code, if: -> { new_record? || will_save_change_to_bank_number? }
   validate :validate_account_number
 
   def routing_number
