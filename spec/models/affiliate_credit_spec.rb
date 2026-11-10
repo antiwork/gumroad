@@ -111,4 +111,57 @@ describe AffiliateCredit do
       end
     end
   end
+
+  describe "purchase search index updates" do
+    let(:seller) { create(:user) }
+    let(:product) { create(:product, user: seller) }
+    let(:affiliate) { create(:direct_affiliate, seller:, affiliate_basis_points: 10_00) }
+    let!(:product_affiliate) { create(:product_affiliate, product:, affiliate:, affiliate_basis_points: 20_00) }
+    let(:purchase) { create(:purchase, seller:, link: product, purchase_state: "successful", affiliate_credit_cents: 20) }
+
+    before do
+      allow_any_instance_of(Purchase).to receive(:using_gumroad_merchant_account_for_affiliate_user?).and_return(true)
+    end
+
+    def enqueued_update_fields
+      ElasticsearchIndexerWorker.jobs.filter_map do |job|
+        job["args"][1]["fields"].sort if job["args"].first == "update"
+      end
+    end
+
+    # Posting a credit assigns it to the purchase's has_one, and that save clears the
+    # credit's change set before the commit callback runs.
+    it "enqueues the purchase's affiliate credit fields when the credit is posted in the purchase's transaction" do
+      purchase
+      ElasticsearchIndexerWorker.clear
+
+      Purchase.transaction { purchase.send(:post_affiliate_credit!, affiliate, 20, 5) }
+
+      expect(enqueued_update_fields).to include(
+        %w[affiliate_credit_id affiliate_credit_affiliate_user_id affiliate_credit_amount_cents affiliate_credit_fee_cents].sort
+      )
+    end
+
+    it "enqueues the direct affiliate's fields for a direct credit" do
+      purchase
+      ElasticsearchIndexerWorker.clear
+
+      Purchase.transaction { purchase.send(:post_affiliate_credit!, affiliate, 20, 5, direct: true) }
+
+      expect(enqueued_update_fields).to include(
+        %w[direct_affiliate_credit_affiliate_user_id direct_affiliate_credit_amount_cents direct_affiliate_credit_fee_cents].sort
+      )
+    end
+
+    it "enqueues the partially refunded fields when a partial refund is created in the refund's transaction" do
+      affiliate_credit = create(:affiliate_credit, purchase:, amount_cents: 20, fee_cents: 5, affiliate_user: create(:user))
+      ElasticsearchIndexerWorker.clear
+
+      Purchase.transaction { create(:affiliate_partial_refund, affiliate_credit:, amount_cents: 5, fee_cents: 1) }
+
+      expect(enqueued_update_fields).to include(
+        %w[affiliate_credit_amount_partially_refunded_cents affiliate_credit_fee_partially_refunded_cents].sort
+      )
+    end
+  end
 end
