@@ -2737,8 +2737,12 @@ class Purchase < ApplicationRecord
       mark_gift_receiver_purchase_successful!
     else
       set_succeeded_at
-      # The provider's fee is only known once the charge has been captured.
-      self.affiliate_credit_cents = determine_affiliate_balance_cents if affiliate.present? && paypal_fee_usd_cents > 0
+      if affiliate.present? && paypal_charge_processor?
+        # The provider's fee is only known once the charge has been captured, and a cart charge
+        # allocates it to its purchases through other instances, so this one may hold the whole fee.
+        self.processor_fee_cents = Purchase.where(id:).pick(:processor_fee_cents) if charge.present?
+        self.affiliate_credit_cents = determine_affiliate_balance_cents if paypal_fee_usd_cents > 0
+      end
       increment_sellers_balance!
       mark_successful!
     end
@@ -2949,7 +2953,13 @@ class Purchase < ApplicationRecord
     return 0 if credit.fee_cents.to_i.zero?
     return (credit.fee_cents * refunded_fee_cents / fee_cents).floor if credits_direct_affiliate? && fee_cents.to_i > 0
 
-    (affiliate_reversal_share(credit) * refunded_fee_cents).floor
+    share = affiliate_reversal_share(credit)
+    # A credit that also paid a share of the provider's fee gets back the same fraction of what it
+    # paid. Every other credit keeps the old formula, so past refunds round as they always did.
+    paid_provider_share = fee_cents.to_i > 0 && credit.fee_cents > (share * fee_cents).ceil && paypal_fee_usd_cents > 0
+    return credit.fee_cents * refunded_fee_cents / fee_cents if paid_provider_share
+
+    (share * refunded_fee_cents).floor
   end
 
   def variant_extra_cost
@@ -5123,7 +5133,8 @@ class Purchase < ApplicationRecord
 
       affiliate_cents = affiliate_cut * displayed_price_usd_cents
       affiliate_cents -= determine_affiliate_fee_cents
-      affiliate_cents.floor
+      # Like the cuts above, a credit the fee leaves nothing of is never posted.
+      affiliate_cents.floor.clamp(0, nil)
     end
 
     def affiliate_cut
