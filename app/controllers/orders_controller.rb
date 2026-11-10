@@ -388,10 +388,16 @@ class OrdersController < ApplicationController
       ).to_h
     end
 
+    # line_items is an array of purchase params. A bare string or scalar is malformed, and refusing
+    # it here keeps the later reads (any?, all?, each) from raising (GUMROAD-283).
     def normalize_line_items
       if params[:line_items].is_a?(ActionController::Parameters)
         params[:line_items] = params[:line_items].values
       end
+
+      return unless params[:line_items].present? && !params[:line_items].is_a?(Array)
+
+      render_error("Sorry, something went wrong.")
     end
 
     def validate_order_request
