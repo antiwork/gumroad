@@ -34,13 +34,38 @@ type request struct {
 
 func (request) LogValue() slog.Value { return slog.GroupValue() }
 
+// railsFilterParameters is config.filter_parameters (filter_parameter_logging.rb). sentry-go
+// matches them as Rails does, as part of a name in any case, on top of its own key/token/secret.
+var railsFilterParameters = []string{
+	"password", "cc_number", "number", "expiry_date", "cc_expiry", "cvc", "account_number", "account_number_repeated", "passphrase",
+	"chargeable", "tax_id", "individual_tax_id", "business_tax_id", "ssn_first_three", "ssn_middle_two", "ssn_last_four",
+	"access_token", "bearer_token", "mobile_token", "device_code", "user_code", "migration_code", "account_setup_token", "client_secret", "license_key",
+}
+
+// options keeps what sentry-go's default (SendDefaultPII off) leaves out, which setting
+// DataCollection otherwise drops: cookies, bodies, user info and the buyer's address headers.
+func options(dsn, environment, release string) sentry.ClientOptions {
+	return sentry.ClientOptions{
+		Dsn: dsn, Environment: environment, Release: release,
+		DataCollection: &sentry.DataCollection{
+			UserInfo:   sentry.Set(false),
+			Cookies:    &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionOff},
+			HTTPBodies: []sentry.BodyType{},
+			HTTPHeaders: &sentry.HeaderCollectionConfig{Request: &sentry.KeyValueCollectionBehavior{
+				Mode: sentry.CollectionDenyList, Terms: []string{"forwarded", "-ip", "remote-", "via", "-user"},
+			}},
+			QueryParams: &sentry.KeyValueCollectionBehavior{Mode: sentry.CollectionDenyList, Terms: railsFilterParameters},
+		},
+	}
+}
+
 // Init reports to dsn where Rails does, in production and staging (enabled_environments),
 // and says whether it does.
 func Init(dsn, environment, release string) (bool, error) {
 	if dsn == "" || (environment != "production" && environment != "staging") {
 		return false, nil
 	}
-	if err := sentry.Init(sentry.ClientOptions{Dsn: dsn, Environment: environment, Release: release}); err != nil {
+	if err := sentry.Init(options(dsn, environment, release)); err != nil {
 		return false, err
 	}
 	sentry.ConfigureScope(func(s *sentry.Scope) { s.SetTag("service", "go_web") })

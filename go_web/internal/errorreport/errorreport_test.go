@@ -13,16 +13,44 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/errorreport"
 )
 
+// newTestLogger reports as Init sets up production, to a transport the test reads.
 func newTestLogger(t *testing.T) (*slog.Logger, *bytes.Buffer, *sentry.MockTransport) {
 	t.Helper()
 	sent := &sentry.MockTransport{}
-	client, err := sentry.NewClient(sentry.ClientOptions{Dsn: "https://public@example.com/1", Transport: sent})
+	opts := errorreport.Options("https://public@example.com/1", "production", "abc123")
+	opts.Transport = sent
+	client, err := sentry.NewClient(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+	sentry.CurrentHub().BindClient(client)
+	t.Cleanup(func() { sentry.CurrentHub().BindClient(nil) })
 	var logs bytes.Buffer
-	h := errorreport.NewHandlerWithHub(slog.NewJSONHandler(&logs, nil), sentry.NewHub(client, sentry.NewScope()))
-	return slog.New(h), &logs, sent
+	return slog.New(errorreport.NewHandler(slog.NewJSONHandler(&logs, nil))), &logs, sent
+}
+
+// Rails' filter_parameters, sentry-go's own sensitive names, and the buyer's address.
+func TestReportedRequestsLeaveOutSecrets(t *testing.T) {
+	logger, _, sent := newTestLogger(t)
+	r := httptest.NewRequest("GET", "/v2/licenses/verify?license_key=LK-1&access_token=AT-1&card_number=4242&passphrase=pp-1&tax_id=tx-1&wanted=true", nil)
+	r.Header.Set("Cookie", "_gumroad_app_session=s-1")
+	r.Header.Set("Authorization", "Bearer b-1")
+	r.Header.Set("X-Forwarded-For", "203.0.113.9")
+	logger.With(errorreport.Request(r, "req-1")).Error("License verification failed", "error", "boom")
+
+	e := sent.Events()[0].Request
+	all := e.QueryString + e.Cookies
+	for k, v := range e.Headers {
+		all += k + "=" + v + ";"
+	}
+	for _, secret := range []string{"LK-1", "AT-1", "4242", "pp-1", "tx-1", "s-1", "b-1", "203.0.113.9"} {
+		if strings.Contains(all, secret) {
+			t.Errorf("%q reached Sentry: %s", secret, all)
+		}
+	}
+	if !strings.Contains(e.QueryString, "wanted=true") {
+		t.Errorf("query %q", e.QueryString)
+	}
 }
 
 func TestErrorLinesAreReportedWithTheirRequestAndCallSite(t *testing.T) {
