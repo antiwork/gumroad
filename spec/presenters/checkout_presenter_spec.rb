@@ -889,7 +889,22 @@ describe CheckoutPresenter do
     end
 
     it "returns only products the buyer already owns" do
-      expect(instance.owned_products_in_cart(cart:)).to eq([{ permalink: owned.unique_permalink, name: "Owned thing" }])
+      expect(instance.owned_products_in_cart(cart:)).to eq([{ permalink: owned.unique_permalink, option_id: nil, name: "Owned thing" }])
+    end
+
+    it "returns only the carted variant the buyer owns" do
+      versioned = create(:product, name: "Versioned thing")
+      category = create(:variant_category, link: versioned)
+      owned_variant = create(:variant, variant_category: category)
+      other_variant = create(:variant, variant_category: category)
+      create(:purchase, link: versioned, email: buyer.email, purchaser: buyer, variant_attributes: [owned_variant])
+      create(:cart_product, cart:, product: versioned, option: owned_variant)
+      create(:cart_product, cart:, product: versioned, option: other_variant)
+
+      expect(instance.owned_products_in_cart(cart: cart.reload)).to contain_exactly(
+        { permalink: owned.unique_permalink, option_id: nil, name: "Owned thing" },
+        { permalink: versioned.unique_permalink, option_id: owned_variant.external_id, name: "Versioned thing" },
+      )
     end
 
     it "ignores a fully refunded purchase" do

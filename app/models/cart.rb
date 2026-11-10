@@ -74,15 +74,19 @@ class Cart < ApplicationRecord
   # unfinished order to someone who already paid, and they write in asking whether they were
   # charged twice (gumroad-private#1626 — 26% of a live 2,000-send sample).
   def purchased_product_ids
-    self.class.purchased_product_ids_by_cart_id([self])[id] || []
+    purchased_cart_products.map(&:product_id).uniq
   end
 
-  # { cart_id => [owned product ids] } for the given carts, in a bounded number of queries.
+  def purchased_cart_products
+    self.class.purchased_cart_products_by_cart_id([self])[id] || []
+  end
+
+  # { cart_id => [owned alive cart products] } for the given carts, in a bounded number of queries.
   #
-  # Production passes exactly one (see #purchased_product_ids). Do not reintroduce a bulk caller:
+  # Production passes exactly one (see #purchased_cart_products). Do not reintroduce a bulk caller:
   # batching widens the statement to the union of every buyer's history, so one heavy buyer blows
   # the budget for the whole batch (gumroad-private#2343).
-  def self.purchased_product_ids_by_cart_id(carts)
+  def self.purchased_cart_products_by_cart_id(carts)
     product_ids = carts.flat_map { _1.alive_cart_products.map(&:product_id) }.uniq
     return {} if product_ids.empty?
 
@@ -95,16 +99,14 @@ class Cart < ApplicationRecord
       owned = recipient_emails_for(cart).filter_map { owned_by_email[_1] }
       owned << owned_by_purchaser[cart.user_id] if cart.user_id.present? && owned_by_purchaser.key?(cart.user_id)
 
-      result[cart.id] = cart.alive_cart_products.filter_map do |cart_product|
+      result[cart.id] = cart.alive_cart_products.select do |cart_product|
         owned_variant_ids = owned.filter_map { _1[cart_product.product_id] }
-        next if owned_variant_ids.empty?
+        next false if owned_variant_ids.empty?
         # A carted variant is only owned when a purchase carries that same variant — owning
         # tier A is not owning tier B, and the job's workflow matching is variant-aware for
         # the same reason. A purchase with no variant recorded suppresses nothing here.
-        next if cart_product.option_id.present? && owned_variant_ids.none? { _1.include?(cart_product.option_id) }
-
-        cart_product.product_id
-      end.uniq
+        cart_product.option_id.blank? || owned_variant_ids.any? { _1.include?(cart_product.option_id) }
+      end
     end
   end
 

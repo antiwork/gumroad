@@ -259,7 +259,7 @@ describe Cart do
     end
   end
 
-  describe ".purchased_product_ids_by_cart_id" do
+  describe ".purchased_cart_products_by_cart_id" do
     it "attributes each buyer's purchases to their own cart without querying per cart" do
       product = create(:product)
       buyer1 = create(:user)
@@ -275,7 +275,7 @@ describe Cart do
         purchase_queries += 1 if payload[:sql].include?("FROM `purchases`")
       end
       begin
-        result = Cart.purchased_product_ids_by_cart_id([cart1.reload, cart2.reload])
+        result = Cart.purchased_cart_products_by_cart_id([cart1.reload, cart2.reload])
       ensure
         ActiveSupport::Notifications.unsubscribe(subscriber)
       end
@@ -283,7 +283,7 @@ describe Cart do
       # Two statements per product-id slice (one per recipient column), not one per cart: the
       # abandoned-cart run passes a 500-cart batch through here.
       expect(purchase_queries).to eq(2)
-      expect(result[cart1.id]).to eq([product.id])
+      expect(result[cart1.id].map(&:product_id)).to eq([product.id])
       expect(result[cart2.id]).to be_empty
     end
 
@@ -295,7 +295,7 @@ describe Cart do
       create(:purchase, link: product, email: buyer.email, purchaser: buyer)
       stub_const("Cart::PURCHASE_LOOKUP_IN_LIST_BATCH_SIZE", 1)
 
-      expect(Cart.purchased_product_ids_by_cart_id([cart.reload])[cart.id]).to eq([product.id])
+      expect(Cart.purchased_cart_products_by_cart_id([cart.reload])[cart.id].map(&:product_id)).to eq([product.id])
     end
 
     it "reads each cart's user from the preload instead of querying per cart" do
@@ -312,7 +312,7 @@ describe Cart do
         user_queries += 1 if payload[:sql].include?("FROM `users`")
       end
       begin
-        Cart.purchased_product_ids_by_cart_id(preloaded)
+        Cart.purchased_cart_products_by_cart_id(preloaded)
       ensure
         ActiveSupport::Notifications.unsubscribe(subscriber)
       end
@@ -329,7 +329,7 @@ describe Cart do
 
       expect(WithMaxExecutionTime).to receive(:timeout_queries).with(seconds: Cart::PURCHASE_LOOKUP_TIME_BUDGET).and_call_original
 
-      Cart.purchased_product_ids_by_cart_id([cart.reload])
+      Cart.purchased_cart_products_by_cart_id([cart.reload])
     end
   end
 
