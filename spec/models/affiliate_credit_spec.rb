@@ -124,9 +124,9 @@ describe AffiliateCredit do
     end
 
     def enqueued_update_fields
-      ElasticsearchIndexerWorker.jobs
-                                .select { |job| job["args"].first == "update" }
-                                .map { |job| job["args"][1]["fields"].sort }
+      ElasticsearchIndexerWorker.jobs.filter_map do |job|
+        job["args"][1]["fields"].sort if job["args"].first == "update"
+      end
     end
 
     # Posting a credit assigns it to the purchase's has_one, and that save clears the
