@@ -131,7 +131,7 @@ type CheckoutIndexPageProps = {
   // nothing. See CheckoutPresenter#sold_out_arrival_notice.
   sold_out_arrival?: { message: string; url: string } | null;
   // Saved-cart products the buyer already owns. See CheckoutPresenter#owned_products_in_cart.
-  owned_in_cart?: { permalink: string; name: string }[];
+  owned_in_cart?: { permalink: string; option_id: string | null; name: string }[];
 };
 
 const BUYER_CURRENCY_QUOTE_INVALID_ERROR_CODE = "buyer_currency_quote_invalid";

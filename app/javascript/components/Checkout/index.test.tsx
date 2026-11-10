@@ -200,6 +200,16 @@ const renderCheckout = (state: State, cart: CartState, dispatch = vi.fn()) =>
     </StateContext.Provider>,
   );
 
+const percent = (percents: number) => ({
+  type: "percent" as const,
+  percents,
+  product_ids: null,
+  expires_at: null,
+  minimum_quantity: null,
+  duration_in_billing_cycles: null,
+  minimum_amount_cents: null,
+});
+
 afterEach(cleanup);
 
 describe("Checkout cart editing", () => {
@@ -1660,15 +1670,6 @@ describe("Checkout pay recap", () => {
   });
 
   it("uses post-discount prices and treats an item discounted to zero as free", () => {
-    const percent = (percents: number) => ({
-      type: "percent" as const,
-      percents,
-      product_ids: null,
-      expires_at: null,
-      minimum_quantity: null,
-      duration_in_billing_cycles: null,
-      minimum_amount_cents: null,
-    });
     const first = cartProduct({ id: "a", permalink: "a", name: "Ebook", price_cents: 1_000, has_offer_codes: true });
     const second = cartProduct({ id: "b", permalink: "b", name: "Course", price_cents: 4_000, has_offer_codes: true });
     const cart: CartState = {
@@ -1822,5 +1823,89 @@ describe("Checkout pay recap", () => {
         { name: "Shipping", price: "US$5" },
       ],
     });
+  });
+});
+
+describe("Checkout already-owned warning", () => {
+  const ownedCart = (names: string[], discountCodes: CartState["discountCodes"] = []): CartState => ({
+    items: names.map((name) =>
+      cartItem({ product: cartProduct({ id: name, permalink: name, name, has_offer_codes: true }) }),
+    ),
+    discountCodes,
+  });
+  const renderOwnedCart = (
+    cart: CartState,
+    ownedInCart: { permalink: string; option_id: string | null; name: string }[],
+  ) =>
+    render(
+      <StateContext.Provider value={[buildState(), vi.fn()]}>
+        <Checkout discoverUrl="#" cart={cart} updateCart={vi.fn()} ownedInCart={ownedInCart} />
+      </StateContext.Provider>,
+    );
+  const ownedByName = (names: string[]) => names.map((name) => ({ permalink: name, option_id: null, name }));
+  const renderOwned = (names: string[], ownedNames: string[]) =>
+    renderOwnedCart(ownedCart(names), ownedByName(ownedNames));
+
+  it("leads with the second charge and joins several names with 'and'", () => {
+    const view = renderOwned(["A", "B", "C"], ["A", "B", "C"]);
+    expect(
+      view.getByText(
+        "You already own A, B, and C. Checking out charges you again. Remove them from your cart if you don't want to buy again.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("joins two names without a comma and notes only the owned line", () => {
+    const view = renderOwned(["A", "B", "C"], ["A", "B"]);
+    expect(view.getByText(/You already own A and B\. Checking out charges you again\./u)).toBeTruthy();
+    expect(view.getAllByText("You already own this. Checking out charges you again.")).toHaveLength(2);
+  });
+
+  it("does not claim a second charge for an owned line a discount code makes free", () => {
+    const view = renderOwnedCart(
+      ownedCart(["A", "B"], [{ code: "FREE", products: { A: percent(100) }, fromUrl: false }]),
+      ownedByName(["A", "B"]),
+    );
+    expect(view.getAllByText("You already own this.")).toHaveLength(1);
+    expect(view.getAllByText("You already own this. Checking out charges you again.")).toHaveLength(1);
+    expect(
+      view.getByText(
+        "You already own A and B. Checking out charges you again for B. Remove them from your cart if you don't want to buy again.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("does not mention a second charge when every owned line is free", () => {
+    const view = renderOwnedCart(
+      ownedCart(["A", "B"], [{ code: "FREE", products: { A: percent(100), B: percent(100) }, fromUrl: false }]),
+      ownedByName(["A", "B"]),
+    );
+    expect(
+      view.getByText("You already own A and B. Remove them from your cart if you don't want to buy again."),
+    ).toBeTruthy();
+    expect(view.queryByText(/charges you again/u)).toBeNull();
+  });
+
+  it("notes only the owned version when another version of the same product is in the cart", () => {
+    const option = (id: string): CartProduct["options"][number] => ({
+      id,
+      name: id,
+      quantity_left: null,
+      description: "",
+      price_difference_cents: 0,
+      recurrence_price_values: null,
+      is_pwyw: false,
+      duration_in_minutes: null,
+      upsell_offered_variant_id: null,
+    });
+    const product = cartProduct({ options: [option("owned"), option("other")] });
+    const view = renderOwnedCart(
+      {
+        items: [cartItem({ product, option_id: "owned" }), cartItem({ product, option_id: "other" })],
+        discountCodes: [],
+      },
+      [{ permalink: product.permalink, option_id: "owned", name: product.name }],
+    );
+    expect(view.getAllByText("You already own this. Checking out charges you again.")).toHaveLength(1);
   });
 });

@@ -89,14 +89,13 @@ class CheckoutPresenter
     }
   end
 
-  # Products in the saved cart that the buyer already owns, so the page can warn before a repeat charge.
+  # Saved-cart lines the buyer already owns, so the page can warn before a repeat charge.
   def owned_products_in_cart(cart:)
     return [] if cart.blank? || cart.user_id.blank?
 
-    owned_ids = cart.purchased_product_ids
-    return [] if owned_ids.empty?
-
-    Link.where(id: owned_ids).map { { permalink: _1.unique_permalink, name: _1.name } }
+    owned = cart.purchased_cart_products
+    ActiveRecord::Associations::Preloader.new(records: owned, associations: [:product, :option]).call
+    owned.map { { permalink: _1.product.unique_permalink, option_id: _1.option&.external_id, name: _1.product.name } }
   end
 
   # The product link adds nothing because its tier, or every tier, is closed or sold out (see

@@ -256,6 +256,9 @@ const CurrencyRefusalNotice = ({ summaryCurrencyCode }: { summaryCurrencyCode: s
   );
 };
 
+const joinNames = (names: string[]) =>
+  names.length > 2 ? `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}` : names.join(" and ");
+
 export const Checkout = ({
   discoverUrl,
   cart,
@@ -271,11 +274,23 @@ export const Checkout = ({
   // Set when a legacy /checkout link named a tier that is closed or sold out, so nothing was added.
   soldOutArrival?: { message: string; url: string } | null;
   // Filtered against the live cart, so removing a line clears its warning.
-  ownedInCart?: { permalink: string; name: string }[];
+  ownedInCart?: { permalink: string; option_id: string | null; name: string }[];
 }) => {
-  const ownedNames = ownedInCart
-    .filter(({ permalink }) => cart.items.some((item) => item.product.permalink === permalink))
-    .map(({ name }) => name);
+  const ownedLines = cart.items.flatMap((item) => {
+    const owned = ownedInCart.find(
+      ({ permalink, option_id }) =>
+        permalink === item.product.permalink && (option_id ?? null) === (item.option_id ?? null),
+    );
+    return owned ? [{ item, name: owned.name, charged: getDiscountedPrice(cart, item).price !== 0 }] : [];
+  });
+  const ownedNames = [...new Set(ownedLines.map(({ name }) => name))];
+  const chargedNames = [...new Set(ownedLines.filter(({ charged }) => charged).map(({ name }) => name))];
+  const secondChargeNotice =
+    chargedNames.length === 0
+      ? ""
+      : chargedNames.length === ownedNames.length
+        ? " Checking out charges you again."
+        : ` Checking out charges you again for ${joinNames(chargedNames)}.`;
   const [state] = useState();
   const [newDiscountCode, setNewDiscountCode] = React.useState("");
   const [loadingDiscount, setLoadingDiscount] = React.useState(false);
@@ -678,8 +693,8 @@ export const Checkout = ({
       {ownedNames.length > 0 ? (
         <div className="px-4 pt-4 md:px-16 md:pt-8">
           <Alert variant="warning">
-            You already own {ownedNames.join(", ")}. Remove {ownedNames.length > 1 ? "them" : "it"} from your cart if
-            you don't want to buy again.
+            You already own {joinNames(ownedNames)}.{secondChargeNotice} Remove {ownedNames.length > 1 ? "them" : "it"}{" "}
+            from your cart if you don't want to buy again.
           </Alert>
         </div>
       ) : null}
@@ -700,6 +715,7 @@ export const Checkout = ({
                     key={`${item.product.permalink}${item.option_id ? `_${item.option_id}` : ""}`}
                     item={item}
                     cart={cart}
+                    alreadyOwned={ownedLines.find((line) => line.item === item) ?? null}
                     isGift={isGift}
                     buyerCurrencyDisplay={localCurrency}
                     presentmentPriceCents={localAmounts?.linePriceCents[index] ?? null}
@@ -1148,6 +1164,7 @@ const cartActionButtonClasses = "h-8 w-15 !p-0 !text-xs";
 const CartItemComponent = ({
   item,
   cart,
+  alreadyOwned = null,
   updateCart,
   isGift,
   buyerCurrencyDisplay,
@@ -1156,6 +1173,7 @@ const CartItemComponent = ({
 }: {
   item: CartItemProps;
   cart: CartState;
+  alreadyOwned?: { charged: boolean } | null;
   updateCart: (update: Partial<CartState>) => void;
   isGift: boolean;
   buyerCurrencyDisplay?: CheckoutLocalCurrencyFormat | null;
@@ -1270,8 +1288,15 @@ const CartItemComponent = ({
   return (
     <CartItem
       extra={
-        renewalNotice || bundleContents ? (
+        alreadyOwned || renewalNotice || bundleContents ? (
           <>
+            {alreadyOwned ? (
+              <span className="text-sm">
+                {alreadyOwned.charged
+                  ? "You already own this. Checking out charges you again."
+                  : "You already own this."}
+              </span>
+            ) : null}
             {renewalNotice ? <span className="text-sm">{renewalNotice}</span> : null}
             {bundleContents}
           </>
