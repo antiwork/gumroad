@@ -1874,6 +1874,36 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       end
     end
 
+    describe "uk bank account whose sort code Stripe's directory cannot find" do
+      let(:user) { create(:user) }
+
+      before do
+        user.alive_user_compliance_info.update_columns(country: "United Kingdom")
+        sign_in user
+        allow(Stripe::Token).to receive(:create).and_raise(
+          Stripe::InvalidRequestError.new("We couldn't find the bank for that sort code", "bank_account[routing_number]", code: "routing_number_invalid")
+        )
+      end
+
+      it "does not save the account and flags the sort code" do
+        expect do
+          put :update, params: {
+            bank_account: {
+              type: UkBankAccount.name,
+              sort_code: "60-84-64",
+              account_number: "00012345",
+              account_number_confirmation: "00012345",
+              account_holder_full_name: "gumbot",
+            }
+          }
+        end.not_to change(BankAccount, :count)
+
+        expect(response).to redirect_to(settings_payments_path)
+        expect(session[:inertia_errors][:base].first).to include("Please enter an account at a different bank.")
+        expect(session[:inertia_errors][:field]).to eq("sort_code")
+      end
+    end
+
     describe "ach account" do
       let(:user) { create(:user) }
       before do

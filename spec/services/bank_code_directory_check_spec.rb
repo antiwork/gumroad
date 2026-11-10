@@ -176,6 +176,47 @@ describe BankCodeDirectoryCheck do
       end
     end
 
+    context "with a UK sort code" do
+      let(:bank_account) { build(:uk_bank_account, user:, sort_code: "60-84-64") }
+
+      it "probes the sort code and passes one Stripe resolves" do
+        expect(Stripe::Token).to receive(:create).with(
+          { bank_account: { country: "GB", currency: "gbp", routing_number: "60-84-64", account_number: "1234567" } },
+          hash_including(:client)
+        ).and_return(double)
+
+        expect(described_class.rejection_for(bank_account)).to be_nil
+      end
+
+      it "names the sort code and asks for a different bank when Stripe cannot find it" do
+        allow(Stripe::Token).to receive(:create).and_raise(unresolvable_routing_number)
+
+        rejection = described_class.rejection_for(bank_account)
+
+        expect(rejection.message).to eq(
+          "Our payment partner couldn't find a bank for the sort code 60-84-64, so it can't be used " \
+          "for payouts. Please enter an account at a different bank."
+        )
+        expect(rejection.field).to eq(:sort_code)
+      end
+
+      it "probes, then fails open on an account number format rejection" do
+        expect(Stripe::Token).to receive(:create).and_raise(
+          stripe_rejection(code: "account_number_invalid", param: "bank_account[account_number]", message: "Invalid")
+        )
+        allow(Rails.logger).to receive(:warn)
+
+        expect(described_class.rejection_for(bank_account)).to be_nil
+      end
+
+      it "fails open when Stripe cannot place the account number, because only the sort code is opted in" do
+        expect(Stripe::Token).to receive(:create).and_raise(unresolvable_branch)
+        allow(Rails.logger).to receive(:warn)
+
+        expect(described_class.rejection_for(bank_account)).to be_nil
+      end
+    end
+
     context "with the previous alive bank account" do
       it "skips the probe when the details are unchanged and already attached at Stripe" do
         previous = create(:egypt_bank_account, user:, bank_code: "QNBAEGCX027", stripe_bank_account_id: "ba_123")
