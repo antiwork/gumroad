@@ -3,13 +3,12 @@
 require "spec_helper"
 require "timeout"
 
-describe McpEventSubscription, "subscribe concurrency" do
+describe McpEventSubscription, "concurrency" do
   self.use_transactional_tests = false
 
   before do
     @seller = create(:user)
     @application = create(:oauth_application)
-    stub_const("McpEventSubscription::MAX_LIVE_PER_CONNECTION", 1)
   end
 
   after do
@@ -57,48 +56,78 @@ describe McpEventSubscription, "subscribe concurrency" do
     end
   end
 
-  it "lets only one of two subscribes at once take the last free slot" do
-    first_inserted = Queue.new
+  # Holds the first writer right after its first statement that starts with `pause_after`, starts
+  # the second writer, expects it to wait on the seller row, then releases the first. Returns
+  # writer => result.
+  def race(first:, second:, pause_after:)
+    paused = Queue.new
     release_first = Queue.new
     second_connection_id = Queue.new
     results = Queue.new
-    # Holds the first subscribe right after its INSERT. Without the seller lock, the second one
-    # would then count no other live row and insert too.
     subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |_name, _start, _finish, _id, payload|
-      next unless Thread.current[:mcp_first_subscribe] && payload[:sql].start_with?("INSERT INTO `mcp_event_subscriptions`")
+      next unless Thread.current[:mcp_first_writer] && payload[:sql].start_with?(pause_after)
 
-      Thread.current[:mcp_first_subscribe] = false
-      first_inserted << true
+      Thread.current[:mcp_first_writer] = false
+      paused << true
       release_first.pop
     end
 
-    first = Thread.new do
+    first_writer = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
-        Thread.current[:mcp_first_subscribe] = true
-        results << [:first, *subscribe("https://example.com/hooks/first")]
+        Thread.current[:mcp_first_writer] = true
+        results << [:first, first.call]
       end
     end
-    Timeout.timeout(10) { first_inserted.pop }
+    Timeout.timeout(10) { paused.pop }
 
-    second = Thread.new do
+    second_writer = Thread.new do
       ActiveRecord::Base.connection_pool.with_connection do
         second_connection_id << ActiveRecord::Base.connection.select_value("SELECT CONNECTION_ID()")
-        results << [:second, *subscribe("https://example.com/hooks/second")]
+        results << [:second, second.call]
       end
     end
-    wait_for_row_lock(process_id: Timeout.timeout(10) { second_connection_id.pop }, table: "users", thread: second)
-    expect(second).to be_alive
+    wait_for_row_lock(process_id: Timeout.timeout(10) { second_connection_id.pop }, table: "users", thread: second_writer)
+    expect(second_writer).to be_alive
 
     release_first << true
-    [first, second].each { expect(_1.join(10)).to be_present }
-
-    outcomes = 2.times.map { results.pop }.to_h { |thread, saved, message| [thread, [saved, message]] }
-    expect(outcomes[:first]).to eq([true, nil])
-    expect(outcomes[:second]).to match([false, a_string_including("already has 1 live event subscriptions")])
-    expect(McpEventSubscription.where(user_id: @seller.id).count).to eq(1)
+    [first_writer, second_writer].each { expect(_1.join(10)).to be_present }
+    2.times.to_h { results.pop }
   ensure
     ActiveSupport::Notifications.unsubscribe(subscriber) if subscriber
     release_first << true if release_first
-    [first, second].compact.each { |thread| thread.join(1) || thread.kill }
+    [first_writer, second_writer].compact.each { |thread| thread.join(1) || thread.kill }
+  end
+
+  it "lets only one of two subscribes at once take the last free slot" do
+    stub_const("McpEventSubscription::MAX_LIVE_PER_CONNECTION", 1)
+
+    # Paused after its INSERT: without the seller lock, the second subscribe would count no other
+    # live row and insert too.
+    outcomes = race(
+      first: -> { subscribe("https://example.com/hooks/first") },
+      second: -> { subscribe("https://example.com/hooks/second") },
+      pause_after: "INSERT INTO `mcp_event_subscriptions`"
+    )
+
+    expect(outcomes[:first]).to eq([true, nil])
+    expect(outcomes[:second]).to match([false, a_string_including("already has 1 live event subscriptions")])
+    expect(McpEventSubscription.where(user_id: @seller.id).count).to eq(1)
+  end
+
+  it "keeps a subscription that is renewed while the cleanup job runs" do
+    callback_url = "https://example.com/hooks/mcp"
+    subscribe(callback_url)
+    McpEventSubscription.where(user_id: @seller.id).update_all(expires_at: 1.minute.ago)
+
+    # Paused after the renewal reads the expired row: without the seller lock, the job would delete
+    # the row before the renewal's update, and the renewal would update nothing.
+    outcomes = race(
+      first: -> { subscribe(callback_url) },
+      second: -> { Mcp::DeleteExpiredEventSubscriptionsJob.new.perform },
+      pause_after: "SELECT `mcp_event_subscriptions`.* FROM `mcp_event_subscriptions` WHERE `mcp_event_subscriptions`.`key_digest`"
+    )
+
+    expect(outcomes[:first]).to eq([true, nil])
+    expect(McpEventSubscription.live.where(user_id: @seller.id).count).to eq(1)
   end
 end
