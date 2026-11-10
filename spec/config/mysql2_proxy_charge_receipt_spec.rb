@@ -33,10 +33,6 @@ describe "mysql2 proxy charge receipt routing" do
     primary_setup do
       seller = create(:user)
       purchase = create(:purchase, seller:, link: create(:product, user: seller, name:))
-      # create_artifacts_and_send_receipt! mints the url_redirect on the transition to successful,
-      # so a factory-made successful purchase is only receipt-ready once it has one. Without it the
-      # job defers the receipt (it renders no download button for the line) and never delivers.
-      purchase.create_url_redirect!
       charge = create(:charge, seller:, purchases: [purchase])
       charge.order.purchases << purchase
       charge
@@ -105,6 +101,28 @@ describe "mysql2 proxy charge receipt routing" do
 
     # The early return on receipt_sent? reads the charge from the primary and unwinds like a send.
     expect_serving_pool(reads, "primary", "charges")
+    expect_pin_unwound
+  end
+
+  # Client-confirm prepare attaches a free line to the charge just after enqueuing its receipt job.
+  it "hands a purchase receipt to the charge job when only the primary has the purchase on a charge" do
+    seller, purchase = primary_setup do
+      seller = create(:user)
+      [seller, create(:purchase, seller:, link: create(:product, user: seller))]
+    end
+    replicate_record(purchase)
+    charge = primary_setup do
+      charge = create(:charge, seller:, purchases: [purchase])
+      charge.order.purchases << purchase
+      charge
+    end
+    expect(serving_pool).to eq("replica")
+
+    expect(CustomerMailer).not_to receive(:receipt)
+
+    SendPurchaseReceiptJob.new.perform(purchase.id)
+
+    expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
     expect_pin_unwound
   end
 end

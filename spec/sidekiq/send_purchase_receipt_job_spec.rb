@@ -85,6 +85,80 @@ describe SendPurchaseReceiptJob do
     end
   end
 
+  context "when the purchase has joined an order's charge since this was enqueued" do
+    let(:charge) { create(:charge, seller:, purchases: [purchase]) }
+
+    before { charge.order.purchases << purchase }
+
+    it "hands the receipt to the charge job, which waits for the charge's other lines" do
+      expect(CustomerMailer).not_to receive(:receipt)
+
+      described_class.new.perform(purchase.id)
+
+      expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
+    end
+
+    it "still sends a resend directly" do
+      expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+      described_class.new.perform(purchase.id, true)
+
+      expect(mail_double).to have_received(:deliver_now)
+      expect(SendChargeReceiptJob.jobs).to be_empty
+    end
+  end
+
+  context "when the purchase's order still has an in-progress line awaiting a charge" do
+    let(:order) { create(:order) }
+    let(:sibling_seller) { seller }
+    let(:sibling) { create(:purchase, link: create(:product, user: sibling_seller), seller: sibling_seller, purchase_state: "in_progress") }
+
+    before { order.purchases << [purchase, sibling] }
+
+    it "re-enqueues itself instead of mailing before prepare attaches the line to the charge" do
+      expect(CustomerMailer).not_to receive(:receipt)
+
+      described_class.new.perform(purchase.id)
+
+      expect(described_class).to have_enqueued_sidekiq_job(purchase.id, false, 1).in(described_class::PENDING_CHARGE_RETRY_DELAYS.first)
+    end
+
+    it "sends the purchase receipt once the retry budget is spent" do
+      expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+      described_class.new.perform(purchase.id, false, described_class::PENDING_CHARGE_RETRY_DELAYS.size)
+
+      expect(mail_double).to have_received(:deliver_now)
+      expect(described_class.jobs.size).to eq(0)
+    end
+
+    context "when the seller's other line has already failed" do
+      before { sibling.update!(purchase_state: "failed") }
+
+      it "sends the receipt right away" do
+        expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+        described_class.new.perform(purchase.id)
+
+        expect(mail_double).to have_received(:deliver_now)
+        expect(described_class.jobs.size).to eq(0)
+      end
+    end
+
+    context "when the in-progress line belongs to another seller" do
+      let(:sibling_seller) { create(:user) }
+
+      it "sends the receipt right away" do
+        expect(CustomerMailer).to receive(:receipt).with(purchase.id).and_return(mail_double)
+
+        described_class.new.perform(purchase.id)
+
+        expect(mail_double).to have_received(:deliver_now)
+        expect(described_class.jobs.size).to eq(0)
+      end
+    end
+  end
+
   context "when the purchase is a bundle product purchae" do
     before do
       allow_any_instance_of(Purchase).to receive(:is_bundle_product_purchase?).and_return(true)
@@ -116,6 +190,16 @@ describe SendPurchaseReceiptJob do
       repeat["lock_args"] = SidekiqUniqueJobs::LockArgs.call(repeat)
 
       expect(SidekiqUniqueJobs::LockDigest.call(first)).to eq(SidekiqUniqueJobs::LockDigest.call(repeat))
+    end
+
+    it "gives a pending-charge retry its own digest so the running job can enqueue it" do
+      running = { "class" => described_class.name, "queue" => "critical", "args" => [purchase.id] }
+      retry_job = { "class" => described_class.name, "queue" => "critical", "args" => [purchase.id, false, 1] }
+      running["lock_args"] = SidekiqUniqueJobs::LockArgs.call(running)
+      retry_job["lock_args"] = SidekiqUniqueJobs::LockArgs.call(retry_job)
+
+      expect(retry_job["lock_args"]).to eq([purchase.id, false, 1])
+      expect(SidekiqUniqueJobs::LockDigest.call(running)).not_to eq(SidekiqUniqueJobs::LockDigest.call(retry_job))
     end
 
     context "with the unique lock enabled" do
