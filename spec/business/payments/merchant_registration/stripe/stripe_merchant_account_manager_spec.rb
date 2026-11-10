@@ -15935,7 +15935,7 @@ describe StripeMerchantAccountManager, :vcr do
         allow(Stripe::Account).to receive(:update) { |_id, params| update_params << params }
       end
 
-      # Only create_account maps legacy types; update_account sends what it sent before the mapping.
+      # Pre-mapping payloads, including the stale private_corporation re-send, which is base behavior rather than a goal.
       {
         %w[llc corporation] => nil,
         %w[llc partnership] => nil,

@@ -3230,7 +3230,7 @@ module StripeMerchantAccountManager
           (UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.key?(user_compliance_info.business_type) ||
            (map_canada_legacy_structures && CANADA_LEGACY_COMPANY_STRUCTURES.key?(user_compliance_info.business_type)))
       # A record can hold a legacy US-vocabulary type the Canadian form never offers, and Stripe rejects
-      # any structure outside its Canadian set: send none for llc/profit (and, on update, any legacy type).
+      # any structure outside its Canadian set: send none for llc/profit, or on update for corporation/partnership.
       structure = CANADA_LEGACY_COMPANY_STRUCTURES.fetch(user_compliance_info.business_type, user_compliance_info.business_type)
       hash.deep_merge!(
         company: {
