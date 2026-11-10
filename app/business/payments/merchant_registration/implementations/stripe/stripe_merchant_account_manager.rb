@@ -28,6 +28,12 @@ module StripeMerchantAccountManager
     UserComplianceInfo::BusinessTypes::CORPORATION => "private_corporation",
     UserComplianceInfo::BusinessTypes::PARTNERSHIP => "private_partnership",
   }.freeze
+  # Legacy US-vocabulary types a Canadian record can hold. Only create_account maps them: update_account
+  # keeps sending what it sent before, because its diff against the last record would otherwise change.
+  CANADA_LEGACY_COMPANY_STRUCTURES = US_COMPANY_STRUCTURES.slice(
+    UserComplianceInfo::BusinessTypes::CORPORATION,
+    UserComplianceInfo::BusinessTypes::PARTNERSHIP
+  ).freeze
 
   BANK_SYNC_FAILURE_NOTE_PREFIX = "Stripe bank sync failed"
 
@@ -493,8 +499,8 @@ module StripeMerchantAccountManager
     tos_agreement = user.tos_agreements.last
     user_compliance_info = user.alive_user_compliance_info
 
-    last_attributes = account_hash(user, nil, last_user_compliance_info, passphrase:)
-    current_attributes = account_hash(user, tos_agreement, user_compliance_info, passphrase:)
+    last_attributes = account_hash(user, nil, last_user_compliance_info, passphrase:, map_canada_legacy_structures: false)
+    current_attributes = account_hash(user, tos_agreement, user_compliance_info, passphrase:, map_canada_legacy_structures: false)
     country_code = user_compliance_info.legal_entity_country_code
     last_attributes[:metadata] = {}
     last_attributes[:business_profile] = {}
@@ -2944,7 +2950,7 @@ module StripeMerchantAccountManager
   end
 
   private_class_method
-  def self.account_hash(user, tos_agreement, user_compliance_info, passphrase:)
+  def self.account_hash(user, tos_agreement, user_compliance_info, passphrase:, map_canada_legacy_structures: true)
     hash = {
       metadata: {
         user_id: user.external_id
@@ -2993,7 +2999,7 @@ module StripeMerchantAccountManager
       end
 
       if user_compliance_info.is_business?
-        hash.deep_merge!(company_hash(user_compliance_info, passphrase))
+        hash.deep_merge!(company_hash(user_compliance_info, passphrase, map_canada_legacy_structures:))
       else
         hash.deep_merge!(
           individual: person_hash(user_compliance_info, passphrase)
@@ -3153,7 +3159,7 @@ module StripeMerchantAccountManager
   end
   private_class_method :company_tax_id_accepted?
 
-  def self.company_hash(user_compliance_info, passphrase)
+  def self.company_hash(user_compliance_info, passphrase, map_canada_legacy_structures: true)
     return unless user_compliance_info.present?
 
     business_tax_id = user_compliance_info.business_tax_id.decrypt(passphrase)
@@ -3222,11 +3228,10 @@ module StripeMerchantAccountManager
       )
     elsif user_compliance_info.legal_entity_country_code == Compliance::Countries::CAN.alpha2 &&
           (UserComplianceInfo::BusinessTypes::BUSINESS_TYPES_CANADA.key?(user_compliance_info.business_type) ||
-           US_COMPANY_STRUCTURES.slice(UserComplianceInfo::BusinessTypes::CORPORATION, UserComplianceInfo::BusinessTypes::PARTNERSHIP).key?(user_compliance_info.business_type))
+           (map_canada_legacy_structures && CANADA_LEGACY_COMPANY_STRUCTURES.key?(user_compliance_info.business_type)))
       # A record can hold a legacy US-vocabulary type the Canadian form never offers, and Stripe rejects
-      # any structure outside its Canadian set: map legacy corporation/partnership, send none for llc/profit.
-      structure = US_COMPANY_STRUCTURES.slice(UserComplianceInfo::BusinessTypes::CORPORATION, UserComplianceInfo::BusinessTypes::PARTNERSHIP)
-                                       .fetch(user_compliance_info.business_type, user_compliance_info.business_type)
+      # any structure outside its Canadian set: send none for llc/profit, or on update for corporation/partnership.
+      structure = CANADA_LEGACY_COMPANY_STRUCTURES.fetch(user_compliance_info.business_type, user_compliance_info.business_type)
       hash.deep_merge!(
         company: {
           structure: structure == "non_profit" ? "" : structure,
