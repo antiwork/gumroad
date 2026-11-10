@@ -15,10 +15,51 @@ describe Mcp::DeliverEventJob do
     }
   end
 
-  before { allow(Resolv).to receive(:getaddresses).with("example.com").and_return(["93.184.216.34"]) }
+  before do
+    allow(Resolv).to receive(:getaddresses).with("example.com").and_return(["93.184.216.34"])
+    create("doorkeeper/access_token", application: subscription.oauth_application, resource_owner_id: subscription.user_id, scopes: "view_sales")
+  end
 
   def perform(attempt = 0)
     described_class.new.perform(subscription.id, event, attempt)
+  end
+
+  it "sends nothing and deletes the subscription once the connection holds no token with the scope" do
+    Doorkeeper::AccessToken.where(resource_owner_id: subscription.user_id).find_each(&:revoke)
+    create("doorkeeper/access_token", application: subscription.oauth_application, resource_owner_id: subscription.user_id, scopes: "view_public")
+    create("doorkeeper/access_token", application: create(:oauth_application), resource_owner_id: subscription.user_id, scopes: "view_sales")
+    allow(Rails.logger).to receive(:info)
+
+    perform
+
+    expect(a_request(:post, callback_url)).not_to have_been_made
+    expect(McpEventSubscription.exists?(subscription.id)).to be(false)
+    expect(described_class.jobs.size).to eq(0)
+    expect(Rails.logger).to have_received(:info).with("mcp_event_delivery subscription_id=#{subscription.id} event=sale.created attempt=1 outcome=access_revoked")
+  end
+
+  it "stops delivering on a team member's token once the membership ends" do
+    Doorkeeper::AccessToken.where(resource_owner_id: subscription.user_id).find_each(&:revoke)
+    membership = create(:team_membership, seller: subscription.user)
+    create("doorkeeper/access_token", application: subscription.oauth_application, resource_owner_id: subscription.user_id, scopes: "view_sales", team_membership_id: membership.id)
+    stub_request(:post, callback_url).to_return(status: 204)
+
+    perform
+    membership.update_columns(deleted_at: Time.current)
+    perform
+
+    expect(a_request(:post, callback_url)).to have_been_made.once
+    expect(McpEventSubscription.exists?(subscription.id)).to be(false)
+  end
+
+  it "delivers to a connection whose token holds the account scope" do
+    Doorkeeper::AccessToken.where(resource_owner_id: subscription.user_id).find_each(&:revoke)
+    create("doorkeeper/access_token", application: subscription.oauth_application, resource_owner_id: subscription.user_id, scopes: "account")
+    stub_request(:post, callback_url).to_return(status: 204)
+
+    perform
+
+    expect(a_request(:post, callback_url)).to have_been_made.once
   end
 
   it "delivers the event under its own id, logs the attempt, and schedules nothing after a 2xx" do

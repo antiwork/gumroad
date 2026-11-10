@@ -13,9 +13,16 @@ class Mcp::DeliverEventJob
   NON_RETRYABLE_STATUSES = [410, 413].freeze
 
   def perform(subscription_id, event, attempt = 0)
-    # The primary: a refresh can replace the secret, or an unsubscribe remove the row, moments before.
+    # The primary: a refresh can replace the secret, and an unsubscribe or a revocation can land, moments before.
     subscription = ApplicationRecord.connected_to(role: :writing) { McpEventSubscription.live.find_by(id: subscription_id) }
     return if subscription.nil?
+
+    unless ApplicationRecord.connected_to(role: :writing) { subscription.access_granted? }
+      # The secret has no use now. The client subscribes again once it holds a token with the scope.
+      subscription.delete
+      log(subscription_id, event, attempt, "access_revoked")
+      return
+    end
 
     response = Mcp::EventWebhook.post(subscription, message_id: event["eventId"], payload: event)
     log(subscription_id, event, attempt, "http_#{response.status}")
