@@ -214,6 +214,21 @@ describe "MCP server events" do
     end
   end
 
+  it "delivers a sale to the callback URL a client subscribed, signed with the client's secret" do
+    stub_echoing_callback
+    subscription_id = subscribe.dig("result", "id")
+    purchase = create(:free_purchase, link: create(:product, user: seller, name: "Field notes"), seller:)
+
+    PostToPingEndpointsWorker.new.perform(purchase.id, nil)
+    Mcp::DeliverEventJob.drain
+
+    delivery = @sent.last
+    expect(JSON.parse(delivery.body)).to include("name" => "sale.created", "data" => a_hash_including("sale_id" => purchase.external_id, "product_name" => "Field notes"))
+    expect(delivery.headers["X-Mcp-Subscription-Id"]).to eq(subscription_id)
+    signed = Mcp::EventSignature.headers(secret:, message_id: delivery.headers["Webhook-Id"], body: delivery.body, timestamp: delivery.headers["Webhook-Timestamp"].to_i)
+    expect(delivery.headers["Webhook-Signature"]).to eq(signed["webhook-signature"])
+  end
+
   describe "events/unsubscribe" do
     it "deletes the subscription for the key, answers the same when there is none, and leaves other connections alone" do
       create(:mcp_event_subscription, user: seller, oauth_application: application, callback_url:)

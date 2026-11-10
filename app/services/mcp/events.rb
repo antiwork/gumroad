@@ -10,10 +10,13 @@ module Mcp
     CALLBACK_ENDPOINT_ERROR = -32015
     WEBHOOK = "webhook"
     MILLISECONDS_PER_SECOND = 1000
+    # Long enough for a ping that waited out a busy queue. A resend within it reaches the client as
+    # a duplicate it can drop.
+    NEW_ORDER_WINDOW = 1.day
     DESCRIPTORS = [
       {
         name: McpEventSubscription::SALE_CREATED,
-        description: "Fires when one of the creator's products sells, free downloads included. The payload identifies the sale; list_sales gives the buyer's email and the amounts after fees.",
+        description: "Fires once for each new order that list_sales shows: free downloads and membership renewals count, a gift or a bundle counts once, a preorder counts when the buyer places it, and test purchases do not count. The payload identifies the sale; list_sales gives the buyer's email and the amounts after fees.",
         delivery: [WEBHOOK],
         inputSchema: { type: "object", properties: {}, additionalProperties: false },
         payloadSchema: {
@@ -31,6 +34,55 @@ module Mcp
         }
       }
     ].freeze
+
+    class << self
+      # Queues one delivery for each live subscription of the seller. Called for every sale ping, so
+      # a seller with no subscription costs one indexed query.
+      def publish_sale(purchase)
+        subscription_ids = McpEventSubscription.live.where(user_id: purchase.seller_id, event_name: McpEventSubscription::SALE_CREATED).ids
+        return if subscription_ids.empty?
+
+        sale = new_order(purchase)
+        return if sale.nil? || !Feature.active?(:mcp_events, purchase.seller)
+
+        event = sale_created(sale)
+        DeliverEventJob.perform_bulk(subscription_ids.map { [_1, event] })
+      end
+
+      # String keys: it travels as Sidekiq job arguments. `data` is the sale.created payloadSchema above.
+      def sale_created(purchase)
+        {
+          # Stable per sale, so a ping sent again for the same sale reaches the client as a duplicate it can drop.
+          "eventId" => "evt_sale_#{ObfuscateIds.encrypt(purchase.id, padding: false)}",
+          "name" => McpEventSubscription::SALE_CREATED,
+          "timestamp" => purchase.created_at.utc.iso8601,
+          "data" => {
+            "sale_id" => purchase.external_id,
+            "product_id" => purchase.link.external_id,
+            "product_name" => purchase.link.name,
+            "price_cents" => purchase.price_cents,
+            "currency" => Currency::USD,
+            "created_at" => purchase.created_at.utc.iso8601
+          },
+          "cursor" => nil
+        }
+      end
+
+      private
+        # The purchase list_sales shows for a pinged sale, or nil when the ping is not a new order.
+        def new_order(purchase)
+          # The giftee's purchase is the one that pings, but list_sales shows the gifter's, which was paid.
+          purchase = purchase.gift_received&.gifter_purchase if purchase.is_gift_receiver_purchase
+          return if purchase.nil? || !Purchase::CHARGED_SUCCESS_STATES.include?(purchase.purchase_state)
+          # Each of these belongs to an order that already fired: a bundle's member rows, and the
+          # charge a preorder makes at release.
+          return if purchase.is_bundle_product_purchase || (purchase.preorder_id.present? && !purchase.is_preorder_authorization)
+          # A seller can resend a ping from the dashboard long after the sale.
+          return if (purchase.succeeded_at || purchase.created_at) < NEW_ORDER_WINDOW.ago
+
+          purchase
+        end
+    end
 
     # The two callables are the server's own scope and argument checks, so a caller gets the same
     # step-up challenge and the same errors as from a tool.

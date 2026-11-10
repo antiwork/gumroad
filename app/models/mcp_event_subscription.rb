@@ -18,6 +18,8 @@ class McpEventSubscription < ApplicationRecord
   MAX_TTL = 1.day
   # A connection is one seller's grant to one OAuth application.
   MAX_LIVE_PER_CONNECTION = 20
+  # A token needs one of these to subscribe, and the connection needs one for a delivery to go out.
+  SCOPES = %i[view_sales account].freeze
   PUBLIC_ID_PREFIX = "sub_"
   PUBLIC_ID_DIGEST_LENGTH = 32
 
@@ -101,6 +103,15 @@ class McpEventSubscription < ApplicationRecord
   # must answer with the id the first subscribe gave. It is never accepted as input.
   def public_id
     "#{PUBLIC_ID_PREFIX}#{key_digest.first(PUBLIC_ID_DIGEST_LENGTH)}"
+  end
+
+  # Revoking one token, or authorizing again with fewer scopes, deletes no row, so a delivery asks
+  # the token table each time.
+  def access_granted?
+    Doorkeeper::AccessToken.active_for(user_id).where(application_id: oauth_application_id).any? do |token|
+      # The endpoint's own rule too: a team member's token ends with the membership.
+      SCOPES.any? { token.includes_scope?(_1) } && MobileAccountToken.valid?(token)
+    end
   end
 
   private

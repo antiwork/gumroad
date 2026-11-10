@@ -18,6 +18,7 @@ class PostToPingEndpointsWorker
         user = purchase.seller
         ping_params = purchase.payload_for_ping_notification(url_parameters: url_parameters.presence || purchase.url_parameters, resource_name:)
         ping_context = { resource_name:, purchase_id: purchase.id, subscription_id: purchase.subscription_id }
+        mcp_sale = purchase if resource_name == ResourceSubscription::SALE_RESOURCE_NAME
       end
 
       targets = user.ping_notification_targets(resource_name)
@@ -26,20 +27,23 @@ class PostToPingEndpointsWorker
       notify_undeliverable_subscriptions(targets.undeliverable_subscriptions)
 
       post_urls = targets.post_urls
-      return if post_urls.empty?
-
-      # No URL vetting here: SsrfFilter.post in the individual worker validates the resolved IPs at
-      # connect time (and per redirect hop), and a pre-check here meant a transient empty DNS lookup
-      # silently dropped the ping with no retry (gp#2155).
-      #
-      # The fifth argument is gated so a consumer still on the four-argument `perform` never
-      # receives it mid-rollout; activate :record_ping_deliveries once the deploy has finished.
-      record_context = Feature.active?(:record_ping_deliveries)
-      post_urls.each do |post_url, content_type|
-        args = [post_url, ping_params.deep_stringify_keys, content_type, user.id]
-        args << ping_context.stringify_keys if record_context
-        PostToIndividualPingEndpointWorker.perform_async(*args)
+      if post_urls.any?
+        # No URL vetting here: SsrfFilter.post in the individual worker validates the resolved IPs at
+        # connect time (and per redirect hop), and a pre-check here meant a transient empty DNS lookup
+        # silently dropped the ping with no retry (gp#2155).
+        #
+        # The fifth argument is gated so a consumer still on the four-argument `perform` never
+        # receives it mid-rollout; activate :record_ping_deliveries once the deploy has finished.
+        record_context = Feature.active?(:record_ping_deliveries)
+        post_urls.each do |post_url, content_type|
+          args = [post_url, ping_params.deep_stringify_keys, content_type, user.id]
+          args << ping_context.stringify_keys if record_context
+          PostToIndividualPingEndpointWorker.perform_async(*args)
+        end
       end
+
+      # Last, so a retry after a failure above does not queue the deliveries a second time.
+      publish_mcp_sale_event(mcp_sale) if mcp_sale
     end
   end
 
@@ -49,10 +53,19 @@ class PostToPingEndpointsWorker
     def notify_undeliverable_subscriptions(subscriptions)
       UndeliverablePingSubscriptionNotifier.notify_all(subscriptions)
     rescue => e
-      begin
-        ErrorNotifier.notify(e)
-      rescue
-        nil
-      end
+      report(e)
+    end
+
+    # The same rule: an MCP event is an extra, and a failure here must not hold up the pings.
+    def publish_mcp_sale_event(purchase)
+      Mcp::Events.publish_sale(purchase)
+    rescue => e
+      report(e)
+    end
+
+    def report(error)
+      ErrorNotifier.notify(error)
+    rescue
+      nil
     end
 end

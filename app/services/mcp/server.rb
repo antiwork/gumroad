@@ -369,7 +369,7 @@ module Mcp
         @events ||= Events.new(
           user:,
           token:,
-          authorize_sales: -> { require_scopes!(:view_sales, :account, subject: "Subscribing to an event") },
+          authorize_sales: -> { require_scopes!(*McpEventSubscription::SCOPES, subject: "Subscribing to an event") },
           validate_arguments: method(:validate_tool_arguments!)
         )
       end
