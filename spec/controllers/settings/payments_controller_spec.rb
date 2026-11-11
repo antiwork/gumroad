@@ -1395,12 +1395,23 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       describe "user is verified" do
         before do
           put :update, params: { user: params }
-          merchant_account = create(:merchant_account, charge_processor_verified_at: Time.current)
-          user.merchant_accounts << merchant_account
+          user.merchant_accounts << create(:merchant_account, charge_processor_verified_at: Time.current)
+        end
+
+        # An unchanged save reads the live business type, so it needs an account that exists on Stripe.
+        def point_merchant_account_at_live_individual_account
+          stripe_account = Stripe::Account.create(
+            type: "custom",
+            country: "US",
+            business_type: "individual",
+            capabilities: { transfers: { requested: true }, card_payments: { requested: true } }
+          )
+          user.stripe_account.update!(charge_processor_merchant_id: stripe_account.id)
         end
 
         describe "user saves existing data unchanged" do
           before do
+            point_merchant_account_at_live_individual_account
             put :update, params: { user: params }
           end
 
@@ -1516,6 +1527,7 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         end
 
         it "allows the user to change the account type from individual to business" do
+          point_merchant_account_at_live_individual_account
           # Save the account type as "individual"
           put :update, params: { user: params }
 
