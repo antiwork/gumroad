@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 import AppWrapper from "../inertia/app_wrapper.tsx";
 import Layout, { PublicLayout, LoggedInUserLayout } from "../inertia/layout.tsx";
 import { isUnredirectedDownloadPagePollResponse, warnAboutDroppedPollResponse } from "../utils/inertia_partial_reload";
-import { installPopstateClaims } from "../utils/popstateClaims";
+import { installPopstateClaims, markVisitStarted } from "../utils/popstateClaims";
 import { installFileDropNavigationGuard } from "../utils/preventFileDropNavigation";
 import { defaults as requestDefaults } from "../utils/request";
 
@@ -40,6 +40,7 @@ if (typeof Node !== "undefined") {
 
 router.on("start", (event) => {
   if (event.detail.visit.prefetch) return;
+  markVisitStarted();
   window.__activeRequests = (window.__activeRequests || 0) + 1;
 });
 

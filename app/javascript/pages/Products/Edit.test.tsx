@@ -4,6 +4,7 @@ import * as React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import ProductEditInertiaPage from "$app/pages/Products/Edit";
+import { installPopstateClaims, markVisitStarted } from "$app/utils/popstateClaims";
 
 Object.assign(globalThis, { SSR: false });
 
@@ -21,8 +22,10 @@ vi.mock("$app/components/ProductEdit/load", () => ({
 }));
 
 const pageProps = vi.hoisted((): { current: Record<string, unknown> } => ({ current: {} }));
+const reload = vi.hoisted(() => vi.fn<(options: { onSuccess: () => void }) => void>());
 vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: pageProps.current }),
+  router: { reload },
 }));
 
 vi.mock("$app/hooks/useDropbox", () => ({ useDropbox: () => {} }));
@@ -140,8 +143,12 @@ const makePageProps = (id: string): Record<string, unknown> => ({
   },
 });
 
+installPopstateClaims();
+
 beforeEach(() => {
   mounts.length = 0;
+  reload.mockReset();
+  markVisitStarted();
 });
 
 afterEach(cleanup);
@@ -164,4 +171,32 @@ it("remounts the editor when the Inertia visit switches products, and only then"
   rerender(<ProductEditInertiaPage />);
   await act(async () => {});
   expect(mounts).toEqual(["product-a", "product-b"]);
+});
+
+it("waits for current props before mounting the editor on a page restored from history", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  pageProps.current = makePageProps("product-a");
+  const { rerender } = render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(mounts).toEqual([]);
+  expect(reload).toHaveBeenCalledTimes(1);
+
+  pageProps.current = makePageProps("product-a");
+  act(() => {
+    reload.mock.calls[0]?.[0].onSuccess();
+  });
+  rerender(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(mounts).toEqual(["product-a"]);
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+it("mounts the editor straight away on a visit", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  markVisitStarted();
+  pageProps.current = makePageProps("product-a");
+  render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(mounts).toEqual(["product-a"]);
+  expect(reload).not.toHaveBeenCalled();
 });
