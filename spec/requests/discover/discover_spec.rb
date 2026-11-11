@@ -398,11 +398,15 @@ describe("Discover", js: true, type: :system) do
     expect(page).to have_current_path(/query=pine\+martens/)
     expect(page).not_to have_selector("h1", visible: :all)
 
+    page.go_back
+    expect(page).to have_selector("h1", text: "Discover digital products from independent creators", exact_text: true)
+
     visit discover_url(host: discover_host, tags: "action")
     expect(page).to have_text("On the market")
     expect(page).not_to have_selector("h1", visible: :all)
 
     visit discover_url(host: discover_host, query: " ", tags: ",")
+    expect(page).to have_selector("h1", count: 1, visible: :all)
     expect(page).to have_selector("h1", text: "Discover digital products from independent creators", exact_text: true)
   end
 
@@ -502,6 +506,7 @@ describe("Discover", js: true, type: :system) do
       visit "#{discover_host}/software-development/programming/c-sharp?sort=featured"
 
       expect(page).to have_title("Software Development » Programming » C# | Gumroad")
+      expect(page).to have_selector("h1", count: 1, visible: :all)
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 3")
       end
@@ -522,6 +527,7 @@ describe("Discover", js: true, type: :system) do
       expect(page).to have_current_path("/software-development/programming")
       expect(page).to have_title("Software Development » Programming — digital products by independent creators | Gumroad")
       expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development / Programming")
+      expect(page).to have_selector("h1", count: 1, visible: :all)
 
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 2", "product 3")
