@@ -134,7 +134,7 @@ describe InstallmentPresenter do
       expect(props[:context][:timezone]).to eq(ActiveSupport::TimeZone[seller.timezone].now.strftime("%Z"))
       expect(props[:context][:currency_type]).to eq("usd")
       expect(props[:context][:countries]).to match_array(["United States"] + Compliance::Countries.for_select.map { _1.last }.without("United States"))
-      expect(props[:context][:profile_sections]).to eq([{ id: section.external_id, name: nil }])
+      expect(props[:context][:profile_sections]).to eq([{ id: section.external_id, name: nil, add_new_posts: false }])
       expect(props[:context][:has_scheduled_emails]).to be(false)
       expect(props[:context][:user_id]).to eq(seller.external_id)
       expect(props[:context][:allow_comments_by_default]).to be(true)

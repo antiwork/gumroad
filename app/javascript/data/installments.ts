@@ -112,7 +112,7 @@ export type InstallmentFormContext = {
   timezone: string;
   currency_type: CurrencyCode;
   countries: string[];
-  profile_sections: { id: string; name: string | null }[];
+  profile_sections: { id: string; name: string | null; add_new_posts: boolean }[];
   has_scheduled_emails: boolean;
   aws_access_key_id: string;
   s3_url: string;

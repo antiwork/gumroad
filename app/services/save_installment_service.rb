@@ -60,7 +60,7 @@ class SaveInstallmentService
       end
       if (installment.published? || installment.add_and_validate_filters(installment_attrs, seller)) && save_with_unique_slug!
         SaveFilesService.perform(installment, product_files_params)
-        update_profile_posts_sections!(new_installment:)
+        update_profile_posts_sections!
       else
         @error = installment.errors.full_messages.first
       end
@@ -74,14 +74,14 @@ class SaveInstallmentService
       installment.save
     end
 
-    # Mirrors Link#add_to_profile_sections: a section that asks for new posts gets one the next time
-    # a post is created, so the seller does not have to tick it in the post editor. Creation only --
-    # a post taken off a section by hand stays off it.
-    def update_profile_posts_sections!(new_installment: false)
+    # Only the sections the seller picked change. The post editor starts those switches from each
+    # section's "add new posts by default" flag, so a section the seller unticked there keeps the
+    # post out even though the flag is on.
+    def update_profile_posts_sections!
       seller.with_profile_sections_lock do
         seller.seller_profile_posts_sections.reload.each do |section|
           shown_posts = Set.new(section.shown_posts)
-          if section.external_id.in?(installment_params[:shown_in_profile_sections]) || (new_installment && section.add_new_posts)
+          if section.external_id.in?(installment_params[:shown_in_profile_sections])
             shown_posts.add(installment.id)
           else
             shown_posts.delete(installment.id)

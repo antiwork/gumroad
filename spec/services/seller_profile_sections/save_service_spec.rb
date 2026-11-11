@@ -125,6 +125,27 @@ describe SellerProfileSections::SaveService do
       expect(posts_section.reload).to have_attributes(shown_posts: [post.id], header: "B!")
     end
 
+    it "keeps a scheduled post the editor cannot list when shown_posts is saved" do
+      published = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      scheduled = create(:installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true, published_at: nil)
+      posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [published.id, scheduled.id])
+
+      service.update!(posts_section, section_params(shown_posts: [published.external_id], header: "B!"), allow_shown_posts: true)
+
+      expect(posts_section.reload).to have_attributes(shown_posts: [published.id, scheduled.id], header: "B!")
+    end
+
+    it "drops ids whose post is gone when shown_posts is saved" do
+      published = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      deleted = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [published.id, deleted.id])
+      deleted.update!(deleted_at: Time.current)
+
+      service.update!(posts_section, section_params(shown_posts: [published.external_id]), allow_shown_posts: true)
+
+      expect(posts_section.reload.shown_posts).to eq([published.id])
+    end
+
     it "processes rich text content with the existing content as old content" do
       product = create(:product, user: seller)
       upsell = create(:upsell, seller:, product:, is_content_upsell: true)

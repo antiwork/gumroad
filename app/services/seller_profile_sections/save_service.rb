@@ -27,6 +27,7 @@ class SellerProfileSections::SaveService
     excepted << :shown_posts unless allow_shown_posts
     attributes = decrypt_ids(attributes.except(*excepted))
     attributes = derive_hide_header(attributes)
+    attributes = keep_unpublished_posts(section, attributes) if allow_shown_posts
     if attributes[:text].present? && section.is_a?(SellerProfileRichTextSection)
       attributes[:text][:content] = process_text(attributes[:text][:content], section.json_data["text"]["content"] || [])
     end
@@ -44,6 +45,15 @@ class SellerProfileSections::SaveService
     def derive_hide_header(attributes)
       return attributes unless attributes.key?(:header)
       attributes.merge(hide_header: attributes[:header].blank?)
+    end
+
+    # The section editor lists published posts only, so its payload omits a post this section
+    # already holds but has not published yet (a scheduled post). Keep those ids.
+    def keep_unpublished_posts(section, attributes)
+      return attributes unless section.is_a?(SellerProfilePostsSection) && attributes.key?(:shown_posts)
+      submitted = Array(attributes[:shown_posts]).map(&:to_i)
+      unpublished_ids = seller.installments.alive.not_published.where(id: Array(section.shown_posts).map(&:to_i) - submitted).pluck(:id)
+      unpublished_ids.empty? ? attributes : attributes.merge(shown_posts: Array(attributes[:shown_posts]) + unpublished_ids)
     end
 
     def decrypt_ids(attributes)
