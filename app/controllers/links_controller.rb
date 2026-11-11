@@ -1435,12 +1435,8 @@ class LinksController < ApplicationController
       set_product_page_crawl_fallback
     end
 
-    # The product's copy only reaches the page through the Inertia payload, so a fetcher without
-    # JavaScript saw an empty shell (gumroad-private#4521). Mirror the help-center/blog fallback:
-    # reduce the stored description HTML to escaped plain text and let the `seo_product_fallback`
-    # partial render it inside <noscript>. Skip the embedded/overlay frame and the Discover layout,
-    # where the served document is not the public product page, and any product that is not
-    # published and alive, whose copy is not public yet.
+    # Skipped where the served document is not the public product page (embed, overlay, Discover
+    # layout) and for a product whose copy is not public yet.
     def set_product_page_crawl_fallback
       return if params[:embed] || params[:overlay]
       return if params[:layout] == Product::Layout::DISCOVER
@@ -1453,7 +1449,7 @@ class LinksController < ApplicationController
       @seo_product_fallback = {
         name: @product.name,
         seller: @product.user.name_or_username,
-        price: @product.price_formatted_verbose(for_default_duration: true),
+        price: @product.price_formatted_verbose(for_default_duration: true, discounted: true),
         description: helpers.simple_format(ERB::Util.html_escape(plain_description)),
       }
     end

@@ -2,10 +2,6 @@
 
 require "spec_helper"
 
-# Product pages ship as an Inertia shell: the name, seller, price and description live only in
-# the JSON payload, so a fetcher that does not run JavaScript reads an empty <body>. A
-# <noscript> fallback carries the same copy for those fetchers (gumroad-private#4521), on the
-# pattern already shipped for help-center articles and blog posts.
 describe "product page crawl fallback", type: :request do
   let(:seller) { create(:user, name: "Fallback Seller") }
 
@@ -64,6 +60,16 @@ describe "product page crawl fallback", type: :request do
       expect(fallback).to be_present
       expect(fallback.text).to include("$10")
       expect(fallback.text.downcase).to include("month")
+    end
+
+    it "quotes the price a default discount leaves, as the product page does" do
+      offer_code = seller.offer_codes.create!(code: "half", amount_percentage: 50, products: [product])
+      product.update!(default_offer_code: offer_code)
+
+      get_product(product)
+
+      expect(noscript_fallback.text).to include("$7.50")
+      expect(noscript_fallback.text).not_to include("$15")
     end
 
     it "cannot be made to close the noscript element from the description" do
