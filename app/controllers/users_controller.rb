@@ -253,9 +253,8 @@ class UsersController < ApplicationController
 
   private
     # The profile ships as an Inertia shell: the name, bio and product links live only in the
-    # payload, so a fetcher that does not run JavaScript reads an empty <body>. The cards are the
-    # ones the React page renders, so a crawler reads the profile's own catalogue, not a second
-    # view of it. Skipped for an Inertia visit, where no document is served.
+    # payload, so a fetcher that does not run JavaScript reads an empty <body>. Skipped for an
+    # Inertia visit, where no document is served.
     def set_profile_page_crawl_fallback(props)
       return if request.inertia?
 
