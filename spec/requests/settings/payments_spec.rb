@@ -861,6 +861,49 @@ describe("Payments Settings Scenario", type: :system, js: true) do
         expect(@user.active_bank_account.send(:account_number_decrypted)).to eq("000123456789")
         expect(@user.stripe_account.charge_processor_merchant_id).to be_present
       end
+
+      it "saves without a tax ID from a representative who has no US one" do
+        visit settings_payments_path
+
+        choose "Business"
+
+        fill_in("Legal business name", with: "US LLC with Algerian rep")
+        select("LLC (single member)", from: "Type")
+        find_field("Address", match: :first).set("address_full_match")
+        find_field("City", match: :first).set("NY")
+        find_field("State", match: :first).select("New York")
+        find_field("ZIP code", match: :first).set("10110")
+        fill_in("Business phone number", with: "5052426789")
+        fill_in("Business Tax ID (EIN, or SSN for sole proprietors)", with: "000000000")
+
+        fill_in("First name", with: "Algerian")
+        fill_in("Last name", with: "Creator")
+        all('select[id$="creator-country"]').last.select("Algeria")
+        all('input[id$="creator-street-address"]').last.set("address_full_match")
+        all('input[id$="creator-city"]').last.set("Algiers")
+        find_field("Postal code").set("16000")
+        fill_in("Phone number", with: "551234567")
+        expect(find_field("Personal tax ID").value).to eq("")
+
+        select("1", from: "Day")
+        select("January", from: "Month")
+        select("1980", from: "Year")
+
+        fill_in("Pay to the order of", with: "US LLC Algerian Rep")
+        fill_in("Routing number", with: "110000000")
+        fill_in("Account number", with: "000123456789")
+        fill_in("Confirm account number", with: "000123456789")
+
+        click_on("Update settings")
+
+        expect(page).to have_alert(text: "Thanks! You're all set.")
+
+        compliance_info = @user.alive_user_compliance_info
+        expect(compliance_info.business_country).to eq("United States")
+        expect(compliance_info.country).to eq("Algeria")
+        expect(compliance_info.individual_tax_id).to be_blank
+        expect(@user.reload.stripe_account.charge_processor_merchant_id).to be_present
+      end
     end
 
     describe "US business with EIN already saved, editing non-EIN fields" do

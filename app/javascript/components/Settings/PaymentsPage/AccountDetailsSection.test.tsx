@@ -145,7 +145,7 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").required).toBe(false);
   });
 
-  it("does not require a mapped foreign ID either, which Stripe discards for a US company", () => {
+  it("does not require a mapped foreign ID either", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }), {
       is_business: true,
       business_country: "US",
