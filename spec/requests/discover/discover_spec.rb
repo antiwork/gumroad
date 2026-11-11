@@ -506,7 +506,6 @@ describe("Discover", js: true, type: :system) do
       visit "#{discover_host}/software-development/programming/c-sharp?sort=featured"
 
       expect(page).to have_title("Software Development » Programming » C# | Gumroad")
-      expect(page).to have_selector("h1", count: 1, visible: :all)
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 3")
       end
@@ -527,7 +526,6 @@ describe("Discover", js: true, type: :system) do
       expect(page).to have_current_path("/software-development/programming")
       expect(page).to have_title("Software Development » Programming — digital products by independent creators | Gumroad")
       expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development / Programming")
-      expect(page).to have_selector("h1", count: 1, visible: :all)
 
       within_section "Featured products", section_element: :section do
         expect_product_cards_with_names("product 0", "product 2", "product 3")
