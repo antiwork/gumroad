@@ -259,7 +259,11 @@ class UsersController < ApplicationController
     def set_profile_page_crawl_fallback(props)
       return if request.inertia?
 
-      cards = Array(props[:sections]).flat_map do |section|
+      # The page renders only sections a tab points at, in tab order; a saved section that no tab
+      # references never appears, so linking its products would be crawler-only.
+      sections_by_id = Array(props[:sections]).index_by { _1[:id] }
+      sections = Array(props[:tabs]).flat_map { _1[:sections] }.uniq.filter_map { sections_by_id[_1] }
+      cards = sections.flat_map do |section|
         case section[:type]
         when "SellerProfileProductsSection" then Array(section.dig(:search_results, :products))
         # A featured section carries the product page's payload, with its card under :product.
