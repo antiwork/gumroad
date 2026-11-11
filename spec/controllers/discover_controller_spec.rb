@@ -439,6 +439,29 @@ describe DiscoverController, type: :controller, inertia: true do
     context "server-rendered crawl links" do
       render_views
 
+      it "renders a heading in the initial HTML of /discover" do
+        get :index
+
+        expect(response.body).to include("<h1>Discover</h1>")
+      end
+
+      it "renders the category title and description as the page heading" do
+        get :index, params: { taxonomy: "3d" }
+
+        doc = Nokogiri::HTML.parse(response.body)
+        expect(doc.at_css("noscript h1").text.strip).to include("3D")
+        expect(doc.at_css("noscript p").text).to include("products from independent creators")
+      end
+
+      it "renders a heading on a leaf category, which has no subcategory links" do
+        leaf = Taxonomy.all.find { |taxonomy| taxonomy.children.empty? && taxonomy.parent.present? }
+        get :index, params: { taxonomy: leaf.self_and_ancestors.reverse.map(&:slug).join("/") }
+
+        doc = Nokogiri::HTML.parse(response.body)
+        expect(doc.at_css("noscript h1").text.strip).to be_present
+        expect(doc.at_css("noscript nav[aria-label='Categories']")).to be_nil
+      end
+
       it "renders top-level category links in the initial HTML of /discover" do
         get :index
 

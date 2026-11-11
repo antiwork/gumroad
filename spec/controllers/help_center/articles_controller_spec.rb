@@ -35,6 +35,15 @@ describe HelpCenter::ArticlesController, inertia: true do
   describe "GET show" do
     let(:article) { HelpCenter::Article.first }
 
+    it "serves the article title and body inside noscript so a crawler without JavaScript sees the text" do
+      get :show, params: { slug: article.slug }
+
+      noscript = Nokogiri::HTML.parse(response.body).at_css("noscript")
+      expect(noscript).to be_present
+      expect(noscript.at_css("h1").text.strip).to eq(article.title)
+      expect(noscript.text.squish.length).to be > 200
+    end
+
     it "returns successful response with Inertia page data" do
       get :show, params: { slug: article.slug }
       expect(response).to be_successful

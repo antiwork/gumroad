@@ -1,0 +1,11 @@
+<%# Crawl fallback for pages whose text exists only inside the Inertia payload: a fetcher
+    that does not run JavaScript otherwise receives an empty shell. noscript keeps it out
+    of the rendered UI, where the React component already shows the same article.
+    The bodies are already escaped or repo-authored; the gsub is the one guarantee that
+    matters here, since a literal closing tag would end the raw-text element early. %>
+<noscript>
+  <article>
+    <h1><%= @seo_article_fallback[:title] %></h1>
+    <%= @seo_article_fallback[:html].to_s.gsub(%r{</noscript}i, "&lt;/noscript").html_safe %>
+  </article>
+</noscript>

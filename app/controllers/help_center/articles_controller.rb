@@ -40,7 +40,10 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
     set_meta_tag(name: "twitter:title", content: title)
     set_meta_tag(name: "twitter:description", content: description)
 
-    render inertia: "HelpCenter/Articles/Show", props: help_center_presenter.article_props(article)
+    props = help_center_presenter.article_props(article)
+    @seo_article_fallback = { title: article.title, html: props[:article][:content] }
+
+    render inertia: "HelpCenter/Articles/Show", props:
   end
 
   private

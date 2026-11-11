@@ -258,6 +258,9 @@ class DiscoverController < ApplicationController
     def prepare_category_seo(search_results:)
       if taxonomy.blank? && params.values_at(:query, :tags).all?(&:blank?)
         @discover_category_links = Discover::CategoryPagePresenter.root_category_links
+        # The Discover app renders client-side, so the served HTML has no heading at all.
+        # This is only used by the noscript crawl fallback in discover/seo_links.
+        @discover_seo_heading = "Discover"
         return
       end
       return unless category_seo_page?
@@ -275,6 +278,8 @@ class DiscoverController < ApplicationController
 
       @discover_category_links = presenter.subcategory_links
       @discover_pagination_links = pagination_links(search_results:)
+      @discover_seo_heading = presenter.title
+      @discover_seo_description = presenter.meta_description
     end
 
     # params[:from] (not the raw request query param) is the actual ES offset behind

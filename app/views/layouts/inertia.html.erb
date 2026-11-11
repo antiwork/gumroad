@@ -8,7 +8,8 @@
     <div id="design-settings" data-settings="<%= RenderingExtension.design_settings(self).to_json %>" style="display: none;"></div>
     <div id="user-agent-info" data-settings="<%= RenderingExtension.user_agent_info(self).to_json %>" style="display: none;"></div>
     <%= render("layouts/shared/flash") %>
-    <%= render("discover/seo_links") if @discover_category_links.present? %>
+    <%= render("discover/seo_links") if @discover_category_links.present? || @discover_seo_heading.present? %>
+    <%= render("layouts/seo_article_fallback") if @seo_article_fallback.present? %>
     <%= content_for?(:content) ? yield(:content) : yield %>
     <% if content_for? :footer %>
       <footer>

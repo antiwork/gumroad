@@ -89,7 +89,8 @@ describe GumroadBlog::PostsController, inertia: true do
         seller: blog_owner,
         shown_on_profile: true,
         slug: "test-post",
-        name: "Test Post"
+        name: "Test Post",
+        message: "<p>Hello from the blog</p>"
       )
     end
 
@@ -109,6 +110,31 @@ describe GumroadBlog::PostsController, inertia: true do
       expect(inertia.props[:published_at]).to eq(post_props[:published_at])
       expect(inertia.props[:message]).to eq(post_props[:message])
       expect(inertia.props[:call_to_action]).to eq(post_props[:call_to_action])
+    end
+
+    context "served HTML" do
+      render_views
+
+      it "serves the post body inside noscript so a crawler without JavaScript sees the text" do
+        get :show, params: { slug: post.slug }
+
+        noscript = Nokogiri::HTML.parse(response.body).at_css("noscript")
+        expect(noscript).to be_present
+        expect(noscript.at_css("h1").text.strip).to eq(post.name)
+        expect(noscript.text).to include("Hello from the blog")
+      end
+
+      it "cannot be made to close the noscript element from post content" do
+        # Browsers end the raw-text element on any casing, and a sanitizer can leave the
+        # sequence inside an attribute value, so try both shapes.
+        post.update!(message: %(<p>hello</p></NOSCRIPT><img src=x onerror="alert(1)"><a title="</NoScript><b>">x</a>))
+
+        get :show, params: { slug: post.slug }
+
+        expect(response.body.scan(%r{</noscript}i).size).to eq(1)
+        expect(response.body).not_to include(%(<img src=x onerror="alert(1)">))
+        expect(response.body).not_to include("<b>")
+      end
     end
 
     it "gives the served head the post's own title, canonical URL and description" do
