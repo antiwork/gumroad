@@ -19,7 +19,20 @@ class HelpCenter::ArticlesController < HelpCenter::BaseController
     set_meta_tag(name: "twitter:title", content: title)
     set_meta_tag(name: "twitter:description", content: description)
 
-    render inertia: "HelpCenter/Articles/Index", props: help_center_presenter.index_props
+    props = help_center_presenter.index_props
+    @seo_links_fallback = {
+      heading: title,
+      description:,
+      sections: props[:categories].map do |category|
+        {
+          heading: category[:title],
+          href: category[:url],
+          links: category[:articles].map { |article| { label: article[:title], href: article[:url] } },
+        }
+      end,
+    }
+
+    render inertia: "HelpCenter/Articles/Index", props:
   end
 
   def show

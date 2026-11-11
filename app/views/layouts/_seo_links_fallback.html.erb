@@ -1,0 +1,24 @@
+<%# Crawl fallback for hub pages (help center index and categories, blog index) whose links
+    exist only inside the Inertia payload: a fetcher that does not run JavaScript otherwise
+    receives an empty shell and can reach the linked pages only through the sitemap.
+    noscript keeps it out of the rendered UI, where the React page already shows the same list.
+    Every value is plain escaped ERB output, never html_safe: noscript is a raw-text element,
+    so an unescaped closing tag in a title would end it early. %>
+<noscript>
+  <h1><%= @seo_links_fallback[:heading] %></h1>
+  <% if @seo_links_fallback[:description].present? %>
+    <p><%= @seo_links_fallback[:description] %></p>
+  <% end %>
+  <% Array(@seo_links_fallback[:sections]).each do |section| %>
+    <nav<% if section[:heading].present? %> aria-label="<%= section[:heading] %>"<% end %>>
+      <% if section[:heading].present? %>
+        <h2><% if section[:href].present? %><a href="<%= section[:href] %>"><%= section[:heading] %></a><% else %><%= section[:heading] %><% end %></h2>
+      <% end %>
+      <ul>
+        <% Array(section[:links]).each do |link| %>
+          <li><a href="<%= link[:href] %>"><%= link[:label] %></a></li>
+        <% end %>
+      </ul>
+    </nav>
+  <% end %>
+</noscript>
