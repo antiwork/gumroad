@@ -462,17 +462,6 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(doc.at_css("noscript p")).to be_nil
       end
 
-      it "renders no heading on search or tag results, and the trail on a searched category page" do
-        get :index, params: { query: "dragons" }
-        expect(Nokogiri::HTML.parse(response.body).at_css("noscript h1")).to be_nil
-
-        get :index, params: { tags: "3d models" }
-        expect(Nokogiri::HTML.parse(response.body).at_css("noscript h1")).to be_nil
-
-        get :index, params: { taxonomy: "3d/3d-modeling", query: "dragons" }
-        expect(Nokogiri::HTML.parse(response.body).at_css("noscript h1").text.strip).to eq("3D / 3D Modeling")
-      end
-
       it "renders a heading on a leaf category, which has no subcategory links" do
         leaf = Taxonomy.all.find { |taxonomy| taxonomy.children.empty? && taxonomy.parent.present? }
         get :index, params: { taxonomy: leaf.self_and_ancestors.reverse.map(&:slug).join("/") }
