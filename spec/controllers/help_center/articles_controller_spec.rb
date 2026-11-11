@@ -30,6 +30,34 @@ describe HelpCenter::ArticlesController, inertia: true do
       get :index
       expect(response.body).to include("Gumroad Help Center</title>")
     end
+
+    it "serves every category and article link inside noscript so a crawler without JavaScript can reach them" do
+      get :index
+
+      html = Nokogiri::HTML.parse(response.body)
+      expect(html.at_css("title").text).to eq("Gumroad Help Center")
+
+      noscripts = html.css("noscript")
+      expect(noscripts.size).to eq(1)
+      fallback = noscripts.first
+      expect(fallback.at_css("h1").text).to eq("Gumroad Help Center")
+
+      article_hrefs = fallback.css("a").map { |a| a["href"] }.select { |href| href.start_with?("/help/article/") }
+      expect(article_hrefs).to match_array(HelpCenter::Article.all.map { |article| "/help/article/#{article.slug}" })
+      expect(article_hrefs.size).to be > 50
+
+      category_hrefs = fallback.css("h2 a").map { |a| a["href"] }
+      expect(category_hrefs).to eq(HelpCenter::Category.all.map { |category| "/help/category/#{category.slug}" })
+    end
+
+    it "escapes titles so none can close the noscript element" do
+      allow_any_instance_of(HelpCenter::Article).to receive(:title).and_return(%(x</NoScript><img src=x onerror="alert(1)">))
+
+      get :index
+
+      expect(response.body.scan(%r{</noscript}i).size).to eq(1)
+      expect(response.body).not_to include("<img src=x")
+    end
   end
 
   describe "GET show" do

@@ -79,6 +79,47 @@ describe GumroadBlog::PostsController, inertia: true do
         ]
       )
     end
+
+    context "served HTML" do
+      render_views
+
+      it "gives the served head its own title, description and canonical" do
+        get :index
+
+        html = Nokogiri::HTML.parse(response.body)
+        expect(html.at_css("title").text).to eq("Gumroad Blog")
+        expect(html.at_css("link[rel=canonical]")["href"]).to end_with("/blog")
+        expect(html.at_css("meta[name=description]")["content"]).to be_present
+        expect(html.at_css("meta[property='og:title']")["content"]).to eq("Gumroad Blog")
+        expect(html.at_css("meta[property='og:description']")["content"]).to eq(html.at_css("meta[name=description]")["content"])
+        expect(html.at_css("meta[property='og:url']")["content"]).to end_with("/blog")
+      end
+
+      it "serves the visible posts' titles and links inside noscript so a crawler without JavaScript can reach them" do
+        get :index
+
+        noscripts = Nokogiri::HTML.parse(response.body).css("noscript")
+        expect(noscripts.size).to eq(1)
+        fallback = noscripts.first
+
+        expect(fallback.at_css("h1").text).to eq("Gumroad Blog")
+        expect(fallback.css("a").map { |a| [a["href"], a.text] }).to eq(
+          [
+            ["/blog/p/#{published_post_2.slug}", "Second Blog Post"],
+            ["/blog/p/#{published_post_1.slug}", "First Blog Post"],
+          ]
+        )
+      end
+
+      it "cannot be made to close the noscript element from a post title" do
+        published_post_1.update!(name: %(Hi</NOSCRIPT><img src=x onerror="alert(1)">))
+
+        get :index
+
+        expect(response.body.scan(%r{</noscript}i).size).to eq(1)
+        expect(response.body).not_to include("<img src=x")
+      end
+    end
   end
 
   describe "GET show" do

@@ -16,18 +16,42 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
       .visible_on_profile
       .order(published_at: :desc)
 
-    render inertia: "GumroadBlog/Posts/Index", props: {
-      posts: posts.map do |post|
+    post_props = posts.map do |post|
+      {
+        slug: post.slug,
+        subject: post.subject,
+        published_at: post.published_at,
+        featured_image_url: post.featured_image_url,
+        message_snippet: post.message_snippet,
+        tags: post.tags,
+      }
+    end
+
+    # The index renders through Inertia, so without these the served head kept the app-wide
+    # "Gumroad" title with no description or canonical. Same shape as #show.
+    title = "Gumroad Blog"
+    description = "Product updates, announcements and stories from the Gumroad team."
+    canonical_url = gumroad_blog_root_url
+
+    set_meta_tag(title:)
+    set_meta_tag(tag_name: "link", rel: "canonical", href: canonical_url, head_key: "canonical")
+    set_meta_tag(name: "description", content: description)
+    set_meta_tag(property: "og:title", content: title)
+    set_meta_tag(property: "og:description", content: description)
+    set_meta_tag(property: "og:url", content: canonical_url)
+
+    # Post subjects are stored content; the partial only ever emits them as escaped text.
+    @seo_links_fallback = {
+      heading: title,
+      description:,
+      sections: [
         {
-          slug: post.slug,
-          subject: post.subject,
-          published_at: post.published_at,
-          featured_image_url: post.featured_image_url,
-          message_snippet: post.message_snippet,
-          tags: post.tags,
-        }
-      end,
+          links: post_props.map { |post| { label: post[:subject], href: gumroad_blog_post_path(post[:slug]) } },
+        },
+      ],
     }
+
+    render inertia: "GumroadBlog/Posts/Index", props: { posts: post_props }
   end
 
   def show
