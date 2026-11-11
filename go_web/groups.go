@@ -261,6 +261,9 @@ func registerWebhooks(app *web.App, d *dependencies) error {
 		Sidekiq:                     &sidekiq.Client{Redis: jobs},
 		StripeEndpointSecret:        d.config("STRIPE__ENDPOINT_SECRET"),
 		StripeConnectEndpointSecret: d.config("STRIPE_CONNECT__ENDPOINT_SECRET"),
+		PaypalWebhookID:             d.config("PAYPAL_WEBHOOK_ID"),
+		PaypalPartnerClientID:       d.config("PAYPAL_PARTNER_CLIENT_ID"),
+		PaypalPartnerClientSecret:   d.config("PAYPAL_PARTNER_CLIENT_SECRET"),
 		SendgridPublicKeys:          webhooks.SendgridPublicKeys(d.config),
 		Logger:                      d.logger,
 	})

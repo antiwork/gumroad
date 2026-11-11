@@ -315,8 +315,8 @@ func tierPercent(raw string, ownership int64) (int64, bool) {
 			// A null tier decodes to no map; nil.with_indifferent_access raises.
 			return 0, false
 		}
-		months, ok := jsonToI(t["months"])
-		amount, ok2 := jsonToI(t["amount_percentage"])
+		months, ok := rails.JSONToI(t["months"])
+		amount, ok2 := rails.JSONToI(t["amount_percentage"])
 		switch {
 		case !ok || !ok2:
 			return 0, false
@@ -328,27 +328,6 @@ func tierPercent(raw string, ownership int64) (int64, bool) {
 		}
 	}
 	return pct, found && !tied
-}
-
-// jsonToI is #to_i on a JSON value: nil is 0, a Float truncates, a String reads as String#to_i;
-// ok is false where Ruby raises.
-func jsonToI(v any) (int64, bool) {
-	switch v := v.(type) {
-	case nil:
-		return 0, true
-	case json.Number:
-		if n, err := v.Int64(); err == nil {
-			return n, true
-		}
-		f, err := v.Float64()
-		if err != nil || math.IsInf(f, 0) || math.Abs(f) >= math.MaxInt64 {
-			return 0, false
-		}
-		return int64(f), true
-	case string:
-		return rails.StringToI(v)
-	}
-	return 0, false
 }
 
 // currencyMatches is product.price_currency_type == currency_type.

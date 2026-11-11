@@ -24,9 +24,10 @@ import (
 type harness struct {
 	app      *web.App
 	handlers *handlers
-	flags    *miniredis.Miniredis // REDIS_HOST, as Flipper reads it
+	flags    *miniredis.Miniredis // REDIS_HOST: Flipper's flags and the PayPal token
 	jobs     *miniredis.Miniredis // SIDEKIQ_REDIS_HOST
 	certs    *fakeCertHost
+	paypal   *fakePaypal
 	logs     *bytes.Buffer
 	now      time.Time
 }
@@ -64,6 +65,9 @@ func newHarness(t *testing.T, edit func(*Deps)) *harness {
 		Sidekiq:                     &sidekiq.Client{Redis: clients[2], Now: func() time.Time { return h.now }},
 		StripeEndpointSecret:        rubyStripeSecret,
 		StripeConnectEndpointSecret: rubyStripeSecret,
+		PaypalWebhookID:             rubyPaypalWebhookID,
+		PaypalPartnerClientID:       paypalClientID,
+		PaypalPartnerClientSecret:   paypalClientSecret,
 		SendgridPublicKeys:          []string{"", rubySendgridKey1, "", rubySendgridKey2, ""},
 		Logger:                      logger,
 		Now:                         func() time.Time { return h.now },
@@ -73,6 +77,11 @@ func newHarness(t *testing.T, edit func(*Deps)) *harness {
 	}
 	if h.handlers, err = register(h.app, deps, h.certs.get); err != nil {
 		t.Fatal(err)
+	}
+	// No test reaches the real PayPal.
+	if v := h.handlers.paypalVerifier; v != nil {
+		h.paypal = newFakePaypal(t)
+		v.api, v.retryWait = h.paypal.server.URL, 0
 	}
 	return h
 }
@@ -136,8 +145,9 @@ func (h *harness) logLines(t *testing.T) []map[string]any {
 func TestRegisterLeavesARouteWithoutItsSecretsToRails(t *testing.T) {
 	h := newHarness(t, func(d *Deps) {
 		d.StripeEndpointSecret, d.StripeConnectEndpointSecret, d.SendgridPublicKeys = " ", "", []string{"", " "}
+		d.PaypalWebhookID = ""
 	})
-	for _, path := range []string{"/stripe-webhook", "/stripe-connect-webhook", "/sendgrid-webhook"} {
+	for _, path := range []string{"/stripe-webhook", "/stripe-connect-webhook", "/paypal-webhook", "/sendgrid-webhook"} {
 		if rec := h.post(path, "application/json", "{}", nil); rec.Code != http.StatusNotFound {
 			t.Errorf("%s: got %d", path, rec.Code)
 		}
@@ -146,7 +156,7 @@ func TestRegisterLeavesARouteWithoutItsSecretsToRails(t *testing.T) {
 	if rec := h.post("/sns-mediaconvert-webhook", "text/plain", "null", nil); rec.Code != http.StatusBadRequest {
 		t.Errorf("SNS: got %d", rec.Code)
 	}
-	for _, want := range []string{"/stripe-webhook is not served", "/stripe-connect-webhook is not served", "/sendgrid-webhook is not served"} {
+	for _, want := range []string{"/stripe-webhook is not served", "/stripe-connect-webhook is not served", "/paypal-webhook is not served", "/sendgrid-webhook is not served"} {
 		if n := strings.Count(h.logs.String(), want); n != 1 {
 			t.Errorf("want one warning containing %q, got %d", want, n)
 		}
@@ -164,6 +174,7 @@ func TestEachRouteLogsItsRailsAction(t *testing.T) {
 	routes := map[string]string{
 		"/stripe-webhook":           "stripe",
 		"/stripe-connect-webhook":   "stripe_connect",
+		"/paypal-webhook":           "paypal",
 		"/sendgrid-webhook":         "sendgrid",
 		"/sns-mediaconvert-webhook": "mediaconvert",
 		"/sns-aws-config-webhook":   "sns_aws_config",
