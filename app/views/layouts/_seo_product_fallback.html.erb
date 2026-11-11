@@ -1,5 +1,6 @@
 <%# noscript is a raw-text element, so an unescaped closing tag ends it early: name, seller and
-    price stay plain escaped output, never html_safe, and the gsub guards the description. %>
+    price stay plain escaped output, never html_safe. The description arrives escaped; the gsub
+    is a second guard, as in the article fallback. %>
 <noscript>
   <article>
     <h1><%= @seo_product_fallback[:name] %></h1>

@@ -221,6 +221,7 @@ class LinksController < ApplicationController
 
     respond_to do |format|
       format.html do
+        set_product_page_crawl_fallback
         case params[:layout]
         when Product::Layout::PROFILE
           render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
@@ -1432,25 +1433,23 @@ class LinksController < ApplicationController
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?
-      set_product_page_crawl_fallback
     end
 
-    # Skipped where the served document is not the public product page (embed, overlay, Discover
-    # layout) and for a product whose copy is not public yet.
+    # Skipped where the served document is not the public product page (Inertia visit, embed,
+    # overlay, Discover layout) and for a product whose copy is not public yet.
     def set_product_page_crawl_fallback
-      return if params[:embed] || params[:overlay]
+      return if request.inertia? || params[:embed] || params[:overlay]
       return if params[:layout] == Product::Layout::DISCOVER
       return if @product.draft || !@product.alive?
 
-      # Keep words apart where block elements used to be: stripping tags alone runs
-      # "<p>one</p><p>two</p>" together into "onetwo".
-      spaced_description = @product.description.to_s.gsub(%r{</(?:p|div|h[1-6]|li|blockquote|tr|td)>|<br\s*/?>}i, " ")
-      plain_description = helpers.strip_tags(spaced_description)
+      # to_text puts each block on its own line for simple_format and decodes entities, so
+      # html_escape is what keeps a "</noscript" in the copy from closing the element.
+      plain_description = Loofah.fragment(@product.description.to_s).scrub!(:prune).to_text(encode_special_chars: false).strip
       @seo_product_fallback = {
         name: @product.name,
         seller: @product.user.name_or_username,
         price: @product.price_formatted_verbose(for_default_duration: true, discounted: true),
-        description: helpers.simple_format(ERB::Util.html_escape(plain_description)),
+        description: helpers.simple_format(ERB::Util.html_escape(plain_description), {}, sanitize: false),
       }
     end
 
