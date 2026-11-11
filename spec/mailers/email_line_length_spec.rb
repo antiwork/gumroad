@@ -3,9 +3,9 @@
 require "spec_helper"
 
 describe QuotedPrintableHtmlMail do
-  # docomo rejects a line over 1000 bytes (send-notice §9); SendGrid's click tracking swaps each link for
-  # a ~455-byte tracking URL (measured on a delivered copy), inside the line that already carries the
-  # inlined email CSS, so the encoded html has to leave room for that swap.
+  # docomo rejects a line over 1000 bytes; SendGrid's click tracking swaps each link for a ~455-byte
+  # tracking URL inside the line that already carries the inlined email CSS, so the encoded html has to
+  # leave room for that swap.
   let(:docomo_line_limit_bytes) { 1000 }
   let(:tracking_url_bytes) { 455 }
   let(:max_encoded_line_bytes) { docomo_line_limit_bytes - tracking_url_bytes }
@@ -47,8 +47,8 @@ describe QuotedPrintableHtmlMail do
     expect(encoded.split("\r\n").map(&:bytesize).max).to be < max_encoded_line_bytes
   end
 
-  # The confirmation link is the line SendGrid's swap lands in, so the real mail has to arrive with the
-  # same links it left with: no link is lossy, no control byte replaces a `=` hex pair.
+  # Regression guard on a real mail: the confirmation link is the line SendGrid's swap lands in, so it has
+  # to arrive with the same links it left with.
   it "delivers the confirmation mail with its links intact" do
     mail = UserSignupMailer.confirmation_instructions(create(:user), {})
     source_links = mail.message.body.to_s.scan(/href="([^"]+)"/).flatten.reject { |href| href.end_with?(".css") }

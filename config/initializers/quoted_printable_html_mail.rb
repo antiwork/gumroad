@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# SendGrid's click tracking swaps each link for a ~450-byte tracking URL, which lands inside the line
+# SendGrid's click tracking swaps each link for a ~455-byte tracking URL, which lands inside the line
 # that already carries the inlined email CSS. docomo rejects the resulting >1000-byte line with
 # "500 Line Too Long"; quoted-printable keeps every transmitted line under 100 bytes.
 module QuotedPrintableHtmlMail
