@@ -560,6 +560,30 @@ describe UpdatePayoutMethod do
         expect(user.stripe_account).to be_nil
       end
 
+      # The switch deletes the Stripe account the note names, so no later submission can carry the
+      # field it asks for — UpdateUserCountry retires the same notes when it tears the rail down.
+      it "retires the payout-setup-rejection notes the torn-down rail produced" do
+        note = create(:comment,
+                      commentable: user,
+                      author_id: GUMROAD_ADMIN_ID,
+                      comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                      content: "Our payment partner couldn't accept the business tax ID you entered.",
+                      json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true, seller_visible: true })
+        other_note = create(:comment,
+                            commentable: user,
+                            author_id: GUMROAD_ADMIN_ID,
+                            comment_type: Comment::COMMENT_TYPE_PAYOUT_NOTE,
+                            content: "Internal payout note")
+        confirmed = ActionController::Parameters.new(payment_address: "paypal@example.com", confirm_bank_rail_loss: "true")
+
+        result = described_class.new(user_params: confirmed, seller: user).process
+
+        expect(result).to eq(success: true)
+        expect(note.reload.deleted_at).to be_present
+        expect(other_note.reload.deleted_at).to be_nil
+        expect(user.reload.latest_payout_setup_rejection_note).to be_nil
+      end
+
       # Egypt offers both rails (`can_setup_paypal_payouts?` lists it) and Stripe can rebuild the
       # bank rail there, so the switch is an ordinary save.
       it "needs no confirmation where the country can re-create the rail" do
