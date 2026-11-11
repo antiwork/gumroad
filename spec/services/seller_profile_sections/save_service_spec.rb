@@ -137,7 +137,7 @@ describe SellerProfileSections::SaveService do
 
     it "drops ids whose post is gone when shown_posts is saved" do
       published = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
-      deleted = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      deleted = create(:installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true, published_at: nil)
       posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [published.id, deleted.id])
       deleted.update!(deleted_at: Time.current)
 

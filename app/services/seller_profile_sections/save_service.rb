@@ -48,7 +48,7 @@ class SellerProfileSections::SaveService
     end
 
     # The section editor lists published posts only, so its payload omits a post this section
-    # already holds but has not published yet (a scheduled post). Keep those ids.
+    # already holds but has not published yet (a draft or scheduled post). Keep those ids.
     def keep_unpublished_posts(section, attributes)
       return attributes unless section.is_a?(SellerProfilePostsSection) && attributes.key?(:shown_posts)
       submitted = Array(attributes[:shown_posts]).map(&:to_i)
