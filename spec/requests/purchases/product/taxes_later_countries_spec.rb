@@ -1176,7 +1176,7 @@ describe("Product Page - Later country tax scenarios", type: :system, js: true) 
       expect(purchase.was_purchase_taxable).to be(false)
     end
 
-    it "clears the VAT and allows the purchase when non-EU elected country matches the non-EU card country, but not the EU detected country" do
+    it "clears the VAT and allows the purchase when non-EU elected country matches the non-EU card country, but not the EU detected country", :stub_tax_id_validation do
       create(:zip_tax_rate, country: "AT", zip_code: nil, state: nil, combined_rate: 0.20, is_seller_responsible: false)
       allow_any_instance_of(ActionDispatch::Request).to receive(:remote_ip).and_return("85.127.28.23") # Austria
 
