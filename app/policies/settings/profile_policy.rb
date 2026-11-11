@@ -33,7 +33,7 @@ class Settings::ProfilePolicy < ApplicationPolicy
         user: user_attributes,
         seller_profile: [:font, :background_color, :highlight_color, :border_radius, :button_hover],
         tabs: [:name, { sections: [] }],
-        sections: [:id, *ProfileSectionPolicy::CREATE_ATTRIBUTES]
+        sections: [:id, *ProfileSectionPolicy::CREATE_ATTRIBUTES, { displayed_posts: [] }]
       }
     ]
   end

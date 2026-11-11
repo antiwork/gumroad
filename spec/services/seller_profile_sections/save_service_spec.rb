@@ -34,6 +34,14 @@ describe SellerProfileSections::SaveService do
       )
     end
 
+    it "creates a posts section from the editor's payload without storing displayed_posts" do
+      post = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      section = service.create!(section_params(type: "SellerProfilePostsSection", header: "Posts", shown_posts: [post.external_id], displayed_posts: [post.external_id], add_new_posts: true))
+
+      expect(section.reload).to have_attributes(shown_posts: [post.id], add_new_posts: true)
+      expect(section.json_data).not_to have_key("displayed_posts")
+    end
+
     it "derives hide_header from the header: a blank header hides the name" do
       with_name = service.create!(section_params(type: "SellerProfileSubscribeSection", header: "Subscribe", button_label: "Follow"))
       without_name = service.create!(section_params(type: "SellerProfileSubscribeSection", header: "", button_label: "Follow"))

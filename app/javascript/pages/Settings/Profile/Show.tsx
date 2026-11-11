@@ -237,7 +237,14 @@ export default function SettingsPage() {
     try {
       await saveProfileSettings({
         ...changedSettings,
-        ...(profileChanged ? { tabs, sections, profileVersion: profile_version } : {}),
+        ...(profileChanged
+          ? {
+              tabs,
+              sections,
+              displayedPostIds: editableProfile.posts.map((post) => post.id),
+              profileVersion: profile_version,
+            }
+          : {}),
       });
       lastSavedSettings.current = settings;
       lastSavedProfile.current = { sections, tabs };
