@@ -86,12 +86,18 @@ const props: DiscountsPageProps = {
   black_friday_code_name: "Black Friday",
 };
 
-const openEditor = () => {
-  render(<DiscountsPage {...props} />);
+const openEditor = (overrides: Partial<OfferCode> = {}) => {
+  render(<DiscountsPage {...props} offer_codes={[{ ...offerCode, ...overrides }]} />);
   fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 };
 
 const save = () => fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+const describedBy = (field: HTMLElement) =>
+  (field.getAttribute("aria-describedby") ?? "")
+    .split(" ")
+    .filter(Boolean)
+    .map((id) => document.getElementById(id)?.textContent);
 
 // A field that only fails one of the checks the form runs on submit used to return with no alert at
 // all, so "Save changes" read as a broken button.
@@ -217,6 +223,163 @@ describe("DiscountsPage save validation", () => {
 
     expect(mocks.showAlert).toHaveBeenCalledWith("Please enter a discount amount.", "error");
     expect(document.activeElement).toBe(percentage);
+  });
+
+  it("describes each invalid tier field by its own reason", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+
+    const tier1Percentage = screen.getByLabelText("Tier 1 percentage");
+    const tier2Months = screen.getByLabelText("Tier 2 starting month");
+    fireEvent.change(tier1Percentage, { target: { value: "" } });
+    fireEvent.change(tier2Months, { target: { value: "0" } });
+    save();
+
+    expect(describedBy(tier1Percentage)).toEqual(["Each tier percentage must be between 0 and 100."]);
+    expect(tier2Months.getAttribute("aria-invalid")).toBe("true");
+    expect(describedBy(tier2Months)).toEqual(["Each tier needs a different starting month."]);
+  });
+
+  it("keeps a tier's reason when another tier is fixed or removed", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+
+    const message = "Each tier percentage must be between 0 and 100.";
+    const tier1Percentage = screen.getByLabelText("Tier 1 percentage");
+    const tier2Percentage = screen.getByLabelText("Tier 2 percentage");
+    fireEvent.change(tier1Percentage, { target: { value: "" } });
+    fireEvent.change(tier2Percentage, { target: { value: "" } });
+    save();
+
+    fireEvent.change(tier1Percentage, { target: { value: "5" } });
+    expect(tier1Percentage.getAttribute("aria-invalid")).not.toBe("true");
+    expect(describedBy(tier1Percentage)).toEqual([]);
+    expect(tier2Percentage.getAttribute("aria-invalid")).toBe("true");
+    expect(describedBy(tier2Percentage)).toEqual([message]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove tier 3" }));
+    expect(tier2Percentage.getAttribute("aria-invalid")).toBe("true");
+    expect(describedBy(tier2Percentage)).toEqual([message]);
+  });
+
+  it("asks for a starting month when a tier's is emptied", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+
+    const message = "Please enter a starting month.";
+    const tier2Months = screen.getByLabelText("Tier 2 starting month");
+    fireEvent.change(tier2Months, { target: { value: "" } });
+    save();
+
+    expect(mocks.showAlert).toHaveBeenCalledWith(message, "error");
+    expect(document.activeElement).toBe(tier2Months);
+    expect(screen.getByText(message)).toBeTruthy();
+    expect(describedBy(tier2Months)).toEqual([message]);
+  });
+
+  it("names the first tier's start under its row when it does not start at 0 months", () => {
+    openEditor({
+      ownership_duration_tiers: [
+        { months: 3, amount_percentage: 10 },
+        { months: 6, amount_percentage: 20 },
+      ],
+    });
+    save();
+
+    const message = "The first tier must start at 0 months.";
+    const tier1Percentage = screen.getByLabelText("Tier 1 percentage");
+    expect(mocks.showAlert).toHaveBeenCalledWith(message, "error");
+    expect(document.activeElement).toBe(tier1Percentage);
+    expect(screen.getByText(message).parentElement?.contains(tier1Percentage)).toBe(true);
+    expect(screen.getByText(message).parentElement?.contains(screen.getByLabelText("Tier 2 percentage"))).toBe(false);
+    expect(tier1Percentage.getAttribute("aria-invalid")).toBe("true");
+    expect(describedBy(tier1Percentage)).toEqual([message]);
+  });
+
+  it("focuses the first tier's start reason before a later tier's reason", () => {
+    openEditor({
+      ownership_duration_tiers: [
+        { months: 3, amount_percentage: 10 },
+        { months: 6, amount_percentage: 20 },
+      ],
+    });
+    fireEvent.change(screen.getByLabelText("Tier 2 percentage"), { target: { value: "" } });
+    save();
+
+    expect(mocks.showAlert).toHaveBeenCalledWith("The first tier must start at 0 months.", "error");
+    expect(document.activeElement).toBe(screen.getByLabelText("Tier 1 percentage"));
+  });
+
+  it("keeps the first tier's start reason with the other tier reasons when tiers are turned off and on", () => {
+    openEditor({
+      ownership_duration_tiers: [
+        { months: 3, amount_percentage: 10 },
+        { months: 6, amount_percentage: 20 },
+      ],
+    });
+    fireEvent.change(screen.getByLabelText("Tier 2 percentage"), { target: { value: "" } });
+    save();
+
+    const tiersToggle = screen.getByLabelText("Tier discount by ownership duration");
+    fireEvent.click(tiersToggle);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "" } });
+    save();
+    fireEvent.click(tiersToggle);
+
+    expect(describedBy(screen.getByLabelText("Tier 1 percentage"))).toEqual(["The first tier must start at 0 months."]);
+    expect(describedBy(screen.getByLabelText("Tier 2 percentage"))).toEqual([
+      "Each tier percentage must be between 0 and 100.",
+    ]);
+  });
+
+  it("clears the first tier's start reason once a tier starting at 0 months is added", () => {
+    openEditor({
+      ownership_duration_tiers: [
+        { months: 3, amount_percentage: 10 },
+        { months: 6, amount_percentage: 20 },
+      ],
+    });
+    save();
+
+    const message = "The first tier must start at 0 months.";
+    expect(document.activeElement).toBe(screen.getByLabelText("Tier 1 percentage"));
+    expect(describedBy(screen.getByLabelText("Tier 1 percentage"))).toEqual([message]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+    const tier3Months = screen.getByLabelText("Tier 3 starting month");
+    fireEvent.change(tier3Months, { target: { value: "0" } });
+    fireEvent.blur(tier3Months);
+
+    expect(screen.queryByText(message)).toBeNull();
+    for (const field of screen.getAllByLabelText(/^Tier \d+ (percentage|starting month)$/u)) {
+      expect(field.getAttribute("aria-invalid")).not.toBe("true");
+      expect(describedBy(field)).toEqual([]);
+    }
+  });
+
+  it("clears a duplicate starting month reason as soon as the other tier is changed", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+
+    const message = "Each tier needs a different starting month.";
+    const tier2Months = screen.getByLabelText("Tier 2 starting month");
+    const tier3Months = screen.getByLabelText("Tier 3 starting month");
+    fireEvent.change(tier2Months, { target: { value: "5" } });
+    fireEvent.change(tier3Months, { target: { value: "5" } });
+    save();
+    expect(describedBy(tier3Months)).toEqual([message]);
+
+    fireEvent.change(tier2Months, { target: { value: "4" } });
+
+    expect(tier3Months.getAttribute("aria-invalid")).not.toBe("true");
+    expect(describedBy(tier3Months)).toEqual([]);
+    expect(screen.queryByText(message)).toBeNull();
   });
 
   it("names the tier problem when a tier percentage is emptied", () => {
