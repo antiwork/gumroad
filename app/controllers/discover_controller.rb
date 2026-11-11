@@ -50,7 +50,9 @@ class DiscoverController < ApplicationController
     params[:size] = INITIAL_PRODUCTS_COUNT
 
     search_results = search_products(params)
-    search_results[:products] = search_results[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).map do |product|
+    products = search_results[:products].includes(ProductPresenter::ASSOCIATIONS_FOR_CARD).to_a
+    prepare_search_seo(products:)
+    search_results[:products] = products.map do |product|
       ProductPresenter.card_for_web(
         product:,
         request:,
@@ -254,6 +256,14 @@ class DiscoverController < ApplicationController
     # follows different rules than the pagination links assume.
     def category_seo_page?
       taxonomy.present? && request.query_parameters.except("from").blank?
+    end
+
+    # Search pages are indexed, but their results exist only in the Inertia payload.
+    def prepare_search_seo(products:)
+      return if params[:query].blank?
+
+      @discover_seo_heading = "Search results for \"#{params[:query]}\""
+      @discover_result_links = products.map { |product| { label: product.name, href: product.long_url } }
     end
 
     def prepare_category_seo(search_results:)

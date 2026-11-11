@@ -12,7 +12,7 @@ class Discover::CanonicalUrlPresenter
     path = params[:taxonomy].presence || INDEX_PATH
     valid_canonical_params = params.permit(:sort, :query, :min_price, :max_price, :rating, tags: [], filetypes: [])
                                    .to_h
-                                   .transform_values { |value| to_canonical_value(value) }
+                                   .to_h { |key, value| [key, key == "query" ? to_canonical_query(value) : to_canonical_value(value)] }
                                    .select { |_, v| v.present? }
 
     UrlService.discover_full_path(path, valid_canonical_params)
@@ -22,4 +22,12 @@ class Discover::CanonicalUrlPresenter
     param_value.is_a?(Array) ? param_value.sort.join(",") : param_value
   end
   private_class_method :to_canonical_value
+
+  # Search ignores case and runs of the separators simple_query_string splits on, so those
+  # spellings are one page. Other spaces, such as U+3000, change results and stay as typed.
+  # Ruby lowercases "İ" to "i" plus a combining dot, but Elasticsearch lowercases it to "i".
+  def self.to_canonical_query(query)
+    query.to_s.gsub(/[ \t\n\r]+/, " ").strip.tr("\u0130", "i").downcase
+  end
+  private_class_method :to_canonical_query
 end

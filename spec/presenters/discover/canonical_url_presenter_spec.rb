@@ -41,6 +41,37 @@ describe Discover::CanonicalUrlPresenter do
       expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/discover?max_price=1&sort=hot_and_new&tags=taga%2Ctagb")
     end
 
+    it "returns one url for every spelling of the same search" do
+      expected = "#{discover_domain_with_protocol}/discover?query=free+brushes"
+
+      ["free brushes", "Free Brushes", "  free   brushes ", "FREE\tBRUSHES"].each do |query|
+        params = ActionController::Parameters.new({ query:, a: "123456", from: "37", recommended_by: "search" })
+        expect(described_class.canonical_url(params)).to eq(expected)
+      end
+    end
+
+    it "lowercases a dotted capital I the way search does" do
+      params = ActionController::Parameters.new({ query: "İSTANBUL" })
+      expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/discover?query=istanbul")
+    end
+
+    it "keeps a full-width space, which search does not split words on" do
+      params = ActionController::Parameters.new({ query: "free\u3000brushes" })
+      expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/discover?query=free%E3%80%80brushes")
+    end
+
+    it "returns the /discover url when the search is empty or only whitespace" do
+      ["", "   "].each do |query|
+        params = ActionController::Parameters.new({ query:, a: "123456" })
+        expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/discover")
+      end
+    end
+
+    it "keeps the category path when a category search is only whitespace" do
+      params = ActionController::Parameters.new({ taxonomy: "3d", query: "   " })
+      expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/3d")
+    end
+
     it "ignores empty parameters" do
       params = ActionController::Parameters.new({ query: "product", max_price: 0, tags: [], sort: "" })
       expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/discover?max_price=0&query=product")
