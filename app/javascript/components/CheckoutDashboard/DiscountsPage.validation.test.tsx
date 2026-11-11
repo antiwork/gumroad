@@ -324,7 +324,7 @@ describe("DiscountsPage save validation", () => {
     }
   });
 
-  it("clears a duplicate starting month reason when the other tier is changed", () => {
+  it("clears a duplicate starting month reason as soon as the other tier is changed", () => {
     openEditor();
     fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
     fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
@@ -339,12 +339,9 @@ describe("DiscountsPage save validation", () => {
     expect(describedBy(tier3Months)).toEqual([message]);
 
     fireEvent.change(tier2Months, { target: { value: "4" } });
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "" } });
-    mocks.showAlert.mockReset();
-    save();
 
-    expect(mocks.showAlert).toHaveBeenCalledWith("Please fill out the required fields.", "error");
     expect(tier3Months.getAttribute("aria-invalid")).not.toBe("true");
+    expect(describedBy(tier3Months)).toEqual([]);
     expect(screen.queryByText(message)).toBeNull();
   });
 

@@ -1176,6 +1176,14 @@ const Form = ({
   // Derived, so whichever tier ends up starting at 0 months clears it.
   const isFirstTierStartErrorShown = isFirstTierStartSubmitted && isFirstTierStartInvalid;
   const firstTierStartErrorMessage = "The first tier must start at 0 months.";
+  const duplicateTierMonthsErrorMessage = "Each tier needs a different starting month.";
+  // Derived, so changing the earlier tier it duplicates clears it too.
+  const tierMonthsErrors = tiers.map((tier, index) =>
+    tier.monthsError === duplicateTierMonthsErrorMessage &&
+    !tiers.slice(0, index).some((other) => other.months === tier.months)
+      ? null
+      : tier.monthsError,
+  );
 
   const updateTier = (id: string, patch: Partial<TierRow>) =>
     setTiers((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
@@ -1253,7 +1261,7 @@ const Form = ({
           tier.months === null
             ? "Please enter a starting month."
             : duplicate
-              ? "Each tier needs a different starting month."
+              ? duplicateTierMonthsErrorMessage
               : monthsValid
                 ? null
                 : "Each tier must start at a whole number of months (0 or more).";
@@ -1284,6 +1292,7 @@ const Form = ({
       isOwnershipProductsInvalid ||
       isTiersInvalid;
 
+    if (useTieredDiscounts) setTiers(tierErrors);
     if (hasValidationErrors) {
       setName((prev) => ({ ...prev, error: isNameInvalid }));
       setCode((prev) => ({ ...prev, error: isCodeInvalid }));
@@ -1294,7 +1303,6 @@ const Form = ({
       setMinimumQuantity((prev) => ({ ...prev, error: isMinimumQuantityInvalid }));
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
-      if (useTieredDiscounts) setTiers(tierErrors);
       setIsFirstTierStartSubmitted(useTieredDiscounts && isFirstTierStartInvalid);
 
       // In form order, so the topmost problem is the one that takes focus and the alert names it: a
@@ -1813,7 +1821,7 @@ const Form = ({
                             ariaDescribedBy={
                               [
                                 tier.percentError && `${uid}${tier.id}percentError`,
-                                index === 0 && tier.monthsError && `${uid}${tier.id}monthsError`,
+                                index === 0 && tierMonthsErrors[index] && `${uid}${tier.id}monthsError`,
                                 index === 0 && isFirstTierStartErrorShown && `${uid}firstTierStartError`,
                               ]
                                 .filter(Boolean)
@@ -1843,8 +1851,8 @@ const Form = ({
                               <TierField
                                 value={tier.months}
                                 ariaLabel={`Tier ${index + 1} starting month`}
-                                ariaInvalid={!!tier.monthsError}
-                                ariaDescribedBy={tier.monthsError ? `${uid}${tier.id}monthsError` : undefined}
+                                ariaInvalid={!!tierMonthsErrors[index]}
+                                ariaDescribedBy={tierMonthsErrors[index] ? `${uid}${tier.id}monthsError` : undefined}
                                 suffix="months"
                                 inputRef={(node) => setTierFieldNode(`${tier.id}:months`, node)}
                                 onBlur={sortTiersByMonths}
@@ -1864,12 +1872,12 @@ const Form = ({
                             {tier.percentError}
                           </FieldsetDescription>
                         ) : null}
-                        {tier.monthsError ? (
+                        {tierMonthsErrors[index] ? (
                           <FieldsetDescription
                             id={`${uid}${tier.id}monthsError`}
                             className="mt-2 text-danger sm:order-last sm:mt-0 sm:basis-full"
                           >
-                            {tier.monthsError}
+                            {tierMonthsErrors[index]}
                           </FieldsetDescription>
                         ) : null}
                         {index === 0 && isFirstTierStartErrorShown ? (
