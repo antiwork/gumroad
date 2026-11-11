@@ -15,14 +15,10 @@ type Props = {
   withTime?: true;
 };
 
-export const DateInput = ({
-  value,
-  onChange,
-  withTime,
-  min,
-  max,
-  ...rest
-}: Props & Omit<React.HTMLProps<HTMLInputElement>, keyof Props>) => {
+export const DateInput = React.forwardRef<
+  HTMLInputElement,
+  Props & Omit<React.HTMLProps<HTMLInputElement>, keyof Props>
+>(({ value, onChange, withTime, min, max, ...rest }, forwardedRef) => {
   const seller = useCurrentSeller();
   const formatDate = (date: Date | null) => {
     if (!date) return withTime ? "mm/dd/yyyy hh:mm" : "mm/dd/yyyy";
@@ -44,13 +40,19 @@ export const DateInput = ({
   };
   // when using `value` below React breaks the date picker, so implementing this manually here
   const ref = React.useRef<HTMLInputElement>(null);
+  // The local ref stays authoritative for the write below; the caller gets the same node to focus.
+  const setRef = (node: HTMLInputElement | null) => {
+    ref.current = node;
+    if (typeof forwardedRef === "function") forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  };
   React.useEffect(() => {
     if (!ref.current) return;
     ref.current.value = formatDate(value);
   }, [value]);
   const input = (
     <Input
-      ref={ref}
+      ref={setRef}
       className="appearance-none"
       type={withTime ? "datetime-local" : "date"}
       {...rest}
@@ -74,4 +76,5 @@ export const DateInput = ({
   ) : (
     <InputGroup>{input}</InputGroup>
   );
-};
+});
+DateInput.displayName = "DateInput";
