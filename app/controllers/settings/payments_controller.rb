@@ -652,11 +652,9 @@ class Settings::PaymentsController < Settings::BaseController
       [:settings, :payments, current_seller]
     end
 
-    # A hosted Stripe form can flip an individual's live business type with no save on our side, so
-    # page loads queue a check. Any failure here must not cost the seller the page.
+    # Any failure here must not cost the seller the page.
     def enqueue_live_business_type_reconcile
-      return unless current_seller.alive_user_compliance_info&.is_individual?
-      return if current_seller.stripe_account.blank? || current_seller.has_stripe_account_connected?
+      return unless StripeMerchantAccountManager.live_business_type_reconcilable?(current_seller)
       return unless $redis.set(RedisKey.stripe_live_business_type_reconcile_throttle(current_seller.id), 1,
                                nx: true, ex: LIVE_BUSINESS_TYPE_RECONCILE_THROTTLE.to_i)
 

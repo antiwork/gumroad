@@ -73,6 +73,15 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(ReconcileStripeLiveBusinessTypeJob.jobs.size).to eq(0)
       end
 
+      it "queues nothing for a seller paid through their own connected Stripe account" do
+        create(:merchant_account, user: seller)
+        create(:merchant_account_stripe_connect, user: seller)
+
+        get :show
+
+        expect(ReconcileStripeLiveBusinessTypeJob.jobs.size).to eq(0)
+      end
+
       it "queues nothing for a seller without a Gumroad-managed Stripe account" do
         get :show
 
@@ -3747,8 +3756,15 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
 
       it "re-syncs an individual seller and takes the flash and requests from the re-read account" do
         stub_reconcile(after_sync: -> { stripe_account_with("individual") })
+        locked = false
+        track_lock = ->(*, payload) { locked ||= payload[:sql].match?(/FROM `users`.*FOR UPDATE/m) }
+        reconcile = StripeMerchantAccountManager.method(:reconcile_live_business_type)
+        allow(StripeMerchantAccountManager).to receive(:reconcile_live_business_type) do |*args, **kwargs|
+          expect(locked).to be(true)
+          reconcile.call(*args, **kwargs)
+        end
 
-        get :verify_stripe_remediation
+        ActiveSupport::Notifications.subscribed(track_lock, "sql.active_record") { get :verify_stripe_remediation }
 
         expect(StripeMerchantAccountManager).to have_received(:handle_new_user_compliance_info).with(user_compliance_info)
         expect(Stripe::Account).to have_received(:retrieve).twice
