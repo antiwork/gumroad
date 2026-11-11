@@ -25,15 +25,33 @@ export default function ProductEditInertiaPage() {
   // with, which predate every save made since. The editor saves from those props, so it waits for
   // the current ones.
   const [awaitingCurrentProps, setAwaitingCurrentProps] = React.useState(pageWasRestoredFromHistory);
+  const [reloadAttempt, setReloadAttempt] = React.useState(0);
   React.useEffect(() => {
     if (!awaitingCurrentProps) return;
+    let reloaded = false;
+    let stopWaiting: (() => void) | undefined;
+    let unmounted = false;
     router.reload({
-      onSuccess: () => setAwaitingCurrentProps(false),
+      onSuccess: () => {
+        reloaded = true;
+        setAwaitingCurrentProps(false);
+      },
       onFinish: (visit) => {
-        if (!visit.completed && !visit.cancelled && !visit.interrupted) window.location.reload();
+        if (reloaded || unmounted) return;
+        // Another visit replaced this reload: ask again once it is done, if this page is still up.
+        if (visit.cancelled || visit.interrupted) {
+          stopWaiting = router.on("finish", () => {
+            stopWaiting?.();
+            setReloadAttempt((attempt) => attempt + 1);
+          });
+        } else window.location.reload();
       },
     });
-  }, [awaitingCurrentProps]);
+    return () => {
+      unmounted = true;
+      stopWaiting?.();
+    };
+  }, [awaitingCurrentProps, reloadAttempt]);
   if (awaitingCurrentProps) return <ProductEditLoadingSkeleton title={editProps.product.name} />;
 
   // The editor's own code is loaded on demand (see ProductEdit/load), so this page can appear the
