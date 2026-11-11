@@ -25,6 +25,12 @@ describe Discover::CategoryPagePresenter do
     end
   end
 
+  describe "#heading" do
+    it "joins the labels with the separator the breadcrumbs show, without branding" do
+      expect(presenter.heading).to eq("Software Development / Programming")
+    end
+  end
+
   describe "#meta_description" do
     it "includes the leaf category label and result count" do
       expect(presenter.meta_description).to include("1,234 Programming products from independent creators on Gumroad")
