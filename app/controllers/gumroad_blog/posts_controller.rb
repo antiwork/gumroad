@@ -45,6 +45,17 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
     set_meta_tag(tag_name: "link", rel: "canonical", href: gumroad_blog_post_url(@post.slug), head_key: "canonical")
     set_post_page_meta(@post, post_presenter)
 
+    # The post body only reaches the page through the Inertia payload, so a crawler without
+    # JavaScript saw a title and nothing else. The fallback sits inside <noscript>, which a
+    # browser parses as raw text until the first closing tag, and this column holds stored
+    # HTML: escaping it to plain text keeps a post from closing the element and injecting
+    # markup into the page.
+    # Keep words apart where block elements used to be: stripping tags alone runs
+    # "<p>one</p><p>two</p>" together into "onetwo".
+    spaced_body = @post.message.to_s.gsub(%r{</(?:p|div|h[1-6]|li|blockquote|tr|td)>|<br\s*/?>}i, " ")
+    plain_body = helpers.strip_tags(spaced_body)
+    @seo_article_fallback = { title: @post.name, html: helpers.simple_format(ERB::Util.html_escape(plain_body)) }
+
     render inertia: "GumroadBlog/Posts/Show", props: post_presenter.post_component_props
   end
 
