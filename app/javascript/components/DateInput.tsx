@@ -39,7 +39,7 @@ export const DateInput = React.forwardRef<
     return `${fields.year?.padStart(4, "0")}-${fields.month}-${fields.day}T${fields.hour}:${fields.minute}`;
   };
   // when using `value` below React breaks the date picker, so implementing this manually here
-  const ref = React.useRef<HTMLInputElement>(null);
+  const ref = React.useRef<HTMLInputElement | null>(null);
   // The local ref stays authoritative for the write below; the caller gets the same node to focus.
   const setRef = (node: HTMLInputElement | null) => {
     ref.current = node;
