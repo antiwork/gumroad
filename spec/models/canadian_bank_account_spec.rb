@@ -94,4 +94,48 @@ describe CanadianBankAccount do
       expect(canadian_bank_account.routing_number).to eq("45678-123")
     end
   end
+
+  describe "#validate_account_number" do
+    it "accepts 1 to 12 digits" do
+      %w[1 12 1234567 123456789012].each do |number|
+        expect(build(:canadian_bank_account, account_number: number)).to be_valid, "expected #{number.length} digits to be valid"
+      end
+    end
+
+    it "rejects blank" do
+      expect(build(:canadian_bank_account, account_number: "")).not_to be_valid
+    end
+
+    it "rejects more than 12 digits and letters" do
+      ["1234567890123", "1234567890123456", "12345678A"].each do |number|
+        account = build(:canadian_bank_account, account_number: number)
+        expect(account).not_to be_valid, "expected #{number.inspect} to be invalid"
+        expect(account.errors.full_messages.to_sentence).to eq("The account number is invalid.")
+      end
+    end
+
+    describe "existing rows with a number that no longer conforms" do
+      let(:account) do
+        build(:canadian_bank_account, account_number: "1234567890123456").tap { |a| a.save!(validate: false) }
+      end
+
+      it "does not block unrelated saves or deletion" do
+        account = BankAccount.find(self.account.id)
+        expect(account.update(account_holder_full_name: "New Name")).to be(true)
+        expect { account.mark_deleted! }.not_to raise_error
+      end
+
+      it "rejects reassigning the number to a non-conforming value" do
+        account = BankAccount.find(self.account.id)
+        account.account_number = "6543210987654321"
+        expect(account).not_to be_valid
+      end
+
+      it "treats re-assigning the identical plaintext as a change" do
+        account = BankAccount.find(self.account.id)
+        account.account_number = "1234567890123456"
+        expect(account).not_to be_valid
+      end
+    end
+  end
 end

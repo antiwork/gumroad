@@ -34,7 +34,8 @@ describe("accountNumberFormatError", () => {
   // Oman's model takes 6 to 16 digits and Tanzania's takes 10 to 14, so the generic example is
   // genuinely valid for both — their entries exist to reject a non-numeric value, not to replace a
   // wrong example.
-  const COUNTRIES_WHOSE_MODEL_ACCEPTS_THE_GENERIC_EXAMPLE = ["OM", "TZ"];
+  // Canada's model takes 1 to 12 digits, so the generic example is valid there as well.
+  const COUNTRIES_WHOSE_MODEL_ACCEPTS_THE_GENERIC_EXAMPLE = ["CA", "OM", "TZ"];
   const COUNTRIES_THE_GENERIC_EXAMPLE_IS_WRONG_FOR = Object.entries(COUNTRY_ACCOUNT_NUMBER_HINTS).filter(
     ([countryCode]) => !COUNTRIES_WHOSE_MODEL_ACCEPTS_THE_GENERIC_EXAMPLE.includes(countryCode),
   );
@@ -49,6 +50,13 @@ describe("accountNumberFormatError", () => {
     expect(accountNumberFormatError("OM", "1234567890")).toBeNull();
     expect(accountNumberFormatError("OM", "OM810180000001299123456")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.OM?.title);
     expect(accountNumberFormatError("TZ", "1234567890")).toBeNull();
+  });
+
+  it("accepts a Canada account number up to 12 digits and rejects longer or non-numeric ones", () => {
+    expect(accountNumberFormatError("CA", "123456789012")).toBeNull();
+    expect(accountNumberFormatError("CA", "1234567890123")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.CA?.title);
+    expect(accountNumberFormatError("CA", "1234567890123456")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.CA?.title);
+    expect(accountNumberFormatError("CA", "1234567A")).toBe(COUNTRY_ACCOUNT_NUMBER_HINTS.CA?.title);
   });
 
   it("rejects a Tanzania account number that carries a letter or the wrong length", () => {
@@ -74,6 +82,7 @@ describe("accountNumberFormatError", () => {
     ["MZ", "0012 3456 7890 1234 5678 9"],
     ["TZ", "0123 4567 89"],
     ["ET", "0000 0000 1234 5"],
+    ["CA", "1234 5678 9012"],
   ])("accepts %s's number written with the separators its bank prints", (countryCode, accountNumber) => {
     expect(accountNumberFormatError(countryCode, accountNumber)).toBeNull();
   });
