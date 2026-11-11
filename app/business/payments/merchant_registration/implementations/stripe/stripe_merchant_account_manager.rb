@@ -2711,20 +2711,24 @@ module StripeMerchantAccountManager
     ErrorNotifier.notify(e)
   end
 
-  # Stripe's hosted forms can move an individual's account to company/non_profit, and an identical
-  # save never reaches update_account, so compare the live type and re-run the sync on a mismatch.
+  # Hosted forms can flip an individual to company/non_profit; nothing in our record changes, so no
+  # save would resend the type. Returns true only when it re-ran the sync.
   def self.reconcile_live_business_type(user, stripe_account: nil)
+    return false if user.has_stripe_account_connected?
+
     compliance_info = user.alive_user_compliance_info
     merchant_account = user.stripe_account
-    return unless compliance_info&.is_individual? && merchant_account&.charge_processor_merchant_id.present?
+    return false unless compliance_info&.is_individual? && merchant_account&.charge_processor_merchant_id.present?
 
     stripe_account ||= Stripe::Account.retrieve(merchant_account.charge_processor_merchant_id)
-    return unless LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
+    return false unless LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
 
     handle_new_user_compliance_info(compliance_info)
+    true
   rescue => e
     Rails.logger.error "Failed to reconcile the live business type for user #{user&.id}: #{e.class}: #{e.message}"
     ErrorNotifier.notify(e)
+    false
   end
 
   private_class_method def self.unresolvable_structure_rejection_notes(user)

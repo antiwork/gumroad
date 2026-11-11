@@ -30,6 +30,7 @@ class RedisKey
     def ai_request_throttle(user_id) = "ai_request_throttle:#{user_id}"
     def team_invitation_send_throttle(seller_id) = "team_invitation_send_throttle:#{seller_id}"
     def team_invitation_burst_reported(seller_id) = "team_invitation_burst_reported:#{seller_id}"
+    def stripe_live_business_type_reconcile_throttle(user_id) = "stripe_live_business_type_reconcile_throttle:#{user_id}"
     def fraudulent_free_purchases_block_hours = "fraudulent_free_purchases_block_hours"
     def recaptcha_score_threshold(surface) = "recaptcha_score_threshold:#{surface}"
     def recaptcha_challenge_offer(browser_guid) = "recaptcha_challenge_offer:#{browser_guid}"

@@ -52,6 +52,47 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(actual_props).to eq(expected_props)
     end
 
+    describe "live business type reconcile" do
+      it "queues one reconcile per seller per throttle window" do
+        create(:merchant_account, user: seller)
+        allow(ReconcileStripeLiveBusinessTypeJob).to receive(:perform_async)
+
+        2.times { get :show }
+
+        expect(ReconcileStripeLiveBusinessTypeJob).to have_received(:perform_async).with(seller.id).once
+        expect($redis.ttl(RedisKey.stripe_live_business_type_reconcile_throttle(seller.id))).to be_within(5).of(1.hour.to_i)
+      end
+
+      it "queues nothing for a business seller" do
+        create(:merchant_account, user: seller)
+        seller.alive_user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user: seller)
+
+        get :show
+
+        expect(ReconcileStripeLiveBusinessTypeJob.jobs.size).to eq(0)
+      end
+
+      it "queues nothing for a seller without a Gumroad-managed Stripe account" do
+        get :show
+
+        expect(ReconcileStripeLiveBusinessTypeJob.jobs.size).to eq(0)
+      end
+
+      it "still renders the page when Redis fails" do
+        create(:merchant_account, user: seller)
+        allow($redis).to receive(:set).and_call_original
+        allow($redis).to receive(:set).with(RedisKey.stripe_live_business_type_reconcile_throttle(seller.id), any_args)
+                                      .and_raise(Redis::CannotConnectError)
+        expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Redis::CannotConnectError), context: { user_id: seller.id })
+
+        get :show
+
+        expect(response).to be_successful
+        expect(ReconcileStripeLiveBusinessTypeJob.jobs.size).to eq(0)
+      end
+    end
+
     describe "account_status prop" do
       it "does not show section for compliant user with no issues" do
         seller.mark_compliant!(author_name: "test")
@@ -1345,7 +1386,12 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       describe "user is verified" do
         before do
           put :update, params: { user: params }
-          user.merchant_accounts << create(:merchant_account, charge_processor_verified_at: Time.current)
+          merchant_account = create(:merchant_account, charge_processor_verified_at: Time.current)
+          user.merchant_accounts << merchant_account
+          # An unchanged save reads the live business type.
+          allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
+            Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, object: "account", business_type: "individual")
+          )
         end
 
         describe "user saves existing data unchanged" do
@@ -3622,20 +3668,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(flash[:info]).to include("Stripe is still reviewing your account")
     end
 
-    it "re-syncs an individual seller whose Stripe account was moved to non_profit by the hosted form" do
-      account = Stripe::Account.construct_from(
-        id: stripe_connect_account_id, object: "account", business_type: "non_profit",
-        requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
-        future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
-      )
-      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(account)
-      expect(StripeMerchantAccountManager).to receive(:reconcile_live_business_type).with(user, stripe_account: account)
-
-      get :verify_stripe_remediation
-
-      expect(response).to redirect_to settings_payments_url
-    end
-
     it "does not show the 'Thanks' notice when Stripe still lists eventually_due requirements" do
       pending_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
       allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(
@@ -3688,6 +3720,64 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(response).to redirect_to settings_payments_url
       expect(flash[:notice]).to be_nil
       expect(flash[:alert]).to include("Stripe has paused payouts")
+    end
+
+    context "when the hosted form moved the seller's Stripe account off individual" do
+      let!(:stripe_connect_account_id) { create(:merchant_account, user:).charge_processor_merchant_id }
+      let!(:pending_request) { create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID) }
+
+      def stripe_account_with(business_type, currently_due: [])
+        Stripe::Account.construct_from(
+          id: stripe_connect_account_id,
+          object: "account",
+          business_type:,
+          requirements: { "currently_due" => currently_due, "past_due" => [], "eventually_due" => [] },
+          future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+        )
+      end
+
+      # Stripe reports the non_profit account until the sync flips it back to individual.
+      def stub_reconcile(after_sync:)
+        synced = false
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) { synced = true }
+        allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id) do
+          synced ? after_sync.call : stripe_account_with("non_profit", currently_due: ["company.tax_id"])
+        end
+      end
+
+      it "re-syncs an individual seller and takes the flash and requests from the re-read account" do
+        stub_reconcile(after_sync: -> { stripe_account_with("individual") })
+
+        get :verify_stripe_remediation
+
+        expect(StripeMerchantAccountManager).to have_received(:handle_new_user_compliance_info).with(user_compliance_info)
+        expect(Stripe::Account).to have_received(:retrieve).twice
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+        expect(pending_request.reload).to be_provided
+      end
+
+      it "redirects without marking requests provided when the re-read fails" do
+        stub_reconcile(after_sync: -> { raise Stripe::APIConnectionError, "timeout" })
+        expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Stripe::APIConnectionError), context: { user_id: user.id })
+
+        get :verify_stripe_remediation
+
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:notice]).to be_nil
+        expect(pending_request.reload).to be_requested
+      end
+
+      it "reads Stripe once for a business seller" do
+        user_compliance_info.mark_deleted!
+        create(:user_compliance_info_business, user:)
+        allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(stripe_account_with("company"))
+
+        get :verify_stripe_remediation
+
+        expect(Stripe::Account).to have_received(:retrieve).once
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+      end
     end
 
     context "when Stripe still shows the pending-only review that opened the remediation link" do

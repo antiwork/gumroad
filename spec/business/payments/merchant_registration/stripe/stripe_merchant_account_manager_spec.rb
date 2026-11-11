@@ -16199,25 +16199,6 @@ describe StripeMerchantAccountManager, :vcr do
           described_class.resync_pending_structure_rejection(user)
         end
 
-        it "re-drives the sync from an unchanged save when Stripe holds a non-individual type" do
-          stub_stripe_account(previous, business_type: "non_profit")
-          allow(Stripe::Account).to receive(:update)
-
-          described_class.reconcile_live_business_type(user)
-
-          expect(Stripe::Account).to have_received(:update).with(
-            merchant_account.charge_processor_merchant_id,
-            hash_including(business_type: "individual")
-          )
-        end
-
-        it "makes no Stripe write when Stripe already holds an individual" do
-          stub_stripe_account(previous, business_type: "individual")
-          expect(Stripe::Account).not_to receive(:update)
-
-          described_class.reconcile_live_business_type(user)
-        end
-
         it "swallows a Stripe failure rather than failing the seller's save" do
           note = user.add_payout_note(content: "rejected", seller_visible: false)
           note.update!(author_id: GUMROAD_ADMIN_ID, json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
@@ -16227,6 +16208,63 @@ describe StripeMerchantAccountManager, :vcr do
           expect(ErrorNotifier).to receive(:notify)
 
           expect { described_class.resync_pending_structure_rejection(user) }.not_to raise_error
+        end
+      end
+
+      describe ".reconcile_live_business_type" do
+        # The hosted form changes nothing on our side, so the metadata still names the current record.
+        let!(:current) { create(:user_compliance_info, user:) }
+
+        it "re-sends the whole individual with business_type individual when Stripe holds non_profit" do
+          stub_stripe_account(current, business_type: "non_profit", company: { structure: "incorporated_non_profit" }, country: "US")
+
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            { company: { structure: "" } }
+          ).ordered
+          expect(Stripe::Account).to receive(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_including(
+              business_type: "individual",
+              individual: hash_including(first_name: "Chuck", last_name: "Bartowski",
+                                         dob: { day: 1, month: 1, year: 1901 },
+                                         address: hash_including(line1: "address_full_match", postal_code: "94107")),
+              company: { name: "Chuck Bartowski" }
+            )
+          ).ordered
+
+          expect(described_class.reconcile_live_business_type(user)).to be(true)
+        end
+
+        it "makes no Stripe write when Stripe already holds an individual" do
+          stub_stripe_account(current, business_type: "individual")
+          expect(Stripe::Account).not_to receive(:update)
+
+          expect(described_class.reconcile_live_business_type(user)).to be(false)
+        end
+
+        it "never touches a seller whose current record is a business" do
+          current.mark_deleted!
+          create(:user_compliance_info_business, user:)
+          stub_stripe_account(current, business_type: "non_profit")
+          expect(Stripe::Account).not_to receive(:update)
+
+          expect(described_class.reconcile_live_business_type(user)).to be(false)
+        end
+
+        it "makes no Stripe call for a seller paid through their own connected account" do
+          allow(user).to receive(:has_stripe_account_connected?).and_return(true)
+          expect(Stripe::Account).not_to receive(:retrieve)
+
+          expect(described_class.reconcile_live_business_type(user)).to be(false)
+        end
+
+        it "swallows and reports a Stripe failure" do
+          stub_stripe_account(current, business_type: "non_profit")
+          allow(Stripe::Account).to receive(:update).and_raise(Stripe::InvalidRequestError.new("boom", nil))
+          expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Stripe::InvalidRequestError))
+
+          expect(described_class.reconcile_live_business_type(user)).to be(false)
         end
       end
 

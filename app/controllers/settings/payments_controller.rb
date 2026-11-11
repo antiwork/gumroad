@@ -11,9 +11,12 @@ class Settings::PaymentsController < Settings::BaseController
 
   PAYOUT_SETUP_ALREADY_UNDERWAY_MESSAGE = "We're already setting up payouts for your account. Refresh this page in a moment to see its status."
 
+  LIVE_BUSINESS_TYPE_RECONCILE_THROTTLE = 1.hour
+
   before_action :authorize
 
   def show
+    enqueue_live_business_type_reconcile
     props = settings_presenter.payments_props(remote_ip: request.remote_ip)
     SocialConnectFunnel.record_offers!(
       user: current_seller,
@@ -355,8 +358,16 @@ class Settings::PaymentsController < Settings::BaseController
 
     stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
     if StripeMerchantAccountManager::LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
-      StripeMerchantAccountManager.reconcile_live_business_type(current_seller, stripe_account:)
-      stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+      reconciled = current_seller.with_lock { StripeMerchantAccountManager.reconcile_live_business_type(current_seller, stripe_account:) }
+      if reconciled
+        # Flipping the type back changes what Stripe has due, so the first read's requirements are stale.
+        begin
+          stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+        rescue Stripe::StripeError => e
+          ErrorNotifier.notify(e, context: { user_id: current_seller.id })
+          safe_redirect_to settings_payments_path and return
+        end
+      end
     end
     requirements = stripe_account["requirements"] || {}
     future_requirements = stripe_account["future_requirements"] || {}
@@ -639,6 +650,19 @@ class Settings::PaymentsController < Settings::BaseController
 
     def current_seller_policy
       [:settings, :payments, current_seller]
+    end
+
+    # A hosted Stripe form can flip an individual's live business type with no save on our side, so
+    # page loads queue a check. Any failure here must not cost the seller the page.
+    def enqueue_live_business_type_reconcile
+      return unless current_seller.alive_user_compliance_info&.is_individual?
+      return if current_seller.stripe_account.blank? || current_seller.has_stripe_account_connected?
+      return unless $redis.set(RedisKey.stripe_live_business_type_reconcile_throttle(current_seller.id), 1,
+                               nx: true, ex: LIVE_BUSINESS_TYPE_RECONCILE_THROTTLE.to_i)
+
+      ReconcileStripeLiveBusinessTypeJob.perform_async(current_seller.id)
+    rescue => e
+      ErrorNotifier.notify(e, context: { user_id: current_seller.id })
     end
 
     def sync_stripe_disabled_reason(merchant_account)
