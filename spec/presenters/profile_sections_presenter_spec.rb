@@ -221,7 +221,19 @@ describe ProfileSectionsPresenter do
       one_section.cached_sections
       baseline = count_queries.call(one_section)
 
-      more = create_list(:seller_profile_products_section, 4, seller:, shown_products: products.map(&:id))
+      # Give each section its own products — a shared set is served from the memoized map after the
+      # first section loads it, so the count would stay flat even without the upfront batch load.
+      # `add_new_products: false` stops `Link#add_to_profile_sections` appending these to every section.
+      products_section.update!(add_new_products: false)
+      extra_products = {}
+      more = 4.times.map do
+        section_product = create(:product, user: seller)
+        section = create(:seller_profile_products_section, seller:, add_new_products: false, shown_products: [section_product.id])
+        extra_products[section.external_id] = [section_product.external_id]
+        section
+      end
+      Link.import(force: true, refresh: true)
+
       many_sections = described_class.new(seller:, query: seller.seller_profile_sections.where(id: [products_section.id, *more.map(&:id)]))
       many_sections.cached_sections
       expect(count_queries.call(many_sections)).to eq(baseline)
@@ -229,7 +241,7 @@ describe ProfileSectionsPresenter do
       props = many_sections.props(request:, pundit_user:, seller_custom_domain_url: nil)
       expect(props[:sections].size).to eq(5)
       props[:sections].each do |section|
-        expect(section[:search_results][:products].map { _1[:id] }).to eq(products.map(&:external_id))
+        expect(section[:search_results][:products].map { _1[:id] }).to eq(extra_products.fetch(section[:id], products.map(&:external_id)))
       end
     end
   end
