@@ -645,6 +645,7 @@ class SettingsPresenter
         individual_tax_id_last_four: tax_id_last_four(user_compliance_info.individual_tax_id),
         individual_tax_id_is_last_four: tax_id_is_last_four_only?(user_compliance_info.individual_tax_id),
         has_outstanding_full_ssn_requirement: outstanding_full_ssn_requirement,
+        has_outstanding_identity_document_requirement: has_outstanding_identity_document_requirement?,
         has_outstanding_nationality_requirement: has_outstanding_nationality_requirement?,
         has_outstanding_state_requirement: has_outstanding_state_requirement?(UserComplianceInfoFields::Individual::Address::STATE),
         has_outstanding_business_state_requirement: has_outstanding_state_requirement?(BUSINESS_STATE_FIELDS),
@@ -678,6 +679,17 @@ class SettingsPresenter
             .requested
             .where(field_needed: UserComplianceInfoFields::Individual::TAX_ID)
             .only_needs_field_to_be_partially_provided(false)
+            .exists?
+    end
+
+    # A US company's representative can be asked for a full SSN (Stripe's `id_number`) that a person
+    # living outside the US does not have. Stripe lists `verification.document` as the alternative for
+    # exactly that field, and the sync mirrors it here, so this request row is what makes the document
+    # upload the right thing to offer beside the tax ID input.
+    def has_outstanding_identity_document_requirement?
+      seller.user_compliance_info_requests
+            .requested
+            .where(field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
             .exists?
     end
 

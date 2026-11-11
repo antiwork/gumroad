@@ -766,6 +766,7 @@ describe SettingsPresenter do
           individual_tax_id_last_four: nil,
           individual_tax_id_is_last_four: false,
           has_outstanding_full_ssn_requirement: false,
+          has_outstanding_identity_document_requirement: false,
           has_outstanding_nationality_requirement: false,
           has_outstanding_state_requirement: false,
           has_outstanding_business_state_requirement: false,
@@ -1669,6 +1670,27 @@ describe SettingsPresenter do
 
       it "is false when no TAX_ID request exists" do
         expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to be(false)
+      end
+    end
+
+    describe "has_outstanding_identity_document_requirement" do
+      it "is true when Stripe's verification.document request is open" do
+        create(:user_compliance_info_request, user: seller,
+                                              field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+
+        expect(presenter.payments_props[:user][:has_outstanding_identity_document_requirement]).to be(true)
+      end
+
+      it "is false once the document request was provided" do
+        request = create(:user_compliance_info_request, user: seller,
+                                                        field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        request.mark_provided!
+
+        expect(presenter.payments_props[:user][:has_outstanding_identity_document_requirement]).to be(false)
+      end
+
+      it "is false when no document request exists" do
+        expect(presenter.payments_props[:user][:has_outstanding_identity_document_requirement]).to be(false)
       end
     end
 

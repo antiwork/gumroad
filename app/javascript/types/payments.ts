@@ -13,6 +13,7 @@ export type User = {
   individual_tax_id_last_four: string | null;
   individual_tax_id_is_last_four: boolean;
   has_outstanding_full_ssn_requirement: boolean;
+  has_outstanding_identity_document_requirement: boolean;
   has_outstanding_nationality_requirement: boolean;
   has_outstanding_state_requirement: boolean;
   has_outstanding_business_state_requirement: boolean;

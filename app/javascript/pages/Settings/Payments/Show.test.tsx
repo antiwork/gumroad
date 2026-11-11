@@ -61,6 +61,7 @@ const user = (overrides: Partial<User> = {}): User => ({
   individual_tax_id_last_four: "6789",
   individual_tax_id_is_last_four: false,
   has_outstanding_full_ssn_requirement: false,
+  has_outstanding_identity_document_requirement: false,
   has_outstanding_nationality_requirement: false,
   has_outstanding_state_requirement: false,
   has_outstanding_business_state_requirement: false,
@@ -237,6 +238,19 @@ describe("US company representative tax ID", () => {
     expect(mocks.put).toHaveBeenCalledTimes(1);
     expect(mocks.put.mock.calls[0]?.[1]?.user).not.toHaveProperty("individual_tax_id");
     expect(document.querySelectorAll('[aria-invalid="true"]').length).toBe(0);
+  });
+
+  it("offers Stripe's document upload when the account is waiting on one", () => {
+    renderPage(
+      { individual_tax_id_entered: false, business_tax_id_entered: true, has_outstanding_identity_document_requirement: true },
+      business,
+    );
+    expect(screen.getByText("Upload a passport via Stripe instead")).toBeTruthy();
+  });
+
+  it("does not offer the document upload when Stripe has not asked for a document", () => {
+    renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
+    expect(screen.queryByText(/Upload a passport via Stripe instead/u)).toBeNull();
   });
 
   it.each(["000000000", "000-00-0000", "000 00 0000"])(
@@ -580,7 +594,7 @@ describe("full-SSN re-entry validation", () => {
     expect(fullSsnError()).toBeNull();
     expect(mocks.put).toHaveBeenCalledTimes(1);
   });
-  it("blocks saving for a US business whose individual country is not US (requirement follows business_country)", () => {
+  it("saves for a US business's non-US representative, who has no number Stripe would accept", () => {
     renderPage(
       {
         need_full_ssn: true,
@@ -591,8 +605,35 @@ describe("full-SSN re-entry validation", () => {
       {
         is_business: true,
         country: "CA",
-        // Complete business fields so no later validation overwrites the SSN error message.
-        business_type: "llc",
+        business_type: "single_member_llc",
+        business_name: "Test LLC",
+        business_street_address: "123 Main St",
+        business_city: "San Francisco",
+        business_state: "CA",
+        business_country: "US",
+        business_zip_code: "94103",
+        business_phone: "+14155552671",
+      },
+    );
+
+    save();
+
+    expect(fullSsnError()).toBeNull();
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("still blocks a US representative of that same US business", () => {
+    renderPage(
+      {
+        need_full_ssn: true,
+        has_outstanding_full_ssn_requirement: true,
+        individual_tax_id_is_last_four: true,
+        business_tax_id_entered: true,
+      },
+      {
+        is_business: true,
+        country: "US",
+        business_type: "single_member_llc",
         business_name: "Test LLC",
         business_street_address: "123 Main St",
         business_city: "San Francisco",

@@ -373,13 +373,18 @@ const AccountDetailsSection = ({
   // requirement follows the account country — business_country for businesses (same rule as the
   // Peru DNI check).
   const ssnRequirementCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
-  const mustReenterFullSsn =
-    user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && ssnRequirementCountry === "US";
-  // The page rejects a blank id_number while that requirement is open, so the hint must not invite one.
-  const blankIndividualTaxIdRejected =
+  // A US company can have a representative who lives elsewhere, and Stripe matches `id_number`
+  // against the ACCOUNT country — so that seller has no number Stripe would accept and cannot clear
+  // a required 9-digit field. Stripe's declared alternative for this account is a verification
+  // document, so the field must stay optional for them while the requirement is open.
+  const ssnBlockApplies =
     user.has_outstanding_full_ssn_requirement &&
     ssnRequirementCountry === "US" &&
-    (user.individual_tax_id_is_last_four || !user.individual_tax_id_entered);
+    !usEntityWithForeignRepresentative(complianceInfo);
+  const mustReenterFullSsn = ssnBlockApplies && user.individual_tax_id_is_last_four;
+  // The page rejects a blank id_number while that requirement is open, so the hint must not invite one.
+  const blankIndividualTaxIdRejected =
+    ssnBlockApplies && (user.individual_tax_id_is_last_four || !user.individual_tax_id_entered);
 
   // A Hong Kong company's foreign representative types the passport number before the country that
   // issued it, so the issuing country renders after the number instead of above it.

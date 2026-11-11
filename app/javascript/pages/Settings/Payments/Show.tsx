@@ -17,7 +17,13 @@ import {
 } from "$app/utils/dominicanRepublicCie";
 import { GUATEMALA_NIT_ERROR_MESSAGE, isValidGuatemalaNit } from "$app/utils/guatemalaNit";
 import { accountNumberFormatError } from "$app/utils/payoutAccountNumbers";
-import { normalizeUsTaxId, personalTaxIdError, usesHongKongPassport, usesUsTaxId } from "$app/utils/personalTaxId";
+import {
+  normalizeUsTaxId,
+  personalTaxIdError,
+  usesHongKongPassport,
+  usesUsTaxId,
+  usEntityWithForeignRepresentative,
+} from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
 import { asyncVoid } from "$app/utils/promise";
 
@@ -355,7 +361,12 @@ export default function PaymentsPage() {
   const [isUpdateCountryConfirmed, setIsUpdateCountryConfirmed] = React.useState(false);
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
   const [saveCounter, setSaveCounter] = React.useState(0);
-  const [hasIdDocumentAlternative, setHasIdDocumentAlternative] = React.useState(false);
+  const [hasIdDocumentAlternativeFromOwners, setHasIdDocumentAlternativeFromOwners] = React.useState(false);
+  // The sync records Stripe's `verification.document` alternative to the representative's id_number
+  // as an open document request, so seed the link from it: a single-owner company never renders the
+  // beneficial-owners list this flag used to depend on, and that is exactly who has no US tax ID.
+  const hasIdDocumentAlternative =
+    props.user.has_outstanding_identity_document_requirement || hasIdDocumentAlternativeFromOwners;
 
   const form = useForm<{
     user: ComplianceInfo;
@@ -1069,8 +1080,12 @@ export default function PaymentsPage() {
       const typedSsnDigits = (form.data.user.individual_tax_id ?? "").replace(/\D/gu, "");
       // Only last-4 (or nothing) on file can never satisfy Stripe's id_number requirement, so the
       // seller must type a fresh full SSN; and any newly typed value must itself be 9 digits so a
-      // fresh 4-digit entry can't be saved into a full-SSN requirement.
-      const mustReenterFullSsn = props.user.individual_tax_id_is_last_four || !props.user.individual_tax_id_entered;
+      // fresh 4-digit entry can't be saved into a full-SSN requirement. A US company's non-US
+      // representative has no number Stripe would accept, so they are not held to it — Stripe's
+      // alternative for that account is a verification document, offered next to the field.
+      const mustReenterFullSsn =
+        !usEntityWithForeignRepresentative(form.data.user) &&
+        (props.user.individual_tax_id_is_last_four || !props.user.individual_tax_id_entered);
       if ((mustReenterFullSsn || form.data.user.individual_tax_id) && typedSsnDigits.length !== FULL_SSN_DIGIT_COUNT) {
         markFieldInvalid("individual_tax_id");
         setClientErrorMessage({
@@ -1811,7 +1826,7 @@ export default function PaymentsPage() {
               countries={props.person_countries}
               states={props.states}
               defaultCountry={form.data.user.business_country ?? form.data.user.country}
-              onIdDocumentAlternativeChange={setHasIdDocumentAlternative}
+              onIdDocumentAlternativeChange={setHasIdDocumentAlternativeFromOwners}
               minDobYear={props.min_dob_year}
               isFormDisabled={props.is_form_disabled}
             />
