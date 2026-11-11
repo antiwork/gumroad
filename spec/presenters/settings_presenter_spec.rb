@@ -766,6 +766,7 @@ describe SettingsPresenter do
           individual_tax_id_last_four: nil,
           individual_tax_id_is_last_four: false,
           has_outstanding_full_ssn_requirement: false,
+          has_outstanding_identity_document_requirement: false,
           has_outstanding_nationality_requirement: false,
           has_outstanding_state_requirement: false,
           has_outstanding_business_state_requirement: false,
@@ -1066,7 +1067,11 @@ describe SettingsPresenter do
                                               verification_error: { code: "verification_failed_keyed_identity" })
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
-                                                                       user: @base_us_props[:user].merge({ need_full_ssn: true, has_outstanding_full_ssn_requirement: true }),
+                                                                       user: @base_us_props[:user].merge(
+                                                                         need_full_ssn: true,
+                                                                         has_outstanding_full_ssn_requirement: true,
+                                                                         has_outstanding_identity_document_requirement: true,
+                                                                       ),
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
@@ -1504,6 +1509,7 @@ describe SettingsPresenter do
         seller.put_on_probation!(author_name: "test")
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       user: @base_us_props[:user].merge(has_outstanding_identity_document_requirement: true),
                                                                        account_status: @base_us_props[:account_status].merge(
                                                                          show_section: true,
                                                                          compliance_actions: [{ message: "Complete pending verification requirements via Stripe", href: "/settings/payments/remediation" }],
@@ -1520,6 +1526,7 @@ describe SettingsPresenter do
         seller.update!(payouts_paused_internally: true)
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       user: @base_us_props[:user].merge(has_outstanding_identity_document_requirement: true),
                                                                        payouts_paused_internally: true,
                                                                        payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
                                                                        account_status: @base_us_props[:account_status].merge(
@@ -1537,6 +1544,7 @@ describe SettingsPresenter do
         seller.update!(payouts_paused_internally: true)
 
         expect(presenter.payments_props).to eq(@base_us_props.merge!({
+                                                                       user: @base_us_props[:user].merge(has_outstanding_identity_document_requirement: true),
                                                                        payouts_paused_internally: true,
                                                                        payouts_paused_by: User::PAYOUT_PAUSE_SOURCE_ADMIN,
                                                                        account_status: @base_us_props[:account_status].merge(
@@ -1669,6 +1677,27 @@ describe SettingsPresenter do
 
       it "is false when no TAX_ID request exists" do
         expect(presenter.payments_props[:user][:has_outstanding_full_ssn_requirement]).to be(false)
+      end
+    end
+
+    describe "has_outstanding_identity_document_requirement" do
+      it "is true when Stripe's verification.document request is open" do
+        create(:user_compliance_info_request, user: seller,
+                                              field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+
+        expect(presenter.payments_props[:user][:has_outstanding_identity_document_requirement]).to be(true)
+      end
+
+      it "is false once the document request was provided" do
+        request = create(:user_compliance_info_request, user: seller,
+                                                        field_needed: UserComplianceInfoFields::Individual::STRIPE_IDENTITY_DOCUMENT_ID)
+        request.mark_provided!
+
+        expect(presenter.payments_props[:user][:has_outstanding_identity_document_requirement]).to be(false)
+      end
+
+      it "is false when no document request exists" do
+        expect(presenter.payments_props[:user][:has_outstanding_identity_document_requirement]).to be(false)
       end
     end
 

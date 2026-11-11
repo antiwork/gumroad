@@ -1,13 +1,20 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ComplianceInfo, FormFieldName, User } from "$app/types/payments";
 
 import AccountDetailsSection from "$app/components/Settings/PaymentsPage/AccountDetailsSection";
 
 afterEach(cleanup);
+
+// The document-upload link reads js-routes, which is only a global in the real page.
+beforeEach(() => {
+  Object.assign(globalThis, {
+    Routes: { remediation_settings_payments_path: () => "/settings/payments/remediation" },
+  });
+});
 
 // happy-dom's compareDocumentPosition does not report source order, so read the form controls back
 // in the order the DOM actually has them.
@@ -29,6 +36,7 @@ const makeUser = (overrides: Partial<User> = {}): User => ({
   individual_tax_id_last_four: "6789",
   individual_tax_id_is_last_four: false,
   has_outstanding_full_ssn_requirement: false,
+  has_outstanding_identity_document_requirement: false,
   has_outstanding_nationality_requirement: false,
   has_outstanding_state_requirement: false,
   has_outstanding_business_state_requirement: false,
@@ -139,15 +147,18 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
   it.each([
     ["nothing on file", { individual_tax_id_entered: false }],
     ["only the last four", { individual_tax_id_entered: true, individual_tax_id_is_last_four: true }],
-  ])("withholds the leave-blank advice while a full SSN is owed (%s)", (_label, userOverrides) => {
-    renderSection(makeUser({ ...userOverrides, has_outstanding_full_ssn_requirement: true }), {
-      is_business: true,
-      business_country: "US",
-      country: "DZ",
-    });
-    expect(screen.getByText(/US ITIN or SSN \(9 digits\)/u)).toBeTruthy();
-    expect(screen.queryByText(/leave this blank/u)).toBeNull();
-  });
+  ])(
+    "keeps offering the leave-blank advice to a non-US representative while a full SSN is owed (%s)",
+    (_label, userOverrides) => {
+      renderSection(makeUser({ ...userOverrides, has_outstanding_full_ssn_requirement: true }), {
+        is_business: true,
+        business_country: "US",
+        country: "DZ",
+      });
+      expect(screen.getByText(/US ITIN or SSN \(9 digits\)/u)).toBeTruthy();
+      expect(screen.getByText(/leave this blank/u)).toBeTruthy();
+    },
+  );
 
   it("does not require the tax ID from a US company's non-US representative", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }), {
@@ -185,15 +196,33 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").required).toBe(true);
   });
 
-  it("keeps the field required while Stripe is asking for the full SSN", () => {
-    renderSection(
-      makeUser({
-        individual_tax_id_entered: false,
-        has_outstanding_full_ssn_requirement: true,
-      }),
-      { is_business: true, business_country: "US", country: "DZ" },
-    );
-    expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").required).toBe(true);
+  it.each([
+    ["nothing on file", { individual_tax_id_entered: false }],
+    ["only the last four", { individual_tax_id_entered: true, individual_tax_id_is_last_four: true }],
+  ])(
+    "does not require the field from a non-US representative while Stripe asks for the full SSN (%s)",
+    (_label, userOverrides) => {
+      renderSection(
+        makeUser({
+          ...userOverrides,
+          has_outstanding_full_ssn_requirement: true,
+          has_outstanding_identity_document_requirement: true,
+        }),
+        { is_business: true, business_country: "US", country: "DZ" },
+        { hasIdDocumentAlternative: true },
+      );
+      expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").required).toBe(false);
+      expect(screen.getByText(/Upload a passport via Stripe instead/u)).toBeTruthy();
+    },
+  );
+
+  it("still requires the field while Stripe asks for the full SSN from a US representative", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false, has_outstanding_full_ssn_requirement: true }), {
+      is_business: true,
+      business_country: "US",
+      country: "US",
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Last 4 digits of SSN").required).toBe(true);
   });
 
   it("keeps a mapped foreign-ID field's existing length behavior", () => {
