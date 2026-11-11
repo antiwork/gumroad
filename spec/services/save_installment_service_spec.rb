@@ -341,6 +341,24 @@ describe SaveInstallmentService do
     end
 
     include_examples "updates profile posts sections"
+
+    it "adds a post created from now on to a section that takes new posts by default" do
+      section = create(:seller_profile_posts_section, seller:, shown_posts: [], add_new_posts: true)
+      other_section = create(:seller_profile_posts_section, seller:, shown_posts: [])
+
+      described_class.new(seller:, installment:, params: params.deep_merge(installment: { shown_in_profile_sections: [] }), preview_email_recipient:).process
+
+      expect(section.reload.shown_posts).to eq([Installment.last.id])
+      expect(other_section.reload.shown_posts).to eq([])
+    end
+
+    it "keeps the posts already on a default-on section when a new one arrives" do
+      section = create(:seller_profile_posts_section, seller:, shown_posts: [2000], add_new_posts: true)
+
+      described_class.new(seller:, installment:, params: params.deep_merge(installment: { shown_in_profile_sections: [] }), preview_email_recipient:).process
+
+      expect(section.reload.shown_posts).to eq([2000, Installment.last.id])
+    end
   end
 
   context "when installment is present" do
@@ -615,6 +633,14 @@ describe SaveInstallmentService do
     end
 
     include_examples "updates profile posts sections"
+
+    it "does not re-add a post the seller took off a section that takes new posts by default" do
+      section = create(:seller_profile_posts_section, seller:, shown_posts: [], add_new_posts: true)
+
+      described_class.new(seller:, installment:, params: params.deep_merge(installment: { shown_in_profile_sections: [] }), preview_email_recipient:).process
+
+      expect(section.reload.shown_posts).to eq([])
+    end
   end
 
   describe "#save_with_unique_slug!" do

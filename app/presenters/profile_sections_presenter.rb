@@ -239,7 +239,7 @@ class ProfileSectionsPresenter
         end
       when "SellerProfilePostsSection"
         if editing
-          cached_props.merge!({ shown_posts: visible_posts(section:).pluck(:id) })
+          cached_props.merge!({ shown_posts: visible_posts(section:).pluck(:id), add_new_posts: section.add_new_posts })
         else
           cached_props[:posts] = visible_posts(section:)
         end

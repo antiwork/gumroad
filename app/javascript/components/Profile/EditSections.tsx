@@ -707,7 +707,7 @@ export const AddSectionButton = ({ side, index }: { index: number; side?: "top" 
                 },
               };
             case "SellerProfilePostsSection":
-              return { ...commonProps, type, shown_posts: state.posts.map((post) => post.id) };
+              return { ...commonProps, type, shown_posts: state.posts.map((post) => post.id), add_new_posts: true };
             case "SellerProfileRichTextSection":
               return { ...commonProps, type, text: {} };
             case "SellerProfileSubscribeSection":

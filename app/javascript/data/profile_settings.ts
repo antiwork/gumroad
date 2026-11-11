@@ -23,6 +23,7 @@ export type ProductsSection = Section & {
 export type PostsSection = Section & {
   type: "SellerProfilePostsSection";
   shown_posts: string[];
+  add_new_posts: boolean;
 };
 
 export type RichTextSection = Section & {

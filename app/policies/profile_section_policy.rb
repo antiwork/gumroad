@@ -10,7 +10,7 @@ class ProfileSectionPolicy < ApplicationPolicy
 
   def destroy? = update?
 
-  UPDATE_ATTRIBUTES = [:header, :default_product_sort, :add_new_products, :hide_header, :show_filters, :button_label, :featured_product_id, { shown_products: [], shown_posts: [], text: {}, shown_wishlists: [] }].freeze
+  UPDATE_ATTRIBUTES = [:header, :default_product_sort, :add_new_products, :add_new_posts, :hide_header, :show_filters, :button_label, :featured_product_id, { shown_products: [], shown_posts: [], text: {}, shown_wishlists: [] }].freeze
   CREATE_ATTRIBUTES = [:type, :product_id, *UPDATE_ATTRIBUTES].freeze
 
   def permitted_attributes_for_create

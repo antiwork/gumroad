@@ -146,7 +146,7 @@ describe ProfileSectionsPresenter do
     it "returns the correct props for the seller" do
       sections = common_sections_props
       sections[0].merge!({ hide_header: false, shown_products: products.map(&:external_id), add_new_products: true })
-      sections[1].merge!({ shown_posts: posts.map(&:external_id), hide_header: false })
+      sections[1].merge!({ shown_posts: posts.map(&:external_id), hide_header: false, add_new_posts: false })
       sections[2].merge!({ hide_header: false })
       sections[3].merge!({ hide_header: false })
       sections[4].merge!({ hide_header: true, header: subscribe_section.header })

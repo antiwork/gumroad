@@ -51,6 +51,7 @@ class SaveInstallmentService
 
   private
     def save_installment
+      new_installment = installment.new_record?
       unless installment.published?
         installment.installment_type = installment_params[:installment_type]
         installment.base_variant = installment_params[:installment_type] == Installment::VARIANT_TYPE ? BaseVariant.find_by_external_id(params[:variant_external_id]) : nil
@@ -59,7 +60,7 @@ class SaveInstallmentService
       end
       if (installment.published? || installment.add_and_validate_filters(installment_attrs, seller)) && save_with_unique_slug!
         SaveFilesService.perform(installment, product_files_params)
-        update_profile_posts_sections!
+        update_profile_posts_sections!(new_installment:)
       else
         @error = installment.errors.full_messages.first
       end
@@ -73,11 +74,14 @@ class SaveInstallmentService
       installment.save
     end
 
-    def update_profile_posts_sections!
+    # Mirrors Link#add_to_profile_sections: a section that asks for new posts gets one the next time
+    # a post is created, so the seller does not have to tick it in the post editor. Creation only --
+    # a post taken off a section by hand stays off it.
+    def update_profile_posts_sections!(new_installment: false)
       seller.with_profile_sections_lock do
         seller.seller_profile_posts_sections.reload.each do |section|
           shown_posts = Set.new(section.shown_posts)
-          if section.external_id.in?(installment_params[:shown_in_profile_sections])
+          if section.external_id.in?(installment_params[:shown_in_profile_sections]) || (new_installment && section.add_new_posts)
             shown_posts.add(installment.id)
           else
             shown_posts.delete(installment.id)
