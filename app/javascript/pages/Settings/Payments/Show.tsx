@@ -362,12 +362,6 @@ export default function PaymentsPage() {
   const [isPayoutMethodChangeConfirmed, setIsPayoutMethodChangeConfirmed] = React.useState(false);
   const [saveCounter, setSaveCounter] = React.useState(0);
   const [hasIdDocumentAlternativeFromOwners, setHasIdDocumentAlternativeFromOwners] = React.useState(false);
-  // A document request only substitutes for the tax ID when that ID is itself outstanding; the sync
-  // also opens document requests for other fields. A single-owner company never renders the
-  // beneficial-owners list this flag used to depend on, and that is who has no US tax ID.
-  const hasIdDocumentAlternative =
-    (props.user.has_outstanding_identity_document_requirement && props.user.has_outstanding_full_ssn_requirement) ||
-    hasIdDocumentAlternativeFromOwners;
 
   const form = useForm<{
     user: ComplianceInfo;
@@ -388,6 +382,14 @@ export default function PaymentsPage() {
     bank_account: props.bank_account_details.bank_account,
     payment_address: props.paypal_address,
   });
+
+  // Only a US company's non-US representative may save without the full SSN, so only they are offered
+  // the document instead. The sync also opens document requests for other fields, hence the SSN pairing.
+  const hasIdDocumentAlternative =
+    (usEntityWithForeignRepresentative(form.data.user) &&
+      props.user.has_outstanding_identity_document_requirement &&
+      props.user.has_outstanding_full_ssn_requirement) ||
+    hasIdDocumentAlternativeFromOwners;
 
   const [selectedPayoutMethod, setSelectedPayoutMethod] = React.useState<PayoutMethod>(() =>
     props.stripe_connect.has_connected_stripe

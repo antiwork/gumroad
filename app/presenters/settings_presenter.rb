@@ -683,9 +683,9 @@ class SettingsPresenter
     end
 
     # A US company's representative can be asked for a full SSN (Stripe's `id_number`) that a person
-    # living outside the US does not have. Stripe lists `verification.document` as the alternative for
-    # exactly that field, and the sync mirrors it here, so this request row is what makes the document
-    # upload the right thing to offer beside the tax ID input.
+    # living outside the US does not have, and Stripe offers `verification.document` as the alternative.
+    # The sync flattens alternatives without their original field, so this row only says a document is
+    # due; the page pairs it with the open SSN request before offering the upload beside the tax ID.
     def has_outstanding_identity_document_requirement?
       seller.user_compliance_info_requests
             .requested
