@@ -50,6 +50,16 @@ describe Discover::CanonicalUrlPresenter do
       end
     end
 
+    it "lowercases a dotted capital I the way search does" do
+      params = ActionController::Parameters.new({ query: "İSTANBUL" })
+      expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/discover?query=istanbul")
+    end
+
+    it "keeps a full-width space, which search does not split words on" do
+      params = ActionController::Parameters.new({ query: "free\u3000brushes" })
+      expect(described_class.canonical_url(params)).to eq("#{discover_domain_with_protocol}/discover?query=free%E3%80%80brushes")
+    end
+
     it "returns the /discover url when the search is empty or only whitespace" do
       ["", "   "].each do |query|
         params = ActionController::Parameters.new({ query:, a: "123456" })

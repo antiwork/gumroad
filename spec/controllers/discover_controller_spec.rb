@@ -480,13 +480,14 @@ describe DiscoverController, type: :controller, inertia: true do
           Link.import(refresh: true, force: true)
         end
 
-        it "renders the result titles and links in the initial HTML" do
+        it "renders the first page of results as titles and links in the initial HTML" do
           get :index, params: { query: "Inkwell" }
 
           doc = Nokogiri::HTML.parse(response.body)
           expect(doc.at_css("noscript h1").text.strip).to eq(%(Search results for "Inkwell"))
-          link = doc.css("noscript nav[aria-label='Search results'] a").find { _1.text == "Inkwell brush pack" }
-          expect(link[:href]).to eq(product.long_url)
+          links = doc.css("noscript nav[aria-label='Search results'] a")
+          expect(links.map(&:text)).to eq(inertia.props[:search_results][:products].map { _1[:name] })
+          expect(links.map { [_1.text, _1[:href]] }).to include([product.name, product.long_url])
         end
 
         it "keeps a product name from closing the noscript element" do
