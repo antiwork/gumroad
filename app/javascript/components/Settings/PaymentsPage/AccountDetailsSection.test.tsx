@@ -134,6 +134,54 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     expect(screen.getByText(/upload a passport/u)).toBeTruthy();
   });
 
+  it("does not require the tax ID from a US company's non-US representative", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "DZ",
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").required).toBe(false);
+  });
+
+  it("does not require a mapped foreign ID either, which Stripe discards for a US company", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "BO",
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Cédula de Identidad (CI)").required).toBe(false);
+  });
+
+  it("still requires the field from a US representative of a US company", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false }), {
+      is_business: true,
+      business_country: "US",
+      country: "US",
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Last 4 digits of SSN").required).toBe(true);
+  });
+
+  it("still requires a non-US company's representative to enter an ID", () => {
+    renderSection(makeUser({ individual_tax_id_entered: false, individual_tax_id_needed_countries: ["GB"] }), {
+      is_business: true,
+      business_country: "GB",
+      country: "DZ",
+    });
+    expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").required).toBe(true);
+  });
+
+  it("keeps the field required while Stripe is asking for the full SSN", () => {
+    renderSection(
+      makeUser({
+        individual_tax_id_entered: false,
+        individual_tax_id_is_last_four: true,
+        has_outstanding_full_ssn_requirement: true,
+      }),
+      { is_business: true, business_country: "US", country: "DZ" },
+    );
+    expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").required).toBe(true);
+  });
+
   it("keeps a mapped foreign-ID field's existing length behavior", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }), {
       is_business: true,
