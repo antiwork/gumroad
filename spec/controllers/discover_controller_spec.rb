@@ -442,7 +442,7 @@ describe DiscoverController, type: :controller, inertia: true do
       it "renders a heading in the initial HTML of /discover" do
         get :index
 
-        expect(response.body).to include("<h1>Discover</h1>")
+        expect(response.body).to include("<h1>Discover digital products from independent creators</h1>")
       end
 
       it "renders the category title and description as the page heading" do
@@ -452,6 +452,14 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(doc.at_css("noscript h1").text.strip).to eq("3D")
         expect(doc.at_css("noscript h1").text).not_to include("Gumroad")
         expect(doc.at_css("noscript p").text).to include("products from independent creators")
+      end
+
+      it "renders the taxonomy trail as the heading of a nested and of a filtered category page" do
+        get :index, params: { taxonomy: "3d/3d-modeling", sort: "hot_and_new" }
+
+        doc = Nokogiri::HTML.parse(response.body)
+        expect(doc.at_css("noscript h1").text.strip).to eq("3D / 3D Modeling")
+        expect(doc.at_css("noscript p")).to be_nil
       end
 
       it "renders a heading on a leaf category, which has no subcategory links" do

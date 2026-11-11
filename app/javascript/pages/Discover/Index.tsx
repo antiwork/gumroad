@@ -51,6 +51,9 @@ type Props = {
   } | null;
 };
 
+// Keep equal to the noscript heading DiscoverController renders for the Discover root.
+export const ROOT_HEADING = "Discover digital products from independent creators";
+
 const sortTitles = {
   curated: "Curated for you",
   trending: "On the market",
@@ -381,6 +384,7 @@ function DiscoverIndex() {
         taxonomyPath={taxonomyPath}
         taxonomiesForNav={props.taxonomies_for_nav}
         showTaxonomy
+        rootHeading={state.params.query || state.params.tags?.length ? undefined : ROOT_HEADING}
         onTaxonomyChange={handleTaxonomyChange}
         query={state.params.query}
         setQuery={(query) => dispatch({ type: "set-params", params: { query, taxonomy: taxonomyPath } })}
