@@ -131,7 +131,8 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     });
     expect(screen.getByLabelText<HTMLInputElement>("Personal tax ID").disabled).toBe(false);
     expect(screen.getByText(/US ITIN or SSN \(9 digits\)/u)).toBeTruthy();
-    expect(screen.getByText(/upload a passport/u)).toBeTruthy();
+    // The link it used to name is offered only once the account exists, i.e. never here.
+    expect(screen.queryByText(/verification link/u)).toBeNull();
   });
 
   it("does not require the tax ID from a US company's non-US representative", () => {
