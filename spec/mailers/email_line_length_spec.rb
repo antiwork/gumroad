@@ -20,4 +20,27 @@ describe QuotedPrintableHtmlMail do
     expect(html_part.body.encoding).to eq("quoted-printable")
     expect(html_part.encoded.split("\r\n").map(&:bytesize).max).to be < 1000 - 455
   end
+
+  # Body#encoding is the encoding of the content handed to the mail gem, so the payload is re-encoded
+  # on the way out and must decode back byte for byte — including URLs carrying = and hex digits, which
+  # a body the gem believed was already quoted-printable would corrupt.
+  it "round-trips the payload, escaping = rather than reading a hex sequence in it" do
+    source = %(<a href="https://example.com/confirm?token=1234ABCD&amp;x=9">Confirm</a>)
+    mail = Mail.new do
+      to "buyer@example.com"
+      from "noreply@gumroad.com"
+      subject "round trip"
+      html_part do
+        content_type "text/html; charset=UTF-8"
+        body source
+      end
+    end
+
+    QuotedPrintableHtmlMail.delivering_email(mail)
+
+    encoded = mail.encoded
+    expect(encoded.gsub("=\r\n", "")).to include("token=3D1234ABCD")
+    expect(mail.html_part.decoded).to eq(source)
+    expect(encoded.split("\r\n").map(&:bytesize).max).to be < 1000 - 455
+  end
 end
