@@ -119,6 +119,26 @@ describe("DiscountsPage save validation", () => {
     expect(document.activeElement).toBe(validUntil);
   });
 
+  it("rejects an end date equal to the start date", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Limit validity period"));
+    fireEvent.click(screen.getByLabelText("No end date"));
+
+    const message = "The discount code's start date must be earlier than its end date.";
+    const validFrom = screen.getByLabelText("Valid from");
+    const validUntil = screen.getByLabelText("Valid until");
+    for (const field of [validFrom, validUntil]) {
+      fireEvent.change(field, { target: { value: "2030-01-01T00:00" } });
+      fireEvent.blur(field);
+    }
+    save();
+
+    expect(mocks.showAlert).toHaveBeenCalledWith(message, "error");
+    expect(document.activeElement).toBe(validUntil);
+    expect(validUntil.getAttribute("aria-invalid")).toBe("true");
+    expect(validUntil.closest("fieldset")?.textContent).toContain(message);
+  });
+
   it("keeps the reason under the field until the field is corrected", () => {
     openEditor();
     fireEvent.click(screen.getByLabelText("Limit validity period"));

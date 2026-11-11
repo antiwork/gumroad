@@ -1214,14 +1214,14 @@ const Form = ({
   const minimumQuantityErrorMessage = "Please enter a minimum quantity.";
 
   // Derived, so correcting "Valid from" or choosing no end date clears it too.
-  const isExpiresAtErrorShown = !!expiresAt.error && !hasNoEndDate && validAt > expiresAt.value;
+  const isExpiresAtErrorShown = !!expiresAt.error && !hasNoEndDate && validAt >= expiresAt.value;
 
   const handleSubmit = () => {
     const isNameInvalid = name.value === "";
     const isCodeInvalid = code.value === "";
     const isDiscountInvalid = !useTieredDiscounts && discount.value === null;
     const isMaxQuantityInvalid = limitQuantity && maxQuantity.value === null;
-    const isExpiresAtInvalid = limitValidity && !hasNoEndDate && validAt > expiresAt.value;
+    const isExpiresAtInvalid = limitValidity && !hasNoEndDate && validAt >= expiresAt.value;
     const isSelectedProductsInvalid = !universal && selectedProductIds.value.length === 0;
     const isMinimumQuantityInvalid = hasMinimumQuantity && minimumQuantity.value === null;
     const isMinimumAmountInvalid = hasMinimumAmount && minimumAmount.value === null;
