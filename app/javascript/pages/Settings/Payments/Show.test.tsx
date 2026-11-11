@@ -235,7 +235,7 @@ describe("US company representative tax ID", () => {
     renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
     save();
     expect(mocks.put).toHaveBeenCalledTimes(1);
-    expect(mocks.put.mock.calls[0][1].user).not.toHaveProperty("individual_tax_id");
+    expect(mocks.put.mock.calls[0]?.[1]?.user).not.toHaveProperty("individual_tax_id");
     expect(document.querySelectorAll('[aria-invalid="true"]').length).toBe(0);
   });
 
