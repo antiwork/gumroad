@@ -4,6 +4,7 @@ import * as React from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import ProductEditInertiaPage from "$app/pages/Products/Edit";
+import { installPopstateClaims, markVisitStarted } from "$app/utils/popstateClaims";
 
 Object.assign(globalThis, { SSR: false });
 
@@ -20,12 +21,45 @@ vi.mock("$app/components/ProductEdit/load", () => ({
   },
 }));
 
+// How Inertia answers a visit: `onSuccess` runs only when the server responded with props,
+// `onFinish` always runs, carrying the flags that say how the visit ended.
+type Visit = { completed: boolean; cancelled: boolean; interrupted: boolean };
+type ReloadOptions = { onSuccess: () => void; onFinish: (visit: Visit) => void };
+
+const inertia = vi.hoisted(() => {
+  const reload = vi.fn<(options: ReloadOptions) => void>();
+  // `router.on` subscribers. The page uses the global "finish" event to wait out the visit that
+  // replaced a reload it could not use, so the mock has to let a test fire one.
+  const finishListeners = new Set<() => void>();
+  const on = vi.fn((event: string, callback: () => void) => {
+    if (event === "finish") finishListeners.add(callback);
+    return () => finishListeners.delete(callback);
+  });
+  const emitFinish = () => {
+    for (const callback of [...finishListeners]) callback();
+  };
+  const locationReload = vi.fn();
+  return { reload, on, finishListeners, emitFinish, locationReload };
+});
+
 const pageProps = vi.hoisted((): { current: Record<string, unknown> } => ({ current: {} }));
 vi.mock("@inertiajs/react", () => ({
   usePage: () => ({ props: pageProps.current }),
+  router: { reload: inertia.reload, on: inertia.on },
 }));
 
 vi.mock("$app/hooks/useDropbox", () => ({ useDropbox: () => {} }));
+
+const reload = inertia.reload;
+
+// The page's last resort when its reload did not come back: replace the document.
+Object.defineProperty(window.location, "reload", {
+  configurable: true,
+  writable: true,
+  value: inertia.locationReload,
+});
+
+const skeletonIsShowing = () => document.querySelector('[aria-busy="true"]') !== null;
 
 const makePageProps = (id: string): Record<string, unknown> => ({
   dropbox_api_key: null,
@@ -140,8 +174,15 @@ const makePageProps = (id: string): Record<string, unknown> => ({
   },
 });
 
+installPopstateClaims();
+
 beforeEach(() => {
   mounts.length = 0;
+  reload.mockReset();
+  inertia.on.mockClear();
+  inertia.finishListeners.clear();
+  inertia.locationReload.mockReset();
+  markVisitStarted();
 });
 
 afterEach(cleanup);
@@ -164,4 +205,129 @@ it("remounts the editor when the Inertia visit switches products, and only then"
   rerender(<ProductEditInertiaPage />);
   await act(async () => {});
   expect(mounts).toEqual(["product-a", "product-b"]);
+});
+
+it("waits for current props before mounting the editor on a page restored from history", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  pageProps.current = makePageProps("product-a");
+  const { rerender } = render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(mounts).toEqual([]);
+  expect(reload).toHaveBeenCalledTimes(1);
+
+  pageProps.current = makePageProps("product-a");
+  act(() => {
+    reload.mock.calls[0]?.[0].onSuccess();
+  });
+  rerender(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(mounts).toEqual(["product-a"]);
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+it("mounts the editor straight away on a visit", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  markVisitStarted();
+  pageProps.current = makePageProps("product-a");
+  render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(mounts).toEqual(["product-a"]);
+  expect(reload).not.toHaveBeenCalled();
+});
+
+it("reloads the document when a history restore's reload fails, instead of mounting the stale snapshot", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  pageProps.current = makePageProps("product-a");
+  render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(skeletonIsShowing()).toBe(true);
+  expect(inertia.locationReload).not.toHaveBeenCalled();
+
+  // Not cancelled and not interrupted: the request simply failed, so nothing else is coming.
+  act(() => {
+    reload.mock.calls[0]?.[0].onFinish({ completed: false, cancelled: false, interrupted: false });
+  });
+
+  expect(inertia.locationReload).toHaveBeenCalledTimes(1);
+  // The props from the history entry are never handed to the editor, and the page does not ask again.
+  expect(mounts).toEqual([]);
+  expect(skeletonIsShowing()).toBe(true);
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+it("waits out a cancelled reload, asks again once that visit finishes, then mounts from the fresh props", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  pageProps.current = makePageProps("product-a");
+  const { rerender } = render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(reload).toHaveBeenCalledTimes(1);
+
+  // A newer visit replaced the reload, so a full reload here would throw that visit away.
+  act(() => {
+    reload.mock.calls[0]?.[0].onFinish({ completed: false, cancelled: true, interrupted: false });
+  });
+
+  expect(inertia.locationReload).not.toHaveBeenCalled();
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(mounts).toEqual([]);
+  expect(skeletonIsShowing()).toBe(true);
+  expect(inertia.on).toHaveBeenCalledWith("finish", expect.any(Function));
+
+  // That visit finishes: the page asks for its props again.
+  act(() => {
+    inertia.emitFinish();
+  });
+  await act(async () => {});
+  expect(reload).toHaveBeenCalledTimes(2);
+  expect(inertia.locationReload).not.toHaveBeenCalled();
+  expect(mounts).toEqual([]);
+  expect(skeletonIsShowing()).toBe(true);
+
+  // The second reload answers with current props.
+  pageProps.current = makePageProps("product-a");
+  act(() => {
+    reload.mock.calls[1]?.[0].onSuccess();
+  });
+  rerender(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(mounts).toEqual(["product-a"]);
+  expect(skeletonIsShowing()).toBe(false);
+  expect(reload).toHaveBeenCalledTimes(2);
+});
+
+it("does not reload the destination when leaving the page cancels the reload", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  pageProps.current = makePageProps("product-a");
+  const { unmount } = render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(reload).toHaveBeenCalledTimes(1);
+
+  // Leaving the editor is what cancels the reload the page started.
+  unmount();
+  await act(async () => {});
+  act(() => {
+    reload.mock.calls[0]?.[0].onFinish({ completed: false, cancelled: true, interrupted: false });
+  });
+
+  expect(inertia.locationReload).not.toHaveBeenCalled();
+  expect(inertia.on).not.toHaveBeenCalled();
+  expect(reload).toHaveBeenCalledTimes(1);
+});
+
+it("does not reload the document after the seller has already left the page", async () => {
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  pageProps.current = makePageProps("product-a");
+  const { unmount } = render(<ProductEditInertiaPage />);
+  await act(async () => {});
+  expect(reload).toHaveBeenCalledTimes(1);
+
+  unmount();
+  await act(async () => {});
+  act(() => {
+    reload.mock.calls[0]?.[0].onFinish({ completed: false, cancelled: false, interrupted: false });
+  });
+
+  expect(inertia.locationReload).not.toHaveBeenCalled();
+  expect(mounts).toEqual([]);
 });

@@ -13,6 +13,17 @@ export const claimPopstate = (claim: PopstateClaim): (() => void) => {
   };
 };
 
+// True from a Back or Forward that Inertia answers out of the history entry until the next visit
+// starts. The props such a page mounts with are the ones its entry was first loaded with, so a page
+// that saves from its props (the product editor) reloads them before it lets the seller edit.
+let restoredFromHistory = false;
+
+export const pageWasRestoredFromHistory = (): boolean => restoredFromHistory;
+
+export const markVisitStarted = (): void => {
+  restoredFromHistory = false;
+};
+
 export const installPopstateClaims = (target: Window = window): void => {
   target.addEventListener("popstate", (event) => {
     for (const claim of claims) {
@@ -21,5 +32,6 @@ export const installPopstateClaims = (target: Window = window): void => {
         return;
       }
     }
+    restoredFromHistory = true;
   });
 };
