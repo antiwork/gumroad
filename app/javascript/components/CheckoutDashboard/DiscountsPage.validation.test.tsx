@@ -119,6 +119,43 @@ describe("DiscountsPage save validation", () => {
     expect(document.activeElement).toBe(validUntil);
   });
 
+  it("keeps the reason under the field until the field is corrected", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Limit validity period"));
+    fireEvent.click(screen.getByLabelText("No end date"));
+
+    const message = "The discount code's start date must be earlier than its end date.";
+    const validUntil = screen.getByLabelText("Valid until");
+    fireEvent.change(validUntil, { target: { value: "2020-01-01T00:00" } });
+    fireEvent.blur(validUntil);
+    expect(screen.queryByText(message)).toBeNull();
+    save();
+
+    expect(validUntil.closest("fieldset")?.textContent).toContain(message);
+
+    fireEvent.change(validUntil, { target: { value: "2999-01-01T00:00" } });
+    fireEvent.blur(validUntil);
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
+  it("shows the amount and tier reasons inline", () => {
+    openEditor();
+    const percentage = screen.getByRole("textbox", { name: "Percentage" });
+    fireEvent.change(percentage, { target: { value: "" } });
+    save();
+    expect(screen.getByText("Please enter a discount amount.")).toBeTruthy();
+    fireEvent.change(percentage, { target: { value: "10" } });
+    expect(screen.queryByText("Please enter a discount amount.")).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
+    const tierPercentage = screen.getByLabelText("Tier 1 percentage");
+    fireEvent.change(tierPercentage, { target: { value: "" } });
+    save();
+    expect(screen.getByText("Each tier percentage must be between 0 and 100.")).toBeTruthy();
+    fireEvent.change(tierPercentage, { target: { value: "5" } });
+    expect(screen.queryByText("Each tier percentage must be between 0 and 100.")).toBeNull();
+  });
+
   it("asks for the amount when the discount field is emptied", () => {
     openEditor();
 

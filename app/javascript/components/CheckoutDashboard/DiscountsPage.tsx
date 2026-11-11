@@ -1156,6 +1156,7 @@ const Form = ({
   };
   // A field that can take focus, paired with the reason it is invalid.
   type InvalidField = { ref: { current: { focus: () => void } | null }; message: string };
+  const [tierErrorMessage, setTierErrorMessage] = React.useState<string | null>(null);
   const [useTieredDiscounts, setUseTieredDiscounts] = React.useState(!!initialTiers?.length);
   const [tiers, setTiers] = React.useState<TierRow[]>(() => {
     if (initialTiers?.length) {
@@ -1168,8 +1169,10 @@ const Form = ({
     return [{ id: nextTierId(), months: 0, amountPercentage: 0 }];
   });
 
-  const updateTier = (id: string, patch: Partial<TierRow>) =>
+  const updateTier = (id: string, patch: Partial<TierRow>) => {
+    setTierErrorMessage(null);
     setTiers((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
   const byMonths = (a: TierRow, b: TierRow) => (a.months ?? Infinity) - (b.months ?? Infinity);
   const sortTiersByMonths = () =>
     setTiers((prev) => {
@@ -1200,6 +1203,12 @@ const Form = ({
   const newCustomersOnlyReason = "Turn off “Limit to new customers” to use this setting.";
   // A reason is the seller's next step, so it reads as body text: text-muted measures about 3.9:1 here.
   const reasonClassName = "text-foreground";
+
+  const discountErrorMessage = "Please enter a discount amount.";
+  const maxQuantityErrorMessage = "Please enter a quantity.";
+  const expiresAtErrorMessage = "The discount code's start date must be earlier than its end date.";
+  const minimumAmountErrorMessage = "Please enter a minimum amount.";
+  const minimumQuantityErrorMessage = "Please enter a minimum quantity.";
 
   const handleSubmit = () => {
     const isNameInvalid = name.value === "";
@@ -1274,6 +1283,7 @@ const Form = ({
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
       if (isTiersInvalid) setTiers(tierErrors);
+      setTierErrorMessage(firstTierError?.message ?? null);
 
       // In form order, so the topmost problem is the one that takes focus and the alert names it: a
       // filled-in field must not be reported as a field the seller has not filled out.
@@ -1281,11 +1291,11 @@ const Form = ({
         isNameInvalid && { ref: nameFieldRef, message: "Please fill out the required fields." },
         isCodeInvalid && { ref: codeFieldRef, message: "Please fill out the required fields." },
         isSelectedProductsInvalid && { ref: selectedProductsFieldRef, message: "Please fill out the required fields." },
-        isDiscountInvalid && { ref: discountFieldRef, message: "Please enter a discount amount." },
-        isMaxQuantityInvalid && { ref: maxQuantityFieldRef, message: "Please enter a quantity." },
+        isDiscountInvalid && { ref: discountFieldRef, message: discountErrorMessage },
+        isMaxQuantityInvalid && { ref: maxQuantityFieldRef, message: maxQuantityErrorMessage },
         isExpiresAtInvalid && {
           ref: expiresAtFieldRef,
-          message: "The discount code's start date must be earlier than its end date.",
+          message: expiresAtErrorMessage,
         },
         isOwnershipProductsInvalid && {
           ref: ownershipProductsFieldRef,
@@ -1297,8 +1307,8 @@ const Form = ({
               message: firstTierError.message,
             }
           : false,
-        isMinimumAmountInvalid && { ref: minimumAmountFieldRef, message: "Please enter a minimum amount." },
-        isMinimumQuantityInvalid && { ref: minimumQuantityFieldRef, message: "Please enter a minimum quantity." },
+        isMinimumAmountInvalid && { ref: minimumAmountFieldRef, message: minimumAmountErrorMessage },
+        isMinimumQuantityInvalid && { ref: minimumQuantityFieldRef, message: minimumQuantityErrorMessage },
       ];
 
       const firstInvalidField = invalidFields.find((field): field is InvalidField => field !== false);
@@ -1571,6 +1581,9 @@ const Form = ({
                   !selectedProducts.every(({ currency_type }) => currency_type === currencyCode)
                 }
               />
+              {discount.error ? (
+                <FieldsetDescription className="text-danger">{discountErrorMessage}</FieldsetDescription>
+              ) : null}
             </Fieldset>
           )}
           <Fieldset className="gap-4">
@@ -1616,6 +1629,7 @@ const Form = ({
                       />
                     )}
                   </NumberInput>
+                  {maxQuantity.error ? <FieldsetDescription>{maxQuantityErrorMessage}</FieldsetDescription> : null}
                   <p className="text-muted-foreground text-sm">
                     {discount.type === "cents" && !useTieredDiscounts && oncePerCart
                       ? "Each checkout uses one, regardless of the number of items."
@@ -1665,6 +1679,7 @@ const Form = ({
                     disabled={hasNoEndDate}
                     aria-invalid={expiresAt.error ?? false}
                   />
+                  {expiresAt.error ? <FieldsetDescription>{expiresAtErrorMessage}</FieldsetDescription> : null}
                 </Fieldset>
               </Dropdown>
             </Details>
@@ -1762,7 +1777,10 @@ const Form = ({
                               type="button"
                               aria-label={`Remove tier ${index + 1}`}
                               className="cursor-pointer rounded p-1 all-unset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:order-last sm:ml-auto"
-                              onClick={() => setTiers((prev) => prev.filter((row) => row.id !== tier.id))}
+                              onClick={() => {
+                                setTierErrorMessage(null);
+                                setTiers((prev) => prev.filter((row) => row.id !== tier.id));
+                              }}
                             >
                               <X className="size-5" />
                             </button>
@@ -1813,6 +1831,9 @@ const Form = ({
                       </div>
                     ))}
                   </div>
+                  {tierErrorMessage ? (
+                    <FieldsetDescription className="text-danger">{tierErrorMessage}</FieldsetDescription>
+                  ) : null}
                   <Button
                     onClick={() => {
                       const maxMonths = Math.max(...tiers.map((tier) => tier.months ?? 0), 0);
@@ -1851,6 +1872,7 @@ const Form = ({
                     placeholder="0"
                     hasError={minimumAmount.error ?? false}
                   />
+                  {minimumAmount.error ? <FieldsetDescription>{minimumAmountErrorMessage}</FieldsetDescription> : null}
                 </Fieldset>
               </Dropdown>
             </Details>
@@ -1883,6 +1905,9 @@ const Form = ({
                       />
                     )}
                   </NumberInput>
+                  {minimumQuantity.error ? (
+                    <FieldsetDescription>{minimumQuantityErrorMessage}</FieldsetDescription>
+                  ) : null}
                 </Fieldset>
               </Dropdown>
             </Details>
