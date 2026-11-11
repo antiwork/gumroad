@@ -1300,6 +1300,9 @@ const AccountDetailsSection = ({
             complianceInfo.business_country === "US" ? (
               <FieldsetDescription className="text-muted">
                 To verify this US company's representative, enter a US ITIN or SSN (9 digits) if you have one.
+                {!hasIdDocumentAlternative
+                  ? " If you have neither, leave this blank — Stripe will ask for a document when it needs one."
+                  : null}
               </FieldsetDescription>
             ) : null}
             {hongKongPassport ? (

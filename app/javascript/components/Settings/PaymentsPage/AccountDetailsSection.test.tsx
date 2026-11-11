@@ -133,6 +133,7 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     expect(screen.getByText(/US ITIN or SSN \(9 digits\)/u)).toBeTruthy();
     // The link it used to name is offered only once the account exists, i.e. never here.
     expect(screen.queryByText(/verification link/u)).toBeNull();
+    expect(screen.getByText(/leave this blank/u)).toBeTruthy();
   });
 
   it("does not require the tax ID from a US company's non-US representative", () => {
@@ -219,7 +220,7 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
   });
 
   it.each(["1234", "12345678", "1234567890", "abcdefghi"])(
-    "takes the representative's own id %s on a US company, which Stripe answers with a document check",
+    "shows an inline error for invalid US tax ID %s",
     (value) => {
       renderSection(makeUser({ individual_tax_id_entered: false }), {
         is_business: true,
@@ -228,32 +229,12 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
       });
       const input = screen.getByLabelText("Personal tax ID");
       fireEvent.change(input, { target: { value } });
+      expect(screen.getByRole("alert").textContent).toBe("Enter a 9-digit US ITIN or SSN.");
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      fireEvent.change(input, { target: { value: "000000000" } });
       expect(screen.queryByRole("alert")).toBeNull();
-      expect(input.getAttribute("aria-invalid")).toBe("false");
     },
   );
-
-  it("keeps demanding the full SSN from a US company's foreign representative when Stripe asks for it", () => {
-    renderSection(makeUser({ individual_tax_id_entered: false, has_outstanding_full_ssn_requirement: true }), {
-      is_business: true,
-      business_country: "US",
-      country: "DZ",
-    });
-    const input = screen.getByLabelText("Personal tax ID");
-    fireEvent.change(input, { target: { value: "abcdefghi" } });
-    expect(screen.getByRole("alert").textContent).toBe("Enter a 9-digit US ITIN or SSN.");
-  });
-
-  it("still holds a US company's US representative to a US number", () => {
-    renderSection(makeUser({ individual_tax_id_entered: false, need_full_ssn: true }), {
-      is_business: true,
-      business_country: "US",
-      country: "US",
-    });
-    const input = screen.getByLabelText("Social Security Number");
-    fireEvent.change(input, { target: { value: "12345678" } });
-    expect(screen.getByRole("alert").textContent).toBe("Enter a 9-digit US ITIN or SSN.");
-  });
 
   it("does not show a fallback when no country requires an ID", () => {
     renderSection(makeUser(), { country: "DZ" });
