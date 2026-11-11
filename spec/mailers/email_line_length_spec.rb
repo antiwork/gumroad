@@ -2,14 +2,14 @@
 
 require "spec_helper"
 
-# docomo rejects a line over 1000 bytes (send-notice §9); SendGrid's click tracking swaps each link for
-# a ~455-byte tracking URL (measured on a delivered copy), inside the line that already carries the
-# inlined email CSS, so the encoded html has to leave room for that swap.
-DOCOMO_LINE_LIMIT_BYTES = 1000
-TRACKING_URL_BYTES = 455
-MAX_ENCODED_LINE_BYTES = DOCOMO_LINE_LIMIT_BYTES - TRACKING_URL_BYTES
-
 describe QuotedPrintableHtmlMail do
+  # docomo rejects a line over 1000 bytes (send-notice §9); SendGrid's click tracking swaps each link for
+  # a ~455-byte tracking URL (measured on a delivered copy), inside the line that already carries the
+  # inlined email CSS, so the encoded html has to leave room for that swap.
+  let(:docomo_line_limit_bytes) { 1000 }
+  let(:tracking_url_bytes) { 455 }
+  let(:max_encoded_line_bytes) { docomo_line_limit_bytes - tracking_url_bytes }
+
   it "is registered as a mail interceptor, after the inliner whose html body it encodes" do
     interceptors = Mail.delivery_interceptors
     expect(interceptors).to include(Premailer::Rails::Hook, QuotedPrintableHtmlMail)
@@ -22,15 +22,12 @@ describe QuotedPrintableHtmlMail do
 
     html_part = mail.html_part
     expect(html_part.body.encoding).to eq("quoted-printable")
-    expect(html_part.encoded.split("\r\n").map(&:bytesize).max).to be < MAX_ENCODED_LINE_BYTES
+    expect(html_part.encoded.split("\r\n").map(&:bytesize).max).to be < max_encoded_line_bytes
   end
 
-  # Body#encoding is the encoding of the content handed to the mail gem, so the payload is re-encoded
-  # on the way out and must decode back byte for byte — including URLs carrying = and hex digits, which
-  # a body the gem believed was already quoted-printable would corrupt.
+  # A body the gem took for already quoted-printable would decode =XX into a stray byte. The escapes come
+  # before any attribute because Ruby's decoder stops at the first invalid escape such as `="`.
   it "round-trips the payload, escaping = rather than reading a hex sequence in it" do
-    # The =XX sequences come before any attribute: Ruby's quoted-printable decoder stops at the first
-    # invalid escape such as `="`, so a source that opens with an attribute cannot catch a decode.
     source = %(<title>price=99 token=E3</title>\n<a href="https://example.com/confirm?token=1234ABCD&amp;x=9">Confirm</a>)
     mail = Mail.new do
       to "buyer@example.com"
@@ -47,7 +44,7 @@ describe QuotedPrintableHtmlMail do
     encoded = mail.encoded
     expect(encoded.gsub("=\r\n", "")).to include("token=3D1234ABCD")
     expect(mail.html_part.decoded).to eq(source)
-    expect(encoded.split("\r\n").map(&:bytesize).max).to be < MAX_ENCODED_LINE_BYTES
+    expect(encoded.split("\r\n").map(&:bytesize).max).to be < max_encoded_line_bytes
   end
 
   # The confirmation link is the line SendGrid's swap lands in, so the real mail has to arrive with the
