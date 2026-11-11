@@ -300,6 +300,20 @@ describe("DiscountsPage save validation", () => {
     expect(describedBy(tier1Percentage)).toEqual([message]);
   });
 
+  it("focuses the first tier's start reason before a later tier's reason", () => {
+    openEditor({
+      ownership_duration_tiers: [
+        { months: 3, amount_percentage: 10 },
+        { months: 6, amount_percentage: 20 },
+      ],
+    });
+    fireEvent.change(screen.getByLabelText("Tier 2 percentage"), { target: { value: "" } });
+    save();
+
+    expect(mocks.showAlert).toHaveBeenCalledWith("The first tier must start at 0 months.", "error");
+    expect(document.activeElement).toBe(screen.getByLabelText("Tier 1 percentage"));
+  });
+
   it("keeps the first tier's start reason with the other tier reasons when tiers are turned off and on", () => {
     openEditor({
       ownership_duration_tiers: [

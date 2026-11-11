@@ -1276,7 +1276,10 @@ const Form = ({
       });
       if (isFirstTierStartInvalid) {
         isTiersInvalid = true;
-        if (tiers[0]) firstTierError ??= { key: `${tiers[0].id}:percentage`, message: firstTierStartErrorMessage };
+        const [firstTier] = tierErrors;
+        if (firstTier && !firstTier.percentError && !firstTier.monthsError) {
+          firstTierError = { key: `${firstTier.id}:percentage`, message: firstTierStartErrorMessage };
+        }
       }
     }
 
