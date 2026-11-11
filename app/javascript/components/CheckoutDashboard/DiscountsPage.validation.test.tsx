@@ -296,7 +296,30 @@ describe("DiscountsPage save validation", () => {
     expect(document.activeElement).toBe(tier1Percentage);
     expect(screen.getByText(message).parentElement?.contains(tier1Percentage)).toBe(true);
     expect(screen.getByText(message).parentElement?.contains(screen.getByLabelText("Tier 2 percentage"))).toBe(false);
+    expect(tier1Percentage.getAttribute("aria-invalid")).toBe("true");
     expect(describedBy(tier1Percentage)).toEqual([message]);
+  });
+
+  it("keeps the first tier's start reason with the other tier reasons when tiers are turned off and on", () => {
+    openEditor({
+      ownership_duration_tiers: [
+        { months: 3, amount_percentage: 10 },
+        { months: 6, amount_percentage: 20 },
+      ],
+    });
+    fireEvent.change(screen.getByLabelText("Tier 2 percentage"), { target: { value: "" } });
+    save();
+
+    const tiersToggle = screen.getByLabelText("Tier discount by ownership duration");
+    fireEvent.click(tiersToggle);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "" } });
+    save();
+    fireEvent.click(tiersToggle);
+
+    expect(describedBy(screen.getByLabelText("Tier 1 percentage"))).toEqual(["The first tier must start at 0 months."]);
+    expect(describedBy(screen.getByLabelText("Tier 2 percentage"))).toEqual([
+      "Each tier percentage must be between 0 and 100.",
+    ]);
   });
 
   it("clears the first tier's start reason once a tier starting at 0 months is added", () => {

@@ -1303,7 +1303,7 @@ const Form = ({
       setMinimumQuantity((prev) => ({ ...prev, error: isMinimumQuantityInvalid }));
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
-      setIsFirstTierStartSubmitted(useTieredDiscounts && isFirstTierStartInvalid);
+      if (useTieredDiscounts) setIsFirstTierStartSubmitted(isFirstTierStartInvalid);
 
       // In form order, so the topmost problem is the one that takes focus and the alert names it: a
       // filled-in field must not be reported as a field the seller has not filled out.
@@ -1817,7 +1817,10 @@ const Form = ({
                           <TierField
                             value={tier.amountPercentage}
                             ariaLabel={`Tier ${index + 1} percentage`}
-                            ariaInvalid={!!tier.percentError}
+                            ariaInvalid={
+                              !!tier.percentError ||
+                              (index === 0 && (!!tierMonthsErrors[index] || isFirstTierStartErrorShown))
+                            }
                             ariaDescribedBy={
                               [
                                 tier.percentError && `${uid}${tier.id}percentError`,
