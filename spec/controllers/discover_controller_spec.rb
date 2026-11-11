@@ -449,7 +449,8 @@ describe DiscoverController, type: :controller, inertia: true do
         get :index, params: { taxonomy: "3d" }
 
         doc = Nokogiri::HTML.parse(response.body)
-        expect(doc.at_css("noscript h1").text.strip).to include("3D")
+        expect(doc.at_css("noscript h1").text.strip).to eq("3D")
+        expect(doc.at_css("noscript h1").text).not_to include("Gumroad")
         expect(doc.at_css("noscript p").text).to include("products from independent creators")
       end
 
