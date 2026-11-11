@@ -284,6 +284,9 @@ class UpdatePayoutMethod
       user.forfeit_unpaid_balance!(:payout_method_change)
       user.stripe_account&.delete_charge_processor_account!
       user.active_bank_account&.mark_deleted!
+      # No Stripe account is left to resubmit the field a rejection note names, so the pipeline's
+      # clear_stale_payout_setup_rejection_notes can never retire it from here.
+      user.retire_payout_setup_rejection_notes!
       user.user_compliance_info_requests.requested.find_each(&:mark_provided!)
       user.update!(payouts_paused_internally: false, payouts_paused_by: nil) if user.payouts_paused_by_source == User::PAYOUT_PAUSE_SOURCE_STRIPE && !user.flagged? && !user.suspended?
 
