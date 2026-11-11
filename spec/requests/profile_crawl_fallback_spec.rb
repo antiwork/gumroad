@@ -89,6 +89,16 @@ describe "profile page crawl fallback", :elasticsearch_wait_for_refresh, type: :
       expect(product_labels).to eq(["Crawlable Product"])
     end
 
+    it "links the featured product of a featured product section" do
+      featured = create(:seller_profile_featured_product_section, seller:, featured_product_id: product.id)
+      create(:seller_profile, seller:, json_data: { tabs: [{ name: "", sections: [featured.id] }] })
+
+      get_profile
+
+      expect(product_labels).to eq(["Crawlable Product"])
+      expect(noscript_fallback.at_css("nav a")["href"]).to eq(product.long_url)
+    end
+
     it "links a featured product once, not once per section it appears in" do
       featured = create(:seller_profile_featured_product_section, seller:, featured_product_id: product.id)
       section = create(:seller_profile_products_section, seller:, shown_products: [product.id])
