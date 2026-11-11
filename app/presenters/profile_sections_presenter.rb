@@ -38,6 +38,13 @@ class ProfileSectionsPresenter
   # the omission.
   def props(request:, pundit_user:, seller_custom_domain_url:, editing: pundit_user.seller == seller, include_default_products_section: false, omit_product: nil)
     sections = query.to_a
+    # Load every card product for every section in one query up front. Loading them section by
+    # section ran ~20 queries per section, so a 65-section storefront catalog cost ~1,200 queries
+    # and ~2s on every product page view (gp#4526).
+    section_cache = cached_sections
+    if normalize_search_param_values!(request.query_parameters.slice(*VISITOR_SEARCH_PARAMS)).blank?
+      preload_card_products(section_cache.flat_map { _1.dig(:search_results, :products) || [] })
+    end
 
     props = {
       currency_code: pundit_user.user&.currency_type || Currency::USD,
@@ -47,7 +54,7 @@ class ProfileSectionsPresenter
       # took multiple seconds for large-catalog sellers.
       show_ratings_filter: seller.links.alive.display_product_reviews.exists?,
       creator_profile: ProfilePresenter.new(seller:, pundit_user:).creator_profile,
-      sections: cached_sections.map do |props|
+      sections: section_cache.map do |props|
         section_props(sections.find { _1.external_id == props[:id] }, cached_props: props, request:, pundit_user:, seller_custom_domain_url:, editing:, omit_product:)
       end
     }
@@ -184,6 +191,28 @@ class ProfileSectionsPresenter
     # revenue fields, and `curated_product_ids`, which the controller decrypts before use.
     VISITOR_SEARCH_PARAMS = %i[query tags filetypes min_price max_price rating sort from size recommended_by].freeze
 
+    def card_products_scope
+      Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
+          .includes(
+            { variant_categories_alive: :alive_variants },
+            { bundle_products: { product: [:tiers, { variant_categories_alive: :alive_variants }], variant: [] } }
+          )
+    end
+
+    # Cached section props store product ids as strings; key by integer id.
+    def preload_card_products(ids)
+      @card_products ||= {}
+      missing = ids.map(&:to_i).uniq - @card_products.keys
+      card_products_scope.where(id: missing).each { @card_products[_1.id] = _1 } if missing.any?
+    end
+
+    # Same contract as `find(ids)`: returns products in `ids` order and raises if one is missing.
+    def card_products(ids)
+      preload_card_products(ids)
+      return card_products_scope.find(ids) if ids.any? { !@card_products.key?(_1.to_i) }
+      ids.map { @card_products.fetch(_1.to_i) }
+    end
+
     def section_props(section, cached_props:, request:, pundit_user:, seller_custom_domain_url:, editing:, omit_product: nil)
       params = normalize_search_param_values!(request.query_parameters.slice(*VISITOR_SEARCH_PARAMS))
       # `editing` selects the owner/editing payload shape. Product visibility (hiding sold-out
@@ -210,12 +239,7 @@ class ProfileSectionsPresenter
           )
         end
         cached_props[:search_results] = section_search_results(section, params:) if params.present?
-        products = Link.includes(ProductPresenter::ASSOCIATIONS_FOR_CARD)
-                       .includes(
-                         { variant_categories_alive: :alive_variants },
-                         { bundle_products: { product: [:tiers, { variant_categories_alive: :alive_variants }], variant: [] } }
-                       )
-                       .find(cached_props[:search_results][:products])
+        products = card_products(cached_props[:search_results][:products])
         if omit_product
           before = products.size
           products = products.reject { |product| product.id == omit_product.id }
