@@ -278,7 +278,7 @@ class DiscoverController < ApplicationController
 
       @discover_category_links = presenter.subcategory_links
       @discover_pagination_links = pagination_links(search_results:)
-      @discover_seo_heading = presenter.title
+      @discover_seo_heading = presenter.heading
       @discover_seo_description = presenter.meta_description
     end
 

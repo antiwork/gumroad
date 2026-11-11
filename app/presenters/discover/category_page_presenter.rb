@@ -21,6 +21,12 @@ class Discover::CategoryPagePresenter
     "#{labels.join(" » ")} — digital products by independent creators | Gumroad"
   end
 
+  # Heading for the crawl fallback: the taxonomy trail on its own, without the branding the
+  # <title> carries. A page heading repeating "| Gumroad" reads as keyword stuffing.
+  def heading
+    labels.join(" » ")
+  end
+
   def meta_description
     count = number_with_delimiter(search_results[:total])
     "Browse #{count} #{labels.last} products from independent creators on Gumroad. " \
