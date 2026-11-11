@@ -1171,6 +1171,12 @@ const Form = ({
     return [{ id: nextTierId(), months: 0, amountPercentage: 0 }];
   });
 
+  const [isFirstTierStartSubmitted, setIsFirstTierStartSubmitted] = React.useState(false);
+  const isFirstTierStartInvalid = Math.min(...tiers.map((tier) => tier.months ?? Infinity)) !== 0;
+  // Derived, so whichever tier ends up starting at 0 months clears it.
+  const isFirstTierStartErrorShown = isFirstTierStartSubmitted && isFirstTierStartInvalid;
+  const firstTierStartErrorMessage = "The first tier must start at 0 months.";
+
   const updateTier = (id: string, patch: Partial<TierRow>) =>
     setTiers((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   // The first tier has no starting month input, so a problem with its start is reported on its percentage.
@@ -1260,15 +1266,9 @@ const Form = ({
         }
         return { ...tier, monthsError, percentError };
       });
-      const minMonths = Math.min(...tiers.map((tier) => tier.months ?? Infinity));
-      if (minMonths !== 0) {
+      if (isFirstTierStartInvalid) {
         isTiersInvalid = true;
-        const firstTierIndex = tierErrors.findIndex((tier) => (tier.months ?? Infinity) === minMonths);
-        const firstTier = tierErrors[firstTierIndex];
-        if (firstTier) {
-          firstTier.monthsError ??= "The first tier must start at 0 months.";
-          firstTierError ??= { key: tierMonthsFieldKey(firstTier.id, firstTierIndex), message: firstTier.monthsError };
-        }
+        if (tiers[0]) firstTierError ??= { key: `${tiers[0].id}:percentage`, message: firstTierStartErrorMessage };
       }
     }
 
@@ -1294,7 +1294,8 @@ const Form = ({
       setMinimumQuantity((prev) => ({ ...prev, error: isMinimumQuantityInvalid }));
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
-      if (isTiersInvalid) setTiers(tierErrors);
+      if (useTieredDiscounts) setTiers(tierErrors);
+      setIsFirstTierStartSubmitted(useTieredDiscounts && isFirstTierStartInvalid);
 
       // In form order, so the topmost problem is the one that takes focus and the alert names it: a
       // filled-in field must not be reported as a field the seller has not filled out.
@@ -1813,6 +1814,7 @@ const Form = ({
                               [
                                 tier.percentError && `${uid}${tier.id}percentError`,
                                 index === 0 && tier.monthsError && `${uid}${tier.id}monthsError`,
+                                index === 0 && isFirstTierStartErrorShown && `${uid}firstTierStartError`,
                               ]
                                 .filter(Boolean)
                                 .join(" ") || undefined
@@ -1857,7 +1859,7 @@ const Form = ({
                         {tier.percentError ? (
                           <FieldsetDescription
                             id={`${uid}${tier.id}percentError`}
-                            className="mt-2 text-danger sm:mt-0 sm:basis-full"
+                            className="mt-2 text-danger sm:order-last sm:mt-0 sm:basis-full"
                           >
                             {tier.percentError}
                           </FieldsetDescription>
@@ -1865,9 +1867,17 @@ const Form = ({
                         {tier.monthsError ? (
                           <FieldsetDescription
                             id={`${uid}${tier.id}monthsError`}
-                            className="mt-2 text-danger sm:mt-0 sm:basis-full"
+                            className="mt-2 text-danger sm:order-last sm:mt-0 sm:basis-full"
                           >
                             {tier.monthsError}
+                          </FieldsetDescription>
+                        ) : null}
+                        {index === 0 && isFirstTierStartErrorShown ? (
+                          <FieldsetDescription
+                            id={`${uid}firstTierStartError`}
+                            className="mt-2 text-danger sm:order-last sm:mt-0 sm:basis-full"
+                          >
+                            {firstTierStartErrorMessage}
                           </FieldsetDescription>
                         ) : null}
                       </div>

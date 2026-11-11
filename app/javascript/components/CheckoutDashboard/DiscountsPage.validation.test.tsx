@@ -299,6 +299,55 @@ describe("DiscountsPage save validation", () => {
     expect(describedBy(tier1Percentage)).toEqual([message]);
   });
 
+  it("clears the first tier's start reason once a tier starting at 0 months is added", () => {
+    openEditor({
+      ownership_duration_tiers: [
+        { months: 3, amount_percentage: 10 },
+        { months: 6, amount_percentage: 20 },
+      ],
+    });
+    save();
+
+    const message = "The first tier must start at 0 months.";
+    expect(document.activeElement).toBe(screen.getByLabelText("Tier 1 percentage"));
+    expect(describedBy(screen.getByLabelText("Tier 1 percentage"))).toEqual([message]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+    const tier3Months = screen.getByLabelText("Tier 3 starting month");
+    fireEvent.change(tier3Months, { target: { value: "0" } });
+    fireEvent.blur(tier3Months);
+
+    expect(screen.queryByText(message)).toBeNull();
+    for (const field of screen.getAllByLabelText(/^Tier \d+ (percentage|starting month)$/u)) {
+      expect(field.getAttribute("aria-invalid")).not.toBe("true");
+      expect(describedBy(field)).toEqual([]);
+    }
+  });
+
+  it("clears a duplicate starting month reason when the other tier is changed", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+
+    const message = "Each tier needs a different starting month.";
+    const tier2Months = screen.getByLabelText("Tier 2 starting month");
+    const tier3Months = screen.getByLabelText("Tier 3 starting month");
+    fireEvent.change(tier2Months, { target: { value: "5" } });
+    fireEvent.change(tier3Months, { target: { value: "5" } });
+    save();
+    expect(describedBy(tier3Months)).toEqual([message]);
+
+    fireEvent.change(tier2Months, { target: { value: "4" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "" } });
+    mocks.showAlert.mockReset();
+    save();
+
+    expect(mocks.showAlert).toHaveBeenCalledWith("Please fill out the required fields.", "error");
+    expect(tier3Months.getAttribute("aria-invalid")).not.toBe("true");
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
   it("names the tier problem when a tier percentage is emptied", () => {
     openEditor();
     fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
