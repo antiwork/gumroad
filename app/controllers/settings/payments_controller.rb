@@ -357,16 +357,16 @@ class Settings::PaymentsController < Settings::BaseController
     safe_redirect_to settings_payments_path and return if current_seller.stripe_account.blank?
 
     stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
-    if StripeMerchantAccountManager::LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
-      reconciled = current_seller.with_lock { StripeMerchantAccountManager.reconcile_live_business_type(current_seller, stripe_account:) }
-      if reconciled
-        # Flipping the type back changes what Stripe has due, so the first read's requirements are stale.
-        begin
-          stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
-        rescue Stripe::StripeError => e
-          ErrorNotifier.notify(e, context: { user_id: current_seller.id })
-          safe_redirect_to settings_payments_path and return
-        end
+    if StripeMerchantAccountManager::LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"]) &&
+       StripeMerchantAccountManager.live_business_type_reconcilable?(current_seller)
+      current_seller.with_lock { StripeMerchantAccountManager.reconcile_live_business_type(current_seller, stripe_account:) }
+      # Flipping the type back changes what Stripe has due, and a repair that reports an error may still have
+      # been applied, so re-read whenever one was attempted instead of trusting the first read.
+      begin
+        stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+      rescue Stripe::StripeError => e
+        ErrorNotifier.notify(e, context: { user_id: current_seller.id })
+        safe_redirect_to settings_payments_path and return
       end
     end
     requirements = stripe_account["requirements"] || {}

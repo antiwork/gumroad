@@ -1397,10 +1397,6 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
           put :update, params: { user: params }
           merchant_account = create(:merchant_account, charge_processor_verified_at: Time.current)
           user.merchant_accounts << merchant_account
-          # An unchanged save reads the live business type.
-          allow(Stripe::Account).to receive(:retrieve).with(merchant_account.charge_processor_merchant_id).and_return(
-            Stripe::Account.construct_from(id: merchant_account.charge_processor_merchant_id, object: "account", business_type: "individual")
-          )
         end
 
         describe "user saves existing data unchanged" do
@@ -3782,6 +3778,25 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
         expect(response).to redirect_to settings_payments_url
         expect(flash[:notice]).to be_nil
         expect(pending_request.reload).to be_requested
+      end
+
+      it "takes the flash and requests from the re-read account when the re-sync errors" do
+        synced = false
+        allow(StripeMerchantAccountManager).to receive(:handle_new_user_compliance_info) do
+          synced = true
+          raise Stripe::APIConnectionError, "timeout"
+        end
+        allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id) do
+          synced ? stripe_account_with("individual") : stripe_account_with("non_profit", currently_due: ["company.tax_id"])
+        end
+        expect(ErrorNotifier).to receive(:notify).with(an_instance_of(Stripe::APIConnectionError))
+
+        get :verify_stripe_remediation
+
+        expect(Stripe::Account).to have_received(:retrieve).twice
+        expect(response).to redirect_to settings_payments_url
+        expect(flash[:notice]).to eq("Thanks! You're all set.")
+        expect(pending_request.reload).to be_provided
       end
 
       it "reads Stripe once for a business seller" do
