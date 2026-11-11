@@ -2,6 +2,13 @@
 
 require "spec_helper"
 
+# docomo rejects a line over 1000 bytes (send-notice §9); SendGrid's click tracking swaps each link for
+# a ~455-byte tracking URL (measured on a delivered copy), inside the line that already carries the
+# inlined email CSS, so the encoded html has to leave room for that swap.
+DOCOMO_LINE_LIMIT_BYTES = 1000
+TRACKING_URL_BYTES = 455
+MAX_ENCODED_LINE_BYTES = DOCOMO_LINE_LIMIT_BYTES - TRACKING_URL_BYTES
+
 describe QuotedPrintableHtmlMail do
   it "is registered as a mail interceptor, after the inliner whose html body it encodes" do
     interceptors = Mail.delivery_interceptors
@@ -9,16 +16,13 @@ describe QuotedPrintableHtmlMail do
     expect(interceptors.index(QuotedPrintableHtmlMail)).to be > interceptors.index(Premailer::Rails::Hook)
   end
 
-  # SendGrid's click tracking swaps each link for a ~455-byte tracking URL (measured on a delivered
-  # copy), inside the line that already carries the inlined email CSS. docomo rejects a line over 1000
-  # bytes with "500 Line Too Long", so the encoded html has to leave room for that swap.
-  it "quoted-printable encodes the html part so a tracked link cannot create an over-long line" do
+  it "quoted-printable encodes the delivered html part so a tracked link cannot create an over-long line" do
     mail = UserSignupMailer.confirmation_instructions(create(:user), {})
     mail.deliver_now
 
     html_part = mail.html_part
     expect(html_part.body.encoding).to eq("quoted-printable")
-    expect(html_part.encoded.split("\r\n").map(&:bytesize).max).to be < 1000 - 455
+    expect(html_part.encoded.split("\r\n").map(&:bytesize).max).to be < MAX_ENCODED_LINE_BYTES
   end
 
   # Body#encoding is the encoding of the content handed to the mail gem, so the payload is re-encoded
@@ -41,6 +45,6 @@ describe QuotedPrintableHtmlMail do
     encoded = mail.encoded
     expect(encoded.gsub("=\r\n", "")).to include("token=3D1234ABCD")
     expect(mail.html_part.decoded).to eq(source)
-    expect(encoded.split("\r\n").map(&:bytesize).max).to be < 1000 - 455
+    expect(encoded.split("\r\n").map(&:bytesize).max).to be < MAX_ENCODED_LINE_BYTES
   end
 end
