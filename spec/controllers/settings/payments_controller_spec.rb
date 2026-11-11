@@ -3622,6 +3622,20 @@ describe Settings::PaymentsController, :vcr, type: :controller, inertia: true do
       expect(flash[:info]).to include("Stripe is still reviewing your account")
     end
 
+    it "re-syncs an individual seller whose Stripe account was moved to non_profit by the hosted form" do
+      account = Stripe::Account.construct_from(
+        id: stripe_connect_account_id, object: "account", business_type: "non_profit",
+        requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] },
+        future_requirements: { "currently_due" => [], "past_due" => [], "eventually_due" => [] }
+      )
+      allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(account)
+      expect(StripeMerchantAccountManager).to receive(:reconcile_live_business_type).with(user, stripe_account: account)
+
+      get :verify_stripe_remediation
+
+      expect(response).to redirect_to settings_payments_url
+    end
+
     it "does not show the 'Thanks' notice when Stripe still lists eventually_due requirements" do
       pending_request = create(:user_compliance_info_request, user:, field_needed: UserComplianceInfoFields::Individual::TAX_ID)
       allow(Stripe::Account).to receive(:retrieve).with(stripe_connect_account_id).and_return(

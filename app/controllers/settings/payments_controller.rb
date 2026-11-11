@@ -354,6 +354,10 @@ class Settings::PaymentsController < Settings::BaseController
     safe_redirect_to settings_payments_path and return if current_seller.stripe_account.blank?
 
     stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+    if StripeMerchantAccountManager::LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"])
+      StripeMerchantAccountManager.reconcile_live_business_type(current_seller, stripe_account:)
+      stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+    end
     requirements = stripe_account["requirements"] || {}
     future_requirements = stripe_account["future_requirements"] || {}
 

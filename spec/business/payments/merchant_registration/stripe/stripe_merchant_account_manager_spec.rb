@@ -16199,6 +16199,25 @@ describe StripeMerchantAccountManager, :vcr do
           described_class.resync_pending_structure_rejection(user)
         end
 
+        it "re-drives the sync from an unchanged save when Stripe holds a non-individual type" do
+          stub_stripe_account(previous, business_type: "non_profit")
+          allow(Stripe::Account).to receive(:update)
+
+          described_class.reconcile_live_business_type(user)
+
+          expect(Stripe::Account).to have_received(:update).with(
+            merchant_account.charge_processor_merchant_id,
+            hash_including(business_type: "individual")
+          )
+        end
+
+        it "makes no Stripe write when Stripe already holds an individual" do
+          stub_stripe_account(previous, business_type: "individual")
+          expect(Stripe::Account).not_to receive(:update)
+
+          described_class.reconcile_live_business_type(user)
+        end
+
         it "swallows a Stripe failure rather than failing the seller's save" do
           note = user.add_payout_note(content: "rejected", seller_visible: false)
           note.update!(author_id: GUMROAD_ADMIN_ID, json_data: { StripeMerchantAccountManager::PAYOUT_SETUP_REJECTION_NOTE_FLAG => true,
