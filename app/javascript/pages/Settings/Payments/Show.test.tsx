@@ -279,6 +279,7 @@ describe("US company representative tax ID", () => {
       },
       { ...business, ...overrides },
     );
+    expect(screen.getByLabelText(/^(Social Security Number|Last 4 digits of SSN)$/u)).toBeTruthy();
     expect(screen.queryByText(/via Stripe instead/u)).toBeNull();
   });
 

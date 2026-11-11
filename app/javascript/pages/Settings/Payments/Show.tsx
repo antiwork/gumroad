@@ -383,10 +383,8 @@ export default function PaymentsPage() {
     payment_address: props.paypal_address,
   });
 
-  // A document request only substitutes for the tax ID when that ID is itself outstanding; the sync
-  // also opens document requests for other fields. A single-owner company never renders the
-  // beneficial-owners list this flag used to depend on, and that is who has no US tax ID. Everyone
-  // else is still held to the full SSN on save, so the link must not call the document a substitute.
+  // Only a US company's non-US representative may save without the full SSN, so only they are offered
+  // the document instead. The sync also opens document requests for other fields, hence the SSN pairing.
   const hasIdDocumentAlternative =
     (usEntityWithForeignRepresentative(form.data.user) &&
       props.user.has_outstanding_identity_document_requirement &&
