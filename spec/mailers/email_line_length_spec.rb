@@ -1,0 +1,23 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+describe QuotedPrintableHtmlMail do
+  it "is registered as a mail interceptor, after the inliner whose html body it encodes" do
+    interceptors = Mail.delivery_interceptors
+    expect(interceptors).to include(Premailer::Rails::Hook, QuotedPrintableHtmlMail)
+    expect(interceptors.index(QuotedPrintableHtmlMail)).to be > interceptors.index(Premailer::Rails::Hook)
+  end
+
+  # SendGrid's click tracking swaps each link for a ~455-byte tracking URL (measured on a delivered
+  # copy), inside the line that already carries the inlined email CSS. docomo rejects a line over 1000
+  # bytes with "500 Line Too Long", so the encoded html has to leave room for that swap.
+  it "quoted-printable encodes the html part so a tracked link cannot create an over-long line" do
+    mail = UserSignupMailer.confirmation_instructions(create(:user), {})
+    mail.deliver_now
+
+    html_part = mail.html_part
+    expect(html_part.body.encoding).to eq("quoted-printable")
+    expect(html_part.encoded.split("\r\n").map(&:bytesize).max).to be < 1000 - 455
+  end
+end
