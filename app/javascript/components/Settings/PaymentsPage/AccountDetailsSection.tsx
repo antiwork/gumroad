@@ -9,6 +9,7 @@ import {
   PERSONAL_ID_NUMBER_CONFIG,
   personalTaxIdError,
   type TaxIdConfig,
+  usEntityWithForeignRepresentative,
   usesHongKongPassport,
 } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
@@ -374,12 +375,6 @@ const AccountDetailsSection = ({
   const ssnRequirementCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
   const mustReenterFullSsn =
     user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && ssnRequirementCountry === "US";
-
-  // Stripe validates `id_number` against the account country, so a US company's non-US
-  // representative has no number it accepts: the backend omits it and Stripe asks for a document
-  // instead. Only a representative in the US can supply one, so only they stay required.
-  const foreignRepresentativeOfUsEntity =
-    complianceInfo.is_business && complianceInfo.business_country === "US" && complianceInfo.country !== "US";
 
   // A Hong Kong company's foreign representative types the passport number before the country that
   // issued it, so the issuing country renders after the number instead of above it.
@@ -1373,7 +1368,10 @@ const AccountDetailsSection = ({
                   minLength={individualTaxIdConfig.minLength}
                   maxLength={individualTaxIdConfig.maxLength}
                   placeholder={individualTaxIdConfig.placeholder}
-                  required={mustReenterFullSsn || (!user.individual_tax_id_entered && !foreignRepresentativeOfUsEntity)}
+                  required={
+                    mustReenterFullSsn ||
+                    (!user.individual_tax_id_entered && !usEntityWithForeignRepresentative(complianceInfo))
+                  }
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("individual_tax_id") || !!individualTaxIdValidationError}
                   aria-describedby={individualTaxIdValidationError ? `${uid}-tax-id-error` : undefined}

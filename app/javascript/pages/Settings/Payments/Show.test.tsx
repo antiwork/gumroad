@@ -223,12 +223,27 @@ describe("US company representative tax ID", () => {
     job_title: "Owner",
     phone: "+213551234567",
   };
-  it.each(["1234", "12345678", "1234567890", "abcdefghi"])("blocks submission of %s", (value) => {
-    renderPage({ individual_tax_id_entered: false }, business);
-    fireEvent.change(screen.getByLabelText("Personal tax ID"), { target: { value } });
+  it.each(["1234", "12345678", "1234567890", "abcdefghi"])(
+    "saves a US company whose representative typed their own id %s",
+    (value) => {
+      renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
+      fireEvent.change(screen.getByLabelText("Personal tax ID"), { target: { value } });
+      save();
+      expect(mocks.put).toHaveBeenCalledWith(
+        "/settings_payments",
+        expect.objectContaining({
+          user: expect.objectContaining({ individual_tax_id: value }),
+        }),
+      );
+    },
+  );
+
+  it("saves the form for a representative who has no US tax ID at all", () => {
+    renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
     save();
-    expect(mocks.put).not.toHaveBeenCalled();
-    expect(screen.getAllByText("Enter a 9-digit US ITIN or SSN.").length).toBeGreaterThan(0);
+    expect(mocks.put).toHaveBeenCalledTimes(1);
+    expect(mocks.put.mock.calls[0][1].user).not.toHaveProperty("individual_tax_id");
+    expect(document.querySelectorAll('[aria-invalid="true"]').length).toBe(0);
   });
 
   it.each(["000000000", "000-00-0000", "000 00 0000"])(

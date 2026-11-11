@@ -52,6 +52,12 @@ export const usesUsTaxId = (complianceInfo: ComplianceInfo, user: User): boolean
 
 export const normalizeUsTaxId = (value: string): string => value.replace(/[\s-]/gu, "");
 
+// Stripe matches `id_number` against the account's country, so a US company takes only a 9-digit
+// SSN/ITIN: a foreign representative's own number is dropped in
+// StripeMerchantAccountManager#person_hash and Stripe asks for a document instead.
+export const usEntityWithForeignRepresentative = (complianceInfo: ComplianceInfo): boolean =>
+  complianceInfo.is_business && complianceInfo.business_country === "US" && complianceInfo.country !== "US";
+
 // Mirrors UpdateUserComplianceInfo#individual_id_country_matches? for Pakistan: the number belongs
 // to the representative, so the country guard only governs an account whose legal entity is in
 // Pakistan too. A foreign representative of a Pakistani business enters their own country's
@@ -71,6 +77,9 @@ export const personalTaxIdError = (complianceInfo: ComplianceInfo, user: User, v
   if (!value) return null;
   if (usesPakistanCnic(complianceInfo)) return isValidPakistanCnic(value) ? null : PAKISTAN_CNIC_ERROR_MESSAGE;
   if (usesUaeEmiratesId(complianceInfo)) return isValidUaeEmiratesId(value) ? null : UAE_EMIRATES_ID_ERROR_MESSAGE;
+  // Nothing to demand from a representative with no US number, unless Stripe is already chasing a
+  // full SSN for them.
+  if (usEntityWithForeignRepresentative(complianceInfo) && !user.has_outstanding_full_ssn_requirement) return null;
   if (!usesUsTaxId(complianceInfo, user)) return null;
   const lastFourAllowed =
     complianceInfo.country === "US" && !user.need_full_ssn && !user.has_outstanding_full_ssn_requirement;
