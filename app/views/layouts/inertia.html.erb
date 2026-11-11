@@ -11,6 +11,7 @@
     <%= render("discover/seo_links") if @discover_category_links.present? || @discover_seo_heading.present? %>
     <%= render("layouts/seo_article_fallback") if @seo_article_fallback.present? %>
     <%= render("layouts/seo_product_fallback") if @seo_product_fallback.present? %>
+    <%= render("layouts/seo_profile_fallback") if @seo_profile_fallback.present? %>
     <%= render("layouts/seo_links_fallback") if @seo_links_fallback.present? %>
     <%= content_for?(:content) ? yield(:content) : yield %>
     <% if content_for? :footer %>
