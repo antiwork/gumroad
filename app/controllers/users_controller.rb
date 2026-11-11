@@ -34,7 +34,9 @@ class UsersController < ApplicationController
         set_user_page_meta(@user)
         set_profile_home_seo_meta(@user)
         set_favicon_meta_tags(@user)
-        render inertia: "Users/Show", props: ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
+        props = ProfilePresenter.new(pundit_user:, seller: @user).profile_props(seller_custom_domain_url:, request:)
+        set_profile_page_crawl_fallback(props)
+        render inertia: "Users/Show", props:
       end
       format.json { render json: ProfilePresenter::PublicApiProps.new(seller: @user, seller_custom_domain_url:).props }
       format.any { e404 }
@@ -250,6 +252,32 @@ class UsersController < ApplicationController
   end
 
   private
+    # The profile ships as an Inertia shell: the name, bio and product links live only in the
+    # payload, so a fetcher that does not run JavaScript reads an empty <body>. Skipped for an
+    # Inertia visit, where no document is served.
+    def set_profile_page_crawl_fallback(props)
+      return if request.inertia?
+
+      # The page renders only sections a tab points at, in tab order; a saved section that no tab
+      # references never appears, so linking its products would be crawler-only.
+      sections_by_id = Array(props[:sections]).index_by { _1[:id] }
+      sections = Array(props[:tabs]).flat_map { _1[:sections] }.uniq.filter_map { sections_by_id[_1] }
+      cards = sections.flat_map do |section|
+        case section[:type]
+        when "SellerProfileProductsSection" then Array(section.dig(:search_results, :products))
+        # A featured section carries the product page's payload, with its card under :product.
+        when "SellerProfileFeaturedProductSection" then [section.dig(:props, :product)].compact
+        else []
+        end
+      end
+      products = cards.uniq { _1[:id] }.filter_map do |card|
+        href = card[:url].presence || card[:long_url].presence
+        { href:, label: card[:name] } if href.present? && card[:name].present?
+      end
+
+      @seo_profile_fallback = { name: @user.name_or_username, bio: @user.bio, products: }
+    end
+
     # The profile is authored entirely through the seller's agent + CLI, so the
     # custom HTML never carries a buy affordance — there's no checkout bridge or
     # ?wanted=true fall-through like the product landing page has. Store links
