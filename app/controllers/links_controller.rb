@@ -221,6 +221,7 @@ class LinksController < ApplicationController
 
     respond_to do |format|
       format.html do
+        set_product_page_crawl_fallback
         case params[:layout]
         when Product::Layout::PROFILE
           render inertia: "Products/Profile/Show", props: presenter.profile_product_props(**presenter_props)
@@ -1432,6 +1433,26 @@ class LinksController < ApplicationController
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?
+    end
+
+    # Skipped where the served document is not the public product page (Inertia visit, embed,
+    # overlay, Discover layout) and for a product that is not published.
+    def set_product_page_crawl_fallback
+      return if request.inertia? || params[:embed] || params[:overlay]
+      return if params[:layout] == Product::Layout::DISCOVER
+      return if @product.draft || !@product.alive?
+
+      # Starts from the page's own scrubbed description so crawlers get only the copy buyers see;
+      # :prune drops the text inside the embed <script> tags it allows. to_text decodes entities,
+      # so html_escape is what keeps a "</noscript" in the copy from closing the element.
+      plain_description = Loofah.fragment(@product.html_safe_description.to_s).scrub!(:prune).to_text(encode_special_chars: false).strip
+      @seo_product_fallback = {
+        name: @product.name,
+        seller: @product.user.name_or_username,
+        # Legacy rows can have no currency, which the price formatter cannot quote.
+        price: (@product.price_formatted_verbose(for_default_duration: true, discounted: true) if @product.price_currency_type.present?),
+        description: helpers.simple_format(ERB::Util.html_escape(plain_description), {}, sanitize: false),
+      }
     end
 
     def link_params
