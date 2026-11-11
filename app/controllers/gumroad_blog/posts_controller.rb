@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 class GumroadBlog::PostsController < GumroadBlog::BaseController
+  include PageMeta::Post
+
   layout "inertia"
   before_action :set_blog_owner!
   before_action :set_post, only: [:show]
@@ -31,11 +33,19 @@ class GumroadBlog::PostsController < GumroadBlog::BaseController
   def show
     authorize @post, policy_class: GumroadBlog::PostsPolicy
 
-    render inertia: "GumroadBlog/Posts/Show", props: PostPresenter.new(
+    post_presenter = PostPresenter.new(
       pundit_user: pundit_user,
       post: @post,
       purchase_id_param: nil
-    ).post_component_props
+    )
+    # The blog renders through Inertia, so without these the served head keeps the app-wide
+    # "Gumroad" title and carries no description or canonical: every post looks identical to a
+    # crawler that does not run JavaScript. Mirrors PostsController#show.
+    set_meta_tag(title: @post.name)
+    set_meta_tag(tag_name: "link", rel: "canonical", href: gumroad_blog_post_url(@post.slug), head_key: "canonical")
+    set_post_page_meta(@post, post_presenter)
+
+    render inertia: "GumroadBlog/Posts/Show", props: post_presenter.post_component_props
   end
 
   private

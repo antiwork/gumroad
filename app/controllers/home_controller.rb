@@ -33,6 +33,15 @@ class HomeController < ApplicationController
 
   PREV_WEEK_PAYOUT_DEFAULT = "3129297"
 
+  # The profiles the marketing footer and nav already link to (home/shared/_footer, _nav).
+  ORGANIZATION_SAME_AS = [
+    "https://x.com/gumroad",
+    "https://www.youtube.com/channel/UC6o7H5wr2Cf4ibntYEs4Mcg",
+    "https://www.instagram.com/gumroad/",
+    "https://www.facebook.com/gumroad",
+    "https://github.com/antiwork/gumroad",
+  ].freeze
+
   prepend_before_action :prepare_edge_cacheable_response, if: :edge_cacheable_request?
   after_action :set_edge_cache_headers, if: -> { @edge_cacheable_response }
 
@@ -46,6 +55,7 @@ class HomeController < ApplicationController
     set_meta_tag(property: "og:description", content: "Start selling what you know, see what sticks, and get paid. Simple and effective.")
     set_meta_tag(property: "og:type", content: "website")
     set_meta_tag(property: "og:url", content: about_url)
+    set_organization_structured_data
     @prev_week_payout_usd = prev_week_payout_usd
   end
 
@@ -146,6 +156,31 @@ class HomeController < ApplicationController
   private
     def hide_layouts
       @hide_layouts = true
+    end
+
+    # Entity markup for the homepage only: this page is the canonical address of the site
+    # (/) and neither block varies by visitor, so the response stays edge-cacheable. Every
+    # sameAs value is already linked from home/shared/_footer and _nav.
+    def set_organization_structured_data
+      organization_id = "#{root_url}#organization"
+
+      set_meta_tag(tag_name: "script", type: "application/ld+json", head_key: "organization-json-ld", inner_content: {
+                     "@context" => "https://schema.org",
+                     "@type" => "Organization",
+                     "@id" => organization_id,
+                     "name" => "Gumroad",
+                     "url" => root_url,
+                     "logo" => helpers.image_url("pink-icon.png"),
+                     "sameAs" => ORGANIZATION_SAME_AS,
+                   })
+      set_meta_tag(tag_name: "script", type: "application/ld+json", head_key: "website-json-ld", inner_content: {
+                     "@context" => "https://schema.org",
+                     "@type" => "WebSite",
+                     "@id" => "#{root_url}#website",
+                     "name" => "Gumroad",
+                     "url" => root_url,
+                     "publisher" => { "@id" => organization_id },
+                   })
     end
 
     def prev_week_payout_usd

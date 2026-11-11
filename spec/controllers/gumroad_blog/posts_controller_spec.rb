@@ -111,6 +111,17 @@ describe GumroadBlog::PostsController, inertia: true do
       expect(inertia.props[:call_to_action]).to eq(post_props[:call_to_action])
     end
 
+    it "gives the served head the post's own title, canonical URL and description" do
+      get :show, params: { slug: post.slug }
+
+      meta_tags = controller.send(:meta_tags)
+      presenter = PostPresenter.new(pundit_user: controller.pundit_user, post: post, purchase_id_param: nil)
+
+      expect(controller.send(:page_title)).to eq("Test Post")
+      expect(meta_tags["canonical"][:href]).to end_with("/blog/p/test-post")
+      expect(meta_tags["meta-name-description"][:content]).to eq(presenter.snippet)
+    end
+
     context "when post is not found" do
       it "raises ActiveRecord::RecordNotFound" do
         expect { get :show, params: { slug: "nonexistent-slug" } }.to raise_error(ActiveRecord::RecordNotFound)

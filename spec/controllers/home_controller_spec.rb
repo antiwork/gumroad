@@ -27,6 +27,28 @@ describe HomeController do
       expect(response).to be_successful
       expect(response.body).to include("$3,129,297")
     end
+
+    it "describes the organization and the website as JSON-LD" do
+      get :about
+
+      blocks = Nokogiri::HTML.parse(response.body)
+        .css("script[type='application/ld+json']")
+        .map { JSON.parse(_1.text) }
+      organization = blocks.find { _1["@type"] == "Organization" }
+      website = blocks.find { _1["@type"] == "WebSite" }
+
+      expect(organization).to include(
+        "name" => "Gumroad",
+        "url" => root_url,
+        "sameAs" => HomeController::ORGANIZATION_SAME_AS
+      )
+      expect(organization["logo"]).to start_with("http")
+      expect(website).to include(
+        "name" => "Gumroad",
+        "url" => root_url,
+        "publisher" => { "@id" => organization["@id"] }
+      )
+    end
   end
 
   describe "GET features_md" do
