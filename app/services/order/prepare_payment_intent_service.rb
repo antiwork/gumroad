@@ -12,6 +12,7 @@ class Order::PreparePaymentIntentService
   # it feeds is checked, and only for increases. See #direct_listed_allocations_match?.
   DIRECT_LISTED_AMOUNT_COMPARED_FIELDS = %w[permalink price_cents tip_cents shipping_cents].freeze
   GENERIC_CHARGE_ERROR = "There is a temporary problem, please try again (your card was not charged)."
+  WALLET_UNAVAILABLE_MESSAGE = "Apple Pay and Google Pay aren't available for this purchase right now. Please pay with a card instead (you were not charged)."
   # A Klarna amount-window rejection is deterministic — retrying Klarna on the same cart can
   # never succeed — so it must not reuse the retry-oriented generic message above. Tell the
   # buyer the one action that works: pick a different payment method.
@@ -597,7 +598,8 @@ class Order::PreparePaymentIntentService
       # Eligibility gates wallets on the client's wallet_type. Stripe's preview is the record a
       # client cannot leave out, so the buyer-currency wallet kill switch also holds without it.
       if @previewed_wallet && !Checkout::BuyerCurrencyEligibility.wallets_enabled?(seller)
-        Rails.logger.info("Skipping client-confirm presentment for order #{order.id}: wallet payment with buyer-currency wallets off")
+        Rails.logger.info("Refusing client-confirm wallet payment for order #{order.id}: buyer-currency wallets off")
+        @client_confirm_presentment_failure_message = WALLET_UNAVAILABLE_MESSAGE
         return nil
       end
       return buyer_currency_quote_presentment_for(charge) if params[:buyer_currency_quote].present?

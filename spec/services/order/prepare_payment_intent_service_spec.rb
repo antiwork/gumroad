@@ -2994,6 +2994,7 @@ describe Order::PreparePaymentIntentService, :vcr do
 
           expect(create_args).to be_nil
           expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(responses["unique-id-0"][:error_message]).to eq(described_class::WALLET_UNAVAILABLE_MESSAGE)
           expect(purchase.reload).to be_failed
         end
       end
