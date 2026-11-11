@@ -2722,7 +2722,7 @@ describe Order::PreparePaymentIntentService, :vcr do
         Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
       end
 
-      def perform_with_direct_listed_card(order, params, mount_currency: Currency::CAD)
+      def perform_with_direct_listed_card(order, params, mount_currency: Currency::CAD, wallet: nil)
         params[:payment_details_source] = PurchasePaymentFlow::PAYMENT_ELEMENT
         params[:payment_element_mount_currency] = mount_currency
         purchase = order.purchases.first
@@ -2741,7 +2741,7 @@ describe Order::PreparePaymentIntentService, :vcr do
             currency: mount_currency
           )
         end
-        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA" })
+        preview = Stripe::StripeObject.construct_from(type: "card", card: { country: "CA", wallet: wallet && { type: wallet } }.compact)
         allow(Stripe::ConfirmationToken).to receive(:retrieve)
           .and_return(Stripe::StripeObject.construct_from(payment_method_preview: preview))
 
@@ -2917,6 +2917,85 @@ describe Order::PreparePaymentIntentService, :vcr do
         expect(purchase.reload).to be_failed
         expect(order.charges.last.charge_presentment).to be_nil
         expect(purchase.purchase_presentment).to be_nil
+      end
+
+      context "when the buyer pays with a wallet" do
+        before do
+          Feature.activate_user(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+          Feature.activate_user(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, seller)
+        end
+
+        after do
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, seller)
+        end
+
+        def wallet_order(tax_cents: 0)
+          order, params = build_order
+          purchase = order.purchases.first
+          purchase.update!(displayed_price_cents: 15_00,
+                           displayed_price_currency_type: Currency::CAD,
+                           rate_converted_to_usd: BigDecimal("0.8"))
+          params[:wallet_type] = "apple_pay"
+          params[:direct_listed_amount_token] = Checkout::DirectListedAmountToken.issue(
+            allocations: [{
+              permalink: product.unique_permalink,
+              price_cents: 15_00,
+              tip_cents: 0,
+              tax_cents:,
+              shipping_cents: 0,
+              total_cents: 15_00 + tax_cents,
+            }],
+            sellers: [seller],
+            currency: Currency::CAD
+          )
+          [order, params, purchase]
+        end
+
+        it "charges exactly the listed total the wallet sheet showed" do
+          order, params, = wallet_order
+
+          create_args, responses = perform_with_direct_listed_card(order, params, wallet: "apple_pay")
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:currency]).to eq(Currency::CAD)
+          expect(create_args[:amount_cents]).to eq(15_00)
+        end
+
+        # A card buyer may be charged less than the reviewed total; a wallet sheet already
+        # authorized one exact amount, so a lower prepare total is refused instead.
+        it "refuses a prepare total below the total the wallet sheet showed" do
+          order, params, purchase = wallet_order(tax_cents: 1_00)
+
+          create_args, responses = perform_with_direct_listed_card(order, params, wallet: "apple_pay")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:error_code]).to eq(PurchaseErrorCode::BUYER_CURRENCY_QUOTE_INVALID)
+          expect(purchase.reload).to be_failed
+        end
+
+        it "refuses a wallet that sent no listed amount token" do
+          order, params, purchase = wallet_order
+          params[:direct_listed_amount_token] = nil
+
+          create_args, responses = perform_with_direct_listed_card(order, params, wallet: "apple_pay")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(purchase.reload).to be_failed
+        end
+
+        it "refuses a Stripe-previewed wallet when the buyer-currency wallet flag is off, even without wallet_type" do
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, seller)
+          order, params, purchase = wallet_order
+          params.delete(:wallet_type)
+
+          create_args, responses = perform_with_direct_listed_card(order, params, wallet: "google_pay")
+
+          expect(create_args).to be_nil
+          expect(responses["unique-id-0"][:success]).to eq(false)
+          expect(purchase.reload).to be_failed
+        end
       end
 
       it "rejects a tampered tip even when the listed price matches" do

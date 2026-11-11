@@ -2246,6 +2246,99 @@ describe Checkout::StripePaymentPresenter do
       deactivate_buyer_currency_flags(seller) if seller
     end
 
+    context "with both wallet flags on" do
+      def activate_wallet_flags(seller)
+        Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+        Feature.activate_user(described_class::BUYER_CURRENCY_WALLETS_FEATURE_NAME, seller)
+      end
+
+      def deactivate_wallet_flags(seller)
+        Feature.deactivate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+        Feature.deactivate_user(described_class::BUYER_CURRENCY_WALLETS_FEATURE_NAME, seller)
+      end
+
+      it "enables wallets on a client-confirm quote remount" do
+        seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+        activate_buyer_currency_flags(seller)
+        activate_wallet_flags(seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+        stub_geoip_country("203.0.113.50", "Bulgaria")
+        add_products = [checkout_product_for(product, buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::EUR })]
+
+        expect(stripe_payment_props(add_products:, ip: "203.0.113.50")).to eq(
+          payment_element_client_confirm_props(buyer_currency_presentment: true, payment_element_wallets: true)
+        )
+      ensure
+        if seller
+          deactivate_wallet_flags(seller)
+          deactivate_buyer_currency_flags(seller)
+        end
+      end
+
+      it "keeps wallets off on a quote remount when only the general wallet flag is on" do
+        seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
+        activate_buyer_currency_flags(seller)
+        Feature.activate_user(described_class::PAYMENT_ELEMENT_WALLETS_FEATURE_NAME, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+        stub_geoip_country("203.0.113.50", "Bulgaria")
+        add_products = [checkout_product_for(product, buyer_currency_display: { display_mode: "buyer_local", buyer_currency_shown: Currency::EUR })]
+
+        props = stripe_payment_props(add_products:, ip: "203.0.113.50")
+
+        expect(props[:elements_options][:buyer_currency_presentment]).to be(true)
+        expect(props[:disable_wallets]).to be(true)
+      ensure
+        if seller
+          deactivate_wallet_flags(seller)
+          deactivate_buyer_currency_flags(seller)
+        end
+      end
+
+      it "enables wallets on a direct-listed EUR card Element" do
+        seller, product = buyer_currency_seller_with_product(price_currency_type: Currency::EUR, price_cents: 1500)
+        activate_buyer_currency_flags(seller)
+        activate_wallet_flags(seller)
+        Feature.activate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_live_currency")
+        stub_geoip_country("203.0.113.50", "Bulgaria")
+        platform_merchant_account
+
+        expect(stripe_payment_props(add_products: [checkout_product_for(product)], ip: "203.0.113.50")).to eq(
+          payment_element_client_confirm_props(
+            currency: Currency::EUR,
+            presentment_amount_cents: 1500,
+            direct_listed_card: true,
+            payment_element_wallets: true,
+          )
+        )
+      ensure
+        if seller
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::LISTED_CURRENCY_DIRECT_CHARGE_FEATURE_NAME, seller)
+          deactivate_wallet_flags(seller)
+          deactivate_buyer_currency_flags(seller)
+        end
+      end
+
+      it "keeps wallets off on a method-forced EUR Element" do
+        seller, product = buyer_currency_seller_with_product(price_cents: 1500)
+        activate_buyer_currency_flags(seller)
+        activate_wallet_flags(seller)
+        allow(Stripe).to receive(:api_key).and_return("sk_test_currency")
+
+        props = stripe_payment_props(add_products: [checkout_product_for(product)])
+
+        expect(props[:integration]).to eq(described_class::STRIPE_PAYMENT_ELEMENT_CLIENT_CONFIRM_INTEGRATION)
+        expect(props[:elements_options][:currency]).to eq(Currency::EUR)
+        expect(props[:elements_options][:direct_listed_card]).to be_nil
+        expect(props[:disable_wallets]).to be(true)
+      ensure
+        if seller
+          deactivate_wallet_flags(seller)
+          deactivate_buyer_currency_flags(seller)
+        end
+      end
+    end
+
     it "selects client-confirm quote presentment for a Bulgarian buyer of a single USD-priced product with the flags on" do
       seller, product = buyer_currency_seller_with_product(price_currency_type: "usd", price_cents: 1500)
       activate_buyer_currency_flags(seller)

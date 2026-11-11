@@ -788,8 +788,19 @@ export function getStripePaymentElementPresentment(state: State): { currency: st
   return null;
 }
 
+// Non-USD wallets on client-confirm: the server enables them only on a quote remount or a
+// direct-listed card Element with the buyer-currency wallet flags on. The sheet then shows the
+// signed quote total or the listed allocations, which is what prepare charges.
+export function clientConfirmSignedTotalWalletsAllowed(state: State) {
+  if (state.checkoutPayment.integration !== "payment_element_client_confirm") return false;
+  if (!state.checkoutPayment.payment_element_wallets || state.checkoutPayment.disable_wallets) return false;
+  const options = state.checkoutPayment.elements_options;
+  return options.buyer_currency_presentment === true || getConfiguredDirectListedCurrency(state) !== null;
+}
+
 export function shouldSuppressClientConfirmWallets(state: State) {
   if (!clientConfirmBuyerCurrencyPresentmentEnabled(state) || state.willSaveCard) return false;
+  if (clientConfirmSignedTotalWalletsAllowed(state)) return false;
   if (state.buyerCurrency !== null && state.buyerCurrency.toLowerCase() !== "usd") return true;
   if (state.surcharges.type !== "loaded") return false;
 

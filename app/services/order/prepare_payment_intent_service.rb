@@ -211,6 +211,7 @@ class Order::PreparePaymentIntentService
       # a method-forced local method (iDEAL/Bancontact) changes the currency the deferred
       # intent must be created in (see client_confirm_presentment_for).
       @previewed_payment_method_type = preview[:type]
+      @previewed_wallet = preview[:card]&.[](:wallet).present?
       country = previewed_country(preview)
       purchases_to_charge.each do |purchase|
         purchase.card_country = country
@@ -593,6 +594,12 @@ class Order::PreparePaymentIntentService
     # flags are off. A non-USD Element never falls back to USD after tokenization; the
     # caller turns a missing presentment into a synchronous failure.
     def client_confirm_presentment_for(charge)
+      # Eligibility gates wallets on the client's wallet_type. Stripe's preview is the record a
+      # client cannot leave out, so the buyer-currency wallet kill switch also holds without it.
+      if @previewed_wallet && !Checkout::BuyerCurrencyEligibility.wallets_enabled?(seller)
+        Rails.logger.info("Skipping client-confirm presentment for order #{order.id}: wallet payment with buyer-currency wallets off")
+        return nil
+      end
       return buyer_currency_quote_presentment_for(charge) if params[:buyer_currency_quote].present?
 
       method_type = @previewed_payment_method_type
@@ -795,7 +802,10 @@ class Order::PreparePaymentIntentService
       # A checkout tab opened before this snapshot shipped cannot send the token. Preserve the
       # pre-deploy server-computed behavior for those in-flight tabs; any client that sends a
       # token must still pass the exact comparison below.
-      return true if params[:direct_listed_amount_token].blank?
+      if params[:direct_listed_amount_token].blank?
+        @direct_listed_amount_rejection_reason = :wallet_without_token if wallet_payment?
+        return !wallet_payment?
+      end
 
       reported = Checkout::DirectListedAmountToken.verify(
         params[:direct_listed_amount_token],
@@ -827,9 +837,19 @@ class Order::PreparePaymentIntentService
       if reviewed_total_cents != prepare_total_cents
         Rails.logger.info("Direct-listed prepare total for order #{order.id} is #{prepare_total_cents} #{currency} cents against a reviewed #{reviewed_total_cents}")
       end
+      # A wallet sheet showed the buyer exactly the reviewed total, so a wallet charge must equal it.
+      if wallet_payment? && prepare_total_cents != reviewed_total_cents
+        @direct_listed_amount_rejection_reason = :wallet_total_changed
+        return false
+      end
       matches = prepare_total_cents <= reviewed_total_cents
       @direct_listed_amount_rejection_reason = :above_reviewed_total unless matches
       matches
+    end
+
+    # The ConfirmationToken preview is Stripe's record of a wallet; wallet_type is the client's.
+    def wallet_payment?
+      @previewed_wallet || params[:wallet_type].present?
     end
 
     # Legacy fallback for clients that did not report their Element's mount currency. It

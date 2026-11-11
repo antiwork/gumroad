@@ -574,6 +574,134 @@ describe("PaymentForm validation-failure feedback", () => {
       elements_options: {
         stripe_elements_mode: "payment",
         currency: "usd",
+        buyer_currency_presentment: false,
+        presentment_amount_cents: null,
+        listed_currency_display: null,
+        payment_method_types: ["card"],
+        payment_method_list_token: null,
+        stripe_link_enabled: false,
+        stripe_connect_account_id: null,
+      },
+    };
+    const checkoutState = state();
+    const [product] = checkoutState.products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+    if (checkoutState.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+
+    renderPaymentForm({
+      ...checkoutState,
+      buyerCurrency: "cad",
+      products: [{ ...product, price: 2_013, requirePayment: true }],
+      surcharges: {
+        type: "loaded",
+        result: {
+          ...checkoutState.surcharges.result,
+          subtotal: 2_013,
+          buyer_currency_quote: {
+            token: "quote-token",
+            currency: "cad",
+            canonical_total_cents: 2_013,
+            presentment_total_cents: 2_813,
+            charge_presentment_total_cents: 2_813,
+            rate: 1.3974,
+            subunit_to_unit: 100,
+            expires_at: "2026-08-26T16:00:00Z",
+            line_allocations: [
+              {
+                permalink: "product-a",
+                price_cents: 2_813,
+                tip_cents: 0,
+                tax_cents: 0,
+                shipping_cents: 0,
+                total_cents: 2_813,
+              },
+            ],
+          },
+        },
+      },
+      checkoutPayment,
+    });
+
+    expect(paymentElementInputRender.walletsEnabled).toBe(false);
+  });
+
+  it("keeps element wallets on a server-chosen quote remount the server left wallets enabled on", () => {
+    type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+    const checkoutPayment: ClientConfirmPayment = {
+      integration: "payment_element_client_confirm",
+      fallback_reason: null,
+      recurring_upi_registration: false,
+      disable_wallets: false,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: true,
+      flat_payment_methods: true,
+      elements_options: {
+        stripe_elements_mode: "payment",
+        currency: "usd",
+        buyer_currency_presentment: true,
+        presentment_amount_cents: null,
+        listed_currency_display: null,
+        payment_method_types: ["card"],
+        payment_method_list_token: null,
+        stripe_link_enabled: false,
+        stripe_connect_account_id: null,
+      },
+    };
+    const checkoutState = state();
+    const [product] = checkoutState.products;
+    if (product === undefined) throw new Error("Expected a checkout product");
+    if (checkoutState.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+
+    renderPaymentForm({
+      ...checkoutState,
+      buyerCurrency: "cad",
+      products: [{ ...product, price: 2_013, requirePayment: true }],
+      surcharges: {
+        type: "loaded",
+        result: {
+          ...checkoutState.surcharges.result,
+          subtotal: 2_013,
+          buyer_currency_quote: {
+            token: "quote-token",
+            currency: "cad",
+            canonical_total_cents: 2_013,
+            presentment_total_cents: 2_813,
+            charge_presentment_total_cents: 2_813,
+            rate: 1.3974,
+            subunit_to_unit: 100,
+            expires_at: "2026-08-26T16:00:00Z",
+            line_allocations: [
+              {
+                permalink: "product-a",
+                price_cents: 2_813,
+                tip_cents: 0,
+                tax_cents: 0,
+                shipping_cents: 0,
+                total_cents: 2_813,
+              },
+            ],
+          },
+        },
+      },
+      checkoutPayment,
+    });
+
+    expect(paymentElementInputRender.walletsEnabled).toBe(true);
+  });
+
+  it("suppresses element wallets on a quote remount the server disabled wallets on", () => {
+    type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+    const checkoutPayment: ClientConfirmPayment = {
+      integration: "payment_element_client_confirm",
+      fallback_reason: null,
+      recurring_upi_registration: false,
+      disable_wallets: true,
+      request_apple_pay_merchant_tokens: false,
+      payment_element_wallets: true,
+      flat_payment_methods: true,
+      elements_options: {
+        stripe_elements_mode: "payment",
+        currency: "usd",
         buyer_currency_presentment: true,
         presentment_amount_cents: null,
         listed_currency_display: null,
@@ -624,6 +752,51 @@ describe("PaymentForm validation-failure feedback", () => {
 
     expect(paymentElementInputRender.walletsEnabled).toBe(false);
   });
+
+  it.each([
+    [false, true],
+    [true, false],
+  ])(
+    "on a direct-listed EUR card Element with disable_wallets=%s, wallets enabled is %s",
+    (disableWallets, expected) => {
+      type ClientConfirmPayment = Extract<CheckoutPaymentConfig, { integration: "payment_element_client_confirm" }>;
+      const checkoutPayment: ClientConfirmPayment = {
+        integration: "payment_element_client_confirm",
+        fallback_reason: null,
+        recurring_upi_registration: false,
+        disable_wallets: disableWallets,
+        request_apple_pay_merchant_tokens: false,
+        payment_element_wallets: true,
+        flat_payment_methods: true,
+        elements_options: {
+          stripe_elements_mode: "payment",
+          currency: "eur",
+          buyer_currency_presentment: false,
+          presentment_amount_cents: 1_500,
+          listed_currency_display: { currency: "eur", subunit_to_unit: 100 },
+          payment_method_types: ["card"],
+          payment_method_list_token: null,
+          stripe_link_enabled: false,
+          stripe_connect_account_id: null,
+          direct_listed_card: true,
+        },
+      };
+      const checkoutState = state();
+      const [product] = checkoutState.products;
+      if (product === undefined) throw new Error("Expected a checkout product");
+      if (checkoutState.surcharges.type !== "loaded") throw new Error("Expected loaded surcharges");
+
+      renderPaymentForm({
+        ...checkoutState,
+        buyerCurrency: "eur",
+        products: [{ ...product, price: 1_800, requirePayment: true, listedPriceCents: 1_500 }],
+        surcharges: { type: "loaded", result: { ...checkoutState.surcharges.result, subtotal: 1_800 } },
+        checkoutPayment,
+      });
+
+      expect(paymentElementInputRender.walletsEnabled).toBe(expected);
+    },
+  );
 
   it("does not reuse a native PayPal agreement after PayPal changes the tax location", async () => {
     const surchargeResult = {

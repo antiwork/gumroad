@@ -69,6 +69,7 @@ import {
   requiresPayment,
   requiresReusablePaymentMethod,
   shouldSuppressClientConfirmWallets,
+  clientConfirmSignedTotalWalletsAllowed,
   BUYER_CURRENCY_QUOTE_REFRESH_MESSAGE,
   PayRecapContext,
   usePayLabel,
@@ -774,7 +775,7 @@ const CreditCardContent = ({
   const paymentElementWalletsEnabled =
     state.checkoutPayment.payment_element_wallets &&
     !suppressClientConfirmWallets &&
-    (getStripePaymentElementMountCurrency(state) ?? "usd") === "usd";
+    ((getStripePaymentElementMountCurrency(state) ?? "usd") === "usd" || clientConfirmSignedTotalWalletsAllowed(state));
 
   // When the Payment Element renders Apple Pay, describe the cart's recurring agreement on the
   // sheet so Apple issues a device-independent merchant token (MPAN) — the exact same declaration

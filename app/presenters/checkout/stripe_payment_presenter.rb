@@ -288,9 +288,14 @@ class Checkout::StripePaymentPresenter
         forced_currency = Checkout::BuyerCurrencyEligibility.forced_currency_for(payment_method_type)
         forced_currency.present? && forced_currency != element_currency
       end
-      # Listed-currency Elements stay wallet-free until their sheet can be guaranteed to carry
-      # the same final tax/tip/shipping total as the deferred intent.
-      disable_wallets = listed_currency || items.any? { buyer_currency_presentment_candidate?(_1) } || inr_local_method_types.any? || quote_remount
+      # Quote remounts and direct-listed card Elements mount on a signed total (the quote's
+      # charge total, or the listed allocations) and prepare charges a wallet exactly that total
+      # or refuses it. Both rely on the buyer-currency wallet flags. Method-forced Elements stay
+      # wallet-free (direct_listed_card already excludes them; a quote remount is USD-listed).
+      signed_total_wallets = (quote_remount || direct_listed_card) &&
+        inr_local_method_types.empty? && buyer_currency_wallets?
+      disable_wallets = !signed_total_wallets &&
+        (listed_currency || quote_remount || inr_local_method_types.any? || items.any? { buyer_currency_presentment_candidate?(_1) })
       if listed_currency
         # The ConfirmationToken inherits this currency and method set. Keep only methods the
         # matching non-USD intent can accept; prepare applies the same restrictions.
@@ -476,8 +481,7 @@ class Checkout::StripePaymentPresenter
       ).resolve
     end
 
-    # Client-confirm remounts the element in the quoted buyer currency. Wallets stay off
-    # because their sheet cannot carry that locked total.
+    # Client-confirm remounts the element in the quoted buyer currency.
     def client_confirm_quote_remount?
       return false unless sellers.one? && sellers.all? { Checkout::BuyerCurrencyEligibility.seller_enabled?(_1) }
 
