@@ -1,0 +1,81 @@
+---
+http_interactions:
+- request:
+    method: get
+    uri: https://api.stripe.com/v1/accounts/000000001
+    body:
+      encoding: US-ASCII
+      string: ''
+    headers:
+      User-Agent:
+      - Stripe/v1 RubyBindings/12.5.0
+      Authorization:
+      - Bearer <STRIPE_API_KEY>
+      Content-Type:
+      - application/x-www-form-urlencoded
+      Stripe-Version:
+      - '2023-10-16'
+      X-Stripe-Client-User-Agent:
+      - "<STRIPE_CLIENT_USER_AGENT>"
+      Accept-Encoding:
+      - gzip;q=1.0,deflate;q=0.6,identity;q=0.3
+      Accept:
+      - "*/*"
+  response:
+    status:
+      code: 403
+      message: Forbidden
+    headers:
+      Server:
+      - nginx
+      Date:
+      - Wed, 11 Nov 2026 20:38:02 GMT
+      Content-Type:
+      - application/json
+      Content-Length:
+      - '423'
+      Connection:
+      - keep-alive
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Methods:
+      - GET, HEAD, PUT, PATCH, POST, DELETE
+      Access-Control-Allow-Origin:
+      - "*"
+      Access-Control-Expose-Headers:
+      - Request-Id, Stripe-Manage-Version, Stripe-Should-Retry, X-Stripe-External-Auth-Required,
+        X-Stripe-Privileged-Session-Required
+      Access-Control-Max-Age:
+      - '300'
+      Cache-Control:
+      - no-cache, no-store
+      Content-Security-Policy:
+      - base-uri 'none'; default-src 'none'; form-action 'none'; frame-ancestors 'none';
+        img-src 'self'; script-src 'self' 'report-sample'; style-src 'self'; worker-src
+        'none'; upgrade-insecure-requests; report-uri https://q.stripe.com/csp-violation?q=0IEkrN63rOuP8pEX33wQ5aQDYYET--kj8NP6cy3-3T3ElqHZYaZkjYzBVPMw3fW1jag05S0SSuIgqGNt;
+        report-to csp
+      Report-To:
+      - '{"group":"csp","max_age":8640,"endpoints":[{"url":"https://q.stripe.com/csp-report-v2?q=0IEkrN63rOuP8pEX33wQ5aQDYYET--kj8NP6cy3-3T3ElqHZYaZkjYzBVPMw3fW1jag05S0SSuIgqGNt&t=1"}],"include_subdomains":true}'
+      Reporting-Endpoints:
+      - csp="https://q.stripe.com/csp-report-v2?q=0IEkrN63rOuP8pEX33wQ5aQDYYET--kj8NP6cy3-3T3ElqHZYaZkjYzBVPMw3fW1jag05S0SSuIgqGNt&t=1"
+      Vary:
+      - Origin
+      X-Robots-Tag:
+      - none
+      X-Wc:
+      - '383'
+      Strict-Transport-Security:
+      - max-age=63072000; includeSubDomains; preload
+    body:
+      encoding: UTF-8
+      string: |
+        {
+          "error": {
+            "message": "The provided key 'sk_test_***********************************************************************************************Uz2J' does not have access to account '000000001' (or that account does not exist). Application access may have been revoked.",
+            "type": "invalid_request_error",
+            "code": "account_invalid",
+            "doc_url": "https://stripe.com/docs/error-codes/account-invalid"
+          }
+        }
+  recorded_at: Wed, 11 Nov 2026 20:38:02 GMT
+recorded_with: VCR 6.2.0
