@@ -265,6 +265,23 @@ describe("US company representative tax ID", () => {
     expect(screen.queryByText(/Upload a passport via Stripe instead/u)).toBeNull();
   });
 
+  it.each([
+    ["a US representative", { country: "US" }],
+    ["a US individual", { is_business: false, country: "US", business_country: null }],
+  ])("does not offer the document as a tax ID substitute to %s", (_, overrides) => {
+    renderPage(
+      {
+        individual_tax_id_is_last_four: true,
+        individual_tax_id_entered: true,
+        business_tax_id_entered: true,
+        has_outstanding_identity_document_requirement: true,
+        has_outstanding_full_ssn_requirement: true,
+      },
+      { ...business, ...overrides },
+    );
+    expect(screen.queryByText(/via Stripe instead/u)).toBeNull();
+  });
+
   it("does not offer the document upload when Stripe has not asked for a document", () => {
     renderPage({ individual_tax_id_entered: false, business_tax_id_entered: true }, business);
     expect(screen.queryByText(/Upload a passport via Stripe instead/u)).toBeNull();
