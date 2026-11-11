@@ -29,7 +29,9 @@ describe QuotedPrintableHtmlMail do
   # on the way out and must decode back byte for byte — including URLs carrying = and hex digits, which
   # a body the gem believed was already quoted-printable would corrupt.
   it "round-trips the payload, escaping = rather than reading a hex sequence in it" do
-    source = %(<a href="https://example.com/confirm?token=1234ABCD&amp;x=9">Confirm</a>)
+    # The =XX sequences come before any attribute: Ruby's quoted-printable decoder stops at the first
+    # invalid escape such as `="`, so a source that opens with an attribute cannot catch a decode.
+    source = %(<title>price=99 token=E3</title>\n<a href="https://example.com/confirm?token=1234ABCD&amp;x=9">Confirm</a>)
     mail = Mail.new do
       to "buyer@example.com"
       from "noreply@gumroad.com"

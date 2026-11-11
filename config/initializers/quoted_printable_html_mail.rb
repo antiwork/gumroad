@@ -6,7 +6,14 @@
 module QuotedPrintableHtmlMail
   def self.delivering_email(message)
     html_part = message.html_part || (message.mime_type == "text/html" ? message : nil)
-    html_part&.body&.encoding = "quoted-printable"
+    return if html_part.nil?
+
+    # The body's encoding names what its source is already in, so the gem decodes the source with it.
+    # Hand over an encoded source: labelling raw html quoted-printable decodes any =XX in it (a subject
+    # such as "price=99" in <title>) into a stray byte.
+    payload = html_part.body.decoded
+    html_part.content_transfer_encoding = "quoted-printable"
+    html_part.body = Mail::Encodings::QuotedPrintable.encode(payload)
   end
 end
 
