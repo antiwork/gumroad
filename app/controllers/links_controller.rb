@@ -1432,6 +1432,30 @@ class LinksController < ApplicationController
       @body_id               = "product_page"
       @is_on_product_page    = true
       @debug                 = params[:debug] && !Rails.env.production?
+      set_product_page_crawl_fallback
+    end
+
+    # The product's copy only reaches the page through the Inertia payload, so a fetcher without
+    # JavaScript saw an empty shell (gumroad-private#4521). Mirror the help-center/blog fallback:
+    # reduce the stored description HTML to escaped plain text and let the `seo_product_fallback`
+    # partial render it inside <noscript>. Skip the embedded/overlay frame and the Discover layout,
+    # where the served document is not the public product page, and any product that is not
+    # published and alive, whose copy is not public yet.
+    def set_product_page_crawl_fallback
+      return if params[:embed] || params[:overlay]
+      return if params[:layout] == Product::Layout::DISCOVER
+      return if @product.draft || !@product.alive?
+
+      # Keep words apart where block elements used to be: stripping tags alone runs
+      # "<p>one</p><p>two</p>" together into "onetwo".
+      spaced_description = @product.description.to_s.gsub(%r{</(?:p|div|h[1-6]|li|blockquote|tr|td)>|<br\s*/?>}i, " ")
+      plain_description = helpers.strip_tags(spaced_description)
+      @seo_product_fallback = {
+        name: @product.name,
+        seller: @product.user.name_or_username,
+        price: @product.price_formatted_verbose(for_default_duration: true),
+        description: helpers.simple_format(ERB::Util.html_escape(plain_description)),
+      }
     end
 
     def link_params

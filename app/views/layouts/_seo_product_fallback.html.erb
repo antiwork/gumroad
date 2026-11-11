@@ -1,0 +1,20 @@
+<%# Crawl fallback for product pages: the copy a fetcher reads otherwise exists only inside the
+    Inertia payload, so without JavaScript it receives an empty shell (gumroad-private#4521).
+    noscript keeps this out of the rendered UI, where the React page already shows the same
+    product, so the text here duplicates the page rather than cloaking it.
+    Name, seller and price are plain escaped ERB output — never html_safe — because noscript is
+    a raw-text element and an unescaped closing tag in any of them would end it early.
+    The description is stored HTML, so it arrives already reduced to escaped plain text; the
+    gsub is the one remaining guarantee that it cannot close the element. %>
+<noscript>
+  <article>
+    <h1><%= @seo_product_fallback[:name] %></h1>
+    <% if @seo_product_fallback[:seller].present? %>
+      <p>by <%= @seo_product_fallback[:seller] %></p>
+    <% end %>
+    <% if @seo_product_fallback[:price].present? %>
+      <p><%= @seo_product_fallback[:price] %></p>
+    <% end %>
+    <%= @seo_product_fallback[:description].to_s.gsub(%r{</noscript}i, "&lt;/noscript").html_safe %>
+  </article>
+</noscript>
