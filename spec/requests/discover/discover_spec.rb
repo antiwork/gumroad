@@ -259,6 +259,8 @@ describe("Discover", js: true, type: :system) do
       visit "#{discover_host}/3d"
 
       expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "3D")
+      expect(page).to have_selector("h1", count: 1)
+      expect(page).to have_selector("[aria-label='Breadcrumbs'] h1", text: "3D", exact_text: true)
 
       within_section "Featured products", section_element: :section do
         expect(page).to have_product_card(count: 5)
@@ -318,6 +320,8 @@ describe("Discover", js: true, type: :system) do
 
       # Should also work with client-side navigation
       visit "#{discover_host}/discover"
+      expect(page).to have_selector("h1", count: 1)
+      expect(page).to have_selector("h1", text: "Discover digital products from independent creators", exact_text: true)
       within "[role=menubar]" do
         find("[role=menuitem]", text: "3D").hover
         click_on "All 3D"
