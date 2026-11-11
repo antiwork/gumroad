@@ -136,6 +136,19 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     expect(screen.getByText(/leave this blank/u)).toBeTruthy();
   });
 
+  it.each([
+    ["nothing on file", { individual_tax_id_entered: false }],
+    ["only the last four", { individual_tax_id_entered: true, individual_tax_id_is_last_four: true }],
+  ])("withholds the leave-blank advice while a full SSN is owed (%s)", (_label, userOverrides) => {
+    renderSection(makeUser({ ...userOverrides, has_outstanding_full_ssn_requirement: true }), {
+      is_business: true,
+      business_country: "US",
+      country: "DZ",
+    });
+    expect(screen.getByText(/US ITIN or SSN \(9 digits\)/u)).toBeTruthy();
+    expect(screen.queryByText(/leave this blank/u)).toBeNull();
+  });
+
   it("does not require the tax ID from a US company's non-US representative", () => {
     renderSection(makeUser({ individual_tax_id_entered: false }), {
       is_business: true,

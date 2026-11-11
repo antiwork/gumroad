@@ -375,6 +375,11 @@ const AccountDetailsSection = ({
   const ssnRequirementCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
   const mustReenterFullSsn =
     user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && ssnRequirementCountry === "US";
+  // The page rejects a blank id_number while that requirement is open, so the hint must not invite one.
+  const blankIndividualTaxIdRejected =
+    user.has_outstanding_full_ssn_requirement &&
+    ssnRequirementCountry === "US" &&
+    (user.individual_tax_id_is_last_four || !user.individual_tax_id_entered);
 
   // A Hong Kong company's foreign representative types the passport number before the country that
   // issued it, so the issuing country renders after the number instead of above it.
@@ -1300,7 +1305,7 @@ const AccountDetailsSection = ({
             complianceInfo.business_country === "US" ? (
               <FieldsetDescription className="text-muted">
                 To verify this US company's representative, enter a US ITIN or SSN (9 digits) if you have one.
-                {!hasIdDocumentAlternative
+                {!hasIdDocumentAlternative && !blankIndividualTaxIdRejected
                   ? " If you have neither, leave this blank — Stripe will ask for a document when it needs one."
                   : null}
               </FieldsetDescription>
