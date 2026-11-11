@@ -47,4 +47,17 @@ describe QuotedPrintableHtmlMail do
     expect(mail.html_part.decoded).to eq(source)
     expect(encoded.split("\r\n").map(&:bytesize).max).to be < MAX_ENCODED_LINE_BYTES
   end
+
+  # The confirmation link is the line SendGrid's swap lands in, so the real mail has to arrive with the
+  # same links it left with: no link is lossy, no control byte replaces a `=` hex pair.
+  it "delivers the confirmation mail with its links intact" do
+    mail = UserSignupMailer.confirmation_instructions(create(:user), {})
+    source_links = mail.message.body.to_s.scan(/href="([^"]+)"/).flatten.reject { |href| href.end_with?(".css") }
+
+    mail.deliver_now
+    received = Mail.read_from_string(mail.encoded).html_part.decoded
+
+    expect(received.scan(/href="([^"]+)"/).flatten).to eq(source_links)
+    expect(received.scan(/[\x00-\x08\x0b\x0c\x0e-\x1f]/)).to be_empty
+  end
 end
