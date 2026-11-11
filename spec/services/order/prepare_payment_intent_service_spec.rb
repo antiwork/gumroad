@@ -2985,6 +2985,17 @@ describe Order::PreparePaymentIntentService, :vcr do
           expect(purchase.reload).to be_failed
         end
 
+        it "still charges a USD-mounted wallet in USD when the buyer-currency wallet flag is off" do
+          Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, seller)
+          order, params, = wallet_order
+          params[:direct_listed_amount_token] = nil
+
+          create_args, responses = perform_with_direct_listed_card(order, params, mount_currency: Currency::USD, wallet: "apple_pay")
+
+          expect(responses["unique-id-0"][:success]).to eq(true)
+          expect(create_args[:currency]).to eq(Currency::USD)
+        end
+
         it "refuses a Stripe-previewed wallet when the buyer-currency wallet flag is off, even without wallet_type" do
           Feature.deactivate_user(Checkout::BuyerCurrencyEligibility::WALLETS_FEATURE_NAME, seller)
           order, params, purchase = wallet_order
