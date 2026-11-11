@@ -189,7 +189,6 @@ describe("AccountDetailsSection foreign representative tax ID", () => {
     renderSection(
       makeUser({
         individual_tax_id_entered: false,
-        individual_tax_id_is_last_four: true,
         has_outstanding_full_ssn_requirement: true,
       }),
       { is_business: true, business_country: "US", country: "DZ" },

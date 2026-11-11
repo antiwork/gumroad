@@ -1374,7 +1374,7 @@ const AccountDetailsSection = ({
                   maxLength={individualTaxIdConfig.maxLength}
                   placeholder={individualTaxIdConfig.placeholder}
                   required={
-                    mustReenterFullSsn ||
+                    blankIndividualTaxIdRejected ||
                     (!user.individual_tax_id_entered && !usEntityWithForeignRepresentative(complianceInfo))
                   }
                   disabled={isFormDisabled}
