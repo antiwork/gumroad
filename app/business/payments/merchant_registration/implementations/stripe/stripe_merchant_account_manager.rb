@@ -3135,7 +3135,10 @@ module StripeMerchantAccountManager
         if legal_entity_country_code == Compliance::Countries::USA.alpha2
           if country_code == Compliance::Countries::USA.alpha2 && personal_tax_id.length == 4
             hash.deep_merge!(ssn_last_4: personal_tax_id.last(4))
-          elsif personal_tax_id.length == 9
+          # An SSN or ITIN is nine digits. A nine-character ID with letters, such as a Singapore NRIC
+          # ("S1234567A"), would otherwise reach Stripe as one, and Stripe would stop asking for an
+          # ID document. A nine-digit foreign ID still passes this check.
+          elsif personal_tax_id.match?(/\A\d{9}\z/)
             hash.deep_merge!(id_number: personal_tax_id)
           end
         else

@@ -52,6 +52,12 @@ export const usesUsTaxId = (complianceInfo: ComplianceInfo, user: User): boolean
 
 export const normalizeUsTaxId = (value: string): string => value.replace(/[\s-]/gu, "");
 
+// Stripe matches `id_number` against the account's country, so a US company keeps only a 9-digit
+// SSN/ITIN: a non-US representative may have no number it accepts, and an absent ID makes Stripe
+// raise its document alternative instead.
+export const usEntityWithForeignRepresentative = (complianceInfo: ComplianceInfo): boolean =>
+  complianceInfo.is_business && complianceInfo.business_country === "US" && complianceInfo.country !== "US";
+
 // Mirrors UpdateUserComplianceInfo#individual_id_country_matches? for Pakistan: the number belongs
 // to the representative, so the country guard only governs an account whose legal entity is in
 // Pakistan too. A foreign representative of a Pakistani business enters their own country's

@@ -559,6 +559,15 @@ describe StripeMerchantAccountManager, :vcr do
         end
       end
 
+      context "with a nine-character foreign ID that has letters" do
+        let(:tax_id) { "S1234567A" }
+
+        it "omits it, because it is not an SSN or ITIN" do
+          expect(person).not_to have_key(:id_number)
+          expect(person).not_to have_key(:ssn_last_4)
+        end
+      end
+
       context "with four digits" do
         let(:tax_id) { "0000" }
 

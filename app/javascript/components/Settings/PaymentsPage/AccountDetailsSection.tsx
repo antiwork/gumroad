@@ -9,6 +9,7 @@ import {
   PERSONAL_ID_NUMBER_CONFIG,
   personalTaxIdError,
   type TaxIdConfig,
+  usEntityWithForeignRepresentative,
   usesHongKongPassport,
 } from "$app/utils/personalTaxId";
 import { countryRequiresPostalCode } from "$app/utils/postalCodes";
@@ -374,6 +375,11 @@ const AccountDetailsSection = ({
   const ssnRequirementCountry = complianceInfo.is_business ? complianceInfo.business_country : complianceInfo.country;
   const mustReenterFullSsn =
     user.has_outstanding_full_ssn_requirement && user.individual_tax_id_is_last_four && ssnRequirementCountry === "US";
+  // The page rejects a blank id_number while that requirement is open, so the hint must not invite one.
+  const blankIndividualTaxIdRejected =
+    user.has_outstanding_full_ssn_requirement &&
+    ssnRequirementCountry === "US" &&
+    (user.individual_tax_id_is_last_four || !user.individual_tax_id_entered);
 
   // A Hong Kong company's foreign representative types the passport number before the country that
   // issued it, so the issuing country renders after the number instead of above it.
@@ -1299,8 +1305,8 @@ const AccountDetailsSection = ({
             complianceInfo.business_country === "US" ? (
               <FieldsetDescription className="text-muted">
                 To verify this US company's representative, enter a US ITIN or SSN (9 digits) if you have one.
-                {!hasIdDocumentAlternative
-                  ? " If you have neither, use Stripe's verification link to upload a passport when offered."
+                {!hasIdDocumentAlternative && !blankIndividualTaxIdRejected
+                  ? " If you have neither, leave this blank — Stripe will ask for a document when it needs one."
                   : null}
               </FieldsetDescription>
             ) : null}
@@ -1367,7 +1373,10 @@ const AccountDetailsSection = ({
                   minLength={individualTaxIdConfig.minLength}
                   maxLength={individualTaxIdConfig.maxLength}
                   placeholder={individualTaxIdConfig.placeholder}
-                  required={!user.individual_tax_id_entered || mustReenterFullSsn}
+                  required={
+                    blankIndividualTaxIdRejected ||
+                    (!user.individual_tax_id_entered && !usEntityWithForeignRepresentative(complianceInfo))
+                  }
                   disabled={isFormDisabled}
                   aria-invalid={errorFieldNames.has("individual_tax_id") || !!individualTaxIdValidationError}
                   aria-describedby={individualTaxIdValidationError ? `${uid}-tax-id-error` : undefined}
