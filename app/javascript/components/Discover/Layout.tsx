@@ -252,12 +252,16 @@ export const TaxonomyCategoryBreadcrumbs = ({
         const isPage = index === breadcrumbs.length - 1;
         return (
           <React.Fragment key={taxonomySlugPath}>
-            {index > 0 ? (
-              <span aria-hidden="true" className="mx-1 select-none">
-                {" / "}
-              </span>
-            ) : null}
-            <span itemProp="itemListElement" itemScope itemType="https://schema.org/ListItem">
+            {index > 0 ? " " : null}
+            {/* inline-block keeps each label and its separator on one line */}
+            <span itemProp="itemListElement" itemScope itemType="https://schema.org/ListItem" className="inline-block">
+              {index > 0 ? (
+                <>
+                  <span aria-hidden="true" className="mx-1">
+                    /
+                  </span>{" "}
+                </>
+              ) : null}
               <a
                 href={`/${taxonomySlugPath}`}
                 onClick={(e) => handleTaxonomyLinkClick(e, taxonomySlugPath, onClickTaxonomy)}

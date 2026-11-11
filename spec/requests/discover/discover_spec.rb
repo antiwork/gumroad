@@ -389,6 +389,27 @@ describe("Discover", js: true, type: :system) do
     end
   end
 
+  it "shows the Discover heading on the root page but not on search or tag results" do
+    visit discover_url(host: discover_host)
+    expect(page).to have_selector("h1", count: 1, visible: :all)
+    expect(page).to have_selector("h1", text: "Discover digital products from independent creators", exact_text: true)
+
+    fill_in "Search products", with: "pine martens\n"
+    expect(page).to have_current_path(/query=pine\+martens/)
+    expect(page).not_to have_selector("h1", visible: :all)
+
+    page.go_back
+    expect(page).to have_selector("h1", text: "Discover digital products from independent creators", exact_text: true)
+
+    visit discover_url(host: discover_host, tags: "action")
+    expect(page).to have_text("On the market")
+    expect(page).not_to have_selector("h1", visible: :all)
+
+    visit discover_url(host: discover_host, query: " ", tags: ",")
+    expect(page).to have_selector("h1", count: 1, visible: :all)
+    expect(page).to have_selector("h1", text: "Discover digital products from independent creators", exact_text: true)
+  end
+
   it "displays a link to the user's profile page with the recommended_by query parameter" do
     Link.__elasticsearch__.create_index!(force: true)
     product = create(:product, name: "Nothing but pine martens", price_cents: 3378, user: create(:compliant_user, name: "Sam Smith", username: "sam"))
@@ -476,6 +497,9 @@ describe("Discover", js: true, type: :system) do
 
       expect(page).to have_title("some tag | Software Development » Programming » C# | Gumroad")
       expect(page).to have_selector("[aria-label='Breadcrumbs']", text: "Software Development / Programming / C#")
+      expect(page).to have_selector("h1", count: 1, visible: :all)
+      expect(page).to have_selector("h1", text: "Software Development / Programming / C#", exact_text: true)
+      expect(find("h1").native.accessible_name).to eq("Software Development Programming C#")
     end
 
     it "shows breadcrumbs with taxonomy links and handles back and forward buttons" do

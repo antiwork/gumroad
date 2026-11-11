@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-# SEO metadata for Discover category/subcategory pages (taxonomy-only, no query/tags):
-# server-rendered title/description, BreadcrumbList + ItemList JSON-LD, and the
-# subcategory/pagination links crawlers need in the initial HTML.
+# SEO metadata for Discover category/subcategory pages: server-rendered title/description,
+# BreadcrumbList + ItemList JSON-LD, and the subcategory/pagination links crawlers need in the
+# initial HTML. Only #heading is also used when a query, tags or filters are present.
 class Discover::CategoryPagePresenter
   include ActionView::Helpers::NumberHelper
   include CurrencyHelper
