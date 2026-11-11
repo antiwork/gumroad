@@ -471,6 +471,40 @@ describe DiscoverController, type: :controller, inertia: true do
         expect(doc.at_css("noscript nav[aria-label='Categories']")).to be_nil
       end
 
+      context "on a search page" do
+        let(:seller) { create(:compliant_user, name: "Search Seller") }
+        let!(:product) { create(:product, :recommendable, user: seller, name: "Inkwell brush pack") }
+        let!(:hostile_product) { create(:product, :recommendable, user: seller, name: %(Inkwell </noscript><img src=x onerror="alert(1)">)) }
+
+        before do
+          Link.import(refresh: true, force: true)
+        end
+
+        it "renders the result titles and links in the initial HTML" do
+          get :index, params: { query: "Inkwell" }
+
+          doc = Nokogiri::HTML.parse(response.body)
+          expect(doc.at_css("noscript h1").text.strip).to eq(%(Search results for "Inkwell"))
+          link = doc.css("noscript nav[aria-label='Search results'] a").find { _1.text == "Inkwell brush pack" }
+          expect(link[:href]).to eq(product.long_url)
+        end
+
+        it "keeps a product name from closing the noscript element" do
+          get :index, params: { query: "Inkwell" }
+
+          expect(response.body.scan(%r{</noscript}i).size).to eq(1)
+          expect(response.body).to include("Inkwell &lt;/noscript&gt;&lt;img")
+          expect(Nokogiri::HTML.parse(response.body).css("img[onerror]")).to be_empty
+        end
+
+        it "keeps a search query from closing the noscript element" do
+          get :index, params: { query: %(</noscript><img src=x onerror="alert(1)">) }
+
+          expect(response.body.scan(%r{</noscript}i).size).to eq(1)
+          expect(Nokogiri::HTML.parse(response.body).css("img[onerror]")).to be_empty
+        end
+      end
+
       it "renders top-level category links in the initial HTML of /discover" do
         get :index
 

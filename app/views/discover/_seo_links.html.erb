@@ -18,6 +18,17 @@
       </ul>
     </nav>
   <% end %>
+  <%# Product names are seller text. Keep them as escaped ERB output, never html_safe: noscript is
+      a raw-text element, so an unescaped closing tag in a name would end it early. %>
+  <% if @discover_result_links.present? %>
+    <nav aria-label="Search results">
+      <ul>
+        <% @discover_result_links.each do |link| %>
+          <li><a href="<%= link[:href] %>"><%= link[:label] %></a></li>
+        <% end %>
+      </ul>
+    </nav>
+  <% end %>
   <% if @discover_pagination_links.present? %>
     <nav aria-label="Pagination">
       <ul>
