@@ -78,6 +78,7 @@ const props = (): ProfileSectionsFormProps => ({
       header: "About me",
       hide_header: false,
       shown_posts: [],
+      add_new_posts: false,
     },
   ],
   products: [],
@@ -139,7 +140,14 @@ describe("ProfileSectionsForm", () => {
     withThree.tabs = [{ name: "Home", sections: ["section-1", "section-2"] }];
     withThree.sections = [
       ...withThree.sections,
-      { id: "section-2", type: "SellerProfilePostsSection", header: "Contact", hide_header: false, shown_posts: [] },
+      {
+        id: "section-2",
+        type: "SellerProfilePostsSection",
+        header: "Contact",
+        hide_header: false,
+        shown_posts: [],
+        add_new_posts: false,
+      },
     ];
     const tracked = trackState();
     render(<ProfileSectionsForm {...withThree} onChange={tracked.onChange} />);
@@ -384,5 +392,53 @@ describe("ProfileSectionsForm", () => {
       return current;
     });
     expect(text).toContain(staleBlob);
+  });
+
+  it("adds a posts section that takes new posts by default", () => {
+    const withPosts = props();
+    withPosts.tabs = [{ name: "Home", sections: [] }];
+    withPosts.sections = [];
+    withPosts.posts = [
+      { id: "post-a", slug: "post-a", name: "Post A", published_at: null },
+      { id: "post-b", slug: "post-b", name: "Post B", published_at: null },
+    ];
+    const tracked = trackState();
+    render(<ProfileSectionsForm {...withPosts} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add section" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Posts" }));
+
+    // Like a products section, a new posts section starts with the creator's published posts and
+    // keeps taking the ones published after it.
+    expect(tracked.latest().sections[0]).toMatchObject({
+      type: "SellerProfilePostsSection",
+      shown_posts: ["post-a", "post-b"],
+      add_new_posts: true,
+    });
+  });
+
+  it("selects and clears every published post on a posts section", () => {
+    const withPosts = props();
+    withPosts.posts = [
+      { id: "post-a", slug: "post-a", name: "Post A", published_at: null },
+      { id: "post-b", slug: "post-b", name: "Post B", published_at: null },
+    ];
+    const tracked = trackState();
+    render(<ProfileSectionsForm {...withPosts} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect(tracked.latest().sections[0]).toMatchObject({ shown_posts: ["post-a", "post-b"] });
+
+    fireEvent.click(screen.getByRole("button", { name: "Deselect all" }));
+    expect(tracked.latest().sections[0]).toMatchObject({ shown_posts: [] });
+  });
+
+  it("turns taking new posts by default on from the section", () => {
+    const tracked = trackState();
+    render(<ProfileSectionsForm {...props()} onChange={tracked.onChange} />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Add new posts by default" }));
+
+    expect(tracked.latest().sections[0]).toMatchObject({ add_new_posts: true });
   });
 });

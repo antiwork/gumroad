@@ -268,7 +268,7 @@ class InstallmentPresenter
         timezone: ActiveSupport::TimeZone[seller.timezone].now.strftime("%Z"),
         currency_type: seller.currency_type.to_s,
         countries: ([Compliance::Countries::USA.common_name] + Compliance::Countries.for_select.map(&:last)).uniq,
-        profile_sections: seller.seller_profile_posts_sections.map { { id: _1.external_id, name: _1.header } },
+        profile_sections: seller.seller_profile_posts_sections.map { { id: _1.external_id, name: _1.header, add_new_posts: _1.add_new_posts } },
         has_scheduled_emails: Installment.alive.not_workflow_installment.scheduled.where(seller:).exists?,
         emailed_posts: emailed_post_options(saved_post_ids),
         aws_access_key_id: AWS_ACCESS_KEY,

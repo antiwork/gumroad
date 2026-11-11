@@ -73,6 +73,9 @@ class SaveInstallmentService
       installment.save
     end
 
+    # Only the sections the seller picked change. The post editor starts those switches from each
+    # section's "add new posts by default" flag, so a section the seller unticked there keeps the
+    # post out even though the flag is on.
     def update_profile_posts_sections!
       seller.with_profile_sections_lock do
         seller.seller_profile_posts_sections.reload.each do |section|

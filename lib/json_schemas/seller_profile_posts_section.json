@@ -8,6 +8,10 @@
         "type": "integer"
       },
       "uniqueItems": true
+    },
+    "add_new_posts": {
+      "type": "boolean",
+      "default": false
     }
   },
   "required": ["shown_posts"],

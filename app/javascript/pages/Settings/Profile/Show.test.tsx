@@ -281,3 +281,43 @@ describe("Profile settings design tab", () => {
     expect(checkedRadio("Color presets")).toEqual(["Default"]);
   });
 });
+
+describe("Profile settings pages tab", () => {
+  it("sends the posts the editor displayed with each posts section", async () => {
+    const props = pageProps(settings());
+    page.set({
+      ...props,
+      editable_profile: {
+        ...props.editable_profile,
+        tabs: [{ name: "Home", sections: ["section-1"] }],
+        sections: [
+          {
+            id: "section-1",
+            type: "SellerProfilePostsSection",
+            header: "",
+            hide_header: true,
+            shown_posts: [],
+            add_new_posts: false,
+          },
+        ],
+        posts: [
+          { id: "post-a", slug: "post-a", name: "Post A", published_at: null },
+          { id: "post-b", slug: "post-b", name: "Post B", published_at: null },
+        ],
+      },
+    });
+    render(
+      <UserAgentProvider value={{ isMobile: false, locale: "en" }}>
+        <SettingsPage />
+      </UserAgentProvider>,
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Pages" }));
+    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Update profile" }));
+
+    await waitFor(() => expect(request).toHaveBeenCalledOnce());
+    expect(request.mock.calls[0]?.[0].data.sections).toEqual([
+      expect.objectContaining({ shown_posts: ["post-a", "post-b"], displayed_posts: ["post-a", "post-b"] }),
+    ]);
+  });
+});

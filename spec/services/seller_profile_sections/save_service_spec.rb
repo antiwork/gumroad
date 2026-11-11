@@ -34,6 +34,14 @@ describe SellerProfileSections::SaveService do
       )
     end
 
+    it "creates a posts section from the editor's payload without storing displayed_posts" do
+      post = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      section = service.create!(section_params(type: "SellerProfilePostsSection", header: "Posts", shown_posts: [post.external_id], displayed_posts: [post.external_id], add_new_posts: true))
+
+      expect(section.reload).to have_attributes(shown_posts: [post.id], add_new_posts: true)
+      expect(section.json_data).not_to have_key("displayed_posts")
+    end
+
     it "derives hide_header from the header: a blank header hides the name" do
       with_name = service.create!(section_params(type: "SellerProfileSubscribeSection", header: "Subscribe", button_label: "Follow"))
       without_name = service.create!(section_params(type: "SellerProfileSubscribeSection", header: "", button_label: "Follow"))
@@ -123,6 +131,27 @@ describe SellerProfileSections::SaveService do
       service.update!(posts_section, section_params(shown_posts: [post.external_id], header: "B!"), allow_shown_posts: true)
 
       expect(posts_section.reload).to have_attributes(shown_posts: [post.id], header: "B!")
+    end
+
+    it "keeps a scheduled post the editor cannot list when shown_posts is saved" do
+      published = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      scheduled = create(:installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true, published_at: nil)
+      posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [published.id, scheduled.id])
+
+      service.update!(posts_section, section_params(shown_posts: [published.external_id], header: "B!"), allow_shown_posts: true)
+
+      expect(posts_section.reload).to have_attributes(shown_posts: [published.id, scheduled.id], header: "B!")
+    end
+
+    it "drops ids whose post is gone when shown_posts is saved" do
+      published = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+      deleted = create(:installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true, published_at: nil)
+      posts_section = create(:seller_profile_posts_section, seller:, shown_posts: [published.id, deleted.id])
+      deleted.update!(deleted_at: Time.current)
+
+      service.update!(posts_section, section_params(shown_posts: [published.external_id]), allow_shown_posts: true)
+
+      expect(posts_section.reload.shown_posts).to eq([published.id])
     end
 
     it "processes rich text content with the existing content as old content" do

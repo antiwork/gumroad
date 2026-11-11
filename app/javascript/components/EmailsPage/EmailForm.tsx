@@ -243,8 +243,10 @@ export const EmailForm = ({ context, installment, singleCustomerRecipient = null
     email: installment?.send_emails ?? hasAudience,
     profile: installment?.shown_on_profile ?? true,
   });
+  // A new post starts in the sections that take new posts by default; the seller can untick them.
   const [shownInProfileSections, setShownInProfileSections] = React.useState(
-    installment?.shown_in_profile_sections ?? [],
+    installment?.shown_in_profile_sections ??
+      context.profile_sections.filter((section) => section.add_new_posts).map((section) => section.id),
   );
   const [affiliatedProducts, setAffiliatedProducts] = React.useState<string[]>(installment?.affiliate_products ?? []);
   const [waitlisted, setWaitlisted] = React.useState<string[]>(installment?.waitlisted_products ?? []);

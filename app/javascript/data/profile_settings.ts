@@ -23,6 +23,7 @@ export type ProductsSection = Section & {
 export type PostsSection = Section & {
   type: "SellerProfilePostsSection";
   shown_posts: string[];
+  add_new_posts: boolean;
 };
 
 export type RichTextSection = Section & {
@@ -62,6 +63,8 @@ export const updateProfileSettings = async (
     custom_html?: string | null;
     tabs?: Tab[];
     sections?: ProfileSection[];
+    // Ids of the posts the editor listed, so the server leaves other posts in a posts section alone.
+    displayedPostIds?: string[];
     profileVersion?: string | null;
   },
 ) => {
@@ -69,6 +72,7 @@ export const updateProfileSettings = async (
     profile_picture_blob_id,
     tabs,
     sections,
+    displayedPostIds,
     profileVersion,
     font,
     background_color,
@@ -94,7 +98,15 @@ export const updateProfileSettings = async (
       // doesn't replace (and prune) the server's section list. When they are sent, profile_version
       // lets the server reject the write if the layout changed elsewhere since this editor loaded.
       ...(tabs !== undefined ? { tabs } : {}),
-      ...(sections !== undefined ? { sections } : {}),
+      ...(sections !== undefined
+        ? {
+            sections: sections.map((section) =>
+              section.type === "SellerProfilePostsSection"
+                ? { ...section, displayed_posts: displayedPostIds }
+                : section,
+            ),
+          }
+        : {}),
       ...(profileVersion !== undefined ? { profile_version: profileVersion } : {}),
     },
   });

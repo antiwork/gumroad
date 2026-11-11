@@ -243,20 +243,54 @@ describe Settings::ProfileController, :vcr, type: :controller, inertia: true do
         expect(seller.reload.seller_profile.json_data["tabs"]).to eq [{ name: "Tab 1", sections: [existing.id, new_section.id] }].as_json
       end
 
-      it "updates shown_posts on an existing posts section" do
+      it "updates shown_posts and add_new_posts on an existing posts section" do
         post1 = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
         post2 = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
         existing = create(:seller_profile_posts_section, seller:, header: "Old", shown_posts: [post1.id])
         seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [existing.id] }] })
 
         put :update, params: {
-          sections: [{ id: existing.external_id, header: "Updated", shown_posts: [post1.external_id, post2.external_id] }],
+          sections: [{ id: existing.external_id, header: "Updated", shown_posts: [post1.external_id, post2.external_id], add_new_posts: true }],
           tabs: [{ name: "Tab 1", sections: [existing.external_id] }],
           profile_version: seller.seller_profile.layout_version,
         }, as: :json
 
         expect(response).to have_http_status :see_other
-        expect(existing.reload).to have_attributes(header: "Updated", shown_posts: [post1.id, post2.id])
+        expect(existing.reload).to have_attributes(header: "Updated", shown_posts: [post1.id, post2.id], add_new_posts: true)
+      end
+
+      it "keeps a post published after the editor loaded and removes only the displayed posts the seller unticked" do
+        shown = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+        unticked = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+        scheduled = create(:installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true, published_at: nil)
+        existing = create(:seller_profile_posts_section, seller:, shown_posts: [shown.id, unticked.id, scheduled.id])
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [existing.id] }] })
+        scheduled.update!(published_at: Time.current)
+
+        put :update, params: {
+          sections: [{ id: existing.external_id, shown_posts: [shown.external_id], displayed_posts: [shown.external_id, unticked.external_id] }],
+          tabs: [{ name: "Tab 1", sections: [existing.external_id] }],
+          profile_version: seller.seller_profile.layout_version,
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(existing.reload.shown_posts).to eq([shown.id, scheduled.id])
+      end
+
+      it "keeps undisplayed posts and drops deleted ones when the editor displayed no posts" do
+        undisplayed = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true)
+        deleted = create(:published_installment, installment_type: Installment::AUDIENCE_TYPE, seller:, shown_on_profile: true, deleted_at: Time.current)
+        existing = create(:seller_profile_posts_section, seller:, shown_posts: [undisplayed.id, deleted.id])
+        seller.seller_profile.update!(json_data: { tabs: [{ name: "Tab 1", sections: [existing.id] }] })
+
+        put :update, params: {
+          sections: [{ id: existing.external_id, shown_posts: [], displayed_posts: [] }],
+          tabs: [{ name: "Tab 1", sections: [existing.external_id] }],
+          profile_version: seller.seller_profile.layout_version,
+        }, as: :json
+
+        expect(response).to have_http_status :see_other
+        expect(existing.reload.shown_posts).to eq([undisplayed.id])
       end
 
       it "destroys sections that no tab references anymore" do

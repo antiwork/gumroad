@@ -257,6 +257,19 @@ describe("EmailForm", () => {
     );
     expect(saveDisabled()).toBe(false);
   });
+
+  it("starts a new post in the sections that take new posts by default", () => {
+    renderForm(null, {
+      ...context,
+      profile_sections: [
+        { id: "default-on", name: "Read Posts", add_new_posts: true },
+        { id: "default-off", name: "Archive", add_new_posts: false },
+      ],
+    });
+
+    expect(screen.getByRole("switch", { name: "Read Posts" })).toHaveProperty("checked", true);
+    expect(screen.getByRole("switch", { name: "Archive" })).toHaveProperty("checked", false);
+  });
 });
 
 describe("EmailForm unsaved-changes guard", () => {

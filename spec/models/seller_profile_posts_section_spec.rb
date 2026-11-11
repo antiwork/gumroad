@@ -17,4 +17,15 @@ describe SellerProfilePostsSection do
       expect(section.errors.full_messages.to_sentence).to eq("The property '#/' contains additional properties [\"garbage\"] outside of the schema when none are allowed")
     end
   end
+
+  describe "#add_new_posts" do
+    it "reads false for a section written before the flag existed, and still saves" do
+      section = create(:seller_profile_posts_section)
+      section.json_data = { "shown_posts" => [] }
+
+      expect(section.add_new_posts).to be(false)
+      expect(section.save).to be(true)
+      expect(section.reload.add_new_posts).to be(false)
+    end
+  end
 end

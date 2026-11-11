@@ -495,24 +495,44 @@ const PostsSectionFields = ({
         : [...section.shown_posts, id],
     });
 
+  const allShown = state.posts.every((post) => section.shown_posts.includes(post.id));
+
   return (
-    <Fieldset>
-      <FieldsetTitle>Posts</FieldsetTitle>
-      {state.posts.length ? (
-        <Rows role="list" aria-label="Posts">
-          {state.posts.map((post) => (
-            <OptionRow
-              key={post.id}
-              name={post.name}
-              checked={section.shown_posts.includes(post.id)}
-              onToggle={() => togglePost(post.id)}
-            />
-          ))}
-        </Rows>
-      ) : (
-        <p>No published profile posts available.</p>
-      )}
-    </Fieldset>
+    <>
+      <Switch
+        checked={section.add_new_posts}
+        onChange={() => update({ ...section, add_new_posts: !section.add_new_posts })}
+        label="Add new posts by default"
+      />
+      <Fieldset>
+        <FieldsetTitle>
+          Posts
+          {state.posts.length ? (
+            <button
+              type="button"
+              className="cursor-pointer border-none bg-transparent p-0 text-sm font-normal underline"
+              onClick={() => update({ ...section, shown_posts: allShown ? [] : state.posts.map((post) => post.id) })}
+            >
+              {allShown ? "Deselect all" : "Select all"}
+            </button>
+          ) : null}
+        </FieldsetTitle>
+        {state.posts.length ? (
+          <Rows role="list" aria-label="Posts">
+            {state.posts.map((post) => (
+              <OptionRow
+                key={post.id}
+                name={post.name}
+                checked={section.shown_posts.includes(post.id)}
+                onToggle={() => togglePost(post.id)}
+              />
+            ))}
+          </Rows>
+        ) : (
+          <p>No published profile posts available.</p>
+        )}
+      </Fieldset>
+    </>
   );
 };
 
@@ -780,6 +800,7 @@ export const ProfileSectionsForm = ({ onChange, disabled = false, ...props }: Pr
           ...commonProps,
           type,
           shown_posts: props.posts.map((post) => post.id),
+          add_new_posts: true,
         };
       case "SellerProfileRichTextSection":
         return {

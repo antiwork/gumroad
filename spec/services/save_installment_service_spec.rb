@@ -341,6 +341,22 @@ describe SaveInstallmentService do
     end
 
     include_examples "updates profile posts sections"
+
+    it "adds a post created from now on to the section the post editor submitted" do
+      section = create(:seller_profile_posts_section, seller:, shown_posts: [2000], add_new_posts: true)
+
+      described_class.new(seller:, installment:, params: params.deep_merge(installment: { shown_in_profile_sections: [section.external_id] }), preview_email_recipient:).process
+
+      expect(section.reload.shown_posts).to eq([2000, Installment.last.id])
+    end
+
+    it "keeps a new post out of a section that takes new posts by default but the seller unticked" do
+      section = create(:seller_profile_posts_section, seller:, shown_posts: [], add_new_posts: true)
+
+      described_class.new(seller:, installment:, params: params.deep_merge(installment: { shown_in_profile_sections: [] }), preview_email_recipient:).process
+
+      expect(section.reload.shown_posts).to eq([])
+    end
   end
 
   context "when installment is present" do
