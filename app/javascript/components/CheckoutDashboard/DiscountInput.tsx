@@ -22,8 +22,9 @@ export const DiscountInput = React.forwardRef<
     currencyCode: CurrencyCode;
     currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void } | undefined;
     disableFixedAmount?: boolean;
+    ariaDescribedBy?: string | undefined;
   }
->(({ discount, setDiscount, currencyCode, currencyCodeSelector, disableFixedAmount }, ref) => {
+>(({ discount, setDiscount, currencyCode, currencyCodeSelector, disableFixedAmount, ariaDescribedBy }, ref) => {
   const fixedAmountFieldset = (
     <Fieldset state={discount.type === "cents" && discount.error ? "danger" : undefined}>
       <div className="grid items-center gap-4 md:grid-cols-[auto_1fr]!">
@@ -47,6 +48,7 @@ export const DiscountInput = React.forwardRef<
           disabled={disableFixedAmount || discount.type !== "cents"}
           hasError={discount.error ?? false}
           ariaLabel="Fixed amount"
+          ariaDescribedBy={discount.type === "cents" ? ariaDescribedBy : undefined}
         />
       </div>
     </Fieldset>
@@ -87,6 +89,7 @@ export const DiscountInput = React.forwardRef<
                   disabled={discount.type !== "percent"}
                   aria-label="Percentage"
                   aria-invalid={discount.error}
+                  aria-describedby={discount.type === "percent" ? ariaDescribedBy : undefined}
                   {...props}
                 />
               )}

@@ -132,10 +132,39 @@ describe("DiscountsPage save validation", () => {
     save();
 
     expect(validUntil.closest("fieldset")?.textContent).toContain(message);
+    expect(validUntil.getAttribute("aria-describedby")).toBe(screen.getByText(message).id);
 
     fireEvent.change(validUntil, { target: { value: "2999-01-01T00:00" } });
     fireEvent.blur(validUntil);
     expect(screen.queryByText(message)).toBeNull();
+    expect(validUntil.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it.each([
+    [
+      "Valid from is moved before the end date",
+      () => {
+        const validFrom = screen.getByLabelText("Valid from");
+        fireEvent.change(validFrom, { target: { value: "2019-01-01T00:00" } });
+        fireEvent.blur(validFrom);
+      },
+    ],
+    ["No end date is chosen", () => fireEvent.click(screen.getByLabelText("No end date"))],
+  ])("clears the date reason when %s", (_name, correct) => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Limit validity period"));
+    fireEvent.click(screen.getByLabelText("No end date"));
+
+    const message = "The discount code's start date must be earlier than its end date.";
+    const validUntil = screen.getByLabelText("Valid until");
+    fireEvent.change(validUntil, { target: { value: "2020-01-01T00:00" } });
+    fireEvent.blur(validUntil);
+    save();
+    expect(screen.getByText(message)).toBeTruthy();
+
+    correct();
+    expect(screen.queryByText(message)).toBeNull();
+    expect(validUntil.getAttribute("aria-invalid")).not.toBe("true");
   });
 
   it("shows the amount and tier reasons inline", () => {
@@ -143,7 +172,7 @@ describe("DiscountsPage save validation", () => {
     const percentage = screen.getByRole("textbox", { name: "Percentage" });
     fireEvent.change(percentage, { target: { value: "" } });
     save();
-    expect(screen.getByText("Please enter a discount amount.")).toBeTruthy();
+    expect(percentage.getAttribute("aria-describedby")).toBe(screen.getByText("Please enter a discount amount.").id);
     fireEvent.change(percentage, { target: { value: "10" } });
     expect(screen.queryByText("Please enter a discount amount.")).toBeNull();
 
@@ -151,7 +180,9 @@ describe("DiscountsPage save validation", () => {
     const tierPercentage = screen.getByLabelText("Tier 1 percentage");
     fireEvent.change(tierPercentage, { target: { value: "" } });
     save();
-    expect(screen.getByText("Each tier percentage must be between 0 and 100.")).toBeTruthy();
+    expect(tierPercentage.getAttribute("aria-describedby")).toBe(
+      screen.getByText("Each tier percentage must be between 0 and 100.").id,
+    );
     fireEvent.change(tierPercentage, { target: { value: "5" } });
     expect(screen.queryByText("Each tier percentage must be between 0 and 100.")).toBeNull();
   });

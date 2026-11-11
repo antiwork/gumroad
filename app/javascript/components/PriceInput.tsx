@@ -52,7 +52,7 @@ export const PriceInput = React.forwardRef<
     placeholder?: string;
     hasError?: boolean;
     ariaLabel?: string;
-    ariaDescribedBy?: string;
+    ariaDescribedBy?: string | undefined;
     onBlur?: () => void;
     disabled?: boolean;
     suffix?: React.ReactNode;

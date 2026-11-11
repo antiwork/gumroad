@@ -902,6 +902,7 @@ const TierField = ({
   onChange,
   ariaLabel,
   ariaInvalid,
+  ariaDescribedBy,
   suffix,
   onBlur,
   inputRef,
@@ -910,6 +911,7 @@ const TierField = ({
   onChange: (value: number | null) => void;
   ariaLabel: string;
   ariaInvalid: boolean;
+  ariaDescribedBy?: string | undefined;
   suffix: string;
   onBlur?: () => void;
   inputRef?: (node: HTMLInputElement | null) => void;
@@ -924,6 +926,7 @@ const TierField = ({
           className="w-12 !px-0 text-center tabular-nums"
           maxLength={3}
           aria-invalid={ariaInvalid}
+          aria-describedby={ariaInvalid ? ariaDescribedBy : undefined}
           onBlur={onBlur}
         />
       )}
@@ -1209,6 +1212,9 @@ const Form = ({
   const expiresAtErrorMessage = "The discount code's start date must be earlier than its end date.";
   const minimumAmountErrorMessage = "Please enter a minimum amount.";
   const minimumQuantityErrorMessage = "Please enter a minimum quantity.";
+
+  // Derived, so correcting "Valid from" or choosing no end date clears it too.
+  const isExpiresAtErrorShown = !!expiresAt.error && !hasNoEndDate && validAt > expiresAt.value;
 
   const handleSubmit = () => {
     const isNameInvalid = name.value === "";
@@ -1564,6 +1570,7 @@ const Form = ({
               <FieldsetTitle>Type</FieldsetTitle>
               <DiscountInput
                 ref={discountFieldRef}
+                ariaDescribedBy={discount.error ? `${uid}discountError` : undefined}
                 discount={discount}
                 setDiscount={setDiscount}
                 currencyCode={currencyCode}
@@ -1582,7 +1589,9 @@ const Form = ({
                 }
               />
               {discount.error ? (
-                <FieldsetDescription className="text-danger">{discountErrorMessage}</FieldsetDescription>
+                <FieldsetDescription id={`${uid}discountError`} className="text-danger">
+                  {discountErrorMessage}
+                </FieldsetDescription>
               ) : null}
             </Fieldset>
           )}
@@ -1625,11 +1634,14 @@ const Form = ({
                         id={`${uid}quantity`}
                         placeholder="0"
                         aria-invalid={maxQuantity.error}
+                        aria-describedby={maxQuantity.error ? `${uid}quantityError` : undefined}
                         {...props}
                       />
                     )}
                   </NumberInput>
-                  {maxQuantity.error ? <FieldsetDescription>{maxQuantityErrorMessage}</FieldsetDescription> : null}
+                  {maxQuantity.error ? (
+                    <FieldsetDescription id={`${uid}quantityError`}>{maxQuantityErrorMessage}</FieldsetDescription>
+                  ) : null}
                   <p className="text-muted-foreground text-sm">
                     {discount.type === "cents" && !useTieredDiscounts && oncePerCart
                       ? "Each checkout uses one, regardless of the number of items."
@@ -1664,7 +1676,7 @@ const Form = ({
                     No end date
                   </Label>
                 </Fieldset>
-                <Fieldset state={expiresAt.error ? "danger" : undefined}>
+                <Fieldset state={isExpiresAtErrorShown ? "danger" : undefined}>
                   <FieldsetTitle>
                     <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
                   </FieldsetTitle>
@@ -1677,9 +1689,12 @@ const Form = ({
                       if (value) setExpiresAt({ value });
                     }}
                     disabled={hasNoEndDate}
-                    aria-invalid={expiresAt.error ?? false}
+                    aria-invalid={isExpiresAtErrorShown}
+                    aria-describedby={isExpiresAtErrorShown ? `${uid}expiresAtError` : undefined}
                   />
-                  {expiresAt.error ? <FieldsetDescription>{expiresAtErrorMessage}</FieldsetDescription> : null}
+                  {isExpiresAtErrorShown ? (
+                    <FieldsetDescription id={`${uid}expiresAtError`}>{expiresAtErrorMessage}</FieldsetDescription>
+                  ) : null}
                 </Fieldset>
               </Dropdown>
             </Details>
@@ -1792,6 +1807,7 @@ const Form = ({
                             value={tier.amountPercentage}
                             ariaLabel={`Tier ${index + 1} percentage`}
                             ariaInvalid={!!tier.percentError}
+                            ariaDescribedBy={tierErrorMessage ? `${uid}tiersError` : undefined}
                             suffix="%"
                             inputRef={(node) => setTierFieldNode(`${tier.id}:percentage`, node)}
                             onChange={(value) => {
@@ -1817,6 +1833,7 @@ const Form = ({
                                 value={tier.months}
                                 ariaLabel={`Tier ${index + 1} starting month`}
                                 ariaInvalid={!!tier.monthsError}
+                                ariaDescribedBy={tierErrorMessage ? `${uid}tiersError` : undefined}
                                 suffix="months"
                                 inputRef={(node) => setTierFieldNode(`${tier.id}:months`, node)}
                                 onBlur={sortTiersByMonths}
@@ -1832,7 +1849,9 @@ const Form = ({
                     ))}
                   </div>
                   {tierErrorMessage ? (
-                    <FieldsetDescription className="text-danger">{tierErrorMessage}</FieldsetDescription>
+                    <FieldsetDescription id={`${uid}tiersError`} className="text-danger">
+                      {tierErrorMessage}
+                    </FieldsetDescription>
                   ) : null}
                   <Button
                     onClick={() => {
@@ -1871,8 +1890,13 @@ const Form = ({
                     onChange={(value) => setMinimumAmount({ value })}
                     placeholder="0"
                     hasError={minimumAmount.error ?? false}
+                    ariaDescribedBy={minimumAmount.error ? `${uid}minimumAmountError` : undefined}
                   />
-                  {minimumAmount.error ? <FieldsetDescription>{minimumAmountErrorMessage}</FieldsetDescription> : null}
+                  {minimumAmount.error ? (
+                    <FieldsetDescription id={`${uid}minimumAmountError`}>
+                      {minimumAmountErrorMessage}
+                    </FieldsetDescription>
+                  ) : null}
                 </Fieldset>
               </Dropdown>
             </Details>
@@ -1901,12 +1925,15 @@ const Form = ({
                         id={`${uid}minimumQuantity`}
                         placeholder="0"
                         aria-invalid={minimumQuantity.error}
+                        aria-describedby={minimumQuantity.error ? `${uid}minimumQuantityError` : undefined}
                         {...props}
                       />
                     )}
                   </NumberInput>
                   {minimumQuantity.error ? (
-                    <FieldsetDescription>{minimumQuantityErrorMessage}</FieldsetDescription>
+                    <FieldsetDescription id={`${uid}minimumQuantityError`}>
+                      {minimumQuantityErrorMessage}
+                    </FieldsetDescription>
                   ) : null}
                 </Fieldset>
               </Dropdown>
