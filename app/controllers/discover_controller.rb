@@ -3,6 +3,7 @@
 class DiscoverController < ApplicationController
   RECOMMENDED_PRODUCTS_COUNT = 8
   INITIAL_PRODUCTS_COUNT = 36
+  ROOT_HEADING = "Discover digital products from independent creators"
 
   include ActionView::Helpers::NumberHelper, RecommendationType, CreateDiscoverSearch,
           DiscoverCuratedProducts, SearchProducts, AffiliateCookie
@@ -258,14 +259,16 @@ class DiscoverController < ApplicationController
     def prepare_category_seo(search_results:)
       if taxonomy.blank? && params.values_at(:query, :tags).all?(&:blank?)
         @discover_category_links = Discover::CategoryPagePresenter.root_category_links
-        # The Discover app renders client-side, so the served HTML has no heading at all.
-        # This is only used by the noscript crawl fallback in discover/seo_links.
-        @discover_seo_heading = "Discover"
+        # Must equal ROOT_HEADING in pages/Discover/Index.tsx, the <h1> the app renders.
+        @discover_seo_heading = ROOT_HEADING
         return
       end
-      return unless category_seo_page?
+      return if taxonomy.blank?
 
       presenter = Discover::CategoryPagePresenter.new(taxonomy_path: params[:taxonomy], taxonomy:, search_results:)
+      # The app renders the trail as the <h1> on filtered category pages too.
+      @discover_seo_heading = presenter.heading
+      return unless category_seo_page?
 
       set_meta_tag(title: presenter.title)
       set_meta_tag(property: "og:title", content: presenter.title)
@@ -278,7 +281,6 @@ class DiscoverController < ApplicationController
 
       @discover_category_links = presenter.subcategory_links
       @discover_pagination_links = pagination_links(search_results:)
-      @discover_seo_heading = presenter.heading
       @discover_seo_description = presenter.meta_description
     end
 

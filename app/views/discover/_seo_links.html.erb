@@ -2,8 +2,7 @@
     pagination hrefs, in the initial HTML for crawlers that don't execute JS. noscript keeps
     it out of the rendered UI. %>
 <noscript>
-  <%# The Discover app renders its own heading client-side; this one exists so the served
-      HTML is not heading-less for a fetcher that does not run JavaScript. %>
+  <%# Same text as the <h1> the Discover app renders, for a fetcher that does not run JavaScript. %>
   <% if @discover_seo_heading.present? %>
     <h1><%= @discover_seo_heading %></h1>
   <% end %>

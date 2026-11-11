@@ -21,10 +21,10 @@ class Discover::CategoryPagePresenter
     "#{labels.join(" » ")} — digital products by independent creators | Gumroad"
   end
 
-  # Heading for the crawl fallback: the taxonomy trail on its own, without the branding the
-  # <title> carries. A page heading repeating "| Gumroad" reads as keyword stuffing.
+  # The taxonomy trail on its own, without the branding the <title> carries. Must equal the
+  # text of the <h1> the Discover app renders (TaxonomyCategoryBreadcrumbs).
   def heading
-    labels.join(" » ")
+    labels.join(" / ")
   end
 
   def meta_description
