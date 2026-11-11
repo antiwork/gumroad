@@ -106,6 +106,15 @@ describe "product page crawl fallback", type: :request do
       expect(noscript_fallback.text).to include("by </noscript><script>alert(1)</script>")
     end
 
+    it "leaves out description text the product page does not show" do
+      product.update!(description: "<p>Shown copy</p><table><tr><td>Hidden cell</td></tr></table>")
+
+      get_product(product)
+
+      expect(noscript_fallback.text).to include("Shown copy")
+      expect(noscript_fallback.text).not_to include("Hidden cell")
+    end
+
     it "does not truncate a long description" do
       long_description = Array.new(2_000) { |i| "word#{i}" }.join(" ")
       product = create(:product, user: seller, description: "<p>#{long_description}</p>")
