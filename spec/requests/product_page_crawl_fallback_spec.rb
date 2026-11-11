@@ -72,6 +72,16 @@ describe "product page crawl fallback", type: :request do
       expect(noscript_fallback.text).not_to include("$15")
     end
 
+    it "leaves out the price instead of failing for a product with no stored currency" do
+      product.update_column(:price_currency_type, nil)
+
+      get_product(product)
+
+      expect(response).to have_http_status(:ok)
+      expect(noscript_fallback.at_css("h1").text).to eq("Crawlable Product")
+      expect(noscript_fallback.css("p").map { _1.text.strip }).to eq(["by Fallback Seller", "First paragraph", "Second paragraph"])
+    end
+
     it "cannot be made to close the noscript element from the description" do
       product = create(
         :product,

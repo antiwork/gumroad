@@ -1449,7 +1449,8 @@ class LinksController < ApplicationController
       @seo_product_fallback = {
         name: @product.name,
         seller: @product.user.name_or_username,
-        price: @product.price_formatted_verbose(for_default_duration: true, discounted: true),
+        # Legacy rows can have no currency, which the price formatter cannot quote.
+        price: (@product.price_formatted_verbose(for_default_duration: true, discounted: true) if @product.price_currency_type.present?),
         description: helpers.simple_format(ERB::Util.html_escape(plain_description), {}, sanitize: false),
       }
     end
