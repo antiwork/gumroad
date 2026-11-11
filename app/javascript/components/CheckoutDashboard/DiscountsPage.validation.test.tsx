@@ -142,4 +142,18 @@ describe("DiscountsPage save validation", () => {
     expect(mocks.showAlert).toHaveBeenCalledWith("Each tier percentage must be between 0 and 100.", "error");
     expect(document.activeElement).toBe(tierPercentage);
   });
+
+  it("reports the tier percentage before the starting month when both are cleared", () => {
+    openEditor();
+    fireEvent.click(screen.getByLabelText("Tier discount by ownership duration"));
+    fireEvent.click(screen.getByRole("button", { name: "Add tier" }));
+
+    const tierPercentage = screen.getByLabelText("Tier 2 percentage");
+    fireEvent.change(tierPercentage, { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Tier 2 starting month"), { target: { value: "" } });
+    save();
+
+    expect(mocks.showAlert).toHaveBeenCalledWith("Each tier percentage must be between 0 and 100.", "error");
+    expect(document.activeElement).toBe(tierPercentage);
+  });
 });

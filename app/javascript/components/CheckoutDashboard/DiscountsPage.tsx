@@ -1231,15 +1231,15 @@ const Form = ({
         const monthsError = !monthsValid || duplicate;
         const percentError = !percentValid;
         if (monthsError || percentError) isTiersInvalid = true;
-        if (monthsError && !firstTierError) {
+        if (percentError && !firstTierError) {
+          firstTierError = { key: `${tier.id}:percentage`, message: "Each tier percentage must be between 0 and 100." };
+        } else if (monthsError && !firstTierError) {
           firstTierError = {
             key: `${tier.id}:months`,
             message: duplicate
               ? "Each tier needs a different starting month."
               : "Each tier must start at a whole number of months (0 or more).",
           };
-        } else if (percentError && !firstTierError) {
-          firstTierError = { key: `${tier.id}:percentage`, message: "Each tier percentage must be between 0 and 100." };
         }
         return { ...tier, monthsError, percentError };
       });
