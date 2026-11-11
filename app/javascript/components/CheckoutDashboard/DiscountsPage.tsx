@@ -926,7 +926,7 @@ const TierField = ({
           className="w-12 !px-0 text-center tabular-nums"
           maxLength={3}
           aria-invalid={ariaInvalid}
-          aria-describedby={ariaInvalid ? ariaDescribedBy : undefined}
+          aria-describedby={ariaDescribedBy}
           onBlur={onBlur}
         />
       )}
@@ -1154,12 +1154,11 @@ const Form = ({
     id: string;
     months: number | null;
     amountPercentage: number | null;
-    monthsError?: boolean;
-    percentError?: boolean;
+    monthsError?: string | null;
+    percentError?: string | null;
   };
   // A field that can take focus, paired with the reason it is invalid.
   type InvalidField = { ref: { current: { focus: () => void } | null }; message: string };
-  const [tierErrorMessage, setTierErrorMessage] = React.useState<string | null>(null);
   const [useTieredDiscounts, setUseTieredDiscounts] = React.useState(!!initialTiers?.length);
   const [tiers, setTiers] = React.useState<TierRow[]>(() => {
     if (initialTiers?.length) {
@@ -1172,10 +1171,10 @@ const Form = ({
     return [{ id: nextTierId(), months: 0, amountPercentage: 0 }];
   });
 
-  const updateTier = (id: string, patch: Partial<TierRow>) => {
-    setTierErrorMessage(null);
+  const updateTier = (id: string, patch: Partial<TierRow>) =>
     setTiers((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
-  };
+  // The first tier has no starting month input, so a problem with its start is reported on its percentage.
+  const tierMonthsFieldKey = (id: string, index: number) => `${id}:${index === 0 ? "percentage" : "months"}`;
   const byMonths = (a: TierRow, b: TierRow) => (a.months ?? Infinity) - (b.months ?? Infinity);
   const sortTiersByMonths = () =>
     setTiers((prev) => {
@@ -1213,15 +1212,16 @@ const Form = ({
   const minimumAmountErrorMessage = "Please enter a minimum amount.";
   const minimumQuantityErrorMessage = "Please enter a minimum quantity.";
 
+  const isExpiresAtBeforeValidAt = !hasNoEndDate && validAt >= expiresAt.value;
   // Derived, so correcting "Valid from" or choosing no end date clears it too.
-  const isExpiresAtErrorShown = !!expiresAt.error && !hasNoEndDate && validAt >= expiresAt.value;
+  const isExpiresAtErrorShown = !!expiresAt.error && isExpiresAtBeforeValidAt;
 
   const handleSubmit = () => {
     const isNameInvalid = name.value === "";
     const isCodeInvalid = code.value === "";
     const isDiscountInvalid = !useTieredDiscounts && discount.value === null;
     const isMaxQuantityInvalid = limitQuantity && maxQuantity.value === null;
-    const isExpiresAtInvalid = limitValidity && !hasNoEndDate && validAt >= expiresAt.value;
+    const isExpiresAtInvalid = limitValidity && isExpiresAtBeforeValidAt;
     const isSelectedProductsInvalid = !universal && selectedProductIds.value.length === 0;
     const isMinimumQuantityInvalid = hasMinimumQuantity && minimumQuantity.value === null;
     const isMinimumAmountInvalid = hasMinimumAmount && minimumAmount.value === null;
@@ -1233,7 +1233,7 @@ const Form = ({
     let firstTierError: { key: string; message: string } | null = null;
     if (useTieredDiscounts) {
       const seenMonths = new Set<number>();
-      tierErrors = tiers.map((tier) => {
+      tierErrors = tiers.map((tier, index) => {
         const monthsValid =
           tier.months !== null && Number.isFinite(tier.months) && tier.months >= 0 && Number.isInteger(tier.months);
         const duplicate = tier.months !== null && seenMonths.has(tier.months);
@@ -1243,26 +1243,32 @@ const Form = ({
           Number.isFinite(tier.amountPercentage) &&
           tier.amountPercentage >= 0 &&
           tier.amountPercentage <= 100;
-        const monthsError = !monthsValid || duplicate;
-        const percentError = !percentValid;
+        const monthsError =
+          tier.months === null
+            ? "Please enter a starting month."
+            : duplicate
+              ? "Each tier needs a different starting month."
+              : monthsValid
+                ? null
+                : "Each tier must start at a whole number of months (0 or more).";
+        const percentError = percentValid ? null : "Each tier percentage must be between 0 and 100.";
         if (monthsError || percentError) isTiersInvalid = true;
         if (percentError && !firstTierError) {
-          firstTierError = { key: `${tier.id}:percentage`, message: "Each tier percentage must be between 0 and 100." };
+          firstTierError = { key: `${tier.id}:percentage`, message: percentError };
         } else if (monthsError && !firstTierError) {
-          firstTierError = {
-            key: `${tier.id}:months`,
-            message: duplicate
-              ? "Each tier needs a different starting month."
-              : "Each tier must start at a whole number of months (0 or more).",
-          };
+          firstTierError = { key: tierMonthsFieldKey(tier.id, index), message: monthsError };
         }
         return { ...tier, monthsError, percentError };
       });
       const minMonths = Math.min(...tiers.map((tier) => tier.months ?? Infinity));
       if (minMonths !== 0) {
         isTiersInvalid = true;
-        const firstTier = tiers.find((tier) => (tier.months ?? Infinity) === minMonths);
-        firstTierError ??= { key: `${firstTier?.id}:months`, message: "The first tier must start at 0 months." };
+        const firstTierIndex = tierErrors.findIndex((tier) => (tier.months ?? Infinity) === minMonths);
+        const firstTier = tierErrors[firstTierIndex];
+        if (firstTier) {
+          firstTier.monthsError ??= "The first tier must start at 0 months.";
+          firstTierError ??= { key: tierMonthsFieldKey(firstTier.id, firstTierIndex), message: firstTier.monthsError };
+        }
       }
     }
 
@@ -1289,7 +1295,6 @@ const Form = ({
       setMinimumAmount((prev) => ({ ...prev, error: isMinimumAmountInvalid }));
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
       if (isTiersInvalid) setTiers(tierErrors);
-      setTierErrorMessage(firstTierError?.message ?? null);
 
       // In form order, so the topmost problem is the one that takes focus and the alert names it: a
       // filled-in field must not be reported as a field the seller has not filled out.
@@ -1792,10 +1797,7 @@ const Form = ({
                               type="button"
                               aria-label={`Remove tier ${index + 1}`}
                               className="cursor-pointer rounded p-1 all-unset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent sm:order-last sm:ml-auto"
-                              onClick={() => {
-                                setTierErrorMessage(null);
-                                setTiers((prev) => prev.filter((row) => row.id !== tier.id));
-                              }}
+                              onClick={() => setTiers((prev) => prev.filter((row) => row.id !== tier.id))}
                             >
                               <X className="size-5" />
                             </button>
@@ -1807,13 +1809,20 @@ const Form = ({
                             value={tier.amountPercentage}
                             ariaLabel={`Tier ${index + 1} percentage`}
                             ariaInvalid={!!tier.percentError}
-                            ariaDescribedBy={tierErrorMessage ? `${uid}tiersError` : undefined}
+                            ariaDescribedBy={
+                              [
+                                tier.percentError && `${uid}${tier.id}percentError`,
+                                index === 0 && tier.monthsError && `${uid}${tier.id}monthsError`,
+                              ]
+                                .filter(Boolean)
+                                .join(" ") || undefined
+                            }
                             suffix="%"
                             inputRef={(node) => setTierFieldNode(`${tier.id}:percentage`, node)}
                             onChange={(value) => {
                               updateTier(tier.id, {
                                 amountPercentage: value === null ? null : between(value, 0, 100),
-                                percentError: false,
+                                percentError: null,
                               });
                             }}
                           />
@@ -1833,26 +1842,37 @@ const Form = ({
                                 value={tier.months}
                                 ariaLabel={`Tier ${index + 1} starting month`}
                                 ariaInvalid={!!tier.monthsError}
-                                ariaDescribedBy={tierErrorMessage ? `${uid}tiersError` : undefined}
+                                ariaDescribedBy={tier.monthsError ? `${uid}${tier.id}monthsError` : undefined}
                                 suffix="months"
                                 inputRef={(node) => setTierFieldNode(`${tier.id}:months`, node)}
                                 onBlur={sortTiersByMonths}
                                 onChange={(value) => {
                                   if (value !== null && value < 0) return;
-                                  updateTier(tier.id, { months: value, monthsError: false });
+                                  updateTier(tier.id, { months: value, monthsError: null });
                                 }}
                               />
                             </>
                           ) : null}
                         </div>
+                        {tier.percentError ? (
+                          <FieldsetDescription
+                            id={`${uid}${tier.id}percentError`}
+                            className="mt-2 text-danger sm:mt-0 sm:basis-full"
+                          >
+                            {tier.percentError}
+                          </FieldsetDescription>
+                        ) : null}
+                        {tier.monthsError ? (
+                          <FieldsetDescription
+                            id={`${uid}${tier.id}monthsError`}
+                            className="mt-2 text-danger sm:mt-0 sm:basis-full"
+                          >
+                            {tier.monthsError}
+                          </FieldsetDescription>
+                        ) : null}
                       </div>
                     ))}
                   </div>
-                  {tierErrorMessage ? (
-                    <FieldsetDescription id={`${uid}tiersError`} className="text-danger">
-                      {tierErrorMessage}
-                    </FieldsetDescription>
-                  ) : null}
                   <Button
                     onClick={() => {
                       const maxMonths = Math.max(...tiers.map((tier) => tier.months ?? 0), 0);
