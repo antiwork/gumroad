@@ -51,7 +51,6 @@ class SaveInstallmentService
 
   private
     def save_installment
-      new_installment = installment.new_record?
       unless installment.published?
         installment.installment_type = installment_params[:installment_type]
         installment.base_variant = installment_params[:installment_type] == Installment::VARIANT_TYPE ? BaseVariant.find_by_external_id(params[:variant_external_id]) : nil
