@@ -14,27 +14,21 @@ import { WithTooltip } from "$app/components/WithTooltip";
 
 export type InputtedDiscount = { type: "percent" | "cents"; value: null | number; error?: boolean };
 
-export const DiscountInput = ({
-  discount,
-  setDiscount,
-  currencyCode,
-  currencyCodeSelector,
-  disableFixedAmount,
-  ref,
-}: {
-  discount: InputtedDiscount;
-  setDiscount: (newDiscount: InputtedDiscount) => void;
-  currencyCode: CurrencyCode;
-  currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void } | undefined;
-  disableFixedAmount?: boolean;
-  ref?: React.RefObject<HTMLInputElement>;
-}) => {
+export const DiscountInput = React.forwardRef<
+  HTMLInputElement,
+  {
+    discount: InputtedDiscount;
+    setDiscount: (newDiscount: InputtedDiscount) => void;
+    currencyCode: CurrencyCode;
+    currencyCodeSelector?: { options: CurrencyCode[]; onChange: (currencyCode: CurrencyCode) => void } | undefined;
+    disableFixedAmount?: boolean;
+  }
+>(({ discount, setDiscount, currencyCode, currencyCodeSelector, disableFixedAmount }, ref) => {
   const fixedAmountFieldset = (
     <Fieldset state={discount.type === "cents" && discount.error ? "danger" : undefined}>
       <div className="grid items-center gap-4 md:grid-cols-[auto_1fr]!">
         <Label>
           <Radio
-            ref={ref}
             checked={discount.type === "cents"}
             onChange={(evt) => {
               if (evt.target.checked) setDiscount({ type: "cents", value: 0 });
@@ -44,6 +38,7 @@ export const DiscountInput = ({
           Fixed amount
         </Label>
         <PriceInput
+          ref={discount.type === "cents" ? ref : undefined}
           currencyCode={currencyCode}
           currencyCodeSelector={currencyCodeSelector}
           cents={discount.type === "cents" ? discount.value : null}
@@ -84,6 +79,9 @@ export const DiscountInput = ({
             >
               {(props) => (
                 <Input
+                  // The ref points at whichever amount input is live, so a caller can focus the field
+                  // that is invalid.
+                  ref={discount.type === "percent" ? ref : undefined}
                   type="text"
                   placeholder="0"
                   disabled={discount.type !== "percent"}
@@ -106,4 +104,5 @@ export const DiscountInput = ({
       )}
     </div>
   );
-};
+});
+DiscountInput.displayName = "DiscountInput";

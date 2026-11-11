@@ -904,6 +904,7 @@ const TierField = ({
   ariaInvalid,
   suffix,
   onBlur,
+  inputRef,
 }: {
   value: number | null;
   onChange: (value: number | null) => void;
@@ -911,11 +912,13 @@ const TierField = ({
   ariaInvalid: boolean;
   suffix: string;
   onBlur?: () => void;
+  inputRef?: (node: HTMLInputElement | null) => void;
 }) => (
   <InputGroup className="w-fit">
     <NumberInput value={value} onChange={onChange}>
       {(inputProps) => (
         <Input
+          ref={inputRef}
           {...inputProps}
           aria-label={ariaLabel}
           className="w-12 !px-0 text-center tabular-nums"
@@ -1067,6 +1070,18 @@ const Form = ({
     value: offerCode?.ownership_products.map(({ id }) => id) ?? [],
   });
   const ownershipProductsFieldRef = React.useRef<SelectInstance<Option, true, GroupBase<Option>>>(null);
+  // Focus targets for the fields below that can fail validation without a message of their own.
+  const discountFieldRef = React.useRef<HTMLInputElement>(null);
+  const maxQuantityFieldRef = React.useRef<HTMLInputElement>(null);
+  const expiresAtFieldRef = React.useRef<HTMLInputElement>(null);
+  const minimumAmountFieldRef = React.useRef<HTMLInputElement>(null);
+  const minimumQuantityFieldRef = React.useRef<HTMLInputElement>(null);
+  // Keyed by row id and field name; only a row that is still rendered is ever looked up.
+  const tierFieldNodes = React.useRef(new Map<string, HTMLInputElement | null>());
+  const setTierFieldNode = (key: string, node: HTMLInputElement | null) => {
+    if (node) tierFieldNodes.current.set(key, node);
+    else tierFieldNodes.current.delete(key);
+  };
   const ownershipProducts = products.filter(({ id }) => ownershipProductIds.value.includes(id));
   const [ownershipOptionIdsByProduct, setOwnershipOptionIdsByProduct] = React.useState<Record<string, string[]>>(
     offerCode?.ownership_option_ids_by_product ?? {},
@@ -1139,6 +1154,8 @@ const Form = ({
     monthsError?: boolean;
     percentError?: boolean;
   };
+  // A field that can take focus, paired with the reason it is invalid.
+  type InvalidField = { ref: { current: { focus: () => void } | null }; message: string };
   const [useTieredDiscounts, setUseTieredDiscounts] = React.useState(!!initialTiers?.length);
   const [tiers, setTiers] = React.useState<TierRow[]>(() => {
     if (initialTiers?.length) {
@@ -1198,6 +1215,7 @@ const Form = ({
 
     let tierErrors: TierRow[] = tiers;
     let isTiersInvalid = false;
+    let firstTierError: { key: string; message: string } | null = null;
     if (useTieredDiscounts) {
       const seenMonths = new Set<number>();
       tierErrors = tiers.map((tier) => {
@@ -1213,10 +1231,24 @@ const Form = ({
         const monthsError = !monthsValid || duplicate;
         const percentError = !percentValid;
         if (monthsError || percentError) isTiersInvalid = true;
+        if (percentError && !firstTierError) {
+          firstTierError = { key: `${tier.id}:percentage`, message: "Each tier percentage must be between 0 and 100." };
+        } else if (monthsError && !firstTierError) {
+          firstTierError = {
+            key: `${tier.id}:months`,
+            message: duplicate
+              ? "Each tier needs a different starting month."
+              : "Each tier must start at a whole number of months (0 or more).",
+          };
+        }
         return { ...tier, monthsError, percentError };
       });
       const minMonths = Math.min(...tiers.map((tier) => tier.months ?? Infinity));
-      if (minMonths !== 0) isTiersInvalid = true;
+      if (minMonths !== 0) {
+        isTiersInvalid = true;
+        const firstTier = tiers.find((tier) => (tier.months ?? Infinity) === minMonths);
+        firstTierError ??= { key: `${firstTier?.id}:months`, message: "The first tier must start at 0 months." };
+      }
     }
 
     const hasValidationErrors =
@@ -1243,15 +1275,36 @@ const Form = ({
       setOwnershipProductIds((prev) => ({ ...prev, error: isOwnershipProductsInvalid }));
       if (isTiersInvalid) setTiers(tierErrors);
 
-      const invalidFieldRefs = [];
-      if (isNameInvalid) invalidFieldRefs.push(nameFieldRef);
-      if (isCodeInvalid) invalidFieldRefs.push(codeFieldRef);
-      if (isSelectedProductsInvalid) invalidFieldRefs.push(selectedProductsFieldRef);
-      if (isOwnershipProductsInvalid) invalidFieldRefs.push(ownershipProductsFieldRef);
+      // In form order, so the topmost problem is the one that takes focus and the alert names it: a
+      // filled-in field must not be reported as a field the seller has not filled out.
+      const invalidFields: (InvalidField | false)[] = [
+        isNameInvalid && { ref: nameFieldRef, message: "Please fill out the required fields." },
+        isCodeInvalid && { ref: codeFieldRef, message: "Please fill out the required fields." },
+        isSelectedProductsInvalid && { ref: selectedProductsFieldRef, message: "Please fill out the required fields." },
+        isDiscountInvalid && { ref: discountFieldRef, message: "Please enter a discount amount." },
+        isMaxQuantityInvalid && { ref: maxQuantityFieldRef, message: "Please enter a quantity." },
+        isExpiresAtInvalid && {
+          ref: expiresAtFieldRef,
+          message: "The discount code's start date must be earlier than its end date.",
+        },
+        isOwnershipProductsInvalid && {
+          ref: ownershipProductsFieldRef,
+          message: "Please fill out the required fields.",
+        },
+        firstTierError
+          ? {
+              ref: { current: tierFieldNodes.current.get(firstTierError.key) ?? null },
+              message: firstTierError.message,
+            }
+          : false,
+        isMinimumAmountInvalid && { ref: minimumAmountFieldRef, message: "Please enter a minimum amount." },
+        isMinimumQuantityInvalid && { ref: minimumQuantityFieldRef, message: "Please enter a minimum quantity." },
+      ];
 
-      if (invalidFieldRefs[0]?.current) {
-        invalidFieldRefs[0].current.focus();
-        showAlert("Please fill out the required fields.", "error");
+      const firstInvalidField = invalidFields.find((field): field is InvalidField => field !== false);
+      if (firstInvalidField) {
+        firstInvalidField.ref.current?.focus();
+        showAlert(firstInvalidField.message, "error");
       }
 
       return;
@@ -1500,6 +1553,7 @@ const Form = ({
             <Fieldset>
               <FieldsetTitle>Type</FieldsetTitle>
               <DiscountInput
+                ref={discountFieldRef}
                 discount={discount}
                 setDiscount={setDiscount}
                 currencyCode={currencyCode}
@@ -1553,7 +1607,13 @@ const Form = ({
                     }}
                   >
                     {(props) => (
-                      <Input id={`${uid}quantity`} placeholder="0" aria-invalid={maxQuantity.error} {...props} />
+                      <Input
+                        ref={maxQuantityFieldRef}
+                        id={`${uid}quantity`}
+                        placeholder="0"
+                        aria-invalid={maxQuantity.error}
+                        {...props}
+                      />
                     )}
                   </NumberInput>
                   <p className="text-muted-foreground text-sm">
@@ -1595,6 +1655,7 @@ const Form = ({
                     <Label htmlFor={`${uid}expiresAt`}>Valid until</Label>
                   </FieldsetTitle>
                   <DateInput
+                    ref={expiresAtFieldRef}
                     withTime
                     id={`${uid}expiresAt`}
                     value={expiresAt.value}
@@ -1714,6 +1775,7 @@ const Form = ({
                             ariaLabel={`Tier ${index + 1} percentage`}
                             ariaInvalid={!!tier.percentError}
                             suffix="%"
+                            inputRef={(node) => setTierFieldNode(`${tier.id}:percentage`, node)}
                             onChange={(value) => {
                               updateTier(tier.id, {
                                 amountPercentage: value === null ? null : between(value, 0, 100),
@@ -1738,6 +1800,7 @@ const Form = ({
                                 ariaLabel={`Tier ${index + 1} starting month`}
                                 ariaInvalid={!!tier.monthsError}
                                 suffix="months"
+                                inputRef={(node) => setTierFieldNode(`${tier.id}:months`, node)}
                                 onBlur={sortTiersByMonths}
                                 onChange={(value) => {
                                   if (value !== null && value < 0) return;
@@ -1780,6 +1843,7 @@ const Form = ({
                     <Label htmlFor={`${uid}minimumAmount`}>Minimum amount</Label>
                   </FieldsetTitle>
                   <PriceInput
+                    ref={minimumAmountFieldRef}
                     id={`${uid}minimumAmount`}
                     currencyCode={currencyCode}
                     cents={minimumAmount.value}
@@ -1811,6 +1875,7 @@ const Form = ({
                   >
                     {(props) => (
                       <Input
+                        ref={minimumQuantityFieldRef}
                         id={`${uid}minimumQuantity`}
                         placeholder="0"
                         aria-invalid={minimumQuantity.error}
