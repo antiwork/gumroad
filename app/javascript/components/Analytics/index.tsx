@@ -5,6 +5,8 @@ import * as React from "react";
 import {
   AnalyticsDataByReferral,
   AnalyticsDataByState,
+  AnalyticsFileDownloads,
+  fetchAnalyticsDataByFile,
   fetchAnalyticsDataByReferral,
   fetchAnalyticsDataByState,
 } from "$app/data/analytics";
@@ -13,6 +15,7 @@ import { AbortError, request, ResponseError } from "$app/utils/request";
 
 import { AnalyticsLayout } from "$app/components/Analytics/AnalyticsLayout";
 import { ExportSalesPopover } from "$app/components/Analytics/ExportSalesPopover";
+import { FileDownloadsTable } from "$app/components/Analytics/FileDownloadsTable";
 import { LazySalesChart, warmSalesChart } from "$app/components/Analytics/loadChart";
 import { AnalyticsTableSkeleton, SalesChartSkeleton } from "$app/components/Analytics/LoadingSkeleton";
 import { LocationsTable } from "$app/components/Analytics/LocationsTable";
@@ -147,15 +150,22 @@ export type AnalyticsProps = {
   // the time the page rendered, or null when recent sales history is too thin. Used
   // to weight the projected end-of-day total on the sales chart.
   expected_sales_fraction_of_day: number | null;
+  show_file_downloads: boolean;
   country_codes: Record<string, string>;
   state_names: Record<string, string>;
 };
+
+type FileDownloadsState =
+  | { status: "loading" }
+  | { status: "loaded"; files: AnalyticsFileDownloads[] }
+  | { status: "failed" };
 
 const Analytics = ({
   products: initialProducts,
   seller_time_zone,
   earliest_date,
   expected_sales_fraction_of_day,
+  show_file_downloads,
   country_codes,
   state_names,
 }: AnalyticsProps) => {
@@ -340,7 +350,33 @@ const Analytics = ({
     };
   }, [startTime, endTime, hourly]);
 
-  const selectedProducts = products.filter((product) => product.selected).map((product) => product.unique_permalink);
+  // Loaded on its own so a slow count never holds up the chart, and a failure here never triggers the
+  // chart's range-halving retry.
+  const [fileDownloads, setFileDownloads] = React.useState<FileDownloadsState>({ status: "loading" });
+  React.useEffect(() => {
+    if (!show_file_downloads || !hasContent) return;
+    let obsolete = false;
+    setFileDownloads({ status: "loading" });
+    const { response, abort } = fetchAnalyticsDataByFile({ startTime, endTime });
+    response.then(
+      ({ files }) => {
+        if (!obsolete) setFileDownloads({ status: "loaded", files });
+      },
+      () => {
+        if (!obsolete) setFileDownloads({ status: "failed" });
+      },
+    );
+    return () => {
+      obsolete = true;
+      abort.abort();
+    };
+  }, [startTime, endTime, show_file_downloads, hasContent]);
+
+  // Stable between renders so the downloads table's "Show more" isn't reset by unrelated updates.
+  const selectedProducts = React.useMemo(
+    () => products.filter((product) => product.selected).map((product) => product.unique_permalink),
+    [products],
+  );
 
   // The chart's code is fetched while the analytics data requests above are still in flight, so it
   // is normally ready by the time there is anything to draw.
@@ -415,6 +451,16 @@ const Analytics = ({
           ) : (
             <AnalyticsTableSkeleton label="locations" columns={4} />
           )}
+          {show_file_downloads ? (
+            fileDownloads.status === "loading" ? (
+              <AnalyticsTableSkeleton label="downloads" columns={4} />
+            ) : (
+              <FileDownloadsTable
+                files={fileDownloads.status === "loaded" ? fileDownloads.files : null}
+                selectedProducts={selectedProducts}
+              />
+            )
+          ) : null}
         </div>
       ) : (
         <div className="p-4 md:p-8">
