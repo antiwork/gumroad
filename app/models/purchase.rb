@@ -450,6 +450,10 @@ class Purchase < ApplicationRecord
       ORDER_OUTCOME_STATES.include?(purchase.purchase_state)
   }
 
+  after_commit :enqueue_meta_conversion_event, if: -> (purchase) {
+    purchase.purchase_state_previously_changed? && purchase.purchase_state == "successful"
+  }
+
   after_create :mark_inventory_new_in_txn
   before_save :snapshot_inventory_pre_save_state
   after_commit :sync_inventory_counter_caches_on_create, on: :create
@@ -4588,6 +4592,14 @@ class Purchase < ApplicationRecord
   def enqueue_record_order_charge_outcome
     order_id = order_purchase&.order_id
     RecordOrderChargeOutcomeJob.perform_async(order_id) if order_id.present?
+  end
+
+  # The sender checks its own gates, so this only has to not fail the purchase: a queue outage
+  # must never reach the checkout response.
+  def enqueue_meta_conversion_event
+    SendMetaConversionEventJob.perform_async(id)
+  rescue => e
+    Rails.logger.error("Failed to enqueue the Meta conversion event for purchase_id=#{id}: #{e.class}: #{e.message}")
   end
 
   def schedule_indian_card_mandate_registration_check

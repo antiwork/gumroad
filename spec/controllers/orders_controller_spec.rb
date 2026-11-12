@@ -146,6 +146,35 @@ describe OrdersController, :vcr do
         expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
       end
 
+      context "when the seller has the Meta conversion sender on" do
+        before do
+          Feature.activate_user(:meta_conversions_api, seller_1)
+          seller_1.update!(facebook_pixel_id: "1056510450054835")
+          seller_1.create_meta_conversions_setting!(access_token: "seller-token")
+        end
+
+        it "saves the buyer user agent and the checkout host for the created purchase" do
+          @request.headers["User-Agent"] = "Mozilla/5.0 (Macintosh)"
+
+          post :create, params: single_purchase_params
+
+          context = MetaConversions::PurchaseContext.fetch(Purchase.last.id)
+          expect(context[:user_agent]).to eq("Mozilla/5.0 (Macintosh)")
+          expect(context[:base_url]).to eq("http://#{@request.host_with_port}")
+        end
+
+        it "creates the purchase when the context cannot be saved" do
+          allow(MetaConversions::PurchaseContext).to receive(:save_for).and_raise(Redis::CannotConnectError)
+          allow(Rails.logger).to receive(:error)
+
+          post :create, params: single_purchase_params
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(Purchase.last).to be_successful
+          expect(Rails.logger).to have_received(:error).with(/Failed to save the Meta conversions purchase context/)
+        end
+      end
+
       context "when purchase fails" do
         let(:payment_params) { StripePaymentMethodHelper.decline.to_stripejs_params }
 
