@@ -11,7 +11,6 @@ import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
-import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -164,17 +163,23 @@ export default function ThirdPartyAnalyticsPage() {
                 <Fieldset state={metaTokenRejected ? "danger" : undefined}>
                   <FieldsetTitle>
                     <Label htmlFor={`${uid}metaConversionsAccessToken`}>Conversions API access token</Label>
+                    <a
+                      href="https://developers.facebook.com/documentation/ads-commerce/conversions-api/get-started"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Learn more
+                    </a>
                   </FieldsetTitle>
-                  {metaTokenRejected ? (
-                    <Alert variant="danger">Meta rejected the saved token. Enter a new token.</Alert>
-                  ) : null}
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
                     <Input
                       id={`${uid}metaConversionsAccessToken`}
                       type="password"
                       autoComplete="off"
                       className="flex-1"
-                      placeholder={metaTokenSaved ? "Token saved. Enter a new token to replace it." : ""}
+                      aria-invalid={metaTokenRejected}
+                      aria-describedby={metaTokenRejected ? `${uid}metaConversionsAccessTokenError` : undefined}
+                      placeholder={metaTokenSaved ? "Enter a new token to replace it." : ""}
                       value={thirdPartyAnalytics.meta_conversions_access_token}
                       onChange={(evt) =>
                         updateUser({
@@ -184,16 +189,27 @@ export default function ThirdPartyAnalyticsPage() {
                       }
                     />
                     {metaTokenSaved ? (
-                      <Button
-                        onClick={() =>
-                          updateUser({ remove_meta_conversions_access_token: true, meta_conversions_access_token: "" })
-                        }
-                      >
-                        Remove token
-                      </Button>
+                      <>
+                        <span className="text-sm whitespace-nowrap text-muted">A token is saved</span>
+                        <Button
+                          onClick={() =>
+                            updateUser({
+                              remove_meta_conversions_access_token: true,
+                              meta_conversions_access_token: "",
+                            })
+                          }
+                        >
+                          Remove token
+                        </Button>
+                      </>
                     ) : null}
                   </div>
-                  <FieldsetDescription>
+                  {metaTokenRejected ? (
+                    <FieldsetDescription id={`${uid}metaConversionsAccessTokenError`} className="text-danger">
+                      Meta rejected this token. Paste a new one to replace it.
+                    </FieldsetDescription>
+                  ) : null}
+                  <FieldsetDescription className="text-muted">
                     {metaConversions.token_saved && thirdPartyAnalytics.remove_meta_conversions_access_token
                       ? "The token is removed when you update your settings. "
                       : null}
