@@ -218,6 +218,7 @@ describe UrlRedirectPresenter do
           rich_content_pages: nil,
           last_content_page_id: nil,
           content_items: [],
+          commission_deliverables: [],
           bundle_products: [],
           posts: [],
           video_transcoding_info: nil,
