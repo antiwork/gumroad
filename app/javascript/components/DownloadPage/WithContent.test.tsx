@@ -99,7 +99,11 @@ const purchaseProps = () => ({
   call: null,
 });
 
-const renderPage = (contentProps: ContentProps, purchase: ReturnType<typeof purchaseProps> | null = purchaseProps()) =>
+const renderPage = (
+  contentProps: ContentProps,
+  purchase: ReturnType<typeof purchaseProps> | null = purchaseProps(),
+  isMobileAppWebView = false,
+) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -117,7 +121,7 @@ const renderPage = (contentProps: ContentProps, purchase: ReturnType<typeof purc
         product_has_third_party_analytics={null}
         seller_analytics={null}
         content_unavailability_reason_code={null}
-        is_mobile_app_web_view={false}
+        is_mobile_app_web_view={isMobileAppWebView}
         terms_page_url="https://gumroad.com/terms"
         token="token"
         redirect_id="redirect-1"
@@ -256,6 +260,28 @@ describe("DownloadPage commission deliverables", () => {
   it("shows no Downloads section when the commission is not completed", () => {
     renderPage({ ...content(null), commission_deliverables: [] });
     expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+  });
+
+  // Mobile web and app WebViews older than the page-navigation bridge have no way to reach a
+  // second content page, so the section has to be present in the page HTML on both.
+  it("shows the deliverables on mobile web, below the desktop breakpoint", () => {
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] });
+
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    expect(container.textContent).toContain("CV final");
+
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(true);
+  });
+
+  it("shows the deliverables on an old mobile app WebView, above the page content", () => {
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] }, purchaseProps(), true);
+
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    // The fix is the position: the deliverables come before the page body, so page 1 alone is enough.
+    const text = container.textContent;
+    expect(text.indexOf("CV final")).toBeLessThan(text.indexOf("Lesson 1 body"));
   });
 });
 
