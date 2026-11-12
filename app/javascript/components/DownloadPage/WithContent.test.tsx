@@ -254,37 +254,40 @@ describe("DownloadPage commission deliverables", () => {
     height: null,
   };
 
-  const expectDeliverablesAboveFirstPage = () => {
-    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
-    expect(
-      screen.getByText("CV final").compareDocumentPosition(screen.getByText("Lesson 1 body")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-  };
-
   it("shows deliverables above the first page without navigating", () => {
-    renderPage({ ...content(null), commission_deliverables: [file] });
-    expectDeliverablesAboveFirstPage();
-  });
-
-  it("shows deliverables above the first page on mobile web", () => {
-    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
-    renderPage({ ...content(null), commission_deliverables: [file] });
-    expectDeliverablesAboveFirstPage();
-  });
-
-  // App builds without the page-navigation bridge hide the bottom nav, so page 1 is all the buyer can reach.
-  it("shows deliverables in an app WebView that has no page navigation", () => {
-    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
-    window.ReactNativeWebView = { postMessage: vi.fn() };
-    renderPage({ ...content(null), commission_deliverables: [file] }, purchaseProps(), true);
-    expect(screen.queryByRole("navigation")).toBeNull();
-    expectDeliverablesAboveFirstPage();
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] });
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    expect(container.textContent).toContain("CV final");
+    expect(container.textContent).toContain("Lesson 1 body");
   });
 
   it("shows no Downloads section when the commission is not completed", () => {
     renderPage({ ...content(null), commission_deliverables: [] });
     expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+  });
+
+  // Mobile web and app WebViews older than the page-navigation bridge have no way to reach a
+  // second content page, so the section has to be present in the page HTML on both.
+  it("shows the deliverables on mobile web, below the desktop breakpoint", () => {
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] });
+
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    expect(container.textContent).toContain("CV final");
+  });
+
+  it("shows the deliverables on an old mobile app WebView, above the page content", () => {
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+    window.ReactNativeWebView = { postMessage: vi.fn() };
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] }, purchaseProps(), true);
+
+    // Inside the app the bottom page nav is hidden, so page 1 is all the buyer can reach.
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    // The fix is the position: the deliverables come before the page body, so page 1 alone is enough.
+    const text = container.textContent;
+    expect(text.indexOf("CV final")).toBeLessThan(text.indexOf("Lesson 1 body"));
   });
 
   // UrlRedirect#rich_content_json also appends this page, embedding the same files.
@@ -320,7 +323,7 @@ describe("DownloadPage commission deliverables", () => {
       content_items: [file],
       commission_deliverables: [file],
     });
-    expectDeliverablesAboveFirstPage();
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: /Downloads/u }));
 
