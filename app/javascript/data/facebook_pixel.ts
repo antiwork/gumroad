@@ -33,12 +33,18 @@ export function trackProductEvent(config: AnalyticsConfig, data: FacebookProduct
 
   if (data.action === "purchased") {
     if (config.trackFreeSales || data.value !== 0) {
-      fbq("trackSingle", config.facebookPixelId, FacebookEvents[data.action], {
-        content_ids: [data.permalink],
-        content_type: "product",
-        value: data.value / (data.valueIsSingleUnit ? 1 : 100), // Value in main currency unit
-        currency: data.currency,
-      });
+      fbq(
+        "trackSingle",
+        config.facebookPixelId,
+        FacebookEvents[data.action],
+        {
+          content_ids: [data.permalink],
+          content_type: "product",
+          value: data.value / (data.valueIsSingleUnit ? 1 : 100), // Value in main currency unit
+          currency: data.currency,
+        },
+        { eventID: data.purchase_external_id },
+      );
     }
   } else {
     fbq("trackSingle", config.facebookPixelId, FacebookEvents[data.action], {
