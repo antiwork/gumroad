@@ -46,7 +46,7 @@ describe EthiopiaBankAccount do
     end
 
     it "does not block saves of an already-stored code that predates this format check" do
-      bank_account = build(:ethiopia_bank_account, bank_code: "CBETETTA")
+      bank_account = build(:ethiopia_bank_account, bank_code: "CBETETTAX")
       bank_account.save!(validate: false)
 
       bank_account.account_holder_full_name = "Renamed Seller"
@@ -56,16 +56,16 @@ describe EthiopiaBankAccount do
     end
 
     it "still rejects the code once the seller edits it" do
-      bank_account = build(:ethiopia_bank_account, bank_code: "CBETETTA")
+      bank_account = build(:ethiopia_bank_account, bank_code: "CBETETTAX")
       bank_account.save!(validate: false)
 
-      bank_account.bank_code = "CBETETAAX"
+      bank_account.bank_code = "CBETETAAXX"
       expect(bank_account).not_to be_valid
       expect(bank_account.errors.full_messages).to eq(["The bank code is invalid."])
     end
 
     it "accepts an edit that corrects the code" do
-      bank_account = build(:ethiopia_bank_account, bank_code: "CBETETTA")
+      bank_account = build(:ethiopia_bank_account, bank_code: "CBETETTAX")
       bank_account.save!(validate: false)
 
       bank_account.bank_code = "CBETETAA"
