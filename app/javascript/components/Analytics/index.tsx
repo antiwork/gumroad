@@ -453,7 +453,7 @@ const Analytics = ({
           )}
           {show_file_downloads ? (
             fileDownloads.status === "loading" ? (
-              <AnalyticsTableSkeleton label="downloads" columns={4} />
+              <AnalyticsTableSkeleton label="downloads" columns={3} />
             ) : (
               <FileDownloadsTable
                 files={fileDownloads.status === "loaded" ? fileDownloads.files : null}

@@ -37,7 +37,7 @@ describe("FileDownloadsTable", () => {
     render(<FileDownloadsTable files={files} selectedProducts={["guide"]} />);
 
     expect(rows().map((row) => row[0])).toEqual(["FileOld chapter (deleted)", "FileChapter 1"]);
-    expect(rows()[1]).toEqual(["FileChapter 1", "ProductGuide", "Downloads3", "Unique buyers2"]);
+    expect(rows()[1]).toEqual(["FileChapter 1", "ProductGuide", "Downloads3"]);
   });
 
   it("says when the selected products have no downloads in the range", () => {

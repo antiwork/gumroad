@@ -41,22 +41,20 @@ export const FileDownloadsTable = ({
             <TableHead {...thProps("name")}>File</TableHead>
             <TableHead {...thProps("product_name")}>Product</TableHead>
             <TableHead {...thProps("downloads")}>Downloads</TableHead>
-            <TableHead {...thProps("unique_buyers")}>Unique buyers</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {items.length ? (
-            items.slice(0, maxRowsShown).map(({ id, name, product_name, downloads, unique_buyers }) => (
+            items.slice(0, maxRowsShown).map(({ id, name, product_name, downloads }) => (
               <TableRow key={id}>
                 <TableCell>{name}</TableCell>
                 <TableCell>{product_name}</TableCell>
                 <TableCell>{downloads}</TableCell>
-                <TableCell>{unique_buyers}</TableCell>
               </TableRow>
             ))
           ) : (
             <TableRow>
-              <TableCell colSpan={4}>{files ? "Nothing yet" : "We couldn't load downloads for this range."}</TableCell>
+              <TableCell colSpan={3}>{files ? "Nothing yet" : "We couldn't load downloads for this range."}</TableCell>
             </TableRow>
           )}
         </TableBody>
