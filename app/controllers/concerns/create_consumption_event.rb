@@ -1,9 +1,18 @@
 # frozen_string_literal: true
 
 module CreateConsumptionEvent
+  # The other types (downloads, archive downloads, download-page views) are written server-side as
+  # they happen. Nothing checks the posted file or purchase against the url_redirect, so accepting
+  # them here would let anyone with a file's external id inflate its download counts.
+  CLIENT_EVENT_TYPES = [
+    ConsumptionEvent::EVENT_TYPE_LISTEN,
+    ConsumptionEvent::EVENT_TYPE_READ,
+    ConsumptionEvent::EVENT_TYPE_WATCH,
+  ].freeze
+
   private
     def create_consumption_event!(params)
-      return false if params[:url_redirect_id].blank? || ConsumptionEvent::EVENT_TYPES.exclude?(params[:event_type])
+      return false if params[:url_redirect_id].blank? || CLIENT_EVENT_TYPES.exclude?(params[:event_type])
       # platform is client-supplied and only the model's inclusion validation guards it, so an
       # unknown value would reach create! as a 500 instead of a { success: false }.
       return false unless Platform.all.include?(params[:platform])
