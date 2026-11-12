@@ -130,6 +130,49 @@ describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
     end
   end
 
+  describe "Conversions API access token" do
+    context "when the feature is on for the seller" do
+      before { Feature.activate_user(:meta_conversions_api, seller) }
+
+      it "saves, replaces and removes the token" do
+        visit settings_third_party_analytics_path
+        expect(page).to have_text("the hashed buyer email, the IP address, the browser user agent, and the order value")
+        fill_in "Conversions API access token", with: "token-1"
+        click_on "Update settings"
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(seller.reload.meta_conversions_setting.access_token).to eq("token-1")
+        expect(page).to have_field("Conversions API access token", with: "")
+        expect(page).not_to have_text("token-1")
+
+        seller.meta_conversions_setting.update!(token_rejected_at: Time.current)
+        visit settings_third_party_analytics_path
+        expect(page).to have_text("Meta rejected the saved token. Enter a new token.")
+        fill_in "Conversions API access token", with: "token-2"
+        click_on "Update settings"
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(page).not_to have_text("Meta rejected the saved token.")
+        setting = seller.reload.meta_conversions_setting
+        expect(setting.access_token).to eq("token-2")
+        expect(setting.token_rejected_at).to be_nil
+
+        click_on "Remove token"
+        click_on "Update settings"
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(page).not_to have_button("Remove token")
+        expect(seller.reload.meta_conversions_setting).to be_nil
+      end
+    end
+
+    context "when the feature is off for the seller" do
+      it "does not show the field" do
+        visit settings_third_party_analytics_path
+
+        expect(page).to have_field("Facebook Pixel")
+        expect(page).not_to have_field("Conversions API access token")
+      end
+    end
+  end
+
   def find_snippet_row(name:)
     find("[role=listitem] h4", text: name).ancestor("[role=listitem]")
   end

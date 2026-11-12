@@ -11,6 +11,7 @@ import { Dropdown } from "$app/components/Dropdown";
 import { useLoggedInUser } from "$app/components/LoggedInUser";
 import { Layout as SettingsLayout } from "$app/components/Settings/Layout";
 import { TypeSafeOptionSelect } from "$app/components/TypeSafeOptionSelect";
+import { Alert } from "$app/components/ui/Alert";
 import { Checkbox } from "$app/components/ui/Checkbox";
 import { Details, DetailsToggle } from "$app/components/ui/Details";
 import { Fieldset, FieldsetDescription, FieldsetTitle } from "$app/components/ui/Fieldset";
@@ -28,6 +29,7 @@ type Products = { permalink: string; name: string }[];
 type ThirdPartyAnalyticsPageProps = {
   settings_pages: SettingPage[];
   third_party_analytics: ThirdPartyAnalytics;
+  meta_conversions: { token_saved: boolean; token_rejected_at: string | null } | null;
   products: Products;
 };
 
@@ -36,15 +38,24 @@ export default function ThirdPartyAnalyticsPage() {
   const loggedInUser = useLoggedInUser();
 
   const form = useForm({
-    user: props.third_party_analytics,
+    user: {
+      ...props.third_party_analytics,
+      meta_conversions_access_token: "",
+      remove_meta_conversions_access_token: false,
+    },
   });
 
   const thirdPartyAnalytics = form.data.user;
-  const updateThirdPartyAnalytics = (update: Partial<ThirdPartyAnalytics>) =>
+  const updateUser = (update: Partial<typeof form.data.user>) =>
     form.setData("user", {
       ...form.data.user,
       ...update,
     });
+  const updateThirdPartyAnalytics = (update: Partial<ThirdPartyAnalytics>) => updateUser(update);
+
+  const metaConversions = props.meta_conversions;
+  const metaTokenSaved = !!metaConversions?.token_saved && !thirdPartyAnalytics.remove_meta_conversions_access_token;
+  const metaTokenRejected = metaTokenSaved && !!metaConversions.token_rejected_at;
 
   const uid = React.useId();
 
@@ -77,6 +88,10 @@ export default function ThirdPartyAnalyticsPage() {
 
     form.put(Routes.settings_third_party_analytics_path(), {
       preserveScroll: true,
+      onSuccess: () =>
+        form.setData((data) => ({
+          user: { ...data.user, meta_conversions_access_token: "", remove_meta_conversions_access_token: false },
+        })),
     });
   };
 
@@ -145,6 +160,39 @@ export default function ThirdPartyAnalyticsPage() {
                   onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
                 />
               </Fieldset>
+              {metaConversions ? (
+                <Fieldset state={metaTokenRejected ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}metaConversionsAccessToken`}>Conversions API access token</Label>
+                  </FieldsetTitle>
+                  {metaTokenRejected ? (
+                    <Alert variant="danger">Meta rejected the saved token. Enter a new token.</Alert>
+                  ) : null}
+                  <div className="flex gap-2">
+                    <Input
+                      id={`${uid}metaConversionsAccessToken`}
+                      type="password"
+                      autoComplete="off"
+                      className="flex-1"
+                      placeholder={metaTokenSaved ? "Token saved. Enter a new token to replace it." : ""}
+                      value={thirdPartyAnalytics.meta_conversions_access_token}
+                      onChange={(evt) => updateUser({ meta_conversions_access_token: evt.target.value })}
+                    />
+                    {metaTokenSaved ? (
+                      <Button onClick={() => updateUser({ remove_meta_conversions_access_token: true })}>
+                        Remove token
+                      </Button>
+                    ) : null}
+                  </div>
+                  <FieldsetDescription>
+                    {metaConversions.token_saved && thirdPartyAnalytics.remove_meta_conversions_access_token
+                      ? "The token is removed when you update your settings. "
+                      : null}
+                    With a token saved, Gumroad sends each sale to Meta from its servers: the hashed buyer email, the IP
+                    address, the browser user agent, and the order value.
+                  </FieldsetDescription>
+                </Fieldset>
+              ) : null}
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}tiktokPixel`}>TikTok Pixel</Label>

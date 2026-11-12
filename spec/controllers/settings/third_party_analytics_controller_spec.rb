@@ -22,11 +22,22 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
       settings_presenter = SettingsPresenter.new(pundit_user: controller.pundit_user)
       expected_props = {
         third_party_analytics: settings_presenter.third_party_analytics_props,
+        meta_conversions: nil,
         products: seller.links.alive.map { |product| { permalink: product.unique_permalink, name: product.name } },
       }
       # Compare only the expected props from inertia.props (ignore shared props)
       actual_props = inertia.props.slice(*expected_props.keys)
       expect(actual_props).to eq(expected_props)
+    end
+
+    it "never includes the saved Conversions API access token" do
+      Feature.activate_user(:meta_conversions_api, seller)
+      seller.create_meta_conversions_setting!(access_token: "secret-token")
+
+      get :show
+
+      expect(inertia.props[:meta_conversions]).to eq(token_saved: true, token_rejected_at: nil)
+      expect(response.body).not_to include("secret-token")
     end
   end
 
@@ -122,6 +133,72 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
 
         expect(flash[:alert]).to eq("Please enter a valid Facebook Pixel ID")
         expect(seller.reload.facebook_pixel_id).to be_nil
+      end
+    end
+
+    describe "Conversions API access token" do
+      context "when the feature is on for the seller" do
+        before { Feature.activate_user(:meta_conversions_api, seller) }
+
+        it "saves a token" do
+          put :update, params: { user: { meta_conversions_access_token: " token-1 " } }
+
+          expect(flash[:notice]).to eq("Changes saved!")
+          expect(seller.reload.meta_conversions_setting.access_token).to eq("token-1")
+        end
+
+        it "replaces a token and clears the rejection" do
+          seller.create_meta_conversions_setting!(access_token: "token-1", token_rejected_at: Time.current)
+
+          put :update, params: { user: { meta_conversions_access_token: "token-2" } }
+
+          setting = seller.reload.meta_conversions_setting
+          expect(setting.access_token).to eq("token-2")
+          expect(setting.token_rejected_at).to be_nil
+        end
+
+        it "keeps the token when the field is blank" do
+          rejected_at = 1.day.ago.change(usec: 0)
+          seller.create_meta_conversions_setting!(access_token: "token-1", token_rejected_at: rejected_at)
+
+          put :update, params: { user: { meta_conversions_access_token: "", facebook_pixel_id: "123456789" } }
+
+          setting = seller.reload.meta_conversions_setting
+          expect(setting.access_token).to eq("token-1")
+          expect(setting.token_rejected_at).to eq(rejected_at)
+        end
+
+        it "removes the token" do
+          seller.create_meta_conversions_setting!(access_token: "token-1")
+
+          put :update, params: { user: { remove_meta_conversions_access_token: true } }
+
+          expect(seller.reload.meta_conversions_setting).to be_nil
+        end
+
+        it "does not save a token when the other settings are invalid" do
+          put :update, params: { user: { google_analytics_id: "bad", meta_conversions_access_token: "token-1" } }
+
+          expect(flash[:alert]).to eq("Please enter a valid Google Analytics ID")
+          expect(seller.reload.meta_conversions_setting).to be_nil
+        end
+      end
+
+      context "when the feature is off for the seller" do
+        it "does not save a token" do
+          put :update, params: { user: { meta_conversions_access_token: "token-1" } }
+
+          expect(flash[:notice]).to eq("Changes saved!")
+          expect(seller.reload.meta_conversions_setting).to be_nil
+        end
+
+        it "does not remove a token" do
+          seller.create_meta_conversions_setting!(access_token: "token-1")
+
+          put :update, params: { user: { remove_meta_conversions_access_token: true } }
+
+          expect(seller.reload.meta_conversions_setting.access_token).to eq("token-1")
+        end
       end
     end
 
