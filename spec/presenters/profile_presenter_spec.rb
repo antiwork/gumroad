@@ -344,10 +344,20 @@ describe ProfilePresenter do
         expect(presenter.profile_settings_props(request:)[:email_confirmation]).to be_nil
       end
 
-      it "doesn't allow resending for a non-owner team member" do
+      it "allows an admin team member to resend" do
         seller.update_columns(confirmed_at: nil)
 
-        expect(presenter.profile_settings_props(request:)[:email_confirmation][:can_resend]).to eq(false)
+        expect(presenter.profile_settings_props(request:)[:email_confirmation][:can_resend]).to eq(true)
+      end
+
+      it "doesn't allow resending for a team member who isn't an admin" do
+        seller.update_columns(confirmed_at: nil)
+        logged_in_user.user_memberships.find_by(seller:).update!(role: TeamMembership::ROLE_MARKETING)
+        marketing_pundit_user = SellerContext.new(user: logged_in_user.reload, seller:)
+
+        props = described_class.new(pundit_user: marketing_pundit_user, seller: seller.reload).profile_settings_props(request:)
+
+        expect(props[:email_confirmation][:can_resend]).to eq(false)
       end
 
       it "names the pending address when an unconfirmed seller also has an email change in flight" do
