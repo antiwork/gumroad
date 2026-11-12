@@ -555,6 +555,18 @@ describe("scalarSettingsForSave", () => {
     ...overrides,
   });
 
+  it("omits an unchanged price so a stale tab cannot rewrite it", () => {
+    expect(scalarSettingsForSave(product(), lastSaved())).not.toHaveProperty("price_cents");
+  });
+
+  it("sends a price this session changed", () => {
+    expect(scalarSettingsForSave(product({ price_cents: 599 }), lastSaved())).toMatchObject({ price_cents: 599 });
+  });
+
+  it("sends the price when the caller has no baseline", () => {
+    expect(scalarSettingsForSave(product(), lastSaved({ price_cents: null }))).toMatchObject({ price_cents: 100 });
+  });
+
   it("omits an unchanged blank custom permalink so a stale tab cannot clear it", () => {
     expect(scalarSettingsForSave(product(), lastSaved())).toEqual({});
     expect(scalarSettingsForSave(product({ custom_permalink: "" }), lastSaved())).toEqual({});
@@ -590,7 +602,7 @@ describe("scalarSettingsForSave", () => {
         product({ customizable_price: false, price_cents: 0, hasPaidVariantPricing: true }),
         lastSaved({ customizable_price: false, hasPaidVariantPricing: true }),
       ),
-    ).toEqual({ customizable_price: false });
+    ).toEqual({ price_cents: 0, customizable_price: false });
   });
 
   it("sends a customizable_price change this session made, in both directions", () => {

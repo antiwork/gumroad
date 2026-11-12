@@ -488,6 +488,14 @@ class LinksController < ApplicationController
           }, status: :conflict
         end
 
+        if (conflict_field = unverified_price_or_refund_write)
+          log_editor_save_conflict("unverified_#{conflict_field}_write")
+          return render json: {
+            error_message: "This page is out of date, so your #{conflict_field == :price ? "price" : "refund policy"} change wasn't saved. Reload the page and make the change again. Your other edits were not applied either.",
+            error_code: "stale_price_or_refund_baseline",
+          }, status: :conflict
+        end
+
         # Capture the deletion-guard diagnostics (alive counts, persisted
         # shared-content flag) NOW, after the lock/reload but before
         # assign_attributes and the save steps below mutate the product — they
@@ -1035,8 +1043,43 @@ class LinksController < ApplicationController
       permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
       permitted.delete(:description) if permitted[:description].blank? && !description_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
-      permitted.delete(:product_refund_policy_enabled) if permitted[:product_refund_policy_enabled].nil?
+      permitted.delete(:product_refund_policy_enabled) if permitted[:product_refund_policy_enabled].nil? || unedited_in_session?(:product_refund_policy_enabled)
+      permitted.delete(:price_cents) if unedited_in_session?(:price_cents)
       permitted.delete(:installment_plan) if permitted[:installment_plan].blank? && !installment_plan_clear_requested?
+    end
+
+    # The editor echoes the value it last loaded or saved as `expected_<key>`. A
+    # payload equal to it was not edited in this session.
+    def unedited_in_session?(key)
+      expected = params["expected_#{key}"]
+      !expected.nil? && !params[key].nil? && normalized_baseline_value(key, params[key]) == normalized_baseline_value(key, expected)
+    end
+
+    def normalized_baseline_value(key, value)
+      key == :price_cents ? value.to_s.to_i : ActiveModel::Type::Boolean.new.cast(value)
+    end
+
+    def stored_baseline_value(key)
+      key == :price_cents ? @product.price_cents : @product.product_refund_policy_enabled?
+    end
+
+    # A deliberate price or refund-policy edit is accepted only when the tab's
+    # baseline still matches the stored record. Old tabs send no baseline, so an
+    # explicit value that disagrees with the record cannot be attributed to the
+    # seller and is refused instead of silently overwriting a newer save.
+    def unverified_price_or_refund_write
+      keys = [:price_cents]
+      keys << :product_refund_policy_enabled unless current_seller.account_level_refund_policy_enabled?
+      keys.each do |key|
+        next if params[key].nil? || unedited_in_session?(key)
+        submitted = normalized_baseline_value(key, params[key])
+        stored = normalized_baseline_value(key, stored_baseline_value(key))
+        next if submitted == stored
+        expected = params["expected_#{key}"]
+        next if !expected.nil? && normalized_baseline_value(key, expected) == stored
+        return key == :price_cents ? :price : :refund_policy
+      end
+      nil
     end
 
     # The editor renders save errors as HTML, so every interpolated value is escaped. The amount moves across

@@ -684,7 +684,7 @@ export const scalarSettingsForSave = (
     custom_permalink: string | null;
     description?: string | null | undefined;
     customizable_price: boolean | null;
-    price_cents: number;
+    price_cents: number | null;
     hasPaidVariantPricing: boolean;
     installment_plan: { number_of_installments: number } | null;
     allow_installment_plan: boolean | null;
@@ -696,6 +696,11 @@ export const scalarSettingsForSave = (
   },
 ) => {
   const settings: Record<string, unknown> = {};
+  // An unedited price is omitted; an edited one is checked server-side against the
+  // baseline saveProduct sends beside it.
+  if (lastSaved.price_cents === null || product.price_cents !== lastSaved.price_cents) {
+    settings.price_cents = product.price_cents;
+  }
   if (product.custom_permalink) {
     settings.custom_permalink = product.custom_permalink;
   } else if (lastSaved.custom_permalink) {
@@ -716,6 +721,7 @@ export const scalarSettingsForSave = (
   }
   const flagIsDerivedFromUnchangedInputs =
     lastSaved.customizable_price !== null &&
+    lastSaved.price_cents !== null &&
     product.price_cents === lastSaved.price_cents &&
     product.hasPaidVariantPricing === lastSaved.hasPaidVariantPricing;
   if (!flagIsDerivedFromUnchangedInputs || product.customizable_price !== lastSaved.customizable_price) {
@@ -835,6 +841,7 @@ export const saveProduct = async (
     free_trial_duration_unit,
     product_refund_policy_enabled,
     refund_policy,
+    price_cents: _priceCents,
     ...productParams
   } = product;
   const response = await request({
@@ -844,6 +851,8 @@ export const saveProduct = async (
     data: {
       ...productParams,
       rich_content: withoutFailedFileEmbeds(product.rich_content, failedFileIds),
+      expected_price_cents: options.lastSavedPriceCents ?? undefined,
+      expected_product_refund_policy_enabled: options.lastSavedProductRefundPolicyEnabled ?? undefined,
       ...scalarSettingsForSave(
         {
           custom_permalink,
@@ -864,7 +873,7 @@ export const saveProduct = async (
           custom_permalink: options.lastSavedCustomPermalink ?? null,
           description: options.lastSavedDescription,
           customizable_price: options.lastSavedCustomizablePrice ?? null,
-          price_cents: options.lastSavedPriceCents ?? product.price_cents,
+          price_cents: options.lastSavedPriceCents ?? null,
           hasPaidVariantPricing: options.lastSavedHasPaidVariantPricing ?? hasPaidVariantPricing(product),
           installment_plan: options.lastSavedInstallmentPlan ?? null,
           allow_installment_plan: options.lastSavedAllowInstallmentPlan ?? null,
