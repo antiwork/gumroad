@@ -286,6 +286,46 @@ describe("DownloadPage commission deliverables", () => {
     renderPage({ ...content(null), commission_deliverables: [] });
     expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
   });
+
+  // UrlRedirect#rich_content_json also appends this page, embedding the same files.
+  const commissionDownloadsPage = {
+    id: "",
+    page_id: "",
+    variant_id: null,
+    title: "Downloads",
+    description: { type: "doc", content: [{ type: "fileEmbed", attrs: { id: file.id } }] },
+    updated_at: "2026-10-01T00:00:00Z",
+  };
+
+  const expectDeliverablesListedOnceOnDownloadsPage = async () => {
+    await waitFor(() => expect(document.querySelector("[data-node-view-wrapper]")).not.toBeNull());
+    expect(screen.getAllByText("CV final")).toHaveLength(1);
+    expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+  };
+
+  it("lists deliverables once when the commission Downloads page is the only page", async () => {
+    renderPage({
+      ...content(null),
+      rich_content_pages: [commissionDownloadsPage],
+      content_items: [file],
+      commission_deliverables: [file],
+    });
+    await expectDeliverablesListedOnceOnDownloadsPage();
+  });
+
+  it("lists deliverables once after navigating from the intake page to the commission Downloads page", async () => {
+    renderPage({
+      ...content(null),
+      rich_content_pages: [page("page-a", "Lesson 1"), commissionDownloadsPage],
+      content_items: [file],
+      commission_deliverables: [file],
+    });
+    expectDeliverablesAboveFirstPage();
+
+    fireEvent.click(screen.getByRole("tab", { name: /Downloads/u }));
+
+    await expectDeliverablesListedOnceOnDownloadsPage();
+  });
 });
 
 describe("DownloadPage receipt alert", () => {

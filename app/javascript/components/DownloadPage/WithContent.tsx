@@ -48,6 +48,9 @@ import { Layout, LayoutProps, PurchaseCustomField } from "./Layout";
 
 export type { PurchaseCustomField };
 
+// UrlRedirect#rich_content_json appends this page for a completed commission; it already embeds the deliverables.
+const COMMISSION_DOWNLOADS_PAGE_ID = "";
+
 const PageIcon = ({ iconKey }: { iconKey: PageIconType }) => {
   const Component = PAGE_ICON_COMPONENTS[iconKey];
   return <Component className="size-5" aria-label={PAGE_ICON_LABELS[iconKey]} />;
@@ -337,7 +340,9 @@ export const WithContent = ({
                 ))}
               </div>
             ) : null}
-            {content.rich_content_pages !== null && (content.commission_deliverables?.length ?? 0) > 0 ? (
+            {content.rich_content_pages !== null &&
+            activePage?.page_id !== COMMISSION_DOWNLOADS_PAGE_ID &&
+            (content.commission_deliverables?.length ?? 0) > 0 ? (
               <section aria-label="Downloads" className="mb-4 flex flex-col gap-2">
                 <h3>Downloads</h3>
                 <DownloadFileList content_items={content.commission_deliverables ?? []} />
