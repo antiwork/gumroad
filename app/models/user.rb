@@ -35,6 +35,7 @@ class User < ApplicationRecord
   has_one :instagram_identity, class_name: "UserInstagramIdentity", dependent: :destroy
   # The Ping signing secret sits in its own table: CONTRIBUTING forbids schema changes on `users`.
   has_one :ping_signing_setting, dependent: :destroy
+  has_one :meta_conversions_setting, dependent: :destroy
   has_one :tiktok_identity, class_name: "UserTiktokIdentity", dependent: :destroy
 
   stripped_fields :name, :facebook_meta_tag, :google_analytics_id, :username, :email, :support_email
