@@ -597,8 +597,13 @@ class LinksController < ApplicationController
         @product.save_tags!(product_permitted_params[:tags] || [])
         @product.reorder_previews((product_permitted_params[:covers] || []).map.with_index.to_h)
         if !current_seller.account_level_refund_policy_enabled?
-          @product.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled]
-          if product_permitted_params[:refund_policy].present? && product_permitted_params[:product_refund_policy_enabled]
+          # A save that omits the flag means "not this session's to write", and the
+          # flags writer turns any non-true value into off — so assigning it
+          # unconditionally let a payload without the key clear a live policy.
+          @product.product_refund_policy_enabled = product_permitted_params[:product_refund_policy_enabled] if product_permitted_params.key?(:product_refund_policy_enabled)
+          # Read the flag off the record, not the params: terms submitted beside an
+          # omitted (unchanged) flag still belong to a policy that is on.
+          if product_permitted_params[:refund_policy].present? && @product.product_refund_policy_enabled?
             @product.find_or_initialize_product_refund_policy.update!(product_permitted_params[:refund_policy])
           end
         end
@@ -1030,6 +1035,7 @@ class LinksController < ApplicationController
       permitted.delete(:custom_permalink) if permitted[:custom_permalink].blank? && !custom_permalink_clear_requested?
       permitted.delete(:description) if permitted[:description].blank? && !description_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
+      permitted.delete(:product_refund_policy_enabled) if permitted[:product_refund_policy_enabled].nil?
       permitted.delete(:installment_plan) if permitted[:installment_plan].blank? && !installment_plan_clear_requested?
     end
 

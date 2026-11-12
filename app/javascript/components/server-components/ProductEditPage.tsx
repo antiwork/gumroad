@@ -735,6 +735,8 @@ const ProductEditPage = (props: Props) => {
         lastSavedFreeTrialEnabled: lastSavedProductRef.current.free_trial_enabled,
         lastSavedFreeTrialDurationAmount: lastSavedProductRef.current.free_trial_duration_amount,
         lastSavedFreeTrialDurationUnit: lastSavedProductRef.current.free_trial_duration_unit,
+        lastSavedProductRefundPolicyEnabled: lastSavedProductRef.current.product_refund_policy_enabled,
+        lastSavedRefundPolicy: lastSavedProductRef.current.refund_policy,
       });
       saved = true;
       setInstallmentPlanClearConflict(null);

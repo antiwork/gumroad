@@ -242,6 +242,8 @@ describe("saveProduct with a failed upload", () => {
     preserved_rich_content_ids: [],
     editor_revision: null,
     allow_installment_plan: false,
+    product_refund_policy_enabled: false,
+    refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
   });
 
   it("saves neither the failed file nor the embed it left in the content", async () => {
@@ -286,6 +288,8 @@ describe("saveProduct with an unreadable response", () => {
       preserved_rich_content_ids: [],
       editor_revision: null,
       allow_installment_plan: false,
+      product_refund_policy_enabled: false,
+      refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
     }) as unknown as Parameters<typeof saveProduct>[2];
   const respond = (response: object) => {
     Object.assign(globalThis, { Routes: { link_path: () => "/p/demo" } });
@@ -341,6 +345,8 @@ describe("saveProduct with membership tiers", () => {
       preserved_rich_content_ids: [],
       editor_revision: null,
       allow_installment_plan: false,
+      product_refund_policy_enabled: false,
+      refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
     } as unknown as Parameters<typeof saveProduct>[2];
 
     await saveProduct("demo", "product-id", product, "usd");
@@ -376,6 +382,8 @@ describe("saveProduct with shipping exclusions", () => {
       preserved_rich_content_ids: [],
       editor_revision: null,
       allow_installment_plan: false,
+      product_refund_policy_enabled: false,
+      refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
       ...exclusions,
     } as unknown as Parameters<typeof saveProduct>[2];
 
@@ -420,6 +428,8 @@ describe("saveProduct with a free trial", () => {
       free_trial_enabled: false,
       free_trial_duration_amount: null,
       free_trial_duration_unit: null,
+      product_refund_policy_enabled: false,
+      refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
       ...overrides,
     } as unknown as Parameters<typeof saveProduct>[2];
 
@@ -455,6 +465,64 @@ describe("saveProduct with a free trial", () => {
   });
 });
 
+describe("saveProduct with a refund policy", () => {
+  const save = async (overrides: Record<string, unknown>, options = {}) => {
+    Object.assign(globalThis, { Routes: { link_path: () => "/p/demo" } });
+    requestMock.mockReset().mockResolvedValue({ ok: true, status: 204 });
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- fixture only carries the fields the save reads
+    const product = {
+      files: [],
+      public_files: [],
+      rich_content: [],
+      variants: [],
+      has_same_rich_content_for_all_variants: true,
+      covers: [],
+      availabilities: [],
+      confirmed_removed_variant_ids: [],
+      confirmed_removed_rich_content_ids: [],
+      preserved_rich_content_ids: [],
+      editor_revision: null,
+      allow_installment_plan: false,
+      custom_permalink: null,
+      description: "",
+      customizable_price: false,
+      price_cents: 100,
+      installment_plan: null,
+      free_trial_enabled: false,
+      free_trial_duration_amount: null,
+      free_trial_duration_unit: null,
+      product_refund_policy_enabled: false,
+      refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
+      ...overrides,
+    } as unknown as Parameters<typeof saveProduct>[2];
+
+    await saveProduct("demo", "product-id", product, "usd", options);
+
+    const [[{ data }]] = cast<[[{ data: Record<string, unknown> }]]>(requestMock.mock.calls);
+    return data;
+  };
+
+  it("leaves an untouched policy out of the payload", async () => {
+    const data = await save(
+      { product_refund_policy_enabled: true },
+      {
+        lastSavedProductRefundPolicyEnabled: true,
+        lastSavedRefundPolicy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
+      },
+    );
+    expect(data).not.toHaveProperty("product_refund_policy_enabled");
+    expect(data).not.toHaveProperty("refund_policy");
+  });
+
+  it("sends an enable with the terms behind it", async () => {
+    const data = await save({ product_refund_policy_enabled: true }, { lastSavedProductRefundPolicyEnabled: false });
+    expect(data).toMatchObject({
+      product_refund_policy_enabled: true,
+      refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
+    });
+  });
+});
+
 describe("scalarSettingsForSave", () => {
   const product = (overrides = {}) => ({
     custom_permalink: null,
@@ -467,6 +535,8 @@ describe("scalarSettingsForSave", () => {
     free_trial_enabled: false,
     free_trial_duration_amount: null,
     free_trial_duration_unit: null,
+    product_refund_policy_enabled: false,
+    refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
     ...overrides,
   });
   const lastSaved = (overrides = {}) => ({
@@ -480,6 +550,8 @@ describe("scalarSettingsForSave", () => {
     free_trial_enabled: false,
     free_trial_duration_amount: null,
     free_trial_duration_unit: null,
+    product_refund_policy_enabled: false,
+    refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
     ...overrides,
   });
 
@@ -702,6 +774,55 @@ describe("scalarSettingsForSave", () => {
         lastSaved({ free_trial_enabled: null }),
       ),
     ).toEqual({ free_trial_enabled: true, free_trial_duration_amount: 1, free_trial_duration_unit: "week" });
+  });
+
+  it("omits an untouched refund policy, on or off, so a stale tab cannot change it", () => {
+    // Both halves unchanged: the enable must stay out (the flags writer turns any
+    // non-true value off) and the terms must not restore older ones.
+    expect(scalarSettingsForSave(product(), lastSaved())).toEqual({});
+    const policy = { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: "Final sale." };
+    expect(
+      scalarSettingsForSave(
+        product({ product_refund_policy_enabled: true, refund_policy: policy }),
+        lastSaved({ product_refund_policy_enabled: true, refund_policy: policy }),
+      ),
+    ).toEqual({});
+  });
+
+  it("carries the terms when this session turns the refund policy on", () => {
+    // The server writes the ProductRefundPolicy row from the terms only while the
+    // policy is on, so an enable that left the terms alone still has to send them.
+    const policy = { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: "Final sale." };
+    expect(
+      scalarSettingsForSave(product({ product_refund_policy_enabled: true, refund_policy: policy }), lastSaved()),
+    ).toEqual({ product_refund_policy_enabled: true, refund_policy: policy });
+  });
+
+  it("sends the terms this session edited while the enable stood", () => {
+    const saved = { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null };
+    const edited = { ...saved, fine_print: "Final sale." };
+    expect(
+      scalarSettingsForSave(
+        product({ product_refund_policy_enabled: true, refund_policy: edited }),
+        lastSaved({ product_refund_policy_enabled: true, refund_policy: saved }),
+      ),
+    ).toEqual({ refund_policy: edited });
+  });
+
+  it("sends the toggle-off this session made", () => {
+    expect(
+      scalarSettingsForSave(
+        product({ product_refund_policy_enabled: false }),
+        lastSaved({ product_refund_policy_enabled: true }),
+      ),
+    ).toMatchObject({ product_refund_policy_enabled: false });
+  });
+
+  it("sends both halves of the refund policy when the caller has no baseline", () => {
+    const policy = { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null };
+    expect(
+      scalarSettingsForSave(product({ refund_policy: policy }), lastSaved({ product_refund_policy_enabled: null })),
+    ).toEqual({ product_refund_policy_enabled: false, refund_policy: policy });
   });
 });
 
