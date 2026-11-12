@@ -2731,7 +2731,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
   test "PUT update updates the product refund policy when seller_refund_policy_disabled_for_all feature flag is set to true" do
     Feature.activate(:seller_refund_policy_disabled_for_all)
 
-    put :update, params: @params, as: :json
+    # The editor echoes the flag it loaded, so a deliberate on-toggle carries the off baseline.
+    put :update, params: @params.merge(expected_product_refund_policy_enabled: false), as: :json
     @product.reload
     assert_equal true, @product.product_refund_policy_enabled
     assert_equal "7-day money back guarantee", @product.product_refund_policy.title
@@ -2743,7 +2744,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
   test "PUT update updates the product refund policy when seller refund policy is set to false" do
     @product.user.update!(refund_policy_enabled: false)
 
-    put :update, params: @params, as: :json
+    put :update, params: @params.merge(expected_product_refund_policy_enabled: false), as: :json
     @product.reload
     assert_equal true, @product.product_refund_policy_enabled
     assert_equal "7-day money back guarantee", @product.product_refund_policy.title
@@ -2755,7 +2756,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     @product.update!(product_refund_policy_enabled: true)
 
     @params[:product_refund_policy_enabled] = false
-    put :update, params: @params, as: :json
+    put :update, params: @params.merge(expected_product_refund_policy_enabled: true), as: :json
     @product.reload
     assert_equal false, @product.product_refund_policy_enabled
     assert_nil @product.product_refund_policy
@@ -2792,14 +2793,14 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "usd", @product.price_currency_type
     assert_equal 1000, @product.price_cents
 
-    put :update, params: { id: @product.unique_permalink, price_currency_type: "eur", price_cents: 1200 }, as: :json
+    put :update, params: { id: @product.unique_permalink, price_currency_type: "eur", price_cents: 1200, expected_price_cents: 1000 }, as: :json
 
     assert_response :success
     @product.reload
     assert_equal "eur", @product.price_currency_type
     assert_equal 1200, @product.price_cents
 
-    put :update, params: { id: @product.unique_permalink, price_currency_type: "usd", price_cents: 1100 }, as: :json
+    put :update, params: { id: @product.unique_permalink, price_currency_type: "usd", price_cents: 1100, expected_price_cents: 1200 }, as: :json
 
     assert_response :success
     @product.reload
@@ -5198,7 +5199,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     create_installment_plan_purchase(link: product)
 
     assert_changes -> { existing_plan.reload.deleted_at }, from: nil do
-      post :update, params: { id: product.unique_permalink, price_cents: 0, installment_plan: nil, installment_plan_changed: true }, as: :json
+      post :update, params: { id: product.unique_permalink, price_cents: 0, expected_price_cents: 1000, installment_plan: nil, installment_plan_changed: true }, as: :json
     end
 
     assert_nil product.reload.installment_plan

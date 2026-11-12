@@ -18,6 +18,7 @@ describe LinksController, type: :controller do
       description: "A description",
       price_currency_type: "usd",
       price_cents: product.price_cents,
+      expected_price_cents: product.price_cents,
       customizable_price: false,
       covers: [],
       files: [],
@@ -76,7 +77,8 @@ describe LinksController, type: :controller do
                                      purchase_type: :buy_and_rent, rental_price_cents: 4_900)
 
       post :update, params: editor_save_params(id: eur_product.unique_permalink, name: eur_product.name,
-                                               price_currency_type: "vnd", price_cents: 1_000_000), as: :json
+                                               price_currency_type: "vnd", price_cents: 1_000_000,
+                                               expected_price_cents: eur_product.price_cents), as: :json
 
       expect(response.parsed_body["error_message"]).to eq("Your changes weren't saved. Your €49 rental price would become 4,900 ₫, " \
                                                          "below the 25,618 ₫ minimum. " \
