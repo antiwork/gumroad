@@ -45,7 +45,7 @@ describe Settings::Main::UserPolicy do
     end
   end
 
-  permissions :update?, :resend_confirmation_email?, :invalidate_active_sessions?, :update_username? do
+  permissions :update?, :invalidate_active_sessions?, :update_username? do
     it "grants access to owner" do
       seller_context = SellerContext.new(user: seller, seller:)
       expect(subject).to permit(seller_context, seller)
@@ -58,6 +58,40 @@ describe Settings::Main::UserPolicy do
 
     it "denies access to marketing" do
       seller_context = SellerContext.new(user: marketing_for_seller, seller:)
+      expect(subject).not_to permit(seller_context, seller)
+    end
+  end
+
+  # The resend is admin-or-owner: a brand account is administered by an admin member
+  # (its own login is unconfirmed and cannot sign in), so an owner-only gate hides it.
+  permissions :resend_confirmation_email? do
+    it "grants access to owner" do
+      seller_context = SellerContext.new(user: seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "grants access to admin" do
+      seller_context = SellerContext.new(user: admin_for_seller, seller:)
+      expect(subject).to permit(seller_context, seller)
+    end
+
+    it "denies access to accountant" do
+      seller_context = SellerContext.new(user: accountant_for_seller, seller:)
+      expect(subject).not_to permit(seller_context, seller)
+    end
+
+    it "denies access to marketing" do
+      seller_context = SellerContext.new(user: marketing_for_seller, seller:)
+      expect(subject).not_to permit(seller_context, seller)
+    end
+
+    it "denies access to support" do
+      seller_context = SellerContext.new(user: support_for_seller, seller:)
+      expect(subject).not_to permit(seller_context, seller)
+    end
+
+    it "denies access to a user with no membership on the account" do
+      seller_context = SellerContext.new(user: create(:user), seller:)
       expect(subject).not_to permit(seller_context, seller)
     end
   end
