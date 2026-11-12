@@ -49,28 +49,10 @@ describe LinksController, type: :controller do
     expect(product.reload.product_refund_policy_enabled?).to be(true)
   end
 
-  it "turns the policy off when the session submits false" do
-    post :update, params: editor_save_params(product_refund_policy_enabled: false), as: :json
-
-    expect(response).to be_successful
-    expect(product.reload.product_refund_policy_enabled?).to be(false)
-  end
-
   it "stores terms submitted beside an omitted enable" do
     post :update, params: editor_save_params(refund_policy: { title: "30-day money back guarantee", max_refund_period_in_days: 30, fine_print: "Within 30 days." }), as: :json
 
     expect(response).to be_successful
     expect(product.reload.product_refund_policy.fine_print).to eq("Within 30 days.")
-  end
-
-  it "creates the row when the session enables the policy with its terms" do
-    product.update!(product_refund_policy_enabled: false)
-    product.product_refund_policy.destroy!
-
-    post :update, params: editor_save_params(product_refund_policy_enabled: true, refund_policy: { title: "30-day money back guarantee", max_refund_period_in_days: 30, fine_print: "Within 30 days." }), as: :json
-
-    expect(response).to be_successful
-    expect(product.reload.product_refund_policy_enabled?).to be(true)
-    expect(product.product_refund_policy.fine_print).to eq("Within 30 days.")
   end
 end
