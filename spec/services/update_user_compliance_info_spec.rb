@@ -172,6 +172,40 @@ describe UpdateUserComplianceInfo do
       end
     end
 
+    context "when an unchanged save is made by an individual whose live Stripe account is non_profit" do
+      let!(:compliance_info) { create(:user_compliance_info, user:) }
+      let(:params) { ActionController::Parameters.new(first_name: compliance_info.first_name, last_name: compliance_info.last_name) }
+
+      before do
+        create(:merchant_account, user:, charge_processor_merchant_id: "acct_hosted_non_profit")
+        create(:tos_agreement, user:)
+        allow(Stripe::Account).to receive(:retrieve).with("acct_hosted_non_profit").and_return(
+          Stripe::Account.construct_from(
+            id: "acct_hosted_non_profit",
+            object: "account",
+            business_type: "non_profit",
+            country: "US",
+            metadata: { user_compliance_info_id: compliance_info.external_id },
+            capabilities: {},
+            requirements: { currently_due: [], eventually_due: [], past_due: [] }
+          )
+        )
+        allow(Stripe::Account).to receive(:list_persons).and_return("data" => [])
+        allow(StripeGuardianManager).to receive(:sync)
+      end
+
+      it "sends business_type individual back to Stripe" do
+        expect(Stripe::Account).to receive(:update).with("acct_hosted_non_profit", hash_including(business_type: "individual"))
+
+        result = nil
+        expect do
+          result = described_class.new(compliance_params: params, user:).process
+        end.not_to change { UserComplianceInfo.count }
+
+        expect(result[:success]).to be true
+      end
+    end
+
     context "when an unchanged save is made by a company seller" do
       let!(:individual_info) { create(:user_compliance_info, user:) }
       let!(:compliance_info) do

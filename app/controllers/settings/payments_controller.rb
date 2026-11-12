@@ -11,9 +11,12 @@ class Settings::PaymentsController < Settings::BaseController
 
   PAYOUT_SETUP_ALREADY_UNDERWAY_MESSAGE = "We're already setting up payouts for your account. Refresh this page in a moment to see its status."
 
+  LIVE_BUSINESS_TYPE_RECONCILE_THROTTLE = 1.hour
+
   before_action :authorize
 
   def show
+    enqueue_live_business_type_reconcile
     props = settings_presenter.payments_props(remote_ip: request.remote_ip)
     SocialConnectFunnel.record_offers!(
       user: current_seller,
@@ -354,6 +357,18 @@ class Settings::PaymentsController < Settings::BaseController
     safe_redirect_to settings_payments_path and return if current_seller.stripe_account.blank?
 
     stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+    if StripeMerchantAccountManager::LIVE_NON_INDIVIDUAL_BUSINESS_TYPES.include?(stripe_account["business_type"]) &&
+       StripeMerchantAccountManager.live_business_type_reconcilable?(current_seller)
+      current_seller.with_lock { StripeMerchantAccountManager.reconcile_live_business_type(current_seller, stripe_account:) }
+      # Flipping the type back changes what Stripe has due, and a repair that reports an error may still have
+      # been applied, so re-read whenever one was attempted instead of trusting the first read.
+      begin
+        stripe_account = Stripe::Account.retrieve(current_seller.stripe_account.charge_processor_merchant_id)
+      rescue Stripe::StripeError => e
+        ErrorNotifier.notify(e, context: { user_id: current_seller.id })
+        safe_redirect_to settings_payments_path and return
+      end
+    end
     requirements = stripe_account["requirements"] || {}
     future_requirements = stripe_account["future_requirements"] || {}
 
@@ -635,6 +650,17 @@ class Settings::PaymentsController < Settings::BaseController
 
     def current_seller_policy
       [:settings, :payments, current_seller]
+    end
+
+    # Any failure here must not cost the seller the page.
+    def enqueue_live_business_type_reconcile
+      return unless StripeMerchantAccountManager.live_business_type_reconcilable?(current_seller)
+      return unless $redis.set(RedisKey.stripe_live_business_type_reconcile_throttle(current_seller.id), 1,
+                               nx: true, ex: LIVE_BUSINESS_TYPE_RECONCILE_THROTTLE.to_i)
+
+      ReconcileStripeLiveBusinessTypeJob.perform_async(current_seller.id)
+    rescue => e
+      ErrorNotifier.notify(e, context: { user_id: current_seller.id })
     end
 
     def sync_stripe_disabled_reason(merchant_account)

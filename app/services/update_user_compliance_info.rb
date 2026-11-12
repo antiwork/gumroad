@@ -133,6 +133,7 @@ class UpdateUserComplianceInfo
             StripeMerchantAccountManager.clear_unresolvable_business_tax_id_notes(user)
             # This path skips Stripe; finish a structure sync that never completed.
             StripeMerchantAccountManager.resync_pending_structure_rejection(user)
+            StripeMerchantAccountManager.reconcile_live_business_type(user)
             return { success: true }
           end
         end
