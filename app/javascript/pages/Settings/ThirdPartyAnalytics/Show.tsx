@@ -176,10 +176,19 @@ export default function ThirdPartyAnalyticsPage() {
                       className="flex-1"
                       placeholder={metaTokenSaved ? "Token saved. Enter a new token to replace it." : ""}
                       value={thirdPartyAnalytics.meta_conversions_access_token}
-                      onChange={(evt) => updateUser({ meta_conversions_access_token: evt.target.value })}
+                      onChange={(evt) =>
+                        updateUser({
+                          meta_conversions_access_token: evt.target.value,
+                          remove_meta_conversions_access_token: false,
+                        })
+                      }
                     />
                     {metaTokenSaved ? (
-                      <Button onClick={() => updateUser({ remove_meta_conversions_access_token: true })}>
+                      <Button
+                        onClick={() =>
+                          updateUser({ remove_meta_conversions_access_token: true, meta_conversions_access_token: "" })
+                        }
+                      >
                         Remove token
                       </Button>
                     ) : null}

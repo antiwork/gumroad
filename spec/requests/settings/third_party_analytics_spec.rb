@@ -162,6 +162,32 @@ describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
         expect(page).not_to have_button("Remove token")
         expect(seller.reload.meta_conversions_setting).to be_nil
       end
+
+      it "removes the saved token when a replacement was typed first" do
+        seller.create_meta_conversions_setting!(access_token: "token-1")
+
+        visit settings_third_party_analytics_path
+        fill_in "Conversions API access token", with: "token-2"
+        click_on "Remove token"
+
+        expect(page).to have_field("Conversions API access token", with: "")
+        click_on "Update settings"
+
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(seller.reload.meta_conversions_setting).to be_nil
+      end
+
+      it "saves a token typed after the removal" do
+        seller.create_meta_conversions_setting!(access_token: "token-1")
+
+        visit settings_third_party_analytics_path
+        click_on "Remove token"
+        fill_in "Conversions API access token", with: "token-2"
+        click_on "Update settings"
+
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(seller.reload.meta_conversions_setting.access_token).to eq("token-2")
+      end
     end
 
     context "when the feature is off for the seller" do

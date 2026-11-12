@@ -47,12 +47,16 @@ class Settings::ThirdPartyAnalyticsController < Settings::BaseController
     def save_meta_conversions_access_token
       return unless Feature.active?(:meta_conversions_api, current_seller)
 
+      # Removal wins: the page can send a typed replacement along with the flag.
+      if ActiveModel::Type::Boolean.new.cast(params.dig(:user, :remove_meta_conversions_access_token))
+        current_seller.meta_conversions_setting&.destroy!
+        return
+      end
+
       access_token = params.dig(:user, :meta_conversions_access_token).to_s.strip
       if access_token.present?
         setting = current_seller.meta_conversions_setting || current_seller.build_meta_conversions_setting
         setting.update!(access_token:, token_rejected_at: nil)
-      elsif ActiveModel::Type::Boolean.new.cast(params.dig(:user, :remove_meta_conversions_access_token))
-        current_seller.meta_conversions_setting&.destroy!
       end
     end
 
