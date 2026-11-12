@@ -721,6 +721,31 @@ describe Settings::MainController, type: :controller, inertia: true do
       it_behaves_like "doesn't resend email confirmation"
     end
 
+    context "when signed in as an admin team member" do
+      include_context "with user signed in as admin for seller"
+
+      before do
+        seller.update_columns(confirmed_at: nil)
+      end
+
+      it_behaves_like "resends email confirmation"
+    end
+
+    context "when signed in as a marketing team member" do
+      include_context "with user signed in as marketing for seller"
+
+      before do
+        seller.update_columns(confirmed_at: nil)
+      end
+
+      it "doesn't resend email confirmation" do
+        expect { post :resend_confirmation_email }
+          .not_to change { ResendConfirmationEmailJob.jobs.size }
+
+        expect(response).to redirect_to(dashboard_url)
+      end
+    end
+
     # The dashboard's confirm-your-email banner posts as JSON so the seller isn't
     # redirected to the Settings page mid-flow.
     context "when requesting JSON" do
