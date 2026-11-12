@@ -176,6 +176,16 @@ describe Settings::ThirdPartyAnalyticsController, type: :controller, inertia: tr
           expect(seller.reload.meta_conversions_setting).to be_nil
         end
 
+        it "removes the token when a replacement token is sent with the removal flag" do
+          seller.create_meta_conversions_setting!(access_token: "token-1")
+
+          put :update, params: {
+            user: { meta_conversions_access_token: "token-2", remove_meta_conversions_access_token: true }
+          }
+
+          expect(seller.reload.meta_conversions_setting).to be_nil
+        end
+
         it "does not save a token when the other settings are invalid" do
           put :update, params: { user: { google_analytics_id: "bad", meta_conversions_access_token: "token-1" } }
 
