@@ -171,12 +171,12 @@ export default function ThirdPartyAnalyticsPage() {
                       Learn more
                     </a>
                   </FieldsetTitle>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 max-sm:flex-col max-sm:items-stretch">
                     <Input
                       id={`${uid}metaConversionsAccessToken`}
                       type="password"
                       autoComplete="off"
-                      className="flex-1"
+                      className="flex-1 max-sm:flex-none"
                       aria-invalid={metaTokenRejected}
                       aria-describedby={metaTokenRejected ? `${uid}metaConversionsAccessTokenError` : undefined}
                       placeholder={metaTokenSaved ? "Enter a new token to replace it." : ""}
