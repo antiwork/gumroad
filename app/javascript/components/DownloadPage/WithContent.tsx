@@ -94,6 +94,7 @@ export type ContentProps = {
   last_content_page_id: string | null;
   license: License | null;
   content_items: (FileItem | FolderItem)[];
+  commission_deliverables?: FileItem[];
   bundle_products: { id: string; name: string; thumbnail_url: string | null; url: string }[];
   posts: Post[];
   video_transcoding_info: { transcode_on_first_sale: boolean } | null;
@@ -335,6 +336,12 @@ export const WithContent = ({
                   </Card>
                 ))}
               </div>
+            ) : null}
+            {content.rich_content_pages !== null && (content.commission_deliverables?.length ?? 0) > 0 ? (
+              <section aria-label="Downloads" className="mb-4 flex flex-col gap-2">
+                <h3>Downloads</h3>
+                <DownloadFileList content_items={content.commission_deliverables ?? []} />
+              </section>
             ) : null}
             {content.rich_content_pages !== null ? (
               activePage ? (

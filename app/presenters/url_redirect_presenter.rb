@@ -169,6 +169,7 @@ class UrlRedirectPresenter
       {
         license:,
         content_items: download_attributes[:content_items],
+        commission_deliverables:,
         bundle_products: bundle_product_props,
         rich_content_pages:,
         last_content_page_id: purchase&.last_content_page_id,
@@ -333,6 +334,13 @@ class UrlRedirectPresenter
       return unless logged_in_user == url_redirect.seller && !url_redirect.with_product_files.has_been_transcoded?
 
       { transcode_on_first_sale: product&.transcode_videos_on_purchase.present? }
+    end
+
+    def commission_deliverables
+      commission = purchase&.commission
+      return [] unless commission&.is_completed?
+
+      commission.files.map { |file| map_commission_file(file) }
     end
 
     def media_locations_by_file

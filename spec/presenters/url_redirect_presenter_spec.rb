@@ -809,11 +809,18 @@ describe UrlRedirectPresenter do
         )
       end
 
+      it "exposes the deliverables separately for the first-page Downloads section" do
+        content = presenter.download_page_with_content_props[:content]
+
+        expect(content[:commission_deliverables].map { |f| f[:id] }).to eq(commission.files.map(&:signed_id))
+      end
+
       context "when the commission is not completed" do
         before { commission.update(status: Commission::STATUS_IN_PROGRESS) }
 
         it "does not include commission files" do
           expect(presenter.download_page_with_content_props[:content][:content_items]).to eq([])
+          expect(presenter.download_page_with_content_props[:content][:commission_deliverables]).to eq([])
         end
       end
     end

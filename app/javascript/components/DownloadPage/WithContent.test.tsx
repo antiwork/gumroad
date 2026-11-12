@@ -214,6 +214,51 @@ describe("DownloadPage content navigation", () => {
   });
 });
 
+describe("DownloadPage commission deliverables", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/d/token");
+  });
+
+  afterEach(() => cleanup());
+
+  const file = {
+    type: "file" as const,
+    file_name: "CV final",
+    description: null,
+    extension: "PDF",
+    file_size: 57712,
+    pagelength: null,
+    duration: null,
+    id: "signed-1",
+    download_url: "https://example.com/cv.pdf",
+    view_url: null,
+    stream_url: null,
+    kindle_data: null,
+    latest_media_location: null,
+    content_length: null,
+    read_url: null,
+    external_link_url: null,
+    subtitle_files: [],
+    pdf_stamp_enabled: false,
+    processing: false,
+    thumbnail_url: null,
+    width: null,
+    height: null,
+  };
+
+  it("shows deliverables above the first page without navigating", () => {
+    const { container } = renderPage({ ...content(null), commission_deliverables: [file] });
+    expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
+    expect(container.textContent).toContain("CV final");
+    expect(container.textContent).toContain("Lesson 1 body");
+  });
+
+  it("shows no Downloads section when the commission is not completed", () => {
+    renderPage({ ...content(null), commission_deliverables: [] });
+    expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
+  });
+});
+
 describe("DownloadPage receipt alert", () => {
   afterEach(() => {
     cleanup();
