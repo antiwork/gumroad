@@ -318,8 +318,11 @@ class ContentModeration::Strategies::ClassifierStrategy
       # unreviewed image, and it would also count towards moderated_count and so
       # suppress the no-image-moderated safety net below.
       results.map { |result| result.is_a?(Hash) ? result["category_scores"] : nil }
+    # Faraday::SSLError descends from Faraday::Error, NOT from ConnectionFailed
+    # or TimeoutError, so a TLS handshake failure has to be named explicitly or
+    # it escapes the strategy.
     rescue Faraday::BadRequestError, Faraday::TimeoutError, Faraday::ConnectionFailed,
-           Faraday::ParsingError, Faraday::ServerError => e
+           Faraday::ParsingError, Faraday::ServerError, Faraday::SSLError => e
       Rails.logger.warn(
         "ContentModeration::ClassifierStrategy image batch of #{input.size} failed " \
         "(#{e.class.name.demodulize}), retrying images individually: #{e.message[0, 300]}"
@@ -339,7 +342,7 @@ class ContentModeration::Strategies::ClassifierStrategy
         return nil unless scores.is_a?(Hash)
 
         scores
-      rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ParsingError, Faraday::ServerError => e
+      rescue Faraday::TimeoutError, Faraday::ConnectionFailed, Faraday::ParsingError, Faraday::ServerError, Faraday::SSLError => e
         # Retrying past the phase deadline is the same overrun one level down: the
         # image is going to count as unmoderated either way, so spend nothing more
         # on it.

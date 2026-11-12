@@ -365,6 +365,16 @@ RSpec.describe ContentModeration::Strategies::PromptStrategy, :vcr do
     expect(Rails.logger).to have_received(:error).with("ContentModeration::PromptStrategy preset evaluation error: API failure").at_least(:once)
   end
 
+  it "treats a TLS handshake failure as upstream flakiness rather than a crash" do
+    allow(client).to receive(:chat).and_raise(Faraday::SSLError, "unexpected eof while reading")
+
+    result = described_class.new(text: "moderate me").perform
+
+    expect(result.status).to eq("compliant")
+    expect(Rails.logger).to have_received(:warn)
+      .with(/preset timeout on .*Faraday::SSLError - unexpected eof while reading/).at_least(:once)
+  end
+
   context "when OpenAI rejects the request with a 400" do
     let(:bad_request_response) do
       {

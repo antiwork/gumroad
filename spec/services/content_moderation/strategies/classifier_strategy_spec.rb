@@ -856,4 +856,36 @@ RSpec.describe ContentModeration::Strategies::ClassifierStrategy, :vcr do
       skip_url: nil,
     )
   end
+
+  it "retries a TLS handshake failure like any other transport failure" do
+    allow(client).to receive(:moderations).and_raise(Faraday::SSLError, "unexpected eof while reading")
+
+    result = described_class.new(text:, image_urls: []).perform
+
+    expect(result.status).to eq("flagged")
+    expect(result.reasoning).to eq([described_class::UNAVAILABLE_REASON])
+    expect(client).to have_received(:moderations).exactly(described_class::MAX_MODERATION_ATTEMPTS).times
+    expect(ErrorNotifier).to have_received(:notify).with(
+      instance_of(Faraday::SSLError),
+      attempts: described_class::MAX_MODERATION_ATTEMPTS,
+      input_type: "text",
+      skip_url: nil,
+    )
+  end
+
+  it "falls back to per-image requests when a batched request fails on TLS" do
+    image_urls = (1..2).map { |n| "https://cdn.example.com/#{n}.png" }
+    input_sizes = []
+    allow(client).to receive(:moderations) do |parameters:|
+      input_sizes << parameters[:input].size
+      raise Faraday::SSLError, "unexpected eof while reading" if parameters[:input].size > 1
+
+      { "results" => [{ "category_scores" => {} }] }
+    end
+
+    result = described_class.new(text: "", image_urls:, max_images: :all).perform
+
+    expect(input_sizes).to eq([2, 1, 1])
+    expect(result.status).to eq("compliant")
+  end
 end
