@@ -16,7 +16,7 @@ describe SendMetaConversionEventJob do
       ip_address: "203.0.113.9",
       ip_country: "United States",
       country: "United States",
-      succeeded_at: Time.utc(2026, 11, 12, 9, 30, 0)
+      succeeded_at: 1.hour.ago
     )
   end
   let(:endpoint) { "https://graph.facebook.com/v27.0/#{seller.facebook_pixel_id}/events" }
@@ -193,6 +193,20 @@ describe SendMetaConversionEventJob do
         "MetaConversions outcome=rejected reason=token purchase_id=#{purchase.id} " \
         "seller_id=#{seller.id} http_status=400 fb_error_code=190 fbtrace_id=A1b2C3"
       )
+    end
+
+    it "leaves a token the seller replaced mid-request alone" do
+      stub_request(:post, endpoint).to_return do
+        MetaConversionsSetting.find_by(user: seller).update!(access_token: "replacement-token")
+        { status: 400, body: { error: { message: "Invalid OAuth access token", code: 190 } }.to_json }
+      end
+
+      perform
+
+      setting = MetaConversionsSetting.find_by(user: seller)
+      expect(setting.access_token).to eq("replacement-token")
+      expect(setting.token_rejected_at).to be_nil
+      expect(MetaConversions::Eligibility.seller_skip_reason(seller)).to be_nil
     end
   end
 

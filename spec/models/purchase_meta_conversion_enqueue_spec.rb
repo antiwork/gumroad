@@ -18,9 +18,7 @@ describe Purchase, "Meta conversion enqueue" do
   end
 
   it "enqueues nothing for a purchase that does not succeed" do
-    purchase.mark_failed!
-
-    expect(SendMetaConversionEventJob).not_to have_enqueued_sidekiq_job(purchase.id)
+    expect { purchase.mark_failed! }.not_to change { SendMetaConversionEventJob.jobs.size }
   end
 
   it "does not fail the purchase when the queue is unreachable" do

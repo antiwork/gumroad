@@ -82,6 +82,10 @@ class OrdersController < ApplicationController
       manage_cookie_verifier:
     ).perform
 
+    # This is the only request in the client-confirm lane that holds the buyer's browser details,
+    # and the purchase succeeds later, from #finalize.
+    save_meta_conversions_purchase_context(order)
+
     prepare_responses = Order::PreparePaymentIntentService.new(
       order:,
       params: prepare_params,

@@ -3089,6 +3089,38 @@ describe OrdersController, :vcr do
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
     end
 
+    context "when the seller has the Meta conversion sender on" do
+      let(:purchases) { double("order_purchases") }
+      let(:order) { double("order", persisted?: true, purchases:) }
+
+      before do
+        allow(purchases).to receive(:each).and_return([])
+        allow(Order::CreateService).to receive(:new)
+          .and_return(instance_double(Order::CreateService, perform: [order, {}, []]))
+        allow(Order::PreparePaymentIntentService).to receive(:new)
+          .and_return(instance_double(Order::PreparePaymentIntentService, perform: { "unique-id-0" => { success: false } }))
+        allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+
+        Feature.activate_user(:meta_conversions_api, seller)
+        seller.update!(facebook_pixel_id: "1056510450054835")
+        seller.create_meta_conversions_setting!(access_token: "seller-token")
+      end
+
+      it "saves the buyer user agent and the checkout host, since the purchase succeeds later" do
+        @request.headers["User-Agent"] = "Mozilla/5.0 (Macintosh)"
+
+        expect(MetaConversions::PurchaseContext).to receive(:save_for).with(
+          purchases,
+          user_agent: "Mozilla/5.0 (Macintosh)",
+          base_url: "http://#{@request.host_with_port}"
+        )
+
+        post :prepare, params: { line_items:, confirmation_token: "ctoken-test" }.merge(common_params)
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
+    end
+
     it "lets a checkout restart check the membership's manage cookie" do
       subscription = create(:subscription)
       other_subscription = create(:subscription)

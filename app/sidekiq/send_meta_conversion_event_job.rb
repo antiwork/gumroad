@@ -9,29 +9,38 @@ class SendMetaConversionEventJob
   class SendFailed < StandardError; end
 
   def perform(purchase_id)
-    purchase = Purchase.find_by(id: purchase_id)
-    return if purchase.nil?
-
-    skip_reason = MetaConversions::Eligibility.seller_skip_reason(purchase.seller)
-    return log(purchase, outcome: "skipped", reason: skip_reason) if skip_reason
-
-    context = MetaConversions::PurchaseContext.fetch(purchase.id)
-    skip_reason = MetaConversions::Eligibility.purchase_skip_reason(purchase, context)
-    return log(purchase, outcome: "skipped", reason: skip_reason) if skip_reason
-
-    setting = purchase.seller.meta_conversions_setting
-    result = MetaConversions::Sender.new(purchase, context:, setting:).perform
-
-    if result.outcome == :rejected && result.token_rejected
-      setting.update!(token_rejected_at: Time.current)
-    end
-
-    log(purchase, outcome: result.outcome.to_s, reason: result.reason, result:)
-
-    raise SendFailed, "Meta rejected the request with reason #{result.reason}" if result.outcome == :retry
+    # The purchase committed moments ago in the checkout request, and workers read a replica:
+    # both the row and the send-time settings have to come from the primary.
+    ApplicationRecord.connected_to(role: :writing) { send_event(purchase_id) }
   end
 
   private
+    def send_event(purchase_id)
+      purchase = Purchase.find_by(id: purchase_id)
+      return if purchase.nil?
+
+      skip_reason = MetaConversions::Eligibility.seller_skip_reason(purchase.seller)
+      return log(purchase, outcome: "skipped", reason: skip_reason) if skip_reason
+
+      context = MetaConversions::PurchaseContext.fetch(purchase.id)
+      skip_reason = MetaConversions::Eligibility.purchase_skip_reason(purchase, context)
+      return log(purchase, outcome: "skipped", reason: skip_reason) if skip_reason
+
+      setting = purchase.seller.meta_conversions_setting
+      result = MetaConversions::Sender.new(purchase, context:, setting:).perform
+
+      if result.outcome == :rejected && result.token_rejected
+        # Only the token this request sent: a seller who replaced it while the request was in
+        # flight must not have the replacement marked bad, which would stop every later send.
+        MetaConversionsSetting.find_by(id: setting.id, access_token: setting.access_token)
+                              &.update!(token_rejected_at: Time.current)
+      end
+
+      log(purchase, outcome: result.outcome.to_s, reason: result.reason, result:)
+
+      raise SendFailed, "Meta rejected the request with reason #{result.reason}" if result.outcome == :retry
+    end
+
     def log(purchase, outcome:, reason: nil, result: nil)
       Rails.logger.info(
         "MetaConversions outcome=#{outcome} reason=#{reason} purchase_id=#{purchase.id} " \
