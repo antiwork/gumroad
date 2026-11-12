@@ -32,8 +32,9 @@ class SendMetaConversionEventJob
       if result.outcome == :rejected && result.token_rejected
         # Only the token this request sent: a seller who replaced it while the request was in
         # flight must not have the replacement marked bad, which would stop every later send.
-        MetaConversionsSetting.find_by(id: setting.id, access_token: setting.access_token)
-                              &.update!(token_rejected_at: Time.current)
+        # One conditional UPDATE: a read-then-write would leave a window for the swap.
+        MetaConversionsSetting.where(id: setting.id, access_token: setting.access_token)
+                              .update_all(token_rejected_at: Time.current, updated_at: Time.current)
       end
 
       log(purchase, outcome: result.outcome.to_s, reason: result.reason, result:)
