@@ -677,6 +677,8 @@ export const scalarSettingsForSave = (
     free_trial_enabled: boolean;
     free_trial_duration_amount: Product["free_trial_duration_amount"];
     free_trial_duration_unit: Product["free_trial_duration_unit"];
+    product_refund_policy_enabled: boolean;
+    refund_policy: { title: string; max_refund_period_in_days: number; fine_print: string | null };
   },
   lastSaved: {
     custom_permalink: string | null;
@@ -689,6 +691,8 @@ export const scalarSettingsForSave = (
     free_trial_enabled: boolean | null;
     free_trial_duration_amount: Product["free_trial_duration_amount"];
     free_trial_duration_unit: Product["free_trial_duration_unit"];
+    product_refund_policy_enabled: boolean | null;
+    refund_policy: { title: string; max_refund_period_in_days: number; fine_print: string | null } | null;
   },
 ) => {
   const settings: Record<string, unknown> = {};
@@ -746,6 +750,21 @@ export const scalarSettingsForSave = (
     settings.free_trial_duration_amount = product.free_trial_enabled ? product.free_trial_duration_amount : null;
     settings.free_trial_duration_unit = product.free_trial_enabled ? product.free_trial_duration_unit : null;
   }
+  // The server writes the policy row from the terms only while the policy is on, so
+  // an enable has to carry them. A save that touched neither half omits both, so a
+  // stale tab cannot turn the policy off or restore older terms.
+  const refundPolicyBaselineKnown = lastSaved.product_refund_policy_enabled !== null;
+  const refundPolicyToggled = product.product_refund_policy_enabled !== lastSaved.product_refund_policy_enabled;
+  const refundPolicyTermsChanged =
+    product.refund_policy.title !== lastSaved.refund_policy?.title ||
+    product.refund_policy.max_refund_period_in_days !== lastSaved.refund_policy?.max_refund_period_in_days ||
+    product.refund_policy.fine_print !== lastSaved.refund_policy?.fine_print;
+  if (!refundPolicyBaselineKnown || refundPolicyToggled) {
+    settings.product_refund_policy_enabled = product.product_refund_policy_enabled;
+  }
+  if (!refundPolicyBaselineKnown || refundPolicyToggled || refundPolicyTermsChanged) {
+    settings.refund_policy = product.refund_policy;
+  }
   return settings;
 };
 
@@ -780,6 +799,8 @@ export const saveProduct = async (
     lastSavedFreeTrialEnabled?: boolean | null;
     lastSavedFreeTrialDurationAmount?: Product["free_trial_duration_amount"];
     lastSavedFreeTrialDurationUnit?: Product["free_trial_duration_unit"];
+    lastSavedProductRefundPolicyEnabled?: boolean | null;
+    lastSavedRefundPolicy?: { title: string; max_refund_period_in_days: number; fine_print: string | null } | null;
   } = {},
 ): Promise<SaveProductResponse> => {
   // TODO remove this once we have a better content uploader
@@ -812,6 +833,8 @@ export const saveProduct = async (
     free_trial_enabled,
     free_trial_duration_amount,
     free_trial_duration_unit,
+    product_refund_policy_enabled,
+    refund_policy,
     ...productParams
   } = product;
   const response = await request({
@@ -834,6 +857,8 @@ export const saveProduct = async (
           free_trial_enabled,
           free_trial_duration_amount,
           free_trial_duration_unit,
+          product_refund_policy_enabled,
+          refund_policy,
         },
         {
           custom_permalink: options.lastSavedCustomPermalink ?? null,
@@ -846,6 +871,8 @@ export const saveProduct = async (
           free_trial_enabled: options.lastSavedFreeTrialEnabled ?? null,
           free_trial_duration_amount: options.lastSavedFreeTrialDurationAmount ?? null,
           free_trial_duration_unit: options.lastSavedFreeTrialDurationUnit ?? null,
+          product_refund_policy_enabled: options.lastSavedProductRefundPolicyEnabled ?? null,
+          refund_policy: options.lastSavedRefundPolicy ?? null,
         },
       ),
       files,
