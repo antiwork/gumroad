@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000002) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000004) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -746,7 +746,7 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_26_000002) do
     t.datetime "consumed_at", precision: nil
     t.integer "media_location_basis_points"
     t.index ["link_id"], name: "index_consumption_events_on_link_id"
-    t.index ["product_file_id"], name: "index_consumption_events_on_product_file_id"
+    t.index ["product_file_id", "event_type", "created_at", "purchase_id"], name: "index_consumption_events_on_file_type_created_purchase"
     t.index ["purchase_id"], name: "index_consumption_events_on_purchase_id"
   end
 
