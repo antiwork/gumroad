@@ -1044,29 +1044,40 @@ class LinksController < ApplicationController
       permitted.delete(:description) if permitted[:description].blank? && !description_clear_requested?
       permitted.delete(:customizable_price) if permitted[:customizable_price].nil?
       permitted.delete(:product_refund_policy_enabled) if permitted[:product_refund_policy_enabled].nil? || unedited_in_session?(:product_refund_policy_enabled)
-      permitted.delete(:price_cents) if unedited_in_session?(:price_cents)
+      [:price_cents, :price_currency_type].each { permitted.delete(_1) } if price_unedited_in_session?
       permitted.delete(:installment_plan) if permitted[:installment_plan].blank? && !installment_plan_clear_requested?
     end
 
     # The editor echoes the value it last loaded or saved as `expected_<key>`. A
     # payload equal to it was not edited in this session.
     def unedited_in_session?(key)
-      return false if key == :price_cents && price_currency_changing?
       expected = params["expected_#{key}"]
-      !expected.nil? && !params[key].nil? && normalized_baseline_value(key, params[key]) == normalized_baseline_value(key, expected)
+      !expected.nil? && !params[key].nil? && ActiveModel::Type::Boolean.new.cast(params[key]) == ActiveModel::Type::Boolean.new.cast(expected)
     end
 
-    # A currency switch needs the amount carried into the new currency's price row.
-    def price_currency_changing?
-      params[:price_currency_type].present? && params[:price_currency_type].to_s != @product.price_currency_type.to_s
+    # A price is its amount and currency together: the same amount in another
+    # currency is a different price. The editor omits an unchanged amount.
+    def baseline_price
+      return if params[:expected_price_cents].nil? || params[:expected_price_currency_type].blank?
+      [params[:expected_price_cents].to_s.to_i, params[:expected_price_currency_type].to_s.downcase]
     end
 
-    def normalized_baseline_value(key, value)
-      key == :price_cents ? value.to_s.to_i : ActiveModel::Type::Boolean.new.cast(value)
+    def stored_price
+      [@product.price_cents.to_i, @product.price_currency_type]
     end
 
-    def stored_baseline_value(key)
-      key == :price_cents ? @product.price_cents : @product.product_refund_policy_enabled?
+    def submitted_price
+      [
+        params[:price_cents].nil? ? stored_price.first : params[:price_cents].to_s.to_i,
+        params[:price_currency_type].presence&.to_s&.downcase || stored_price.last,
+      ]
+    end
+
+    def price_unedited_in_session?
+      baseline = baseline_price
+      return false if baseline.nil?
+      (params[:price_cents].nil? || params[:price_cents].to_s.to_i == baseline.first) &&
+        (params[:price_currency_type].blank? || params[:price_currency_type].to_s.downcase == baseline.last)
     end
 
     # A deliberate price or refund-policy edit is accepted only when the tab's
@@ -1074,18 +1085,14 @@ class LinksController < ApplicationController
     # explicit value that disagrees with the record cannot be attributed to the
     # seller and is refused instead of silently overwriting a newer save.
     def unverified_price_or_refund_write
-      keys = [:price_cents]
-      keys << :product_refund_policy_enabled unless current_seller.account_level_refund_policy_enabled?
-      keys.each do |key|
-        next if params[key].nil? || unedited_in_session?(key)
-        submitted = normalized_baseline_value(key, params[key])
-        stored = normalized_baseline_value(key, stored_baseline_value(key))
-        next if submitted == stored
-        expected = params["expected_#{key}"]
-        next if !expected.nil? && normalized_baseline_value(key, expected) == stored
-        return key == :price_cents ? :price : :refund_policy
-      end
-      nil
+      return :price if !price_unedited_in_session? && submitted_price != stored_price && baseline_price != stored_price
+      return if current_seller.account_level_refund_policy_enabled?
+      return if params[:product_refund_policy_enabled].nil? || unedited_in_session?(:product_refund_policy_enabled)
+      submitted = ActiveModel::Type::Boolean.new.cast(params[:product_refund_policy_enabled])
+      expected = params[:expected_product_refund_policy_enabled]
+      stored = @product.product_refund_policy_enabled?
+      return if submitted == stored || (!expected.nil? && ActiveModel::Type::Boolean.new.cast(expected) == stored)
+      :refund_policy
     end
 
     # The editor renders save errors as HTML, so every interpolated value is escaped. The amount moves across

@@ -2215,6 +2215,8 @@ class LinksControllerUpdateTest < ActionController::TestCase
       id: product.unique_permalink,
       name: product.name,
       price_currency_type: "eur",
+      expected_price_cents: product.price_cents,
+      expected_price_currency_type: "usd",
       variants: [
         { id: first_tier.external_id, name: first_tier.name,
           updated_at: Product::StaleContentWriteGuard.snapshot_at(first_tier).as_json,
@@ -2793,14 +2795,14 @@ class LinksControllerUpdateTest < ActionController::TestCase
     assert_equal "usd", @product.price_currency_type
     assert_equal 1000, @product.price_cents
 
-    put :update, params: { id: @product.unique_permalink, price_currency_type: "eur", price_cents: 1200, expected_price_cents: 1000 }, as: :json
+    put :update, params: { id: @product.unique_permalink, price_currency_type: "eur", price_cents: 1200, expected_price_cents: 1000, expected_price_currency_type: "usd" }, as: :json
 
     assert_response :success
     @product.reload
     assert_equal "eur", @product.price_currency_type
     assert_equal 1200, @product.price_cents
 
-    put :update, params: { id: @product.unique_permalink, price_currency_type: "usd", price_cents: 1100, expected_price_cents: 1200 }, as: :json
+    put :update, params: { id: @product.unique_permalink, price_currency_type: "usd", price_cents: 1100, expected_price_cents: 1200, expected_price_currency_type: "eur" }, as: :json
 
     assert_response :success
     @product.reload
@@ -5199,7 +5201,7 @@ class LinksControllerUpdateTest < ActionController::TestCase
     create_installment_plan_purchase(link: product)
 
     assert_changes -> { existing_plan.reload.deleted_at }, from: nil do
-      post :update, params: { id: product.unique_permalink, price_cents: 0, expected_price_cents: 1000, installment_plan: nil, installment_plan_changed: true }, as: :json
+      post :update, params: { id: product.unique_permalink, price_cents: 0, expected_price_cents: 1000, expected_price_currency_type: "usd", installment_plan: nil, installment_plan_changed: true }, as: :json
     end
 
     assert_nil product.reload.installment_plan

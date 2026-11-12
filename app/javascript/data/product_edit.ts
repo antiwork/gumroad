@@ -854,6 +854,7 @@ export const saveProduct = async (
       ...productParams,
       rich_content: withoutFailedFileEmbeds(product.rich_content, failedFileIds),
       expected_price_cents: options.lastSavedPriceCents ?? undefined,
+      expected_price_currency_type: options.lastSavedCurrencyType,
       expected_product_refund_policy_enabled: options.lastSavedProductRefundPolicyEnabled ?? undefined,
       ...scalarSettingsForSave(
         {

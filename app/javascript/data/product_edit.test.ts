@@ -521,6 +521,11 @@ describe("saveProduct with a refund policy", () => {
       refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
     });
   });
+
+  it("sends the price baseline as an amount and a currency, and the amount on a currency switch", async () => {
+    const data = await save({}, { lastSavedPriceCents: 100, lastSavedCurrencyType: "eur" });
+    expect(data).toMatchObject({ expected_price_cents: 100, expected_price_currency_type: "eur", price_cents: 100 });
+  });
 });
 
 describe("scalarSettingsForSave", () => {
