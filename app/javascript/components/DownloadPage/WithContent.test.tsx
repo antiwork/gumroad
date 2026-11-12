@@ -99,7 +99,11 @@ const purchaseProps = () => ({
   call: null,
 });
 
-const renderPage = (contentProps: ContentProps, purchase: ReturnType<typeof purchaseProps> | null = purchaseProps()) =>
+const renderPage = (
+  contentProps: ContentProps,
+  purchase: ReturnType<typeof purchaseProps> | null = purchaseProps(),
+  isMobileAppWebView = false,
+) =>
   render(
     <DomainSettingsProvider
       value={{
@@ -117,7 +121,7 @@ const renderPage = (contentProps: ContentProps, purchase: ReturnType<typeof purc
         product_has_third_party_analytics={null}
         seller_analytics={null}
         content_unavailability_reason_code={null}
-        is_mobile_app_web_view={false}
+        is_mobile_app_web_view={isMobileAppWebView}
         terms_page_url="https://gumroad.com/terms"
         token="token"
         redirect_id="redirect-1"
@@ -217,9 +221,13 @@ describe("DownloadPage content navigation", () => {
 describe("DownloadPage commission deliverables", () => {
   beforeEach(() => {
     window.history.replaceState(null, "", "/d/token");
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(true);
   });
 
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    delete window.ReactNativeWebView;
+  });
 
   const file = {
     type: "file" as const,
@@ -246,11 +254,32 @@ describe("DownloadPage commission deliverables", () => {
     height: null,
   };
 
-  it("shows deliverables above the first page without navigating", () => {
-    const { container } = renderPage({ ...content(null), commission_deliverables: [file] });
+  const expectDeliverablesAboveFirstPage = () => {
     expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
-    expect(container.textContent).toContain("CV final");
-    expect(container.textContent).toContain("Lesson 1 body");
+    expect(
+      screen.getByText("CV final").compareDocumentPosition(screen.getByText("Lesson 1 body")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  };
+
+  it("shows deliverables above the first page without navigating", () => {
+    renderPage({ ...content(null), commission_deliverables: [file] });
+    expectDeliverablesAboveFirstPage();
+  });
+
+  it("shows deliverables above the first page on mobile web", () => {
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+    renderPage({ ...content(null), commission_deliverables: [file] });
+    expectDeliverablesAboveFirstPage();
+  });
+
+  // App builds without the page-navigation bridge hide the bottom nav, so page 1 is all the buyer can reach.
+  it("shows deliverables in an app WebView that has no page navigation", () => {
+    vi.mocked(useIsAboveBreakpoint).mockReturnValue(false);
+    window.ReactNativeWebView = { postMessage: vi.fn() };
+    renderPage({ ...content(null), commission_deliverables: [file] }, purchaseProps(), true);
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expectDeliverablesAboveFirstPage();
   });
 
   it("shows no Downloads section when the commission is not completed", () => {
