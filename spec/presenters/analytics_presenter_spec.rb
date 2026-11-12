@@ -14,6 +14,14 @@ describe AnalyticsPresenter do
   before { build(:purchase, link: deleted_with_sales).save!(validate: false) }
 
   describe "#page_props" do
+    it "shows file downloads only when the feature is on for the seller" do
+      expect(presenter.page_props[:show_file_downloads]).to be(false)
+
+      Feature.activate_user(CreatorAnalytics::FileDownloads::FEATURE_FLAG, seller)
+
+      expect(described_class.new(seller:).page_props[:show_file_downloads]).to be(true)
+    end
+
     it "returns the correct props" do
       expect(presenter.page_props[:products]).to contain_exactly(
         {

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 class AnalyticsController < Sellers::BaseController
-  before_action :set_time_range, only: %i[data_by_date data_by_state data_by_referral]
+  before_action :set_time_range, only: %i[data_by_date data_by_state data_by_referral data_by_file]
 
   after_action :set_dashboard_preference_to_sales, only: :index
   before_action :check_payment_details, only: :index
@@ -48,6 +48,16 @@ class AnalyticsController < Sellers::BaseController
       data = CreatorAnalytics::CachingProxy.new(current_seller).data_for_dates(@start_date, @end_date, by: :referral)
     end
     render json: data
+  end
+
+  def data_by_file
+    authorize :analytics, :index?
+    return e404_json unless Feature.active?(CreatorAnalytics::FileDownloads::FEATURE_FLAG, current_seller)
+
+    files = CreatorAnalytics::FileDownloads.new(seller: current_seller, start_date: @start_date, end_date: @end_date).by_file
+    render json: { files: }
+  rescue WithMaxExecutionTime::QueryTimeoutError
+    render json: { error: "Request timed out" }, status: :gateway_timeout
   end
 
   protected

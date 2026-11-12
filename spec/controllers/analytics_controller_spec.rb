@@ -145,6 +145,50 @@ describe AnalyticsController do
     end
   end
 
+  describe "GET data_by_file" do
+    let(:start_time) { "Mon Jun 01 2025 00:00:00 GMT-0000" }
+    let(:end_time) { "Wed Jul 30 2025 00:00:00 GMT-0000" }
+
+    it_behaves_like "supports start and end times", :data_by_file
+
+    it_behaves_like "authorize called for action", :get, :data_by_file do
+      let(:record) { :analytics }
+      let(:policy_method) { :index? }
+    end
+
+    it "returns 404 while the feature is off for the seller" do
+      expect(CreatorAnalytics::FileDownloads).not_to receive(:new)
+
+      get :data_by_file, params: { start_time:, end_time: }
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    context "when the feature is on for the seller" do
+      before { Feature.activate_user(CreatorAnalytics::FileDownloads::FEATURE_FLAG, seller) }
+
+      it "returns the per-file counts for the requested dates" do
+        files = [{ id: "file-1", product_permalink: "abc", product_name: "Guide", name: "Chapter 1", deleted: false, downloads: 3, unique_buyers: 2 }]
+        expect(CreatorAnalytics::FileDownloads).to receive(:new)
+          .with(seller:, start_date: Date.new(2025, 6, 1), end_date: Date.new(2025, 7, 30))
+          .and_return(instance_double(CreatorAnalytics::FileDownloads, by_file: files))
+
+        get :data_by_file, params: { start_time:, end_time: }
+
+        expect(response).to have_http_status(:ok)
+        expect(response.parsed_body).to eq("files" => files.map(&:stringify_keys))
+      end
+
+      it "returns 504 when the counts time out" do
+        allow_any_instance_of(CreatorAnalytics::FileDownloads).to receive(:by_file).and_raise(WithMaxExecutionTime::QueryTimeoutError)
+
+        get :data_by_file, params: { start_time:, end_time: }
+
+        expect(response).to have_http_status(:gateway_timeout)
+      end
+    end
+  end
+
   describe "GET data_by_referral" do
     it_behaves_like "supports start and end times", :data_by_referral
 
