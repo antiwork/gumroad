@@ -1051,8 +1051,14 @@ class LinksController < ApplicationController
     # The editor echoes the value it last loaded or saved as `expected_<key>`. A
     # payload equal to it was not edited in this session.
     def unedited_in_session?(key)
+      return false if key == :price_cents && price_currency_changing?
       expected = params["expected_#{key}"]
       !expected.nil? && !params[key].nil? && normalized_baseline_value(key, params[key]) == normalized_baseline_value(key, expected)
+    end
+
+    # A currency switch needs the amount carried into the new currency's price row.
+    def price_currency_changing?
+      params[:price_currency_type].present? && params[:price_currency_type].to_s != @product.price_currency_type.to_s
     end
 
     def normalized_baseline_value(key, value)

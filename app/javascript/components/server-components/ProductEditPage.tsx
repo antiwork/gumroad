@@ -566,6 +566,7 @@ const ProductEditPage = (props: Props) => {
   const [webAppUploading, setWebAppUploading] = React.useState(false);
   const [currencyType, setCurrencyType] = React.useState<CurrencyCode>(props.currency_type);
   const lastSavedProductRef = React.useRef<Product>(structuredClone(props.product));
+  const lastSavedCurrencyRef = React.useRef<CurrencyCode>(props.currency_type);
   // What the seller has by the time a save's response lands, which the closure's `product` predates.
   const productRef = useRefToLatest(product);
   const [savedWaitlistEnabled, setSavedWaitlistEnabled] = React.useState(props.product.waitlist_enabled);
@@ -728,6 +729,7 @@ const ProductEditPage = (props: Props) => {
         lastSavedCustomPermalink: lastSavedProductRef.current.custom_permalink,
         lastSavedCustomizablePrice: lastSavedProductRef.current.customizable_price,
         lastSavedPriceCents: lastSavedProductRef.current.price_cents,
+        lastSavedCurrencyType: lastSavedCurrencyRef.current,
         lastSavedHasPaidVariantPricing: hasPaidVariantPricing(lastSavedProductRef.current),
         lastSavedInstallmentPlan: lastSavedProductRef.current.installment_plan,
         lastSavedAllowInstallmentPlan: lastSavedProductRef.current.allow_installment_plan,
@@ -794,6 +796,7 @@ const ProductEditPage = (props: Props) => {
       // snapshot still claim a description clear.
       reconciled.description_changed = false;
       lastSavedProductRef.current = reconciled;
+      lastSavedCurrencyRef.current = currencyType;
       setSavedWaitlistEnabled(reconciled.waitlist_enabled);
       setVariantIdMappings((previous) => ({ ...previous, ...response.variant_id_mappings }));
       setRichContentIdMappings((previous) => {

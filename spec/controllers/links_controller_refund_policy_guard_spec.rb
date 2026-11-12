@@ -67,6 +67,21 @@ describe LinksController, type: :controller do
       expect(product.reload.price_cents).to eq(10_000)
     end
 
+    it "applies a currency-only switch that echoes the baseline amount" do
+      post :update, params: editor_save_params(price_currency_type: "eur", price_cents: 10_000, expected_price_cents: 10_000), as: :json
+
+      expect(response).to be_successful
+      expect(product.reload.price_currency_type).to eq("eur")
+      expect(product.price_cents).to eq(10_000)
+    end
+
+    it "refuses a currency switch whose echoed amount is stale against the record" do
+      post :update, params: editor_save_params(price_currency_type: "eur", price_cents: 9_000, expected_price_cents: 9_000), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(product.reload.price_currency_type).to eq("usd")
+    end
+
     it "refuses a price whose baseline no longer matches the record" do
       post :update, params: editor_save_params(price_cents: 5_900, expected_price_cents: 9_000), as: :json
 

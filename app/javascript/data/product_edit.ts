@@ -683,6 +683,7 @@ export const scalarSettingsForSave = (
   lastSaved: {
     custom_permalink: string | null;
     description?: string | null | undefined;
+    currencyChanged?: boolean;
     customizable_price: boolean | null;
     price_cents: number | null;
     hasPaidVariantPricing: boolean;
@@ -698,7 +699,7 @@ export const scalarSettingsForSave = (
   const settings: Record<string, unknown> = {};
   // An unedited price is omitted; an edited one is checked server-side against the
   // baseline saveProduct sends beside it.
-  if (lastSaved.price_cents === null || product.price_cents !== lastSaved.price_cents) {
+  if (lastSaved.price_cents === null || product.price_cents !== lastSaved.price_cents || lastSaved.currencyChanged) {
     settings.price_cents = product.price_cents;
   }
   if (product.custom_permalink) {
@@ -798,6 +799,7 @@ export const saveProduct = async (
     lastSavedCustomPermalink?: string | null;
     lastSavedCustomizablePrice?: boolean | null;
     lastSavedPriceCents?: number | null;
+    lastSavedCurrencyType?: CurrencyCode;
     lastSavedHasPaidVariantPricing?: boolean | null;
     lastSavedInstallmentPlan?: { number_of_installments: number } | null;
     lastSavedAllowInstallmentPlan?: boolean | null;
@@ -874,6 +876,8 @@ export const saveProduct = async (
           description: options.lastSavedDescription,
           customizable_price: options.lastSavedCustomizablePrice ?? null,
           price_cents: options.lastSavedPriceCents ?? null,
+          currencyChanged:
+            options.lastSavedCurrencyType !== undefined && options.lastSavedCurrencyType !== currencyType,
           hasPaidVariantPricing: options.lastSavedHasPaidVariantPricing ?? hasPaidVariantPricing(product),
           installment_plan: options.lastSavedInstallmentPlan ?? null,
           allow_installment_plan: options.lastSavedAllowInstallmentPlan ?? null,

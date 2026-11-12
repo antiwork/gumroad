@@ -559,6 +559,10 @@ describe("scalarSettingsForSave", () => {
     expect(scalarSettingsForSave(product(), lastSaved())).not.toHaveProperty("price_cents");
   });
 
+  it("sends the unchanged price when only the currency changed", () => {
+    expect(scalarSettingsForSave(product(), lastSaved({ currencyChanged: true }))).toMatchObject({ price_cents: 100 });
+  });
+
   it("sends a price this session changed", () => {
     expect(scalarSettingsForSave(product({ price_cents: 599 }), lastSaved())).toMatchObject({ price_cents: 599 });
   });
