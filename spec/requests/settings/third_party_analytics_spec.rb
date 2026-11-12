@@ -156,8 +156,9 @@ describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
         expect(setting.token_rejected_at).to be_nil
 
         click_on "Remove token"
+        expect(page).to have_text("The token is removed when you update your settings.")
         click_on "Update settings"
-        expect(page).to have_alert(text: "Changes saved!")
+        expect(page).not_to have_text("The token is removed when you update your settings.")
         expect(page).not_to have_button("Remove token")
         expect(seller.reload.meta_conversions_setting).to be_nil
       end
