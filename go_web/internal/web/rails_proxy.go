@@ -34,8 +34,7 @@ const (
 	// nginx's proxy_next_upstream_timeout: a first attempt can spend it before its 504, and
 	// retryTransport starts no third attempt past it.
 	railsNginxRetryBudget = 10 * time.Second
-	// A deploy stops half the hosts, so four unmarked picks all stopping is 1 in 16; a cap keeps
-	// a fleet-wide outage from walking every host on every request.
+	// A cap keeps a fleet-wide outage from walking every host on every request.
 	railsMaxAttempts = 4
 	maxReplayBody    = 64 << 10
 )
@@ -44,7 +43,7 @@ const (
 // leaves to Rails because porting them exactly isn't worth it.
 //
 // The upstreams are host:port lines Nomad renders from Consul's passing "web" instances,
-// the Rails nginx in front of Puma. That nginx appends this host to X-Forwarded-For, a
+// the Rails nginx in front of Puma, each under its color's "# blue" or "# green" header. That nginx appends this host to X-Forwarded-For, a
 // private address Rails' remote_ip skips, and passes every other header through, so Rails
 // sees the request as if the load balancer had sent it. Only the file decides where a
 // request goes.
@@ -68,6 +67,8 @@ type upstreamList struct {
 	checkedAt time.Time
 	modTime   time.Time
 	hosts     []string
+	// colors is each host's deploy color, from the file's "# blue" / "# green" headers.
+	colors map[string]string
 }
 
 func NewRailsProxy(upstreamsFile string) *RailsProxy {
@@ -183,13 +184,41 @@ func (p *RailsProxy) upstream(skip []string) (string, error) {
 	return hosts[p.pick(len(hosts))], nil
 }
 
+// markDown marks host down. A second host of the same color down within the window marks
+// the whole color: a deploy restarts a color at once, and Consul keeps listing those hosts
+// until their checks fail. One sick host alone doesn't, nor a color with no other up.
 func (p *RailsProxy) markDown(host string) {
+	list := p.snapshot.Load()
 	p.downMu.Lock()
 	defer p.downMu.Unlock()
 	if p.downUntil == nil {
 		p.downUntil = map[string]time.Time{}
 	}
-	p.downUntil[host] = p.now().Add(railsUpstreamDownFor)
+	now := p.now()
+	until := now.Add(railsUpstreamDownFor)
+	p.downUntil[host] = until
+	color := list.colors[host]
+	if color == "" {
+		return
+	}
+	sameDown, otherUp := false, false
+	for h, c := range list.colors {
+		down := p.downUntil[h].After(now)
+		if c == color && h != host && down {
+			sameDown = true
+		}
+		if c != color && !down {
+			otherUp = true
+		}
+	}
+	if !sameDown || !otherUp {
+		return
+	}
+	for h, c := range list.colors {
+		if c == color {
+			p.downUntil[h] = until
+		}
+	}
 }
 
 // downHosts drops expired marks and returns the hosts still down.
@@ -216,7 +245,8 @@ func (p *RailsProxy) reload(old *upstreamList) *upstreamList {
 	next.checkedAt = p.now()
 	if info, err := os.Stat(p.path); err == nil && !info.ModTime().Equal(old.modTime) {
 		if data, err := os.ReadFile(p.path); err == nil {
-			next.modTime, next.hosts = info.ModTime(), parseUpstreams(string(data))
+			next.hosts, next.colors = parseUpstreams(string(data))
+			next.modTime = info.ModTime()
 		}
 	}
 	p.snapshot.Store(&next)
@@ -270,15 +300,29 @@ func (p *RailsProxy) Revision(ctx context.Context) string {
 	return best
 }
 
-func parseUpstreams(data string) []string {
+// parseUpstreams reads host:port lines, each under the "# <color>" header before it, if any.
+// Anything else is skipped, which is how a build without colors reads a file with them.
+func parseUpstreams(data string) ([]string, map[string]string) {
 	var hosts []string
+	colors := map[string]string{}
+	color := ""
 	for line := range strings.SplitSeq(data, "\n") {
 		line = strings.TrimSpace(line)
+		if header, ok := strings.CutPrefix(line, "#"); ok {
+			// A one-word header names a color; any other comment ends the last one.
+			if color = strings.TrimSpace(header); strings.ContainsAny(color, " \t") {
+				color = ""
+			}
+			continue
+		}
 		if _, port, err := net.SplitHostPort(line); err == nil && port != "" && !slices.Contains(hosts, line) {
 			hosts = append(hosts, line)
+			if color != "" {
+				colors[line] = color
+			}
 		}
 	}
-	return hosts
+	return hosts, colors
 }
 
 // retryTransport sends a request on to another Rails host while nothing reached Puma: the
