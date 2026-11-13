@@ -151,6 +151,9 @@ FANOUT = {
   # Recurring run-all-specs gaps (ProductEdit, Settings, API docs, Analytics,
   # Audience, Bundles, Dashboard). These trees have no co-located rspec.
   %r{\Aapp/javascript/components/ProductEdit/} => PRODUCT_FLOW_SPECS,
+  # Imported by ProductEdit/ProductPreview, its only consumer; the hook has a co-located
+  # vitest file and no rspec, so a diff touching it escalated.
+  %r{\Aapp/javascript/components/useDebouncedValue\.ts\z} => PRODUCT_FLOW_SPECS,
   %r{\Aapp/javascript/components/Product/} => PRODUCT_FLOW_SPECS + %w[spec/requests/purchases/product],
   %r{\Aapp/javascript/pages/Products/} => PRODUCT_FLOW_SPECS,
   %r{\Aapp/javascript/components/server-components/ProductEdit} => PRODUCT_FLOW_SPECS,
