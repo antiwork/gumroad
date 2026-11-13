@@ -9,8 +9,8 @@ import { LandingPagePreview } from "$app/components/ProductEdit/LandingPagePrevi
 import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { previewRefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
-import { useDebouncedValue } from "$app/components/useDebouncedValue";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
+import { useDebouncedValue } from "$app/components/useDebouncedValue";
 
 export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
   const currentSeller = useCurrentSeller();
