@@ -243,7 +243,9 @@ class AlertOnStalledPostEmailBlastsJob
     # terminal (another copy ended it, or it delivered after the scan read it).
     def end_if_post_unsendable(blast)
       post = blast.post
-      return false if post.alive? && post.published? && post.send_emails?
+      # A post row that is gone outright counts too — it can never send again, and the alternative
+      # is leaving the blast unfinished for good.
+      return false if post.present? && post.alive? && post.published? && post.send_emails?
 
       PostEmailBlast.stop_for_removed_post(blast.id).positive?
     end

@@ -192,8 +192,6 @@ class SendPostBlastEmailsJob
     def end_if_post_unsendable
       PostEmailBlast.stop_for_removed_post(@blast.id)
       clear_blast_state
-      # A blast that never delivered still holds the day's large-send slot; one that delivered spent it.
-      SellerLargeBlastQuota.release(seller_id: @post.seller_id, blast_id: @blast.id, kind: "post_blast") if @blast.first_email_delivered_at.nil?
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the post can no longer send")
     end
 
