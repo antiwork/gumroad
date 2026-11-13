@@ -101,6 +101,17 @@ describe CustomersPresenter do
     end
   end
 
+  describe "#paged_props" do
+    it "returns only the table props, without the filter-box payload the page already has" do
+      expect(presenter.paged_props).to eq(
+        customers: [purchase1, purchase2].map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) },
+        count: 2,
+        pagination: nil,
+        product_id: nil,
+      )
+    end
+  end
+
   describe "variant belongs to coffee" do
     let(:seller) { create(:user, :eligible_for_service_products) }
     let(:coffee) { create(:product, user: seller, native_type: Link::NATIVE_TYPE_COFFEE) }
