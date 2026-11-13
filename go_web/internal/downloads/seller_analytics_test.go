@@ -97,6 +97,32 @@ func TestSellerAnalyticsTheyCantPortGoToRails(t *testing.T) {
 	}
 }
 
+func TestZeroTaxOnAProductPricedInAnotherCurrency(t *testing.T) {
+	e := newPageEnv(t)
+	e.pages.BuyerCurrency = &fakeBuyerCurrency{}
+	e.db.Exec("UPDATE users SET facebook_pixel_id = 'FB1' WHERE id = ?", sellerID)
+	t.Cleanup(func() {
+		e.db.Exec("UPDATE users SET facebook_pixel_id = NULL WHERE id = ?", sellerID)
+		e.db.Exec("UPDATE links SET price_currency_type = 'usd' WHERE id = ?", productID)
+	})
+	// Without a stored rate, get_rate converts the zero, which stays zero.
+	e.db.Exec("UPDATE links SET price_currency_type = 'eur' WHERE id = ?", productID)
+	row := map[string]any{"price_cents": 500, "displayed_price_cents": 500, "displayed_price_currency_type": "eur"}
+	w := e.page(e.purchase(productID, row, nil), nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("status %d, rails %v", w.Code, e.railsHit != nil)
+	}
+	event := pageProps(t, w.Body.String()).Value("seller_analytics").(*rails.Hash).Value("purchase_event").(*rails.Hash)
+	if event.Value("tax") != "0" || event.Value("currency") != "eur" {
+		t.Errorf("purchase event %s", rails.EncodeJSON(event))
+	}
+	// A currency get_rate can't quote is Rails'.
+	e.db.Exec("UPDATE links SET price_currency_type = 'xyz' WHERE id = ?", productID)
+	if e.page(e.purchase(productID, row, nil), nil); e.railsHit == nil {
+		t.Error("rendered a product priced in an unknown currency")
+	}
+}
+
 func TestABlankTikTokIDIsNoAnalytics(t *testing.T) {
 	e := newPageEnv(t)
 	e.pages.BuyerCurrency = &fakeBuyerCurrency{}
