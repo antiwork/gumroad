@@ -665,3 +665,8 @@
   title: "How to sell Notion templates"
   description: "Sell Notion templates on Gumroad. Put your template link in a digital product, and buyers duplicate it into their own Notion workspace after they pay."
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 359
+  slug: "359-sell-procreate-brushes"
+  title: "How to sell Procreate brushes"
+  description: "You can sell Procreate brushes on Gumroad. Upload your .brushset files to a digital product, set a price, and share the link with your buyers."
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
