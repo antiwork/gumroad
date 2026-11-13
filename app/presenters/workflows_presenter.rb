@@ -14,7 +14,7 @@ class WorkflowsPresenter
 
     {
       workflows: workflows.map do |workflow|
-        WorkflowPresenter.new(seller:, workflow:).workflow_props
+        WorkflowPresenter.new(seller:, workflow:).workflow_props(with_installment_content: false)
       end
     }
   end

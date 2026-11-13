@@ -20,7 +20,7 @@ class WorkflowPresenter
     { workflow: workflow_props, context: workflow_form_context_props }
   end
 
-  def workflow_props
+  def workflow_props(with_installment_content: true)
     recipient_name = "All sales"
     if workflow.product_type?
       recipient_name = workflow.link.name
@@ -45,7 +45,11 @@ class WorkflowPresenter
       send_to_past_customers: workflow.send_to_past_customers,
     }
 
-    props[:installments] = workflow.alive_installments_in_delivery_order.map { InstallmentPresenter.new(seller:, installment: _1).props }
+    # The workflows list renders names and delays, not bodies, so it asks for the cheaper rows.
+    installment_props = with_installment_content ? :props : :list_props
+    props[:installments] = workflow.alive_installments_in_delivery_order.map do |installment|
+      InstallmentPresenter.new(seller:, installment:).public_send(installment_props)
+    end
 
     props.merge!(workflow.json_filters)
     if workflow.product_type? || workflow.variant_type?

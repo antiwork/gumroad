@@ -725,4 +725,17 @@ describe InstallmentPresenter do
       end
     end
   end
+
+  describe "#list_props" do
+    let(:installment) { create(:installment, seller:, name: "Post", message: "<p>Body text</p>") }
+
+    it "leaves out the email body and its files, which only the edit form reads" do
+      presenter = described_class.new(seller:, installment:)
+
+      expect(presenter.props).to include(message: "<p>Body text</p>")
+      expect(presenter.list_props).not_to have_key(:message)
+      expect(presenter.list_props).not_to have_key(:files)
+      expect(presenter.list_props).to eq(presenter.props.except(:message, :files))
+    end
+  end
 end
