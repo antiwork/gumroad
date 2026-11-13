@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
@@ -212,6 +214,31 @@ func TestAppLogsOneLinePerActionAndSetsDebugHeaders(t *testing.T) {
 	app.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/healthcheck", nil))
 	if logs.Len() != 0 {
 		t.Fatalf("healthcheck logged %q", logs.String())
+	}
+}
+
+type recordedRoutes []string
+
+func (r *recordedRoutes) Record(action string, status int) {
+	*r = append(*r, action+" "+strconv.Itoa(status))
+}
+
+// Each answered request counts once under its action, with the status the client got,
+// including a recovered panic's.
+func TestAppCountsEachRequestUnderItsAction(t *testing.T) {
+	app, _ := newTestApp(t, "")
+	var routes recordedRoutes
+	app.SetRouteRecorder(&routes)
+	app.Handle("POST /paypal-webhook", "ForeignWebhooksController#paypal", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	app.Handle("GET /boom", "BoomController#show", http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") }))
+	app.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/paypal-webhook", nil))
+	app.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/boom", nil))
+	app.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/robots.txt", nil))
+	app.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "/healthcheck", nil))
+	if got := strings.Join(routes, ","); got != "ForeignWebhooksController#paypal 502,BoomController#show 500,RobotsController#index 200" {
+		t.Errorf("recorded %q", got)
 	}
 }
 
