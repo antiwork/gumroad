@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2026_12_26_000004) do
+ActiveRecord::Schema[7.1].define(version: 2026_12_26_000005) do
   create_table "active_storage_attachments", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
     t.string "name", limit: 191, null: false
     t.string "record_type", limit: 191, null: false
@@ -1509,6 +1509,15 @@ ActiveRecord::Schema[7.1].define(version: 2026_12_26_000004) do
     t.datetime "charge_processor_alive_at", precision: nil
     t.index ["charge_processor_merchant_id"], name: "index_merchant_accounts_on_charge_processor_merchant_id"
     t.index ["user_id"], name: "index_merchant_accounts_on_user_id"
+  end
+
+  create_table "meta_conversions_settings", charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.text "access_token", null: false
+    t.datetime "token_rejected_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_meta_conversions_settings_on_user_id", unique: true
   end
 
   create_table "oauth_access_grants", id: :integer, charset: "utf8mb4", collation: "utf8mb4_unicode_ci", force: :cascade do |t|

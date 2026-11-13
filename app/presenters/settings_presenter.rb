@@ -185,6 +185,16 @@ class SettingsPresenter
     }
   end
 
+  def meta_conversions_props
+    return unless Feature.active?(:meta_conversions_api, seller)
+
+    setting = seller.meta_conversions_setting
+    {
+      token_saved: setting.present?,
+      token_rejected_at: setting&.token_rejected_at,
+    }
+  end
+
   def social_connections_props
     {
       twitter_connected: seller.twitter_user_id.present?,

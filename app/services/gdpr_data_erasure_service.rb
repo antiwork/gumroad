@@ -295,6 +295,7 @@ class GdprDataErasureService
       # The signing secret is a credential in its own table (CONTRIBUTING forbids schema changes on
       # `users`), so the update_columns above cannot reach it.
       @user.ping_signing_setting&.delete
+      @user.meta_conversions_setting&.delete
 
       # A removed PayPal payout address is the same email PII as `payment_address` above, just moved
       # into json_data (Payment#invalidate_paypal_payout_address). update_columns bypasses the

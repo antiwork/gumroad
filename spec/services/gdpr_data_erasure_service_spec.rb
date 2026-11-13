@@ -37,6 +37,7 @@ describe GdprDataErasureService do
 
     it "anonymizes user PII" do
       user.create_ping_signing_setting!(secret: "s3cret")
+      user.create_meta_conversions_setting!(access_token: "token")
       create(:mcp_event_subscription, user:)
       other_subscription = create(:mcp_event_subscription)
 
@@ -58,6 +59,7 @@ describe GdprDataErasureService do
       expect(user.account_created_ip).to be_nil
       expect(user.deleted_at).to be_present
       expect(PingSigningSetting.where(user_id: user.id)).not_to exist
+      expect(MetaConversionsSetting.where(user_id: user.id)).not_to exist
     end
 
     it "closes a piracy report that never went out, and keeps the row" do

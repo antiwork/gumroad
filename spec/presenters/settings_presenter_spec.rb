@@ -394,6 +394,29 @@ describe SettingsPresenter do
     end
   end
 
+  describe "#meta_conversions_props" do
+    it "returns nil when the feature is off for the seller" do
+      seller.create_meta_conversions_setting!(access_token: "token")
+
+      expect(presenter.meta_conversions_props).to be_nil
+    end
+
+    context "when the feature is on for the seller" do
+      before { Feature.activate_user(:meta_conversions_api, seller) }
+
+      it "reports that no token is saved" do
+        expect(presenter.meta_conversions_props).to eq(token_saved: false, token_rejected_at: nil)
+      end
+
+      it "reports a saved token and its rejection time without the token" do
+        rejected_at = Time.utc(2026, 1, 2, 3, 4, 5)
+        seller.create_meta_conversions_setting!(access_token: "token", token_rejected_at: rejected_at)
+
+        expect(presenter.meta_conversions_props).to eq(token_saved: true, token_rejected_at: rejected_at)
+      end
+    end
+  end
+
   describe "#password_props" do
     let(:settings_pages) { %w(main team payments billing password social_connections third_party_analytics advanced) }
 

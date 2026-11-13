@@ -28,6 +28,7 @@ type Products = { permalink: string; name: string }[];
 type ThirdPartyAnalyticsPageProps = {
   settings_pages: SettingPage[];
   third_party_analytics: ThirdPartyAnalytics;
+  meta_conversions: { token_saved: boolean; token_rejected_at: string | null } | null;
   products: Products;
 };
 
@@ -36,15 +37,24 @@ export default function ThirdPartyAnalyticsPage() {
   const loggedInUser = useLoggedInUser();
 
   const form = useForm({
-    user: props.third_party_analytics,
+    user: {
+      ...props.third_party_analytics,
+      meta_conversions_access_token: "",
+      remove_meta_conversions_access_token: false,
+    },
   });
 
   const thirdPartyAnalytics = form.data.user;
-  const updateThirdPartyAnalytics = (update: Partial<ThirdPartyAnalytics>) =>
+  const updateUser = (update: Partial<typeof form.data.user>) =>
     form.setData("user", {
       ...form.data.user,
       ...update,
     });
+  const updateThirdPartyAnalytics = (update: Partial<ThirdPartyAnalytics>) => updateUser(update);
+
+  const metaConversions = props.meta_conversions;
+  const metaTokenSaved = !!metaConversions?.token_saved && !thirdPartyAnalytics.remove_meta_conversions_access_token;
+  const metaTokenRejected = metaTokenSaved && !!metaConversions.token_rejected_at;
 
   const uid = React.useId();
 
@@ -77,6 +87,10 @@ export default function ThirdPartyAnalyticsPage() {
 
     form.put(Routes.settings_third_party_analytics_path(), {
       preserveScroll: true,
+      onSuccess: () =>
+        form.setData((data) => ({
+          user: { ...data.user, meta_conversions_access_token: "", remove_meta_conversions_access_token: false },
+        })),
     });
   };
 
@@ -145,6 +159,65 @@ export default function ThirdPartyAnalyticsPage() {
                   onChange={(evt) => updateThirdPartyAnalytics({ facebook_pixel_id: evt.target.value })}
                 />
               </Fieldset>
+              {metaConversions ? (
+                <Fieldset state={metaTokenRejected ? "danger" : undefined}>
+                  <FieldsetTitle>
+                    <Label htmlFor={`${uid}metaConversionsAccessToken`}>Conversions API access token</Label>
+                    <a
+                      href="https://developers.facebook.com/documentation/ads-commerce/conversions-api/get-started"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Learn more
+                    </a>
+                  </FieldsetTitle>
+                  <div className="flex items-center gap-2 max-sm:flex-col max-sm:items-stretch">
+                    <Input
+                      id={`${uid}metaConversionsAccessToken`}
+                      type="password"
+                      autoComplete="off"
+                      className="flex-1 max-sm:flex-none"
+                      aria-invalid={metaTokenRejected}
+                      aria-describedby={metaTokenRejected ? `${uid}metaConversionsAccessTokenError` : undefined}
+                      placeholder={metaTokenSaved ? "Enter a new token to replace it." : ""}
+                      value={thirdPartyAnalytics.meta_conversions_access_token}
+                      onChange={(evt) =>
+                        updateUser({
+                          meta_conversions_access_token: evt.target.value,
+                          remove_meta_conversions_access_token: false,
+                        })
+                      }
+                    />
+                    {metaTokenSaved ? (
+                      <>
+                        <span className="text-sm whitespace-nowrap text-muted">A token is saved</span>
+                        <Button
+                          onClick={() =>
+                            updateUser({
+                              remove_meta_conversions_access_token: true,
+                              meta_conversions_access_token: "",
+                            })
+                          }
+                        >
+                          Remove token
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                  {metaTokenRejected ? (
+                    <FieldsetDescription id={`${uid}metaConversionsAccessTokenError`} className="text-danger">
+                      Meta rejected this token. Paste a new one to replace it.
+                    </FieldsetDescription>
+                  ) : null}
+                  <FieldsetDescription className="text-muted">
+                    {metaConversions.token_saved && thirdPartyAnalytics.remove_meta_conversions_access_token
+                      ? "The token is removed when you update your settings. "
+                      : null}
+                    For server-side purchase events, Gumroad sends Meta the hashed buyer email, the IP address, the
+                    browser user agent, and the order value.
+                  </FieldsetDescription>
+                </Fieldset>
+              ) : null}
               <Fieldset>
                 <FieldsetTitle>
                   <Label htmlFor={`${uid}tiktokPixel`}>TikTok Pixel</Label>

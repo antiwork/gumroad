@@ -130,6 +130,79 @@ describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
     end
   end
 
+  describe "Conversions API access token" do
+    context "when the feature is on for the seller" do
+      before { Feature.activate_user(:meta_conversions_api, seller) }
+
+      it "saves, replaces and removes the token" do
+        visit settings_third_party_analytics_path
+        expect(page).to have_text("For server-side purchase events, Gumroad sends Meta the hashed buyer email, the IP address, the browser user agent, and the order value.")
+        fill_in "Conversions API access token", with: "token-1"
+        click_on "Update settings"
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(seller.reload.meta_conversions_setting.access_token).to eq("token-1")
+        expect(page).to have_field("Conversions API access token", with: "")
+        expect(page).to have_text("A token is saved")
+        expect(page).not_to have_text("token-1")
+
+        seller.meta_conversions_setting.update!(token_rejected_at: Time.current)
+        visit settings_third_party_analytics_path
+        expect(page).to have_css("small.text-danger", text: "Meta rejected this token. Paste a new one to replace it.")
+        expect(page).to have_css("small.text-muted", text: "the hashed buyer email")
+        fill_in "Conversions API access token", with: "token-2"
+        click_on "Update settings"
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(page).not_to have_text("Meta rejected this token.")
+        expect(page).not_to have_css("small.text-danger", text: "Meta rejected this token.")
+        setting = seller.reload.meta_conversions_setting
+        expect(setting.access_token).to eq("token-2")
+        expect(setting.token_rejected_at).to be_nil
+
+        click_on "Remove token"
+        expect(page).to have_text("The token is removed when you update your settings.")
+        click_on "Update settings"
+        expect(page).not_to have_text("The token is removed when you update your settings.")
+        expect(page).not_to have_button("Remove token")
+        expect(seller.reload.meta_conversions_setting).to be_nil
+      end
+
+      it "removes the saved token when a replacement was typed first" do
+        seller.create_meta_conversions_setting!(access_token: "token-1")
+
+        visit settings_third_party_analytics_path
+        fill_in "Conversions API access token", with: "token-2"
+        click_on "Remove token"
+
+        expect(page).to have_field("Conversions API access token", with: "")
+        click_on "Update settings"
+
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(seller.reload.meta_conversions_setting).to be_nil
+      end
+
+      it "saves a token typed after the removal" do
+        seller.create_meta_conversions_setting!(access_token: "token-1")
+
+        visit settings_third_party_analytics_path
+        click_on "Remove token"
+        fill_in "Conversions API access token", with: "token-2"
+        click_on "Update settings"
+
+        expect(page).to have_alert(text: "Changes saved!")
+        expect(seller.reload.meta_conversions_setting.access_token).to eq("token-2")
+      end
+    end
+
+    context "when the feature is off for the seller" do
+      it "does not show the field" do
+        visit settings_third_party_analytics_path
+
+        expect(page).to have_field("Facebook Pixel")
+        expect(page).not_to have_field("Conversions API access token")
+      end
+    end
+  end
+
   def find_snippet_row(name:)
     find("[role=listitem] h4", text: name).ancestor("[role=listitem]")
   end
