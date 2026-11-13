@@ -386,6 +386,12 @@ func TestASignedOutVisitorGetsTheProductPage(t *testing.T) {
 			t.Errorf("missing %s", want)
 		}
 	}
+	// set_product_page_crawl_fallback's copy, where the layout renders it between the flash and the app.
+	if !strings.Contains(body, "style=\"display: none;\"></div>\n    \n    \n    \n    <noscript>\n  <article>\n    <h1>Guide &lt;1&gt;</h1>\n"+
+		"      <p>by Seller</p>\n      <p>$5</p>\n    <p>Read https://example.com &amp; more</p>\n  </article>\n</noscript>\n\n"+
+		"    \n    \n    <div id=\"app\"") {
+		t.Errorf("no crawl fallback in %s", body[strings.Index(body, "<body"):strings.Index(body, `<div id="app"`)])
+	}
 	if csp := w.Header().Get("Content-Security-Policy"); !strings.Contains(csp, "'nonce-NONCE'") {
 		t.Errorf("CSP %q", csp)
 	}
@@ -396,6 +402,20 @@ func TestASignedOutVisitorGetsTheProductPage(t *testing.T) {
 	}
 	if w.Header().Get("X-Robots-Tag") != "" || w.Header().Get("Strict-Transport-Security") != "" {
 		t.Errorf("headers %v", w.Header())
+	}
+}
+
+func TestTheCrawlFallbackSkipsWhatRailsSkips(t *testing.T) {
+	e := newTestEnv(t)
+	for _, target := range []string{"/l/guide?embed=", "/l/guide?overlay=true"} {
+		w := e.get(host, target, nil)
+		if w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("%s: %d, rails %v", target, w.Code, e.railsHit != nil)
+		}
+		if body := w.Body.String(); strings.Contains(body, "<noscript>") ||
+			!strings.Contains(body, "</div>\n    \n    \n    \n    \n    \n    \n    <div id=\"app\"") {
+			t.Errorf("%s: %s", target, body[strings.Index(body, "<body"):strings.Index(body, `<div id="app"`)])
+		}
 	}
 }
 
@@ -1289,7 +1309,7 @@ func TestDefaultOfferCodes(t *testing.T) {
 		setup        func(t *testing.T, e *testEnv, conn *sql.DB)
 	}{
 		{name: "an auto-applied percent code", wants: []string{`"discount_code":` + sale20 + `,"sale_label":"Sale",`,
-			`"options":{"":` + saleEntry + `},"rent_options":null}`},
+			`"options":{"":` + saleEntry + `},"rent_options":null}`, "      <p>$4</p>\n"},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) { auto(t, conn, nil) }},
 		{name: "an auto-applied code's own label", wants: []string{`"sale_label":"Black Friday",`},
 			setup: func(t *testing.T, e *testEnv, conn *sql.DB) {

@@ -166,11 +166,16 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		}
 	}
 
+	crawl, err := h.crawlFallback(p, prod, v)
+	if err != nil {
+		return err
+	}
 	asEmbed, _ := p.Req.Params.Get("as_embed")
 	doc := inertia.Document{
 		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta, AsEmbed: asEmbed != nil,
 		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page", BodyClass: bodyClass,
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
+		CrawlFallback: crawl,
 	}
 
 	if err := h.finishShow(w, p, prod, v.ip); err != nil {
@@ -326,6 +331,21 @@ type view struct {
 	editor *rails.RHash
 	// wanted is wanted=true's cart item; nil without one, or when show renders the page anyway.
 	wanted *wantedItem
+	// minDifference is lowest_variant_price_difference_cents once variantFloor has read it.
+	minDifference     sql.NullInt64
+	minDifferenceRead bool
+}
+
+// variantFloor is lowestVariantDifference for the page's product, read once.
+func (h *handler) variantFloor(ctx context.Context, prod *product, v *view) (sql.NullInt64, error) {
+	if !v.minDifferenceRead {
+		floor, err := h.lowestVariantDifference(ctx, prod, v.variants)
+		if err != nil {
+			return floor, err
+		}
+		v.minDifference, v.minDifferenceRead = floor, true
+	}
+	return v.minDifference, nil
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {

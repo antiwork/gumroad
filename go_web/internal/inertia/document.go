@@ -85,6 +85,8 @@ type Document struct {
 	BodyID, BodyClass string
 	// DesignSettings and UserAgentInfo are the JSON the layout writes into its hidden divs.
 	DesignSettings, UserAgentInfo string
+	// CrawlFallback is the _seo_product_fallback partial's output, "" when it doesn't render.
+	CrawlFallback string
 }
 
 // PageJSON is the page object, with the meta tags among its props.
@@ -123,8 +125,9 @@ func (l *Layout) Render(d Document) string {
 	b.WriteString("\" style=\"display: none;\"></div>\n" + `    <div id="user-agent-info" data-settings="`)
 	web.WriteHTMLEscaped(&b, d.UserAgentInfo)
 	b.WriteString("\" style=\"display: none;\"></div>\n")
-	// The flash partial renders nothing for Inertia, and there are no discover SEO links.
-	b.WriteString("    \n    \n" + `    <div id="app" data-page="`)
+	// The flash partial renders nothing for Inertia. Of the five SEO partials after it, only the
+	// product page's can render here.
+	b.WriteString("    \n    \n    \n    " + d.CrawlFallback + "\n    \n    \n" + `    <div id="app" data-page="`)
 	web.WriteHTMLEscaped(&b, page)
 	b.WriteString(`"></div>`)
 	b.WriteString(l.tail)
