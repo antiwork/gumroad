@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 
@@ -31,6 +32,16 @@ type ContentConfig struct {
 	IDs *obfuscate.IDs
 	// S3BaseURL is S3_BASE_URL, and AssetHost config.asset_host.
 	S3BaseURL, AssetHost string
+	// PublicStorage is the public service's object URL prefix, and CDNMap CDN_URL_MAP.
+	PublicStorage string
+	CDNMap        web.CDNMap
+	// Cache is Rails.cache, for the variant URLs of videos' thumbnails; nil leaves those to Rails.
+	Cache Cache
+}
+
+// Cache is Rails.cache.read.
+type Cache interface {
+	Read(ctx context.Context, key string) (value any, found bool, err error)
 }
 
 // ContentRedirect is what map_file reads from the url redirect.
@@ -117,7 +128,7 @@ func (l *loader) displayFiles(query string, args ...any) ([]ProductFile, error) 
 
 // ContentItems is UrlRedirectPresenter#download_attributes[:content_items] for a signed-out
 // viewer, without a completed commission's files. ErrUnported covers what only Rails maps:
-// thumbnails, subtitles, stamped PDFs, web builds, a post's files and non-ASCII extensions.
+// subtitles, stamped PDFs, web builds, a post's files and non-ASCII extensions.
 func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 	l := p.l
 	if _, err := p.Files(); err != nil {
@@ -154,8 +165,15 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 		append(append(append([]any(nil), ids...), ids...), ids...)...).Scan(&subtitles, &builds, &thumbnails); err != nil {
 		return nil, err
 	}
-	if subtitles || builds || thumbnails {
+	if subtitles || builds {
 		return nil, ErrUnported
+	}
+	thumbnailsByFile := map[int64]*thumbnail{}
+	if thumbnails {
+		var err error
+		if thumbnailsByFile, err = loadThumbnails(l, ids); err != nil {
+			return nil, err
+		}
 	}
 
 	owners, err := productOwnerExternalIDs(l, productIDs)
@@ -185,7 +203,11 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 		return nil, err
 	}
 	mapFile := func(d *displayFile) (*rails.RHash, error) {
-		return c.mapFile(r, d, owners[d.productID.Int64], locations[d.ID], granted)
+		thumbnailURL, err := c.thumbnailURL(l, d, thumbnailsByFile[d.ID])
+		if err != nil {
+			return nil, err
+		}
+		return c.mapFile(r, d, owners[d.productID.Int64], locations[d.ID], granted, thumbnailURL)
 	}
 	items := []any{}
 	for _, folder := range folders {
@@ -301,10 +323,10 @@ func loadFolders(l *loader, productID *int64, folderIDs []any) (map[int64]bool, 
 	return alive, folders, rows.Err()
 }
 
-// mapFile is UrlRedirectPresenter#map_file for a signed-out viewer, for a file without a
-// thumbnail, subtitles, a web build or PDF stamping. owner is the product's user's
-// external_id column.
-func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, location *mediaLocation, granted map[int64]bool) (*rails.RHash, error) {
+// mapFile is UrlRedirectPresenter#map_file for a signed-out viewer, for a file without
+// subtitles, a web build or PDF stamping. owner is the product's user's external_id column.
+func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, location *mediaLocation, granted map[int64]bool,
+	thumbnailURL any) (*rails.RHash, error) {
 	names := s3Names{url: d.url.String, baseURL: c.S3BaseURL, ownerExternalID: owner}
 	external := c.IDs.Encrypt(d.ID)
 	token := web.EscapeSegment(r.Token)
@@ -392,7 +414,7 @@ func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, 
 		Sym("subtitle_files", []any{}).
 		Sym("pdf_stamp_enabled", false).
 		Sym("processing", false).
-		Sym("thumbnail_url", nil).
+		Sym("thumbnail_url", thumbnailURL).
 		Sym("width", width).
 		Sym("height", height), nil
 }

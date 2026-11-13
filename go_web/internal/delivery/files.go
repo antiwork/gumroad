@@ -327,20 +327,28 @@ func (l *loader) resolveRichContentProvider() (*owner, error) {
 		if err != nil {
 			return nil, err
 		}
-		if product != nil && product.is(productHasSameRichContentForAllVariants) {
-			recoverable, err := l.recoverableHiddenVariantRichContent(product)
-			if err != nil {
-				return nil, err
-			}
-			if !recoverable {
-				return &owner{product: product}, nil
-			}
+		shared, err := l.sharesPages(product)
+		if err != nil {
+			return nil, err
+		}
+		if shared {
+			return &owner{product: product}, nil
 		}
 		if !entity.variant.deleted {
 			return entity, nil
 		}
 	}
 	return l.productOrCheapestVariant(entity)
+}
+
+// sharesPages is whether product shows one set of pages for every variant: it says so, and its
+// variants' own pages aren't the recoverable copy of its content. A nil product shares none.
+func (l *loader) sharesPages(p *product) (bool, error) {
+	if p == nil || !p.is(productHasSameRichContentForAllVariants) {
+		return false, nil
+	}
+	recoverable, err := l.recoverableHiddenVariantRichContent(p)
+	return !recoverable, err
 }
 
 // withProductFiles is UrlRedirect#with_product_files.
@@ -410,13 +418,9 @@ func (l *loader) productOrCheapestVariant(entity *owner) (*owner, error) {
 	if err != nil {
 		return nil, err
 	}
-	effectivelyShared := false
-	if product.is(productHasSameRichContentForAllVariants) {
-		recoverable, err := l.recoverableHiddenVariantRichContent(product)
-		if err != nil {
-			return nil, err
-		}
-		effectivelyShared = !recoverable
+	effectivelyShared, err := l.sharesPages(product)
+	if err != nil {
+		return nil, err
 	}
 	if product.is(productIsPhysical) || effectivelyShared || hasProductLevelContent {
 		return &owner{product: product}, nil
