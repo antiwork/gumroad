@@ -62,6 +62,8 @@ type testEnv struct {
 	ids       *obfuscate.IDs
 	railsHit  *http.Request
 	railsBody []byte
+	// pages is the full page's config, when the test turned it on.
+	pages *PageConfig
 }
 
 func newTestEnv(t *testing.T) *testEnv { return newConfiguredTestEnv(t, nil, nil) }

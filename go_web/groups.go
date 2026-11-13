@@ -236,6 +236,11 @@ func registerDownloads(app *web.App, d *dependencies) error {
 	if err != nil {
 		return err
 	}
+	if b.pages != nil {
+		if err := d.setBuyerCurrency(b); err != nil {
+			return err
+		}
+	}
 	downloads.Register(app, &downloads.Config{
 		Env: d.env, DB: b.conn, Stack: d.stack, Store: b.store, Resolver: b.resolver, IDs: b.ids, Proxy: b.proxy, Meta: b.meta,
 		Now: time.Now, Pages: b.pages, DryRunKey: pages.DryRunKey(d.config("SECRET_KEY_BASE")), DryRunOnce: d.redis,
