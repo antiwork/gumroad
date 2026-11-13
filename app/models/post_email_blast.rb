@@ -94,6 +94,8 @@ class PostEmailBlast < ApplicationRecord
     return stopped unless stopped.positive?
 
     $redis.del(RedisKey.blast_quota_deferred_until(id))
+    # Re-read after the stop: a delivery that landed in between means the slot was spent.
+    blast.reload
     SellerLargeBlastQuota.release(seller_id: blast.seller_id, blast_id: id, kind: "post_blast") if blast.first_email_delivered_at.nil?
     stopped
   end
