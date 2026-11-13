@@ -55,8 +55,7 @@ describe CommissionsController, :vcr do
 
       commission.files.attach(file_fixture("test.png"))
 
-      file = fixture_file_upload("test.pdf")
-      blob = ActiveStorage::Blob.create_and_upload!(io: file, filename: "test.pdf")
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.pdf"), filename: "test.pdf", service_name: Commission::FILES_SERVICE)
 
       expect do
         put :update, params: { id: commission.external_id, file_signed_ids: [blob.signed_id] }, as: :json
