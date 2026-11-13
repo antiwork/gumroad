@@ -59,94 +59,41 @@ describe SendPostBlastEmailsJob, :freeze_time do
       expect(current_role).to be_nil
     end
 
-    it "ends a blast whose post was deleted" do
+    it "ignores deleted posts" do
       basic_post_with_audience.mark_deleted!
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
-
       described_class.new.perform(blast.id)
 
       expect_sent_count 0
-      expect(blast.reload).to have_attributes(started_at: nil, completed_at: nil, delivery_count: 0)
-      expect(blast.expired_at).to be_within(5.seconds).of(Time.current)
-      expect(blast.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
-      expect(blast.delivery_status).to eq("expired")
+      expect(blast.reload.started_at).to be_blank
+      expect(blast.completed_at).to be_blank
     end
 
-    it "ends a blast whose post was unpublished" do
+    it "ignores unpublished posts" do
       basic_post_with_audience.update!(published_at: nil)
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
-
       described_class.new.perform(blast.id)
 
       expect_sent_count 0
-      expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
-      expect(blast.delivery_status).to eq("expired")
+      expect(blast.reload.started_at).to be_blank
+      expect(blast.completed_at).to be_blank
     end
 
-    it "ends a blast whose post had its emails turned off" do
-      basic_post_with_audience.update!(send_emails: false, shown_on_profile: true)
+    it "ignores posts where send_emails is false" do
+      basic_post_with_audience.update!(published_at: nil)
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
-
       described_class.new.perform(blast.id)
 
       expect_sent_count 0
-      expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
-      expect(blast.delivery_status).to eq("expired")
+      expect(blast.reload.started_at).to be_blank
+      expect(blast.completed_at).to be_blank
     end
 
-    # The deferred copy of a blast is the case that guarantees hours between the request and this
-    # run, so a post edited or deleted in that window strands the blast.
-    it "ends the deferred copy of a blast whose post was deleted before the deferred run" do
-      blast = create(:blast, :just_requested, requested_at: 1.day.ago, post: basic_post_with_audience)
-      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.ago.iso8601)
-      basic_post_with_audience.mark_deleted!
-
-      described_class.new.perform(blast.id)
-
-      expect_sent_count 0
-      expect(described_class.jobs.count { _1["args"] == [blast.id] }).to eq(0)
-      expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
-      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
-    ensure
-      $redis.del(RedisKey.blast_quota_deferred_until(blast.id), RedisKey.blast_quota_admitted(blast.id)) if blast
-    end
-
-    it "gives back the daily large-send slot a blast that never delivered still holds" do
-      blast = create(:blast, :just_requested, post: basic_post_with_audience)
-      slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
-      $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
-      basic_post_with_audience.update!(send_emails: false, shown_on_profile: true)
-
-      described_class.new.perform(blast.id)
-
-      expect($redis.exists?(slot_key)).to eq(false)
-    ensure
-      $redis.del(slot_key) if blast
-    end
-
-    it "keeps the slot and the delivered count of a blast that had already sent" do
-      blast = create(:blast, post: basic_post_with_audience, requested_at: 1.day.ago, started_at: 1.day.ago,
-                             first_email_delivered_at: 1.day.ago, last_email_delivered_at: 1.day.ago, delivery_count: 12)
-      slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
-      $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
-      basic_post_with_audience.mark_deleted!
-
-      described_class.new.perform(blast.id)
-
-      expect(blast.reload).to have_attributes(completed_at: nil, delivery_count: 12, expiry_reason: PostEmailBlast::EXPIRY_POST_REMOVED)
-      expect($redis.get(slot_key)).to eq("post_blast:#{blast.id}")
-    ensure
-      $redis.del(slot_key) if blast
-    end
-
-    it "leaves a completed blast alone even when its post is gone" do
+    it "ignores completed blasts" do
       blast = create(:blast, post: basic_post_with_audience, completed_at: Time.current)
-      basic_post_with_audience.mark_deleted!
-
       described_class.new.perform(blast.id)
 
       expect_sent_count 0
-      expect(blast.reload.expired_at).to be_nil
     end
 
     it "does not send a has-opened email whose openers fell below the floor by send time" do

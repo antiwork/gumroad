@@ -28,8 +28,7 @@ class SendPostBlastEmailsJob
     @blast = PostEmailBlast.find(blast_id)
     @post = @blast.post
     Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} post_id=#{@post.id}")
-    return unless @blast.completed_at.nil? && @blast.expired_at.nil?
-    return end_if_post_unsendable unless @post.alive? && @post.published? && @post.send_emails?
+    return unless @post.alive? && @post.published? && @post.send_emails? && @blast.completed_at.nil? && @blast.expired_at.nil?
     # A retired newsletter now sends through Feature announcements; product and customer posts are unaffected.
     return if stop_for_retired_newsletter?
 
@@ -184,15 +183,6 @@ class SendPostBlastEmailsJob
       clear_blast_state
       Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the behavior-filtered audience fell below the floor")
       true
-    end
-
-    # A post deleted, unpublished or with its emails turned off between the request and this run
-    # has no send left. This job is the only writer that ever revisits the blast, so returning here
-    # would leave the row unfinished until the stalled-blast scan gives up on it days later.
-    def end_if_post_unsendable
-      PostEmailBlast.stop_for_removed_post(@blast.id)
-      clear_blast_state
-      Rails.logger.info("[#{self.class.name}] blast_id=#{@blast.id} expired: the post can no longer send")
     end
 
     def send_inline

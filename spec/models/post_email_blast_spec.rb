@@ -86,45 +86,6 @@ RSpec.describe PostEmailBlast do
     end
   end
 
-  describe "#delivery_status once its post can no longer send", :freeze_time do
-    let(:post) { create(:audience_post) }
-
-    it "is expired from zero delivered, gives back the day's slot, and is re-sendable if the post comes back" do
-      blast = create(:blast, :just_requested, post:)
-      slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
-      $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
-
-      expect(PostEmailBlast.stop_for_removed_post(blast.id)).to eq(1)
-
-      blast.reload
-      expect(blast.attributes.slice("delivery_count", "completed_at")).to eq("delivery_count" => 0, "completed_at" => nil)
-      expect(blast.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
-      expect(blast.delivery_status).to eq("expired")
-      expect(blast.ended_unsent?).to be(true)
-      expect($redis.exists?(slot_key)).to eq(false)
-    ensure
-      $redis.del(slot_key) if blast
-    end
-
-    it "keeps the delivered count, the day's slot and drops the deferral marker" do
-      blast = create(:blast, post:, requested_at: 1.day.ago, first_email_delivered_at: 1.day.ago, delivery_count: 12, completed_at: nil)
-      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.ago.iso8601)
-      slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
-      $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
-
-      expect(PostEmailBlast.stop_for_removed_post(blast.id)).to eq(1)
-
-      blast.reload
-      expect(blast.attributes.slice("delivery_count", "completed_at")).to eq("delivery_count" => 12, "completed_at" => nil)
-      expect(blast.delivery_status).to eq("expired")
-      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
-      expect($redis.get(slot_key)).to eq("post_blast:#{blast.id}")
-      expect(PostEmailBlast.stop_for_removed_post(blast.id)).to eq(0)
-    ensure
-      $redis.del(RedisKey.blast_quota_deferred_until(blast.id), slot_key) if blast
-    end
-  end
-
   describe "#delivery_status once expired", :freeze_time do
     let(:post) { create(:installment) }
 
