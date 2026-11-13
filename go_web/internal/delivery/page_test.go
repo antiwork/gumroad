@@ -144,6 +144,39 @@ func TestRichContentPagesInPositionOrder(t *testing.T) {
 	}
 }
 
+func TestRichContentPagesOfAPurchasedVariant(t *testing.T) {
+	e, r := newPageEnv(t)
+	category, variant := base+8_901, base+8_911
+	e.category(category, pageProduct)
+	e.variant(variant, category, nil)
+	e.file(pageFile, map[string]any{"link_id": pageProduct, "position": 0})
+	e.attach(variant, pageFile)
+	e.buys(pagePurchase, variant)
+	e.insert("rich_contents", base+8_803, map[string]any{"entity_type": "BaseVariant", "entity_id": variant, "title": "Deluxe", "position": 0,
+		"description": textPage, "created_at": stamp, "updated_at": stamp})
+	e.insert("rich_contents", base+8_804, map[string]any{"entity_type": "Link", "entity_id": pageProduct, "title": "Shared", "position": 0,
+		"description": textPage, "created_at": stamp, "updated_at": stamp})
+	pages, err := NewPage(context.Background(), e.db, r, e.ids).RichContentPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rails.EncodeJSON(pages.JSON); !strings.HasPrefix(got, `[{"id":"`+e.ids.Encrypt(base+8_803)+`","page_id":"`+e.ids.Encrypt(base+8_803)+
+		`","title":"Deluxe","variant_id":"`+e.ids.Encrypt(variant)+`",`) {
+		t.Errorf("variant pages %s", got)
+	}
+
+	// While the product shares one set of pages, the purchase gets the product's.
+	e.exec("UPDATE links SET flags = flags | ? WHERE id = ?", productHasSameRichContentForAllVariants, pageProduct)
+	pages, err = NewPage(context.Background(), e.db, r, e.ids).RichContentPages()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rails.EncodeJSON(pages.JSON); !strings.HasPrefix(got, `[{"id":"`+e.ids.Encrypt(base+8_804)+`","page_id":"`+e.ids.Encrypt(base+8_804)+
+		`","title":"Shared","variant_id":null,`) {
+		t.Errorf("shared pages %s", got)
+	}
+}
+
 func TestOwnerIsTheProductAndItsUser(t *testing.T) {
 	e, r := newPageEnv(t)
 	o, err := NewPage(context.Background(), e.db, r, e.ids).Owner()
