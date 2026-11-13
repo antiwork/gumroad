@@ -25,6 +25,8 @@ class OrdersController < ApplicationController
       manage_cookie_verifier:
     ).perform
 
+    save_meta_conversions_purchase_context(order)
+
     charge_responses = Order::ChargeService.new(order:, params: order_params).perform
 
     attribute_utm_link_sale(order, order_params[:browser_guid])
@@ -79,6 +81,10 @@ class OrdersController < ApplicationController
       params: order_params,
       manage_cookie_verifier:
     ).perform
+
+    # This is the only request in the client-confirm lane that holds the buyer's browser details,
+    # and the purchase succeeds later, from #finalize.
+    save_meta_conversions_purchase_context(order)
 
     prepare_responses = Order::PreparePaymentIntentService.new(
       order:,
@@ -154,6 +160,18 @@ class OrdersController < ApplicationController
   end
 
   private
+    # Best effort: the buyer's user agent and the checkout host are only needed if the seller has
+    # the Meta sender on, and a cache outage must never fail the order.
+    def save_meta_conversions_purchase_context(order)
+      MetaConversions::PurchaseContext.save_for(
+        order.purchases,
+        user_agent: request.user_agent,
+        base_url: request.base_url
+      )
+    rescue => e
+      Rails.logger.error("Failed to save the Meta conversions purchase context: #{e.class}: #{e.message}")
+    end
+
     def release_failed_client_confirmation(order, processor_intent_id:)
       checked_intent_id = nil
       purchase = order.purchases.active_once_per_cart_offer_code_reservations.find do

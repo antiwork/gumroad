@@ -146,6 +146,35 @@ describe OrdersController, :vcr do
         expect(SendChargeReceiptJob).to have_enqueued_sidekiq_job(charge.id)
       end
 
+      context "when the seller has the Meta conversion sender on" do
+        before do
+          Feature.activate_user(:meta_conversions_api, seller_1)
+          seller_1.update!(facebook_pixel_id: "1056510450054835")
+          seller_1.create_meta_conversions_setting!(access_token: "seller-token")
+        end
+
+        it "saves the buyer user agent and the checkout host for the created purchase" do
+          @request.headers["User-Agent"] = "Mozilla/5.0 (Macintosh)"
+
+          post :create, params: single_purchase_params
+
+          context = MetaConversions::PurchaseContext.fetch(Purchase.last.id)
+          expect(context[:user_agent]).to eq("Mozilla/5.0 (Macintosh)")
+          expect(context[:base_url]).to eq("http://#{@request.host_with_port}")
+        end
+
+        it "creates the purchase when the context cannot be saved" do
+          allow(MetaConversions::PurchaseContext).to receive(:save_for).and_raise(Redis::CannotConnectError)
+          allow(Rails.logger).to receive(:error)
+
+          post :create, params: single_purchase_params
+
+          expect(response.parsed_body["success"]).to be(true)
+          expect(Purchase.last).to be_successful
+          expect(Rails.logger).to have_received(:error).with(/Failed to save the Meta conversions purchase context/)
+        end
+      end
+
       context "when purchase fails" do
         let(:payment_params) { StripePaymentMethodHelper.decline.to_stripejs_params }
 
@@ -3058,6 +3087,38 @@ describe OrdersController, :vcr do
       expect(Charge.last.stripe_payment_intent_id).to be_present
 
       expect(Event.purchase.where(purchase_id: Purchase.last.id)).to be_empty
+    end
+
+    context "when the seller has the Meta conversion sender on" do
+      let(:purchases) { double("order_purchases") }
+      let(:order) { double("order", persisted?: true, purchases:) }
+
+      before do
+        allow(purchases).to receive(:each).and_return([])
+        allow(Order::CreateService).to receive(:new)
+          .and_return(instance_double(Order::CreateService, perform: [order, {}, []]))
+        allow(Order::PreparePaymentIntentService).to receive(:new)
+          .and_return(instance_double(Order::PreparePaymentIntentService, perform: { "unique-id-0" => { success: false } }))
+        allow(Order::OfferCodeRecoveryService).to receive(:for_order).with(order).and_return([])
+
+        Feature.activate_user(:meta_conversions_api, seller)
+        seller.update!(facebook_pixel_id: "1056510450054835")
+        seller.create_meta_conversions_setting!(access_token: "seller-token")
+      end
+
+      it "saves the buyer user agent and the checkout host, since the purchase succeeds later" do
+        @request.headers["User-Agent"] = "Mozilla/5.0 (Macintosh)"
+
+        expect(MetaConversions::PurchaseContext).to receive(:save_for).with(
+          purchases,
+          user_agent: "Mozilla/5.0 (Macintosh)",
+          base_url: "http://#{@request.host_with_port}"
+        )
+
+        post :prepare, params: { line_items:, confirmation_token: "ctoken-test" }.merge(common_params)
+
+        expect(response.parsed_body["success"]).to be(true)
+      end
     end
 
     it "lets a checkout restart check the membership's manage cookie" do

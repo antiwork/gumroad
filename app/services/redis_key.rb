@@ -110,6 +110,8 @@ class RedisKey
     # Marks that the seller was told this purchase's receipt has no evidence of reaching the buyer.
     # Permanent, so the nightly sweep reports each buyer once. See UndeliveredReceiptNotifier.
     def undelivered_receipt_notified(purchase_id) = "undelivered_receipt_notified:#{purchase_id}"
+    # The buyer's user agent and the checkout host, held for the Meta conversion sender.
+    def meta_conversions_purchase_context(purchase_id) = "meta_conversions:purchase_context:#{purchase_id}"
     # High-water mark for AlertSellersOfUndeliveredReceiptsJob: the last email_infos id it judged.
     def undelivered_receipt_sweep_cursor = "undelivered_receipt_sweep:cursor"
     def stale_block_sweep_cursor = "stale_block_sweep:cursor"
