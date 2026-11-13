@@ -18,7 +18,9 @@ type pageData struct {
 	email, purchaseState, streetAddress, jsonData sql.NullString
 	createdAt                                     db.NullTime
 	priceCents, shippingCents, quantity           sql.NullInt64
-	stripePartiallyRefunded                       bool
+	// purchaserIDColumn is purchases.purchaser_id, set even when the user row is gone.
+	purchaserIDColumn       sql.NullInt64
+	stripePartiallyRefunded bool
 	// license is the content's license prop: nil, or license_key, is_multiseat_license and seats.
 	license any
 
@@ -38,6 +40,9 @@ type pageData struct {
 	purchaserName, purchaserUsername sql.NullString
 
 	thirdPartyAnalytics bool
+	// discordIntegration is whether the product or a purchased variant has a live Discord
+	// integration, without which find_enabled_integration finds none either way.
+	discordIntegration bool
 	// ownReview, postPurchaseFields and call are whether the purchase has those rows, so their
 	// reads only run when there's something to read.
 	ownReview, postPurchaseFields, call bool
@@ -47,15 +52,6 @@ type pageData struct {
 
 func (d *pageData) productIs(flag int64) bool { return d.productFlags&flag != 0 }
 
-// pageChecks are the rows whose presence leaves the page to Rails, each as an EXISTS over
-// purchases.id, in the order their reason is reported.
-var pageChecks = []struct{ reason, exists string }{
-	{"integration", "SELECT 1 FROM product_integrations WHERE product_integrations.product_id = links.id AND product_integrations.deleted_at IS NULL"},
-	{"variant integration", "SELECT 1 FROM base_variant_integrations JOIN base_variants_purchases" +
-		" ON base_variants_purchases.base_variant_id = base_variant_integrations.base_variant_id" +
-		" WHERE base_variants_purchases.purchase_id = purchases.id AND base_variant_integrations.deleted_at IS NULL"},
-}
-
 // loadPageData reads the rows in one query, or returns a fallback for a purchase whose page
 // this port leaves to Rails.
 func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) {
@@ -64,9 +60,9 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 	var partially, productDeleted sql.NullBool
 	var ownerID, sellerFlags sql.NullInt64
 	var ownerGA, ownerPixel, ownerJSON sql.NullString
-	checks := make([]bool, len(pageChecks))
 	query := `SELECT purchases.email, purchases.purchase_state, purchases.street_address, purchases.json_data,
-		purchases.created_at, purchases.price_cents, purchases.shipping_cents, purchases.quantity, purchases.stripe_partially_refunded,
+		purchases.created_at, purchases.price_cents, purchases.shipping_cents, purchases.quantity, purchases.purchaser_id,
+		purchases.stripe_partially_refunded,
 		links.id, links.name, links.unique_permalink, links.custom_permalink, links.deleted_at IS NOT NULL, links.flags,
 		owner.id, owner.username, owner.external_id, owner.google_analytics_id, owner.facebook_pixel_id, owner.json_data,
 		seller.flags, seller.name, seller.username, seller.external_id, purchaser.name, purchaser.username,
@@ -75,20 +71,24 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 		OR EXISTS(SELECT 1 FROM third_party_analytics WHERE third_party_analytics.user_id = links.user_id
 			AND third_party_analytics.link_id IS NULL AND third_party_analytics.deleted_at IS NULL
 			AND third_party_analytics.location IN ('receipt', 'all')),
+		EXISTS(SELECT 1 FROM product_integrations JOIN integrations ON integrations.id = product_integrations.integration_id
+			WHERE product_integrations.product_id = links.id AND product_integrations.deleted_at IS NULL
+			AND integrations.type = 'DiscordIntegration')
+		OR EXISTS(SELECT 1 FROM base_variants_purchases JOIN base_variant_integrations
+			ON base_variant_integrations.base_variant_id = base_variants_purchases.base_variant_id
+			JOIN integrations ON integrations.id = base_variant_integrations.integration_id
+			WHERE base_variants_purchases.purchase_id = purchases.id AND base_variant_integrations.deleted_at IS NULL
+			AND integrations.type = 'DiscordIntegration'),
 		EXISTS(SELECT 1 FROM product_reviews WHERE product_reviews.purchase_id = purchases.id),
 		EXISTS(SELECT 1 FROM purchase_custom_fields WHERE purchase_custom_fields.purchase_id = purchases.id
 			AND purchase_custom_fields.flags & 1 != 0 AND purchase_custom_fields.custom_field_id IS NOT NULL),
 		EXISTS(SELECT 1 FROM calls WHERE calls.purchase_id = purchases.id)`
 	dest := []any{&d.email, &d.purchaseState, &d.streetAddress, &d.jsonData, &d.createdAt, &d.priceCents, &d.shippingCents, &d.quantity,
-		&partially,
+		&d.purchaserIDColumn, &partially,
 		&d.productID, &d.productName, &d.uniquePermalink, &d.customPermalink, &productDeleted, &d.productFlags,
 		&ownerID, &d.ownerUsername, &d.ownerExternalID, &ownerGA, &ownerPixel, &ownerJSON,
 		&sellerFlags, &d.sellerName, &d.sellerUsername, &d.sellerExternalID, &d.purchaserName, &d.purchaserUsername, &d.thirdPartyAnalytics,
-		&d.ownReview, &d.postPurchaseFields, &d.call}
-	for i, c := range pageChecks {
-		query += ", EXISTS(" + c.exists + ")"
-		dest = append(dest, &checks[i])
-	}
+		&d.discordIntegration, &d.ownReview, &d.postPurchaseFields, &d.call}
 	err := h.c.DB.QueryRowContext(ctx, query+`
 		FROM purchases
 		JOIN links ON links.id = purchases.link_id
@@ -109,21 +109,16 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 	d.stripePartiallyRefunded, d.productDeleted = partially.Bool, productDeleted.Bool
 
 	switch {
-	case pu.flags&(purchaseIsGiftSender|purchaseIsBundleProduct|purchaseIsCommissionDeposit|purchaseIsCommissionCompletion) != 0:
-		return nil, fallback("gift, bundle or commission purchase")
-	case d.productIs(productCommunityChatEnabled):
-		return nil, fallback("community chat")
+	case pu.flags&purchaseIsGiftSender != 0:
+		return nil, fallback("gift sender")
+	case pu.flags&(purchaseIsCommissionDeposit|purchaseIsCommissionCompletion) != 0:
+		return nil, fallback("commission")
 	case !rails.Present(d.uniquePermalink.String) && !rails.Present(d.customPermalink.String):
 		// short_link_url raises without a permalink.
 		return nil, fallback("no permalink")
 	case !d.priceCents.Valid:
 		// paid? and free_purchase? compare nil.
 		return nil, fallback("nil price")
-	}
-	for i, c := range pageChecks {
-		if checks[i] {
-			return nil, fallback(c.reason)
-		}
 	}
 	if err := d.loadLicense(ctx, h.c.DB, pu, p.subscription != nil); err != nil {
 		return nil, err
@@ -202,7 +197,7 @@ func (d *pageData) lastContentPageID() (any, error) {
 // its negation.
 func (d *pageData) freePurchase() bool {
 	// nil == 0 is false, so a nil shipping price is a paid purchase.
-	return d.priceCents.Int64 == 0 && d.shippingCents.Valid && d.shippingCents.Int64 == 0
+	return d.priceCents.Valid && d.priceCents.Int64 == 0 && d.shippingCents.Valid && d.shippingCents.Int64 == 0
 }
 
 // sellerNameOrUsername is the seller's User#name_or_username.

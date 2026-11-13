@@ -74,6 +74,18 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 	s3Endpoint := d.globalConfig("AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
 	// The public service's url, which avatar.url answers.
 	publicStorage := "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/"
+	var jobs *sidekiq.Client
+	if conn, err := d.sidekiqRedis(); err != nil {
+		d.logger.Warn("download page jobs left to Rails", "reason", err.Error())
+	} else {
+		jobs = &sidekiq.Client{Redis: conn}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := jobs.LoadRedisVersion(ctx); err != nil {
+			// The unique-jobs scripts take the version without reading it.
+			d.logger.Warn("Sidekiq Redis version unread", "reason", err.Error())
+		}
+		cancel()
+	}
 	return &downloads.PageConfig{
 		Layout: layout,
 		CSP:    csp,
@@ -104,6 +116,7 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 		IOSAppID:        d.globalConfig("IOS_APP_ID", "916819108"),
 		AndroidBundleID: d.globalConfig("ANDROID_BUNDLE_ID", "com.gumroad.app"),
 		NewNonce:        newNonce,
+		Sidekiq:         jobs,
 	}, nil
 }
 

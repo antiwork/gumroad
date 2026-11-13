@@ -31,6 +31,15 @@ func (h *handler) loadPurchaseProps(ctx context.Context, p *page, d *pageData) (
 	}
 	out := &purchaseProps{receiptID: pu.id, hasInvoice: !d.freePurchase(), customFields: []any{}}
 	var err error
+	if pu.flags&purchaseIsBundleProduct != 0 {
+		if s != nil {
+			// receipt_purchase reads the bundle purchase first, and its own membership after.
+			return nil, fallback("bundle member membership")
+		}
+		if err = h.loadBundleReceipt(ctx, out, pu, d); err != nil {
+			return nil, err
+		}
+	}
 	if s != nil {
 		if err = h.loadReceipt(ctx, out, pu, s, d); err != nil {
 			return nil, err

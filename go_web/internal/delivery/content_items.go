@@ -128,7 +128,7 @@ func (l *loader) displayFiles(query string, args ...any) ([]ProductFile, error) 
 
 // ContentItems is UrlRedirectPresenter#download_attributes[:content_items] for a signed-out
 // viewer, without a completed commission's files. ErrUnported covers what only Rails maps:
-// subtitles, stamped PDFs, web builds, a post's files and non-ASCII extensions.
+// subtitles, web builds, a post's files and non-ASCII extensions.
 func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 	l := p.l
 	if _, err := p.Files(); err != nil {
@@ -140,14 +140,13 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 	}
 	var ids, productIDs []any
 	seen, seenProduct := map[int64]bool{}, map[int64]bool{}
+	stamping := false
 	for _, d := range files {
-		switch {
-		case !d.productID.Valid:
+		if !d.productID.Valid {
 			// with_product_files_owner is a post's.
 			return nil, ErrUnported
-		case d.is(filePDFStampEnabled):
-			return nil, ErrUnported
 		}
+		stamping = stamping || d.is(filePDFStampEnabled)
 		if !seen[d.ID] {
 			seen[d.ID] = true
 			ids = append(ids, d.ID)
@@ -180,8 +179,13 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var granted map[int64]bool
+	var granted, stamped map[int64]bool
 	var locations map[int64]*mediaLocation
+	if stamping {
+		if stamped, err = StampedFileIDs(l.ctx, l.conn, l.r.ID, false); err != nil {
+			return nil, err
+		}
+	}
 	if l.r.PurchaseID != nil {
 		if locations, err = maxConsumedAtByFile(l.ctx, l.conn, *l.r.PurchaseID); err != nil {
 			return nil, err
@@ -207,7 +211,7 @@ func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return c.mapFile(r, d, owners[d.productID.Int64], locations[d.ID], granted, thumbnailURL)
+		return c.mapFile(r, d, owners[d.productID.Int64], locations[d.ID], granted, stamped, thumbnailURL)
 	}
 	items := []any{}
 	for _, folder := range folders {
@@ -324,8 +328,9 @@ func loadFolders(l *loader, productID *int64, folderIDs []any) (map[int64]bool, 
 }
 
 // mapFile is UrlRedirectPresenter#map_file for a signed-out viewer, for a file without
-// subtitles, a web build or PDF stamping. owner is the product's user's external_id column.
-func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, location *mediaLocation, granted map[int64]bool,
+// subtitles or a web build. owner is the product's user's external_id column, and stamped
+// the files with an alive stamped PDF for this url redirect.
+func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, location *mediaLocation, granted, stamped map[int64]bool,
 	thumbnailURL any) (*rails.RHash, error) {
 	names := s3Names{url: d.url.String, baseURL: c.S3BaseURL, ownerExternalID: owner}
 	external := c.IDs.Encrypt(d.ID)
@@ -381,6 +386,7 @@ func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, 
 		width, height = nullInt(d.width), nullInt(d.height)
 	}
 	hideKindleAndRead := d.is(fileHideKindleAndReadButton)
+	stampEnabled := d.is(filePDFStampEnabled)
 	if d.canSendToKindle() && !hideKindleAndRead {
 		kindle = rails.NewRHash().Sym("email", nil).Sym("icon_url", c.AssetHost+"/images/white-15.png")
 	}
@@ -412,11 +418,36 @@ func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, 
 		Sym("read_url", readURL).
 		Sym("external_link_url", externalURL).
 		Sym("subtitle_files", []any{}).
-		Sym("pdf_stamp_enabled", false).
-		Sym("processing", false).
+		Sym("pdf_stamp_enabled", stampEnabled).
+		Sym("processing", stampEnabled && !stamped[d.ID]).
 		Sym("thumbnail_url", thumbnailURL).
 		Sym("width", width).
 		Sym("height", height), nil
+}
+
+// StampedFileIDs is the product_file_ids of url redirect redirectID's stamped PDFs: the alive
+// ones (alive_stamped_pdfs), or with deleted the deleted ones (stamped_pdfs.deleted).
+func StampedFileIDs(ctx context.Context, conn *sql.DB, redirectID int64, deleted bool) (map[int64]bool, error) {
+	state := "IS NULL"
+	if deleted {
+		state = "IS NOT NULL"
+	}
+	rows, err := conn.QueryContext(ctx, "SELECT product_file_id FROM stamped_pdfs WHERE url_redirect_id = ? AND deleted_at "+state, redirectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := map[int64]bool{}
+	for rows.Next() {
+		var id sql.NullInt64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		if id.Valid {
+			ids[id.Int64] = true
+		}
+	}
+	return ids, rows.Err()
 }
 
 func nullString(s sql.NullString) any {

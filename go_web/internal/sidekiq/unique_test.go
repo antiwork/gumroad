@@ -73,6 +73,32 @@ func TestPushUntilExecutedPushesOnlyTheLockHolder(t *testing.T) {
 	}
 }
 
+// unique_across_queues leaves the queue out of the digest, so a push on another queue waits
+// on the same lock.
+func TestUniqueAcrossQueuesSharesOneLock(t *testing.T) {
+	m := miniredis.RunT(t)
+	c := &Client{Redis: redis.NewClient(&redis.Options{Addr: m.Addr()}), RedisVersion: "7.2.4",
+		Now: func() time.Time { return time.Unix(1762430000, 250_000_000) }}
+	opts := Options{Class: "StampPdfForPurchaseJob", Queue: "long", Retry: 5, UniqueAcrossQueues: true}
+	ctx := context.Background()
+	jid, pushed, err := c.PushUntilExecuted(ctx, opts, 123)
+	if err != nil || !pushed {
+		t.Fatalf("first push: %v %v", pushed, err)
+	}
+	// MD5 of JSON.generate([["class", "StampPdfForPurchaseJob"], ["lock_args", [123]]]).
+	const digest = "uniquejobs:00af0acf0125c9c315cc70a6be32fa94"
+	want := `{"retry":5,"queue":"long","backtrace":true,"lock":"until_executed","unique_across_queues":true,"args":[123],` +
+		`"class":"StampPdfForPurchaseJob","jid":"` + jid + `","created_at":1762430000.25,"lock_timeout":0,"lock_ttl":null,` +
+		`"lock_prefix":"uniquejobs","lock_args":[123],"lock_digest":"` + digest + `","enqueued_at":1762430000.25}`
+	if got, _ := m.List("queue:long"); len(got) != 1 || got[0] != want {
+		t.Errorf("queue %v\nwant %s", got, want)
+	}
+	opts.Queue = "critical"
+	if _, pushed, err := c.PushUntilExecuted(ctx, opts, 123); err != nil || pushed {
+		t.Errorf("push on another queue: %v %v", pushed, err)
+	}
+}
+
 // The server reads the lock type off the item, so only the payload differs from until_executed.
 func TestPushUntilExecutingNamesItsLock(t *testing.T) {
 	m := miniredis.RunT(t)

@@ -35,6 +35,7 @@ const (
 	subscriptionInstallmentPlan  = 1 << 6 // Subscription 7 => :is_installment_plan
 
 	productIsLicensed                   = 1 << 6  // Link 7 => :is_licensed
+	productIsPhysical                   = 1 << 7  // Link 8 => :is_physical
 	productBlockAccessAfterCancellation = 1 << 9  // Link 10 => :block_access_after_membership_cancellation
 	productCommunityChatEnabled         = 1 << 29 // Link 30 => :community_chat_enabled
 
