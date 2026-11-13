@@ -74,14 +74,14 @@ func monthsSince(ts, now time.Time) int64 {
 	return int64(max(months, 0))
 }
 
-// returningCustomer is OfferCode#returning_customer?(purchaser_ids: [buyer.id], emails: [buyer.email]).
+// returningCustomer is OfferCode#returning_customer?(purchaser_ids: [buyer.ID], emails: [buyer.Email]).
 func (h *handler) returningCustomer(ctx context.Context, buyer *signedInUser, sellerID int64) (bool, error) {
 	q := "SELECT 1 FROM purchases WHERE " + qualifyingPurchases + " AND purchases.seller_id = ? AND purchases."
-	found, err := h.exists(ctx, q+"purchaser_id = ? LIMIT 1", sellerID, buyer.id)
-	if err != nil || found || !rails.Present(buyer.email.String) {
+	found, err := h.exists(ctx, q+"purchaser_id = ? LIMIT 1", sellerID, buyer.ID)
+	if err != nil || found || !rails.Present(buyer.Email.String) {
 		return found, err
 	}
-	return h.exists(ctx, q+"email = ? LIMIT 1", sellerID, buyer.email.String)
+	return h.exists(ctx, q+"email = ? LIMIT 1", sellerID, buyer.Email.String)
 }
 
 // oldestOwnership is ownership_months_for(buyer, ownership_reference_products(prod))'s oldest
@@ -108,9 +108,9 @@ func (h *handler) oldestOwnership(ctx context.Context, buyer *signedInUser, code
 	if len(ids) == 0 {
 		ids = []int64{prod.id}
 	}
-	owner, args := "purchases.purchaser_id = ?", []any{buyer.id}
-	if rails.Present(buyer.email.String) && buyer.confirmedAt.Valid {
-		owner, args = owner+" OR purchases.email = ?", append(args, buyer.email.String)
+	owner, args := "purchases.purchaser_id = ?", []any{buyer.ID}
+	if rails.Present(buyer.Email.String) && buyer.ConfirmedAt.Valid {
+		owner, args = owner+" OR purchases.email = ?", append(args, buyer.Email.String)
 	}
 	var oldest db.NullTime
 	err = h.c.DB.QueryRowContext(ctx, "SELECT purchases.created_at FROM purchases WHERE "+qualifyingPurchases+

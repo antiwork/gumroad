@@ -12,6 +12,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -31,6 +32,9 @@ type PageConfig struct {
 	NewNonce func() string
 	// BuyerCurrency is what seller_analytics reads; nil leaves pages with it to Rails.
 	BuyerCurrency BuyerCurrency
+	// Viewers loads the signed-in visitor and the signed-in share; nil leaves signed-in pages
+	// to Rails.
+	Viewers *viewer.Loader
 }
 
 // pageWriteTimeout bounds the after_actions' writes, which outlive a client that leaves.

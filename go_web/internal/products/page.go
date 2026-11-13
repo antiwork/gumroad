@@ -17,6 +17,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -57,9 +58,8 @@ type PageConfig struct {
 	NewNonce                      func() string
 	// EmailDigestKey is OBFUSCATE_IDS_CIPHER_KEY, which Purchase#email_digest signs with.
 	EmailDigestKey string
-	// GumroadAdminID is GUMROAD_ADMIN_ID, who writes payout setup notes; 0 leaves a page that
-	// reads them to Rails.
-	GumroadAdminID int64
+	// Viewers loads the signed-in visitor and the signed-in share.
+	Viewers *viewer.Loader
 	// CustomHTMLAnalytics is vite_typescript_tag("custom_html_analytics"); nil leaves a custom
 	// HTML product page to Rails.
 	CustomHTMLAnalytics *vite.Tags
@@ -136,9 +136,9 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	// The share blocks in order: the signed-in one follows detected_buyer_currency's, and
 	// LinksController's own MobileAppWebView share comes last.
 	props := shared.Sym("detected_buyer_currency", nullableString(v.detectedCurrency))
-	if u := p.viewer; u != nil {
-		props.Sym("logged_in_user", u.loggedIn).Sym("current_seller", u.currentSeller).
-			Sym("current_user", u.currentUser).Sym("prompt_passkey_setup", u.promptPasskey)
+	if v := p.share; v != nil {
+		props.Sym("logged_in_user", v.LoggedInUser).Sym("current_seller", v.CurrentSeller).
+			Sym("current_user", v.CurrentUser).Sym("prompt_passkey_setup", v.PromptPasskeySetup)
 		p.avatarPushes = appendNew(p.avatarPushes, p.viewerPushes...)
 	}
 	props.Sym("is_mobile_app_web_view", p.Req.Param("display") == "mobile_app" || p.Session.Get("mobile_app_web_view") == true)

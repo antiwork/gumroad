@@ -43,7 +43,7 @@ func (h *handler) createDiscoverSearch(ctx context.Context, p *page, prod *produ
 	ctx = context.WithoutCancel(ctx)
 	var userID any
 	if p.viewer != nil {
-		userID = p.viewer.id
+		userID = p.viewer.ID
 	}
 	autocomplete := p.Req.Param("autocomplete") == "true"
 	now := p.Req.Now.UTC().Truncate(time.Microsecond)

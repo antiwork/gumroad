@@ -165,7 +165,7 @@ func (h *handler) autocompleteResults(p *page, pending any) (*rails.RHash, error
 func (h *handler) recentSearches(p *page, query string, pending any) ([]any, error) {
 	where, arg := "`discover_searches`.`browser_guid` = ? AND `discover_searches`.`user_id` IS NULL", any(p.GUID)
 	if p.viewer != nil {
-		where, arg = "`discover_searches`.`user_id` = ?", p.viewer.id
+		where, arg = "`discover_searches`.`user_id` = ?", p.viewer.ID
 	}
 	from := " FROM `discover_search_suggestions` INNER JOIN `discover_searches` ON `discover_searches`.`id` =" +
 		" `discover_search_suggestions`.`discover_search_id` WHERE `discover_search_suggestions`.`deleted_at` IS NULL AND " + where +
@@ -274,7 +274,7 @@ func (h *handler) recentlyViewed(p *page) ([]any, error) {
 		"must_not": map[string]any{"exists": map[string]any{"field": "user_id"}},
 	}
 	if p.viewer != nil {
-		boolQuery = map[string]any{"must": map[string]any{"term": map[string]any{"user_id": p.viewer.id}}}
+		boolQuery = map[string]any{"must": map[string]any{"term": map[string]any{"user_id": p.viewer.ID}}}
 	}
 	var res struct {
 		Hits struct {

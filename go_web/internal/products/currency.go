@@ -11,6 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/antiwork/gumroad/go_web/internal/compliance"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
@@ -298,7 +299,7 @@ func (h *handler) stripeConnectRoutes(p *page) (bool, error) {
 	if on, err := h.flag(p.Ctx, "merchant_migration", p.seller.id); err != nil || !on {
 		return false, err
 	}
-	info, err := h.complianceInfo(p.Ctx, p.seller.id)
+	info, err := compliance.Load(p.Ctx, h.c.DB, p.seller.id)
 	if err != nil || info == nil {
 		return false, err
 	}
@@ -308,9 +309,9 @@ func (h *handler) stripeConnectRoutes(p *page) (bool, error) {
 	}
 	var code string
 	if byEntity {
-		code, err = info.legalEntityCountryCode()
+		code, err = info.LegalEntityCountryCode()
 	} else {
-		code, err = complianceCountry(info.country)
+		code, err = compliance.CountryCode(info.Country)
 	}
 	return stripeConnectCountries[code], err
 }

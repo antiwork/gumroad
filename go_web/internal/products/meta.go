@@ -29,7 +29,7 @@ func (h *handler) productMeta(p *page, prod *product, v *view) (*inertia.MetaTag
 	}
 	var viewerID string
 	if p.viewer != nil {
-		viewerID = p.viewer.externalID.String
+		viewerID = p.viewer.ExternalID.String
 	}
 	set("", "", "", inertia.Pairs("property", "gr:logged_in_user:id", "content", viewerID)...)
 	set("", "", "", inertia.Pairs("property", "gr:page:type", "content", "")...)

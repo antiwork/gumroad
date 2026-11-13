@@ -69,7 +69,7 @@ func (h *handler) curatedProducts(ctx context.Context, p *page) ([]int64, error)
 		" WHERE `purchases`.`purchaser_id` = ? ORDER BY `succeeded_at` DESC"
 	var purchased []int64
 	if p.viewer != nil {
-		if purchased, err = h.scanIDs(ctx, purchasedQuery+" LIMIT ?", p.viewer.id, limit); err != nil {
+		if purchased, err = h.scanIDs(ctx, purchasedQuery+" LIMIT ?", p.viewer.ID, limit); err != nil {
 			return nil, err
 		}
 	}
@@ -95,7 +95,7 @@ func (h *handler) curatedProducts(ctx context.Context, p *page) ([]int64, error)
 	// Every purchase only matters as a set, which a LIMIT that cut nothing already holds.
 	allPurchased := purchased
 	if p.viewer != nil && int64(len(purchased)) == limit {
-		if allPurchased, err = h.scanIDs(ctx, purchasedQuery, p.viewer.id); err != nil {
+		if allPurchased, err = h.scanIDs(ctx, purchasedQuery, p.viewer.ID); err != nil {
 			return nil, err
 		}
 	}
@@ -117,7 +117,7 @@ func (h *handler) cartProductIDs(ctx context.Context, p *page) ([]int64, error) 
 	switch {
 	case p.viewer != nil:
 		row = h.c.DB.QueryRowContext(ctx, "SELECT `carts`.`id` FROM `carts` WHERE `carts`.`user_id` = ?"+
-			" AND `carts`.`deleted_at` IS NULL ORDER BY `carts`.`id` ASC LIMIT 1", p.viewer.id)
+			" AND `carts`.`deleted_at` IS NULL ORDER BY `carts`.`id` ASC LIMIT 1", p.viewer.ID)
 	case rails.Blank(p.GUID):
 		return nil, nil
 	default:

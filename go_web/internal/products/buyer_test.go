@@ -12,16 +12,17 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 )
 
 // How a signed-in buyer's purchases decide the codes for new or existing customers, read
 // through the evaluators the product page calls.
 func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 	const buyerID, codeID, otherID = int64(1_797_001), int64(1_797_101), int64(1_797_201)
-	confirmed := &signedInUser{user: user{id: buyerID}, email: sql.NullString{String: "buyer@example.com", Valid: true},
-		confirmedAt: db.NullTime{Time: testNow, Valid: true}}
-	unconfirmed := &signedInUser{user: user{id: buyerID}, email: confirmed.email}
-	blank := &signedInUser{user: user{id: buyerID}, email: sql.NullString{Valid: true}, confirmedAt: confirmed.confirmedAt}
+	confirmed := &signedInUser{User: &viewer.User{ID: buyerID, Email: sql.NullString{String: "buyer@example.com", Valid: true},
+		ConfirmedAt: db.NullTime{Time: testNow, Valid: true}}}
+	unconfirmed := &signedInUser{User: &viewer.User{ID: buyerID, Email: confirmed.Email}}
+	blank := &signedInUser{User: &viewer.User{ID: buyerID, Email: sql.NullString{Valid: true}, ConfirmedAt: confirmed.ConfirmedAt}}
 	purchase := func(t *testing.T, conn *sql.DB, id int64, columns map[string]any) {
 		row := map[string]any{"id": id, "seller_id": sellerID, "link_id": productID, "purchaser_id": buyerID,
 			"email": "buyer@example.com", "purchase_state": "successful", "created_at": testNow.AddDate(0, -2, 0), "updated_at": testNow}
@@ -174,7 +175,7 @@ func TestABuyersPurchasesDecideCustomerCodes(t *testing.T) {
 // owning another option of the product doesn't make the code apply here.
 func TestAnOwnershipOptionFallsBackToRails(t *testing.T) {
 	const codeID = int64(1_797_102)
-	buyer := &signedInUser{user: user{id: 1_797_002}}
+	buyer := &signedInUser{User: &viewer.User{ID: 1_797_002}}
 	want := fallback("offer code ownership variants")
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
@@ -184,7 +185,7 @@ func TestAnOwnershipOptionFallsBackToRails(t *testing.T) {
 	testdb.Insert(t, conn, "offer_codes_ownership_variants", map[string]any{"id": int64(1_797_611), "offer_code_id": codeID,
 		"variant_id": int64(1_797_621), "created_at": testNow, "updated_at": testNow})
 	testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_311), "seller_id": sellerID, "link_id": productID,
-		"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
+		"purchaser_id": buyer.ID, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
 	prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
 	p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, viewer: buyer}
 	if _, _, err := h.evaluateURLCode(p, prod, "loyal"); err != want {
@@ -203,7 +204,7 @@ func TestAnOwnershipOptionFallsBackToRails(t *testing.T) {
 // then weighs against the sale: the sale only wins by taking more off.
 func TestABuyersExistingCustomerDefault(t *testing.T) {
 	const loyalID, saleID = int64(1_797_111), int64(1_797_112)
-	buyer := &signedInUser{user: user{id: 1_797_001}}
+	buyer := &signedInUser{User: &viewer.User{ID: 1_797_001}}
 	for _, c := range []struct {
 		name, reason, code string
 		sale               int
@@ -222,7 +223,7 @@ func TestABuyersExistingCustomerDefault(t *testing.T) {
 				insertOfferCode(t, conn, saleID, map[string]any{"code": "sale", "amount_percentage": c.sale, "universal": true, "auto_apply": true})
 			}
 			testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_301), "seller_id": sellerID, "link_id": productID,
-				"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
+				"purchaser_id": buyer.ID, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
 			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: testNow.Add(time.Hour)}}, seller: &user{id: sellerID},
 				viewer: buyer, hasAutoApplyCode: c.sale > 0}
 			prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true},
@@ -272,13 +273,13 @@ func TestATieredCodeForABuyer(t *testing.T) {
 			e := newTestEnv(t)
 			conn := testdb.Open(t)
 			h := &handler{c: e.config}
-			buyer := &signedInUser{user: user{id: 1_797_002}}
+			buyer := &signedInUser{User: &viewer.User{ID: 1_797_002}}
 			now := testNow.Add(time.Hour)
 			insertOfferCode(t, conn, codeID, map[string]any{"code": "LOYAL", "universal": true,
 				"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`})
 			if c.owned {
 				testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_311), "seller_id": sellerID, "link_id": productID,
-					"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
+					"purchaser_id": buyer.ID, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
 			}
 			p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: now}}, seller: &user{id: sellerID}, viewer: buyer}
 			p.discountCode = "LOYAL"
@@ -307,12 +308,12 @@ func TestATieredSaleKeepsItsStoredPercentage(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
 	h := &handler{c: e.config}
-	buyer := &signedInUser{user: user{id: 1_797_003}}
+	buyer := &signedInUser{User: &viewer.User{ID: 1_797_003}}
 	now := testNow.Add(time.Hour)
 	insertOfferCode(t, conn, codeID, map[string]any{"code": "SALE", "amount_percentage": 10, "universal": true, "auto_apply": true,
 		"ownership_duration_tiers": `[{"months":0,"amount_percentage":10},{"months":12,"amount_percentage":25}]`})
 	testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_312), "seller_id": sellerID, "link_id": productID,
-		"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
+		"purchaser_id": buyer.ID, "purchase_state": "successful", "created_at": now.AddDate(0, -13, 0), "updated_at": now})
 	p := &page{Visit: &pages.Visit{Ctx: t.Context(), Req: &rails.Request{Now: now}}, seller: &user{id: sellerID}, viewer: buyer,
 		hasAutoApplyCode: true}
 	prod := &product{id: productID, userID: sellerID, priceCurrencyType: sql.NullString{String: "usd", Valid: true}}
@@ -343,14 +344,14 @@ func TestThreeCodesEachWinningAnOption(t *testing.T) {
 	e := newTestEnv(t)
 	conn := testdb.Open(t)
 	h := &handler{c: e.config}
-	buyer := &signedInUser{user: user{id: 1_797_003}}
+	buyer := &signedInUser{User: &viewer.User{ID: 1_797_003}}
 	insertOfferCode(t, conn, urlID, map[string]any{"code": "SAVE", "amount_cents": 150, "currency_type": "usd", "universal": true})
 	insertOfferCode(t, conn, loyalID, map[string]any{"code": "loyal", "amount_cents": 300, "currency_type": "usd", "minimum_amount_cents": 900,
 		"existing_customers_only": true})
 	testdb.Insert(t, conn, "offer_codes_products", map[string]any{"id": int64(1_797_161), "offer_code_id": loyalID, "product_id": productID})
 	insertOfferCode(t, conn, saleID, map[string]any{"code": "SALE", "amount_percentage": 20, "universal": true, "auto_apply": true})
 	testdb.Insert(t, conn, "purchases", map[string]any{"id": int64(1_797_321), "seller_id": sellerID, "link_id": productID,
-		"purchaser_id": buyer.id, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
+		"purchaser_id": buyer.ID, "purchase_state": "successful", "created_at": testNow, "updated_at": testNow})
 	testdb.Insert(t, conn, "variant_categories", map[string]any{"id": category, "link_id": productID, "title": "Size"})
 	for i, id := range []int64{small, mid, large} {
 		testdb.Insert(t, conn, "base_variants", map[string]any{"id": id, "type": "Variant", "variant_category_id": category, "name": fmt.Sprint("Size ", i),

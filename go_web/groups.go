@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/credentials"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/downloads"
+	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/geoip"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/licenses"
@@ -30,6 +32,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/robots"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 	"github.com/antiwork/gumroad/go_web/internal/webhooks"
 )
@@ -161,6 +164,7 @@ type pageBase struct {
 	pages    *downloads.PageConfig
 	// cache is Rails.cache, nil when the pages are off or it isn't configured.
 	cache *railscache.Store
+	flags *flagSet
 }
 
 func (d *dependencies) pageBase() (*pageBase, error) {
@@ -199,7 +203,12 @@ func (d *dependencies) pageBase() (*pageBase, error) {
 		return nil, err
 	}
 	var cache *railscache.Store
+	flags := &flagSet{redis: d.redis, flags: map[string]*flipper.Flag{}}
 	if pageConfig != nil {
+		// GlobalConfig.get("GUMROAD_ADMIN_ID", 767082) in production.
+		gumroadAdminID, _ := strconv.ParseInt(d.globalConfig("GUMROAD_ADMIN_ID", "767082"), 10, 64)
+		pageConfig.Viewers = &viewer.Loader{DB: conn, IDs: ids, Avatars: pageConfig.Avatars, Flag: flags.flag,
+			RootDomain: d.env.RootDomain, GumroadAdminID: gumroadAdminID}
 		cache, err = d.railsCache(proxy)
 		if errors.Is(err, errPagesOff) {
 			d.logger.Info("Rails.cache reads left to Rails", "reason", err.Error())
@@ -226,6 +235,7 @@ func (d *dependencies) pageBase() (*pageBase, error) {
 		},
 		pages: pageConfig,
 		cache: cache,
+		flags: flags,
 	}
 	return d.pages, nil
 }
