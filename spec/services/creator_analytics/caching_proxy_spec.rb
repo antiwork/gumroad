@@ -480,6 +480,30 @@ describe CreatorAnalytics::CachingProxy do
     end
   end
 
+  describe "#normalize_day_keys" do
+    before do
+      @service = described_class.new(build(:user))
+    end
+
+    it "symbolizes the keys the formatters read on a JSON day, and leaves everything else alone" do
+      day = JSON.parse({
+        start_date: "Dec 1",
+        end_date: "Dec 1",
+        dates_and_months: [{ date: "Dec 1", month: "2020-12" }],
+        by_state: { views: { "p" => { "United States" => [1] } }, sales: {}, totals: {} },
+        unknown_key: "kept",
+      }.to_json)
+
+      normalized = @service.send(:normalize_day_keys, day)
+
+      expect(normalized.keys).to include(:start_date, :end_date, :dates_and_months, :by_state, "unknown_key")
+      expect(normalized.keys).not_to include("by_state", "dates_and_months")
+      expect(normalized[:by_state]).to include(:views, :sales, :totals)
+      expect(normalized[:by_state][:views]["p"]["United States"]).to eq([1])
+      expect(normalized[:dates_and_months].first).to eq(date: "Dec 1", month: "2020-12")
+    end
+  end
+
   describe "#find_missing_date_ranges" do
     before do
       @service = described_class.new(build(:user))

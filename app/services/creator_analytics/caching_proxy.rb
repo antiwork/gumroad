@@ -156,7 +156,32 @@ class CreatorAnalytics::CachingProxy
         next day_data if day_data
         missing_range = missing_date_ranges.find { |range| range.begin == date }
         analytics_data(missing_range.begin, missing_range.end, by:, products:) if missing_range
-      end.compact.map(&:with_indifferent_access)
+      end.compact.map { |day_data| normalize_day_keys(day_data) }
+    end
+
+    DAY_KEYS = %i[start_date end_date first_sale_date dates_and_months by_date by_state by_referral].freeze
+    SERIES_KEYS = %i[by_date by_state by_referral].freeze
+    private_constant :DAY_KEYS, :SERIES_KEYS
+
+    # A cached day comes back from MySQL as JSON (string keys); a day computed during the request is a
+    # Ruby hash (symbol keys), and the formatters read both. with_indifferent_access deep-copied every
+    # blob to bridge that — for a year of a large catalogue, ~14 MB of copying per request.
+    # Symbolize only the keys the formatters actually read: the top level, the three series hashes,
+    # and the per-day date entries.
+    def normalize_day_keys(day_data)
+      normalized = day_data.dup
+      DAY_KEYS.each do |key|
+        value = day_data.fetch(key) { day_data[key.to_s] }
+        next if value.nil?
+
+        normalized.delete(key.to_s)
+        normalized[key] = value
+      end
+      SERIES_KEYS.each do |series|
+        normalized[series] = normalized[series].transform_keys(&:to_sym) if normalized[series]
+      end
+      Array(normalized[:dates_and_months]).each { |entry| entry.transform_keys!(&:to_sym) if entry.is_a?(Hash) }
+      normalized
     end
 
     # Returns contiguous missing dates as ranges.
