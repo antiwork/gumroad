@@ -660,3 +660,8 @@
   title: "How to sell an ebook online"
   description: "Sell an ebook online with Gumroad. Upload a PDF or EPUB, set a price, and publish. Buyers read it in their browser, in the Gumroad app, or on a Kindle."
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 358
+  slug: "358-sell-notion-templates"
+  title: "How to sell Notion templates"
+  description: "Sell Notion templates on Gumroad. Put your template link in a digital product, and buyers duplicate it into their own Notion workspace after they pay."
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
