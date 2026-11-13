@@ -12,19 +12,21 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/go-redis/v9/logging"
 
 	"github.com/antiwork/gumroad/go_web/internal/credentials"
 	"github.com/antiwork/gumroad/go_web/internal/errorreport"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/routemetrics"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
 const (
 	defaultPort = "3000"
 
-	// Inside the Nomad task's kill_timeout, with sentryFlushTimeout.
+	// Inside the Nomad task's kill_timeout, with sentryFlushTimeout and routemetrics' final send.
 	shutdownTimeout    = 25 * time.Second
 	sentryFlushTimeout = 2 * time.Second
 
@@ -95,6 +97,11 @@ func run(logger *slog.Logger) error {
 	if err := registerRouteGroups(app, deps, getenv("GO_WEB_ROUTE_GROUPS")); err != nil {
 		return err
 	}
+	if env.Name == "production" {
+		if err := deps.startRouteMetrics(app); err != nil {
+			return err
+		}
+	}
 
 	port := getenv("PORT")
 	if port == "" {
@@ -124,6 +131,29 @@ func run(logger *slog.Logger) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	return httpServer.Shutdown(shutdownCtx)
+}
+
+// startRouteMetrics counts every request by action and sends the counts to CloudWatch each
+// minute, for the per-route alarms; closing the dependencies sends what is left.
+func (d *dependencies) startRouteMetrics(app *web.App) error {
+	cfg, err := d.awsConfig()
+	if err != nil {
+		return err
+	}
+	recorder := routemetrics.New(cloudwatch.NewFromConfig(cfg), d.logger)
+	app.SetRouteRecorder(recorder)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		recorder.Run(ctx)
+		close(done)
+	}()
+	d.closers = append(d.closers, func() error {
+		cancel()
+		<-done
+		return nil
+	})
+	return nil
 }
 
 // loadCredentials opens RAILS_CREDENTIALS_PATH, the Rails credentials file baked into the image,

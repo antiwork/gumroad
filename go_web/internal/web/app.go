@@ -22,7 +22,16 @@ type App struct {
 	redirects *SubdomainRedirects
 	mux       *http.ServeMux
 	unclean   []uncleanRoute
+	routes    RouteRecorder
 }
+
+type RouteRecorder interface {
+	Record(action string, status int)
+}
+
+// SetRouteRecorder sets where each request's action and status are counted; call it before
+// serving.
+func (a *App) SetRouteRecorder(r RouteRecorder) { a.routes = r }
 
 // uncleanRoute serves, under prefix, a path ServeMux would redirect to its cleaned form.
 type uncleanRoute struct {
@@ -109,6 +118,9 @@ func (a *App) wrap(action string, h http.Handler, redirect bool) http.Handler {
 				slog.Int("status", status),
 				slog.Float64("duration", float64(time.Since(start).Microseconds())/1000),
 			)
+			if a.routes != nil {
+				a.routes.Record(action, status)
+			}
 		}()
 
 		if !redirect {
