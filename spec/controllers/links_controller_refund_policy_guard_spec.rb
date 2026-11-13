@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "timeout"
 
 describe LinksController, type: :controller do
   let(:seller) { create(:user) }
@@ -22,6 +23,7 @@ describe LinksController, type: :controller do
       description: "A description",
       price_currency_type: "usd",
       price_cents: product.price_cents,
+      expected_price_currency_type: "usd",
       customizable_price: false,
       covers: [],
       files: [],
@@ -54,5 +56,168 @@ describe LinksController, type: :controller do
 
     expect(response).to be_successful
     expect(product.reload.product_refund_policy.fine_print).to eq("Within 30 days.")
+  end
+
+  describe "baseline checks for deliberate price and refund-policy writes" do
+    let(:new_terms) { { title: "30-day money back guarantee", max_refund_period_in_days: 30, fine_print: "Within 30 days." } }
+
+    it "refuses a price that differs from the record when the tab sent no baseline" do
+      post :update, params: editor_save_params(price_cents: 5_900), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body["error_code"]).to eq("stale_price_or_refund_baseline")
+      expect(product.reload.price_cents).to eq(10_000)
+    end
+
+    it "applies a currency-only switch that echoes the baseline amount" do
+      post :update, params: editor_save_params(price_currency_type: "eur", price_cents: 10_000, expected_price_cents: 10_000), as: :json
+
+      expect(response).to be_successful
+      expect(product.reload.price_currency_type).to eq("eur")
+      expect(product.price_cents).to eq(10_000)
+    end
+
+    it "refuses a currency switch whose echoed amount is stale against the record" do
+      post :update, params: editor_save_params(price_currency_type: "eur", price_cents: 9_000, expected_price_cents: 9_000), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(product.reload.price_currency_type).to eq("usd")
+    end
+
+    context "when another tab moved the product to EUR" do
+      before do
+        product.price_currency_type = "eur"
+        product.price_cents = 12_000
+        product.save!
+      end
+
+      it "keeps the stored currency and price when a stale tab echoes its unchanged currency, applying its other edits" do
+        post :update, params: editor_save_params(name: "Renamed", expected_price_cents: 10_000).except(:price_cents), as: :json
+
+        expect(response).to be_successful
+        product.reload
+        expect([product.price_currency_type, product.price_cents]).to eq(["eur", 12_000])
+        expect(product.name).to eq("Renamed")
+      end
+
+      it "refuses a stale tab's switch to the currency the record already has at another amount" do
+        post :update, params: editor_save_params(price_currency_type: "eur", price_cents: 10_000, expected_price_cents: 10_000), as: :json
+
+        expect(response).to have_http_status(:conflict)
+        expect(product.reload.price_cents).to eq(12_000)
+      end
+    end
+
+    it "refuses a price edit whose baseline amount matches the record only in another currency" do
+      product.price_currency_type = "eur"
+      product.price_cents = 10_000
+      product.save!
+
+      post :update, params: editor_save_params(price_cents: 5_900, expected_price_cents: 10_000), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      product.reload
+      expect([product.price_currency_type, product.price_cents]).to eq(["eur", 10_000])
+    end
+
+    it "refuses a price whose baseline no longer matches the record" do
+      post :update, params: editor_save_params(price_cents: 5_900, expected_price_cents: 9_000), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(product.reload.price_cents).to eq(10_000)
+    end
+
+    it "refuses an explicit refund-policy off from an old tab and applies none of the save" do
+      post :update, params: editor_save_params(name: "Renamed", product_refund_policy_enabled: false), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      product.reload
+      expect(product.product_refund_policy_enabled?).to be(true)
+      expect(product.name).not_to eq("Renamed")
+    end
+
+    it "accepts a deliberate price edit whose baseline matches the record" do
+      post :update, params: editor_save_params(price_cents: 5_900, expected_price_cents: 10_000), as: :json
+
+      expect(response).to be_successful
+      expect(product.reload.price_cents).to eq(5_900)
+    end
+
+    it "accepts a deliberate refund-policy toggle whose baseline matches the record, keeping other edits" do
+      post :update, params: editor_save_params(name: "Renamed", product_refund_policy_enabled: false, expected_product_refund_policy_enabled: true), as: :json
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.product_refund_policy_enabled?).to be(false)
+      expect(product.name).to eq("Renamed")
+    end
+
+    it "keeps the stored price and policy when the tab echoes unchanged values beside a stale baseline" do
+      product.update!(price_cents: 7_000)
+      post :update, params: editor_save_params(name: "Renamed", price_cents: 10_000, expected_price_cents: 10_000, product_refund_policy_enabled: true, expected_product_refund_policy_enabled: true), as: :json
+
+      expect(response).to be_successful
+      product.reload
+      expect(product.price_cents).to eq(7_000)
+      expect(product.name).to eq("Renamed")
+    end
+
+    it "lets only the first of two saves from the same baseline change the price" do
+      post :update, params: editor_save_params(price_cents: 5_900, expected_price_cents: 10_000), as: :json
+      expect(response).to be_successful
+
+      post :update, params: editor_save_params(price_cents: 8_000, expected_price_cents: 10_000), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(product.reload.price_cents).to eq(5_900)
+    end
+  end
+
+  describe "a save racing another save of the same product" do
+    # The racing save has to commit from its own connection.
+    self.use_transactional_tests = false
+
+    after do
+      RefundPolicy.where(seller_id: seller.id).delete_all
+      Price.where(link_id: product.id).delete_all
+      Link.where(id: product.id).delete_all
+      GlobalAffiliate.where(affiliate_user_id: seller.id).delete_all
+      User.where(id: seller.id).delete_all
+    end
+
+    it "checks the baseline against the price the other save committed while this one waited on the row lock" do
+      holding_lock = Queue.new
+      release = Queue.new
+      first_save = Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do
+          locked = Link.find(product.id)
+          locked.with_lock do
+            locked.price_cents = 5_900
+            holding_lock << true
+            release.pop
+          end
+        end
+      end
+      Timeout.timeout(15) { holding_lock.pop }
+      # Commit the first save once this one is queued on the row lock, inside the editor's 1s lock-wait bound.
+      # performance_schema is live; information_schema.innodb_trx can lag past that bound.
+      releaser = Thread.new do
+        ActiveRecord::Base.connection_pool.with_connection do |connection|
+          deadline = 10.seconds.from_now
+          sleep 0.02 until Time.current > deadline || connection.uncached { connection.select_value("SELECT COUNT(*) FROM performance_schema.data_lock_waits") }.to_i > 0
+        end
+      ensure
+        release << true
+      end
+
+      post :update, params: editor_save_params(price_cents: 8_000, expected_price_cents: 10_000), as: :json
+
+      expect(response).to have_http_status(:conflict)
+      expect(response.parsed_body["error_code"]).to eq("stale_price_or_refund_baseline")
+      expect(product.reload.price_cents).to eq(5_900)
+    ensure
+      release << true
+      [releaser, first_save].compact.each { |thread| thread.join(15) || thread.kill }
+    end
   end
 end

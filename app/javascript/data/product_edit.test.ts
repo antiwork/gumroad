@@ -521,6 +521,11 @@ describe("saveProduct with a refund policy", () => {
       refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
     });
   });
+
+  it("sends the price baseline as an amount and a currency, and the amount on a currency switch", async () => {
+    const data = await save({}, { lastSavedPriceCents: 100, lastSavedCurrencyType: "eur" });
+    expect(data).toMatchObject({ expected_price_cents: 100, expected_price_currency_type: "eur", price_cents: 100 });
+  });
 });
 
 describe("scalarSettingsForSave", () => {
@@ -553,6 +558,22 @@ describe("scalarSettingsForSave", () => {
     product_refund_policy_enabled: false,
     refund_policy: { title: "No refunds allowed", max_refund_period_in_days: 0, fine_print: null },
     ...overrides,
+  });
+
+  it("omits an unchanged price so a stale tab cannot rewrite it", () => {
+    expect(scalarSettingsForSave(product(), lastSaved())).not.toHaveProperty("price_cents");
+  });
+
+  it("sends the unchanged price when only the currency changed", () => {
+    expect(scalarSettingsForSave(product(), lastSaved({ currencyChanged: true }))).toMatchObject({ price_cents: 100 });
+  });
+
+  it("sends a price this session changed", () => {
+    expect(scalarSettingsForSave(product({ price_cents: 599 }), lastSaved())).toMatchObject({ price_cents: 599 });
+  });
+
+  it("sends the price when the caller has no baseline", () => {
+    expect(scalarSettingsForSave(product(), lastSaved({ price_cents: null }))).toMatchObject({ price_cents: 100 });
   });
 
   it("omits an unchanged blank custom permalink so a stale tab cannot clear it", () => {
@@ -590,7 +611,7 @@ describe("scalarSettingsForSave", () => {
         product({ customizable_price: false, price_cents: 0, hasPaidVariantPricing: true }),
         lastSaved({ customizable_price: false, hasPaidVariantPricing: true }),
       ),
-    ).toEqual({ customizable_price: false });
+    ).toEqual({ price_cents: 0, customizable_price: false });
   });
 
   it("sends a customizable_price change this session made, in both directions", () => {
