@@ -56,6 +56,7 @@ func newPageEnv(t *testing.T) *testEnv {
 			NewNonce: func() string { return "NONCE" },
 		}
 		c.DryRunKey = pages.DryRunKey(testSecretKeyBase)
+		e.pages = c.Pages
 	})
 	testdb.Insert(t, e.db, "rich_contents", map[string]any{"id": richContentID, "entity_id": productID, "entity_type": "Link",
 		"title": "Welcome", "position": 0, "description": `[{"type": "paragraph", "content": [{"text": "Hello <there>", "type": "text"}]}]`,

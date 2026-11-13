@@ -290,7 +290,7 @@ func (h *handler) offerData(p *page, prod *product, v *view, url string) (*rails
 		}
 	}
 	if !prod.is(productIsTieredMembership) && cents != nil {
-		diff, err := h.lowestVariantDifference(p.Ctx, prod, v.variants)
+		diff, err := h.variantFloor(p.Ctx, prod, v)
 		if err != nil {
 			return nil, err
 		}

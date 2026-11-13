@@ -12,7 +12,8 @@ import (
 )
 
 // testdata/production_expired_page.html is an expired page production rendered through the
-// inertia layout, with the buyer's details replaced; its manifest is ../vite/testdata's.
+// inertia layout, with the buyer's details replaced; its manifest is ../vite/testdata's. Four of
+// the blank lines before the app div are the SEO partials the layout gained after the capture.
 func TestLayoutMatchesProduction(t *testing.T) {
 	want, err := os.ReadFile("testdata/production_expired_page.html")
 	if err != nil {

@@ -53,12 +53,7 @@ func (c *currencyDisplay) setOriginal(original int64, productCurrency string) {
 // localCurrencyBuyer is the page's buyer currency when a local price may show: the seller has
 // opted in, and the currency cookie or GeoIP names one.
 func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {
-	if raw, ok := v.sellerJSON.present("disable_buyer_local_currency"); ok {
-		if disabled := rails.BooleanCast(raw); disabled != nil && *disabled {
-			return nil, nil
-		}
-	}
-	on, err := h.flag(p.Ctx, "buyer_local_currency", p.seller.id)
+	on, err := h.creatorOptedIn(p, v.sellerJSON)
 	if err != nil || !on {
 		return nil, err
 	}
@@ -66,6 +61,16 @@ func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {
 		return buyer, nil
 	}
 	return v.detectedCurrency, nil
+}
+
+// creatorOptedIn is buyer_currency_display_props' creator_opted_in for the page's seller.
+func (h *handler) creatorOptedIn(p *page, sellerJSON jsonData) (bool, error) {
+	if raw, ok := sellerJSON.present("disable_buyer_local_currency"); ok {
+		if disabled := rails.BooleanCast(raw); disabled != nil && *disabled {
+			return false, nil
+		}
+	}
+	return h.flag(p.Ctx, "buyer_local_currency", p.seller.id)
 }
 
 // currencyDisplayFor is the rest of buyer_currency_display_props for prod at price; hasPlan is
