@@ -26,6 +26,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/products"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/robots"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
@@ -158,6 +159,8 @@ type pageBase struct {
 	proxy    *web.RailsProxy
 	meta     inertia.DefaultMeta
 	pages    *downloads.PageConfig
+	// cache is Rails.cache, nil when the pages are off or it isn't configured.
+	cache *railscache.Store
 }
 
 func (d *dependencies) pageBase() (*pageBase, error) {
@@ -195,6 +198,17 @@ func (d *dependencies) pageBase() (*pageBase, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	var cache *railscache.Store
+	if pageConfig != nil {
+		cache, err = d.railsCache(proxy)
+		if errors.Is(err, errPagesOff) {
+			d.logger.Info("Rails.cache reads left to Rails", "reason", err.Error())
+		} else if err != nil {
+			return nil, err
+		} else {
+			pageConfig.Content.Cache = cache
+		}
+	}
 	d.pages = &pageBase{
 		conn:     conn,
 		ids:      ids,
@@ -211,6 +225,7 @@ func (d *dependencies) pageBase() (*pageBase, error) {
 			AnalyticsByEnvironment: d.env.Name == "production" || d.env.Name == "staging",
 		},
 		pages: pageConfig,
+		cache: cache,
 	}
 	return d.pages, nil
 }
