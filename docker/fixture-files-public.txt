@@ -1,2 +1,0 @@
-test.png
-file with spaces.png

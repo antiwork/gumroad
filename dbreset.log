@@ -1,0 +1,99 @@
+DEPRECATION WARNING: ActiveSupport::Configurable is deprecated without replacement, and will be removed in Rails 8.2.
+
+You can emulate the previous behavior with `class_attribute`.
+ (called from Kernel#require at /private/tmp/gp-perf-wt/config/boot.rb:18)
+[test-redis-isolation] no free Redis database block on localhost:6379 (16 databases = 0 concurrent runs); falling back to the shared databases in .env.test.
+[test-redis-isolation] Concurrent runs will flush each other's keys mid-test. Start Redis with more databases (docker/docker-compose-local.yml passes --databases 64), or free a slot: a spring server holds its lease until `bin/spring stop`, so idle checkouts keep one.
+sidekiq-pro is not installed
+DEPRECATION WARNING: Setting action_controller.escape_json_responses = true is deprecated and will have no effect in Rails 8.2. Set it to `false`, or remove the config. (called from Kernel#require at /private/tmp/gp-perf-wt/config/boot.rb:18)
+Dropped database 'gp_perf_test'
+Created database 'gp_perf_test'
+CREATE 3d-assets/subject_category
+CREATE 3d-assets/file_format
+CREATE 3d-assets/textured_pbr
+CREATE 3d-assets/rigged
+CREATE 3d-assets/animated
+CREATE 3d-assets/poly_count
+CREATE 3d-assets/license
+CREATE avatars/item_type
+CREATE avatars/platform
+CREATE avatars/performance_rank
+CREATE avatars/rigged
+CREATE avatars/license
+CREATE vrchat/item_type
+CREATE vrchat/platform
+CREATE vrchat/performance_rank
+CREATE vrchat/rigged
+CREATE vrchat/license
+CREATE fonts/classification
+CREATE fonts/format
+CREATE fonts/license
+CREATE fonts/variable_font
+CREATE fonts/has_multiple_weights
+CREATE fonts/styles
+CREATE assets-and-templates/template_type
+CREATE assets-and-templates/software
+CREATE assets-and-templates/file_format
+CREATE assets-and-templates/layered
+CREATE assets-and-templates/license
+CREATE music-and-sound-design/genre
+CREATE music-and-sound-design/content_type
+CREATE music-and-sound-design/format
+CREATE music-and-sound-design/tempo
+CREATE music-and-sound-design/loopable
+CREATE music-and-sound-design/license
+CREATE dance-and-theater/genre
+CREATE dance-and-theater/content_type
+CREATE dance-and-theater/format
+CREATE dance-and-theater/tempo
+CREATE dance-and-theater/loopable
+CREATE dance-and-theater/license
+CREATE instruments/genre
+CREATE instruments/content_type
+CREATE instruments/format
+CREATE instruments/tempo
+CREATE instruments/loopable
+CREATE instruments/license
+CREATE sound-design/genre
+CREATE sound-design/content_type
+CREATE sound-design/format
+CREATE sound-design/tempo
+CREATE sound-design/loopable
+CREATE sound-design/license
+CREATE vocal/genre
+CREATE vocal/content_type
+CREATE vocal/format
+CREATE vocal/tempo
+CREATE vocal/loopable
+CREATE vocal/license
+CREATE software-development/product_type
+CREATE software-development/language
+CREATE software-development/framework
+CREATE software-development/includes_source
+CREATE software-development/license
+CREATE app-development/product_type
+CREATE app-development/language
+CREATE app-development/framework
+CREATE app-development/includes_source
+CREATE app-development/license
+CREATE php-scripts/product_type
+CREATE php-scripts/language
+CREATE php-scripts/framework
+CREATE php-scripts/includes_source
+CREATE php-scripts/license
+CREATE programming/product_type
+CREATE programming/language
+CREATE programming/framework
+CREATE programming/includes_source
+CREATE programming/license
+CREATE software-and-plugins/product_type
+CREATE software-and-plugins/language
+CREATE software-and-plugins/framework
+CREATE software-and-plugins/includes_source
+CREATE software-and-plugins/license
+CREATE web-development/product_type
+CREATE web-development/language
+CREATE web-development/framework
+CREATE web-development/includes_source
+CREATE web-development/license
+APPLIED created=88 updated=0 deactivated=0
