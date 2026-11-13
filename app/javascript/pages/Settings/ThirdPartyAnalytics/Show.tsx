@@ -213,8 +213,8 @@ export default function ThirdPartyAnalyticsPage() {
                     {metaConversions.token_saved && thirdPartyAnalytics.remove_meta_conversions_access_token
                       ? "The token is removed when you update your settings. "
                       : null}
-                    With a token saved, Gumroad sends each sale to Meta from its servers: the hashed buyer email, the IP
-                    address, the browser user agent, and the order value.
+                    For server-side purchase events, Gumroad sends Meta the hashed buyer email, the IP address, the
+                    browser user agent, and the order value.
                   </FieldsetDescription>
                 </Fieldset>
               ) : null}

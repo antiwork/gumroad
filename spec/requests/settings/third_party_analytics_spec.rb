@@ -136,7 +136,7 @@ describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
 
       it "saves, replaces and removes the token" do
         visit settings_third_party_analytics_path
-        expect(page).to have_text("the hashed buyer email, the IP address, the browser user agent, and the order value")
+        expect(page).to have_text("For server-side purchase events, Gumroad sends Meta the hashed buyer email, the IP address, the browser user agent, and the order value.")
         fill_in "Conversions API access token", with: "token-1"
         click_on "Update settings"
         expect(page).to have_alert(text: "Changes saved!")
