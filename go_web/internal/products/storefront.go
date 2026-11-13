@@ -726,7 +726,7 @@ func (h *handler) cardProps(p *page, c *card, buyer *string) (*rails.RHash, erro
 		}
 	}
 	base := price
-	price, err := h.cardPriceCents(p, c, base)
+	price, err := h.discountedPriceCents(p, prod, c.offer, c.minVariantDifference, base)
 	if err != nil {
 		return nil, err
 	}
