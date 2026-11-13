@@ -438,7 +438,9 @@ type offerDiscount struct {
 	urlCode string
 	// code is the code that applies, nil for none, and resultCode the string its result
 	// echoes: the URL's as typed, else the stored one.
-	code       *offerCode
+	code *offerCode
+	// effective is effective_default_offer_code.
+	effective  *offerCode
 	resultCode string
 	// urlError is the URL code's error_code, "" when it applies or there is none. urlRow is that
 	// code when it applies, or when an option outside its scope would get option_not_eligible.
@@ -521,6 +523,7 @@ func (h *handler) loadOfferDiscount(ctx context.Context, p *page, prod *product,
 	if err != nil {
 		return nil, err
 	}
+	d.effective = eff
 	var list []*offerCode
 	if explicit != nil && explicit.existingOnly && explicit.currencyValid(prod) {
 		list = append(list, explicit)

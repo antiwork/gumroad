@@ -2,6 +2,7 @@ package products
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
@@ -73,9 +74,9 @@ func (h *handler) excludedCards(ctx context.Context, codeID int64, cards []*card
 	return out, rows.Err()
 }
 
-// cardPriceCents is discounted_price_cents(base) through the card's effective default code.
-func (h *handler) cardPriceCents(p *page, c *card, base int64) (int64, error) {
-	code, prod := c.offer, c.prod
+// discountedPriceCents is discounted_price_cents(base) without an option, through prod's
+// effective default code; minDifference is its lowest variant price difference.
+func (h *handler) discountedPriceCents(p *page, prod *product, code *offerCode, minDifference sql.NullInt64, base int64) (int64, error) {
 	if code == nil || code.deletedAt.Valid || code.inactive(p.Req.Now) || code.existingOnly || code.newOnly || !code.currencyValid(prod) ||
 		code.minimumQuantity.Int64 > 1 || code.minimumAmountCents.Int64 > base {
 		return base, nil
@@ -84,7 +85,7 @@ func (h *handler) cardPriceCents(p *page, c *card, base int64) (int64, error) {
 		return base, err
 	}
 	if code.hasVariants {
-		if covers, err := h.coversLowestPricedOption(p, c, code); err != nil || !covers {
+		if covers, err := h.coversLowestPricedOption(p, prod, minDifference, code); err != nil || !covers {
 			return base, err
 		}
 	}
@@ -92,9 +93,8 @@ func (h *handler) cardPriceCents(p *page, c *card, base int64) (int64, error) {
 }
 
 // coversLowestPricedOption is discounts_lowest_priced_option?: whether the code limits none of
-// the card's options or covers one of the cheapest of its preloaded_options, whose minimum
-// difference minVariantDifference holds.
-func (h *handler) coversLowestPricedOption(p *page, c *card, code *offerCode) (bool, error) {
+// prod's options or covers one of the cheapest, whose difference is minDifference.
+func (h *handler) coversLowestPricedOption(p *page, prod *product, minDifference sql.NullInt64, code *offerCode) (bool, error) {
 	// restricted_variants_for counts a Variant in a deleted category, and a deleted option, as the
 	// product's; only an alive one can be among the cheapest. With no difference at all the
 	// minimum is nil, which an option without one equals.
@@ -106,11 +106,11 @@ func (h *handler) coversLowestPricedOption(p *page, c *card, code *offerCode) (b
 		" LEFT JOIN variant_categories ON variant_categories.id = base_variants.variant_category_id"+
 		" WHERE offer_codes_variants.offer_code_id = ?"+
 		" AND IF(base_variants.type = 'Variant', variant_categories.link_id, base_variants.link_id) = ?",
-		c.minVariantDifference, code.id, c.prod.id).Scan(&restricted, &cheapest)
+		minDifference, code.id, prod.id).Scan(&restricted, &cheapest)
 	switch {
 	case err != nil || restricted == 0:
 		return err == nil, err
-	case c.prod.is(productIsTieredMembership):
+	case prod.is(productIsTieredMembership):
 		// lowest_priced_tier_ids weighs the tiers' prices.
 		return false, fallback("catalog offer code tiers")
 	}

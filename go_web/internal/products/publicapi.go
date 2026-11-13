@@ -211,17 +211,8 @@ func (h *handler) loadPublicRest(ctx context.Context, p *page, prod *product, v 
 		if v.tierPrice, err = h.lowestTierPrice(ctx, prod, v.variants); err != nil {
 			return err
 		}
-	} else {
-		// current_base_variants.minimum: preload_product leaves the SKUs unloaded, so Rails asks
-		// MySQL, with the categories' ids inline. A subquery there scans the whole table.
-		categories, args := "NULL", []any{prod.id}
-		if len(v.variants.categories) > 0 {
-			categories, args = placeholders(len(v.variants.categories)), append(args, int64Args(v.variants.categories)...)
-		}
-		if err := h.c.DB.QueryRowContext(ctx, "SELECT MIN(price_difference_cents) FROM `base_variants` WHERE `base_variants`.`deleted_at` IS NULL"+
-			" AND (link_id = ? OR variant_category_id IN ("+categories+"))", args...).Scan(&v.lowestDifference); err != nil {
-			return err
-		}
+	} else if v.lowestDifference, err = h.lowestVariantDifference(ctx, prod, v.variants); err != nil {
+		return err
 	}
 	if v.reviews, err = h.publicReviews(ctx, p, prod); err != nil {
 		return err
@@ -318,14 +309,11 @@ func (h *handler) publicAPIProps(p *page, prod *product, v *publicView) (*rails.
 // priceFormattedVerbose is Link#price_formatted_verbose: display_price_cents, a + where
 // show_customizable_price_indicator?, and the display recurrence's label.
 func priceFormattedVerbose(prod *product, v *publicView) (string, error) {
-	cents, customizable := v.lowestDifference.Int64, prod.customizablePrice.Bool
+	cents := v.lowestDifference.Int64
 	duration, _ := prod.subscriptionDurationName()
 	recurrence := duration
 	if t := v.tierPrice; t != nil {
-		offered := offeredTiers(v.variants.tiers)
 		cents, recurrence = t.cents, t.recurrence.String
-		customizable = len(offered) > 1 || slices.ContainsFunc(offered, func(o *variantOption) bool { return o.customizablePrice.Bool }) ||
-			len(offered) == 1 && len(offered[0].buyPrices) > 1
 	} else if v.priceCents != nil {
 		cents += *v.priceCents
 	}
@@ -333,14 +321,51 @@ func priceFormattedVerbose(prod *product, v *publicView) (string, error) {
 	if !ok {
 		return "", fallback("price formatted currency")
 	}
-	if customizable {
+	if customizablePriceIndicator(prod, v.variants) {
 		formatted += "+"
 	}
 	if prod.is(productIsRecurringBilling) {
-		// recurrence_label: nil for a blank or unknown recurrence.
-		formatted += " " + recurrenceLongIndicators[recurrence]
+		label, _ := recurrenceLabel(recurrence, sql.NullInt64{})
+		formatted += " " + label
 	}
 	return formatted, nil
+}
+
+// customizablePriceIndicator is show_customizable_price_indicator?.
+func customizablePriceIndicator(prod *product, vs *variants) bool {
+	if !prod.is(productIsTieredMembership) {
+		return prod.customizablePrice.Bool
+	}
+	offered := offeredTiers(vs.tiers)
+	return len(offered) > 1 || slices.ContainsFunc(offered, func(o *variantOption) bool { return o.customizablePrice.Bool }) ||
+		len(offered) == 1 && len(offered[0].buyPrices) > 1
+}
+
+// recurrenceMonths is BasePrice::Recurrence::RECURRENCE_TO_NUMBER_OF_MONTHS.
+var recurrenceMonths = map[string]int64{"monthly": 1, "quarterly": 3, "biannually": 6, "yearly": 12, "every_two_years": 24}
+
+// recurrenceLabel is CurrencyHelper#recurrence_label, "" where Ruby returns nil. ok is false where
+// Ruby raises: a duration over a recurrence with no month count.
+func recurrenceLabel(recurrence string, durationInMonths sql.NullInt64) (string, bool) {
+	if rails.Blank(recurrence) {
+		return "", true
+	}
+	months, known := recurrenceMonths[recurrence]
+	if !durationInMonths.Valid {
+		return recurrenceLongIndicators[recurrence], true
+	}
+	if !known {
+		return "", false
+	}
+	if durationInMonths.Int64 == months {
+		return "once", true
+	}
+	// Integer#/ floors.
+	n := durationInMonths.Int64 / months
+	if durationInMonths.Int64%months != 0 && durationInMonths.Int64 < 0 {
+		n--
+	}
+	return recurrenceLongIndicators[recurrence] + " x " + itoa(n), true
 }
 
 // displayPrice is format_price(MoneyFormatter.format(cents, currency, no_cents_if_whole: true,
