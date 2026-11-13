@@ -6,8 +6,8 @@ module MetaConversions
   class Sender
     GRAPH_API_VERSION = "v27.0"
     TIMEOUT_SECONDS = 5
-    # 190: bad OAuth token. 102: session expired. 10 and 200-299: the app lacks permission for this
-    # dataset. None of them is fixed by retrying.
+    # 190: bad OAuth token; 102: expired session; 10 and 200-299: missing dataset permission.
+    # Both token and permission failures stop sends until the seller saves a token again.
     TOKEN_ERROR_CODES = [10, 102, 190, *(200..299)].to_set.freeze
     # 4, 17, 32 and 613 are Meta's rate limits.
     RETRYABLE_ERROR_CODES = [4, 17, 32, 613].to_set.freeze

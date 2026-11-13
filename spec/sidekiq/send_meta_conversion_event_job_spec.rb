@@ -275,6 +275,14 @@ describe SendMetaConversionEventJob do
       expect(Rails.logger).to have_received(:info).with(/outcome=skipped reason=restricted_country/)
     end
 
+    it "sends nothing for a buyer in an EU territory" do
+      purchase.update!(ip_country: "French Guiana", country: nil)
+
+      expect { perform }.not_to raise_error
+      expect(a_request(:post, endpoint)).not_to have_been_made
+      expect(Rails.logger).to have_received(:info).with(/outcome=skipped reason=restricted_country/)
+    end
+
     it "sends nothing when the purchase row is gone" do
       purchase_id = purchase.id
       purchase.destroy!

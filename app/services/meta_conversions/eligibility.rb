@@ -6,10 +6,9 @@ module MetaConversions
   module Eligibility
     SEND_WINDOW = 7.days
 
-    # The EEA, the UK and Switzerland. Country names arrive from the purchase row, so they are
-    # compared by their ISO code.
+    # The VAT list omits EU territories with separate ISO country codes.
     RESTRICTED_COUNTRY_CODES = (
-      Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES + %w[IS LI NO CH GB]
+      Compliance::Countries::EU_VAT_APPLICABLE_COUNTRY_CODES + %w[IS LI NO CH GB AX GF GP MQ RE YT MF]
     ).to_set.freeze
 
     module_function

@@ -130,6 +130,20 @@ describe MetaConversions::Eligibility do
       expect(described_class.purchase_skip_reason(purchase, context)).to eq(:restricted_country)
     end
 
+    ["Åland Islands", "French Guiana", "Guadeloupe", "Martinique", "Réunion", "Mayotte", "Saint Martin (French part)"].each do |country|
+      it "skips a buyer with an IP address in #{country}" do
+        purchase.update!(ip_country: country, country: nil)
+
+        expect(described_class.purchase_skip_reason(purchase, context)).to eq(:restricted_country)
+      end
+
+      it "skips a buyer with a billing address in #{country}" do
+        purchase.update!(country:)
+
+        expect(described_class.purchase_skip_reason(purchase, context)).to eq(:restricted_country)
+      end
+    end
+
     it "sends a purchase from outside the restricted countries" do
       purchase.update!(ip_country: "Canada", country: "Canada")
 
