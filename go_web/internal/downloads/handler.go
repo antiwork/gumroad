@@ -64,8 +64,10 @@ type handler struct {
 // page is the controller instance for one request.
 type page struct {
 	*pages.Visit
-	// purchase is url_redirect.purchase once checkPermissions has loaded it.
-	purchase *purchase
+	// purchase is url_redirect.purchase once checkPermissions has loaded it, and subscription
+	// the purchase's.
+	purchase     *purchase
+	subscription *subscription
 	// poll is a background poll; anything else is the full page.
 	poll bool
 }

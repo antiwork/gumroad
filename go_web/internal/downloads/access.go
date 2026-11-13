@@ -65,6 +65,7 @@ func (h *handler) checkPermissions(p *page) (*urlRedirect, string, error) {
 			return nil, "", err
 		}
 	}
+	p.subscription = subscription
 	// viewer_owns_subscription? ends with the true original purchase's gift, which this port
 	// leaves to Rails. It only changes the outcome when the viewer isn't the purchaser.
 	if signedIn && purchase != nil && !purchase.giftReceiver() && subscription != nil && subscription.userID != nil &&
