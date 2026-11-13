@@ -35,6 +35,7 @@ class PostEmailBlast < ApplicationRecord
   EXPIRY_ABANDONED = "abandoned"
   EXPIRY_NEWSLETTER_RETIRED = "newsletter_retired"
   EXPIRY_TOO_FEW_RECIPIENTS = "too_few_recipients"
+  EXPIRY_POST_REMOVED = "post_removed"
 
   scope :to_non_openers, -> { where(recipient_filter: RECIPIENT_FILTER_UNOPENED) }
 
@@ -72,11 +73,22 @@ class PostEmailBlast < ApplicationRecord
     expirable.where(id: ids).update_all(expired_at: now, expiry_reason: reason, updated_at: now)
   end
 
-  # Ends a blast whose newsletter retired mid-send. Unlike `expire`, it applies after delivery
-  # started; the delivery columns keep what was already sent.
-  def self.stop_for_retired_newsletter(id)
+  # Ends a blast that has nothing left to send. Unlike `expire`, it applies after delivery
+  # started: the delivery columns keep what was already sent.
+  def self.stop(id, reason)
     now = Time.current
-    where(id:, completed_at: nil, expired_at: nil).update_all(expired_at: now, expiry_reason: EXPIRY_NEWSLETTER_RETIRED, updated_at: now)
+    where(id:, completed_at: nil, expired_at: nil).update_all(expired_at: now, expiry_reason: reason, updated_at: now)
+  end
+  private_class_method :stop
+
+  def self.stop_for_retired_newsletter(id) = stop(id, EXPIRY_NEWSLETTER_RETIRED)
+
+  # Its post was deleted, unpublished, or had its emails turned off before the send finished. The
+  # deferral marker goes too, so nothing still reads as a slot this blast is coming back for.
+  def self.stop_for_removed_post(id)
+    stopped = stop(id, EXPIRY_POST_REMOVED)
+    $redis.del(RedisKey.blast_quota_deferred_until(id)) if stopped.positive?
+    stopped
   end
 
   def to_non_openers?
