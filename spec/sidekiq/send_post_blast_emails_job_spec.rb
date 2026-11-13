@@ -124,6 +124,26 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.del(slot_key) if blast
     end
 
+    it "ends the blast, keeps its slot and clears its sending state when the pending count cannot be read" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
+      $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
+      $redis.set(RedisKey.blast_audience_snapshot(blast.id), "[]")
+      basic_post_with_audience.mark_deleted!
+      allow($redis).to receive(:exists?).and_call_original
+      allow($redis).to receive(:exists?).with(RedisKey.blast_pending_recipients(blast.id)).and_raise(Redis::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
+      expect($redis.get(slot_key)).to eq("post_blast:#{blast.id}")
+      expect($redis.exists?(RedisKey.blast_audience_snapshot(blast.id))).to eq(false)
+      expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Redis::CannotConnectError), blast_id: blast.id)
+    ensure
+      $redis.del(slot_key, RedisKey.blast_audience_snapshot(blast.id)) if blast
+    end
+
     it "leaves the expired quota decision of a writer that ended the blast after this copy loaded it" do
       blast = create(:blast, :just_requested, post: basic_post_with_audience)
       admitted_key = RedisKey.blast_quota_admitted(blast.id)

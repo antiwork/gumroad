@@ -96,13 +96,28 @@ class PostEmailBlast < ApplicationRecord
     # Re-read after the stop: a delivery that landed in between means the slot was spent. The pending
     # count is written before the first provider handoff, so its presence covers one still in flight.
     blast.reload
-    if blast.first_email_delivered_at.nil? && !$redis.exists?(RedisKey.blast_pending_recipients(id))
+    if blast.first_email_delivered_at.nil? && !handoff_may_be_in_flight?(id)
       SellerLargeBlastQuota.release(seller_id: blast.seller_id, blast_id: id, kind: "post_blast")
     end
-    # After the release: no later run revisits a stopped row, so a failure here must not cost the slot.
-    $redis.del(RedisKey.blast_quota_deferred_until(id))
+    # No later run revisits a stopped row, so nothing after the stop may raise: a raise would skip the
+    # caller's cleanup for good and, in the stalled-blast scan, that tick's alert for every other row.
+    begin
+      $redis.del(RedisKey.blast_quota_deferred_until(id))
+    rescue Redis::BaseError, RedisClient::Error => e
+      ErrorNotifier.notify(e, blast_id: id)
+    end
     stopped
   end
+
+  # An unreadable count counts as in flight, keeping the slot until the day ends, which is what a
+  # failed `SellerLargeBlastQuota.release` leaves too. Releasing after a handoff would allow a second large send.
+  def self.handoff_may_be_in_flight?(id)
+    $redis.exists?(RedisKey.blast_pending_recipients(id))
+  rescue Redis::BaseError, RedisClient::Error => e
+    ErrorNotifier.notify(e, blast_id: id)
+    true
+  end
+  private_class_method :handoff_may_be_in_flight?
 
   def to_non_openers?
     recipient_filter == RECIPIENT_FILTER_UNOPENED

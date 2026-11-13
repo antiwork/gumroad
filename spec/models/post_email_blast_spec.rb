@@ -138,19 +138,42 @@ RSpec.describe PostEmailBlast do
       $redis.del(RedisKey.blast_pending_recipients(blast.id), slot_key) if blast
     end
 
-    it "gives back the day's slot even when dropping the deferral marker fails" do
+    it "gives back the day's slot and reports the stop even when dropping the deferral marker fails" do
       blast = create(:blast, :just_requested, post:)
       slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
       $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
       allow($redis).to receive(:del).and_call_original
       allow($redis).to receive(:del).with(RedisKey.blast_quota_deferred_until(blast.id)).and_raise(Redis::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
 
-      expect { PostEmailBlast.stop_for_removed_post(blast.id) }.to raise_error(Redis::CannotConnectError)
+      expect(PostEmailBlast.stop_for_removed_post(blast.id)).to eq(1)
 
       expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
       expect($redis.exists?(slot_key)).to eq(false)
+      expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Redis::CannotConnectError), blast_id: blast.id)
     ensure
       $redis.del(slot_key) if blast
+    end
+
+    it "keeps the day's slot and still drops the deferral marker when the pending count cannot be read" do
+      blast = create(:blast, :just_requested, post:)
+      slot_key = RedisKey.seller_large_blast_quota(blast.seller_id, Date.current)
+      $redis.set(slot_key, "post_blast:#{blast.id}", ex: 1.hour.to_i)
+      $redis.set(RedisKey.blast_quota_deferred_until(blast.id), 1.hour.ago.iso8601)
+      allow($redis).to receive(:exists?).and_call_original
+      allow($redis).to receive(:exists?).with(RedisKey.blast_pending_recipients(blast.id)).and_raise(Redis::CannotConnectError)
+      allow(ErrorNotifier).to receive(:notify)
+
+      expect(PostEmailBlast.stop_for_removed_post(blast.id)).to eq(1)
+
+      expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
+      expect($redis.get(slot_key)).to eq("post_blast:#{blast.id}")
+      expect($redis.exists?(RedisKey.blast_quota_deferred_until(blast.id))).to eq(false)
+      expect(ErrorNotifier).to have_received(:notify).with(an_instance_of(Redis::CannotConnectError), blast_id: blast.id).once
+      expect(PostEmailBlast.stop_for_removed_post(blast.id)).to eq(0)
+      expect($redis.get(slot_key)).to eq("post_blast:#{blast.id}")
+    ensure
+      $redis.del(RedisKey.blast_quota_deferred_until(blast.id), slot_key) if blast
     end
   end
 
