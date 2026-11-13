@@ -271,6 +271,18 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 	}, nil
 }
 
+// setBuyerCurrency gives the download page the product page's buyer_currency_display_props.
+// Without GeoIP the buyer's currency can't be told, so pages that show it stay Rails'.
+func (d *dependencies) setBuyerCurrency(b *pageBase) error {
+	geo, err := d.geoIP()
+	if err != nil || geo == nil {
+		return err
+	}
+	flags := &flagSet{redis: d.redis, flags: map[string]*flipper.Flag{}}
+	b.pages.BuyerCurrency = products.NewBuyerCurrency(b.conn, b.ids, &products.PageConfig{Redis: d.redis, GeoIP: geo, Flag: flags.flag})
+	return nil
+}
+
 // flagSet keeps one Flipper flag reader per name.
 type flagSet struct {
 	redis *redis.Client

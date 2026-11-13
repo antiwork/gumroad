@@ -41,6 +41,8 @@ type pageData struct {
 	// ownReview, postPurchaseFields and call are whether the purchase has those rows, so their
 	// reads only run when there's something to read.
 	ownReview, postPurchaseFields, call bool
+	// sellerAnalytics is the seller_analytics prop.
+	sellerAnalytics any
 }
 
 func (d *pageData) productIs(flag int64) bool { return d.productFlags&flag != 0 }
@@ -126,20 +128,17 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 	if err := d.loadLicense(ctx, h.c.DB, pu, p.subscription != nil); err != nil {
 		return nil, err
 	}
-	// PurchaseSellerAnalyticsPresenter reads link.analytics_data, the product user's, and
-	// only builds props when one id is set; "" counts.
-	if ownerGA.Valid || ownerPixel.Valid {
-		return nil, fallback("seller analytics")
-	}
+	var tiktok any
 	if rails.Present(ownerJSON.String) {
 		data, err := rails.ParseJSON([]byte(ownerJSON.String))
 		hash, ok := data.(*rails.Hash)
 		if err != nil || !ok {
 			return nil, fallback("seller json_data")
 		}
-		if rails.Present(hash.Value("tiktok_pixel_id")) {
-			return nil, fallback("seller analytics")
-		}
+		tiktok = hash.Value("tiktok_pixel_id")
+	}
+	if d.sellerAnalytics, err = h.sellerAnalytics(p, d, ownerGA, ownerPixel, tiktok); err != nil {
+		return nil, err
 	}
 	return d, nil
 }

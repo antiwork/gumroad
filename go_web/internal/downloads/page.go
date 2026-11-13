@@ -29,6 +29,8 @@ type PageConfig struct {
 	IOSAppID, AndroidBundleID string
 	// NewNonce is SecureHeaders' script nonce: SecureRandom.base64(32).
 	NewNonce func() string
+	// BuyerCurrency is what seller_analytics reads; nil leaves pages with it to Rails.
+	BuyerCurrency BuyerCurrency
 }
 
 // pageWriteTimeout bounds the after_actions' writes, which outlive a client that leaves.
@@ -163,7 +165,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("android_app_url", "https://play.google.com/store/apps/details?id="+pc.AndroidBundleID).
 			Sym("download_all_button", nil)).
 		Sym("product_has_third_party_analytics", d.thirdPartyAnalytics).
-		Sym("seller_analytics", nil).
+		Sym("seller_analytics", d.sellerAnalytics).
 		Sym("terms_page_url", protocolRoot+"/terms").
 		Sym("token", u.token).
 		Sym("redirect_id", h.c.IDs.Encrypt(u.id)).
