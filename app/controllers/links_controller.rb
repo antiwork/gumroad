@@ -150,7 +150,11 @@ class LinksController < ApplicationController
       # /coffee renders the product's custom landing page when it has one, so carry the two
       # flags that opt out of it: ?wanted=true (the custom page's buy button) and
       # ?native=true (the standard-page escape).
-      return redirect_to custom_domain_coffee_path(**params.permit(:wanted, :native).to_h.symbolize_keys)
+      # _url carrying PROTOCOL for the same reason as AffiliateRequestsController#create: a bare
+      # path comes back http:// behind the custom-domain edge, whose http->https 301 drops these
+      # flags with the rest of the query string.
+      return redirect_to custom_domain_coffee_url(**params.permit(:wanted, :native).to_h.symbolize_keys,
+                                                 host: request.host_with_port, protocol: PROTOCOL)
     end
     # Force a preload of all association data used in rendering
     preload_product

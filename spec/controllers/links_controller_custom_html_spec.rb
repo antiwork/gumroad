@@ -386,6 +386,17 @@ describe LinksController, :vcr, type: :controller do
 
       expect(response).to redirect_to(custom_domain_coffee_path(native: "true"))
     end
+
+    # Same stub as the affiliate-confirmation pin: the custom-domain edge terminates TLS without
+    # forwarding the scheme, so the Location has to come from the app's PROTOCOL.
+    it "keeps the app protocol on the /coffee redirect behind the edge" do
+      stub_const("PROTOCOL", "https")
+
+      get :show, params: { id: coffee.unique_permalink, wanted: "true" }
+
+      expect(response.location).to start_with("https://")
+      expect(response.location).to end_with("/coffee?wanted=true")
+    end
   end
 
   describe "GET landing_iframe_content" do
