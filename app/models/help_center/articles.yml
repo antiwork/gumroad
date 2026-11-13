@@ -655,3 +655,8 @@
   title: "Selling games and web apps that play in the browser"
   description: "Sell a web app, such as a game or an interactive course, that your buyers open on Gumroad with their progress saved. This covers what you can sell, how to add your web app and release new versions, how to go back to an earlier version, how saving works, and what a web app can't do."
   category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
+- id: 357
+  slug: "357-sell-an-ebook"
+  title: "How to sell an ebook online"
+  description: "Sell an ebook online with Gumroad. Upload a PDF or EPUB, set a price, and publish. Buyers read it in their browser, in the Gumroad app, or on a Kindle."
+  category_id: <%= HelpCenter::Category::ADD_A_PRODUCT.id %>
