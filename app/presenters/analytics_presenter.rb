@@ -23,6 +23,7 @@ class AnalyticsPresenter
       # assuming a uniform run rate. Computed once at page render — the projection
       # only refreshes when the page data does, so a point-in-time value is enough.
       expected_sales_fraction_of_day: CreatorAnalytics::HourlySalesCurve.new(seller:).expected_fraction_of_day,
+      show_file_downloads: Feature.active?(CreatorAnalytics::FileDownloads::FEATURE_FLAG, seller),
       country_codes: Compliance::Countries.alpha2_by_name,
       state_names: STATES_SUPPORTED_BY_ANALYTICS.map { |state_code| Compliance::Countries::USA.subdivisions[state_code]&.name || "Other" }
     }

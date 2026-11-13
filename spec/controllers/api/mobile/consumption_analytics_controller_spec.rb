@@ -134,5 +134,20 @@ describe Api::Mobile::ConsumptionAnalyticsController do
 
       expect(response.parsed_body["success"]).to be(false)
     end
+
+    it "rejects a download event, which the server records itself" do
+      consumption_event_params = {
+        event_type: "download",
+        product_file_id: @product_file.external_id,
+        url_redirect_id: @url_redirect.external_id,
+        purchase_id: @purchase.external_id,
+        platform: "android"
+      }
+
+      post :create, params: @mobile_post_params.merge(consumption_event_params)
+
+      expect(response.parsed_body["success"]).to be(false)
+      expect(ConsumptionEvent.count).to eq(0)
+    end
   end
 end

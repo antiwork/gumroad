@@ -142,15 +142,18 @@ describe("Third-party Analytics Settings Scenario", type: :system, js: true) do
         expect(page).to have_alert(text: "Changes saved!")
         expect(seller.reload.meta_conversions_setting.access_token).to eq("token-1")
         expect(page).to have_field("Conversions API access token", with: "")
+        expect(page).to have_text("A token is saved")
         expect(page).not_to have_text("token-1")
 
         seller.meta_conversions_setting.update!(token_rejected_at: Time.current)
         visit settings_third_party_analytics_path
-        expect(page).to have_text("Meta rejected the saved token. Enter a new token.")
+        expect(page).to have_css("small.text-danger", text: "Meta rejected this token. Paste a new one to replace it.")
+        expect(page).to have_css("small.text-muted", text: "the hashed buyer email")
         fill_in "Conversions API access token", with: "token-2"
         click_on "Update settings"
         expect(page).to have_alert(text: "Changes saved!")
-        expect(page).not_to have_text("Meta rejected the saved token.")
+        expect(page).not_to have_text("Meta rejected this token.")
+        expect(page).not_to have_css("small.text-danger", text: "Meta rejected this token.")
         setting = seller.reload.meta_conversions_setting
         expect(setting.access_token).to eq("token-2")
         expect(setting.token_rejected_at).to be_nil

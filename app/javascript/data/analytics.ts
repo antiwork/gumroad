@@ -62,3 +62,24 @@ export const fetchAnalyticsDataByState = ({ startTime, endTime }: { startTime: s
   }).then((response) => readJson<AnalyticsDataByState>(response));
   return { response, abort };
 };
+
+export type AnalyticsFileDownloads = {
+  id: string;
+  product_permalink: string;
+  product_name: string;
+  name: string;
+  deleted: boolean;
+  downloads: number;
+  unique_buyers: number;
+};
+
+export const fetchAnalyticsDataByFile = ({ startTime, endTime }: { startTime: string; endTime: string }) => {
+  const abort = new AbortController();
+  const response = request({
+    method: "GET",
+    accept: "json",
+    url: Routes.analytics_data_by_file_path({ start_time: startTime, end_time: endTime }),
+    abortSignal: abort.signal,
+  }).then((response) => readJson<{ files: AnalyticsFileDownloads[] }>(response));
+  return { response, abort };
+};
