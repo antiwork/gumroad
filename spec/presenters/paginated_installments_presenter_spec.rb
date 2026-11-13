@@ -20,7 +20,7 @@ describe PaginatedInstallmentsPresenter do
         result = presenter.props
 
         expect(result[:pagination]).to eq(count: 2, next: 2)
-        expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment2).props)
+        expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment2).list_props)
       end
     end
 
@@ -39,7 +39,7 @@ describe PaginatedInstallmentsPresenter do
         result = presenter.props
 
         expect(result[:pagination]).to eq(count: 2, next: nil)
-        expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment1).props)
+        expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment1).list_props)
       end
     end
 
@@ -72,9 +72,9 @@ describe PaginatedInstallmentsPresenter do
 
         expect(result[:pagination]).to eq(count: 3, next: nil)
         expect(result[:installments]).to eq([
-                                              InstallmentPresenter.new(seller:, installment: scheduled_installment2).props,
-                                              InstallmentPresenter.new(seller:, installment: scheduled_installment3).props,
-                                              InstallmentPresenter.new(seller:, installment: scheduled_installment1).props,
+                                              InstallmentPresenter.new(seller:, installment: scheduled_installment2).list_props,
+                                              InstallmentPresenter.new(seller:, installment: scheduled_installment3).list_props,
+                                              InstallmentPresenter.new(seller:, installment: scheduled_installment1).list_props,
                                             ])
       end
     end
@@ -111,7 +111,7 @@ describe PaginatedInstallmentsPresenter do
         result = presenter.props
 
         expect(result[:pagination]).to eq(count: 2, next: 2)
-        expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment3).props)
+        expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment3).list_props)
       end
 
       context "when 'page' option is specified" do
@@ -133,7 +133,7 @@ describe PaginatedInstallmentsPresenter do
           result = presenter.props
 
           expect(result[:pagination]).to eq(count: 2, next: nil)
-          expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment1).props)
+          expect(result[:installments].sole).to eq(InstallmentPresenter.new(seller:, installment: published_installment1).list_props)
         end
       end
     end

@@ -47,7 +47,7 @@ class PaginatedInstallmentsPresenter
     installments = installments.to_a
     Installment.preload_engagement_summaries!(installments)
     {
-      installments: installments.map { InstallmentPresenter.new(seller:, installment: _1).props },
+      installments: installments.map { InstallmentPresenter.new(seller:, installment: _1).list_props },
       pagination: pagiation_metadata,
     }
   end

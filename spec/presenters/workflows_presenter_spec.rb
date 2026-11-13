@@ -34,7 +34,7 @@ describe WorkflowsPresenter do
         result = described_class.new(seller:).workflows_props
 
         expect(result[:workflows].map { _1[:installments].size }).to eq([2, 0, 2])
-        expect(result[:workflows]).to eq([workflow3, workflow4, workflow1].map { WorkflowPresenter.new(seller:, workflow: _1).workflow_props })
+        expect(result[:workflows]).to eq([workflow3, workflow4, workflow1].map { WorkflowPresenter.new(seller:, workflow: _1).workflow_props(with_installment_content: false) })
       end
 
       it "loads emails and their open counts without a query or DynamoDB read per workflow" do
