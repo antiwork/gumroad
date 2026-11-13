@@ -85,7 +85,7 @@ class PostEmailBlast < ApplicationRecord
 
   # Its post was deleted, unpublished, or had its emails turned off before the send finished, from
   # whichever copy of the job noticed first. A blast that never delivered gives back the day's
-  # large-send slot it claimed; one that did keeps it, because the slot was spent on real sends.
+  # large-send slot it claimed; one that did, or may have, keeps it, because the slot was spent on real sends.
   def self.stop_for_removed_post(id)
     blast = find_by(id:)
     return 0 if blast.nil?
@@ -93,10 +93,14 @@ class PostEmailBlast < ApplicationRecord
     stopped = stop(id, EXPIRY_POST_REMOVED)
     return stopped unless stopped.positive?
 
-    $redis.del(RedisKey.blast_quota_deferred_until(id))
-    # Re-read after the stop: a delivery that landed in between means the slot was spent.
+    # Re-read after the stop: a delivery that landed in between means the slot was spent. The pending
+    # count is written before the first provider handoff, so its presence covers one still in flight.
     blast.reload
-    SellerLargeBlastQuota.release(seller_id: blast.seller_id, blast_id: id, kind: "post_blast") if blast.first_email_delivered_at.nil?
+    if blast.first_email_delivered_at.nil? && !$redis.exists?(RedisKey.blast_pending_recipients(id))
+      SellerLargeBlastQuota.release(seller_id: blast.seller_id, blast_id: id, kind: "post_blast")
+    end
+    # After the release: no later run revisits a stopped row, so a failure here must not cost the slot.
+    $redis.del(RedisKey.blast_quota_deferred_until(id))
     stopped
   end
 

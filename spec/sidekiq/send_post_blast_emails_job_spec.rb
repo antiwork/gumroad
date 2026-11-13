@@ -124,6 +124,25 @@ describe SendPostBlastEmailsJob, :freeze_time do
       $redis.del(slot_key) if blast
     end
 
+    it "leaves the expired quota decision of a writer that ended the blast after this copy loaded it" do
+      blast = create(:blast, :just_requested, post: basic_post_with_audience)
+      admitted_key = RedisKey.blast_quota_admitted(blast.id)
+      basic_post_with_audience.mark_deleted!
+      allow(PostEmailBlast).to receive(:find).and_wrap_original do |original, *args|
+        original.call(*args).tap do
+          $redis.set(admitted_key, described_class::EXPIRED_QUOTA_DECISION)
+          PostEmailBlast.expire(blast.id, reason: PostEmailBlast::EXPIRY_QUOTA)
+        end
+      end
+
+      described_class.new.perform(blast.id)
+
+      expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_QUOTA)
+      expect($redis.get(admitted_key)).to eq(described_class::EXPIRED_QUOTA_DECISION)
+    ensure
+      $redis.del(admitted_key) if blast
+    end
+
     it "keeps the slot and the delivered count of a blast that had already sent" do
       blast = create(:blast, post: basic_post_with_audience, requested_at: 1.day.ago, started_at: 1.day.ago,
                              first_email_delivered_at: 1.day.ago, last_email_delivered_at: 1.day.ago, delivery_count: 12)
