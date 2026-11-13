@@ -316,13 +316,15 @@ describe("DownloadPage commission deliverables", () => {
     await expectDeliverablesListedOnceOnDownloadsPage();
   });
 
-  it("lists deliverables once after navigating from the intake page to the commission Downloads page", async () => {
+  // Sellers often leave the intake page untitled and text-only, so page 1 has no files of its own.
+  it("lists deliverables once after navigating from an untitled intake page to the commission Downloads page", async () => {
     renderPage({
       ...content(null),
-      rich_content_pages: [page("page-a", "Lesson 1"), commissionDownloadsPage],
+      rich_content_pages: [{ ...page("page-a", "Intake"), title: null }, commissionDownloadsPage],
       content_items: [file],
       commission_deliverables: [file],
     });
+    expect(screen.getByRole("tab", { name: /Untitled/u }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("heading", { name: "Downloads" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("tab", { name: /Downloads/u }));
