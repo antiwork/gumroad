@@ -62,10 +62,10 @@ func (h *handler) sellerAnalytics(p *page, d *pageData, ga, pixel sql.NullString
 	if !displayedCents.Valid || !currency.Valid || !products.CurrencyChoice(currency.String) {
 		return nil, fallback("displayed price")
 	}
-	// seller_taxes_in_purchase_currency converts tax_cents into the product's currency, which a
-	// rate read from Redis does unless the purchase kept one; zero formats as "0" in every
-	// CURRENCY_CHOICES currency.
-	if taxCents.Int64 != 0 || productCurrency.String != "usd" && !rails.Present(rate.String) {
+	// seller_taxes_in_purchase_currency converts tax_cents through the purchase's rate, or
+	// get_rate's for the product's currency, which only a code outside CURRENCY_CHOICES can fail;
+	// zero converts to zero and formats as "0" in every CURRENCY_CHOICES currency.
+	if taxCents.Int64 != 0 || productCurrency.String != "usd" && !rails.Present(rate.String) && !products.CurrencyChoice(productCurrency.String) {
 		return nil, fallback("seller tax")
 	}
 	var ip string
