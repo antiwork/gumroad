@@ -77,9 +77,9 @@ func (h *handler) firstID(ctx context.Context, query string, args ...any) (*int6
 	return &id, nil
 }
 
-// communityChatURL is UrlRedirectPresenter#community_chat_url for a signed-out viewer, with
-// referencedID the url redirect's referenced_link.
-func (h *handler) communityChatURL(ctx context.Context, d *pageData, referencedID *int64) (any, error) {
+// communityChatURL is UrlRedirectPresenter#community_chat_url, with referencedID the url
+// redirect's referenced_link and signedIn whether there's a logged_in_user.
+func (h *handler) communityChatURL(ctx context.Context, d *pageData, referencedID *int64, signedIn bool) (any, error) {
 	if referencedID == nil {
 		// product.community_chat_enabled? raises on a nil referenced_link.
 		return nil, fallback("no referenced product")
@@ -109,8 +109,11 @@ func (h *handler) communityChatURL(ctx context.Context, d *pageData, referencedI
 	}
 	path := "/communities/" + web.EscapeSegment(d.sellerExternalID.String) + "/" + web.EscapeSegment(h.c.IDs.Encrypt(*community))
 	query := rails.ToQuery([2]string{"email", d.email.String}, [2]string{"next", path})
-	if !d.purchaserIDColumn.Valid {
+	switch {
+	case !d.purchaserIDColumn.Valid:
 		return "/signup?" + query, nil
+	case signedIn:
+		return path, nil
 	}
 	return "/login?" + query, nil
 }

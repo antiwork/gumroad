@@ -50,6 +50,8 @@ type ContentRedirect struct {
 	Rental bool
 	// ReferencedProductID is referenced_link's id, whose folders hold the files.
 	ReferencedProductID *int64
+	// KindleEmail is logged_in_user&.kindle_email.
+	KindleEmail any
 }
 
 // displayFile is a product_files row as map_file reads it.
@@ -126,9 +128,9 @@ func (l *loader) displayFiles(query string, args ...any) ([]ProductFile, error) 
 	return files, rows.Err()
 }
 
-// ContentItems is UrlRedirectPresenter#download_attributes[:content_items] for a signed-out
-// viewer, without a completed commission's files. ErrUnported covers what only Rails maps:
-// subtitles, web builds, a post's files and non-ASCII extensions.
+// ContentItems is UrlRedirectPresenter#download_attributes[:content_items], without a
+// completed commission's files. ErrUnported covers what only Rails maps: subtitles, web
+// builds, a post's files and non-ASCII extensions.
 func (p *Page) ContentItems(r ContentRedirect, c ContentConfig) ([]any, error) {
 	l := p.l
 	if _, err := p.Files(); err != nil {
@@ -327,9 +329,9 @@ func loadFolders(l *loader, productID *int64, folderIDs []any) (map[int64]bool, 
 	return alive, folders, rows.Err()
 }
 
-// mapFile is UrlRedirectPresenter#map_file for a signed-out viewer, for a file without
-// subtitles or a web build. owner is the product's user's external_id column, and stamped
-// the files with an alive stamped PDF for this url redirect.
+// mapFile is UrlRedirectPresenter#map_file for a file without subtitles or a web build. owner
+// is the product's user's external_id column, and stamped the files with an alive stamped PDF
+// for this url redirect.
 func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, location *mediaLocation, granted, stamped map[int64]bool,
 	thumbnailURL any) (*rails.RHash, error) {
 	names := s3Names{url: d.url.String, baseURL: c.S3BaseURL, ownerExternalID: owner}
@@ -388,7 +390,7 @@ func (c ContentConfig) mapFile(r ContentRedirect, d *displayFile, owner string, 
 	hideKindleAndRead := d.is(fileHideKindleAndReadButton)
 	stampEnabled := d.is(filePDFStampEnabled)
 	if d.canSendToKindle() && !hideKindleAndRead {
-		kindle = rails.NewRHash().Sym("email", nil).Sym("icon_url", c.AssetHost+"/images/white-15.png")
+		kindle = rails.NewRHash().Sym("email", r.KindleEmail).Sym("icon_url", c.AssetHost+"/images/white-15.png")
 	}
 	if d.browserReadable() && (!hideKindleAndRead || d.streamOnly()) {
 		readURL = "/read/" + token + "/" + web.EscapeSegment(external)
