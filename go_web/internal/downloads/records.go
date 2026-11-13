@@ -20,6 +20,7 @@ const (
 	purchaseChargebackBack         = 1 << 9  // Purchase 10 => :chargeback_reversed
 	purchaseIsArchived             = 1 << 16 // Purchase 17 => :is_archived
 	purchaseIsFreeTrial            = 1 << 18 // Purchase 19 => :is_free_trial_purchase
+	purchaseIsMultiseatLicense     = 1 << 21 // Purchase 22 => :is_multiseat_license
 	purchaseExcludesProductReview  = 1 << 22 // Purchase 23 => :should_exclude_product_review
 	purchaseAccessRevoked          = 1 << 24 // Purchase 25 => :is_access_revoked
 	purchaseIsBundle               = 1 << 25 // Purchase 26 => :is_bundle_purchase

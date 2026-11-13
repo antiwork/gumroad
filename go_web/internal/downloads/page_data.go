@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
+	"github.com/antiwork/gumroad/go_web/internal/licenses"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
@@ -16,8 +17,10 @@ var countsReviewStates = map[string]bool{"successful": true, "gift_receiver_purc
 type pageData struct {
 	email, purchaseState, streetAddress, jsonData sql.NullString
 	createdAt                                     db.NullTime
-	priceCents, shippingCents                     sql.NullInt64
+	priceCents, shippingCents, quantity           sql.NullInt64
 	stripePartiallyRefunded                       bool
+	// license is the content's license prop: nil, or license_key, is_multiseat_license and seats.
+	license any
 
 	productID                                     int64
 	productName, uniquePermalink, customPermalink sql.NullString
@@ -29,6 +32,8 @@ type pageData struct {
 	ownerID                        int64
 
 	sellerFlags int64
+	// sellerName, sellerUsername and sellerExternalID are the purchase's seller's.
+	sellerName, sellerUsername, sellerExternalID sql.NullString
 	// purchaserName and purchaserUsername are the purchaser's, when there is one.
 	purchaserName, purchaserUsername sql.NullString
 
@@ -60,19 +65,20 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 	var ownerGA, ownerPixel, ownerJSON sql.NullString
 	checks := make([]bool, len(pageChecks))
 	query := `SELECT purchases.email, purchases.purchase_state, purchases.street_address, purchases.json_data,
-		purchases.created_at, purchases.price_cents, purchases.shipping_cents, purchases.stripe_partially_refunded,
+		purchases.created_at, purchases.price_cents, purchases.shipping_cents, purchases.quantity, purchases.stripe_partially_refunded,
 		links.id, links.name, links.unique_permalink, links.custom_permalink, links.deleted_at IS NOT NULL, links.flags,
 		owner.id, owner.username, owner.external_id, owner.google_analytics_id, owner.facebook_pixel_id, owner.json_data,
-		seller.flags, purchaser.name, purchaser.username,
+		seller.flags, seller.name, seller.username, seller.external_id, purchaser.name, purchaser.username,
 		EXISTS(SELECT 1 FROM third_party_analytics WHERE third_party_analytics.link_id = links.id
 			AND third_party_analytics.deleted_at IS NULL AND third_party_analytics.location IN ('receipt', 'all'))
 		OR EXISTS(SELECT 1 FROM third_party_analytics WHERE third_party_analytics.user_id = links.user_id
 			AND third_party_analytics.link_id IS NULL AND third_party_analytics.deleted_at IS NULL
 			AND third_party_analytics.location IN ('receipt', 'all'))`
-	dest := []any{&d.email, &d.purchaseState, &d.streetAddress, &d.jsonData, &d.createdAt, &d.priceCents, &d.shippingCents, &partially,
+	dest := []any{&d.email, &d.purchaseState, &d.streetAddress, &d.jsonData, &d.createdAt, &d.priceCents, &d.shippingCents, &d.quantity,
+		&partially,
 		&d.productID, &d.productName, &d.uniquePermalink, &d.customPermalink, &productDeleted, &d.productFlags,
 		&ownerID, &d.ownerUsername, &d.ownerExternalID, &ownerGA, &ownerPixel, &ownerJSON,
-		&sellerFlags, &d.purchaserName, &d.purchaserUsername, &d.thirdPartyAnalytics}
+		&sellerFlags, &d.sellerName, &d.sellerUsername, &d.sellerExternalID, &d.purchaserName, &d.purchaserUsername, &d.thirdPartyAnalytics}
 	for i, c := range pageChecks {
 		query += ", EXISTS(" + c.exists + ")"
 		dest = append(dest, &checks[i])
@@ -101,8 +107,6 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 		return nil, fallback("membership")
 	case pu.flags&(purchaseIsGiftSender|purchaseIsBundleProduct|purchaseIsCommissionDeposit|purchaseIsCommissionCompletion) != 0:
 		return nil, fallback("gift, bundle or commission purchase")
-	case d.productIs(productIsLicensed):
-		return nil, fallback("licensed product")
 	case d.productIs(productCommunityChatEnabled):
 		return nil, fallback("community chat")
 	case !rails.Present(d.uniquePermalink.String) && !rails.Present(d.customPermalink.String):
@@ -116,6 +120,9 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 		if checks[i] {
 			return nil, fallback(c.reason)
 		}
+	}
+	if err := d.loadLicense(ctx, h.c.DB, pu); err != nil {
+		return nil, err
 	}
 	// PurchaseSellerAnalyticsPresenter reads link.analytics_data, the product user's, and
 	// only builds props when one id is set; "" counts.
@@ -135,6 +142,33 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 	return d, nil
 }
 
+// loadLicense sets the license prop from purchase.license_key: the license's serial when
+// uses_license_key? holds. A membership's recurring charge reads its original purchase's
+// license, but memberships are left to Rails before this.
+func (d *pageData) loadLicense(ctx context.Context, conn *sql.DB, pu *purchase) error {
+	if !d.productIs(productIsLicensed) {
+		return nil
+	}
+	permitted, err := licenses.LicenseKeyPermitted(ctx, conn, d.productID, d.productFlags, pu.id)
+	if err != nil || !permitted {
+		return err
+	}
+	// has_one :license, without an order.
+	var serial sql.NullString
+	err = conn.QueryRowContext(ctx, "SELECT serial FROM licenses WHERE purchase_id = ? LIMIT 1", pu.id).Scan(&serial)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && !serial.Valid {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	d.license = rails.NewRHash().
+		Sym("license_key", serial.String).
+		Sym("is_multiseat_license", pu.flags&purchaseIsMultiseatLicense != 0).
+		Sym("seats", nullableInt(d.quantity))
+	return nil
+}
+
 // lastContentPageID is purchase.last_content_page_id: json_data's value when present.
 func (d *pageData) lastContentPageID() (any, error) {
 	if !rails.Present(d.jsonData.String) {
@@ -151,10 +185,22 @@ func (d *pageData) lastContentPageID() (any, error) {
 	return nil, nil
 }
 
-// hasInvoice is Purchase#has_invoice? without a subscription: !free_purchase?.
-func (d *pageData) hasInvoice() bool {
+// freePurchase is Purchase#free_purchase?, and Purchase#has_invoice? without a subscription is
+// its negation.
+func (d *pageData) freePurchase() bool {
 	// nil == 0 is false, so a nil shipping price is a paid purchase.
-	return !(d.priceCents.Int64 == 0 && d.shippingCents.Valid && d.shippingCents.Int64 == 0)
+	return d.priceCents.Int64 == 0 && d.shippingCents.Valid && d.shippingCents.Int64 == 0
+}
+
+// sellerNameOrUsername is the seller's User#name_or_username.
+func (d *pageData) sellerNameOrUsername() string {
+	switch {
+	case rails.Present(d.sellerName.String):
+		return d.sellerName.String
+	case rails.Present(d.sellerUsername.String):
+		return d.sellerUsername.String
+	}
+	return d.sellerExternalID.String
 }
 
 // allowsReview is Purchase#allows_review? for a purchase without a subscription.
