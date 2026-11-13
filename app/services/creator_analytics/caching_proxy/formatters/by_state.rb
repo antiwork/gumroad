@@ -6,26 +6,29 @@ module CreatorAnalytics::CachingProxy::Formatters::ByState
     data = { by_state: { views: {}, sales: {}, totals: {} } }
 
     permalinks = days_data.flat_map do |day_data|
-      day_data[:by_state].values.map(&:keys)
-    end.flatten.uniq
+      day_data[:by_state].values.flat_map(&:keys)
+    end.uniq
 
-
+    # Every product gets all three series even when a day has no activity for it, and the target
+    # hashes are resolved once per product instead of once per product x day x type.
     permalinks.each do |permalink|
+      countries_by_type = { views: (data[:by_state][:views][permalink] ||= {}),
+                            sales: (data[:by_state][:sales][permalink] ||= {}),
+                            totals: (data[:by_state][:totals][permalink] ||= {}) }
+
       days_data.each do |day_data|
-        %i[views sales totals].each do |type|
-          data[:by_state][type][permalink] ||= {}
-          (day_data[:by_state][type][permalink] || {}).each do |country, value|
+        by_state = day_data[:by_state]
+        countries_by_type.each do |type, countries|
+          (by_state[type][permalink] || {}).each do |country, value|
             if value.is_a?(Array)
-              if data[:by_state][type][permalink].key?(country)
-                value.each.with_index do |element, i|
-                  data[:by_state][type][permalink][country][i] += element
-                end
+              if (existing = countries[country])
+                value.each_with_index { |element, i| existing[i] += element }
               else
-                data[:by_state][type][permalink][country] = value
+                # Copy: the day's array is part of the cached payload and must not be summed into.
+                countries[country] = value.dup
               end
             else
-              data[:by_state][type][permalink][country] ||= 0
-              data[:by_state][type][permalink][country] += value
+              countries[country] = (countries[country] || 0) + value
             end
           end
         end
