@@ -29,6 +29,11 @@ var ErrUnported = errors.New("railscache: unported cache entry")
 // within the last 30 seconds (Dalli's down_retry_delay).
 var ErrServerDown = errors.New("railscache: memcached server down")
 
+// ErrRequestFailed is a request that failed after connecting, a timeout or an error status
+// included: Dalli raises, and MemCacheStore reads a miss. Unlike ErrServerDown, it takes a
+// second one in a row (socket_max_failures) to mark the server down.
+var ErrRequestFailed = errors.New("railscache: memcached request failed")
+
 // Store::MAX_KEY_SIZE, which MemCacheStore keeps.
 const maxKeySize = 250
 
@@ -167,7 +172,7 @@ func (s *Store) Read(ctx context.Context, name string) (any, bool, error) {
 	case statusNotFound:
 		return nil, false, nil
 	default:
-		return nil, false, fmt.Errorf("railscache: get status %d", resp.status)
+		return nil, false, fmt.Errorf("%w: get status %d", ErrRequestFailed, resp.status)
 	}
 	var flags uint32
 	if len(resp.extras) >= 4 {
@@ -209,7 +214,7 @@ func (s *Store) Write(ctx context.Context, name string, value any, expiresIn tim
 		return err
 	}
 	if resp.status != statusOK {
-		return fmt.Errorf("railscache: set status %d", resp.status)
+		return fmt.Errorf("%w: set status %d", ErrRequestFailed, resp.status)
 	}
 	return nil
 }
@@ -225,7 +230,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		return err
 	}
 	if resp.status != statusOK && resp.status != statusNotFound {
-		return fmt.Errorf("railscache: delete status %d", resp.status)
+		return fmt.Errorf("%w: delete status %d", ErrRequestFailed, resp.status)
 	}
 	return nil
 }
@@ -248,7 +253,15 @@ func (s *Store) do(ctx context.Context, key string, op byte, extras, value []byt
 		if c, err = srv.dial(dialCtx, ctx, time.Now()); err != nil {
 			return response{}, err
 		}
-		return srv.roundTrip(ctx, c, deadline, op, key, extras, value)
+		resp, err = srv.roundTrip(ctx, c, deadline, op, key, extras, value)
+	}
+	// roundTrip joins the caller's own cancellation or deadline to the error it caused.
+	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		srv.failed(time.Now())
+		return response{}, fmt.Errorf("%w: %w", ErrRequestFailed, err)
+	}
+	if err == nil {
+		srv.succeeded()
 	}
 	return resp, err
 }

@@ -29,6 +29,9 @@ const (
 // skipped before the next attempt.
 const downRetryDelay = 30 * time.Second
 
+// Base's socket_max_failures: failed requests in a row that mark a server down.
+const socketMaxFailures = 2
+
 const maxIdleConns = 64
 
 // Far past memcached's 1MB item limit: a body this big means the stream is out of sync,
@@ -44,6 +47,7 @@ type server struct {
 	idle      chan *conn
 	mu        sync.Mutex
 	downUntil time.Time
+	failures  int
 }
 
 type conn struct {
@@ -64,6 +68,22 @@ func (s *server) markDown(now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.downUntil = now.Add(downRetryDelay)
+}
+
+// failed counts a failed request, marking the server down at socketMaxFailures in a row.
+func (s *server) failed(now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.failures++; s.failures >= socketMaxFailures {
+		s.failures = 0
+		s.downUntil = now.Add(downRetryDelay)
+	}
+}
+
+func (s *server) succeeded() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failures = 0
 }
 
 // conn is Base#alive?: an open connection, or a new one unless the server was marked down

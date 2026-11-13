@@ -2707,6 +2707,7 @@ func TestTheSalesCount(t *testing.T) {
 		{"read from the cache", "", search, int64(9), nil, `"sales_count":9,`, 0},
 		{"a cached value this port can't read", "cached sales count", search, "9", nil, "", 0},
 		{"the cache down", "cache", search, nil, railscache.ErrServerDown, "", 0},
+		{"a cache read that timed out", "cache", search, nil, fmt.Errorf("%w: %w", railscache.ErrRequestFailed, os.ErrDeadlineExceeded), "", 0},
 		{"a failed search", "sales count search", failing, nil, nil, "", 1},
 		{"no search client", "sales count", nil, nil, nil, "", 0},
 	} {

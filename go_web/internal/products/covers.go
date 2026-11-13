@@ -592,10 +592,11 @@ func nullString(s sql.NullString) any {
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 
-// readCache is Rails.cache.read; an entry this port can't read, or a server down, is Rails'.
+// readCache is Rails.cache.read; an entry this port can't read, a server down or a failed
+// request is Rails'.
 func (h *handler) readCache(ctx context.Context, key string) (any, bool, error) {
 	v, found, err := h.c.Page.Cache.Read(ctx, key)
-	if errors.Is(err, railscache.ErrUnported) || errors.Is(err, railscache.ErrServerDown) {
+	if errors.Is(err, railscache.ErrUnported) || errors.Is(err, railscache.ErrServerDown) || errors.Is(err, railscache.ErrRequestFailed) {
 		return nil, false, fallback("cache")
 	}
 	return v, found, err
