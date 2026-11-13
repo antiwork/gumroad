@@ -1039,6 +1039,7 @@ Rails.application.routes.draw do
     resources :purchase_custom_fields, only: [:create]
     resources :commissions, only: [:update] do
       member do
+        post :direct_upload
         post :complete
       end
     end
@@ -1293,6 +1294,7 @@ Rails.application.routes.draw do
     get "/r/:id/rental_expired", to: "url_redirects#rental_expired_page", as: :url_redirect_rental_expired_page
     get "/r/:id/membership_inactive", to: "url_redirects#membership_inactive_page", as: :url_redirect_membership_inactive_page
     get "/r/:id/check_purchaser", to: "url_redirects#check_purchaser", as: :url_redirect_check_purchaser
+    get "/r/:id/commission_files/:file_id", to: "url_redirects#download_commission_file", as: :url_redirect_download_commission_file
     get "/r/:id/:product_file_id/stream.smil", to: "url_redirects#smil", as: :url_redirect_smil_for_product_file
     get "/r/:id/:product_file_id/index.m3u8", to: "url_redirects#hls_playlist", as: :hls_playlist_for_product_file
     get "/r/:id", to: "url_redirects#show", as: :url_redirect

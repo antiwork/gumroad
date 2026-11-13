@@ -11,6 +11,38 @@ describe CommissionsController, :vcr do
 
   include_context "with user signed in as admin for seller"
 
+  describe "POST direct_upload" do
+    let(:blob_params) do
+      { filename: "work.pdf", byte_size: 1024, checksum: Digest::MD5.base64digest("x"), content_type: "application/pdf" }
+    end
+
+    it_behaves_like "authorize called for action", :post, :direct_upload do
+      let(:policy_klass) { CommissionPolicy }
+      let(:policy_method) { :update? }
+      let(:record) { commission }
+      let(:request_params) { { id: commission.external_id, blob: blob_params } }
+    end
+
+    it "reserves a blob on the private commission service" do
+      post :direct_upload, params: { id: commission.external_id, blob: blob_params }, as: :json
+
+      expect(response).to be_successful
+      expect(response.parsed_body["direct_upload"]["url"]).to be_present
+      blob = ActiveStorage::Blob.find_signed(response.parsed_body["signed_id"])
+      expect(blob.service_name).to eq("commission_files")
+    end
+
+    it "rejects completed commissions" do
+      commission.update!(status: Commission::STATUS_COMPLETED)
+
+      expect do
+        post :direct_upload, params: { id: commission.external_id, blob: blob_params }, as: :json
+      end.to not_change { ActiveStorage::Blob.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+  end
+
   describe "PUT update" do
     it_behaves_like "authorize called for action", :put, :update do
       let(:policy_klass) { CommissionPolicy }
@@ -33,6 +65,26 @@ describe CommissionsController, :vcr do
       expect(response).to be_successful
       expect(response).to have_http_status(:no_content)
       expect(commission.files.first.filename).to eq("test.pdf")
+    end
+
+    it "rejects new files that were uploaded to the public service" do
+      blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.pdf"), filename: "test.pdf", service_name: "test")
+
+      expect do
+        put :update, params: { id: commission.external_id, file_signed_ids: [blob.signed_id] }, as: :json
+      end.to not_change { commission.reload.files.count }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+    end
+
+    it "keeps files already stored on the public service" do
+      commission.files.attach(file_fixture("test.png"))
+      commission.files.first.blob.update!(service_name: "test")
+
+      put :update, params: { id: commission.external_id, file_signed_ids: [commission.files.first.signed_id] }, as: :json
+
+      expect(response).to have_http_status(:no_content)
+      expect(commission.reload.files.count).to eq(1)
     end
 
     it "rejects attaching files to completed commissions" do

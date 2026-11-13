@@ -31,3 +31,14 @@ amazon:
   region: us-east-1
   bucket: <%= PUBLIC_STORAGE_S3_BUCKET %>
   public: true
+
+# Private bucket for commission deliverables; reads go through a buyer-authorized redirect.
+commission_files:
+  service: S3
+  endpoint: <%= GlobalConfig.get("AWS_S3_ENDPOINT") %>
+  access_key_id: <%= GlobalConfig.get("AWS_ACCESS_KEY_ID") %>
+  secret_access_key: <%= GlobalConfig.get("AWS_SECRET_ACCESS_KEY") %>
+  region: us-east-1
+  bucket: <%= GlobalConfig.get("COMMISSION_FILES_S3_BUCKET", S3_BUCKET) %>
+  public: false
+  force_path_style: <%= !Rails.env.production? %>

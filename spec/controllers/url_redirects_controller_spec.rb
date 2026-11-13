@@ -2103,6 +2103,66 @@ describe UrlRedirectsController, inertia: true do
     end
   end
 
+  describe "GET download_commission_file" do
+    let(:commission) { create(:commission, status: Commission::STATUS_COMPLETED) }
+    let(:commission_url_redirect) do
+      commission.files.attach(file_fixture("test.pdf"))
+      commission.deposit_purchase.create_url_redirect!
+    end
+    let(:file) { commission.files.first }
+
+    it "redirects to a short-lived private URL and records a download event" do
+      expect(file.blob.service_name).to eq("commission_files")
+
+      expect do
+        get :download_commission_file, params: { id: commission_url_redirect.token, file_id: file.signed_id }
+      end.to change { ConsumptionEvent.where(event_type: ConsumptionEvent::EVENT_TYPE_DOWNLOAD, url_redirect_id: commission_url_redirect.id).count }.by(1)
+
+      expect(response).to have_http_status(:redirect)
+      expect(response.location).to include("X-Amz-Signature")
+      expect(response.location).to include("attachment")
+      expect(ConsumptionEvent.last.product_file_id).to be_nil
+    end
+
+    it "serves files that were stored publicly before the private service existed" do
+      commission_url_redirect
+      file.blob.update!(service_name: "test")
+
+      get :download_commission_file, params: { id: commission_url_redirect.token, file_id: file.signed_id }
+
+      expect(response).to have_http_status(:redirect)
+    end
+
+    it "404s for a commission that is not completed" do
+      commission_url_redirect
+      commission.update!(status: Commission::STATUS_IN_PROGRESS)
+
+      expect do
+        get :download_commission_file, params: { id: commission_url_redirect.token, file_id: file.signed_id }
+      end.to raise_error(ActionController::RoutingError)
+      expect(ConsumptionEvent.count).to eq(0)
+    end
+
+    it "404s for a blob that does not belong to the commission" do
+      commission_url_redirect
+      other_blob = ActiveStorage::Blob.create_and_upload!(io: fixture_file_upload("test.pdf"), filename: "other.pdf")
+
+      expect do
+        get :download_commission_file, params: { id: commission_url_redirect.token, file_id: other_blob.signed_id }
+      end.to raise_error(ActionController::RoutingError)
+    end
+
+    it "does not serve the file to a viewer who fails the purchase access checks" do
+      commission_url_redirect
+      commission.deposit_purchase.update!(is_access_revoked: true)
+
+      get :download_commission_file, params: { id: commission_url_redirect.token, file_id: file.signed_id }
+
+      expect(response).to redirect_to(url_redirect_expired_page_path(commission_url_redirect.token))
+      expect(ConsumptionEvent.count).to eq(0)
+    end
+  end
+
   describe "GET download_subtitle_file" do
     before do
       @product_file = @product.product_files.last
