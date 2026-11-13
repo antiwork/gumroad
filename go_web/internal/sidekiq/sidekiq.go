@@ -18,6 +18,9 @@ type Options struct {
 	Class string
 	Queue string
 	Retry any
+	// UniqueAcrossQueues is sidekiq-unique-jobs' unique_across_queues, declared after lock: the
+	// lock digest leaves out the queue.
+	UniqueAcrossQueues bool
 }
 
 // Client pushes to the Sidekiq Redis (SIDEKIQ_REDIS_HOST).
@@ -113,6 +116,9 @@ func normalizeItem(opts Options, args []any, now time.Time, classFirst bool, loc
 	job := Hash{{"retry", opts.Retry}, {"queue", opts.Queue}, {"backtrace", true}}
 	if lock != "" {
 		job = append(job, Pair{"lock", lock})
+	}
+	if opts.UniqueAcrossQueues {
+		job = append(job, Pair{"unique_across_queues", true})
 	}
 	if classFirst {
 		job = append(job, Pair{"class", opts.Class}, Pair{"args", args})

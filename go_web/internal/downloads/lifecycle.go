@@ -11,8 +11,13 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 )
 
-// transcodeVideoJob is TranscodeVideoForStreamingWorker's sidekiq_options.
-var transcodeVideoJob = sidekiq.Options{Class: "TranscodeVideoForStreamingWorker", Queue: "default", Retry: 13}
+// transcodeVideoJob and stampPDFJob are TranscodeVideoForStreamingWorker's and
+// StampPdfForPurchaseJob's sidekiq_options. The stamp job's lock_args is args.first, which is
+// all of the one-arg push the download page makes.
+var (
+	transcodeVideoJob = sidekiq.Options{Class: "TranscodeVideoForStreamingWorker", Queue: "default", Retry: 13}
+	stampPDFJob       = sidekiq.Options{Class: "StampPdfForPurchaseJob", Queue: "long", Retry: 5, UniqueAcrossQueues: true}
+)
 
 const (
 	// UrlRedirect's transcoded video methods read the ids each_slice(1_000).
@@ -26,28 +31,40 @@ type lifecycle struct {
 	// videos get last_accessed_at, and transcodes are the files whose transcodes are
 	// regenerated, in enqueue order.
 	videos, transcodes []int64
+	// stampPurchase is the purchase_id whose deleted stamped PDFs are stamped again.
+	stampPurchase *int64
 }
 
 // planLifecycle reads what trigger_files_lifecycle_events would write for the page's files.
-// Regenerating stamped PDFs is left to Rails: StampPdfForPurchaseJob's lock is unique
-// across queues on its own lock_args, which the sidekiq client doesn't build.
 func (h *handler) planLifecycle(ctx context.Context, content *delivery.Page, u *urlRedirect) (*lifecycle, error) {
 	videos, stampable, err := content.LifecycleFiles()
 	if err != nil {
 		return nil, err
 	}
-	if len(stampable) > 0 {
+	lc := &lifecycle{videos: videos}
+	if lc.transcodes, err = h.deletedTranscodes(ctx, videos); err != nil {
+		return nil, err
+	}
+	// enqueue_job_to_regenerate_deleted_stamped_pdfs returns without a purchase.
+	if len(stampable) > 0 && u.purchaseID != nil {
 		regenerate, err := h.stampedPDFsDeleted(ctx, u.id, stampable)
 		if err != nil {
 			return nil, err
 		}
 		if regenerate {
-			return nil, fallback("stamped PDF job")
+			lc.stampPurchase = u.purchaseID
 		}
 	}
-	lc := &lifecycle{videos: videos}
+	if (len(lc.transcodes) > 0 || lc.stampPurchase != nil) && h.c.Pages.Sidekiq == nil {
+		return nil, fallback("jobs")
+	}
+	return lc, nil
+}
+
+// deletedTranscodes is the files enqueue_job_to_regenerate_deleted_transcoded_videos enqueues.
+func (h *handler) deletedTranscodes(ctx context.Context, videos []int64) ([]int64, error) {
 	if len(videos) == 0 {
-		return lc, nil
+		return nil, nil
 	}
 	alive := map[int64]bool{}
 	for chunk := range slices.Chunk(videos, transcodeSlice) {
@@ -67,15 +84,9 @@ func (h *handler) planLifecycle(ctx context.Context, content *delivery.Page, u *
 		}
 	}
 	if len(missing) == 0 {
-		return lc, nil
+		return nil, nil
 	}
-	if lc.transcodes, err = h.transcodableWithDeletedTranscodes(ctx, missing); err != nil {
-		return nil, err
-	}
-	if len(lc.transcodes) > 0 && h.c.Pages.Sidekiq == nil {
-		return nil, fallback("jobs")
-	}
-	return lc, nil
+	return h.transcodableWithDeletedTranscodes(ctx, missing)
 }
 
 // stampedPDFsDeleted is whether enqueue_job_to_regenerate_deleted_stamped_pdfs would enqueue:
@@ -142,7 +153,7 @@ func (h *handler) transcodableWithDeletedTranscodes(ctx context.Context, missing
 }
 
 // runLifecycle is trigger_files_lifecycle_events' writes: last_accessed_at on the videos' alive
-// transcodes, then a transcode job for each file whose transcodes were deleted.
+// transcodes, a transcode job for each file whose transcodes were deleted, then the stamp job.
 func (h *handler) runLifecycle(ctx context.Context, lc *lifecycle) error {
 	if len(lc.videos) > 0 {
 		// update_all quotes Time.current at the column's microsecond precision.
@@ -157,6 +168,12 @@ func (h *handler) runLifecycle(ctx context.Context, lc *lifecycle) error {
 	}
 	for i, id := range lc.transcodes {
 		if _, err := h.c.Pages.Sidekiq.PushIn(ctx, transcodeVideoJob, time.Duration(i)*transcodeSpacing, id, "ProductFile"); err != nil {
+			return err
+		}
+	}
+	if lc.stampPurchase != nil {
+		// A job already holding the lock means the stamp is on its way, as it does for Rails.
+		if _, _, err := h.c.Pages.Sidekiq.PushUntilExecuted(ctx, stampPDFJob, *lc.stampPurchase); err != nil {
 			return err
 		}
 	}

@@ -125,11 +125,12 @@ func TestPagesThatWouldEnqueueWithoutAClientGoToRails(t *testing.T) {
 	}
 }
 
-func TestADeletedStampedPDFLeavesThePageToRails(t *testing.T) {
-	e := newPageEnv(t)
+func TestADeletedStampedPDFIsStampedAgain(t *testing.T) {
+	e, mr := newJobsPageEnv(t)
 	e.db.Exec("UPDATE product_files SET flags = flags | 16 WHERE id = ?", fileID)
 	defer e.db.Exec("UPDATE product_files SET flags = flags & ~16 WHERE id = ?", fileID)
 	token := e.purchase(productID, map[string]any{"price_cents": 500}, nil)
+	id := nextPurchase
 	w := e.page(token, nil)
 	if w.Code != http.StatusOK || e.railsHit != nil {
 		t.Fatalf("status %d, rails %v", w.Code, e.railsHit != nil)
@@ -138,11 +139,32 @@ func TestADeletedStampedPDFLeavesThePageToRails(t *testing.T) {
 	if pdf := items[0].(*rails.Hash); pdf.Value("pdf_stamp_enabled") != true || pdf.Value("processing") != true {
 		t.Errorf("stamped file %s", rails.EncodeJSON(pdf))
 	}
-	// enqueue_job_to_regenerate_deleted_stamped_pdfs would enqueue: Rails renders it.
-	testdb.Insert(t, e.db, "stamped_pdfs", map[string]any{"id": int64(1_780_921), "url_redirect_id": nextPurchase, "product_file_id": fileID,
+	// Never stamped: the purchase's own stamping job makes it, so the page enqueues nothing.
+	if jobs, _ := mr.List("queue:long"); len(jobs) != 0 {
+		t.Errorf("jobs before any stamped PDF was deleted: %v", jobs)
+	}
+	testdb.Insert(t, e.db, "stamped_pdfs", map[string]any{"id": int64(1_780_921), "url_redirect_id": id, "product_file_id": fileID,
 		"created_at": testNow, "updated_at": testNow, "deleted_at": testNow})
-	if e.page(token, nil); e.railsHit == nil {
-		t.Error("a page whose stamped PDF was deleted was rendered")
+	if w := e.page(token, nil); w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("status %d, rails %v", w.Code, e.railsHit != nil)
+	}
+	jobs, _ := mr.List("queue:long")
+	if len(jobs) != 1 {
+		t.Fatalf("jobs %v", jobs)
+	}
+	var job struct {
+		Class              string `json:"class"`
+		Args               []any  `json:"args"`
+		UniqueAcrossQueues bool   `json:"unique_across_queues"`
+	}
+	json.Unmarshal([]byte(jobs[0]), &job)
+	if job.Class != "StampPdfForPurchaseJob" || len(job.Args) != 1 || job.Args[0] != float64(id) || !job.UniqueAcrossQueues {
+		t.Errorf("job %s", jobs[0])
+	}
+	// Its lock holds the next view's push back until it has run.
+	e.page(token, nil)
+	if jobs, _ := mr.List("queue:long"); len(jobs) != 1 {
+		t.Errorf("jobs after a second view: %d", len(jobs))
 	}
 }
 

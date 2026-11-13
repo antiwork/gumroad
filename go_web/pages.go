@@ -78,6 +78,12 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 		d.logger.Warn("download page jobs left to Rails", "reason", err.Error())
 	} else {
 		jobs = &sidekiq.Client{Redis: conn}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := jobs.LoadRedisVersion(ctx); err != nil {
+			// The unique-jobs scripts take the version without reading it.
+			d.logger.Warn("Sidekiq Redis version unread", "reason", err.Error())
+		}
+		cancel()
 	}
 	return &downloads.PageConfig{
 		Layout: layout,
