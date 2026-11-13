@@ -60,7 +60,7 @@ class AlertOnStalledPostEmailBlastsJob
 
   # Rows the run acted on (or would have) are the audit trail. `message_for` reports them after
   # the HELD rows, so they keep their slots only while the held rows leave room.
-  AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared].freeze
+  AUDITED_ACTIONS = [:resumed, :resumed_to_complete, :would_resume, :would_complete, :skipped_reappeared, :ended_unsendable_post].freeze
 
   # Both the parent distributor and its slice jobs carry the blast id as args[0], so a
   # mid-send split blast must be recognized as a live sender by the scans below or it would
@@ -132,6 +132,7 @@ class AlertOnStalledPostEmailBlastsJob
     # ran at all — a blast whose enqueue was lost is precisely the row this alert must not skip.
     def scan_for_stalled_blasts
       candidates = PostEmailBlast
+        .includes(:post)
         .where(completed_at: nil, expired_at: nil)
         .where(requested_at: LOOKBACK.ago..STALL_THRESHOLD.ago)
         .order(requested_at: :desc)
@@ -197,6 +198,11 @@ class AlertOnStalledPostEmailBlastsJob
         return resume(entry, marker: RedisKey.stalled_blast_completion_resumed(blast.id)) ? :resumed_to_complete : :held_already_resumed
       end
 
+      # Nothing can be delivered from a post that was deleted, unpublished or had its emails turned
+      # off, so a resume would only spend the blast's one auto-resume marker to end it again. End it
+      # here, where a lost enqueue is the only thing left that would otherwise strand the row.
+      return :ended_unsendable_post if end_if_post_unsendable(blast)
+
       # A DEAD entry proves its attempt chain ended; UNACCOUNTED can hide a live sender, and a
       # concurrent duplicate double-delivers a non-opener resend.
       return :held_non_opener if entry[:disposition] == :unaccounted && blast.to_non_openers?
@@ -230,6 +236,18 @@ class AlertOnStalledPostEmailBlastsJob
 
     def recipients_still_owed?(blast)
       self.class.recipients_still_owed?(blast)
+    end
+
+    # Ends a blast whose post was deleted, unpublished or had its emails turned off: nothing can be
+    # delivered, so no scan should spend its one auto-resume on it. False when the row was already
+    # terminal (another copy ended it, or it delivered after the scan read it).
+    def end_if_post_unsendable(blast)
+      post = blast.post
+      # A post row that is gone outright counts too — it can never send again, and the alternative
+      # is leaving the blast unfinished for good.
+      return false if post.present? && post.alive? && post.published? && post.send_emails?
+
+      PostEmailBlast.stop_for_removed_post(blast.id).positive?
     end
 
     # A job moves between the retry set, the queue and a worker in both directions, so a single
@@ -325,8 +343,10 @@ class AlertOnStalledPostEmailBlastsJob
           "next daily large-blast slot. DEAD/UNACCOUNTED blasts requested " \
           "within #{AUTO_RESUME_WINDOW.inspect} are resumed automatically, once per blast " \
           "(gumroad-private#2106) — except UNACCOUNTED non-opener resends, which a concurrent " \
-          "duplicate sender would double-deliver. UNACCOUNTED usually means a lost enqueue, a " \
-          "post no longer sendable, or a job stranded in a retired process's private queue that " \
+          "duplicate sender would double-deliver. A blast whose post was deleted, unpublished or had " \
+          "its emails turned off is ENDED rather than resumed — a resume could only end it again. " \
+          "UNACCOUNTED usually means a lost enqueue or a job stranded in a retired process's " \
+          "private queue that " \
           "no resurrection pass has reached — super_fetch does not reliably resurrect hard-killed " \
           "jobs (gumroad-private#2352). HELD " \
           "rows need a human: confirm with the seller (time-boxed blasts may be worse late than " \
@@ -354,6 +374,7 @@ class AlertOnStalledPostEmailBlastsJob
         when :held_already_resumed then " → HELD (already auto-resumed once)"
         when :held_non_opener then " → HELD (non-opener resend: a duplicate sender double-delivers)"
         when :skipped_reappeared then " → SKIPPED (sender reappeared at resume time)"
+        when :ended_unsendable_post then " → ENDED (its post can no longer send)"
         else ""
         end
       "• blast #{blast.id} (post #{blast.post_id}, seller #{blast.seller_id}) — " \
