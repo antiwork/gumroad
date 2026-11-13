@@ -2103,13 +2103,16 @@ describe UrlRedirectsController, inertia: true do
     end
   end
 
-  describe "GET download_commission_file" do
+  describe "GET download_commission_file", :vcr do
     let(:commission) { create(:commission, status: Commission::STATUS_COMPLETED) }
     let(:commission_url_redirect) do
       commission.files.attach(file_fixture("test.pdf"))
       commission.deposit_purchase.create_url_redirect!
     end
-    let(:file) { commission.files.first }
+    let(:file) do
+      commission_url_redirect # attaching the file is what this setup does
+      commission.files.first
+    end
 
     it "redirects to a short-lived private URL and records a download event" do
       expect(file.blob.service_name).to eq("commission_files")
