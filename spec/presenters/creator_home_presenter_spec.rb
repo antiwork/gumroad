@@ -460,8 +460,14 @@ describe CreatorHomePresenter do
           expect(props[:email_confirmation][:can_resend]).to eq(true)
         end
 
-        it "doesn't allow resending for non-owner team members" do
-          expect(presenter.creator_home_props[:email_confirmation][:can_resend]).to eq(false)
+        it "allows resending for an admin team member" do
+          expect(presenter.creator_home_props[:email_confirmation][:can_resend]).to eq(true)
+        end
+
+        it "doesn't allow resending for other team member roles" do
+          marketing_pundit_user = SellerContext.new(user: marketing_for_seller, seller:)
+          props = described_class.new(marketing_pundit_user).creator_home_props
+          expect(props[:email_confirmation][:can_resend]).to eq(false)
         end
       end
 

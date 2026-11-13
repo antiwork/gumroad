@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -18,6 +17,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -44,7 +44,7 @@ type PageConfig struct {
 	Flag func(name string) *flipper.Flag
 	// CDNMap is CDN_URL_MAP in order, and PublicStorageURL the public service's object URL
 	// prefix, "https://<bucket>.s3.amazonaws.com/".
-	CDNMap           [][2]string
+	CDNMap           web.CDNMap
 	PublicStorageURL string
 	// CalendarHref is vite_asset_path("components/ui/Calendar.tsx"), "" when the manifest
 	// lacks it.
@@ -58,21 +58,15 @@ type PageConfig struct {
 	NewNonce                      func() string
 	// EmailDigestKey is OBFUSCATE_IDS_CIPHER_KEY, which Purchase#email_digest signs with.
 	EmailDigestKey string
-	// GumroadAdminID is GUMROAD_ADMIN_ID, who writes payout setup notes; 0 leaves a page that
-	// reads them to Rails.
-	GumroadAdminID int64
+	// Viewers loads the signed-in visitor and the signed-in share.
+	Viewers *viewer.Loader
 	// CustomHTMLAnalytics is vite_typescript_tag("custom_html_analytics"); nil leaves a custom
 	// HTML product page to Rails.
 	CustomHTMLAnalytics *vite.Tags
 }
 
 // cdnURL is cdn_url_for.
-func (pc *PageConfig) cdnURL(s string) string {
-	for _, m := range pc.CDNMap {
-		s = strings.ReplaceAll(s, m[0], m[1])
-	}
-	return s
-}
+func (pc *PageConfig) cdnURL(s string) string { return pc.CDNMap.URLFor(s) }
 
 // render is LinksController#prepare_product_page and #show, then the after_actions. Everything is
 // read before anything is written.
@@ -142,9 +136,9 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 	// The share blocks in order: the signed-in one follows detected_buyer_currency's, and
 	// LinksController's own MobileAppWebView share comes last.
 	props := shared.Sym("detected_buyer_currency", nullableString(v.detectedCurrency))
-	if u := p.viewer; u != nil {
-		props.Sym("logged_in_user", u.loggedIn).Sym("current_seller", u.currentSeller).
-			Sym("current_user", u.currentUser).Sym("prompt_passkey_setup", u.promptPasskey)
+	if v := p.share; v != nil {
+		props.Sym("logged_in_user", v.LoggedInUser).Sym("current_seller", v.CurrentSeller).
+			Sym("current_user", v.CurrentUser).Sym("prompt_passkey_setup", v.PromptPasskeySetup)
 		p.avatarPushes = appendNew(p.avatarPushes, p.viewerPushes...)
 	}
 	props.Sym("is_mobile_app_web_view", p.Req.Param("display") == "mobile_app" || p.Session.Get("mobile_app_web_view") == true)
@@ -166,11 +160,16 @@ func (h *handler) render(w http.ResponseWriter, p *page, prod *product) error {
 		}
 	}
 
+	crawl, err := h.crawlFallback(p, prod, v)
+	if err != nil {
+		return err
+	}
 	asEmbed, _ := p.Req.Params.Get("as_embed")
 	doc := inertia.Document{
 		Component: component, URL: p.Req.FullPath(), Props: props, Meta: meta, AsEmbed: asEmbed != nil,
 		UserAgent: p.Req.Header("User-Agent"), BodyID: "product_page", BodyClass: bodyClass,
 		DesignSettings: pc.Shared.DesignSettingsJSON(), UserAgentInfo: pages.UserAgentInfoJSON(pages.Request{Req: p.Req, Session: p.Session}),
+		CrawlFallback: crawl,
 	}
 
 	if err := h.finishShow(w, p, prod, v.ip); err != nil {
@@ -326,6 +325,21 @@ type view struct {
 	editor *rails.RHash
 	// wanted is wanted=true's cart item; nil without one, or when show renders the page anyway.
 	wanted *wantedItem
+	// minDifference is lowest_variant_price_difference_cents once variantFloor has read it.
+	minDifference     sql.NullInt64
+	minDifferenceRead bool
+}
+
+// variantFloor is lowestVariantDifference for the page's product, read once.
+func (h *handler) variantFloor(ctx context.Context, prod *product, v *view) (sql.NullInt64, error) {
+	if !v.minDifferenceRead {
+		floor, err := h.lowestVariantDifference(ctx, prod, v.variants)
+		if err != nil {
+			return floor, err
+		}
+		v.minDifference, v.minDifferenceRead = floor, true
+	}
+	return v.minDifference, nil
 }
 
 func (h *handler) loadView(ctx context.Context, p *page, prod *product) (*view, error) {

@@ -105,8 +105,13 @@ func (c *Client) pushUnique(ctx context.Context, lockType string, opts Options, 
 	if err != nil {
 		return "", false, err
 	}
-	// Job.prepare, with no lock_args method: the lock args are the args.
-	digestable, err := Marshal([]any{[]any{"class", opts.Class}, []any{"lock_args", args}, []any{"queue", opts.Queue}})
+	// Job.prepare, with no lock_args method (or one that keeps a one-arg push's args): the lock
+	// args are the args. LockDigest sorts the pairs and drops the queue across queues.
+	pairs := []any{[]any{"class", opts.Class}, []any{"lock_args", args}}
+	if !opts.UniqueAcrossQueues {
+		pairs = append(pairs, []any{"queue", opts.Queue})
+	}
+	digestable, err := Marshal(pairs)
 	if err != nil {
 		return "", false, err
 	}

@@ -354,7 +354,7 @@ module Product::Prices
         if rent_only?
           prices.alive.is_rental.where(currency: price_currency_type).pluck(:price_cents)
         else
-          prices.alive.is_buy.pluck(:price_cents)
+          prices.alive.is_buy.where(currency: price_currency_type).pluck(:price_cents)
         end
       end
 

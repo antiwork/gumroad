@@ -15,11 +15,14 @@ const (
 	urlRedirectHasBeenSeen = 1 << 0 // UrlRedirect 1 => :has_been_seen
 	urlRedirectIsRental    = 1 << 2 // UrlRedirect 3 => :is_rental
 
+	purchaseIsOriginalSubscription = 1 << 2  // Purchase 3 => :is_original_subscription_purchase
 	purchaseIsGiftReceiver         = 1 << 5  // Purchase 6 => :is_gift_receiver_purchase
 	purchaseIsGiftSender           = 1 << 6  // Purchase 7 => :is_gift_sender_purchase
 	purchaseChargebackBack         = 1 << 9  // Purchase 10 => :chargeback_reversed
 	purchaseIsArchived             = 1 << 16 // Purchase 17 => :is_archived
+	purchaseIsArchivedOriginal     = 1 << 17 // Purchase 18 => :is_archived_original_subscription_purchase
 	purchaseIsFreeTrial            = 1 << 18 // Purchase 19 => :is_free_trial_purchase
+	purchaseIsMultiseatLicense     = 1 << 21 // Purchase 22 => :is_multiseat_license
 	purchaseExcludesProductReview  = 1 << 22 // Purchase 23 => :should_exclude_product_review
 	purchaseAccessRevoked          = 1 << 24 // Purchase 25 => :is_access_revoked
 	purchaseIsBundle               = 1 << 25 // Purchase 26 => :is_bundle_purchase
@@ -27,9 +30,12 @@ const (
 	purchaseIsCommissionDeposit    = 1 << 28 // Purchase 29 => :is_commission_deposit_purchase
 	purchaseIsCommissionCompletion = 1 << 29 // Purchase 30 => :is_commission_completion_purchase
 
-	subscriptionInstallmentPlan = 1 << 6 // Subscription 7 => :is_installment_plan
+	subscriptionIsTest           = 1 << 0 // Subscription 1 => :is_test_subscription
+	subscriptionCancelledByBuyer = 1 << 1 // Subscription 2 => :cancelled_by_buyer
+	subscriptionInstallmentPlan  = 1 << 6 // Subscription 7 => :is_installment_plan
 
 	productIsLicensed                   = 1 << 6  // Link 7 => :is_licensed
+	productIsPhysical                   = 1 << 7  // Link 8 => :is_physical
 	productBlockAccessAfterCancellation = 1 << 9  // Link 10 => :block_access_after_membership_cancellation
 	productCommunityChatEnabled         = 1 << 29 // Link 30 => :community_chat_enabled
 
@@ -135,23 +141,26 @@ func findPurchase(ctx context.Context, conn *sql.DB, id int64) (*purchase, error
 
 // subscription is purchase.subscription with the subscriber and the product's access flag.
 type subscription struct {
-	userID                         *int64 // the user row, when it exists
-	flags                          int64
-	cancelledAt, failedAt, endedAt *time.Time
-	productMissing                 bool
-	blockAccessAfterCancellation   bool
+	id                                              int64
+	userID                                          *int64 // the user row, when it exists
+	flags                                           int64
+	cancelledAt, failedAt, endedAt, freeTrialEndsAt *time.Time
+	chargeOccurrenceCount                           *int64
+	productMissing                                  bool
+	blockAccessAfterCancellation                    bool
 }
 
 func findSubscription(ctx context.Context, conn *sql.DB, id int64) (*subscription, error) {
 	s := &subscription{}
 	var productFlags sql.NullInt64
-	err := conn.QueryRowContext(ctx, `SELECT users.id, subscriptions.flags, subscriptions.cancelled_at, subscriptions.failed_at,
-		subscriptions.ended_at, links.flags
+	err := conn.QueryRowContext(ctx, `SELECT subscriptions.id, users.id, subscriptions.flags, subscriptions.cancelled_at,
+		subscriptions.failed_at, subscriptions.ended_at, subscriptions.free_trial_ends_at, subscriptions.charge_occurrence_count, links.flags
 		FROM subscriptions
 		LEFT JOIN users ON users.id = subscriptions.user_id
 		LEFT JOIN links ON links.id = subscriptions.link_id
 		WHERE subscriptions.id = ? LIMIT 1`, id).
-		Scan(&s.userID, &s.flags, db.Time(&s.cancelledAt), db.Time(&s.failedAt), db.Time(&s.endedAt), &productFlags)
+		Scan(&s.id, &s.userID, &s.flags, db.Time(&s.cancelledAt), db.Time(&s.failedAt), db.Time(&s.endedAt), db.Time(&s.freeTrialEndsAt),
+			&s.chargeOccurrenceCount, &productFlags)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

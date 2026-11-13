@@ -310,6 +310,54 @@ func TestRailsProxyKeepsTheOnly502WithoutAnotherHost(t *testing.T) {
 	}
 }
 
+// A deploy stops a whole color: once two of its hosts fail, the rest of it is skipped and the
+// retry goes to the other color.
+func TestRailsProxyTakesOutAColorTwoOfWhoseHostsAreStopping(t *testing.T) {
+	var a, b, c, g int
+	tp := newTestProxy(t, "# blue",
+		addr(stoppingRails(t, http.StatusBadGateway, "0", &a)), addr(stoppingRails(t, http.StatusBadGateway, "0", &b)), addr(stoppingRails(t, http.StatusBadGateway, "0", &c)),
+		"# green", addr(stoppingRails(t, http.StatusOK, "", &g)))
+	for range 2 {
+		if w := tp.forward(httptest.NewRequest("GET", "/x", nil)); w.Code != 200 {
+			t.Fatalf("%d", w.Code)
+		}
+	}
+	if a != 1 || b != 1 || c != 0 || g != 2 {
+		t.Errorf("blue hosts hit %d, %d and %d times, green %d", a, b, c, g)
+	}
+	tp.clock = tp.clock.Add(railsUpstreamDownFor)
+	tp.forward(httptest.NewRequest("GET", "/x", nil))
+	if a != 2 {
+		t.Errorf("the color stayed down: %d", a)
+	}
+}
+
+// One sick host outside a deploy takes out only itself.
+func TestRailsProxyKeepsAColorOneOfWhoseHostsFails(t *testing.T) {
+	var sick, blue, green int
+	tp := newTestProxy(t, "# blue", addr(stoppingRails(t, http.StatusBadGateway, "0", &sick)), addr(stoppingRails(t, http.StatusOK, "", &blue)),
+		"# green", addr(stoppingRails(t, http.StatusOK, "", &green)))
+	for range 2 {
+		tp.forward(httptest.NewRequest("GET", "/x", nil))
+	}
+	if sick != 1 || blue != 2 || green != 0 {
+		t.Errorf("sick %d, blue %d, green %d", sick, blue, green)
+	}
+}
+
+// A list without color headers, as Nomad rendered it before, still parses host by host, and a
+// comment that isn't one word ends the color above it.
+func TestParseUpstreamsReadsColorHeaders(t *testing.T) {
+	hosts, colors := parseUpstreams("# blue\n10.1.0.1:80\n10.1.0.2:80\n\n#green\n10.1.0.3:80\n10.1.0.1:80\n# rendered by consul-template\n10.1.0.4:80\n")
+	if strings.Join(hosts, ",") != "10.1.0.1:80,10.1.0.2:80,10.1.0.3:80,10.1.0.4:80" || colors["10.1.0.2:80"] != "blue" || colors["10.1.0.3:80"] != "green" || colors["10.1.0.4:80"] != "" {
+		t.Errorf("hosts %v colors %v", hosts, colors)
+	}
+	hosts, colors = parseUpstreams("10.1.0.1:80\n10.1.0.2:80\n")
+	if len(hosts) != 2 || len(colors) != 0 {
+		t.Errorf("uncolored: hosts %v colors %v", hosts, colors)
+	}
+}
+
 func TestRailsProxyRereadsTheListWhenItChanges(t *testing.T) {
 	first := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "first") }))
 	defer first.Close()

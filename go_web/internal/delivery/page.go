@@ -120,15 +120,21 @@ func (p *Page) Files() ([]ProductFile, error) {
 	return files, nil
 }
 
-// Streamable is whether any of the files is a video.
-func (p *Page) Streamable() (bool, error) {
-	files, err := p.Files()
-	for _, f := range files {
-		if f.streamable() {
-			return true, err
+// LifecycleFiles is what trigger_files_lifecycle_events reads from alive_product_files: the
+// videos' ids, and the ids of the files with PDF stamping on, repeats included.
+func (p *Page) LifecycleFiles() (videos, stampable []int64, err error) {
+	if _, err := p.Files(); err != nil {
+		return nil, nil, err
+	}
+	for _, d := range p.l.displayed {
+		if d.Filegroup == "video" {
+			videos = append(videos, d.ID)
+		}
+		if d.is(filePDFStampEnabled) {
+			stampable = append(stampable, d.ID)
 		}
 	}
-	return false, err
+	return videos, stampable, nil
 }
 
 // RichPages is what the download page reads from url_redirect.rich_content_json.
@@ -140,8 +146,8 @@ type RichPages struct {
 }
 
 // RichContentPages is url_redirect.rich_content_json.presence without a completed
-// commission's page. A variant's pages, a description has_posts? raises on, and tied
-// positions only the C library can order are left to Rails.
+// commission's page. A description has_posts? raises on, and tied positions only the C
+// library can order, are left to Rails.
 func (p *Page) RichContentPages() (*RichPages, error) {
 	l := p.l
 	provider, err := l.richContentProvider()
@@ -151,8 +157,21 @@ func (p *Page) RichContentPages() (*RichPages, error) {
 	if provider == nil {
 		return &RichPages{}, nil
 	}
-	if provider.variant != nil || provider.installment {
+	if provider.installment {
 		return nil, ErrUnported
+	}
+	var variantID any
+	if v := provider.variant; v != nil {
+		// RichContents#rich_content_json hides a variant's pages while its product shares one
+		// set across variants, unless they're the recoverable copy; an orphaned variant's show.
+		product, err := l.owningProduct(v)
+		if err != nil {
+			return nil, err
+		}
+		if hidden, err := l.sharesPages(product); err != nil || hidden {
+			return &RichPages{}, err
+		}
+		variantID = l.ids.Encrypt(v.id)
 	}
 	contents, err := l.contentsOf(provider)
 	if err != nil {
@@ -186,7 +205,7 @@ func (p *Page) RichContentPages() (*RichPages, error) {
 			Sym("id", external).
 			Sym("page_id", external).
 			Sym("title", nullString(c.Title)).
-			Sym("variant_id", nil).
+			Sym("variant_id", variantID).
 			Sym("description", rails.NewRHash().Sym("type", "doc").Sym("content", description)).
 			Sym("updated_at", c.updatedAt)
 	}

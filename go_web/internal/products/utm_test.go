@@ -131,7 +131,8 @@ func TestAFailedUTMVisitPushGoesToRails(t *testing.T) {
 	testdb.Open(t)
 	jobs := miniredis.RunT(t)
 	e.config.Page.Sidekiq = &sidekiq.Client{Redis: redis.NewClient(&redis.Options{Addr: jobs.Addr(), MaxRetries: -1}), RedisVersion: "7.2.4"}
-	jobs.Close()
+	// Failing every command, not closing: a closed port can be reused by another test's server.
+	jobs.SetError("LOADING Redis is loading the dataset in memory")
 	if e.get(host, "/l/guide?utm_source=a&utm_medium=b&utm_campaign=c", nil); e.railsHit == nil || len(e.cache.writes) != 0 {
 		t.Errorf("rails %v, cache writes %v", e.railsHit != nil, e.cache.writes)
 	}

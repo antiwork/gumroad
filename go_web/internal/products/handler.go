@@ -22,6 +22,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -78,6 +79,8 @@ type page struct {
 	// to with teamRole.
 	currentSeller *signedInUser
 	teamRole      string
+	// share is the signed-in share, nil when signed out.
+	share *viewer.Viewer
 	// cacheWrites are the Rails.cache writes the render makes, made once it renders here.
 	cacheWrites        []pendingWrite
 	rates              map[string]rateRead

@@ -11,6 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/antiwork/gumroad/go_web/internal/compliance"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
 
@@ -52,12 +53,7 @@ func (c *currencyDisplay) setOriginal(original int64, productCurrency string) {
 // localCurrencyBuyer is the page's buyer currency when a local price may show: the seller has
 // opted in, and the currency cookie or GeoIP names one.
 func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {
-	if raw, ok := v.sellerJSON.present("disable_buyer_local_currency"); ok {
-		if disabled := rails.BooleanCast(raw); disabled != nil && *disabled {
-			return nil, nil
-		}
-	}
-	on, err := h.flag(p.Ctx, "buyer_local_currency", p.seller.id)
+	on, err := h.creatorOptedIn(p, v.sellerJSON)
 	if err != nil || !on {
 		return nil, err
 	}
@@ -65,6 +61,16 @@ func (h *handler) localCurrencyBuyer(p *page, v *view) (*string, error) {
 		return buyer, nil
 	}
 	return v.detectedCurrency, nil
+}
+
+// creatorOptedIn is buyer_currency_display_props' creator_opted_in for the page's seller.
+func (h *handler) creatorOptedIn(p *page, sellerJSON jsonData) (bool, error) {
+	if raw, ok := sellerJSON.present("disable_buyer_local_currency"); ok {
+		if disabled := rails.BooleanCast(raw); disabled != nil && *disabled {
+			return false, nil
+		}
+	}
+	return h.flag(p.Ctx, "buyer_local_currency", p.seller.id)
 }
 
 // currencyDisplayFor is the rest of buyer_currency_display_props for prod at price; hasPlan is
@@ -293,7 +299,7 @@ func (h *handler) stripeConnectRoutes(p *page) (bool, error) {
 	if on, err := h.flag(p.Ctx, "merchant_migration", p.seller.id); err != nil || !on {
 		return false, err
 	}
-	info, err := h.complianceInfo(p.Ctx, p.seller.id)
+	info, err := compliance.Load(p.Ctx, h.c.DB, p.seller.id)
 	if err != nil || info == nil {
 		return false, err
 	}
@@ -303,9 +309,9 @@ func (h *handler) stripeConnectRoutes(p *page) (bool, error) {
 	}
 	var code string
 	if byEntity {
-		code, err = info.legalEntityCountryCode()
+		code, err = info.LegalEntityCountryCode()
 	} else {
-		code, err = complianceCountry(info.country)
+		code, err = compliance.CountryCode(info.Country)
 	}
 	return stripeConnectCountries[code], err
 }

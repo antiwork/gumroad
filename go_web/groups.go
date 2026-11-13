@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/credentials"
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/downloads"
+	"github.com/antiwork/gumroad/go_web/internal/flipper"
 	"github.com/antiwork/gumroad/go_web/internal/geoip"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/licenses"
@@ -26,9 +28,11 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/products"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/railscache"
 	"github.com/antiwork/gumroad/go_web/internal/robots"
 	"github.com/antiwork/gumroad/go_web/internal/session"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 	"github.com/antiwork/gumroad/go_web/internal/webhooks"
 )
@@ -158,6 +162,9 @@ type pageBase struct {
 	proxy    *web.RailsProxy
 	meta     inertia.DefaultMeta
 	pages    *downloads.PageConfig
+	// cache is Rails.cache, nil when the pages are off or it isn't configured.
+	cache *railscache.Store
+	flags *flagSet
 }
 
 func (d *dependencies) pageBase() (*pageBase, error) {
@@ -195,6 +202,22 @@ func (d *dependencies) pageBase() (*pageBase, error) {
 	} else if err != nil {
 		return nil, err
 	}
+	var cache *railscache.Store
+	flags := &flagSet{redis: d.redis, flags: map[string]*flipper.Flag{}}
+	if pageConfig != nil {
+		// GlobalConfig.get("GUMROAD_ADMIN_ID", 767082) in production.
+		gumroadAdminID, _ := strconv.ParseInt(d.globalConfig("GUMROAD_ADMIN_ID", "767082"), 10, 64)
+		pageConfig.Viewers = &viewer.Loader{DB: conn, IDs: ids, Avatars: pageConfig.Avatars, Flag: flags.flag,
+			RootDomain: d.env.RootDomain, GumroadAdminID: gumroadAdminID}
+		cache, err = d.railsCache(proxy)
+		if errors.Is(err, errPagesOff) {
+			d.logger.Info("Rails.cache reads left to Rails", "reason", err.Error())
+		} else if err != nil {
+			return nil, err
+		} else {
+			pageConfig.Content.Cache = cache
+		}
+	}
 	d.pages = &pageBase{
 		conn:     conn,
 		ids:      ids,
@@ -211,6 +234,8 @@ func (d *dependencies) pageBase() (*pageBase, error) {
 			AnalyticsByEnvironment: d.env.Name == "production" || d.env.Name == "staging",
 		},
 		pages: pageConfig,
+		cache: cache,
+		flags: flags,
 	}
 	return d.pages, nil
 }
@@ -220,6 +245,11 @@ func registerDownloads(app *web.App, d *dependencies) error {
 	b, err := d.pageBase()
 	if err != nil {
 		return err
+	}
+	if b.pages != nil {
+		if err := d.setBuyerCurrency(b); err != nil {
+			return err
+		}
 	}
 	downloads.Register(app, &downloads.Config{
 		Env: d.env, DB: b.conn, Stack: d.stack, Store: b.store, Resolver: b.resolver, IDs: b.ids, Proxy: b.proxy, Meta: b.meta,

@@ -1526,16 +1526,14 @@ class Subscription < ApplicationRecord
     end
   end
 
-  def expected_completion_time
-    return nil unless has_fixed_length?
+  def expected_final_charge_time
+    return nil unless has_fixed_length? && remaining_charges_count.positive?
 
-    # end_time_of_last_paid_period is nil when the subscription has no
-    # successful, non-refunded/non-chargedback charge and no free trial (for
-    # example, when the only installment charge was refunded or charged back).
-    # In that case there is no anchor date to project the final charge from.
+    # Nil when no successful, non-refunded charge or free trial anchors the schedule.
     return nil if end_time_of_last_paid_period.nil?
 
-    end_time_of_last_paid_period + period * remaining_charges_count
+    # end_time_of_last_paid_period is already the next charge date, so only the charges after it add a period.
+    end_time_of_last_paid_period + period * (remaining_charges_count - 1)
   end
 
   def send_renewal_reminder_at

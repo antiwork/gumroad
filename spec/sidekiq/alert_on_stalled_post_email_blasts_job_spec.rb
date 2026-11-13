@@ -3,7 +3,7 @@
 require "spec_helper"
 
 describe AlertOnStalledPostEmailBlastsJob do
-  let(:post) { create(:installment) }
+  let(:post) { create(:installment, :published) }
 
   def stalled_blast(requested_hours_ago: 6, post: self.post, delivery_count: 0, started: true)
     requested_at = requested_hours_ago.hours.ago
@@ -97,9 +97,9 @@ describe AlertOnStalledPostEmailBlastsJob do
 
   it "distinguishes running, queued, retrying and unaccounted blasts" do
     running = stalled_blast
-    queued = stalled_blast(post: create(:installment))
-    retrying = stalled_blast(post: create(:installment))
-    lost = stalled_blast(post: create(:installment))
+    queued = stalled_blast(post: create(:installment, :published))
+    retrying = stalled_blast(post: create(:installment, :published))
+    lost = stalled_blast(post: create(:installment, :published))
     stub_sidekiq(busy: [running.id], queued: [queued.id], retrying: [retrying.id])
 
     described_class.new.perform
@@ -115,7 +115,7 @@ describe AlertOnStalledPostEmailBlastsJob do
   it "says the scan was truncated instead of presenting a cut page as the total" do
     stub_const("#{described_class}::MAX_CANDIDATES_SCANNED", 1)
     stalled_blast
-    stalled_blast(post: create(:installment))
+    stalled_blast(post: create(:installment, :published))
     stub_sidekiq
 
     described_class.new.perform
@@ -216,6 +216,60 @@ describe AlertOnStalledPostEmailBlastsJob do
         expect(InternalNotificationWorker).not_to have_received(:perform_async)
       end
 
+      # A resume would only run the sender, which ends such a blast itself — so the blast's one
+      # auto-resume marker would be spent on a row that can never deliver anything.
+      it "ends a DEAD blast whose post was deleted instead of spending its auto-resume" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        post.mark_deleted!
+        stub_sidekiq(dead: [blast.id])
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect($redis.exists?(RedisKey.stalled_blast_auto_resumed(blast.id))).to be(false)
+        expect(blast.reload).to have_attributes(completed_at: nil, expiry_reason: PostEmailBlast::EXPIRY_POST_REMOVED)
+        expect(blast.expired_at).to be_within(5.seconds).of(Time.current)
+      end
+
+      it "ends an UNACCOUNTED blast whose post was unpublished" do
+        blast = stalled_blast(requested_hours_ago: 6)
+        post.update!(published_at: nil)
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
+      end
+
+      # Past the resume window such a row would otherwise be HELD for a human, who has nothing to
+      # decide: no resume can deliver it.
+      it "ends a blast past the resume window whose post has emails turned off" do
+        blast = stalled_blast(requested_hours_ago: 30)
+        post.update!(send_emails: false, shown_on_profile: true)
+        stub_sidekiq(dead: [blast.id])
+
+        described_class.new.perform
+
+        expect(SendPostBlastEmailsJob).not_to have_received(:perform_async)
+        expect(InternalNotificationWorker).not_to have_received(:perform_async)
+        expect(blast.reload.expiry_reason).to eq(PostEmailBlast::EXPIRY_POST_REMOVED)
+      end
+
+      it "reports an ended blast alongside the HELD rows" do
+        ended = stalled_blast(requested_hours_ago: 6)
+        held = stalled_blast(requested_hours_ago: 30, post: create(:installment, :published))
+        post.mark_deleted!
+        stub_sidekiq
+
+        described_class.new.perform
+
+        expect(InternalNotificationWorker).to have_received(:perform_async) do |_room, _subject, message|
+          expect(message).to match(/blast #{held.id}.*HELD \(past/)
+          expect(message).to match(/blast #{ended.id}.*ENDED \(its post can no longer send\)/)
+        end
+      end
+
       it "holds a blast past the resume window for a human" do
         blast = stalled_blast(requested_hours_ago: 30)
         stub_sidekiq(dead: [blast.id])
@@ -233,7 +287,7 @@ describe AlertOnStalledPostEmailBlastsJob do
       it "reports the HELD rows it was sent for ahead of auto-resumed ones" do
         stub_const("#{described_class}::MAX_REPORTED", 1)
         resumed = stalled_blast(requested_hours_ago: 6)
-        held = stalled_blast(requested_hours_ago: 30, post: create(:installment))
+        held = stalled_blast(requested_hours_ago: 30, post: create(:installment, :published))
         stub_sidekiq
 
         described_class.new.perform
@@ -500,8 +554,8 @@ describe AlertOnStalledPostEmailBlastsJob do
 
       it "does not touch RUNNING, QUEUED, or RETRYING blasts" do
         running = stalled_blast
-        queued_blast = stalled_blast(post: create(:installment))
-        retrying = stalled_blast(post: create(:installment))
+        queued_blast = stalled_blast(post: create(:installment, :published))
+        retrying = stalled_blast(post: create(:installment, :published))
         stub_sidekiq(busy: [running.id], queued: [queued_blast.id], retrying: [retrying.id])
 
         described_class.new.perform
@@ -645,7 +699,7 @@ describe AlertOnStalledPostEmailBlastsJob do
       it "never truncates action rows out of the report" do
         stub_const("#{described_class}::MAX_REPORTED", 1)
         resumable = stalled_blast(requested_hours_ago: 6)
-        running = stalled_blast(requested_hours_ago: 5, post: create(:installment))
+        running = stalled_blast(requested_hours_ago: 5, post: create(:installment, :published))
         stub_sidekiq(busy: [running.id])
 
         described_class.new.perform

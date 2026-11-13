@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -73,31 +72,51 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 		return nil, err
 	}
 	s3Endpoint := d.globalConfig("AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
+	// The public service's url, which avatar.url answers.
+	publicStorage := "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/"
+	var jobs *sidekiq.Client
+	if conn, err := d.sidekiqRedis(); err != nil {
+		d.logger.Warn("download page jobs left to Rails", "reason", err.Error())
+	} else {
+		jobs = &sidekiq.Client{Redis: conn}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		if err := jobs.LoadRedisVersion(ctx); err != nil {
+			// The unique-jobs scripts take the version without reading it.
+			d.logger.Warn("Sidekiq Redis version unread", "reason", err.Error())
+		}
+		cancel()
+	}
 	return &downloads.PageConfig{
 		Layout: layout,
 		CSP:    csp,
 		Shared: pages.NewShared(env, flipper.New(d.redis, "disable_stripe_signup").Active),
 		Avatars: &storage.Avatars{
-			DB:        conn,
-			Exists:    s3Exister{client: s3Client, bucket: env.PublicStorageBucket},
-			AssetHost: env.AssetHost(),
-			// The public service's url, which avatar.url answers.
-			PublicStorage: "https://" + env.PublicStorageBucket + ".s3.amazonaws.com/",
+			DB:            conn,
+			Exists:        s3Exister{client: s3Client, bucket: env.PublicStorageBucket},
+			AssetHost:     env.AssetHost(),
+			PublicStorage: publicStorage,
 			// CDN_URL_MAP's https://<bucket>.s3.amazonaws.com/ => PUBLIC_STORAGE_CDN_S3_PROXY_HOST/.
 			PublicCDN: env.PublicStorageHost + "/",
 			Now:       time.Now,
 			Logger:    d.logger,
 		},
 		Content: delivery.ContentConfig{
-			IDs:       ids,
-			S3BaseURL: d.globalConfig("S3_BASE_URL_TEMPLATE", s3Endpoint+"/gumroad/"),
-			AssetHost: env.AssetHost(),
+			IDs:           ids,
+			S3BaseURL:     d.globalConfig("S3_BASE_URL_TEMPLATE", s3Endpoint+"/gumroad/"),
+			AssetHost:     env.AssetHost(),
+			PublicStorage: publicStorage,
+			// CDN_URL_MAP in production.
+			CDNMap: web.CDNMap{
+				{s3Endpoint + "/gumroad/", env.S3ProxyHost + "/res/gumroad/"},
+				{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
+			},
 		},
 		EmailDigestKey:  digestKey,
 		DropboxAPIKey:   dropboxKey,
 		IOSAppID:        d.globalConfig("IOS_APP_ID", "916819108"),
 		AndroidBundleID: d.globalConfig("ANDROID_BUNDLE_ID", "com.gumroad.app"),
 		NewNonce:        newNonce,
+		Sidekiq:         jobs,
 	}, nil
 }
 
@@ -167,13 +186,9 @@ func followRailsRevision(proxy *web.RailsProxy, cache *railscache.Store, logger 
 	}
 }
 
-// productPageConfig is what the product page reads beyond the shared page config, or
-// errPagesOff. Its Rails.cache reads and writes follow the Rails hosts' REVISION namespace (see
-// followRailsRevision), starting from go_web's own.
-func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, error) {
-	if b.pages == nil {
-		return nil, fmt.Errorf("%w: download page config", errPagesOff)
-	}
+// railsCache is the pages' Rails.cache, or errPagesOff. Its reads and writes follow the Rails
+// hosts' REVISION namespace (see followRailsRevision), starting from go_web's own.
+func (d *dependencies) railsCache(proxy *web.RailsProxy) (*railscache.Store, error) {
 	servers := getenv("MEMCACHE_SERVERS")
 	if servers == "" || d.env.Revision == "" {
 		return nil, fmt.Errorf("%w: MEMCACHE_SERVERS or REVISION is not set", errPagesOff)
@@ -183,22 +198,30 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		return nil, fmt.Errorf("%w: %v", errPagesOff, err)
 	}
 	d.closers = append(d.closers, func() error { cache.Close(); return nil })
-	if b.proxy != nil {
-		stop := make(chan struct{})
-		go followRailsRevision(b.proxy, cache, d.logger, stop)
-		d.closers = append(d.closers, func() error { close(stop); return nil })
+	stop := make(chan struct{})
+	go followRailsRevision(proxy, cache, d.logger, stop)
+	d.closers = append(d.closers, func() error { close(stop); return nil })
+	return cache, nil
+}
+
+// productPageConfig is what the product page reads beyond the shared page config, or
+// errPagesOff.
+func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, error) {
+	if b.pages == nil {
+		return nil, fmt.Errorf("%w: download page config", errPagesOff)
+	}
+	cache := b.cache
+	if cache == nil {
+		return nil, fmt.Errorf("%w: no Rails.cache", errPagesOff)
 	}
 	geo, err := d.geoIP()
 	if err != nil {
 		return nil, err
 	}
-	env := d.env
 	recaptcha := d.globalConfig("RECAPTCHA_FOLLOW_SITE_KEY", "")
 	if rails.Blank(recaptcha) {
 		recaptcha = d.globalConfig("RECAPTCHA_MONEY_SITE_KEY", "")
 	}
-	s3Endpoint := d.globalConfig("AWS_S3_ENDPOINT", "https://s3.amazonaws.com")
-	flags := &flagSet{redis: d.redis, flags: map[string]*flipper.Flag{}}
 	var search *elastic.Client
 	if host := getenv("ELASTICSEARCH_HOST"); host != "" {
 		// Only what needs a search goes to Rails without it.
@@ -218,8 +241,6 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		}
 		cancel()
 	}
-	// GlobalConfig.get("GUMROAD_ADMIN_ID", 767082) in production.
-	gumroadAdminID, _ := strconv.ParseInt(d.globalConfig("GUMROAD_ADMIN_ID", "767082"), 10, 64)
 	var customHTML *vite.Tags
 	manifest := b.pages.Layout.Manifest()
 	if tags, err := manifest.TypescriptTag("custom_html_analytics"); err != nil {
@@ -235,21 +256,18 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		d.logger.Warn("call product pages left to Rails", "reason", err.Error())
 	}
 	return &products.PageConfig{
-		Layout:   b.pages.Layout,
-		CSP:      b.pages.CSP,
-		Shared:   b.pages.Shared,
-		Avatars:  b.pages.Avatars,
-		Cache:    cache,
-		Revision: cache.Namespace,
-		Redis:    d.redis,
-		GeoIP:    geo,
-		Flag:     flags.flag,
-		// CDN_URL_MAP in production.
-		CDNMap: [][2]string{
-			{s3Endpoint + "/gumroad/", env.S3ProxyHost + "/res/gumroad/"},
-			{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
-		},
-		PublicStorageURL: b.pages.Avatars.PublicStorage,
+		Layout:           b.pages.Layout,
+		CSP:              b.pages.CSP,
+		Shared:           b.pages.Shared,
+		Avatars:          b.pages.Avatars,
+		Cache:            cache,
+		Revision:         cache.Namespace,
+		Redis:            d.redis,
+		GeoIP:            geo,
+		Flag:             b.flags.flag,
+		Viewers:          b.pages.Viewers,
+		CDNMap:           b.pages.Content.CDNMap,
+		PublicStorageURL: b.pages.Content.PublicStorage,
 		CalendarHref:     calendar,
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,
@@ -258,9 +276,19 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		NewNonce:         newNonce,
 		// Its tags are the same on every render.
 		CustomHTMLAnalytics: customHTML,
-		GumroadAdminID:      gumroadAdminID,
 		EmailDigestKey:      b.pages.EmailDigestKey,
 	}, nil
+}
+
+// setBuyerCurrency gives the download page the product page's buyer_currency_display_props.
+// Without GeoIP the buyer's currency can't be told, so pages that show it stay Rails'.
+func (d *dependencies) setBuyerCurrency(b *pageBase) error {
+	geo, err := d.geoIP()
+	if err != nil || geo == nil {
+		return err
+	}
+	b.pages.BuyerCurrency = products.NewBuyerCurrency(b.conn, b.ids, &products.PageConfig{Redis: d.redis, GeoIP: geo, Flag: b.flags.flag})
+	return nil
 }
 
 // flagSet keeps one Flipper flag reader per name.

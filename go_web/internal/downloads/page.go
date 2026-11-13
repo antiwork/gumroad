@@ -5,13 +5,16 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/delivery"
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -29,6 +32,13 @@ type PageConfig struct {
 	IOSAppID, AndroidBundleID string
 	// NewNonce is SecureHeaders' script nonce: SecureRandom.base64(32).
 	NewNonce func() string
+	// Sidekiq pushes the page's jobs; without it a page that enqueues one goes to Rails.
+	Sidekiq *sidekiq.Client
+	// BuyerCurrency is what seller_analytics reads; nil leaves pages with it to Rails.
+	BuyerCurrency BuyerCurrency
+	// Viewers loads the signed-in visitor and the signed-in share; nil leaves signed-in pages
+	// to Rails.
+	Viewers *viewer.Loader
 }
 
 // pageWriteTimeout bounds the after_actions' writes, which outlive a client that leaves.
@@ -40,7 +50,7 @@ const pageWriteTimeout = 5 * time.Second
 func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) error {
 	pc := h.c.Pages
 	switch {
-	case p.Auth.LoggedInUser() != nil:
+	case p.Auth.LoggedInUser() != nil && pc.Viewers == nil:
 		return fallback("signed in")
 	case p.purchase == nil:
 		return fallback("no purchase")
@@ -62,6 +72,24 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if err != nil {
 		return err
 	}
+	pp, err := h.loadPurchaseProps(p.Ctx, p, d)
+	if err != nil {
+		return err
+	}
+	var v *viewer.Viewer
+	if p.Auth.LoggedInUser() != nil {
+		if v, err = pc.Viewers.Load(p.Ctx, p.Req, p.Session, p.Auth); err != nil {
+			return err
+		}
+		if len(v.AvatarResizes) > 0 {
+			// avatar_url would enqueue GenerateAvatarVariantJob, which this page doesn't push.
+			return fallback("avatar")
+		}
+	}
+	addToLibrary, err := addToLibraryOption(p, d, v)
+	if err != nil {
+		return err
+	}
 	content := delivery.NewPage(p.Ctx, h.c.DB, u.delivery(), h.c.IDs)
 	owner, err := content.Owner()
 	if err != nil {
@@ -70,9 +98,9 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if owner.SellerID == nil {
 		return fallback("no seller")
 	}
-	if video, err := content.Streamable(); err != nil || video {
-		// trigger_files_lifecycle_events writes for videos.
-		return firstErr(err, fallback("video"))
+	lc, err := h.planLifecycle(p.Ctx, content, u)
+	if err != nil {
+		return err
 	}
 	rich, err := content.RichContentPages()
 	if err != nil {
@@ -81,13 +109,29 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if rich.JSON == nil || rich.MayHavePosts {
 		return fallback("posts")
 	}
+	var kindleEmail any
+	if v != nil {
+		kindleEmail = nullableString(v.User.KindleEmail)
+		// video_transcoding_info is the seller's own: it reads has_been_transcoded?.
+		if v.User.ID == *owner.SellerID && len(lc.videos) > 0 {
+			return fallback("seller's video")
+		}
+	}
 	items, err := content.ContentItems(delivery.ContentRedirect{
-		Token: u.token, Rental: u.flags&urlRedirectIsRental != 0, ReferencedProductID: owner.ReferencedProductID,
+		Token: u.token, Rental: u.flags&urlRedirectIsRental != 0, ReferencedProductID: owner.ReferencedProductID, KindleEmail: kindleEmail,
 	}, pc.Content)
 	if err != nil {
 		return unported(err)
 	}
 	lastPage, err := d.lastContentPageID()
+	if err != nil {
+		return err
+	}
+	discord, err := h.discordProp(p.Ctx, p.purchase, d)
+	if err != nil {
+		return err
+	}
+	communityChat, err := h.communityChatURL(p.Ctx, d, owner.ReferencedProductID, v != nil)
 	if err != nil {
 		return err
 	}
@@ -126,12 +170,13 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 		return err
 	}
 
-	pu := p.purchase
-	addToLibrary := "none"
-	if pu.purchaserID == nil {
-		// claim_by_seller? is false for a signed-out viewer.
-		addToLibrary = "signup_form"
+	if v != nil {
+		// The signed-in share block follows the ones every page has.
+		shared.Sym("logged_in_user", v.LoggedInUser).Sym("current_seller", v.CurrentSeller).
+			Sym("current_user", v.CurrentUser).Sym("prompt_passkey_setup", v.PromptPasskeySetup)
 	}
+
+	pu := p.purchase
 	var variantID any
 	if owner.VariantID != nil {
 		variantID = h.c.IDs.Encrypt(*owner.VariantID)
@@ -145,7 +190,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 
 	props := shared.
 		Sym("content", rails.NewRHash().
-			Sym("license", nil).
+			Sym("license", d.license).
 			Sym("content_items", items).
 			Sym("bundle_products", []any{}).
 			Sym("rich_content_pages", rich.JSON).
@@ -153,24 +198,26 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("posts", []any{}).
 			Sym("video_transcoding_info", nil).
 			Sym("custom_receipt", nil).
-			Sym("discord", nil).
-			Sym("community_chat_url", nil).
+			Sym("discord", discord).
+			Sym("community_chat_url", communityChat).
 			Sym("ios_app_url", "https://itunes.apple.com/app/id"+pc.IOSAppID).
 			Sym("android_app_url", "https://play.google.com/store/apps/details?id="+pc.AndroidBundleID).
 			Sym("download_all_button", nil)).
 		Sym("product_has_third_party_analytics", d.thirdPartyAnalytics).
-		Sym("seller_analytics", nil).
+		Sym("seller_analytics", d.sellerAnalytics).
 		Sym("terms_page_url", protocolRoot+"/terms").
 		Sym("token", u.token).
 		Sym("redirect_id", h.c.IDs.Encrypt(u.id)).
 		Sym("purchase", rails.NewRHash().
 			Sym("id", purchaseID).
-			Sym("receipt_purchase_id", purchaseID).
+			Sym("receipt_purchase_id", h.c.IDs.Encrypt(pp.receiptID)).
 			Sym("email", nullableString(d.email)).
+			Sym("free", d.freePurchase()).
+			Sym("seller_name", d.sellerNameOrUsername()).
 			Sym("email_digest", rails.EmailDigest(pc.EmailDigestKey, pu.id, d.email.String)).
 			Sym("created_at", d.createdAt.OrNil()).
 			Sym("is_archived", pu.flags&purchaseIsArchived != 0).
-			Sym("has_invoice", d.hasInvoice()).
+			Sym("has_invoice", pp.hasInvoice).
 			Sym("product_permalink", nullableString(d.uniquePermalink)).
 			Sym("product_id", h.c.IDs.Encrypt(d.productID)).
 			Sym("product_name", nullableString(d.productName)).
@@ -179,11 +226,11 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("allows_review", d.allowsReview(pu)).
 			Sym("product_available", !d.productDeleted).
 			Sym("disable_reviews_after_year", d.sellerFlags&userDisablesReviewsAfterYear != 0).
-			Sym("review", nil).
+			Sym("review", pp.review).
 			Sym("review_account_name", d.raterAccountName(pu)).
-			Sym("membership", nil).
-			Sym("purchase_custom_fields", []any{}).
-			Sym("call", nil)).
+			Sym("membership", pp.membership).
+			Sym("purchase_custom_fields", pp.customFields).
+			Sym("call", pp.call)).
 		Sym("is_mobile_app_web_view", p.Req.Param("display") == "mobile_app").
 		Sym("content_unavailability_reason_code", nil).
 		Sym("add_to_library_option", addToLibrary).
@@ -201,6 +248,13 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	// A dry run skips only the database writes: its cookies are what a parity check compares
 	// with Rails', and it keeps none of them.
 	if !p.DryRun {
+		// trigger_files_lifecycle_events runs in the action, before the render and its after_actions.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(p.Ctx), pageWriteTimeout)
+		err := h.runLifecycle(ctx, lc)
+		cancel()
+		if err != nil {
+			return err
+		}
 		if err := h.recordView(p, u, d.productID); err != nil {
 			return err
 		}
@@ -243,11 +297,56 @@ func (h *handler) recordView(p *page, u *urlRedirect, productID int64) error {
 	return err
 }
 
-func firstErr(err, otherwise error) error {
-	if err != nil {
-		return err
+// AddToLibraryOption's values.
+const (
+	addToLibraryNone   = "none"
+	addToLibraryButton = "add_to_library_button"
+	addToLibrarySignup = "signup_form"
+)
+
+// addToLibraryOption is common_props' add_to_library_option: a purchase without a purchaser
+// offers to join the visitor's library, unless the visitor is its seller claiming it.
+func addToLibraryOption(p *page, d *pageData, v *viewer.Viewer) (string, error) {
+	pu := p.purchase
+	if pu.purchaserID != nil {
+		return addToLibraryNone, nil
 	}
-	return otherwise
+	if v == nil {
+		return addToLibrarySignup, nil
+	}
+	claimed, err := claimBySeller(pu, d, v.User)
+	if err != nil || claimed {
+		return addToLibraryNone, err
+	}
+	return addToLibraryButton, nil
+}
+
+// claimBySeller is Purchase#claim_by_seller?(user) for a purchase whose purchaser is nil.
+func claimBySeller(pu *purchase, d *pageData, u *viewer.User) (bool, error) {
+	if d.ownerID != u.ID {
+		return false, nil
+	}
+	if test, err := pu.testPurchase(); err != nil || test {
+		return false, err
+	}
+	if d.purchaserIDColumn.Valid {
+		// A purchaser_id whose user is gone.
+		return true, nil
+	}
+	// casecmp? folds Unicode fully, which strings.EqualFold doesn't; past ASCII, Rails decides.
+	if !ascii(d.email.String) || !ascii(u.Email.String) {
+		return false, fallback("email case")
+	}
+	return !strings.EqualFold(d.email.String, u.Email.String), nil
+}
+
+func ascii(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
 }
 
 func unported(err error) error {
@@ -262,4 +361,11 @@ func nullableString(s sql.NullString) any {
 		return nil
 	}
 	return s.String
+}
+
+func nullableInt(n sql.NullInt64) any {
+	if !n.Valid {
+		return nil
+	}
+	return n.Int64
 }

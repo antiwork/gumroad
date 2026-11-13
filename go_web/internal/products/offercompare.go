@@ -131,7 +131,7 @@ func (h *handler) comparedOffer(p *page, prod *product, v *view, url *offerCode,
 		// lowest_tier_price would compare the tier prices with a nil duration.
 		return offerChoice{}, nil, fallback("offer code comparison")
 	}
-	minDifference, err := h.lowestVariantDifference(ctx, prod, v.variants)
+	minDifference, err := h.variantFloor(ctx, prod, v)
 	if err != nil {
 		return offerChoice{}, nil, err
 	}

@@ -15,11 +15,11 @@ class InstallmentPresenter
     @from_tab = from_tab
   end
 
-  def props
+  # Everything the list rows need. The email body and its files are the bulk of a row, and only the
+  # edit form reads them, so they live in #props and every list uses this.
+  def list_props
     attrs = {
       name: installment.displayed_name,
-      message: installment.message,
-      files: installment.alive_product_files.map(&:as_json),
       published_at: installment.published_at,
       updated_at: installment.updated_at,
       external_id: installment.external_id,
@@ -75,6 +75,14 @@ class InstallmentPresenter
     end
 
     attrs.except(:paid_more_than, :paid_less_than)
+  end
+
+  # The edit form's props: the list fields plus the body text and files it edits.
+  def props
+    list_props.merge(
+      message: installment.message,
+      files: installment.alive_product_files.map(&:as_json),
+    )
   end
 
   def new_page_props(copy_from: nil, single_customer_purchase_id: nil)

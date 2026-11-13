@@ -11,13 +11,20 @@ class CustomersPresenter
     @count = count
   end
 
-  def customers_props
-    user_presenter = UserPresenter.new(user: pundit_user.seller)
+  # Just the table: what GET /customers/paged returns for a page turn, sort or search. The filter-box
+  # props below are computed once for the Inertia page load and never change between pages.
+  def paged_props
     {
       pagination:,
       product_id: product&.external_id,
       customers: customers.map { CustomerPresenter.new(purchase: _1).customer(pundit_user:) },
       count:,
+    }
+  end
+
+  def customers_props
+    user_presenter = UserPresenter.new(user: pundit_user.seller)
+    paged_props.merge(
       products: user_presenter.products_for_filter_box.map do |product|
         {
           id: product.external_id,
@@ -34,6 +41,6 @@ class CustomersPresenter
       show_refund_fee_notice: pundit_user.seller.show_refund_fee_notice?,
       license_uses_filter_enabled: Feature.active?(:license_uses_sales_filter, pundit_user.seller),
       can_send_emails: user_presenter.audience_types.include?(:customers),
-    }
+    )
   end
 end

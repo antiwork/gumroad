@@ -13,11 +13,13 @@ import (
 	"time"
 )
 
-// fakeMemcached answers every binary request "not found". With stall set it reads requests
-// and never replies; with dropAfterReply it closes each connection after one reply.
+// fakeMemcached answers every binary request "not found", or with status if set. With stall
+// set it reads requests and never replies; with dropAfterReply it closes each connection after
+// one reply.
 type fakeMemcached struct {
 	ln             net.Listener
 	stall          atomic.Bool
+	status         atomic.Uint32
 	dropAfterReply bool
 	accepted       atomic.Int32
 }
@@ -59,7 +61,11 @@ func (f *fakeMemcached) serve(c net.Conn) {
 		}
 		resp := make([]byte, 24)
 		resp[0], resp[1] = 0x81, h[1]
-		binary.BigEndian.PutUint16(resp[6:], statusNotFound)
+		status := uint16(statusNotFound)
+		if s := f.status.Load(); s != 0 {
+			status = uint16(s)
+		}
+		binary.BigEndian.PutUint16(resp[6:], status)
 		c.Write(resp)
 		if f.dropAfterReply {
 			return
@@ -86,8 +92,8 @@ func TestSlowReplyOnAPooledConnectionDoesNotMarkTheServerDown(t *testing.T) {
 	}
 	f.stall.Store(true)
 	_, _, err := s.Read(ctx, "k")
-	if !errors.Is(err, os.ErrDeadlineExceeded) || errors.Is(err, ErrServerDown) {
-		t.Errorf("a reply that never came is a timeout, got %v", err)
+	if !errors.Is(err, os.ErrDeadlineExceeded) || !errors.Is(err, ErrRequestFailed) || errors.Is(err, ErrServerDown) {
+		t.Errorf("a reply that never came is a failed request, not a down server: %v", err)
 	}
 	if s.ring.servers[0].down(time.Now()) {
 		t.Fatal("one slow reply marked a healthy server down")
@@ -95,6 +101,43 @@ func TestSlowReplyOnAPooledConnectionDoesNotMarkTheServerDown(t *testing.T) {
 	f.stall.Store(false)
 	if _, _, err := s.Read(ctx, "k"); err != nil {
 		t.Errorf("the next read: %v", err)
+	}
+}
+
+// Base#down! marks a server down at socket_max_failures failed requests in a row; a reply in
+// between starts the count over.
+func TestTwoFailedRequestsInARowMarkTheServerDown(t *testing.T) {
+	f := startFake(t)
+	s := fakeStore(t, f)
+	ctx := t.Context()
+	srv := s.ring.servers[0]
+	f.stall.Store(true)
+	s.Read(ctx, "k")
+	f.stall.Store(false)
+	if _, _, err := s.Read(ctx, "k"); err != nil || srv.down(time.Now()) {
+		t.Fatalf("a reply after one failure: %v, down %v", err, srv.down(time.Now()))
+	}
+	f.stall.Store(true)
+	s.Read(ctx, "k")
+	if srv.down(time.Now()) {
+		t.Fatal("one failure after a reply marked the server down")
+	}
+	_, _, err := s.Read(ctx, "k")
+	if !errors.Is(err, ErrRequestFailed) || !srv.down(time.Now()) {
+		t.Errorf("the second failure in a row: %v, down %v", err, srv.down(time.Now()))
+	}
+	if _, _, err := s.Read(ctx, "k"); !errors.Is(err, ErrServerDown) {
+		t.Errorf("a read while down: %v", err)
+	}
+}
+
+// Dalli raises on a status it doesn't expect, and MemCacheStore reads that as a miss.
+func TestAnErrorStatusIsAFailedRequest(t *testing.T) {
+	f := startFake(t)
+	f.status.Store(0x0082) // out of memory
+	s := fakeStore(t, f)
+	if _, _, err := s.Read(t.Context(), "k"); !errors.Is(err, ErrRequestFailed) {
+		t.Errorf("read: %v", err)
 	}
 }
 

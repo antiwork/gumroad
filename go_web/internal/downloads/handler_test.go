@@ -62,6 +62,8 @@ type testEnv struct {
 	ids       *obfuscate.IDs
 	railsHit  *http.Request
 	railsBody []byte
+	// pages is the full page's config, when the test turned it on.
+	pages *PageConfig
 }
 
 func newTestEnv(t *testing.T) *testEnv { return newConfiguredTestEnv(t, nil, nil) }
@@ -213,13 +215,7 @@ func (e *testEnv) poll(c call) *httptest.ResponseRecorder {
 	}
 	var cookies []string
 	if c.user != 0 {
-		// In the order Devise and the CSRF commit leave a signed-in session.
-		raw := []byte(rails.EncodeJSON(rails.NewRHash().
-			Str("session_id", "0123456789abcdef0123456789abcdef").
-			Str("warden.user.user.key", []any{[]any{c.user}, "salt"}).
-			Str("warden.user.user.session", rails.NewRHash().Str("last_sign_in_at", testNow.Unix())).
-			Str("_csrf_token", session.GenerateCSRFToken())))
-		cookies = append(cookies, sessionName+"="+url.QueryEscape(sessiontest.Encrypt(e.t, testSecretKeyBase, sessionName, raw, testNow.Add(time.Hour))))
+		cookies = append(cookies, e.sessionCookie(c.user))
 	}
 	for k, v := range c.cookies {
 		cookies = append(cookies, k+"="+url.QueryEscape(v))
@@ -234,6 +230,17 @@ func (e *testEnv) poll(c call) *httptest.ResponseRecorder {
 	w := httptest.NewRecorder()
 	e.handler.ServeHTTP(w, r)
 	return w
+}
+
+// sessionCookie is the session cookie of user signed in, in the order Devise and the CSRF
+// commit leave it.
+func (e *testEnv) sessionCookie(user int64) string {
+	raw := []byte(rails.EncodeJSON(rails.NewRHash().
+		Str("session_id", "0123456789abcdef0123456789abcdef").
+		Str("warden.user.user.key", []any{[]any{user}, "salt"}).
+		Str("warden.user.user.session", rails.NewRHash().Str("last_sign_in_at", testNow.Unix())).
+		Str("_csrf_token", session.GenerateCSRFToken())))
+	return sessionName + "=" + url.QueryEscape(sessiontest.Encrypt(e.t, testSecretKeyBase, sessionName, raw, testNow.Add(time.Hour)))
 }
 
 // sessionAfter decrypts the session cookie the response set.

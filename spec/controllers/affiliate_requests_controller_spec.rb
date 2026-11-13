@@ -171,6 +171,29 @@ describe AffiliateRequestsController, inertia: true do
             expect(affiliate_request).to be_approved
           end
         end
+
+        context "when the request arrives on the creator's custom domain" do
+          before do
+            create(:custom_domain, domain: "store.example1.com", user: creator)
+            @request.host = "store.example1.com"
+          end
+
+          # PROTOCOL is http in the test env, and stubbing it restores the production scheme: what
+          # the example pins is that the confirmation uses the app's protocol rather than the http
+          # the origin sees behind the edge.
+          it "confirms over the app protocol rather than the scheme the origin sees" do
+            stub_const("PROTOCOL", "https")
+
+            post :create, params: { username: creator.username, affiliate_request: { name: "John Doe", email: "john@example.com", promotion_text: "hello" } }
+
+            expect(response.location).to start_with("https://store.example1.com/affiliates?")
+            expect(Rack::Utils.parse_query(URI.parse(response.location).query)).to include(
+              "success" => "true",
+              "requester_has_existing_account" => "false",
+              "email" => "john@example.com"
+            )
+          end
+        end
       end
     end
   end

@@ -4162,38 +4162,38 @@ class SubscriptionTest < ActiveSupport::TestCase
     end
   end
 
-  # --- #expected_completion_time ---------------------------------------------
+  # --- #expected_final_charge_time -------------------------------------------
 
-  test "#expected_completion_time returns nil for non fixed-length subscriptions" do
+  test "#expected_final_charge_time returns nil for non fixed-length subscriptions" do
     freeze_time do
       subscription = create_membership_purchase.subscription
-      assert_nil subscription.expected_completion_time
+      assert_nil subscription.expected_final_charge_time
     end
   end
 
-  test "#expected_completion_time calculates end_of_last_paid_period + period * remaining when some charges completed" do
+  test "#expected_final_charge_time is the next charge date plus one period per charge after it" do
     freeze_time do
       t0 = Time.utc(2023, 1, 1, 12, 0, 0)
       travel_to(t0)
       purchase = create_membership_purchase(succeeded_at: t0)
       subscription = purchase.subscription
       subscription.update!(charge_occurrence_count: 3)
-      assert_equal purchase.succeeded_at + 3.months, subscription.expected_completion_time
+      assert_equal purchase.succeeded_at + 2.months, subscription.expected_final_charge_time
     end
   end
 
-  test "#expected_completion_time considers free_trial_ends_at during the free trial" do
+  test "#expected_final_charge_time counts the first charge at free_trial_ends_at during the free trial" do
     freeze_time do
       t0 = Time.utc(2023, 1, 1, 12, 0, 0)
       travel_to(t0)
       free_trial_purchase = create_free_trial_membership_purchase(created_at: t0)
       subscription = free_trial_purchase.subscription
       subscription.update!(charge_occurrence_count: 3)
-      assert_equal subscription.free_trial_ends_at + 3.months, subscription.expected_completion_time
+      assert_equal subscription.free_trial_ends_at + 2.months, subscription.expected_final_charge_time
     end
   end
 
-  test "#expected_completion_time equals end_of_last_paid_period when all required charges are completed" do
+  test "#expected_final_charge_time returns nil when all required charges are completed" do
     freeze_time do
       t0 = Time.utc(2023, 1, 1, 12, 0, 0)
       travel_to(t0)
@@ -4203,11 +4203,11 @@ class SubscriptionTest < ActiveSupport::TestCase
       create_purchase(subscription:, link: subscription.link, succeeded_at: t0 + 1.month)
       create_purchase(subscription:, link: subscription.link, succeeded_at: t0 + 2.months)
       assert_equal true, subscription.charges_completed?
-      assert_equal subscription.end_time_of_last_paid_period, subscription.expected_completion_time
+      assert_nil subscription.expected_final_charge_time
     end
   end
 
-  test "#expected_completion_time returns nil when there is no paid period to anchor on" do
+  test "#expected_final_charge_time returns nil when there is no paid period to anchor on" do
     freeze_time do
       t0 = Time.utc(2023, 1, 1, 12, 0, 0)
       travel_to(t0)
@@ -4216,7 +4216,7 @@ class SubscriptionTest < ActiveSupport::TestCase
       subscription.update!(charge_occurrence_count: 3)
       purchase.update!(stripe_refunded: true)
       assert_nil subscription.end_time_of_last_paid_period
-      assert_nil subscription.expected_completion_time
+      assert_nil subscription.expected_final_charge_time
     end
   end
 

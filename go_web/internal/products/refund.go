@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
+	"github.com/antiwork/gumroad/go_web/internal/description"
 	"github.com/antiwork/gumroad/go_web/internal/html4"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 )
@@ -71,49 +72,5 @@ func simpleFormat(text string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	s := frag.RenderChildren()
-	if rails.Blank(s) {
-		return "<p></p>", nil
-	}
-	s = strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
-	var b strings.Builder
-	b.Grow(len(s) + 16)
-	paragraphs := splitParagraphs(s)
-	for i, p := range paragraphs {
-		if i > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString("<p>")
-		// No paragraph holds "\n\n", so a newline with text on both sides is /([^\n]\n)(?=[^\n])/.
-		for j := 0; j < len(p); j++ {
-			b.WriteByte(p[j])
-			if p[j] == '\n' && j > 0 && j < len(p)-1 {
-				b.WriteString("<br />")
-			}
-		}
-		b.WriteString("</p>")
-	}
-	return b.String(), nil
-}
-
-// splitParagraphs is String#split(/\n\n+/): a leading empty piece stays, trailing ones go.
-func splitParagraphs(s string) []string {
-	var out []string
-	start := 0
-	for i := 0; i < len(s); {
-		if s[i] == '\n' && i+1 < len(s) && s[i+1] == '\n' {
-			out = append(out, s[start:i])
-			for i < len(s) && s[i] == '\n' {
-				i++
-			}
-			start = i
-			continue
-		}
-		i++
-	}
-	out = append(out, s[start:])
-	for len(out) > 0 && out[len(out)-1] == "" {
-		out = out[:len(out)-1]
-	}
-	return out
+	return description.Paragraphs(frag.RenderChildren()), nil
 }

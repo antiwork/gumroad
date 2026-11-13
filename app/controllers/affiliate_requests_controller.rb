@@ -32,13 +32,18 @@ class AffiliateRequestsController < ApplicationController
       affiliate_request.approve! if Feature.active?(:auto_approve_affiliates, @user)
       update_logged_in_user_name_if_needed(permitted_create_params[:name])
 
-      redirect_to custom_domain_new_affiliate_request_path(
+      # _url carrying PROTOCOL, not a bare path: redirect_to makes a path absolute from
+      # request.protocol, which is http at the origin behind the custom-domain edge, and the
+      # edge's http->https 301 then drops the query string the confirmation rides on.
+      redirect_to custom_domain_new_affiliate_request_url(
         success: true,
         requester_has_existing_account: User.exists?(email: affiliate_request.email),
-        email: affiliate_request.email
+        email: affiliate_request.email,
+        host: request.host_with_port,
+        protocol: PROTOCOL
       ), status: :see_other
     else
-      redirect_to custom_domain_new_affiliate_request_path,
+      redirect_to custom_domain_new_affiliate_request_url(host: request.host_with_port, protocol: PROTOCOL),
                   alert: affiliate_request.errors.full_messages.to_sentence
     end
   end
