@@ -11,6 +11,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/inertia"
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -29,6 +30,8 @@ type PageConfig struct {
 	IOSAppID, AndroidBundleID string
 	// NewNonce is SecureHeaders' script nonce: SecureRandom.base64(32).
 	NewNonce func() string
+	// Sidekiq pushes the page's jobs; without it a page that enqueues one goes to Rails.
+	Sidekiq *sidekiq.Client
 }
 
 // pageWriteTimeout bounds the after_actions' writes, which outlive a client that leaves.
@@ -70,9 +73,9 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if owner.SellerID == nil {
 		return fallback("no seller")
 	}
-	if video, err := content.Streamable(); err != nil || video {
-		// trigger_files_lifecycle_events writes for videos.
-		return firstErr(err, fallback("video"))
+	lc, err := h.planLifecycle(p.Ctx, content, u)
+	if err != nil {
+		return err
 	}
 	rich, err := content.RichContentPages()
 	if err != nil {
@@ -88,6 +91,18 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 		return unported(err)
 	}
 	lastPage, err := d.lastContentPageID()
+	if err != nil {
+		return err
+	}
+	discord, err := h.discordProp(p.Ctx, p.purchase, d)
+	if err != nil {
+		return err
+	}
+	communityChat, err := h.communityChatURL(p.Ctx, d, owner.ReferencedProductID)
+	if err != nil {
+		return err
+	}
+	receiptID, hasInvoice, err := h.receiptPurchase(p.Ctx, p.purchase, d)
 	if err != nil {
 		return err
 	}
@@ -153,8 +168,8 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("posts", []any{}).
 			Sym("video_transcoding_info", nil).
 			Sym("custom_receipt", nil).
-			Sym("discord", nil).
-			Sym("community_chat_url", nil).
+			Sym("discord", discord).
+			Sym("community_chat_url", communityChat).
 			Sym("ios_app_url", "https://itunes.apple.com/app/id"+pc.IOSAppID).
 			Sym("android_app_url", "https://play.google.com/store/apps/details?id="+pc.AndroidBundleID).
 			Sym("download_all_button", nil)).
@@ -165,14 +180,14 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 		Sym("redirect_id", h.c.IDs.Encrypt(u.id)).
 		Sym("purchase", rails.NewRHash().
 			Sym("id", purchaseID).
-			Sym("receipt_purchase_id", purchaseID).
+			Sym("receipt_purchase_id", h.c.IDs.Encrypt(receiptID)).
 			Sym("email", nullableString(d.email)).
 			Sym("free", d.freePurchase()).
 			Sym("seller_name", d.sellerNameOrUsername()).
 			Sym("email_digest", rails.EmailDigest(pc.EmailDigestKey, pu.id, d.email.String)).
 			Sym("created_at", d.createdAt.OrNil()).
 			Sym("is_archived", pu.flags&purchaseIsArchived != 0).
-			Sym("has_invoice", !d.freePurchase()).
+			Sym("has_invoice", hasInvoice).
 			Sym("product_permalink", nullableString(d.uniquePermalink)).
 			Sym("product_id", h.c.IDs.Encrypt(d.productID)).
 			Sym("product_name", nullableString(d.productName)).
@@ -203,6 +218,13 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	// A dry run skips only the database writes: its cookies are what a parity check compares
 	// with Rails', and it keeps none of them.
 	if !p.DryRun {
+		// trigger_files_lifecycle_events runs in the action, before the render and its after_actions.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(p.Ctx), pageWriteTimeout)
+		err := h.runLifecycle(ctx, lc)
+		cancel()
+		if err != nil {
+			return err
+		}
 		if err := h.recordView(p, u, d.productID); err != nil {
 			return err
 		}
@@ -243,13 +265,6 @@ func (h *handler) recordView(p *page, u *urlRedirect, productID int64) error {
 	_, err := h.c.DB.ExecContext(ctx, "UPDATE url_redirects SET flags = COALESCE(flags, 0) | ?, updated_at = ? WHERE id = ?",
 		urlRedirectHasBeenSeen, now.UTC().Truncate(time.Microsecond), u.id)
 	return err
-}
-
-func firstErr(err, otherwise error) error {
-	if err != nil {
-		return err
-	}
-	return otherwise
 }
 
 func unported(err error) error {

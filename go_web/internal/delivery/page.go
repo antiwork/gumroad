@@ -120,15 +120,21 @@ func (p *Page) Files() ([]ProductFile, error) {
 	return files, nil
 }
 
-// Streamable is whether any of the files is a video.
-func (p *Page) Streamable() (bool, error) {
-	files, err := p.Files()
-	for _, f := range files {
-		if f.streamable() {
-			return true, err
+// LifecycleFiles is what trigger_files_lifecycle_events reads from alive_product_files: the
+// videos' ids, and the ids of the files with PDF stamping on, repeats included.
+func (p *Page) LifecycleFiles() (videos, stampable []int64, err error) {
+	if _, err := p.Files(); err != nil {
+		return nil, nil, err
+	}
+	for _, d := range p.l.displayed {
+		if d.Filegroup == "video" {
+			videos = append(videos, d.ID)
+		}
+		if d.is(filePDFStampEnabled) {
+			stampable = append(stampable, d.ID)
 		}
 	}
-	return false, err
+	return videos, stampable, nil
 }
 
 // RichPages is what the download page reads from url_redirect.rich_content_json.

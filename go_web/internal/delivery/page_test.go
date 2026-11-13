@@ -93,6 +93,36 @@ func TestContentItemsHonorDownloadGrants(t *testing.T) {
 	}
 }
 
+func TestContentItemsMarkStampedPDFsProcessingUntilStamped(t *testing.T) {
+	e, r := newPageEnv(t)
+	e.file(pageFile, map[string]any{"link_id": pageProduct, "position": 0, "flags": filePDFStampEnabled})
+	state := func() string {
+		t.Helper()
+		items, err := e.items(r, ContentRedirect{Token: "tok"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f := items[0].(*rails.RHash)
+		return rails.EncodeJSON([]any{f.Get("pdf_stamp_enabled"), f.Get("processing")})
+	}
+	if got := state(); got != "[true,true]" {
+		t.Errorf("without a stamped PDF: %s", got)
+	}
+	// Only an alive stamped PDF for this url redirect ends the processing.
+	e.insert("stamped_pdfs", base+8_801, map[string]any{"url_redirect_id": pageRedirect, "product_file_id": pageFile,
+		"created_at": stamp, "updated_at": stamp, "deleted_at": stamp})
+	e.insert("stamped_pdfs", base+8_802, map[string]any{"url_redirect_id": pageRedirect + 1, "product_file_id": pageFile,
+		"created_at": stamp, "updated_at": stamp})
+	if got := state(); got != "[true,true]" {
+		t.Errorf("with a deleted or another redirect's stamped PDF: %s", got)
+	}
+	e.insert("stamped_pdfs", base+8_803, map[string]any{"url_redirect_id": pageRedirect, "product_file_id": pageFile,
+		"created_at": stamp, "updated_at": stamp})
+	if got := state(); got != "[true,false]" {
+		t.Errorf("with a stamped PDF: %s", got)
+	}
+}
+
 func TestContentItemsLeaveToRailsWhatTheyDoNotMap(t *testing.T) {
 	cases := map[string]func(e *env){
 		"subtitles": func(e *env) {
@@ -104,7 +134,6 @@ func TestContentItemsLeaveToRailsWhatTheyDoNotMap(t *testing.T) {
 			e.insert("active_storage_attachments", base+8_702, map[string]any{"name": "thumbnail", "record_type": "ProductFile",
 				"record_id": pageFile, "blob_id": base + 8_703, "created_at": stamp})
 		},
-		"stamped PDF": func(e *env) { e.exec("UPDATE product_files SET flags = ? WHERE id = ?", filePDFStampEnabled, pageFile) },
 		"non-ASCII type": func(e *env) {
 			e.exec("UPDATE product_files SET filetype = 'straße', url = NULL WHERE id = ?", pageFile)
 		},

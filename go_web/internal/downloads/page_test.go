@@ -30,7 +30,10 @@ func (presentFiles) Exists(context.Context, string) (bool, error) { return true,
 
 // newPageEnv is newTestEnv with the full page turned on and a rich content page for the
 // product.
-func newPageEnv(t *testing.T) *testEnv {
+func newPageEnv(t *testing.T) *testEnv { return newPageEnvWith(t, nil) }
+
+// newPageEnvWith is newPageEnv with extra changing the page's config.
+func newPageEnvWith(t *testing.T, extra func(*PageConfig)) *testEnv {
 	t.Helper()
 	e := newConfiguredTestEnv(t, nil, func(e *testEnv, c *Config) {
 		manifest, err := vite.LoadDir(c.Env.AssetHost(), "../vite/testdata")
@@ -54,6 +57,9 @@ func newPageEnv(t *testing.T) *testEnv {
 			Content:        delivery.ContentConfig{IDs: c.IDs, S3BaseURL: "https://s3.amazonaws.com/gumroad/", AssetHost: c.Env.AssetHost()},
 			EmailDigestKey: "digest-key", DropboxAPIKey: "dropbox", IOSAppID: "916819108", AndroidBundleID: "com.gumroad.app",
 			NewNonce: func() string { return "NONCE" },
+		}
+		if extra != nil {
+			extra(c.Pages)
 		}
 		c.DryRunKey = pages.DryRunKey(testSecretKeyBase)
 	})
@@ -221,17 +227,13 @@ func TestALicensedProductsPageShowsItsKey(t *testing.T) {
 func TestTheFullPageLeavesToRailsWhatItDoesNotPort(t *testing.T) {
 	e := newPageEnv(t)
 	for name, token := range map[string]string{
-		"community chat": e.purchase(productID, nil, nil),
-		"gift sender":    e.purchase(productID, map[string]any{"flags": purchaseIsGiftSender}, nil),
+		"commission":  e.purchase(productID, map[string]any{"flags": purchaseIsCommissionDeposit}, nil),
+		"gift sender": e.purchase(productID, map[string]any{"flags": purchaseIsGiftSender}, nil),
 	} {
-		if name == "community chat" {
-			e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productCommunityChatEnabled, productID)
-		}
 		w := e.page(token, nil)
 		if e.railsHit == nil || w.Body.String() != "rails" {
 			t.Errorf("%s: not handed to Rails: %d", name, w.Code)
 		}
-		e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productCommunityChatEnabled, productID)
 	}
 	// An Inertia visit to the page goes to Rails too.
 	token := e.purchase(productID, nil, nil)
@@ -255,11 +257,10 @@ func TestADryRunWritesNothingAndNamesItsFallback(t *testing.T) {
 	if events != 0 || uses != 0 {
 		t.Errorf("a dry run wrote: events %d uses %d", events, uses)
 	}
-	e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productCommunityChatEnabled, productID)
-	defer e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productCommunityChatEnabled, productID)
+	e.db.Exec("UPDATE purchases SET flags = flags | ? WHERE id = ?", purchaseIsCommissionDeposit, nextPurchase)
 	header := sign("/d/"+token, testNow.Add(-time.Second))
 	w := e.page(token, header)
-	if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "community chat" || e.railsHit != nil {
+	if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "commission" || e.railsHit != nil {
 		t.Errorf("fallback in a dry run: %d %q rails %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
 	}
 	// A header works once; used again, it is refused without running the page.
