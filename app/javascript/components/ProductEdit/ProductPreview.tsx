@@ -10,7 +10,6 @@ import { useProductUrl } from "$app/components/ProductEdit/Layout";
 import { previewRefundPolicy, RefundPolicyModalPreview } from "$app/components/ProductEdit/RefundPolicy";
 import { useProductEditContext } from "$app/components/ProductEdit/state";
 import { Layout as ProfileLayout } from "$app/components/Profile/Layout";
-import { useDebouncedValue } from "$app/components/useDebouncedValue";
 
 export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModal?: boolean }) => {
   const currentSeller = useCurrentSeller();
@@ -33,11 +32,6 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
 
   const url = useProductUrl();
   const hasLandingPage = !!product.custom_html?.trim();
-
-  // Every keystroke in the description editor lands in `product`, and the preview re-parses the whole
-  // description when its HTML changes. Hold the value still between keystrokes so the preview parses
-  // once per pause; the stored description still updates on every keystroke.
-  const previewDescription = useDebouncedValue(product.description, 300);
 
   if (!currentSeller) return null;
 
@@ -86,7 +80,7 @@ export const ProductPreview = ({ showRefundPolicyModal }: { showRefundPolicyModa
     custom_view_content_button_text: null,
     permalink: uniquePermalink,
     preorder: null,
-    description_html: previewDescription,
+    description_html: product.description,
     is_compliance_blocked: false,
     is_published: product.is_published,
     is_stream_only: false,
