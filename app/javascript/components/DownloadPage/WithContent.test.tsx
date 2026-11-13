@@ -262,7 +262,7 @@ describe("DownloadPage commission deliverables", () => {
   });
 
   it("shows no Downloads section when the commission is not completed", () => {
-    renderPage({ ...content(null), commission_deliverables: [] });
+    renderPage(content(null));
     expect(screen.queryByRole("heading", { name: "Downloads" })).toBeNull();
   });
 

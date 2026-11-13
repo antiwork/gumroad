@@ -218,7 +218,6 @@ describe UrlRedirectPresenter do
           rich_content_pages: nil,
           last_content_page_id: nil,
           content_items: [],
-          commission_deliverables: [],
           bundle_products: [],
           posts: [],
           video_transcoding_info: nil,
@@ -821,7 +820,7 @@ describe UrlRedirectPresenter do
 
         it "does not include commission files" do
           expect(presenter.download_page_with_content_props[:content][:content_items]).to eq([])
-          expect(presenter.download_page_with_content_props[:content][:commission_deliverables]).to eq([])
+          expect(presenter.download_page_with_content_props[:content]).not_to have_key(:commission_deliverables)
         end
       end
     end

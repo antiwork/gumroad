@@ -169,7 +169,7 @@ class UrlRedirectPresenter
       {
         license:,
         content_items: download_attributes[:content_items],
-        commission_deliverables:,
+        **commission_deliverables_props,
         bundle_products: bundle_product_props,
         rich_content_pages:,
         last_content_page_id: purchase&.last_content_page_id,
@@ -336,11 +336,13 @@ class UrlRedirectPresenter
       { transcode_on_first_sale: product&.transcode_videos_on_purchase.present? }
     end
 
-    def commission_deliverables
+    # go_web mirrors content_props key by key and hands commission purchases to Rails, so only
+    # a completed commission's page may gain this key.
+    def commission_deliverables_props
       commission = purchase&.commission
-      return [] unless commission&.is_completed?
+      return {} unless commission&.is_completed?
 
-      commission.files.map { |file| map_commission_file(file) }
+      { commission_deliverables: commission.files.map { |file| map_commission_file(file) } }
     end
 
     def media_locations_by_file
