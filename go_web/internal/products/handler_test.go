@@ -38,6 +38,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/session/testdb"
 	"github.com/antiwork/gumroad/go_web/internal/sidekiq"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/vite"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
@@ -165,13 +166,14 @@ func newTestEnv(t *testing.T) *testEnv {
 			PublicStorageURL: "https://gumroad-public-storage.s3.amazonaws.com/",
 			OGNamespace:      "gumroad",
 			NewNonce:         func() string { return "NONCE" },
-			GumroadAdminID:   767082,
 			CustomHTMLAnalytics: &vite.Tags{HTML: `<script src="` + testAnalyticsScript + `" crossorigin="" type="module"></script>`,
 				Links: []string{"<" + testAnalyticsScript + ">; rel=modulepreload; as=script; crossorigin=; nopush"}},
 		},
 		DryRunKey:  pages.DryRunKey(testSecretKeyBase),
 		DryRunOnce: redisClient,
 	}
+	pc := e.config.Page
+	pc.Viewers = &viewer.Loader{DB: conn, IDs: e.ids, Avatars: pc.Avatars, Flag: pc.Flag, RootDomain: env.RootDomain, GumroadAdminID: 767082}
 	Register(app, e.config)
 	e.handler = app
 

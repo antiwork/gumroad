@@ -109,7 +109,7 @@ func (h *handler) wishlistCards(p *page, shown []int64) ([]any, error) {
 	if p.currentSeller != nil {
 		rows, err := h.c.DB.QueryContext(ctx, "SELECT wishlist_followers.wishlist_id FROM wishlist_followers"+
 			" WHERE wishlist_followers.deleted_at IS NULL AND wishlist_followers.follower_user_id = ?"+
-			" AND wishlist_followers.wishlist_id IN ("+placeholders(len(ids))+")", append([]any{p.currentSeller.id}, int64Args(ids)...)...)
+			" AND wishlist_followers.wishlist_id IN ("+placeholders(len(ids))+")", append([]any{p.currentSeller.ID}, int64Args(ids)...)...)
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +152,7 @@ func (h *handler) wishlistCards(p *page, shown []int64) ([]any, error) {
 			Sym("product_count", int64(len(w.productIDs))).
 			Sym("follower_count", w.followerCount).
 			Sym("following", following[w.id]).
-			Sym("can_follow", p.currentSeller == nil || p.currentSeller.id != w.userID))
+			Sym("can_follow", p.currentSeller == nil || p.currentSeller.ID != w.userID))
 	}
 	return out, nil
 }

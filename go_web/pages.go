@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -210,7 +209,6 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 	if rails.Blank(recaptcha) {
 		recaptcha = d.globalConfig("RECAPTCHA_MONEY_SITE_KEY", "")
 	}
-	flags := &flagSet{redis: d.redis, flags: map[string]*flipper.Flag{}}
 	var search *elastic.Client
 	if host := getenv("ELASTICSEARCH_HOST"); host != "" {
 		// Only what needs a search goes to Rails without it.
@@ -230,8 +228,6 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		}
 		cancel()
 	}
-	// GlobalConfig.get("GUMROAD_ADMIN_ID", 767082) in production.
-	gumroadAdminID, _ := strconv.ParseInt(d.globalConfig("GUMROAD_ADMIN_ID", "767082"), 10, 64)
 	var customHTML *vite.Tags
 	manifest := b.pages.Layout.Manifest()
 	if tags, err := manifest.TypescriptTag("custom_html_analytics"); err != nil {
@@ -255,7 +251,8 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		Revision:         cache.Namespace,
 		Redis:            d.redis,
 		GeoIP:            geo,
-		Flag:             flags.flag,
+		Flag:             b.flags.flag,
+		Viewers:          b.pages.Viewers,
 		CDNMap:           b.pages.Content.CDNMap,
 		PublicStorageURL: b.pages.Content.PublicStorage,
 		CalendarHref:     calendar,
@@ -266,7 +263,6 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		NewNonce:         newNonce,
 		// Its tags are the same on every render.
 		CustomHTMLAnalytics: customHTML,
-		GumroadAdminID:      gumroadAdminID,
 		EmailDigestKey:      b.pages.EmailDigestKey,
 	}, nil
 }

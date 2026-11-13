@@ -12,6 +12,7 @@ import (
 	"github.com/antiwork/gumroad/go_web/internal/pages"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
 	"github.com/antiwork/gumroad/go_web/internal/storage"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 	"github.com/antiwork/gumroad/go_web/internal/web"
 )
 
@@ -29,6 +30,9 @@ type PageConfig struct {
 	IOSAppID, AndroidBundleID string
 	// NewNonce is SecureHeaders' script nonce: SecureRandom.base64(32).
 	NewNonce func() string
+	// Viewers loads the signed-in visitor and the signed-in share; nil leaves signed-in pages
+	// to Rails.
+	Viewers *viewer.Loader
 }
 
 // pageWriteTimeout bounds the after_actions' writes, which outlive a client that leaves.

@@ -61,7 +61,7 @@ func (h *handler) purchaseProps(p *page, prod *product, v *view) (any, error) {
 	hasGUID = hasGUID && !p.MintedGUID
 	if p.viewer != nil {
 		vp, err := h.lastEligiblePurchase(p, prod, "index_purchases_on_purchaser_id",
-			"purchases.purchaser_id = ? AND purchases.link_id = ?", p.viewer.id, prod.id)
+			"purchases.purchaser_id = ? AND purchases.link_id = ?", p.viewer.ID, prod.id)
 		if err != nil || vp != nil {
 			return h.shownPurchase(p, prod, v, vp, true, err)
 		}
@@ -70,7 +70,7 @@ func (h *handler) purchaseProps(p *page, prod *product, v *view) (any, error) {
 		}
 		// A purchase of theirs in any state keeps the browser's out.
 		bought, err := h.exists(p.Ctx, "SELECT 1 FROM purchases WHERE purchases.purchaser_id = ? AND purchases.link_id = ? LIMIT 1",
-			p.viewer.id, prod.id)
+			p.viewer.ID, prod.id)
 		if err != nil || bought {
 			return nil, err
 		}

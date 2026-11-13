@@ -12,6 +12,7 @@ import (
 
 	"github.com/antiwork/gumroad/go_web/internal/db"
 	"github.com/antiwork/gumroad/go_web/internal/rails"
+	"github.com/antiwork/gumroad/go_web/internal/viewer"
 )
 
 const (
@@ -67,7 +68,7 @@ func bucketsProps(buckets []catalogBucket) []any {
 func storefront(p *page) bool { return p.seller.is(userProductPageStorefrontEnabled) && !p.ownView() }
 
 // ownView is pundit_user.seller == seller: Rails then renders the sections in the editor's shape.
-func (p *page) ownView() bool { return p.currentSeller != nil && p.currentSeller.id == p.seller.id }
+func (p *page) ownView() bool { return p.currentSeller != nil && p.currentSeller.ID == p.seller.id }
 
 // canEdit is LinkPolicy#edit? for the visitor; staff, whom is_team_member? lets in, went to Rails.
 func (p *page) canEdit() bool {
@@ -76,11 +77,11 @@ func (p *page) canEdit() bool {
 
 // TeamMembership::ROLES.
 const (
-	teamOwner      = "owner"
-	teamAccountant = "accountant"
-	teamAdmin      = "admin"
-	teamMarketing  = "marketing"
-	teamSupport    = "support"
+	teamOwner      = viewer.RoleOwner
+	teamAccountant = viewer.RoleAccountant
+	teamAdmin      = viewer.RoleAdmin
+	teamMarketing  = viewer.RoleMarketing
+	teamSupport    = viewer.RoleSupport
 )
 
 // hasRole is a role_*_for?(current_seller) check: the visitor's own account always passes,
