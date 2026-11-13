@@ -561,6 +561,19 @@ describe Product::Prices do
       end
     end
 
+    context "for simple products with a leftover row in another currency" do
+      let(:product) { create(:product, price_cents: 5_00) }
+
+      it "ignores the row" do
+        product.update_columns(price_currency_type: "sek")
+        create(:price, link: product, currency: "usd", price_cents: 9_00)
+        product.prices.where(currency: "usd").where.not(price_cents: 9_00).each(&:mark_deleted!)
+        create(:price, link: product, currency: "sek", price_cents: 99_00)
+
+        expect(product.reload.available_price_cents).to eq([99_00])
+      end
+    end
+
     context "for simple products with rent prices" do
       let(:product) { create(:product, price_cents: 5_00, rental_price_cents: 2_00, purchase_type: :buy_and_rent) }
 
