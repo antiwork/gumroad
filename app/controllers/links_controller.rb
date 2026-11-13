@@ -491,7 +491,7 @@ class LinksController < ApplicationController
         if (conflict_field = unverified_price_or_refund_write)
           log_editor_save_conflict("unverified_#{conflict_field}_write")
           return render json: {
-            error_message: "This page is out of date, so your #{conflict_field == :price ? "price" : "refund policy"} change wasn't saved. Reload the page and make the change again. Your other edits were not applied either.",
+            error_message: "This page is out of date, so your #{conflict_field == :price ? "price" : "refund policy"} change wasn't saved. Your other edits were not applied either. Reloading discards the edits on this page, so copy anything you want to keep first, then reload and make the change again.",
             error_code: "stale_price_or_refund_baseline",
           }, status: :conflict
         end
