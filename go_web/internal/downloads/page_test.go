@@ -150,8 +150,12 @@ func TestTheFullPageRendersAndRecordsTheView(t *testing.T) {
 	}
 	purchase := props.Value("purchase").(*rails.Hash)
 	if purchase.Value("email") != "buyer@example.com" || purchase.Value("has_invoice") != true || purchase.Value("allows_review") != true ||
-		purchase.Value("product_long_url") != "https://gowebdownloadseller.gumroad.com/l/gowebdl101" {
+		purchase.Value("product_long_url") != "https://gowebdownloadseller.gumroad.com/l/gowebdl101" ||
+		purchase.Value("free") != false || purchase.Value("seller_name") != "gowebdownloadseller" {
 		t.Errorf("purchase %s", rails.EncodeJSON(purchase))
+	}
+	if got := strings.Join(purchase.Keys(), " "); !strings.HasPrefix(got, "id receipt_purchase_id email free seller_name email_digest ") {
+		t.Errorf("purchase keys %s", got)
 	}
 	if props.Value("add_to_library_option") != "none" || props.Value("csp_nonce") != "NONCE" {
 		t.Errorf("props %v %v", props.Value("add_to_library_option"), props.Value("csp_nonce"))
@@ -167,20 +171,67 @@ func TestTheFullPageRendersAndRecordsTheView(t *testing.T) {
 	}
 }
 
+func TestAFreePurchaseNamesItsSeller(t *testing.T) {
+	e := newPageEnv(t)
+	e.db.Exec("UPDATE users SET name = 'Ana Rivera' WHERE id = ?", sellerID)
+	defer e.db.Exec("UPDATE users SET name = NULL WHERE id = ?", sellerID)
+	token := e.purchase(productID, map[string]any{"price_cents": 0, "shipping_cents": 0}, nil)
+	w := e.page(token, nil)
+	if w.Code != http.StatusOK || e.railsHit != nil {
+		t.Fatalf("status %d, rails %v: %s", w.Code, e.railsHit != nil, w.Header().Get("X-Go-Web-Fallback"))
+	}
+	purchase := pageProps(t, w.Body.String()).Value("purchase").(*rails.Hash)
+	if purchase.Value("free") != true || purchase.Value("has_invoice") != false || purchase.Value("seller_name") != "Ana Rivera" {
+		t.Errorf("purchase %s", rails.EncodeJSON(purchase))
+	}
+}
+
+func TestALicensedProductsPageShowsItsKey(t *testing.T) {
+	e := newPageEnv(t)
+	e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsLicensed, productID)
+	defer e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productIsLicensed, productID)
+	token := e.purchase(productID, map[string]any{"price_cents": 500, "quantity": 3, "flags": purchaseIsMultiseatLicense}, nil)
+	id := nextPurchase
+	testdb.Insert(t, e.db, "licenses", map[string]any{"id": int64(1_780_701), "link_id": productID, "purchase_id": id, "serial": "ABCD-1234",
+		"created_at": testNow, "updated_at": testNow})
+	license := func() any {
+		t.Helper()
+		w := e.page(token, nil)
+		if w.Code != http.StatusOK || e.railsHit != nil {
+			t.Fatalf("status %d, rails %v: %s", w.Code, e.railsHit != nil, w.Header().Get("X-Go-Web-Fallback"))
+		}
+		return pageProps(t, w.Body.String()).Value("content").(*rails.Hash).Value("license")
+	}
+	if got := rails.EncodeJSON(license()); got != `{"license_key":"ABCD-1234","is_multiseat_license":true,"seats":3}` {
+		t.Errorf("license %s", got)
+	}
+
+	// uses_license_key? reads the product's flag, whatever rows exist.
+	e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productIsLicensed, productID)
+	if got := license(); got != nil {
+		t.Errorf("license on an unlicensed product: %s", rails.EncodeJSON(got))
+	}
+	e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsLicensed, productID)
+	e.db.Exec("DELETE FROM licenses WHERE id = ?", int64(1_780_701))
+	if got := license(); got != nil {
+		t.Errorf("license without a license row: %s", rails.EncodeJSON(got))
+	}
+}
+
 func TestTheFullPageLeavesToRailsWhatItDoesNotPort(t *testing.T) {
 	e := newPageEnv(t)
 	for name, token := range map[string]string{
-		"licensed product": e.purchase(productID, nil, nil),
-		"gift sender":      e.purchase(productID, map[string]any{"flags": purchaseIsGiftSender}, nil),
+		"community chat": e.purchase(productID, nil, nil),
+		"gift sender":    e.purchase(productID, map[string]any{"flags": purchaseIsGiftSender}, nil),
 	} {
-		if name == "licensed product" {
-			e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsLicensed, productID)
+		if name == "community chat" {
+			e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productCommunityChatEnabled, productID)
 		}
 		w := e.page(token, nil)
 		if e.railsHit == nil || w.Body.String() != "rails" {
 			t.Errorf("%s: not handed to Rails: %d", name, w.Code)
 		}
-		e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productIsLicensed, productID)
+		e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productCommunityChatEnabled, productID)
 	}
 	// An Inertia visit to the page goes to Rails too.
 	token := e.purchase(productID, nil, nil)
@@ -204,11 +255,11 @@ func TestADryRunWritesNothingAndNamesItsFallback(t *testing.T) {
 	if events != 0 || uses != 0 {
 		t.Errorf("a dry run wrote: events %d uses %d", events, uses)
 	}
-	e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productIsLicensed, productID)
-	defer e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productIsLicensed, productID)
+	e.db.Exec("UPDATE links SET flags = flags | ? WHERE id = ?", productCommunityChatEnabled, productID)
+	defer e.db.Exec("UPDATE links SET flags = flags & ~? WHERE id = ?", productCommunityChatEnabled, productID)
 	header := sign("/d/"+token, testNow.Add(-time.Second))
 	w := e.page(token, header)
-	if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "licensed product" || e.railsHit != nil {
+	if w.Code != http.StatusNoContent || w.Header().Get("X-Go-Web-Fallback") != "community chat" || e.railsHit != nil {
 		t.Errorf("fallback in a dry run: %d %q rails %v", w.Code, w.Header().Get("X-Go-Web-Fallback"), e.railsHit != nil)
 	}
 	// A header works once; used again, it is refused without running the page.

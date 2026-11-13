@@ -145,7 +145,7 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 
 	props := shared.
 		Sym("content", rails.NewRHash().
-			Sym("license", nil).
+			Sym("license", d.license).
 			Sym("content_items", items).
 			Sym("bundle_products", []any{}).
 			Sym("rich_content_pages", rich.JSON).
@@ -167,10 +167,12 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("id", purchaseID).
 			Sym("receipt_purchase_id", purchaseID).
 			Sym("email", nullableString(d.email)).
+			Sym("free", d.freePurchase()).
+			Sym("seller_name", d.sellerNameOrUsername()).
 			Sym("email_digest", rails.EmailDigest(pc.EmailDigestKey, pu.id, d.email.String)).
 			Sym("created_at", d.createdAt.OrNil()).
 			Sym("is_archived", pu.flags&purchaseIsArchived != 0).
-			Sym("has_invoice", d.hasInvoice()).
+			Sym("has_invoice", !d.freePurchase()).
 			Sym("product_permalink", nullableString(d.uniquePermalink)).
 			Sym("product_id", h.c.IDs.Encrypt(d.productID)).
 			Sym("product_name", nullableString(d.productName)).
@@ -262,4 +264,11 @@ func nullableString(s sql.NullString) any {
 		return nil
 	}
 	return s.String
+}
+
+func nullableInt(n sql.NullInt64) any {
+	if !n.Valid {
+		return nil
+	}
+	return n.Int64
 }
