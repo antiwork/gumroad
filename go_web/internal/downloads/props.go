@@ -115,13 +115,10 @@ func (h *handler) communityChatURL(ctx context.Context, d *pageData, referencedI
 	return "/login?" + query, nil
 }
 
-// receiptPurchase is Purchase#receipt_purchase's id and has_invoice? for a purchase without a
-// subscription: a bundle member's is the bundle purchase it came with, when that one isn't a
-// gift and has the same email.
-func (h *handler) receiptPurchase(ctx context.Context, pu *purchase, d *pageData) (int64, bool, error) {
-	if pu.flags&purchaseIsBundleProduct == 0 {
-		return pu.id, !d.freePurchase(), nil
-	}
+// loadBundleReceipt is Purchase#receipt_purchase and its has_invoice? for a bundle member
+// without a subscription: the bundle purchase it came with, unless that one is a gift or was
+// bought under another email.
+func (h *handler) loadBundleReceipt(ctx context.Context, out *purchaseProps, pu *purchase, d *pageData) error {
 	var id, flags int64
 	var email sql.NullString
 	var subscriptionID, price, shipping sql.NullInt64
@@ -129,18 +126,17 @@ func (h *handler) receiptPurchase(ctx context.Context, pu *purchase, d *pageData
 		" purchases.price_cents, purchases.shipping_cents FROM purchases INNER JOIN bundle_product_purchases"+
 		" ON purchases.id = bundle_product_purchases.bundle_purchase_id WHERE bundle_product_purchases.product_purchase_id = ? LIMIT 1",
 		pu.id).Scan(&id, &email, &flags, &subscriptionID, &price, &shipping)
-	if errors.Is(err, sql.ErrNoRows) {
-		return pu.id, !d.freePurchase(), nil
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	if id == pu.id || flags&purchaseIsGiftSender != 0 || email != d.email {
-		return pu.id, !d.freePurchase(), nil
-	}
-	if subscriptionID.Valid {
-		return 0, false, fallback("bundle purchase subscription")
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
+		return err
+	case id == pu.id || flags&purchaseIsGiftSender != 0 || email != d.email:
+		return nil
+	case subscriptionID.Valid:
+		return fallback("bundle purchase subscription")
 	}
 	bundle := pageData{priceCents: price, shippingCents: shipping}
-	return id, !bundle.freePurchase(), nil
+	out.receiptID, out.hasInvoice = id, !bundle.freePurchase()
+	return nil
 }

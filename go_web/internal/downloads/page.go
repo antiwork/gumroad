@@ -67,6 +67,10 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 	if err != nil {
 		return err
 	}
+	pp, err := h.loadPurchaseProps(p.Ctx, p, d)
+	if err != nil {
+		return err
+	}
 	content := delivery.NewPage(p.Ctx, h.c.DB, u.delivery(), h.c.IDs)
 	owner, err := content.Owner()
 	if err != nil {
@@ -101,10 +105,6 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 		return err
 	}
 	communityChat, err := h.communityChatURL(p.Ctx, d, owner.ReferencedProductID)
-	if err != nil {
-		return err
-	}
-	receiptID, hasInvoice, err := h.receiptPurchase(p.Ctx, p.purchase, d)
 	if err != nil {
 		return err
 	}
@@ -182,14 +182,14 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 		Sym("redirect_id", h.c.IDs.Encrypt(u.id)).
 		Sym("purchase", rails.NewRHash().
 			Sym("id", purchaseID).
-			Sym("receipt_purchase_id", h.c.IDs.Encrypt(receiptID)).
+			Sym("receipt_purchase_id", h.c.IDs.Encrypt(pp.receiptID)).
 			Sym("email", nullableString(d.email)).
 			Sym("free", d.freePurchase()).
 			Sym("seller_name", d.sellerNameOrUsername()).
 			Sym("email_digest", rails.EmailDigest(pc.EmailDigestKey, pu.id, d.email.String)).
 			Sym("created_at", d.createdAt.OrNil()).
 			Sym("is_archived", pu.flags&purchaseIsArchived != 0).
-			Sym("has_invoice", hasInvoice).
+			Sym("has_invoice", pp.hasInvoice).
 			Sym("product_permalink", nullableString(d.uniquePermalink)).
 			Sym("product_id", h.c.IDs.Encrypt(d.productID)).
 			Sym("product_name", nullableString(d.productName)).
@@ -198,11 +198,11 @@ func (h *handler) renderPage(w http.ResponseWriter, p *page, u *urlRedirect) err
 			Sym("allows_review", d.allowsReview(pu)).
 			Sym("product_available", !d.productDeleted).
 			Sym("disable_reviews_after_year", d.sellerFlags&userDisablesReviewsAfterYear != 0).
-			Sym("review", nil).
+			Sym("review", pp.review).
 			Sym("review_account_name", d.raterAccountName(pu)).
-			Sym("membership", nil).
-			Sym("purchase_custom_fields", []any{}).
-			Sym("call", nil)).
+			Sym("membership", pp.membership).
+			Sym("purchase_custom_fields", pp.customFields).
+			Sym("call", pp.call)).
 		Sym("is_mobile_app_web_view", p.Req.Param("display") == "mobile_app").
 		Sym("content_unavailability_reason_code", nil).
 		Sym("add_to_library_option", addToLibrary).

@@ -43,20 +43,14 @@ type pageData struct {
 	// discordIntegration is whether the product or a purchased variant has a live Discord
 	// integration, without which find_enabled_integration finds none either way.
 	discordIntegration bool
+	// ownReview, postPurchaseFields and call are whether the purchase has those rows, so their
+	// reads only run when there's something to read.
+	ownReview, postPurchaseFields, call bool
 	// sellerAnalytics is the seller_analytics prop.
 	sellerAnalytics any
 }
 
 func (d *pageData) productIs(flag int64) bool { return d.productFlags&flag != 0 }
-
-// pageChecks are the rows whose presence leaves the page to Rails, each as an EXISTS over
-// purchases.id, in the order their reason is reported.
-var pageChecks = []struct{ reason, exists string }{
-	{"review", "SELECT 1 FROM product_reviews WHERE product_reviews.purchase_id = purchases.id"},
-	{"call", "SELECT 1 FROM calls WHERE calls.purchase_id = purchases.id"},
-	{"custom fields", "SELECT 1 FROM purchase_custom_fields WHERE purchase_custom_fields.purchase_id = purchases.id" +
-		" AND purchase_custom_fields.custom_field_id IS NOT NULL"},
-}
 
 // loadPageData reads the rows in one query, or returns a fallback for a purchase whose page
 // this port leaves to Rails.
@@ -66,7 +60,6 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 	var partially, productDeleted sql.NullBool
 	var ownerID, sellerFlags sql.NullInt64
 	var ownerGA, ownerPixel, ownerJSON sql.NullString
-	checks := make([]bool, len(pageChecks))
 	query := `SELECT purchases.email, purchases.purchase_state, purchases.street_address, purchases.json_data,
 		purchases.created_at, purchases.price_cents, purchases.shipping_cents, purchases.quantity, purchases.purchaser_id,
 		purchases.stripe_partially_refunded,
@@ -85,17 +78,17 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 			ON base_variant_integrations.base_variant_id = base_variants_purchases.base_variant_id
 			JOIN integrations ON integrations.id = base_variant_integrations.integration_id
 			WHERE base_variants_purchases.purchase_id = purchases.id AND base_variant_integrations.deleted_at IS NULL
-			AND integrations.type = 'DiscordIntegration')`
+			AND integrations.type = 'DiscordIntegration'),
+		EXISTS(SELECT 1 FROM product_reviews WHERE product_reviews.purchase_id = purchases.id),
+		EXISTS(SELECT 1 FROM purchase_custom_fields WHERE purchase_custom_fields.purchase_id = purchases.id
+			AND purchase_custom_fields.flags & 1 != 0 AND purchase_custom_fields.custom_field_id IS NOT NULL),
+		EXISTS(SELECT 1 FROM calls WHERE calls.purchase_id = purchases.id)`
 	dest := []any{&d.email, &d.purchaseState, &d.streetAddress, &d.jsonData, &d.createdAt, &d.priceCents, &d.shippingCents, &d.quantity,
 		&d.purchaserIDColumn, &partially,
 		&d.productID, &d.productName, &d.uniquePermalink, &d.customPermalink, &productDeleted, &d.productFlags,
 		&ownerID, &d.ownerUsername, &d.ownerExternalID, &ownerGA, &ownerPixel, &ownerJSON,
 		&sellerFlags, &d.sellerName, &d.sellerUsername, &d.sellerExternalID, &d.purchaserName, &d.purchaserUsername, &d.thirdPartyAnalytics,
-		&d.discordIntegration}
-	for i, c := range pageChecks {
-		query += ", EXISTS(" + c.exists + ")"
-		dest = append(dest, &checks[i])
-	}
+		&d.discordIntegration, &d.ownReview, &d.postPurchaseFields, &d.call}
 	err := h.c.DB.QueryRowContext(ctx, query+`
 		FROM purchases
 		JOIN links ON links.id = purchases.link_id
@@ -116,8 +109,6 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 	d.stripePartiallyRefunded, d.productDeleted = partially.Bool, productDeleted.Bool
 
 	switch {
-	case pu.subscriptionID != nil:
-		return nil, fallback("membership")
 	case pu.flags&purchaseIsGiftSender != 0:
 		return nil, fallback("gift sender")
 	case pu.flags&(purchaseIsCommissionDeposit|purchaseIsCommissionCompletion) != 0:
@@ -129,12 +120,7 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 		// paid? and free_purchase? compare nil.
 		return nil, fallback("nil price")
 	}
-	for i, c := range pageChecks {
-		if checks[i] {
-			return nil, fallback(c.reason)
-		}
-	}
-	if err := d.loadLicense(ctx, h.c.DB, pu); err != nil {
+	if err := d.loadLicense(ctx, h.c.DB, pu, p.subscription != nil); err != nil {
 		return nil, err
 	}
 	var tiktok any
@@ -153,9 +139,8 @@ func (h *handler) loadPageData(ctx context.Context, p *page) (*pageData, error) 
 }
 
 // loadLicense sets the license prop from purchase.license_key: the license's serial when
-// uses_license_key? holds. A membership's recurring charge reads its original purchase's
-// license, but memberships are left to Rails before this.
-func (d *pageData) loadLicense(ctx context.Context, conn *sql.DB, pu *purchase) error {
+// uses_license_key? holds. hasSubscription is whether the purchase's subscription row exists.
+func (d *pageData) loadLicense(ctx context.Context, conn *sql.DB, pu *purchase, hasSubscription bool) error {
 	if !d.productIs(productIsLicensed) {
 		return nil
 	}
@@ -163,9 +148,22 @@ func (d *pageData) loadLicense(ctx context.Context, conn *sql.DB, pu *purchase) 
 	if err != nil || !permitted {
 		return err
 	}
+	owner := pu.id
+	if hasSubscription && pu.flags&(purchaseIsOriginalSubscription|purchaseIsGiftReceiver) == 0 {
+		// Purchase#license: a recurring charge's is its subscription's original purchase's.
+		err := conn.QueryRowContext(ctx, "SELECT id FROM purchases WHERE subscription_id = ? AND flags & ? != 0 AND flags & ? = 0 LIMIT 1",
+			*pu.subscriptionID, purchaseIsOriginalSubscription, purchaseIsArchivedOriginal).Scan(&owner)
+		if errors.Is(err, sql.ErrNoRows) {
+			// nil.license raises.
+			return fallback("missing original purchase")
+		}
+		if err != nil {
+			return err
+		}
+	}
 	// has_one :license, without an order.
 	var serial sql.NullString
-	err = conn.QueryRowContext(ctx, "SELECT serial FROM licenses WHERE purchase_id = ? LIMIT 1", pu.id).Scan(&serial)
+	err = conn.QueryRowContext(ctx, "SELECT serial FROM licenses WHERE purchase_id = ? LIMIT 1", owner).Scan(&serial)
 	if errors.Is(err, sql.ErrNoRows) || err == nil && !serial.Valid {
 		return nil
 	}
@@ -213,7 +211,8 @@ func (d *pageData) sellerNameOrUsername() string {
 	return d.sellerExternalID.String
 }
 
-// allowsReview is Purchase#allows_review? for a purchase without a subscription.
+// allowsReview is Purchase#allows_review?, which permits recurring charges, so a subscription
+// changes nothing.
 func (d *pageData) allowsReview(pu *purchase) bool {
 	state := d.purchaseState.String
 	return countsReviewStates[state] &&
