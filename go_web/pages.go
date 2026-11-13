@@ -95,7 +95,7 @@ func (d *dependencies) pageConfig(s3Client *s3.Client, ids *obfuscate.IDs) (*dow
 			AssetHost:     env.AssetHost(),
 			PublicStorage: publicStorage,
 			// CDN_URL_MAP in production.
-			CDNMap: [][2]string{
+			CDNMap: web.CDNMap{
 				{s3Endpoint + "/gumroad/", env.S3ProxyHost + "/res/gumroad/"},
 				{"https://gumroad-public-storage.s3.amazonaws.com/", env.PublicStorageHost + "/"},
 			},
@@ -257,7 +257,7 @@ func (d *dependencies) productPageConfig(b *pageBase) (*products.PageConfig, err
 		GeoIP:            geo,
 		Flag:             flags.flag,
 		CDNMap:           b.pages.Content.CDNMap,
-		PublicStorageURL: b.pages.Avatars.PublicStorage,
+		PublicStorageURL: b.pages.Content.PublicStorage,
 		CalendarHref:     calendar,
 		OGNamespace:      d.config("FACEBOOK_OG_NAMESPACE"),
 		RecaptchaSiteKey: recaptcha,

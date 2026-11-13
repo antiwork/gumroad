@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -44,7 +43,7 @@ type PageConfig struct {
 	Flag func(name string) *flipper.Flag
 	// CDNMap is CDN_URL_MAP in order, and PublicStorageURL the public service's object URL
 	// prefix, "https://<bucket>.s3.amazonaws.com/".
-	CDNMap           [][2]string
+	CDNMap           web.CDNMap
 	PublicStorageURL string
 	// CalendarHref is vite_asset_path("components/ui/Calendar.tsx"), "" when the manifest
 	// lacks it.
@@ -67,12 +66,7 @@ type PageConfig struct {
 }
 
 // cdnURL is cdn_url_for.
-func (pc *PageConfig) cdnURL(s string) string {
-	for _, m := range pc.CDNMap {
-		s = strings.ReplaceAll(s, m[0], m[1])
-	}
-	return s
-}
+func (pc *PageConfig) cdnURL(s string) string { return pc.CDNMap.URLFor(s) }
 
 // render is LinksController#prepare_product_page and #show, then the after_actions. Everything is
 // read before anything is written.

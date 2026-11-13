@@ -162,11 +162,8 @@ func (p *Page) RichContentPages() (*RichPages, error) {
 		if err != nil {
 			return nil, err
 		}
-		if product != nil && product.is(productHasSameRichContentForAllVariants) {
-			recoverable, err := l.recoverableHiddenVariantRichContent(product)
-			if err != nil || !recoverable {
-				return &RichPages{}, err
-			}
+		if hidden, err := l.sharesPages(product); err != nil || hidden {
+			return &RichPages{}, err
 		}
 		variantID = l.ids.Encrypt(v.id)
 	}

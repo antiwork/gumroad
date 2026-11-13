@@ -57,9 +57,9 @@ func (c ContentConfig) thumbnailURL(l *loader, d *displayFile, t *thumbnail) (an
 		// thumbnail.url raises, in the rescue too.
 		return nil, ErrUnported
 	}
-	original := c.cdnURLFor(c.PublicStorage + t.key.String)
+	original := c.PublicStorage + t.key.String
 	if d.renderableImage() {
-		return original, nil
+		return c.CDNMap.URLFor(original), nil
 	}
 	if c.Cache == nil {
 		return nil, ErrUnported
@@ -73,12 +73,12 @@ func (c ContentConfig) thumbnailURL(l *loader, d *displayFile, t *thumbnail) (an
 		if !ok {
 			return nil, ErrUnported
 		}
-		return c.cdnURLFor(url), nil
+		return c.CDNMap.URLFor(url), nil
 	}
 	contentType := t.contentType.String
 	if !strings.HasPrefix(contentType, "image") || !supportedThumbnailType.MatchString(contentType) || !storage.Variable(contentType) {
 		// thumbnail_variant is nil, or variant raises; either way the rescue answers.
-		return original, nil
+		return c.CDNMap.URLFor(original), nil
 	}
 	var variantKey sql.NullString
 	err = l.conn.QueryRowContext(l.ctx, "SELECT variant_blobs.key FROM active_storage_variant_records"+
@@ -94,15 +94,7 @@ func (c ContentConfig) thumbnailURL(l *loader, d *displayFile, t *thumbnail) (an
 		return nil, err
 	case !variantKey.Valid:
 		// The record's image isn't attached, so its url raises into the rescue.
-		return original, nil
+		return c.CDNMap.URLFor(original), nil
 	}
-	return c.cdnURLFor(c.PublicStorage + variantKey.String), nil
-}
-
-// cdnURLFor is cdn_url_for: each CDN_URL_MAP origin replaced, in the map's order.
-func (c ContentConfig) cdnURLFor(url string) string {
-	for _, m := range c.CDNMap {
-		url = strings.ReplaceAll(url, m[0], m[1])
-	}
-	return url
+	return c.CDNMap.URLFor(c.PublicStorage + variantKey.String), nil
 }

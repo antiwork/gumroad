@@ -34,7 +34,7 @@ type ContentConfig struct {
 	S3BaseURL, AssetHost string
 	// PublicStorage is the public service's object URL prefix, and CDNMap CDN_URL_MAP.
 	PublicStorage string
-	CDNMap        [][2]string
+	CDNMap        web.CDNMap
 	// Cache is Rails.cache, for the variant URLs of videos' thumbnails; nil leaves those to Rails.
 	Cache Cache
 }

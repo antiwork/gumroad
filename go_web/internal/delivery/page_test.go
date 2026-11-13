@@ -144,7 +144,10 @@ func TestContentItemsThumbnails(t *testing.T) {
 				"record_id": variantRecord, "blob_id": variantBlob, "created_at": stamp})
 		}
 		cfg := pageConfig
-		cfg.IDs, cfg.PublicStorage, cfg.Cache = e.ids, "https://gumroad-public-storage.s3.amazonaws.com/", cache
+		cfg.IDs, cfg.PublicStorage = e.ids, "https://gumroad-public-storage.s3.amazonaws.com/"
+		if cache != nil {
+			cfg.Cache = cache
+		}
 		cfg.CDNMap = [][2]string{{"https://gumroad-public-storage.s3.amazonaws.com/", "https://public-files.gumroad.com/"}}
 		items, err := NewPage(context.Background(), e.db, r, e.ids).ContentItems(ContentRedirect{Token: "tok"}, cfg)
 		if err != nil {
@@ -172,10 +175,18 @@ func TestContentItemsThumbnails(t *testing.T) {
 			}
 		})
 	}
-	// A variant still to be made is resized in Rails' request.
-	if _, err := thumbnailURL(t, "mp4", "video", "image/png", fakeCache{}, false); !errors.Is(err, ErrUnported) {
-		t.Errorf("unprocessed variant: %v", err)
-	}
+	// A variant still to be made is resized in Rails' request, and without Rails.cache the
+	// cached URL is unknown.
+	t.Run("unprocessed variant", func(t *testing.T) {
+		if _, err := thumbnailURL(t, "mp4", "video", "image/png", fakeCache{}, false); !errors.Is(err, ErrUnported) {
+			t.Errorf("got %v", err)
+		}
+	})
+	t.Run("no cache", func(t *testing.T) {
+		if _, err := thumbnailURL(t, "mp4", "video", "image/png", nil, true); !errors.Is(err, ErrUnported) {
+			t.Errorf("got %v", err)
+		}
+	})
 }
 
 func TestRichContentPagesInPositionOrder(t *testing.T) {
